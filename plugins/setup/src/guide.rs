@@ -70,6 +70,9 @@ pub(crate) struct Guide {
     /// Whether the focus shows (once a button was used; at once without
     /// touch).
     shown: bool,
+    /// The number being changed with the buttons, as on the settings
+    /// pages.
+    edit: ui::NumberEdit,
     style: UiStyle,
     layout: Layout,
 }
@@ -145,6 +148,7 @@ impl Guide {
             page: 0,
             focus: Target::Next,
             shown: !env.device.input.touch,
+            edit: ui::NumberEdit::default(),
             style: UiStyle::new(env),
             layout: Layout::default(),
         };
@@ -344,6 +348,7 @@ impl Guide {
             return;
         }
         let page = page as usize;
+        self.edit.leave(&env, cx);
         if page > self.steps.len() {
             mark_done(&env);
             cx.command(Command::Back);
@@ -400,10 +405,16 @@ impl Guide {
                     return;
                 };
                 // Its editor, the keyboard, the list of its values; else
-                // the next value.
+                // the next value; a number is changed with the buttons as
+                // on the settings pages (by touch, its − and +).
                 match ui::setting_opens(&env, spec) {
                     Some(command) => cx.command(command),
                     None if !matches!(spec.kind, SettingKind::Int { .. }) => self.change(1, cx),
+                    None if self.shown => {
+                        let spec = spec.clone();
+                        self.edit.start(&env, &spec, cx);
+                        self.redraw(cx, RefreshMode::Fast);
+                    }
                     None => {}
                 }
             }
@@ -488,8 +499,11 @@ impl Guide {
                     let Some((minus, plus)) = self.layout.stepper else {
                         return;
                     };
-                    ui::draw_button(canvas, env, style, minus, "−", false, false);
-                    ui::draw_button(canvas, env, style, plus, "+", false, false);
+                    // Filled while the buttons change it, as on the
+                    // settings pages.
+                    let editing = self.edit.active();
+                    ui::draw_button(canvas, env, style, minus, "−", editing, false);
+                    ui::draw_button(canvas, env, style, plus, "+", editing, false);
                     // The value large between them.
                     let between = Rect::new(
                         minus.x + minus.width,
@@ -603,6 +617,9 @@ impl Screen for Guide {
     }
 
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
+        if self.edit.active() {
+            return self.edit.hint(action, env);
+        }
         if *action == actions::BACK && self.page == 0 {
             paperpaw_sdk::Hint::Text(env.i18n.tr("setup.skip-short").to_string())
         } else {
@@ -613,9 +630,18 @@ impl Screen for Guide {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
         let a = action;
-        let on_card = self.shown && self.focus == Target::Card;
-        let on_number = on_card && self.is_number(&env);
-        let on_two = on_card && self.two(&env).is_some();
+        // A number being changed: as on the settings pages, but for the
+        // page buttons, which keep it and turn the page as ever.
+        if self.edit.active() {
+            let spec = self.setting(&env).cloned();
+            if *a == actions::NEXT_PAGE || *a == actions::PREV_PAGE {
+                self.edit.finish(&env, spec.as_ref(), true, cx);
+            } else {
+                let handled = self.edit.on_action(&env, spec.as_ref(), a, cx);
+                self.redraw(cx, RefreshMode::Fast);
+                return handled;
+            }
+        }
         if *a == actions::BACK {
             if self.page == 0 {
                 self.ask_skip(cx);
@@ -626,10 +652,6 @@ impl Screen for Guide {
             self.turn(self.page as isize + 1, cx);
         } else if *a == actions::PREV_PAGE {
             self.turn(self.page as isize - 1, cx);
-        } else if on_number && (*a == actions::LEFT || *a == actions::RIGHT) {
-            self.change(if *a == actions::LEFT { -1 } else { 1 }, cx);
-        } else if on_two && (*a == actions::LEFT || *a == actions::RIGHT) {
-            self.pick(usize::from(*a == actions::RIGHT), cx);
         } else if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
             self.move_focus(-1, cx);
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
@@ -676,6 +698,8 @@ impl Screen for Guide {
             return Handled::No;
         }
         self.shown = false;
+        let env = *cx.env();
+        self.edit.leave(&env, cx);
         if let Some((minus, plus)) = self.layout.stepper {
             if minus.contains(gesture.start) {
                 self.change(-1, cx);

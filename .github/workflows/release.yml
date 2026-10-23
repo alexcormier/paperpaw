@@ -22,7 +22,7 @@ name: Release
 # of its own as the emulators below. For tools that work with a release without a build of their
 # own (the workshop): the desktop emulator for each computer
 # (`paperpaw-emu-<version>-<target>.zip`, with paperpaw-dev for
-# `--check`), driven over `--stdio` and loading code plugins built for
+# `--check` and paperpaw-sign for signing plugins), driven over `--stdio` and loading code plugins built for
 # the computer, and the handbook (`paperpaw-handbook-<version>.zip`:
 # registry, check codes, docs, samples, the SDK's items and source,
 # PaperPaw's own plugins as examples); each
@@ -131,7 +131,7 @@ jobs:
       # The toolchain of rust-toolchain.toml: code plugins built for the
       # computer must be built with it (`--stdio` says it).
       - uses: dtolnay/rust-toolchain@stable
-      - name: Build the emulator and paperpaw-dev
+      - name: Build the emulator, paperpaw-dev and paperpaw-sign
         shell: bash
         env:
           RUST_TARGET: ${{ matrix.rust }}
@@ -143,15 +143,16 @@ jobs:
           built=target/release
           if [[ -n "$RUST_TARGET" ]]; then
             rustup target add "$RUST_TARGET"
-            cargo build --release --target "$RUST_TARGET" -p paperpaw-emulator -p paperpaw-dev
+            cargo build --release --target "$RUST_TARGET" -p paperpaw-emulator -p paperpaw-dev -p paperpaw-sign
             built="target/$RUST_TARGET/release"
           else
-            cargo build --release -p paperpaw-emulator -p paperpaw-dev
+            cargo build --release -p paperpaw-emulator -p paperpaw-dev -p paperpaw-sign
           fi
           exe=""
           [[ "$RUNNER_OS" == Windows ]] && exe=.exe
           mkdir -p dist/pkg
-          cp "$built/paperpaw-emu$exe" "$built/paperpaw-dev$exe" dist/pkg/
+          tools=("paperpaw-emu$exe" "paperpaw-dev$exe" "paperpaw-sign$exe")
+          for tool in "${tools[@]}"; do cp "$built/$tool" dist/pkg/; done
           # Where it runs as built: it answers over --stdio, as the
           # release of its version (the tag is the workspace's version).
           if [[ -z "$RUST_TARGET" ]]; then
@@ -162,8 +163,13 @@ jobs:
           fi
           name="paperpaw-emu-$version-${{ matrix.target }}.zip"
           py="$(command -v python3 || command -v python)"
-          (cd dist/pkg && "$py" -m zipfile -c "../$name" "paperpaw-emu$exe" "paperpaw-dev$exe")
+          (cd dist/pkg && "$py" -m zipfile -c "../$name" "${tools[@]}")
           rm -r dist/pkg
+          # The zip holds all three tools, as tools taking it expect.
+          listed="$("$py" -m zipfile -l "dist/$name")"
+          for tool in "${tools[@]}"; do
+            grep -q "^$tool " <<< "$listed" || { echo "$name has no $tool"; exit 1; }
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: emulator-${{ matrix.target }}
