@@ -375,6 +375,10 @@ file to your report.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).
+- The emulator's release ZIP for each computer
+  (`paperpaw-emu-<version>-<target>.zip`) holds `paperpaw-sign` beside
+  `paperpaw-emu` and `paperpaw-dev`, for signing plugins without a build
+  of one's own.
 - SDK: `Version::parse` reads a version with a pre-release or build
   after its three numbers as those numbers, so a plugin of a beta loads.
   `install::folder_release` gives the version as `plugin.ini` writes it;
