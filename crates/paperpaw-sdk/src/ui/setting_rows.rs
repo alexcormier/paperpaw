@@ -288,6 +288,18 @@ pub fn draw_note(
     draw_note_below(canvas, env, style, rect, below, focused, note);
 }
 
+/// Whether `note`, a setting's description, shows whole in a row `width`
+/// wide: on the [`NOTE_LINES`] lines a row gives it. A longer one is
+/// shortened with "…"; descriptions are kept short to fit (detail goes in
+/// the plugin's How it works).
+pub fn note_fits(env: &Env<'_>, style: &UiStyle, width: u16, note: &str) -> bool {
+    let Some(font) = style.font(env) else {
+        return true;
+    };
+    let width = f32::from(width) - 2.0 * style.margin as f32;
+    font.wrap(style.small, note, width).len() <= NOTE_LINES
+}
+
 /// Draws the note of a row from `below` down to the end of `rect`: in
 /// small gray text (light on a focused row), wrapped to [`NOTE_LINES`].
 pub(super) fn draw_note_below(
@@ -308,7 +320,6 @@ pub(super) fn draw_note_below(
         rect.width,
         rect.bottom().saturating_sub(u32::from(below)) as u16,
     );
-    canvas.describe(Role::Text, note, at, false, None);
     let margin = style.margin as f32;
     let width = f32::from(rect.width) - 2.0 * margin;
     let color = style.focus_faint(focused, 80);
@@ -319,6 +330,8 @@ pub(super) fn draw_note_below(
     // Only as many as the row holds below its title: never past its end.
     let room = (f32::from(at.height) / line) as usize;
     let most = NOTE_LINES.min(room);
+    // What is drawn, so that what describes the screen sees a cut.
+    let mut shown = String::new();
     for (n, range) in lines.iter().take(most).enumerate() {
         let last = n + 1 == most && lines.len() > most;
         let text = if last {
@@ -326,6 +339,10 @@ pub(super) fn draw_note_below(
         } else {
             note[range.clone()].to_string()
         };
+        if !shown.is_empty() {
+            shown.push(' ');
+        }
+        shown.push_str(text.trim());
         let baseline = top + line * n as f32 + ascent;
         font.draw(
             canvas,
@@ -336,6 +353,12 @@ pub(super) fn draw_note_below(
             color,
         );
     }
+    let said = if lines.len() > most {
+        shown.as_str()
+    } else {
+        note
+    };
+    canvas.describe(Role::Text, said, at, false, None);
 }
 
 /// Draws a row: `title` on the left, `value` right-aligned.

@@ -435,7 +435,6 @@ pub fn draw_message(
     let Some(font) = style.font(env) else {
         return;
     };
-    canvas.describe(Role::Text, text, area, false, None);
     let width = f32::from(area.width) - 2.0 * style.margin as f32;
     let line_height = font.line_metrics(style.text).line_height;
     let mut lines = font.wrap(style.text, text, width);
@@ -447,16 +446,40 @@ pub fn draw_message(
     let mut baseline =
         f32::from(area.y) + (f32::from(area.height) - total).max(0.0) / 2.0 + line_height * 0.8;
     let count = lines.len();
-    for (n, range) in lines.into_iter().enumerate() {
+    let mut last = String::new();
+    for (n, range) in lines.iter().cloned().enumerate() {
         let line = if cut && n + 1 == count {
             let rest = text[range.start..].trim_end();
-            Cow::Owned(fit(&font, style.text, &format!("{rest} …"), width))
+            last = fit(&font, style.text, &format!("{rest} …"), width);
+            Cow::Borrowed(last.as_str())
         } else {
             Cow::Borrowed(&text[range])
         };
         let x = f32::from(area.x) + (f32::from(area.width) - font.measure(style.text, &line)) / 2.0;
         font.draw(canvas, style.text, x, baseline as i32, &line, Color::BLACK);
         baseline += line_height;
+    }
+    canvas.describe(
+        Role::Text,
+        &as_shown(text, &lines, cut, &last),
+        area,
+        false,
+        None,
+    );
+}
+
+/// What a block of `text` wrapped on `lines` says as it is drawn: all of
+/// it, or where its last line was cut (`last` as drawn), the lines shown,
+/// so that what describes the screen (and paperpaw-dev) sees the "…".
+fn as_shown<'a>(
+    text: &'a str,
+    lines: &[core::ops::Range<usize>],
+    cut: bool,
+    last: &str,
+) -> Cow<'a, str> {
+    match lines.last() {
+        Some(range) if cut => Cow::Owned(alloc::format!("{}{last}", &text[..range.start])),
+        _ => Cow::Borrowed(text),
     }
 }
 
@@ -504,19 +527,27 @@ pub fn draw_note_line(
     lines.truncate(fits);
     let count = lines.len();
     let mut y = f32::from(top) + (f32::from(height) - line * count as f32).max(0.0) / 2.0;
-    for (n, range) in lines.into_iter().enumerate() {
+    let block = Rect::new(
+        area.x + margin,
+        y as u16,
+        width,
+        (line * count as f32) as u16,
+    );
+    let mut last = String::new();
+    for (n, range) in lines.iter().cloned().enumerate() {
         let shown = if cut && n + 1 == count {
-            fit(
+            last = fit(
                 &font,
                 style.small,
                 &format!("{} …", text[range.start..].trim_end()),
                 room,
-            )
+            );
+            last.clone()
         } else {
             text[range].to_string()
         };
         let row = Rect::new(area.x + margin, y as u16, width, line as u16);
-        draw_label(
+        draw_text(
             canvas,
             &font,
             style.small,
@@ -527,6 +558,13 @@ pub fn draw_note_line(
         );
         y += line;
     }
+    canvas.describe(
+        Role::Text,
+        &as_shown(text, &lines, cut, &last),
+        block,
+        false,
+        None,
+    );
 }
 
 /// `text` shortened with an ellipsis to fit `width` pixels.
@@ -678,10 +716,13 @@ pub fn draw_empty(
     } else {
         0.0
     };
-    // As many lines of the text as fit, the last saying there is more.
+    // The text whole, or not at all where it does not fit (a small
+    // widget's cell): the title says enough there, and no explanation
+    // shows cut.
     let fits = ((room - icon_room - words - gap) / line).max(0.0) as usize;
-    let cut = lines.len() > fits;
-    lines.truncate(fits);
+    if lines.len() > fits {
+        lines.clear();
+    }
     let total =
         icon_room + words + if lines.is_empty() { 0.0 } else { gap } + text_height(lines.len());
     // A little above the middle, where the eye looks first.
@@ -732,29 +773,19 @@ pub fn draw_empty(
         area.width,
         text_height(lines.len()) as u16,
     );
-    canvas.describe(Role::Text, text, block, false, None);
     let ascent = font.line_metrics(text_size).ascent;
-    let count = lines.len();
-    for (n, range) in lines.into_iter().enumerate() {
-        let shown = if cut && n + 1 == count {
-            fit(
-                &font,
-                text_size,
-                &format!("{} …", text[range.start..].trim_end()),
-                width,
-            )
-        } else {
-            text[range].trim().to_string()
-        };
-        let x = centre(font.measure(text_size, &shown));
+    for range in &lines {
+        let shown = text[range.clone()].trim();
+        let x = centre(font.measure(text_size, shown));
         font.draw(
             canvas,
             text_size,
             x,
             (y + ascent) as i32,
-            &shown,
+            shown,
             style.ink(Ink::Note),
         );
         y += line;
     }
+    canvas.describe(Role::Text, text, block, false, None);
 }

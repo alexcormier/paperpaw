@@ -143,3 +143,63 @@ fn a_data_plugin_found_wanting() {
     assert!(!dir.join("out/work").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A community plugin whose setting's description is longer than its
+/// row's two lines.
+struct Wordy;
+
+static WORDY: [paperpaw_sdk::SettingSpec; 1] = [paperpaw_sdk::SettingSpec::fixed_switch(
+    "wordy.long",
+    "Long",
+    false,
+    paperpaw_sdk::builtin::groups::SYSTEM,
+)
+.described("wordy.long.help")];
+
+impl paperpaw_sdk::Plugin for Wordy {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            paperpaw_sdk::Id::new_static("wordy"),
+            "Wordy",
+            paperpaw_sdk::Version::new(0, 1, 0),
+        )
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        r.add_settings(&WORDY)?;
+        r.add_translations(std::borrow::Cow::Borrowed(
+            "[meta]\nlanguage = en\nname = English\nplural = one-other\n[messages]\n\
+             wordy.long.help = A description that goes on and on, far longer than the two lines \
+             a row of the settings gives it on a small screen, so the end of it is cut.\n",
+        ))
+    }
+}
+
+fn add_wordy(builder: paperpaw_core::KernelBuilder) -> paperpaw_core::KernelBuilder {
+    builder.plugin(Wordy)
+}
+
+/// A description longer than its row is a warning: the row would cut it.
+#[test]
+fn a_description_longer_than_its_row_is_found() {
+    let context = Context::new(
+        Target {
+            plugins: vec!["wordy".into()],
+            add: Some(add_wordy),
+            ..Target::default()
+        },
+        out("wordy"),
+    );
+    let mut report = Report::default();
+    lint::run(&context, &mut report).unwrap();
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| f.check == "lint.help-cut" && f.place == "wordy.long"),
+        "{}",
+        report.text(Level::Info)
+    );
+    let _ = std::fs::remove_dir_all(&context.out);
+}

@@ -252,6 +252,14 @@ impl ConfirmQuestion {
         self
     }
 
+    /// One button only, yes (by default *OK*): no question, a text shown
+    /// to be read whole, e.g. an explanation a screen has no room for; the
+    /// page buttons scroll it where it is long.
+    pub fn only_yes(mut self) -> Self {
+        self.params.set(crate::ui::confirm::ONLY_YES, "1");
+        self
+    }
+
     /// The focus starts on yes, where that is the answer to expect and
     /// does no harm.
     pub fn focus_yes(mut self) -> Self {

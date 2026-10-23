@@ -426,6 +426,7 @@ const paperpaw_sdk::ui::choice::OPTION: &str = "option"
 const paperpaw_sdk::ui::confirm::ANSWER: &str = "answer"
 const paperpaw_sdk::ui::confirm::FOCUS_YES: &str = "focus-yes"
 const paperpaw_sdk::ui::confirm::NO_LABEL: &str = "no-label"
+const paperpaw_sdk::ui::confirm::ONLY_YES: &str = "only-yes"
 const paperpaw_sdk::ui::confirm::YES_LABEL: &str = "yes-label"
 const paperpaw_sdk::ui::items::LINES: &str = "lines"
 const paperpaw_sdk::ui::style::Ink::ALL: [paperpaw_sdk::ui::style::Ink; 14] = [ Ink::Text, Ink::Paper, Ink::Note, Ink::Muted, Ink::Faint, Ink::Disabled, Ink::Rule, Ink::Line, Ink::LineFaint, Ink::OnFocusMuted, Ink::OnDarkMuted, Ink::Card, Ink::CardPattern, Ink::Section, ]
