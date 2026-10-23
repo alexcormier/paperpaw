@@ -74,6 +74,12 @@ pub const KEY_SHAPE: Setting<Text> = Setting::new("keyboard.key-shape");
 pub const SHAPE_TALL: &str = "keyboard.key-shape.tall";
 pub const SHAPE_ROUND: &str = "keyboard.key-shape.round";
 pub const SHAPE_WIDE: &str = "keyboard.key-shape.wide";
+/// How big the keys that are tapped are: smaller, as their shape says
+/// (the default), or larger.
+pub const KEY_SIZE: Setting<Text> = Setting::new("keyboard.size");
+pub const SIZE_SMALL: &str = "keyboard.size.small";
+pub const SIZE_MEDIUM: &str = "keyboard.size.medium";
+pub const SIZE_LARGE: &str = "keyboard.size.large";
 const CHOOSE_SCREEN: Id = Id::new_static("keyboard.choose");
 /// The clipboard's text, asked for by *Paste*.
 const PASTED: Event<Typed> = Event::new("keyboard.pasted");
@@ -138,7 +144,7 @@ pub struct Keyboard;
 
 /// The layouts to type with, chosen on their screen.
 static CHOSEN: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_SCREEN);
-static SETTINGS: [SettingSpec; 3] = [
+static SETTINGS: [SettingSpec; 4] = [
     SettingSpec::fixed(
         LAYOUTS_SETTING.static_str(),
         "keyboard.setting.layouts",
@@ -163,6 +169,14 @@ static SETTINGS: [SettingSpec; 3] = [
         groups::SYSTEM,
     )
     .described("keyboard.setting.key-shape.help"),
+    SettingSpec::fixed_choice(
+        KEY_SIZE.static_str(),
+        "keyboard.setting.size",
+        &[SIZE_SMALL, SIZE_MEDIUM, SIZE_LARGE],
+        SIZE_MEDIUM,
+        groups::SYSTEM,
+    )
+    .described("keyboard.setting.size.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -253,6 +267,53 @@ fn height_of(shape: &str) -> u32 {
         SHAPE_WIDE => 85,
         _ => 110,
     }
+}
+
+/// How high the keyboard is where keys are tapped, in hundredths of its
+/// height at Medium, by its size ([`KEY_SIZE`]): the keys take what
+/// changes. With round keys on the X4 Pro and the Boox, the keyboard
+/// then takes about 30 %, 40 % and 50 % of the screen.
+fn size_of(size: &str) -> u32 {
+    match size {
+        SIZE_SMALL => 75,
+        SIZE_LARGE => 125,
+        _ => 100,
+    }
+}
+
+/// How high the keys are where they are tapped, for keys `letter` wide,
+/// `count` rows of them and `around` pixels of the keyboard that are not
+/// keys. The shape gives the height at Medium, and the size scales the
+/// whole keyboard from there.
+fn tapped_height(env: &Env<'_>, style: &UiStyle, letter: u32, count: u16, around: u16) -> u16 {
+    let shape = env.settings.read(&KEY_SHAPE);
+    let border = 2 * ui::button_border(style) as u16;
+    let touch_row = style.touch_row(style.row) as u16;
+    let height = (letter * height_of(shape) / 100) as u16;
+    let shaped = match shape {
+        // As before: no higher than a touch row, as high as a line.
+        SHAPE_TALL => height
+            .min(touch_row)
+            .max(paperpaw_sdk::widgets::line_height(env, style.text) + border),
+        // As high as wide; high enough for the letter itself.
+        SHAPE_ROUND => height.max(style.text as u16 + border),
+        _ => height.min(touch_row).max(style.text as u16 + border),
+    };
+    let count = count.max(1);
+    let medium = u32::from(around) + u32::from(count) * u32::from(shaped);
+    let target = medium * size_of(env.settings.read(&KEY_SIZE)) / 100;
+    let sized = (target.saturating_sub(u32::from(around)) / u32::from(count)) as u16;
+    // Larger keys stop where the keyboard would take more than half the
+    // screen.
+    let half = (env.device.display.height / 2).saturating_sub(around) / count;
+    let sized = if sized > shaped {
+        sized.min(half.max(shaped))
+    } else {
+        sized
+    };
+    // Never smaller than a finger hits, nor than the letter on the key.
+    let least = (env.metrics.mm(LEAST_TAP_MM) as u16).max(style.text as u16 + border);
+    sized.max(least)
 }
 
 /// The units of a row of keys.
@@ -429,33 +490,22 @@ impl KeyboardScreen {
         // The field's buttons grow on touch screens, and its row with them.
         let touch_row = style.touch_row(style.row) as u16;
         let field_height = (style.small * 1.5) as u16 + touch_row;
-        // Keys that are tapped nearly round: as high as a letter's key is
-        // wide, a little more, but no higher than a touch row and high
-        // enough for their letter. Chosen with buttons, a row high.
+        // Keys that are tapped have the height of their shape and size.
+        // Chosen with buttons, they are a row high.
         let widest = rows.iter().map(|row| units(row)).max().unwrap_or(20).max(1);
         let letter = (u32::from(display.width) - 2 * style.margin) * 2 / widest;
-        let line = paperpaw_sdk::widgets::line_height(env, style.text);
-        let shape = env.settings.read(&KEY_SHAPE);
-        let border = 2 * ui::button_border(&style) as u16;
-        let key_height = if touch {
-            let height = (letter * height_of(shape) / 100) as u16;
-            match shape {
-                // As before: no higher than a touch row, as high as a line.
-                SHAPE_TALL => height.min(touch_row).max(line + border),
-                // As high as wide; high enough for the letter itself.
-                SHAPE_ROUND => height.max(style.text as u16 + border),
-                _ => height.min(touch_row).max(style.text as u16 + border),
-            }
-        } else {
-            touch_row
-        };
         let gap = style.gap as u16 / 2;
         // The last row's keys keep the side margin from the bottom edge
         // (tapped, they fill their place but for the seam).
-        let room = if touch {
-            (style.margin as u16).saturating_sub(ui::button_border(&style) as u16)
+        let (key_height, room) = if touch {
+            let room = (style.margin as u16).saturating_sub(ui::button_border(&style) as u16);
+            let around = field_height + gap * 2 + room;
+            (
+                tapped_height(env, &style, letter, count as u16, around),
+                room,
+            )
         } else {
-            ui::edge_room(&style, key_height)
+            (touch_row, ui::edge_room(&style, touch_row))
         };
         // On the screen whatever the rows: keys get smaller first.
         let room_for_keys = display
@@ -492,7 +542,7 @@ impl KeyboardScreen {
             key_height: keys_height / count as u16,
             most,
             touch,
-            shape: shape.to_string(),
+            shape: env.settings.read(&KEY_SHAPE).to_string(),
         };
         screen.buttons = screen.field_buttons(env);
         screen
