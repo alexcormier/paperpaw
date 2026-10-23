@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Titles and headings on more lines have their lines closer than text
+  (1.2 times their size, never so close that accents meet descenders):
+  `FontHandle::heading_line_height`, `widgets::heading_line_height` and
+  `Wrapped::heading`. The reading widgets' book titles, the home screen's
+  book card, header titles that wrap, dialog and choice titles, empty
+  screens and the book information use them; text keeps its line height.
 - Tools (the home screen's grid, all tools) set a name too long for a
   line on two, hyphenated where one word is too long (by the
   interface's language), before shortening it, and centre icon and name

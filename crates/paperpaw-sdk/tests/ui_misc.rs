@@ -415,6 +415,27 @@ proptest! {
     }
 }
 
+/// The lines of a heading on more lines are closer than those of text,
+/// and still the highest letters of a line (capitals with accents) stay
+/// clear of the lowest of the line above.
+#[test]
+fn heading_lines_are_closer_than_text_and_never_touch() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let font = UiStyle::new(&env).font(&env).unwrap();
+    for size in [12.0, 16.0, 20.0, 26.0, 34.0, 48.0] {
+        let apart = font.heading_line_height(size);
+        assert!(apart < font.line_metrics(size).line_height, "{size}");
+        assert_eq!(widgets::heading_line_height(&env, size), apart as u16);
+        let (top, _) = font.ink(size, "ÅÄÉÖÜ").unwrap();
+        let (_, bottom) = font.ink(size, "gjpqyß").unwrap();
+        assert!(
+            ((bottom - top) as f32) < apart,
+            "{size}: {top} {bottom} {apart}"
+        );
+    }
+}
+
 #[test]
 fn frames_and_sizes_read_from_settings_fall_back_when_unknown() {
     let h = look_harness("core.frame.cloud", "sideways");

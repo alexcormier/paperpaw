@@ -135,6 +135,10 @@ const OTHERS: usize = 4;
 /// Largest font file loaded.
 const MAX_FONT_FILE: u64 = 48 * 1024 * 1024;
 
+/// The lines of a heading or title, as many times its size apart
+/// ([`FontHandle::heading_line_height`]).
+const HEADING_LEADING: f32 = 1.2;
+
 /// All registered fonts, the role bindings and the glyph cache.
 ///
 /// Fonts are bound to *roles* such as
@@ -762,6 +766,19 @@ impl<'a> FontHandle<'a> {
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
         self.font()
             .line_metrics(self.font().size_for(size, "", self.display))
+    }
+
+    /// How far apart the lines of a heading or title set on more lines
+    /// are, in pixels: closer than those of text (its line height, about
+    /// 1.4 times the size with the default font), 1.2 times the size, so
+    /// that a title on two lines reads as one; the highest letters of a
+    /// line (capitals with accents) still stay clear of the lowest of the
+    /// line above (descenders). Text keeps its line height.
+    pub fn heading_line_height(&self, size: f32) -> f32 {
+        let drawn = self.font().size_for(size, "", self.display);
+        // In whole pixels, rounded up (no float rounding in `no_std`).
+        let apart = (drawn * HEADING_LEADING + 0.999) as u32 as f32;
+        apart.min(self.line_metrics(size).line_height)
     }
 
     /// The font that draws `ch` and its number in the cache: this one,

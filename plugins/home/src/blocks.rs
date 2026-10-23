@@ -758,14 +758,15 @@ impl CardParts {
             room -= half + small;
         }
         // Two lines at most; in a flat card, down to the small size.
-        let two = room.min(2 * line_height(env, style.title));
+        let two = room
+            .min(line_height(env, style.title) + widgets::heading_line_height(env, style.title));
         let least = if room >= line {
             style.text
         } else {
             style.small
         };
         let title = &book.book.title;
-        parts.title = widgets::Wrapped::fitting(env, title, style.title, least, text.width, two);
+        parts.title = widgets::Wrapped::heading(env, title, style.title, least, text.width, two);
         parts.text = Some(text);
         parts
     }

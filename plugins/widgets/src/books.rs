@@ -331,9 +331,10 @@ pub(crate) struct Line<'t> {
 
 /// Lines of text, each with its size, colour and [`Role`], drawn one
 /// below the other together in the middle of an area, a little room
-/// between them. What does not fit gives way as its role says: no line
-/// breaks inside a word, a caption before the title's other lines
-/// before a note.
+/// between them (the lines of a title closer, as a heading's,
+/// `widgets::heading_line_height`). What does not fit gives way as its
+/// role says: no line breaks inside a word, a caption before the title's
+/// other lines before a note.
 pub(crate) struct Lines<'t> {
     pub lines: Vec<Line<'t>>,
     /// The title as given, its size and the lines it shows in, while it
@@ -374,13 +375,36 @@ impl<'t> Lines<'t> {
 
     /// The height they take, the room between them included.
     pub(crate) fn height(&self, env: &Env<'_>) -> u16 {
-        let gap = Self::gap(env);
-        let lines: u16 = self.lines.iter().map(|l| line_height(env, l.size)).sum();
-        lines + gap * self.lines.len().saturating_sub(1) as u16
+        let Some(last) = self.lines.last() else {
+            return 0;
+        };
+        let steps: u16 = (1..self.lines.len()).map(|i| self.step(env, i)).sum();
+        steps + line_height(env, last.size)
+    }
+
+    /// From the top of line `i - 1` to the top of line `i`: a heading's
+    /// line between the lines of a title, else a line and the room
+    /// between lines.
+    fn step(&self, env: &Env<'_>, i: usize) -> u16 {
+        let (above, line) = (&self.lines[i - 1], &self.lines[i]);
+        if above.role == Role::Title && line.role == Role::Title {
+            widgets::heading_line_height(env, above.size)
+        } else {
+            line_height(env, above.size) + Self::gap(env)
+        }
     }
 
     fn gap(env: &Env<'_>) -> u16 {
         UiStyle::new(env).gap as u16 / 4
+    }
+
+    /// The lines of a title at `s` that `free` pixels hold, a heading's
+    /// line apart.
+    fn title_rows(env: &Env<'_>, s: f32, free: u16) -> usize {
+        let room = free + Self::gap(env);
+        let first = line_height(env, s) + Self::gap(env);
+        let apart = widgets::heading_line_height(env, s).max(1);
+        usize::from(room >= first) + usize::from(room.saturating_sub(first) / apart)
     }
 
     /// Makes them fit `width` × `height`: each line on one line, smaller
@@ -430,8 +454,7 @@ impl<'t> Lines<'t> {
                 .sum();
             let free = height.saturating_sub(others);
             let wrap = |s: f32, most: usize| {
-                let line = line_height(env, s) + Self::gap(env);
-                let rows = usize::from((free + Self::gap(env)) / line.max(1));
+                let rows = Self::title_rows(env, s, free);
                 let lines = wrap_words(&font, s, &text, width, most.min(rows));
                 (lines.len() > 1).then_some(lines)
             };
@@ -444,9 +467,7 @@ impl<'t> Lines<'t> {
                 .or_else(|| {
                     // Not whole in any: in lines up to the word it has
                     // to shorten, where that shows more than one line.
-                    let line = line_height(env, least) + Self::gap(env);
-                    let rows = usize::from((free + Self::gap(env)) / line.max(1));
-                    let rows = rows.min(MOST_TITLE_LINES);
+                    let rows = Self::title_rows(env, least, free).min(MOST_TITLE_LINES);
                     let lines = cut_lines(&font, least, &text, width, rows);
                     (lines.len() > 1).then_some((least, lines))
                 });
@@ -515,14 +536,17 @@ impl<'t> Lines<'t> {
         let total = self.height(env).min(area.height);
         let top = area.y + (area.height - total) / 2;
         let mut y = top;
-        for line in &self.lines {
+        for (i, line) in self.lines.iter().enumerate() {
+            if i > 0 {
+                y += self.step(env, i);
+            }
             if y >= area.y + area.height {
                 break;
             }
             let row = Rect::new(area.x, y, area.width, area.y + area.height - y);
-            y += draw_line(
+            draw_line(
                 canvas, env, &font, line.size, row, align, &line.text, line.color,
-            ) + Self::gap(env);
+            );
         }
         Rect::new(area.x, top, area.width, total)
     }
