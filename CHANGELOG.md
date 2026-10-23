@@ -92,6 +92,11 @@ change the plugin SDK.
   and its size (it said 64 GB for both). Looking for Calibre in the
   network asks again a few times when no answer comes, since a call
   can be lost on Wi-Fi without a word.
+- Wi-Fi: a scan that finds no saved network is made again, up to three
+  times, before what waits for the network (Calibre, the store, a
+  sync) says there is none. On the X4s the first scan after the radio
+  comes on often found nothing, and Calibre said *no network* while
+  the device joined a few seconds later.
 - SDK: `Storage::total_space` tells a storage's size, as `free_space`
   tells what it has free.
 - SDK: `builtin::events::TYPE_TEXT` types text into the text field

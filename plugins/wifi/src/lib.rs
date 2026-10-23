@@ -404,6 +404,13 @@ impl Plugin for Wifi {
             match policy.scanned(&wifi.networks, &known) {
                 Some(commands) => wifi_commands(out, commands),
                 None => {
+                    policy.scans += 1;
+                    if policy.still_wanted(wifi, env.now) && policy.scans < policy::SCANS {
+                        // The first scans after the radio came on may
+                        // find nothing.
+                        wifi_commands(out, alloc::vec![WifiCommand::Scan]);
+                        return;
+                    }
                     policy.goal = Goal::Nothing;
                     if policy.still_wanted(wifi, env.now) {
                         out.push(Command::Notify(env.i18n.tr("wifi.none-in-reach").into()));

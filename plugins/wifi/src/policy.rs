@@ -5,6 +5,8 @@
 //!   lets it ([`ON_DEMAND`](crate::ON_DEMAND)); then the strongest secured
 //!   network joined before is joined, the next one if that fails (open
 //!   networks only when chosen, see [`best_known`]).
+//! - A scan that finds no network joined before is made again, up to
+//!   [`SCANS`] times, before none counts as in reach.
 //! - A round that joins nothing is tried again a little later while the
 //!   network is still wanted or charging keeps the radio on (e.g. while a
 //!   router starts, or once a first try had no answer). The network is
@@ -22,6 +24,10 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::Instant;
 use paperpaw_sdk::wifi::{NETWORK_WAIT_MS, Wifi, WifiCommand, WifiNetwork, WifiState};
+
+/// Scans in a row that find no network joined before, until none counts
+/// as in reach: the first after the radio comes on often finds none.
+pub const SCANS: u8 = 3;
 
 /// What the radio is for now.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -41,6 +47,8 @@ pub struct Policy {
     pub goal: Goal,
     /// Networks tried this round (to try the next one).
     pub tried: Vec<String>,
+    /// Scans this round that found no network joined before.
+    pub scans: u8,
     /// The user switched the radio on (on the page): it stays on.
     pub manual: bool,
     /// A network chosen with a password not kept yet: kept once joined.
@@ -119,6 +127,7 @@ impl Policy {
     fn start_round(&mut self, goal: Goal) {
         self.goal = goal;
         self.tried.clear();
+        self.scans = 0;
     }
 
     /// The user chose a network (with its password, or a kept one).
