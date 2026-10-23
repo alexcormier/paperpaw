@@ -14,7 +14,8 @@
 mod common;
 
 use common::{LIST, Shared, Shopping};
-use paperpaw_plugin_store::OPEN;
+use paperpaw_core::Kernel;
+use paperpaw_plugin_store::{DISCOVER_FONTS, OPEN, Store};
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::{Id, Instant, Params, Storage, Version};
 
@@ -304,6 +305,40 @@ fn fonts_open_the_fonts_browser() {
     shopping.choose("Look");
     shopping.choose("Fonts");
     shopping.request("https://paperpaw.org/api/v1/fonts.json");
+}
+
+/// The reading settings say where fonts with larger sizes are found: the
+/// font size goes as far as the packs built in (48 pixels at 220 dpi: 16
+/// points), and *Discover fonts* opens the fonts browser, or its page
+/// where it is not installed.
+#[test]
+fn larger_sizes_are_discovered_from_the_reading_settings() {
+    let mut shopping = Shopping::new(&list("1.0.0"));
+    let kernel = &shopping.kernel;
+    let size = kernel
+        .settings()
+        .spec("core.font-size")
+        .map(|s| s.kind.clone());
+    assert_eq!(
+        size,
+        Some(paperpaw_sdk::SettingKind::Int { min: 6, max: 16 })
+    );
+    let reading = kernel.menus().ids("core.group.reading");
+    assert!(reading.contains(&&DISCOVER_FONTS), "{reading:?}");
+    shopping.run(DISCOVER_FONTS);
+    shopping.request("https://paperpaw.org/api/v1/fonts.json");
+
+    let mut kernel = Kernel::builder(common::DEVICE)
+        .storage(Shared::default())
+        .network(true)
+        .catalog_device("x4")
+        .plugin(Store)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), DISCOVER_FONTS);
+    let top = kernel.screens().last().map(Id::as_str);
+    assert_eq!(top, Some("store.plugin"));
 }
 
 #[test]

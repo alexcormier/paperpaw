@@ -14,8 +14,8 @@ use std::rc::Rc;
 
 use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_platform::Rotation;
-use paperpaw_plugin_fonts_browser::{DISCOVER, FontsBrowser, OPEN};
-use paperpaw_sdk::builtin::{actions, groups, settings};
+use paperpaw_plugin_fonts_browser::{FontsBrowser, OPEN};
+use paperpaw_sdk::builtin::{actions, settings};
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage,
     PixelFormat, Storage, StorageError,
@@ -426,29 +426,4 @@ fn a_download_cut_off_by_a_restart_is_dropped() {
         shown.iter().all(|label| !label.contains("0 / 2")),
         "{shown:?}"
     );
-}
-
-/// The reading settings say where fonts with larger sizes are found: the
-/// font size goes as far as the packs built in (48 pixels at 220 dpi: 16
-/// points), and *Discover fonts* opens the list.
-#[test]
-fn larger_sizes_are_discovered_from_the_reading_settings() {
-    let storage = Shared::default();
-    let mut kernel = started(&storage);
-    let size = kernel
-        .settings()
-        .spec(settings::FONT_SIZE.as_str())
-        .map(|spec| spec.kind.clone());
-    assert_eq!(
-        size,
-        Some(paperpaw_sdk::SettingKind::Int { min: 6, max: 16 })
-    );
-    let reading = kernel.menus().ids(groups::READING.as_str());
-    assert!(reading.contains(&&DISCOVER), "{reading:?}");
-    kernel.run_action(Instant(100), DISCOVER);
-    let asked = kernel
-        .take_io()
-        .into_iter()
-        .any(|io| matches!(io, Io::Http(call) if call.url == CATALOG));
-    assert!(asked);
 }

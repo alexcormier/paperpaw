@@ -11,7 +11,9 @@ change the plugin SDK.
   looked the same. A size set before past them gives way to the
   largest. At the largest, the help says that a font with larger sizes
   gives more, and *Discover fonts* on the reading settings opens the
-  font browser. Scalable fonts keep every size. For plugins:
+  font browser (or its page in the store, where it is not installed).
+  The setup's sample of the font size is a shorter sentence, shown
+  whole. Scalable fonts keep every size. For plugins:
   `FontHandle::largest_size`; for the kernel, `Settings::set_range` and
   `Settings::set_description`.
 - First-run setup: the sample of the font size is in the book's font,
