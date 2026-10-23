@@ -37,6 +37,7 @@ pub const UPDATE_DIR: &str = "updates";
 
 /// What the shell is told to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FirmwareCommand {
     /// Installs the update file at this storage path: checks it
     /// ([`Update::may_install`]), writes it beside the running firmware
@@ -110,6 +111,7 @@ impl From<Problem> for InstallFailure {
 
 /// Firmware as the kernel knows it ([`Env::firmware`](crate::Env)).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Firmware {
     /// The running firmware's version, e.g. `0.4.0`.
     pub version: String,
@@ -129,6 +131,47 @@ pub struct Firmware {
     /// The code plugins built in, as the image lists them (empty if it
     /// does not).
     pub plugins: Plugins,
+}
+
+impl Firmware {
+    /// The firmware `project` of `version` on `chip`; nothing else known.
+    pub fn new(version: impl Into<String>, project: impl Into<String>, chip: u16) -> Self {
+        Self {
+            version: version.into(),
+            project: project.into(),
+            chip,
+            ..Self::default()
+        }
+    }
+
+    /// With PaperPaw's keys built in.
+    pub fn keys(mut self, keys: Vec<[u8; 32]>) -> Self {
+        self.keys = keys;
+        self
+    }
+
+    /// With `room` bytes for an update.
+    pub fn room(mut self, room: u64) -> Self {
+        self.room = room;
+        self
+    }
+
+    /// An update before did not start cleanly, if `undone`.
+    pub fn undone(mut self, undone: bool) -> Self {
+        self.undone = undone;
+        self
+    }
+
+    pub fn state(mut self, state: FirmwareState) -> Self {
+        self.state = state;
+        self
+    }
+
+    /// With the code plugins built in.
+    pub fn plugins(mut self, plugins: Plugins) -> Self {
+        self.plugins = plugins;
+        self
+    }
 }
 
 /// Who signed an update.

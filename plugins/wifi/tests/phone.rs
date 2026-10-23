@@ -117,11 +117,7 @@ impl Test {
 }
 
 fn network(ssid: &str) -> WifiNetwork {
-    WifiNetwork {
-        ssid: String::from(ssid),
-        signal: -50,
-        secured: true,
-    }
+    WifiNetwork::new(String::from(ssid), -50, true)
 }
 
 /// The page's answer to a request: its status and body.

@@ -131,10 +131,7 @@ pub(crate) fn to_text(builds: &[Build]) -> String {
             build.package.name.replace(['\n', '\r'], " ")
         ));
         for f in &build.package.files {
-            let digest = match &f.digest {
-                Digest::Sha1(hex) => format!("sha1:{hex}"),
-                Digest::Sha256(hex) => format!("sha256:{hex}"),
-            };
+            let digest = f.digest.text();
             text.push_str(&format!("file {} {digest} {} {}\n", f.size, f.path, f.url));
         }
     }

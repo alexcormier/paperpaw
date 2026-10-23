@@ -101,19 +101,11 @@ impl Storage for MemoryStorage {
                 Some((sub, _)) => {
                     dirs.insert(String::from(sub));
                 }
-                None => visit(DirEntry {
-                    name: rest,
-                    is_dir: false,
-                    size: data.len() as u64,
-                }),
+                None => visit(DirEntry::new(rest, false, data.len() as u64)),
             }
         }
         for name in &dirs {
-            visit(DirEntry {
-                name,
-                is_dir: true,
-                size: 0,
-            });
+            visit(DirEntry::new(name, true, 0));
         }
         if found {
             Ok(())

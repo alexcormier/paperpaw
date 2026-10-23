@@ -208,13 +208,14 @@ pub(crate) fn answer(
         |status, kind: &str, body: &[u8]| ServerResponse::new(number, status, kind, body.to_vec());
     match guard.check_target(request.target, request.at) {
         Access::Granted => {}
-        Access::Denied => {
-            let text = b"The key is missing or wrong: scan the code shown on the reader.";
-            return (respond(403, PLAIN, text), None);
-        }
         Access::Locked => {
             let text = b"Too many wrong keys: try again in a minute.";
             return (respond(429, PLAIN, text), None);
+        }
+        // Denied, and a state to come: refused as a wrong key is.
+        _ => {
+            let text = b"The key is missing or wrong: scan the code shown on the reader.";
+            return (respond(403, PLAIN, text), None);
         }
     }
     let (path, query) = request

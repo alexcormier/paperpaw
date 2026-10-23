@@ -275,16 +275,12 @@ impl Ota {
     /// The firmware as plugins see it.
     pub fn firmware(&self) -> Firmware {
         let target = (self.running + 1) % ota::SLOTS;
-        Firmware {
-            version: String::from(env!("PAPERPAW_VERSION")),
-            project: String::from(PROJECT),
-            chip: CHIP,
-            keys: KEYS.to_vec(),
-            room: u64::from(self.apps[target as usize].1),
-            undone: self.undone,
-            state: FirmwareState::Idle,
-            plugins: Plugins::read_static(&PLUGINS).unwrap_or_default(),
-        }
+        Firmware::new(env!("PAPERPAW_VERSION"), PROJECT, CHIP)
+            .keys(KEYS.to_vec())
+            .room(u64::from(self.apps[target as usize].1))
+            .undone(self.undone)
+            .state(FirmwareState::Idle)
+            .plugins(Plugins::read_static(&PLUGINS).unwrap_or_default())
     }
 
     /// Whether an install goes on (the device neither sleeps nor waits

@@ -532,15 +532,7 @@ mod tests {
     use super::*;
 
     fn at(year: i32, month: u8, day: u8, hour: u8) -> LocalTime {
-        LocalTime {
-            year,
-            month,
-            day,
-            hour,
-            minute: 0,
-            second: 0,
-            weekday: dates::weekday(year, month, day),
-        }
+        LocalTime::new(year, month, day, hour, 0, 0)
     }
 
     #[test]

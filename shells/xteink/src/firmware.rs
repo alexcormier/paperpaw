@@ -278,6 +278,8 @@ impl Firmware {
                 self.apply(effects);
             }
             FirmwareCommand::Restart => self.restart(),
+            // A command this firmware does not know: nothing done.
+            _ => {}
         }
     }
 

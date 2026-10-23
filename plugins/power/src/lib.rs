@@ -96,6 +96,8 @@ pub fn choose(env: &Env<'_>) -> (Id, bool) {
         PowerLevel::Normal => power::NORMAL,
         PowerLevel::Saving => power::SAVING,
         PowerLevel::Offline => power::OFFLINE,
+        // A level to come: everything as configured.
+        _ => power::NORMAL,
     };
     let chosen = env.settings.read(&MODE);
     let level = match chosen {
@@ -183,6 +185,7 @@ impl Plugin for Power {
                         PowerLevel::Normal => return None,
                         PowerLevel::Saving => "leaf",
                         PowerLevel::Offline => "wifi-off",
+                        _ => return None,
                     };
                     Some(StatusValue::Icon(Cow::Borrowed(icon)))
                 }),

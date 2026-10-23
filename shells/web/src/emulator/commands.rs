@@ -221,7 +221,8 @@ impl Emulator {
             }
             Command::Usage => {
                 let u = device.kernel.usage();
-                let [fast, partial, full] = u.refreshes;
+                let (fast, partial, full) =
+                    (u.refreshes.fast, u.refreshes.partial, u.refreshes.full);
                 format!(
                     "{{\"refreshes\":[{fast},{partial},{full}],\"pixels\":{},\"inputs\":{}}}",
                     u.pixels, u.inputs

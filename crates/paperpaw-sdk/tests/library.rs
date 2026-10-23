@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use paperpaw_sdk::builtin::events::Reading;
 use paperpaw_sdk::document::{DocumentError, ImageRef};
 use paperpaw_sdk::library::listing::{Entry, Listing, UNRANKED};
-use paperpaw_sdk::library::{self, Book, BookData, catalog};
+use paperpaw_sdk::library::{self, Book, BookData, BookDataKind, catalog};
 use paperpaw_sdk::{FormatSpec, Formats, Id, MemoryStorage, Storage};
 use proptest::prelude::*;
 
@@ -465,11 +465,11 @@ fn moved_and_removed_books_take_their_place_in_the_lists() {
 
 #[test]
 fn book_data_entries_are_named_by_sixteen_small_hex_digits() {
-    let data = BookData {
-        folder: Cow::Borrowed("cache"),
-        prefix: Cow::Borrowed("epub-"),
-        ..BookData::default()
-    };
+    let data = BookData::new(
+        Cow::Borrowed("cache"),
+        Cow::Borrowed("epub-"),
+        BookDataKind::default(),
+    );
     let key = "0123456789abcdef";
     assert_eq!(data.key_of(&format!("epub-{key}")), Some((key, "")));
     assert_eq!(data.key_of(&format!("epub-{key}.ini")), Some((key, ".ini")));

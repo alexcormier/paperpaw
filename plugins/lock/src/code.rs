@@ -109,13 +109,8 @@ fn salt(env: &Env<'_>) -> String {
 pub(crate) fn keep(env: &Env<'_>, kind: &str, code: &str) -> Command {
     let salt = salt(env);
     let value = format!("{kind}:{salt}:{}", hash(&salt, code));
-    Command::SetSecret(SecretChange {
-        id: SECRET.to_string(),
-        label: String::from("lock.secret"),
-        value: Some(value),
-        // A hash: nothing to type anew in the list.
-        changeable: false,
-    })
+    // A hash: nothing to type anew in the list.
+    Command::SetSecret(SecretChange::keep(SECRET, "lock.secret", &value).changeable(false))
 }
 
 /// The command that forgets the code.

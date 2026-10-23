@@ -83,11 +83,7 @@ impl Storage for Log {
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
         self.note(format!("list {dir}"))?;
         for name in self.entries {
-            visit(DirEntry {
-                name,
-                is_dir: false,
-                size: 1,
-            });
+            visit(DirEntry::new(name, false, 1));
         }
         Ok(())
     }

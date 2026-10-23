@@ -246,14 +246,31 @@ pub fn key(path: &str) -> String {
 /// ([`clean_up_unused`]): a cache by itself, the reader's data only when
 /// the reader says so.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BookData {
     pub folder: alloc::borrow::Cow<'static, str>,
     pub prefix: alloc::borrow::Cow<'static, str>,
     pub kind: BookDataKind,
 }
 
+impl BookData {
+    /// Data of `kind` in `folder`, named `prefix` and the book's id.
+    pub fn new(
+        folder: impl Into<alloc::borrow::Cow<'static, str>>,
+        prefix: impl Into<alloc::borrow::Cow<'static, str>>,
+        kind: BookDataKind,
+    ) -> Self {
+        Self {
+            folder: folder.into(),
+            prefix: prefix.into(),
+            kind,
+        }
+    }
+}
+
 /// What a folder of [`BookData`] holds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BookDataKind {
     /// The reader's: a place, notes, settings for the book, a sync's
     /// state. A book not found may be on a card not inserted, or renamed

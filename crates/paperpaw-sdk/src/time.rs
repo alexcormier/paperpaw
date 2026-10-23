@@ -81,6 +81,7 @@ pub const TIME_ZONES: &[(&str, &str)] = &[
 
 /// A date and time of day.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct LocalTime {
     pub year: i32,
     /// 1 to 12.
@@ -95,20 +96,32 @@ pub struct LocalTime {
 }
 
 impl LocalTime {
+    /// The time of day on a date; its weekday follows from the date.
+    pub fn new(year: i32, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> Self {
+        Self {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            weekday: weekday(year, month, day),
+        }
+    }
+
     /// The local time `seconds` after 1970-01-01 00:00 local time.
     pub fn from_seconds(seconds: i64) -> Self {
         let days = seconds.div_euclid(86_400);
         let rest = seconds.rem_euclid(86_400);
         let (year, month, day) = civil_from_days(days);
-        LocalTime {
+        LocalTime::new(
             year,
             month,
             day,
-            hour: (rest / 3600) as u8,
-            minute: (rest / 60 % 60) as u8,
-            second: (rest % 60) as u8,
-            weekday: weekday_of(days),
-        }
+            (rest / 3600) as u8,
+            (rest / 60 % 60) as u8,
+            (rest % 60) as u8,
+        )
     }
 
     /// The seconds after 1970-01-01 00:00 of this time, the other way

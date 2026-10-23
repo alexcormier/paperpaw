@@ -106,6 +106,7 @@ pub fn is_safe_path(path: &str) -> bool {
 
 /// What a file is checked by: its digest, in lower-case hex digits.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Digest {
     /// 40 digits, as plugin libraries give the files of a folder.
     Sha1(String),
@@ -130,7 +131,7 @@ impl Digest {
     }
 
     /// As kept in a job: `sha1:…` or `sha256:…`.
-    fn text(&self) -> String {
+    pub fn text(&self) -> String {
         match self {
             Digest::Sha1(hex) => format!("sha1:{}", hex.to_ascii_lowercase()),
             Digest::Sha256(hex) => format!("sha256:{}", hex.to_ascii_lowercase()),
@@ -256,6 +257,7 @@ impl Package {
 
 /// An installation going on: which plugin, and how far.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Progress {
     pub plugin: String,
     pub name: String,

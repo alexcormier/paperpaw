@@ -222,15 +222,7 @@ pub fn http_date(text: &str) -> Option<i64> {
     if parts.next()? != "GMT" || hour > 23 || minute > 59 || second > 60 || day > 31 {
         return None;
     }
-    let time = crate::time::LocalTime {
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
-        weekday: 0,
-    };
+    let time = crate::time::LocalTime::new(year, month, day, hour, minute, second);
     Some(time.to_seconds())
 }
 

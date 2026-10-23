@@ -1326,10 +1326,12 @@ pub fn core::option::Option<T>::missing() -> core::option::Option<Self>
 pub fn core::option::Option<T>::to_param(&self) -> alloc::string::String
 pub type paperpaw_sdk::event::EventHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>)>
 pub mod paperpaw_sdk::files
-pub struct paperpaw_sdk::files::Entry
+#[non_exhaustive] pub struct paperpaw_sdk::files::Entry
 pub paperpaw_sdk::files::Entry::is_dir: bool
 pub paperpaw_sdk::files::Entry::name: alloc::string::String
 pub paperpaw_sdk::files::Entry::size: u64
+impl paperpaw_sdk::files::Entry
+pub fn paperpaw_sdk::files::Entry::new(impl core::convert::Into<alloc::string::String>, bool, u64) -> Self
 pub const paperpaw_sdk::files::MAX_LINE: usize
 pub fn paperpaw_sdk::files::copy(&dyn paperpaw_platform::storage::Storage, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::files::delete(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -1457,7 +1459,7 @@ pub use paperpaw_sdk::firmware::Trailer
 pub use paperpaw_sdk::firmware::fingerprint
 pub use paperpaw_sdk::firmware::key_hex
 pub use paperpaw_sdk::firmware::parse_key
-pub enum paperpaw_sdk::firmware::FirmwareCommand
+#[non_exhaustive] pub enum paperpaw_sdk::firmware::FirmwareCommand
 pub paperpaw_sdk::firmware::FirmwareCommand::Install
 pub paperpaw_sdk::firmware::FirmwareCommand::Install::key: core::option::Option<[u8; 32]>
 pub paperpaw_sdk::firmware::FirmwareCommand::Install::older: bool
@@ -1485,7 +1487,7 @@ pub fn paperpaw_sdk::firmware::InstallFailure::from(paperpaw_update::Problem) ->
 #[non_exhaustive] pub enum paperpaw_sdk::firmware::Signer
 pub paperpaw_sdk::firmware::Signer::PaperPaw
 pub paperpaw_sdk::firmware::Signer::Unknown
-pub struct paperpaw_sdk::firmware::Firmware
+#[non_exhaustive] pub struct paperpaw_sdk::firmware::Firmware
 pub paperpaw_sdk::firmware::Firmware::chip: u16
 pub paperpaw_sdk::firmware::Firmware::keys: alloc::vec::Vec<[u8; 32]>
 pub paperpaw_sdk::firmware::Firmware::plugins: paperpaw_update::plugins::Plugins
@@ -1494,6 +1496,13 @@ pub paperpaw_sdk::firmware::Firmware::room: u64
 pub paperpaw_sdk::firmware::Firmware::state: paperpaw_sdk::firmware::FirmwareState
 pub paperpaw_sdk::firmware::Firmware::undone: bool
 pub paperpaw_sdk::firmware::Firmware::version: alloc::string::String
+impl paperpaw_sdk::firmware::Firmware
+pub fn paperpaw_sdk::firmware::Firmware::keys(self, alloc::vec::Vec<[u8; 32]>) -> Self
+pub fn paperpaw_sdk::firmware::Firmware::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, u16) -> Self
+pub fn paperpaw_sdk::firmware::Firmware::plugins(self, paperpaw_update::plugins::Plugins) -> Self
+pub fn paperpaw_sdk::firmware::Firmware::room(self, u64) -> Self
+pub fn paperpaw_sdk::firmware::Firmware::state(self, paperpaw_sdk::firmware::FirmwareState) -> Self
+pub fn paperpaw_sdk::firmware::Firmware::undone(self, bool) -> Self
 pub struct paperpaw_sdk::firmware::Update
 pub paperpaw_sdk::firmware::Update::info: paperpaw_update::AppInfo
 pub paperpaw_sdk::firmware::Update::path: alloc::string::String
@@ -1656,11 +1665,12 @@ pub fn paperpaw_sdk::install::marks::Marks::new(paperpaw_sdk::install::marks::Fr
 pub const paperpaw_sdk::install::marks::FILE: &str
 pub fn paperpaw_sdk::install::marks::settle(&dyn paperpaw_platform::storage::Storage, &str, &str) -> bool
 pub fn paperpaw_sdk::install::marks::write(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::install::marks::Marks) -> bool
-pub enum paperpaw_sdk::install::Digest
+#[non_exhaustive] pub enum paperpaw_sdk::install::Digest
 pub paperpaw_sdk::install::Digest::Sha1(alloc::string::String)
 pub paperpaw_sdk::install::Digest::Sha256(alloc::string::String)
 impl paperpaw_sdk::install::Digest
 pub fn paperpaw_sdk::install::Digest::is_valid(&self) -> bool
+pub fn paperpaw_sdk::install::Digest::text(&self) -> alloc::string::String
 impl core::default::Default for paperpaw_sdk::install::Digest
 pub fn paperpaw_sdk::install::Digest::default() -> Self
 #[non_exhaustive] pub enum paperpaw_sdk::install::Origin
@@ -1706,7 +1716,7 @@ impl paperpaw_sdk::install::PackageFile
 pub fn paperpaw_sdk::install::PackageFile::is_valid(&self) -> bool
 impl paperpaw_sdk::install::PackageFile
 pub fn paperpaw_sdk::install::PackageFile::new(alloc::string::String, alloc::string::String, u64, paperpaw_sdk::install::Digest) -> Self
-pub struct paperpaw_sdk::install::Progress
+#[non_exhaustive] pub struct paperpaw_sdk::install::Progress
 pub paperpaw_sdk::install::Progress::done: usize
 pub paperpaw_sdk::install::Progress::name: alloc::string::String
 pub paperpaw_sdk::install::Progress::plugin: alloc::string::String
@@ -2115,7 +2125,7 @@ pub const paperpaw_sdk::library::what::STATUS: u32
 #[non_exhaustive] pub enum paperpaw_sdk::library::Badge
 pub paperpaw_sdk::library::Badge::Icon(&'static str)
 pub paperpaw_sdk::library::Badge::Text(alloc::string::String)
-pub enum paperpaw_sdk::library::BookDataKind
+#[non_exhaustive] pub enum paperpaw_sdk::library::BookDataKind
 pub paperpaw_sdk::library::BookDataKind::Cache
 pub paperpaw_sdk::library::BookDataKind::UserData
 #[non_exhaustive] pub struct paperpaw_sdk::library::Book
@@ -2154,12 +2164,14 @@ impl paperpaw_sdk::library::service::BookBadge
 pub fn paperpaw_sdk::library::service::BookBadge::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Record) -> core::option::Option<paperpaw_sdk::library::service::Badge> + 'static) -> Self
 impl core::fmt::Debug for paperpaw_sdk::library::service::BookBadge
 pub fn paperpaw_sdk::library::service::BookBadge::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct paperpaw_sdk::library::BookData
+#[non_exhaustive] pub struct paperpaw_sdk::library::BookData
 pub paperpaw_sdk::library::BookData::folder: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::library::BookData::kind: paperpaw_sdk::library::BookDataKind
 pub paperpaw_sdk::library::BookData::prefix: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::library::BookData
 pub fn paperpaw_sdk::library::BookData::key_of<'n>(&self, &'n str) -> core::option::Option<(&'n str, &'n str)>
+impl paperpaw_sdk::library::BookData
+pub fn paperpaw_sdk::library::BookData::new(impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::library::BookDataKind) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::library::BookField
 pub paperpaw_sdk::library::BookField::id: paperpaw_sdk::Id
 pub paperpaw_sdk::library::BookField::in_catalog: bool
@@ -2321,11 +2333,14 @@ pub const fn paperpaw_sdk::memory::Memory::new(fn() -> core::option::Option<pape
 pub fn paperpaw_sdk::memory::Memory::read(&self) -> core::option::Option<paperpaw_sdk::memory::MemoryUse>
 impl core::fmt::Debug for paperpaw_sdk::memory::Memory
 pub fn paperpaw_sdk::memory::Memory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct paperpaw_sdk::memory::MemoryUse
+#[non_exhaustive] pub struct paperpaw_sdk::memory::MemoryUse
 pub paperpaw_sdk::memory::MemoryUse::heap_free: u32
 pub paperpaw_sdk::memory::MemoryUse::heap_size: u32
 pub paperpaw_sdk::memory::MemoryUse::stack_free: core::option::Option<u32>
 pub paperpaw_sdk::memory::MemoryUse::stack_size: core::option::Option<u32>
+impl paperpaw_sdk::memory::MemoryUse
+pub const fn paperpaw_sdk::memory::MemoryUse::new(u32, u32) -> Self
+pub const fn paperpaw_sdk::memory::MemoryUse::with_stack(self, u32, u32) -> Self
 pub mod paperpaw_sdk::native
 pub use paperpaw_sdk::native::BadSignature
 pub use paperpaw_sdk::native::Chip
@@ -2457,7 +2472,7 @@ pub fn paperpaw_sdk::positions::load(&dyn paperpaw_platform::storage::Storage, &
 pub fn paperpaw_sdk::positions::load_for_update(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<core::option::Option<paperpaw_sdk::positions::Position>, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::positions::save(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::positions::Position) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub mod paperpaw_sdk::power
-pub enum paperpaw_sdk::power::PowerLevel
+#[non_exhaustive] pub enum paperpaw_sdk::power::PowerLevel
 pub paperpaw_sdk::power::PowerLevel::Normal
 pub paperpaw_sdk::power::PowerLevel::Offline
 pub paperpaw_sdk::power::PowerLevel::Saving
@@ -2747,23 +2762,24 @@ pub mod paperpaw_sdk::secrets
 pub struct paperpaw_sdk::secrets::Anyone
 impl paperpaw_sdk::secrets::Running for paperpaw_sdk::secrets::Anyone
 pub fn paperpaw_sdk::secrets::Anyone::runs(&self, &str) -> bool
-pub struct paperpaw_sdk::secrets::Listed<'a>
+#[non_exhaustive] pub struct paperpaw_sdk::secrets::Listed<'a>
 pub paperpaw_sdk::secrets::Listed::changeable: bool
 pub paperpaw_sdk::secrets::Listed::id: &'a str
 pub paperpaw_sdk::secrets::Listed::label: &'a str
-pub struct paperpaw_sdk::secrets::Secret
+#[non_exhaustive] pub struct paperpaw_sdk::secrets::Secret
 pub paperpaw_sdk::secrets::Secret::changeable: bool
 pub paperpaw_sdk::secrets::Secret::id: alloc::string::String
 pub paperpaw_sdk::secrets::Secret::label: alloc::string::String
 pub paperpaw_sdk::secrets::Secret::value: alloc::string::String
 impl core::fmt::Debug for paperpaw_sdk::secrets::Secret
 pub fn paperpaw_sdk::secrets::Secret::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct paperpaw_sdk::secrets::SecretChange
+#[non_exhaustive] pub struct paperpaw_sdk::secrets::SecretChange
 pub paperpaw_sdk::secrets::SecretChange::changeable: bool
 pub paperpaw_sdk::secrets::SecretChange::id: alloc::string::String
 pub paperpaw_sdk::secrets::SecretChange::label: alloc::string::String
 pub paperpaw_sdk::secrets::SecretChange::value: core::option::Option<alloc::string::String>
 impl paperpaw_sdk::secrets::SecretChange
+pub fn paperpaw_sdk::secrets::SecretChange::changeable(self, bool) -> Self
 pub fn paperpaw_sdk::secrets::SecretChange::keep(&str, &str, &str) -> Self
 pub fn paperpaw_sdk::secrets::SecretChange::remove(&str) -> Self
 impl core::fmt::Debug for paperpaw_sdk::secrets::SecretChange
@@ -2811,7 +2827,7 @@ pub fn paperpaw_sdk::semantics::find<'a>(&'a [paperpaw_sdk::semantics::Part], &s
 pub fn paperpaw_sdk::semantics::focused(&[paperpaw_sdk::semantics::Part]) -> core::option::Option<&paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::role_name(paperpaw_graphics::canvas::Role) -> &'static str
 pub mod paperpaw_sdk::served
-pub enum paperpaw_sdk::served::Access
+#[non_exhaustive] pub enum paperpaw_sdk::served::Access
 pub paperpaw_sdk::served::Access::Denied
 pub paperpaw_sdk::served::Access::Granted
 pub paperpaw_sdk::served::Access::Locked
@@ -3089,7 +3105,7 @@ pub fn paperpaw_sdk::time::Clock::micros(&self) -> core::option::Option<u64>
 pub const fn paperpaw_sdk::time::Clock::new(fn() -> u64) -> Self
 impl core::fmt::Debug for paperpaw_sdk::time::Clock
 pub fn paperpaw_sdk::time::Clock::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct paperpaw_sdk::time::LocalTime
+#[non_exhaustive] pub struct paperpaw_sdk::time::LocalTime
 pub paperpaw_sdk::time::LocalTime::day: u8
 pub paperpaw_sdk::time::LocalTime::hour: u8
 pub paperpaw_sdk::time::LocalTime::minute: u8
@@ -3099,6 +3115,7 @@ pub paperpaw_sdk::time::LocalTime::weekday: u8
 pub paperpaw_sdk::time::LocalTime::year: i32
 impl paperpaw_sdk::time::LocalTime
 pub fn paperpaw_sdk::time::LocalTime::from_seconds(i64) -> Self
+pub fn paperpaw_sdk::time::LocalTime::new(i32, u8, u8, u8, u8, u8) -> Self
 pub fn paperpaw_sdk::time::LocalTime::to_seconds(&self) -> i64
 pub struct paperpaw_sdk::time::TimeZone
 impl paperpaw_sdk::time::TimeZone
@@ -3944,24 +3961,33 @@ pub fn paperpaw_sdk::ui::two_options(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Sett
 pub fn paperpaw_sdk::ui::value_row_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str, &str) -> u16
 pub fn paperpaw_sdk::ui::value_stepper(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str) -> core::option::Option<(paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect)>
 pub mod paperpaw_sdk::usage
-pub struct paperpaw_sdk::usage::PluginUsage
+#[non_exhaustive] pub struct paperpaw_sdk::usage::PluginUsage
 pub paperpaw_sdk::usage::PluginUsage::busy_us: u64
 pub paperpaw_sdk::usage::PluginUsage::calls: u32
 pub paperpaw_sdk::usage::PluginUsage::pixels: u64
 pub paperpaw_sdk::usage::PluginUsage::plugin: paperpaw_sdk::Id
 pub paperpaw_sdk::usage::PluginUsage::read: u64
-pub paperpaw_sdk::usage::PluginUsage::refreshes: [u32; 3]
+pub paperpaw_sdk::usage::PluginUsage::refreshes: paperpaw_sdk::usage::Refreshes
 pub paperpaw_sdk::usage::PluginUsage::refused: u32
 pub paperpaw_sdk::usage::PluginUsage::requests: u32
 pub paperpaw_sdk::usage::PluginUsage::shown_ms: u64
 pub paperpaw_sdk::usage::PluginUsage::written: u64
+impl paperpaw_sdk::usage::PluginUsage
+pub fn paperpaw_sdk::usage::PluginUsage::new(paperpaw_sdk::Id) -> Self
 impl core::default::Default for paperpaw_sdk::usage::PluginUsage
 pub fn paperpaw_sdk::usage::PluginUsage::default() -> Self
-pub struct paperpaw_sdk::usage::Usage
+#[non_exhaustive] pub struct paperpaw_sdk::usage::Refreshes
+pub paperpaw_sdk::usage::Refreshes::fast: u32
+pub paperpaw_sdk::usage::Refreshes::full: u32
+pub paperpaw_sdk::usage::Refreshes::partial: u32
+impl paperpaw_sdk::usage::Refreshes
+pub const fn paperpaw_sdk::usage::Refreshes::new(u32, u32, u32) -> Self
+pub fn paperpaw_sdk::usage::Refreshes::total(&self) -> u32
+#[non_exhaustive] pub struct paperpaw_sdk::usage::Usage
 pub paperpaw_sdk::usage::Usage::inputs: u32
 pub paperpaw_sdk::usage::Usage::panel_ms: u64
 pub paperpaw_sdk::usage::Usage::pixels: u64
-pub paperpaw_sdk::usage::Usage::refreshes: [u32; 3]
+pub paperpaw_sdk::usage::Usage::refreshes: paperpaw_sdk::usage::Refreshes
 pub paperpaw_sdk::usage::Usage::sleeps: u32
 impl paperpaw_sdk::usage::Usage
 pub fn paperpaw_sdk::usage::Usage::total_refreshes(&self) -> u32
@@ -4414,7 +4440,7 @@ impl paperpaw_sdk::event::ParamValue for paperpaw_sdk::wifi::JoinFailure
 pub fn paperpaw_sdk::wifi::JoinFailure::from_param(&str) -> core::option::Option<Self>
 pub fn paperpaw_sdk::wifi::JoinFailure::missing() -> core::option::Option<Self>
 pub fn paperpaw_sdk::wifi::JoinFailure::to_param(&self) -> alloc::string::String
-pub enum paperpaw_sdk::wifi::WifiCommand
+#[non_exhaustive] pub enum paperpaw_sdk::wifi::WifiCommand
 pub paperpaw_sdk::wifi::WifiCommand::Host
 pub paperpaw_sdk::wifi::WifiCommand::Host::password: alloc::string::String
 pub paperpaw_sdk::wifi::WifiCommand::Host::ssid: alloc::string::String
@@ -4444,18 +4470,19 @@ pub fn paperpaw_sdk::wifi::WifiState::is_hosting(&self) -> bool
 pub fn paperpaw_sdk::wifi::WifiState::is_on(&self) -> bool
 pub fn paperpaw_sdk::wifi::WifiState::is_online(&self) -> bool
 pub fn paperpaw_sdk::wifi::WifiState::ssid(&self) -> core::option::Option<&str>
-pub struct paperpaw_sdk::wifi::Wifi
+#[non_exhaustive] pub struct paperpaw_sdk::wifi::Wifi
 pub paperpaw_sdk::wifi::Wifi::busy: bool
 pub paperpaw_sdk::wifi::Wifi::networks: alloc::vec::Vec<paperpaw_sdk::wifi::WifiNetwork>
 pub paperpaw_sdk::wifi::Wifi::scanning: bool
 pub paperpaw_sdk::wifi::Wifi::state: paperpaw_sdk::wifi::WifiState
 pub paperpaw_sdk::wifi::Wifi::wanted: bool
-pub struct paperpaw_sdk::wifi::WifiNetwork
+#[non_exhaustive] pub struct paperpaw_sdk::wifi::WifiNetwork
 pub paperpaw_sdk::wifi::WifiNetwork::secured: bool
 pub paperpaw_sdk::wifi::WifiNetwork::signal: i8
 pub paperpaw_sdk::wifi::WifiNetwork::ssid: alloc::string::String
 impl paperpaw_sdk::wifi::WifiNetwork
 pub fn paperpaw_sdk::wifi::WifiNetwork::bars(&self) -> u8
+pub fn paperpaw_sdk::wifi::WifiNetwork::new(impl core::convert::Into<alloc::string::String>, i8, bool) -> Self
 pub const paperpaw_sdk::wifi::NETWORK_WAIT_MS: u64
 pub const paperpaw_sdk::wifi::SECRET_PREFIX: &str
 pub fn paperpaw_sdk::wifi::forget(&str) -> paperpaw_sdk::secrets::SecretChange

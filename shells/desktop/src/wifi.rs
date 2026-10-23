@@ -25,11 +25,7 @@ const ADDRESS: &str = "192.168.1.42";
 const HOST_ADDRESS: &str = "192.168.4.1";
 
 fn networks() -> Vec<WifiNetwork> {
-    let net = |ssid: &str, signal, secured| WifiNetwork {
-        ssid: String::from(ssid),
-        signal,
-        secured,
-    };
+    let net = |ssid: &str, signal, secured| WifiNetwork::new(String::from(ssid), signal, secured);
     vec![
         net("PaperPaw Test", -48, true),
         net("Cafe", -70, false),
@@ -112,7 +108,8 @@ impl Wifi {
                     },
                 );
             }
-            WifiCommand::Host { .. } => {}
+            // Hosting with the radio off, and a command to come.
+            _ => {}
         }
     }
 

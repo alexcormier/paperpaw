@@ -355,12 +355,10 @@ pub fn memory_use() -> Option<paperpaw_core::sdk::memory::MemoryUse> {
     let stats = stats();
     let size = stats.limit?;
     let bytes = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-    Some(paperpaw_core::sdk::memory::MemoryUse {
-        heap_free: bytes(size.saturating_sub(stats.live)),
-        heap_size: bytes(size),
-        stack_free: None,
-        stack_size: None,
-    })
+    Some(paperpaw_core::sdk::memory::MemoryUse::new(
+        bytes(size.saturating_sub(stats.live)),
+        bytes(size),
+    ))
 }
 
 impl std::fmt::Display for Stats {

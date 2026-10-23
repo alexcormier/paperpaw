@@ -210,10 +210,7 @@ fn read_value(storage: &dyn paperpaw_sdk::Storage, file: &str, key: &str) -> Opt
 /// typed anew in the list of passwords and keys: it is no password.
 pub(crate) fn save_key(key: Option<&str>) -> Command {
     Command::SetSecret(match key {
-        Some(key) => SecretChange {
-            changeable: false,
-            ..SecretChange::keep(SECRET, "kosync.secret", key)
-        },
+        Some(key) => SecretChange::keep(SECRET, "kosync.secret", key).changeable(false),
         None => SecretChange::remove(SECRET),
     })
 }

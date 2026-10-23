@@ -44,6 +44,7 @@ pub fn key(random: &Random) -> Option<String> {
 
 /// Whether a request is answered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Access {
     Granted,
     /// Without the key, or with a wrong one.

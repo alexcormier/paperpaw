@@ -189,11 +189,7 @@ impl Plugin for NoticeKeeper {
 }
 
 fn network(ssid: &str, signal: i8, secured: bool) -> WifiNetwork {
-    WifiNetwork {
-        ssid: ssid.to_string(),
-        signal,
-        secured,
-    }
+    WifiNetwork::new(ssid.to_string(), signal, secured)
 }
 
 struct Device {

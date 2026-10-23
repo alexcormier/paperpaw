@@ -173,16 +173,11 @@ struct Device {
 
 impl Device {
     fn new(storage: Shared, options: Options) -> Self {
-        let firmware = Firmware {
-            version: options.version.into(),
-            project: PROJECT.into(),
-            chip: CHIP,
-            keys: vec![paperpaw_update::public_key(&SEED)],
-            room: 1_000_000,
-            undone: options.undone,
-            plugins: Plugins::new("paperpaw-plugin-stats 0.4.0\n"),
-            ..Firmware::default()
-        };
+        let firmware = Firmware::new(options.version, PROJECT, CHIP)
+            .keys(vec![paperpaw_update::public_key(&SEED)])
+            .room(1_000_000)
+            .undone(options.undone)
+            .plugins(Plugins::new("paperpaw-plugin-stats 0.4.0\n"));
         let said = Rc::default();
         let mut kernel = Kernel::builder(device(options.touch))
             .storage(storage.clone())

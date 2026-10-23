@@ -148,10 +148,7 @@ impl Shopping {
 
     /// The store on the X4 running firmware `version`.
     pub fn on_firmware(version: &str, list: &str, storage: Shared) -> Self {
-        let firmware = paperpaw_sdk::firmware::Firmware {
-            version: String::from(version),
-            ..Default::default()
-        };
+        let firmware = paperpaw_sdk::firmware::Firmware::new(version, "", 0);
         Self::of(DEVICE, Some("x4"), None, list, storage, Some(firmware))
     }
 

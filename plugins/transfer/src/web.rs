@@ -75,14 +75,15 @@ pub fn answer(
     }
     match guard.check(param(query, "k").as_deref(), request.at) {
         Access::Granted => {}
-        Access::Denied => {
+        Access::Locked => {
+            return text(429, "Too many wrong keys: try again in a minute.");
+        }
+        // Denied, and a state to come: refused as a wrong key is.
+        _ => {
             return text(
                 403,
                 "The key is missing or wrong: open the address shown on the device.",
             );
-        }
-        Access::Locked => {
-            return text(429, "Too many wrong keys: try again in a minute.");
         }
     }
     let wanted = param(query, "path").unwrap_or_default();

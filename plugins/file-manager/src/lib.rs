@@ -318,11 +318,7 @@ impl Browser {
     /// place), after something was done to it.
     fn reload_at(&mut self, env: &Env<'_>, name: &str) {
         let path = ops::join(&self.dir, name);
-        let entry = Entry {
-            name: name.to_string(),
-            is_dir: ops::is_dir(env.storage, &path),
-            size: 0,
-        };
+        let entry = Entry::new(name.to_string(), ops::is_dir(env.storage, &path), 0);
         self.load(env, Some(entry));
     }
 
@@ -493,11 +489,11 @@ impl Browser {
                 books.push(String::from(book));
             }
         });
-        let at = Entry {
-            name: ops::name(path).to_string(),
-            is_dir: ops::is_dir(env.storage, path),
-            size: 0,
-        };
+        let at = Entry::new(
+            ops::name(path).to_string(),
+            ops::is_dir(env.storage, path),
+            0,
+        );
         let deleted = ops::delete(env.storage, path);
         if deleted.is_ok() {
             for path in books {
@@ -575,11 +571,7 @@ fn valid_name(name: &str) -> Option<&str> {
 
 /// A folder named `name`, as an entry to find in a listing.
 fn folder_entry(name: &str) -> Entry {
-    Entry {
-        name: name.to_string(),
-        is_dir: true,
-        size: 0,
-    }
+    Entry::new(name.to_string(), true, 0)
 }
 
 /// Renames `path` to `name` in its folder: where another entry has that
@@ -1060,11 +1052,7 @@ mod tests {
             for (key, (path, data)) in self.files.borrow().iter() {
                 if key.starts_with(&prefix) {
                     found = true;
-                    visit(DirEntry {
-                        name: ops::name(path),
-                        is_dir: false,
-                        size: data.len() as u64,
-                    });
+                    visit(DirEntry::new(ops::name(path), false, data.len() as u64));
                 }
             }
             if found {

@@ -588,11 +588,11 @@ impl Registrar {
         folder: impl Into<Cow<'static, str>>,
         prefix: impl Into<Cow<'static, str>>,
     ) -> Result<(), RegisterError> {
-        self.add(Contribution::BookData(crate::library::BookData {
-            folder: folder.into(),
-            prefix: prefix.into(),
-            kind: crate::library::BookDataKind::UserData,
-        }))
+        self.add(Contribution::BookData(crate::library::BookData::new(
+            folder.into(),
+            prefix.into(),
+            crate::library::BookDataKind::UserData,
+        )))
     }
 
     /// As [`add_book_data`](Self::add_book_data), for what the plugin
@@ -604,11 +604,11 @@ impl Registrar {
         folder: impl Into<Cow<'static, str>>,
         prefix: impl Into<Cow<'static, str>>,
     ) -> Result<(), RegisterError> {
-        self.add(Contribution::BookData(crate::library::BookData {
-            folder: folder.into(),
-            prefix: prefix.into(),
-            kind: crate::library::BookDataKind::Cache,
-        }))
+        self.add(Contribution::BookData(crate::library::BookData::new(
+            folder.into(),
+            prefix.into(),
+            crate::library::BookDataKind::Cache,
+        )))
     }
 
     /// Adds a field plugins keep with books ([`library::set_field`](crate::library::set_field)):
@@ -1302,11 +1302,11 @@ mod tests {
                 ),
                 "{folder:?}"
             );
-            let data = Contribution::BookData(crate::library::BookData {
-                folder: Cow::Owned(folder.into()),
-                prefix: Cow::Borrowed(""),
-                kind: crate::library::BookDataKind::UserData,
-            });
+            let data = Contribution::BookData(crate::library::BookData::new(
+                Cow::Owned(folder.into()),
+                Cow::Borrowed(""),
+                crate::library::BookDataKind::UserData,
+            ));
             assert!(r.add(data).is_err(), "{folder:?}");
         }
         assert_eq!(r.contributions().len(), 2);

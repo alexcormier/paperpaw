@@ -232,11 +232,7 @@ mod tests {
     use super::*;
 
     fn net(ssid: &str, signal: i8) -> WifiNetwork {
-        WifiNetwork {
-            ssid: String::from(ssid),
-            signal,
-            secured: true,
-        }
+        WifiNetwork::new(String::from(ssid), signal, true)
     }
 
     fn known() -> Vec<(String, String)> {
@@ -288,10 +284,7 @@ mod tests {
         policy.wanted(&WifiState::On, &known);
         // An open network named as a secured one joined before (a twin set
         // up by someone else), and an open one joined before: neither.
-        let open = |ssid: &str| WifiNetwork {
-            secured: false,
-            ..net(ssid, -40)
-        };
+        let open = |ssid: &str| WifiNetwork::new(ssid, -40, false);
         assert_eq!(policy.scanned(&[open("Home"), open("Cafe")], &known), None);
         policy.wanted(&WifiState::On, &known);
         assert_eq!(

@@ -397,6 +397,18 @@ file to your report.
   feature, and `Canvas`'s drawing internals are hidden. A cover drawn
   small is `ui::draw_small_image`; whether the device has a row of
   button hints is `env.caps.button_row`.
+- SDK, cleaned up before its first release (platform): the types that
+  grow are `#[non_exhaustive]`, with constructors where plugins build
+  them: `DirEntry::new`, `files::Entry::new`, `LocalTime::new` (its
+  weekday from the date), `MemoryUse::new` and `with_stack`,
+  `PluginUsage::new`, `WifiNetwork::new`, `Firmware::new` with `keys`,
+  `room`, `undone`, `state` and `plugins`, `BookData::new` and
+  `SecretChange::changeable`; `install::Digest::text` writes a digest as
+  a job keeps it. A match on `WifiCommand`, `PowerLevel`,
+  `served::Access`, `install::Digest`, `FirmwareCommand` or
+  `BookDataKind` needs an arm for what is to come. `Usage::refreshes`
+  and `PluginUsage::refreshes` name their modes (`usage::Refreshes`:
+  `fast`, `partial`, `full`, `total`) in place of an array.
 - SDK: types that may grow are `#[non_exhaustive]`, with constructors
   where plugins build them: `decorations::{PageWord, PageText,
   Decorated}::new`, `semantics::Part::new` and `Described::new` (with
