@@ -14,7 +14,10 @@
 //!   with the layout's code (e.g. `DE`) switches between them.
 //! - Accents and other variants: a long press on a letter (with buttons:
 //!   a long press on confirm) shows its variants, e.g. `é è ê ë` for `e`,
-//!   and German quotes on `"`.
+//!   and German quotes on `"`. German has ten keys a row, as English, and
+//!   types ä, ö, ü and ß so (first on a, o, u and s); with buttons, the
+//!   field says so on those letters. The setting *Umlaut keys* gives them
+//!   keys of their own instead.
 //! - When there is text on the clipboard, *Paste* in the text field
 //!   inserts it, and so does a long press in the field (with buttons: up
 //!   from the first row).
@@ -62,6 +65,9 @@ pub const SCREEN: Id = Id::new_static("keyboard.screen");
 /// The layouts to type with: ids separated by commas, in the order the
 /// layout key switches through them.
 pub const LAYOUTS_SETTING: Setting<Text> = Setting::new("keyboard.layouts");
+/// Whether the letters a layout types by holding another (German ä, ö, ü,
+/// ß) have keys of their own, in rows of more keys.
+pub const UMLAUT_KEYS: Setting<bool> = Setting::new("keyboard.umlaut-keys");
 const CHOOSE_SCREEN: Id = Id::new_static("keyboard.choose");
 /// The clipboard's text, asked for by *Paste*.
 const PASTED: Event<Typed> = Event::new("keyboard.pasted");
@@ -126,15 +132,24 @@ pub struct Keyboard;
 
 /// The layouts to type with, chosen on their screen.
 static CHOSEN: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_SCREEN);
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed(
-    LAYOUTS_SETTING.static_str(),
-    "keyboard.setting.layouts",
-    paperpaw_sdk::SettingKind::List,
-    paperpaw_sdk::SettingValue::Text(Cow::Borrowed(layouts::AUTO)),
-    groups::SYSTEM,
-)
-.with_extra(&CHOSEN)
-.described("keyboard.setting.layouts.help")];
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed(
+        LAYOUTS_SETTING.static_str(),
+        "keyboard.setting.layouts",
+        paperpaw_sdk::SettingKind::List,
+        paperpaw_sdk::SettingValue::Text(Cow::Borrowed(layouts::AUTO)),
+        groups::SYSTEM,
+    )
+    .with_extra(&CHOSEN)
+    .described("keyboard.setting.layouts.help"),
+    SettingSpec::fixed_switch(
+        UMLAUT_KEYS.static_str(),
+        "keyboard.setting.umlaut-keys",
+        false,
+        groups::SYSTEM,
+    )
+    .described("keyboard.setting.umlaut-keys.help"),
+];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -205,9 +220,25 @@ enum Key {
 /// A key and its width in units (a letter is 2).
 type Slot = (Key, u8);
 
-/// The least width of a letter's key, in millimetres: on a narrow screen
-/// (the X4) its rows are split rather than their keys made narrower.
+/// The least width of a letter's key, in millimetres, where keys are
+/// chosen with buttons: room for the letter and the focus frame round it.
+/// On a narrower screen (the X4) the rows are split rather than their keys
+/// made narrower.
 const LEAST_KEY_MM: u32 = 6;
+
+/// The least width of a letter's key where keys are tapped, in
+/// millimetres: as much as a finger hits reliably.
+const LEAST_TAP_MM: u32 = 4;
+
+/// How high a key that is tapped is, in hundredths of a letter key's
+/// width: nearly round, so the keyboard leaves much of the screen above
+/// it in view.
+const ROUND: u32 = 110;
+
+/// The units of a row of keys.
+fn units(row: &[Slot]) -> u32 {
+    row.iter().map(|(_, w)| u32::from(*w)).sum()
+}
 
 /// `row` in rows of at most `most` units, as even as can be and in their
 /// order ("qwert" above "yuiop"); as it is where it fits.
@@ -264,7 +295,13 @@ fn rows(letters: &str, layer: Layer, switch: bool, most: u32) -> Vec<Vec<Slot>> 
             if switch && layer == Layer::Letters {
                 bottom.push((Key::NextLayout, 3));
             }
-            let space = if bottom.len() > 1 { 7 } else { 10 };
+            // The space bar takes what leaves the row as wide as the
+            // widest, five letters at least; "," and "." are as wide as a
+            // letter.
+            let widest = rows.iter().map(|row| units(row)).max().unwrap_or(20);
+            let others = units(&bottom) + 2 + 2 + 3;
+            let least = if bottom.len() > 1 { 7 } else { 10 };
+            let space = widest.saturating_sub(others).max(least) as u8;
             bottom.extend([
                 (Key::Char(','), 2),
                 (Key::Space, space),
@@ -334,6 +371,8 @@ struct KeyboardScreen {
     key_height: u16,
     /// The most units a row of keys holds (see [`rows`]).
     most: u32,
+    /// Whether the keys are tapped (else only chosen with buttons).
+    touch: bool,
 }
 
 impl KeyboardScreen {
@@ -344,14 +383,17 @@ impl KeyboardScreen {
         } else {
             Layer::Letters
         };
-        let layouts = layouts::chosen(env, env.settings.read(&LAYOUTS_SETTING));
+        let keys = env.settings.read(&UMLAUT_KEYS);
+        let layouts = layouts::chosen(env, env.settings.read(&LAYOUTS_SETTING), keys);
         if current.get() >= layouts.len() {
             current.set(0);
         }
         let display = env.device.display;
+        let touch = env.device.input.touch;
         // As many units in a row as leave a letter (2 units) its least
         // width.
-        let unit = (env.metrics.mm(LEAST_KEY_MM) / 2).max(1);
+        let least = if touch { LEAST_TAP_MM } else { LEAST_KEY_MM };
+        let unit = (env.metrics.mm(least) / 2).max(1);
         let most = (u32::from(display.width) - 2 * style.margin) / unit;
         let letters = &layouts[current.get()].1;
         // As high as the layer with the most rows needs, so that turning
@@ -362,13 +404,30 @@ impl KeyboardScreen {
         };
         let rows = rows(letters, layer, layouts.len() > 1, most);
         let count = rows.len().max(other).max(4);
-        // Keys and the field's buttons grow on touch screens, and their
-        // rows with them.
-        let key_height = style.touch_row(style.row) as u16;
-        let field_height = (style.small * 1.5) as u16 + key_height;
+        // The field's buttons grow on touch screens, and its row with them.
+        let touch_row = style.touch_row(style.row) as u16;
+        let field_height = (style.small * 1.5) as u16 + touch_row;
+        // Keys that are tapped nearly round: as high as a letter's key is
+        // wide, a little more, but no higher than a touch row and high
+        // enough for their letter. Chosen with buttons, a row high.
+        let widest = rows.iter().map(|row| units(row)).max().unwrap_or(20).max(1);
+        let letter = (u32::from(display.width) - 2 * style.margin) * 2 / widest;
+        let line = paperpaw_sdk::widgets::line_height(env, style.text);
+        let key_height = if touch {
+            ((letter * ROUND / 100) as u16)
+                .min(touch_row)
+                .max(line + 2 * ui::button_border(&style) as u16)
+        } else {
+            touch_row
+        };
         let gap = style.gap as u16 / 2;
-        // The last row's keys keep the side margin from the bottom edge.
-        let room = ui::edge_room(&style, key_height);
+        // The last row's keys keep the side margin from the bottom edge
+        // (tapped, they fill their place but for the seam).
+        let room = if touch {
+            (style.margin as u16).saturating_sub(ui::button_border(&style) as u16)
+        } else {
+            ui::edge_room(&style, key_height)
+        };
         // On the screen whatever the rows: keys get smaller first.
         let room_for_keys = display
             .height
@@ -403,6 +462,7 @@ impl KeyboardScreen {
             // Smaller where the screen holds the rows only so.
             key_height: keys_height / count as u16,
             most,
+            touch,
         };
         screen.buttons = screen.field_buttons(env);
         screen
@@ -422,10 +482,13 @@ impl KeyboardScreen {
         )
     }
 
-    /// Keys are drawn inset by this inside their area (room for the
-    /// focus frame), so their areas reach this far over the margins.
+    /// Keys are drawn inset by this inside their area, so their areas
+    /// reach this far over the margins: a thin seam between them where
+    /// they are tapped, room for the focus frame where only buttons
+    /// choose them.
     fn key_inset(&self) -> u32 {
-        ui::button_border(&self.style) * 3
+        let border = ui::button_border(&self.style);
+        if self.touch { border } else { border * 3 }
     }
 
     /// The buttons at the right end of the text field: *Phone* where text
@@ -493,12 +556,20 @@ impl KeyboardScreen {
             return self.buttons.get(index).map_or(self.field, |b| b.1);
         }
         let keys = &self.rows[row];
-        let total: u32 = keys.iter().map(|(_, w)| u32::from(*w)).sum::<u32>().max(1);
+        // Tapped, every key as wide in every row, shorter rows in the
+        // middle; chosen with buttons, each row across the width.
+        let own = units(keys);
+        let total = if self.touch {
+            self.rows.iter().map(|r| units(r)).max().unwrap_or(own)
+        } else {
+            own
+        }
+        .max(1);
         // The keys' visible edges on the margins.
         let outside = self.style.margin.saturating_sub(self.key_inset());
         let width = u32::from(self.keys.width) - 2 * outside;
         let x0 = u32::from(self.keys.x) + outside;
-        let before: u32 = keys[..index].iter().map(|(_, w)| u32::from(*w)).sum();
+        let before = total.saturating_sub(own) / 2 + units(&keys[..index]);
         let left = x0 + width * before / total;
         let right = x0 + width * (before + u32::from(keys[index].1)) / total;
         let y = self.keys.y + self.key_height * row as u16;
@@ -764,7 +835,23 @@ impl KeyboardScreen {
         self.redraw(cx, self.key_area(row, index));
         self.redraw(cx, self.key_area(to.0, to.1));
         self.focus = Some(to);
+        // The field's hint of letters held, where it changes.
+        if self.held_hint(cx.env()).is_some() || (row != PASTE_ROW && self.has_held(row, index)) {
+            self.redraw(cx, self.field);
+        }
         true
+    }
+
+    /// Whether the key at `(row, index)` is a letter the layout holds
+    /// others on ([`KeyboardScreen::held_hint`]).
+    fn has_held(&self, row: usize, index: usize) -> bool {
+        let Some(Key::Char(c)) = self.rows.get(row).and_then(|r| r.get(index)).map(|k| k.0) else {
+            return false;
+        };
+        self.layouts[self.current.get()]
+            .2
+            .iter()
+            .any(|(base, _)| c.to_lowercase().eq(core::iter::once(*base)))
     }
 
     /// The key of row `to` nearest below the centre of key `index` of `row`.
@@ -820,11 +907,29 @@ impl KeyboardScreen {
         let f = self.field;
         let title_height = (style.small * 1.5) as u16;
         let title_area = Rect::new(f.x, f.y, f.width, title_height);
+        // With buttons, on a letter that holds others: that it does, at
+        // the right end.
+        let held = self.held_hint(env);
+        let held_width = held
+            .as_ref()
+            .map_or(0.0, |h| font.measure(style.small, h) + margin);
+        if let Some(held) = &held {
+            let x = f32::from(f.x + f.width) - margin - font.measure(style.small, held);
+            ui::draw_label(
+                canvas,
+                &font,
+                style.small,
+                x,
+                title_area,
+                held,
+                Color::BLACK,
+            );
+        }
         let title = ui::fit(
             &font,
             style.small,
             &self.title,
-            f32::from(f.width) - 2.0 * margin,
+            f32::from(f.width) - 2.0 * margin - held_width,
         );
         ui::draw_label(
             canvas,
@@ -888,20 +993,46 @@ impl KeyboardScreen {
         }
     }
 
+    /// The letters the layout types by holding the focused letter (German
+    /// ä on a), e.g. "Hold for ä", while keys are chosen with buttons.
+    fn held_hint(&self, env: &Env<'_>) -> Option<String> {
+        let (row, index) = self.focus.filter(|(row, _)| *row != PASTE_ROW)?;
+        let Key::Char(c) = self.rows.get(row)?.get(index)?.0 else {
+            return None;
+        };
+        let (_, letters) = self.layouts[self.current.get()]
+            .2
+            .iter()
+            .find(|(base, _)| c.to_lowercase().eq(core::iter::once(*base)))?;
+        let letters: String = letters.chars().map(|l| self.cased(l)).collect();
+        Some(env.i18n.format(
+            "keyboard.hold-for",
+            &[("letters", paperpaw_sdk::Arg::Str(&letters))],
+        ))
+    }
+
     fn draw_key(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, row: usize, index: usize) {
         let style = self.style;
         let key = self.rows[row][index].0;
         let area = self.key_area(row, index);
-        // Buttons as everywhere, with room for the focus frame.
-        let h = ui::button_height(&style, area);
-        let pad = self.key_inset() as u16;
+        let focused = self.focus == Some((row, index));
+        // Buttons as everywhere. Tapped, they fill their place but for a
+        // seam, the focused one (after a button was used) smaller by its
+        // focus frame, which stays in its place; chosen with buttons, as
+        // high as buttons are, with room for the frame.
+        let frame = ui::button_border(&style) * 3;
+        let pad = if focused { frame } else { self.key_inset() } as u16;
+        let h = if self.touch {
+            area.height.saturating_sub(2 * pad)
+        } else {
+            ui::button_height(&style, area)
+        };
         let r = Rect::new(
             area.x + pad,
             area.y + (area.height - h) / 2,
             area.width.saturating_sub(2 * pad),
             h,
         );
-        let focused = self.focus == Some((row, index));
         // Shift while on, and *OK* always: the key that ends typing stands
         // out.
         let active = (key == Key::Shift && self.shift) || key == Key::Done;
@@ -1153,7 +1284,7 @@ mod tests {
 
     #[test]
     fn several_layouts_get_a_key_to_switch() {
-        let letters = "abc def ghi";
+        let letters = "qwertyuiop asdfghjkl zxcvbnm";
         let one = rows(letters, Layer::Letters, false, 0);
         let two = rows(letters, Layer::Letters, true, 0);
         let has = |rows: &Vec<Vec<Slot>>| rows.iter().flatten().any(|(k, _)| *k == Key::NextLayout);
@@ -1168,6 +1299,8 @@ mod tests {
                 .sum()
         };
         assert_eq!(width(&one), width(&two));
+        // As wide as the letter rows: the space bar takes what is left.
+        assert_eq!(width(&one), 20);
         // Not on the symbols.
         assert!(!has(&rows(letters, Layer::Symbols, true, 0)));
     }

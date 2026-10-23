@@ -226,16 +226,26 @@ impl Typing {
     }
 
     /// Moves the focus with *Next* (through every key, row after row)
-    /// to the key that says `label` and presses it.
-    fn press_by_buttons(&mut self, label: &str) {
+    /// to the key that says `label`.
+    fn focus_by_buttons(&mut self, label: &str) {
         for _ in 0..80 {
             if self.focused().as_deref() == Some(label) {
-                self.run(actions::CONFIRM);
                 return;
             }
             self.run(actions::NEXT);
         }
         panic!("no key says {label:?}");
+    }
+
+    /// [`Typing::focus_by_buttons`], then presses it.
+    fn press_by_buttons(&mut self, label: &str) {
+        self.focus_by_buttons(label);
+        self.run(actions::CONFIRM);
+    }
+
+    /// Whether some text on the screen says exactly `text`.
+    fn says(&mut self, text: &str) -> bool {
+        self.parts().iter().any(|p| p.label == text)
     }
 
     /// The middle of the part that says `label`.
@@ -589,8 +599,9 @@ fn the_answer_carries_the_question_context() {
 fn buttons_move_round_the_rows() {
     let mut typing = Typing::new(BUTTONS);
     typing.open(&[]);
-    // On this narrow screen the rows are split ("qwert" above "yuiop").
-    // Left from the first key wraps to the end of the row.
+    // On this narrow screen chosen with buttons the rows are split
+    // ("qwert" above "yuiop"). Left from the first key wraps to the end
+    // of the row.
     typing.run(actions::LEFT);
     assert_eq!(typing.focused().as_deref(), Some("t"));
     typing.run(actions::RIGHT);
@@ -631,10 +642,15 @@ fn the_layout_key_switches_and_the_next_keyboard_keeps_it() {
     assert!(typing.part("ü").is_none());
     typing.tap("EN");
     assert!(typing.part("DE").is_some());
+    // Umlauts and ß by holding u and s.
+    assert!(typing.part("ü").is_none());
+    typing.hold("u");
     typing.tap("ü");
+    typing.hold("s");
     typing.tap("ß");
     // `ß` has no single capital: it stays as it is.
     typing.tap("Shift");
+    typing.hold("S");
     typing.tap("ß");
     typing.tap("OK");
     assert_eq!(typing.answer(), "üßß");
@@ -651,10 +667,32 @@ fn the_layout_key_by_buttons() {
     let mut typing = Typing::with_config(BUTTONS, TWO_LAYOUTS);
     typing.open(&[]);
     typing.press_by_buttons("EN");
-    typing.press_by_buttons("ö");
+    // On the `o` the field says what holding Select types; it comes
+    // first there.
+    typing.focus_by_buttons("o");
+    assert!(typing.says("Hold for ö"));
+    typing.hold_button("confirm");
+    assert_eq!(typing.focused().as_deref(), Some("ö"));
+    typing.run(actions::CONFIRM);
+    // Not on a letter without.
     typing.press_by_buttons("y");
+    assert!(!typing.says("Hold for ö"));
     typing.press_by_buttons("OK");
     assert_eq!(typing.answer(), "öy");
+}
+
+/// German with *Umlaut keys*: ä, ö, ü and ß have keys of their own.
+#[test]
+fn umlaut_keys_give_german_keys_for_them() {
+    let held = Typing::with_config(TOUCH, "[keyboard]\nlayouts = keyboard.layout.de\n");
+    let keys = "[keyboard]\nlayouts = keyboard.layout.de\numlaut-keys = true\n";
+    let keys = Typing::with_config(TOUCH, keys);
+    for (mut typing, own) in [(held, false), (keys, true)] {
+        typing.open(&[]);
+        for letter in ["ä", "ö", "ü", "ß"] {
+            assert_eq!(typing.part(letter).is_some(), own, "{letter}");
+        }
+    }
 }
 
 #[test]

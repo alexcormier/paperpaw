@@ -103,8 +103,9 @@ fn buttons_keep_their_room_on_touch_screens() {
                 .collect();
             assert!(cramped.is_empty(), "{profile} {screen}: {cramped:?}");
         }
-        // Asked for more room than the keyboard's keys have: found.
-        looker.ui.gap *= 4;
+        // Asked for more room than the keyboard's keys have from the
+        // screen's edges: found.
+        looker.ui.margin *= 4;
         let looked = looker
             .screen(&mut session, "keyboard.screen")
             .unwrap()
