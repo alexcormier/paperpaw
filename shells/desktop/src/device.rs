@@ -393,6 +393,18 @@ impl Device {
         self.execute(effects);
     }
 
+    /// Types `text` into the text field shown, then confirms it with
+    /// `done` (scripts' `type`, the remote's): whether one was shown.
+    pub fn type_text(&mut self, text: &str, done: bool) -> bool {
+        let now = self.now();
+        let kernel = &mut self.kernel;
+        let Some(effects) = budget::track(|| kernel.type_text(now, text, done)) else {
+            return false;
+        };
+        self.execute(effects);
+        true
+    }
+
     /// Draws the whole screen again, nothing on it changed (scripts'
     /// `redraw`).
     pub fn draw_again(&mut self) {

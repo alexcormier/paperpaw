@@ -326,6 +326,7 @@ impl Remote {
             | Command::IdleSleep(_)
             | Command::Network(_)
             | Command::Emit { .. }
+            | Command::Type { .. }
             | Command::Slot { .. }
             | Command::Show { .. }
             | Command::Touch { .. }

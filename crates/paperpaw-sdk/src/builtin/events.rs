@@ -78,6 +78,18 @@ crate::event_data! {
 }
 
 crate::event_data! {
+    /// Text typed from outside the screen ([`TYPE_TEXT`]).
+    pub struct TypeText {
+        /// What was typed, as many characters as there are.
+        pub text: String,
+    }
+    optional {
+        /// The text is then confirmed, as with the keyboard's *OK*.
+        pub done: bool,
+    }
+}
+
+crate::event_data! {
     /// Which setting changed ([`SETTING_CHANGED`]).
     pub struct SettingChanged {
         pub id: Id,
@@ -437,6 +449,12 @@ pub const SETTING_CHANGED: Event<SettingChanged> = Event::new("core.setting-chan
 /// [`ID`](super::params::ID) (as [`ui::setting_opens`](crate::ui::setting_opens)
 /// asks): the kernel sets the setting to it, trimmed.
 pub const SETTING_TYPED: Event<crate::replies::Typed> = Event::new("core.setting-typed");
+/// Text typed from outside the screen, by keys of a keyboard or a
+/// remote control for tests ([`TypeText`]): the screen bound to
+/// [`slots::KEYBOARD`](super::slots::KEYBOARD) adds it to its field as if
+/// typed on its keys (characters that are no text left out) and, with
+/// `done`, confirms it. Sent only while that screen is shown.
+pub const TYPE_TEXT: Event<TypeText> = Event::new("core.type-text");
 /// The focus of the buttons moved to another part of the screen
 /// ([`FocusChanged`]): for screen readers of one's own. Worked out
 /// only while a plugin listens or the focus is spoken.

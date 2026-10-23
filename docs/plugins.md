@@ -521,7 +521,8 @@ expect no warnings
 
 Steps are those of the emulator's scripts (a button's name, `long:`,
 `tap:x:y`, `tap-on:<text>`, `swipe:`, `wait:<ms>`, `run:<action>`,
-`open:<screen>`); assertions are `expect screen`, `stack`, `text`,
+`open:<screen>`, `type:<text>` into the keyboard shown and `type-enter:`
+to confirm it); assertions are `expect screen`, `stack`, `text`,
 `no text`, `focus`, `on`, `off`, `setting`, `no warnings` and
 `picture <name>` (compared with a snapshot). `paperpaw-emu --record
 my.flow` writes what one does in the emulator's window as a flow, to be

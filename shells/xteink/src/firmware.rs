@@ -969,6 +969,16 @@ impl Firmware {
                 self.apply(effects);
                 remote::ok();
             }
+            Command::Type { text, done } => {
+                let at = self.kernel_now();
+                match self.kernel.type_text(at, &text, done) {
+                    Some(effects) => {
+                        self.apply(effects);
+                        remote::ok();
+                    }
+                    None => remote::error("no text field"),
+                }
+            }
             Command::Drag {
                 from,
                 to,

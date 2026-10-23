@@ -1097,6 +1097,22 @@ impl Kernel {
         self.finish()
     }
 
+    /// Types `text` into the text field shown, as if on its keys, and
+    /// confirms it with `done` ([`events::TYPE_TEXT`]): for a shell's
+    /// remote control or keys of a keyboard. `None` where no text field
+    /// shows (the screen bound to [`slots::KEYBOARD`] is not on top).
+    pub fn type_text(&mut self, now: Instant, text: &str, done: bool) -> Option<Effects> {
+        let keyboard = self
+            .shared
+            .registry
+            .resolve_slot(slots::KEYBOARD.as_str())?;
+        if self.active_screen() != Some(keyboard) {
+            return None;
+        }
+        let typed = events::TypeText::new(text.into()).done(done);
+        Some(self.send_event(now, events::TYPE_TEXT.id().clone(), typed.to_params()))
+    }
+
     /// Returns and clears the collected warnings.
     pub fn take_warnings(&mut self) -> Vec<Warning> {
         mem::take(&mut self.warnings)

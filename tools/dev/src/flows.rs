@@ -33,7 +33,9 @@
 //! (the row, button or heading with this text or beginning so; commas
 //! are fine here), `long-tap:x:y`, `swipe:x1:y1:x2:y2`, `down:x:y`,
 //! `move:x:y`, `up:x:y`, `wait:<ms>`, `run:<action>`,
-//! `open:<screen>:<key>=<value>...`, `redraw`, `shot:<file>`. Time passes
+//! `open:<screen>:<key>=<value>...`, `type:<text>` and `type-enter:<text>`
+//! (typed into the keyboard shown, then confirmed), `redraw`,
+//! `shot:<file>`. Time passes
 //! as the steps take it (100 ms a step) and with `wait:`.
 //!
 //! Assertions begin with `expect`; texts may be quoted:
@@ -91,8 +93,23 @@ const TOUCH: &[&str] = &["tap", "tap-on", "long-tap", "swipe", "down", "move", "
 
 /// Steps that are no button's name.
 const NAMED: &[&str] = &[
-    "long", "tap", "tap-on", "long-tap", "swipe", "down", "move", "up", "wait", "run", "open",
-    "redraw", "shot", "serve", "describe",
+    "long",
+    "tap",
+    "tap-on",
+    "long-tap",
+    "swipe",
+    "down",
+    "move",
+    "up",
+    "wait",
+    "run",
+    "open",
+    "redraw",
+    "shot",
+    "serve",
+    "describe",
+    "type",
+    "type-enter",
 ];
 
 /// A flow read from its file.

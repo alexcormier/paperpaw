@@ -23,7 +23,8 @@ impl Emulator {
     ///
     /// - `run <action>`, `slot <slot> [<key>=<hex> …]`, `show <screen>
     ///   [<key>=<hex> …]`, `open <hex path>`, `set <setting> <hex value>`,
-    ///   `emit <event> [<key>=<hex> …]`, `press <button>`, `hold <button>
+    ///   `emit <event> [<key>=<hex> …]`, `type <hex>`, `type-enter <hex>`
+    ///   (an error where no text field shows), `press <button>`, `hold <button>
     ///   <ms>`, `touch <down|move|up> <x> <y>`, `time set <unix ms>`,
     ///   `rm <path>`, `mkdir <path>`, `mv <hex> <hex>`: `{}`;
     /// - `screen`: `{"screen": id}`; `screens`: `{"screens": [ids]}`;
@@ -110,6 +111,12 @@ impl Emulator {
             } => {
                 let (event, params) = (id(&event)?, params(pairs));
                 device.call(|kernel, now| kernel.send_event(now, event, params));
+                String::from(DONE)
+            }
+            Command::Type { text, done } => {
+                if !device.type_text(&text, done) {
+                    return Err(String::from("no text field"));
+                }
                 String::from(DONE)
             }
             Command::Set { id: setting, value } => {

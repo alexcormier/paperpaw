@@ -94,6 +94,12 @@ change the plugin SDK.
   can be lost on Wi-Fi without a word.
 - SDK: `Storage::total_space` tells a storage's size, as `free_space`
   tells what it has free.
+- SDK: `builtin::events::TYPE_TEXT` types text into the text field
+  shown, as if on its keys (the keyboard confirms it when told to);
+  `Kernel::type_text` sends it while a keyboard shows. Testing: the
+  X4's USB remote (`type`, `type-enter`, steps `type:` and
+  `type-enter:` in `tools/x4-remote.py`), the emulator's scripts and
+  flows and the web emulator type with it.
 - SDK: `Registrar::add_book_cache` names book data that is made again
   from the book (cleaned up by itself); `add_book_data` is for the
   reader's own data, removed only when the reader agrees.

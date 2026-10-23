@@ -46,7 +46,7 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{actions, groups, params, slots};
+use paperpaw_sdk::builtin::{actions, events, groups, params, slots};
 use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
@@ -612,6 +612,17 @@ impl KeyboardScreen {
     }
 
     /// Inserts pasted text: one line, digits only for numbers.
+    /// Text typed from outside (keys of a keyboard, a remote control): as
+    /// the keys would add it, without what is no text.
+    fn typed(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
+        let text: String = text
+            .chars()
+            .filter(|c| !c.is_control())
+            .filter(|c| self.layer != Layer::Digits || c.is_ascii_digit())
+            .collect();
+        self.insert(&text, cx);
+    }
+
     fn pasted(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
         let line: String = text
             .chars()
@@ -1083,6 +1094,11 @@ impl Screen for KeyboardScreen {
             // Typed on the phone with the text so far: it replaces it.
             self.text.clear();
             self.pasted(&typed.text, cx);
+        } else if let Some(typed) = events::TYPE_TEXT.read(event, params) {
+            self.typed(&typed.text, cx);
+            if typed.done == Some(true) {
+                self.finish(cx);
+            }
         }
     }
 

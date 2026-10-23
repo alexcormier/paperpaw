@@ -301,6 +301,19 @@ impl Typing {
         answers[0].clone()
     }
 
+    /// Text typed from outside (keys of a keyboard, a remote control);
+    /// whether a text field took it.
+    fn typed_from_outside(&mut self, text: &str, done: bool) -> bool {
+        self.now += 100;
+        match self.kernel.type_text(Instant(self.now), text, done) {
+            Some(effects) => {
+                self.settle(effects);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Text arriving as if typed on a phone.
     fn typed_on_phone(&mut self, text: &str) {
         self.now += 100;
@@ -720,6 +733,35 @@ fn text_from_a_phone_keeps_only_digits_for_numbers() {
     typing.typed_on_phone("PIN: 12-34 ٣");
     typing.tap("OK");
     assert_eq!(typing.answer(), "1234");
+}
+
+/// Text typed from outside (keys of a keyboard, a remote control) goes
+/// in as if typed on the keys, umlauts and spaces kept, and is confirmed
+/// when said so; without a text field shown, nothing takes it.
+#[test]
+fn text_typed_from_outside_goes_in_as_typed() {
+    let mut typing = Typing::new(BUTTONS);
+    assert!(!typing.typed_from_outside("lost", false));
+    typing.open(&[]);
+    assert!(typing.typed_from_outside("Grüße, ", false));
+    assert!(typing.typed_from_outside(
+        "Zoë €5
+",
+        false
+    ));
+    assert!(typing.answers().is_empty());
+    typing.press_by_buttons("OK");
+    assert_eq!(typing.answer(), "Grüße, Zoë €5");
+
+    let mut typing = Typing::new(TOUCH);
+    typing.open(&[]);
+    assert!(typing.typed_from_outside("ab", true));
+    assert_eq!(typing.answer(), "ab");
+    assert_ne!(
+        typing.kernel.active_screen().map(Id::as_str),
+        Some("keyboard.screen")
+    );
+    assert!(!typing.typed_from_outside("c", true));
 }
 
 proptest! {

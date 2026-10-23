@@ -18,6 +18,8 @@
 //! | `redraw` | draw the whole screen again, nothing on it changed |
 //! | `reset-peak` | measure the heap's peak anew from now (what one step takes) |
 //! | `emit:core.library-changed` | send an event without parameters, as a plugin would |
+//! | `type:hello world` | type into the text field shown, as if on its keys (a script's commas cannot be typed) |
+//! | `type-enter:hello` | the same, then confirm it (`type-enter:` confirms only) |
 //! | `serve:20` | answer plugins' servers in real time for 20 s |
 //! | `shot:out/a.png` | save a screenshot now (the last one comes with `--screenshot`) |
 
@@ -107,6 +109,11 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
             let event = paperpaw_core::sdk::Id::parse(event).map_err(|e| e.to_string())?;
             let params = paperpaw_core::sdk::Params::new();
             device.call(|kernel, now| kernel.send_event(now, event, params));
+        }
+        ["type" | "type-enter", text @ ..] => {
+            if !device.type_text(&text.join(":"), parts[0] == "type-enter") {
+                return Err(String::from("no text field shows"));
+            }
         }
         ["tap", x, y] => touch(device, Point::new(number(x)?, number(y)?), None, 60),
         ["tap-on", label @ ..] if !label.is_empty() => {
