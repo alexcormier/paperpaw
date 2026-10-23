@@ -2118,7 +2118,7 @@ pub fn paperpaw_sdk::library::service::BookField::new(impl core::convert::Into<p
 pub paperpaw_sdk::library::Deleted::commands: alloc::vec::Vec<paperpaw_sdk::Command>
 pub paperpaw_sdk::library::Deleted::failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>
 pub paperpaw_sdk::library::Deleted::refused: alloc::vec::Vec<alloc::string::String>
-pub struct paperpaw_sdk::library::Fingerprint
+#[non_exhaustive] pub struct paperpaw_sdk::library::Fingerprint
 pub paperpaw_sdk::library::Fingerprint::md5: alloc::string::String
 pub paperpaw_sdk::library::Fingerprint::size: u64
 impl paperpaw_sdk::library::Fingerprint

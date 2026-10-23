@@ -17,6 +17,7 @@ use paperpaw_digest::md5;
 
 /// A book's size and partial MD5.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Fingerprint {
     /// The file's size in bytes.
     pub size: u64,
