@@ -86,7 +86,6 @@ paperpaw_sdk::Version
 paperpaw_sdk::annotations::Annotation
 paperpaw_sdk::annotations::Mark
 paperpaw_sdk::data::Format
-paperpaw_sdk::firmware::Update
 paperpaw_sdk::library::listing::Entry
 paperpaw_sdk::library::listing::Listing
 paperpaw_sdk::native::Fingerprint

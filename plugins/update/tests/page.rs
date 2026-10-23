@@ -567,11 +567,7 @@ fn an_update_signed_by_another_key_installs_with_the_key_shown() {
     device.run(actions::CONFIRM);
     assert_eq!(
         device.install(),
-        FirmwareCommand::Install {
-            path: "updates/own.bin".into(),
-            key: Some(key),
-            older: false,
-        }
+        FirmwareCommand::install("updates/own.bin", Some(key), false)
     );
 }
 
@@ -596,11 +592,7 @@ fn an_older_update_says_so_and_installs_only_as_chosen() {
     device.run(actions::CONFIRM);
     assert_eq!(
         device.install(),
-        FirmwareCommand::Install {
-            path: "updates/old.bin".into(),
-            key: None,
-            older: true,
-        }
+        FirmwareCommand::install("updates/old.bin", None, true)
     );
 }
 

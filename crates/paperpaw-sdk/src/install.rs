@@ -36,14 +36,18 @@
 //! // })?;
 //! ```
 
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod local;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod marks;
 mod origin;
 
-pub use origin::{
-    Origin, Origins, adopt, folder_release, folder_version, forget_store_install, origin,
-    remember_store_install,
-};
+pub use origin::{Origin, Origins, folder_release, folder_version, origin};
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use origin::{adopt, forget_store_install, remember_store_install};
 
 use alloc::format;
 use alloc::string::{String, ToString};

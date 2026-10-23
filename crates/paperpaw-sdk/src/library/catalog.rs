@@ -680,8 +680,7 @@ pub enum Sort {
     Added,
 }
 
-/// What books to find in the catalog ([`query`]): all of the conditions
-/// set.
+/// What books to find in the catalog ([`query`]): all of the conditions set.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Query {
@@ -908,12 +907,13 @@ pub fn search_after(
     page(storage, &|record| record.matches(&words), after, n)
 }
 
-/// Writes `records` as the catalog (emptying the log), e.g. for tests of
-/// views.
+/// Writes `records` as the catalog (emptying the log), e.g. for tests of views.
 #[expect(
     clippy::let_underscore_must_use,
-    reason = "for tests of views; a catalog not written is made anew by the next walk"
+    reason = "one not written is made anew by a walk"
 )]
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn write(storage: &dyn Storage, records: &[Record]) {
     let mut text = next_header(storage);
     text.extend(records.iter().map(Record::text));

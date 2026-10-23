@@ -94,9 +94,9 @@ pub trait Library {
     }
 
     /// Keeps `index` in the file `file` while the view lets it go
-    /// ([`Index::save`]); `false` where it is not kept.
+    /// (`Index::save`); `false` where it is not kept.
     fn keep_index(&self, env: &Env<'_>, index: &Index, file: &str, archive: &str) -> bool {
-        index.save(env.storage, file, archive)
+        index.write(env.storage, file, archive)
     }
 
     /// The index kept in `file`, where it is of the books there are now

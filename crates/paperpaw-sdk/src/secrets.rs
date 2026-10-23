@@ -309,6 +309,8 @@ impl Secrets {
     /// label written as `\t`, `\n`, `\r` and `\\` (a network's name may
     /// hold any of them).
     /// Lines this version does not read are written back as they are.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn encode(&self) -> String {
         let mut text: String = self
             .list
@@ -332,6 +334,8 @@ impl Secrets {
 
     /// Lines it cannot read (more fields or flags than it knows, or
     /// damaged) are kept for [`Secrets::encode`], not dropped.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn decode(text: &str) -> Self {
         let mut secrets = Self::default();
         for line in text.lines() {

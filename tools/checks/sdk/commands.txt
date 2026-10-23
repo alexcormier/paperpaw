@@ -15,7 +15,6 @@ paperpaw_sdk::install::Installer::install
 paperpaw_sdk::install::Installer::received
 paperpaw_sdk::install::Installer::remove
 paperpaw_sdk::install::Installer::start
-paperpaw_sdk::install::local::Staging::commit
 paperpaw_sdk::voices::SpeakFn
 paperpaw_sdk::voices::StopFn
 paperpaw_sdk::voices::VoiceSpec::new

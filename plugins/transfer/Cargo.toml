@@ -12,7 +12,8 @@ categories = ["no-std"]
 
 [dependencies]
 paperpaw-qr.workspace = true
-paperpaw-sdk.workspace = true
+# Installs plugins sent from a computer (kernel).
+paperpaw-sdk = { workspace = true, features = ["kernel"] }
 
 [dev-dependencies]
 paperpaw-core.workspace = true
