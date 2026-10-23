@@ -278,11 +278,11 @@ fn without_an_etag_nothing_counts_as_deleted_there() {
     }
 }
 
-/// The file in the folder replaced by that of a device that started
-/// anew: what it lacks was not deleted there, so nothing here goes; and
-/// the sync says so.
+/// The file in the folder empty (replaced by that of a device that
+/// started anew, or all statistics reset in KOReader): nothing here goes
+/// and nothing is uploaded, the user is asked. *Keep* uploads them again.
 #[test]
-fn a_replaced_file_there_deletes_nothing_and_says_so() {
+fn an_empty_file_there_deletes_nothing_unless_the_user_says_so() {
     let mut fresh = app(device(&[], 6, 10));
     let get = fresh.sync_now();
     let put = fresh.answer(&get[0], 404, b"Not Found", None);
@@ -293,11 +293,75 @@ fn a_replaced_file_there_deletes_nothing_and_says_so() {
     assert!(a.answer(&put[0], 201, b"", None).is_empty());
     let before = common::stays(&a.storage);
     let get = a.sync_now();
+    assert!(a.answer(&get[0], 200, &empty, Some("\"v2\"")).is_empty());
+    // Asked, the focus on Keep.
+    let shown = a.shown();
+    assert!(
+        shown.contains(
+            "
+Statistics were removed
+"
+        ),
+        "{shown}"
+    );
+    assert!(shown.contains(">Keep"), "{shown}");
+    assert_eq!(common::stays(&a.storage), before);
+    a.press("confirm");
+    let get = a.requests();
+    assert_eq!(get.len(), 1, "{get:?}");
     let put = a.answer(&get[0], 200, &empty, Some("\"v2\""));
+    assert_eq!(put.len(), 1);
     assert!(a.answer(&put[0], 204, b"", None).is_empty());
+    assert!(a.shown().contains("Synced: 2 books."), "{}", a.shown());
     assert_eq!(titles(&a), ["Anna Karenina", "Effi Briest"]);
     assert_eq!(common::stays(&a.storage), before);
-    assert!(a.shown().contains("looks replaced"), "{}", a.shown());
+}
+
+/// Most statistics removed in KOReader since this device's upload (the
+/// books read last): whether they were deleted there or a backup was
+/// restored cannot be told, so the user is asked. *Remove* removes them
+/// here too, and is remembered for the file there as it is: a failed
+/// upload does not ask again.
+#[test]
+fn statistics_removed_there_go_here_when_the_user_says_so() {
+    let three = [(1, "Anna Karenina"), (2, "Effi Briest"), (3, "Faust")];
+    let mut other = app(device(&three[..1], 6, 10));
+    let get = other.sync_now();
+    let put = other.answer(&get[0], 404, b"Not Found", None);
+    let one = other.body(&put[0]);
+    let mut a = app(device(&three, 6, 10));
+    let get = a.sync_now();
+    let put = a.answer(&get[0], 404, b"Not Found", None);
+    assert!(a.answer(&put[0], 201, b"", None).is_empty());
+    let get = a.sync_now();
+    assert!(a.answer(&get[0], 200, &one, Some("\"v2\"")).is_empty());
+    // Asked, the focus on Keep.
+    let shown = a.shown();
+    assert!(
+        shown.contains(
+            "
+Statistics were removed
+"
+        ),
+        "{shown}"
+    );
+    assert!(shown.contains(">Keep"), "{shown}");
+    assert_eq!(titles(&a).len(), 3);
+    a.press("left");
+    assert!(a.shown().contains(">Remove"), "{}", a.shown());
+    a.press("confirm");
+    let get = a.requests();
+    assert_eq!(get.len(), 1, "{get:?}");
+    let put = a.answer(&get[0], 200, &one, Some("\"v2\""));
+    assert_eq!(put.len(), 1);
+    assert_eq!(titles(&a), ["Anna Karenina"]);
+    assert!(a.answer(&put[0], 500, b"", None).is_empty());
+    let get = a.sync_now();
+    let put = a.answer(&get[0], 200, &one, Some("\"v2\""));
+    assert_eq!(put.len(), 1, "not asked again");
+    assert!(a.answer(&put[0], 204, b"", None).is_empty());
+    assert!(a.shown().contains("Synced: 1 book."), "{}", a.shown());
+    assert_eq!(common::stays(&a.storage).len(), 10);
 }
 
 #[test]

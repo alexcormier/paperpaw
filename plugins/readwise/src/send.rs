@@ -6,8 +6,8 @@
 //! Readwise took its highlights, or when it has none (or was deleted).
 //! What fails stays waiting and goes with the next sending: the next
 //! export, or Wi-Fi coming back where PaperPaw manages it. A token
-//! Readwise refuses is let go, so nothing is tried by itself until a new
-//! one is entered with the next export.
+//! Readwise refuses is let go, so nothing is tried by itself until
+//! another one is kept, or one is entered with the next export.
 //!
 //! Each request's body is written to a file first, a highlight at a
 //! time as the notes are read, and sent from there; Readwise's answer
@@ -156,9 +156,10 @@ pub struct Run {
     /// Highlights sent, notes files not sent.
     sent: i64,
     failed: usize,
-    /// Readwise refused the token kept: it stays kept, but is not sent
-    /// by itself again; the next export asks for one.
-    refused: bool,
+    /// The token Readwise refused: it stays kept, but is not sent by
+    /// itself again; the next export asks for one. Another token kept,
+    /// or this one entered anew, is sent again.
+    refused: Option<String>,
 }
 
 impl Run {
@@ -171,6 +172,9 @@ impl Run {
         token: Option<&str>,
         out: &mut Vec<Command>,
     ) {
+        if token.is_some() {
+            self.refused = None;
+        }
         let waiting = waiting(env.storage);
         if self.running {
             // Those exported meanwhile come along.
@@ -184,7 +188,10 @@ impl Run {
         if waiting.is_empty() {
             return;
         }
-        let kept = env.secrets.get(SECRET).filter(|_| !self.refused);
+        let kept = env
+            .secrets
+            .get(SECRET)
+            .filter(|t| self.refused.as_deref() != Some(*t));
         let Some(token) = token.or(kept) else {
             if start == Start::Export {
                 out.push(Command::Notify(
@@ -271,8 +278,9 @@ impl Run {
             401 | 403 => {
                 // Asked for anew with the next export; kept meanwhile, as
                 // Readwise may refuse it only for a while.
+                let token = core::mem::take(&mut self.token);
                 self.end(env, "readwise.bad-token", out);
-                self.refused = true;
+                self.refused = Some(token);
             }
             0 => self.end(env, "readwise.unreachable", out),
             _ => {

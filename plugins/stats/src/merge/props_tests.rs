@@ -273,7 +273,8 @@ fn books_are_the_same_by_their_fingerprint_not_their_title() {
         Outcome {
             books: 3,
             stays: 4,
-            kept: false
+            kept: false,
+            unclear: false
         }
     );
     let books = store::books(&here);
@@ -413,7 +414,8 @@ fn a_book_deleted_on_both_sides_stays_deleted() {
         Outcome {
             books: 1,
             stays: 2,
-            kept: false
+            kept: false,
+            unclear: false
         }
     );
     assert_eq!(fingerprints(&here), ["0000000000000000000000000000000a"]);

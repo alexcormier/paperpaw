@@ -14,7 +14,10 @@
 //! ETag: the upload could then replace a file changed meanwhile. A file
 //! gone from a folder this device uploaded to is not replaced at once (a
 //! server may say so by mistake): the sync says so, and the next one
-//! uploads.
+//! uploads. Where the file there lacks much and it cannot be told whether
+//! that was deleted there (see [`merge`]), nothing is uploaded: the user
+//! is asked whether to remove it here too, and the sync starts again with
+//! the answer, kept for that file until an upload changes it.
 
 use alloc::borrow::Cow;
 use alloc::format;
@@ -25,7 +28,7 @@ use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::replies::{Confirmed, HttpReply, Typed};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Params, Rect,
@@ -57,15 +60,21 @@ paperpaw_sdk::event_data! {
     }
 }
 const URL_ENTERED: Event<Typed> = Event::new("stats.url-entered");
+/// Whether to remove here what was removed there; with the file's ETag
+/// as [`ETAG`].
+const DECIDED: Event<Confirmed> = Event::new("stats.removed-there");
+const ETAG: &str = "etag";
 
 /// The WebDAV folder and its user, both set on the sync page.
 static ON_PAGE: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(SCREEN);
 static SETTINGS: [paperpaw_sdk::SettingSpec; 2] = [
     paperpaw_sdk::SettingSpec::fixed_text(URL.static_str(), "stats.setting.sync", "", crate::GROUP)
         .with_extra(&ON_PAGE)
+        .kept_on_reset()
         .described("stats.setting.sync.help"),
     paperpaw_sdk::SettingSpec::fixed_text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
         .with_extra(&ON_PAGE)
+        .kept_on_reset()
         .advanced()
         .described("stats.sync.user.help"),
 ];
@@ -106,6 +115,11 @@ pub(crate) struct Sync {
     books: usize,
     /// Whether what the file there lacked was kept ([`Outcome::kept`]).
     kept: bool,
+    /// What the user decided where the file there lacked much and it
+    /// could not be told why ([`Outcome::unclear`]): for that file (its
+    /// address and ETag), whether to remove it here too. It holds until
+    /// an upload changes the file.
+    decided: Option<(String, String, bool)>,
 }
 
 pub(crate) type SharedSync = Rc<RefCell<Sync>>;
@@ -275,7 +289,8 @@ impl Sync {
         // meanwhile: what it lacks then is not taken for deleted there.
         let cached = (uploaded_before && reply.etag.is_some()).then_some(self.last_upload.as_str());
         let upload = file(FILE);
-        let result = merge::merge(env.storage, income, cached, Some(&upload), &dir());
+        let decided = self.decided_for(reply.etag.as_deref());
+        let result = merge::merge_as(env.storage, income, cached, Some(&upload), &dir(), decided);
         #[expect(
             clippy::let_underscore_must_use,
             reason = "a download left behind is written over by the next sync"
@@ -294,6 +309,9 @@ impl Sync {
                 return done(out, env.i18n.format(key, &[("reason", Arg::Str(&reason))]));
             }
         };
+        if outcome.unclear {
+            return self.ask(env, reply.etag.as_deref().unwrap_or_default(), out);
+        }
         self.books = outcome.books;
         self.kept = outcome.kept;
         let mut put = self.request(env, "PUT", &UPLOADED);
@@ -318,6 +336,46 @@ impl Sync {
         out.push(Command::Http(put));
     }
 
+    /// What the user decided for the file there with `etag`, if anything.
+    fn decided_for(&self, etag: Option<&str>) -> Option<bool> {
+        let (url, decided_etag, remove) = self.decided.as_ref()?;
+        (*url == self.url && Some(decided_etag.as_str()) == etag).then_some(*remove)
+    }
+
+    /// The file there (with `etag`) lacks much, and it cannot be told
+    /// whether that was deleted there: nothing is uploaded, and the user
+    /// is asked whether to remove it here too. Going back asks again with
+    /// the next sync.
+    fn ask(&mut self, env: &Env<'_>, etag: &str, out: &mut Vec<Command>) {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "an upload left behind is written over by the next sync"
+        )]
+        let _ = env.storage.remove(&file(FILE));
+        self.running = false;
+        self.attempt = 0;
+        done(out, env.i18n.tr("stats.sync.asked").to_string());
+        out.push(
+            paperpaw_sdk::ask::confirm(env.i18n.tr("stats.sync.ask"), &DECIDED)
+                .text(env.i18n.tr("stats.sync.ask.text"))
+                .yes(env.i18n.tr("stats.sync.remove"))
+                .no(env.i18n.tr("stats.sync.keep"))
+                .with(ETAG, etag)
+                .command(),
+        );
+    }
+
+    /// The user decided: the sync starts again, with the decision for the
+    /// file asked about.
+    pub(crate) fn decide(&mut self, env: &Env<'_>, answer: &Confirmed, out: &mut Vec<Command>) {
+        if self.running {
+            return;
+        }
+        let etag = answer.context.get(ETAG).unwrap_or_default().to_string();
+        self.decided = Some((self.url.clone(), etag, answer.yes));
+        self.start(env, out);
+    }
+
     /// The merged file is up (or someone was faster).
     pub(crate) fn uploaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
         if !self.running {
@@ -338,6 +396,8 @@ impl Sync {
                     let _ = env.storage.remove(&upload);
                 }
                 forget_other_uploads(env, &self.last_upload);
+                // The file there changed: a decision for it holds no more.
+                self.decided = None;
                 self.running = false;
                 self.attempt = 0;
                 let key = if self.kept {
@@ -443,6 +503,10 @@ pub(crate) fn register(
     let s = sync.clone();
     r.on(UPLOADED, move |env, reply, out| {
         s.borrow_mut().uploaded(env, reply, out);
+    })?;
+    let s = sync.clone();
+    r.on(DECIDED, move |env, answer, out| {
+        s.borrow_mut().decide(env, answer, out);
     })?;
     r.add_screen(ScreenSpec::new(
         SCREEN,
