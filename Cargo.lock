@@ -1798,6 +1798,7 @@ dependencies = [
  "paperpaw-platform",
  "paperpaw-plugin-fonts-default",
  "paperpaw-plugin-keyboard",
+ "paperpaw-plugin-menu",
  "paperpaw-plugin-sleep",
  "paperpaw-sdk",
  "proptest",
