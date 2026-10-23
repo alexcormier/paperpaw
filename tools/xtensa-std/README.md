@@ -14,10 +14,17 @@ So each release builds them once, on Linux, and publishes them
 (`paperpaw-xtensa-std-<version>.tar.gz`, signed like the emulators). Installed
 into the `esp` toolchain, they are where rustc finds a target's
 libraries, as rustup puts the X4's: plugins build without `-Zbuild-std`
-(the alias `cargo +esp x4pro` of `samples/hello-native`), and a plugin's
-file is the same on Windows, macOS and Linux, given the same remapped
-paths (the sample's `build.sh`). The firmware still builds its own with
-`-Zbuild-std`; the libraries installed do not change that.
+(the alias `cargo +esp x4pro` of `samples/hello-native`). The X4 Pro is
+then where the X4 is: a file built on Linux or macOS with the sample's
+`build.sh` matches the rebuild. On Windows two more things must hold, as
+for the X4, which `build.sh` does not do: every folder with Rust files
+remapped on its own (else the paths below the top keep their `\`), and
+Cargo told the Linux host (a `rustc` that says `host:
+x86_64-unknown-linux-gnu` in `-vV`, else the build scripts' hashes
+differ). With both, and the SDK from a registry, a Windows build and a
+Linux build of the sample packed to the same file, byte for byte
+(measured 2026-10-23, `esp` 1.97.0.0). The firmware still builds its own
+with `-Zbuild-std`; the libraries installed do not change that.
 
 | | What |
 |---|---|
@@ -35,6 +42,8 @@ rm -rf "$sysroot/lib/rustlib/xtensa-esp32s3-none-elf"
 tar -xzf paperpaw-xtensa-std-0.4.0.tar.gz -C "$sysroot"
 ```
 
-The signer is PaperPaw's release key, fingerprint 55A9 F626 DB17 EB90.
-CI checks that plugin files are the same in any folder
-(`tools/plugin-files/anywhere.sh`).
+The signer is PaperPaw's release key, fingerprint 55A9 F626 DB17 EB90,
+whole `55a9f626db17eb9058707323d29f52470bfcd09638898e17bd01784ef9df0c51`. The archive holds `core`, `alloc` and `compiler_builtins`,
+all a plugin links with: CI builds the sample and PaperPaw's own store
+plugins against them alone. CI also checks that plugin files are the
+same in any folder (`tools/plugin-files/anywhere.sh`).

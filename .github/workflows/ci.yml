@@ -138,6 +138,11 @@ jobs:
             samples/hello-native
             .
           key: ${{ matrix.device }}
+      # Code plugins for the ESP32-S3 link with core libraries built once,
+      # as the release publishes them; installed first, as the release
+      # does, so that everything after builds beside them.
+      - uses: ./.github/actions/xtensa-std
+        if: matrix.device != 'x4'
       - name: Lint and build
         working-directory: shells/xteink
         # Linted with remote control over USB, as for testing, and
@@ -146,10 +151,6 @@ jobs:
           cargo +"$FIRMWARE_TOOLCHAIN" clippy $FIRMWARE_CARGO --features "$DEVICE,remote" -- -D warnings
           cargo +"$FIRMWARE_TOOLCHAIN" clippy $FIRMWARE_CARGO --features "$DEVICE" -- -D warnings
           cargo +"$FIRMWARE_TOOLCHAIN" build $FIRMWARE_CARGO --features "$DEVICE"
-      # Code plugins for the ESP32-S3 link with core libraries built once,
-      # as the release publishes them.
-      - uses: ./.github/actions/xtensa-std
-        if: matrix.device != 'x4'
       - name: The sample code plugin fits the firmware
         id: native
         uses: ./.github/actions/native-sample
@@ -180,6 +181,12 @@ jobs:
           tools/plugin-files/sign.sh "$out" target/release/paperpaw-sign --key "$RUNNER_TEMP/ci.key"
           version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
           python3 tools/plugin-files/catalogue.py "$out" "$version" https://example.invalid/ci
+      # espup's toolchain is cached between runs (xteink-tools): the core
+      # libraries installed into it go again, so that no run finds those
+      # of another commit.
+      - name: The core libraries out of the cached toolchain
+        if: always() && matrix.device != 'x4'
+        run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
 
   native:
     name: Native plugins

@@ -320,6 +320,12 @@ jobs:
         with:
           name: plugins-${{ matrix.device }}
           path: dist/plugins/*.ppn
+      # espup's toolchain is cached between runs (xteink-tools): the core
+      # libraries installed into it go again, so that no run finds those
+      # of another commit.
+      - name: The core libraries out of the cached toolchain
+        if: always() && matrix.device != 'x4'
+        run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
 
   release:
     name: Release
