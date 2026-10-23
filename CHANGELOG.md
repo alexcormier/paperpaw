@@ -409,6 +409,9 @@ file to your report.
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
   tell whether they are disabled.
+- SDK: `EnvParts`, `WorkStates::set_works`, `WorkStates::set_note` and
+  `ScreenKey::new` come with the `kernel` feature: only the kernel and
+  tests make an `Env`, set work states or number screens.
 - SDK: actions have one shape, with params everywhere. A handler is
   `.handler(|env, params, out| ..)`; `handler_with` and
   `ActionParamsHandler` are gone. `Command::RunAction(id, params)` takes

@@ -692,13 +692,15 @@ impl WorkStates {
     }
 
     /// Sets every work's state at once (for the kernel).
-    #[doc(hidden)]
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_works(&mut self, works: Vec<(Id, String, WorkState)>) {
         self.works = works;
     }
 
     /// Keeps a plugin's note in place of the one before (for the kernel).
-    #[doc(hidden)]
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_note(&mut self, plugin: Id, note: Note) {
         match self.notes.iter_mut().find(|(p, _)| *p == plugin) {
             Some((_, old)) => *old = note,
