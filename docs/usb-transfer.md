@@ -151,11 +151,11 @@ requests, each with the page's key (`k=`), shown on the device:
 
 ## The emulator
 
-`paperpaw-emu --stdio` speaks the cable transfer on standard input and
+`paperpaw-emu --cable` speaks the cable transfer on standard input and
 output, as a device does over its cable; in its window the questions show
 and are answered as on a device. With `--headless` it answers what needs
 no permission. For example:
 
 ```
-python tools/usb-transfer.py --emulator "paperpaw-emu --stdio" install path/to/my-plugin
+python tools/usb-transfer.py --emulator "paperpaw-emu --cable" install path/to/my-plugin
 ```

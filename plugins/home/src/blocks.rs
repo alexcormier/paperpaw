@@ -758,14 +758,15 @@ impl CardParts {
             room -= half + small;
         }
         // Two lines at most; in a flat card, down to the small size.
-        let two = room.min(2 * line_height(env, style.title));
+        let two = room
+            .min(line_height(env, style.title) + widgets::heading_line_height(env, style.title));
         let least = if room >= line {
             style.text
         } else {
             style.small
         };
         let title = &book.book.title;
-        parts.title = widgets::Wrapped::fitting(env, title, style.title, least, text.width, two);
+        parts.title = widgets::Wrapped::heading(env, title, style.title, least, text.width, two);
         parts.text = Some(text);
         parts
     }
@@ -1287,11 +1288,25 @@ fn draw_placeholder(
 
 // ---- Tools ----------------------------------------------------------------
 
-/// A tool in its cells: its icon, and its name below (where shown),
-/// together in the middle.
-pub(crate) fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id) {
+/// Draws the tool of `action` in `area`, its name if tools show names,
+/// with room for a name of `lines` lines (see
+/// [`grid::draw_tool_lines`](paperpaw_sdk::widgets::grid::draw_tool_lines)):
+/// where its icon and name have ink.
+pub(crate) fn draw_tool_lines(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    area: Rect,
+    action: &Id,
+    lines: usize,
+) -> Rect {
     let labels = env.settings.read(&TOOL_LABELS);
-    paperpaw_sdk::widgets::grid::draw_tool(canvas, env, area, action, labels);
+    paperpaw_sdk::widgets::grid::draw_tool_lines(canvas, env, area, action, labels, lines)
+}
+
+/// How many lines the name of the tool of `action` takes in `area`.
+pub(crate) fn tool_name_lines(env: &Env<'_>, area: Rect, action: &Id) -> usize {
+    let labels = env.settings.read(&TOOL_LABELS);
+    paperpaw_sdk::widgets::grid::tool_name_lines(env, area, action, labels)
 }
 
 /// How many of the recent books the widgets in `items` show: the current

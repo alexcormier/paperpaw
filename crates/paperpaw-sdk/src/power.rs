@@ -158,6 +158,25 @@ impl Power {
     }
 }
 
+/// How PaperPaw started this time ([`Env::started`](crate::Env::started)),
+/// where the shell can tell: e.g. for a device check, which proves a
+/// sleep by the start that ends it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Start {
+    /// The shell does not say.
+    #[default]
+    Unknown,
+    /// Switched on: the power came, by the power button or the cable. A
+    /// device whose sleep cuts the power (the X4) wakes so too.
+    PowerOn,
+    /// Woken from a deep sleep that kept the power.
+    Wake,
+    /// Started again with its power on: by a watchdog, a panic or a
+    /// restart asked for.
+    Restart,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

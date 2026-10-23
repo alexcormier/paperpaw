@@ -16,7 +16,8 @@ use paperpaw_graphics::Framebuffer;
 use paperpaw_platform::{Color, PixelFormat};
 use paperpaw_text::charset::{self, LATIN};
 use paperpaw_text::{
-    BitmapFont, Font, FontError, GlyphCache, PackSource, StoredPack, TextStyle, draw_text, measure,
+    BitmapFont, Font, FontError, GlyphCache, PackSource, StoredPack, TextStyle, draw_text, glyph_x,
+    is_mark, measure,
 };
 
 const PACK: &[u8] = include_bytes!("../testdata/pack.ppfp.v1");
@@ -98,6 +99,17 @@ fn glyphs_land_where_their_offsets_say() {
         assert!(g.2.abs_diff(e.2) <= 2, "{g:?} is not {e:?}");
     }
     assert_eq!(cache.bytes(), 0, "packs are read in place");
+}
+
+/// A combining mark reaches back onto the character before it; with
+/// none there, it sits on the pen instead of left of where its text
+/// begins.
+#[test]
+fn a_mark_with_nothing_before_it_starts_at_the_pen() {
+    assert!(is_mark('\u{324}') && is_mark('\u{301}') && !is_mark('a') && !is_mark(' '));
+    assert_eq!(glyph_x(10.0, -4, false), 6, "on the letter before it");
+    assert_eq!(glyph_x(10.0, -4, true), 10, "on nothing");
+    assert_eq!(glyph_x(10.0, 2, true), 12, "already right of the pen");
 }
 
 #[test]

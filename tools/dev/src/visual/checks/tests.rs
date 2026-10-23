@@ -227,6 +227,30 @@ fn icons_off_their_column() {
     assert!(issues[0].message.contains("8 px left"), "{issues:?}");
 }
 
+/// A dotted separator below some rows, running on under their labels,
+/// and a label's first letter reaching in: neither moves their icons.
+#[test]
+fn separators_and_letters_are_no_icons() {
+    let mut image = paper();
+    let mut parts = Vec::new();
+    for i in 0..4u16 {
+        let y = 100 + i * 60;
+        fill(&mut image, Rect::new(30, y + 20, 20, 20), INK);
+        word(&mut image, 77, y + 20, 5, 20);
+        if i < 3 {
+            // A line of dots from the margin on under the label.
+            for x in (26..454).step_by(2) {
+                fill(&mut image, Rect::new(x, y + 58, 1, 1), INK);
+            }
+        }
+        // A letter that starts a pixel before its described text.
+        fill(&mut image, Rect::new(75, y + 20, 3, 20), INK);
+        parts.push(d(Role::Row, "", Rect::new(0, y, 480, 60)));
+        parts.push(d(Role::Text, "Label", Rect::new(77, y, 377, 60)));
+    }
+    assert!(align(&scene(&image, parts)).is_empty());
+}
+
 #[test]
 fn widgets_drawing_outside_their_cell() {
     let baseline = paper();
@@ -311,6 +335,82 @@ fn small_touch_targets() {
     let issues = touch_targets(&scene);
     assert_eq!(checks(&issues), [TOUCH_TARGET]);
     assert!(issues[0].message.contains("3.5 mm"), "{issues:?}");
+}
+
+/// Narrow keys pass in a row of many on the keyboard's screen only.
+#[test]
+fn narrow_keys_pass_on_the_keyboard_alone() {
+    let image = paper();
+    let parts: Vec<_> = (0..10u16)
+        .map(|i| d(Role::Button, "q", Rect::new(26 + i * 43, 400, 43, 70)))
+        .collect();
+    let mut scene = scene(&image, parts);
+    scene.ui.finger = 61;
+    assert_eq!(checks(&touch_targets(&scene)), [TOUCH_TARGET]);
+    let scene = scene.keyboard(true);
+    assert!(touch_targets(&scene).is_empty());
+}
+
+/// A keyboard's keys nearly round, 4 mm and a little more each way (35 px
+/// here), a thin seam apart: neither too small nor too close there; as
+/// buttons elsewhere, both.
+#[test]
+fn low_keys_a_seam_apart_pass_on_the_keyboard_alone() {
+    let image = paper();
+    let mut parts: Vec<_> = (0..10u16)
+        .map(|i| d(Role::Button, "q", Rect::new(28 + i * 42, 400, 38, 41)))
+        .collect();
+    // The row below with fewer, wider keys (the space bar's).
+    parts.extend([
+        d(Role::Button, "123", Rect::new(28, 445, 80, 41)),
+        d(Role::Button, "Space", Rect::new(112, 445, 248, 41)),
+        d(Role::Button, "OK", Rect::new(364, 445, 80, 41)),
+    ]);
+    let mut scene = scene(&image, parts);
+    scene.ui.finger = 61;
+    assert_eq!(checks(&touch_targets(&scene)), [TOUCH_TARGET]);
+    assert_eq!(checks(&button_room(&scene)), [BUTTON_ROOM]);
+    let scene = scene.keyboard(true);
+    assert!(touch_targets(&scene).is_empty());
+    assert!(button_room(&scene).is_empty());
+}
+
+/// A word split onto two lines in a box drawn tight round it is still
+/// found; a button's own label is looked at even where it holds a text
+/// of something else.
+#[test]
+fn tight_texts_and_buttons_with_other_words_are_looked_at() {
+    let mut image = paper();
+    word(&mut image, 30, 10, 4, 16);
+    word(&mut image, 30, 30, 3, 16);
+    let tight = vec![d(Role::Text, "Wrapped", Rect::new(30, 10, 70, 36))];
+    assert_eq!(checks(&wrap(&scene(&image, tight))), [WRAP]);
+    let mut image = paper();
+    word(&mut image, 40, 110, 4, 16);
+    word(&mut image, 40, 130, 3, 16);
+    let parts = vec![
+        d(Role::Button, "Wrapped", Rect::new(26, 100, 120, 120)),
+        d(Role::Text, "Note", Rect::new(40, 190, 40, 20)),
+    ];
+    assert_eq!(checks(&wrap(&scene(&image, parts))), [WRAP]);
+}
+
+/// Words on a box filled round them, its corners round (a day marked in
+/// a calendar): one line, not three.
+#[test]
+fn words_on_a_filled_box_with_round_corners_are_one_line() {
+    let mut image = paper();
+    let cell = Rect::new(100, 100, 45, 45);
+    fill(&mut image, cell, INK);
+    // The paper left in its round corners.
+    for (x, y) in [(100, 100), (143, 100), (100, 143), (143, 143)] {
+        fill(&mut image, Rect::new(x, y, 2, 2), PAPER);
+    }
+    for i in 0..2u16 {
+        fill(&mut image, Rect::new(112 + i * 12, 112, 6, 20), PAPER);
+    }
+    let parts = vec![d(Role::Text, "14", cell)];
+    assert!(wrap(&scene(&image, parts)).is_empty());
 }
 
 #[test]

@@ -240,7 +240,15 @@ impl Firmware {
     fn io(&mut self) {
         for io in self.kernel.take_io() {
             match io {
-                Io::Wifi(command) => self.network.ask(NetworkIo::Wifi(command)),
+                Io::Wifi(command) => {
+                    // Joining: named for the router as the reader named it.
+                    if matches!(command, paperpaw_sdk::wifi::WifiCommand::Join { .. }) {
+                        let name = self.kernel.device_name();
+                        let host = paperpaw_sdk::device_name::host_name(&name);
+                        self.network.set_host_name(&host);
+                    }
+                    self.network.ask(NetworkIo::Wifi(command));
+                }
                 Io::Http(call) => self.network.ask(NetworkIo::Http(call)),
                 Io::Server(call) => self.network.ask(NetworkIo::Server(call)),
                 Io::Socket(call) => self.network.ask(NetworkIo::Socket(call)),

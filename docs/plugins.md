@@ -409,8 +409,10 @@ static HOW: [(&str, &str); 2] = [
 // In `manifest`: Manifest::new(…).description(…).how(&HOW)
 ```
 
-The same text is the `description` of the plugin's entry in the store
-(see [Publishing](#publishing)), shown on its page there. A data plugin
+The store shows the same text on the plugin's page and in the readers'
+store: put the files into the folder you upload as well (`how/en.txt`,
+`how/de.txt`), as PaperPaw's own plugins in the store have them, or say
+it in the entry's `description` (see [Publishing](#publishing)). A data plugin
 gives it as `<id>.plugin.how` in its catalogs, quoted, paragraphs apart
 by `\n\n`. `paperpaw-dev` warns where a plugin with code has none or a
 short one.
@@ -1248,7 +1250,10 @@ online for goes out: a screen that needs the network says so on itself
 and offers *Go online*, which sends `Command::GoOnline` (the network for
 that screen until it closes); anything else is refused with
 `Reason::Offline` and may try again on `events::WORK_ALLOWED`.
-`Command::CancelHttp` takes requests back.
+`Command::CancelHttp` takes requests back. Where a server or a computer
+is told which device this is (a sync service, Calibre), the name is
+`env.device_name()`: the one the reader set under *Device name*, else
+the model's; a plugin never makes one of its own.
 
 ### Work in the background
 
@@ -1388,6 +1393,14 @@ cargo x4                  # riscv32imc-unknown-none-elf, the X4
 cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro and X4 Classic (espup's toolchain)
 ```
 
+The X4's core libraries (`core`, `alloc`) come from rustup, with the
+target in the sample's `rust-toolchain.toml`. The X4 Pro's come with each
+PaperPaw release, built once and signed
+(`paperpaw-xtensa-std-<version>.tar.gz`): install them into the `esp`
+toolchain once for each release, with PaperPaw's
+`tools/xtensa-std/install.sh` or by hand as its README says. Without
+them, `cargo +esp x4pro` finds no `core`.
+
 ### Which build fits
 
 Until PaperPaw 1.0 a plugin file runs only on the PaperPaw it was built
@@ -1400,6 +1413,28 @@ toolchain that release names, and build again for every release, until
 1.0: the fingerprint holds the SDK's version, so a release loads no file
 built for another. The
 store and the update check show which plugins wait for a build.
+
+### The file in the emulator
+
+The desktop emulator loads a plugin's code built for the computer it runs
+on, as Android loads `code.so`: a `cdylib` crate with the same
+`plugin!` line, built with the emulator's toolchain against its SDK with
+the `outline` feature (`paperpaw-sdk = { version = "0.4", features =
+["outline"] }`), is `code-host.dll`, `code-host.so` or `code-host.dylib`
+in the plugin's folder (`plugins/<id>/` of the emulator's library,
+beside its `plugin.ini`). The emulator runs such code only when it is started
+with `--trust-code`, which installs every such file in the library first
+(as on a device, only code installed runs); without it, none, whatever
+the library says is installed: a library copied from elsewhere runs no
+code of its own.
+
+```sh
+paperpaw-emu --library my-library --trust-code
+```
+
+Over `--stdio`, `start` with `"trust_code": true` does the same, and
+`reload` loads a new build; `ready` says the fingerprint and compiler
+the emulator takes.
 
 ### Packing and signing
 
@@ -1504,6 +1539,10 @@ plugins/large-print/
   points/*.txt   lines for a point, one a line, e.g. about.lines.txt (formats 3)
   setup.ini      steps of the first-run setup (formats 3)
 ```
+
+[Files on the card](data-files.md#a-data-plugins-files) lists each of them
+with its format, what reads it and an example, and how a `settings.ini`
+brings a home screen of its own.
 
 `plugin.ini` may also bind fonts to roles (formats 3):
 
@@ -1740,9 +1779,10 @@ source*, *Not rebuilt* or *Rebuilt, but does not match its source*.
 Paths end up in a build (in its panic messages), so the sample's
 `build.sh` and the rebuild write them as the same everywhere, with
 `--remap-path-prefix` added to the flags of `.cargo/config.toml`
-(through `cargo --config`): the source's top as `/plugin`, Cargo's home
-as `/cargo`, and the X4 Pro's toolchain, whose `core` and `alloc` are
-built with the plugin, as `/rust`. So:
+(through `cargo --config`): the source's top as `/plugin` and Cargo's
+home as `/cargo`. The core libraries come built, the same for everyone:
+rustup's for the X4, the release's for the X4 Pro, which the rebuild
+installs as authors do (see [The crate](#the-crate)). So:
 
 - build with `build.sh`, or the sample's CI job
   (`samples/hello-native/.github/workflows/build.yml`) that runs it, from
@@ -1751,9 +1791,10 @@ built with the plugin, as `/rust`. So:
   on Windows);
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
-  `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`) and its SDK
-  (`paperpaw-sdk = "0.4"`), and build again for every release until 1.0
-  (see [Which build fits](#which-build-fits));
+  `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`), its SDK
+  (`paperpaw-sdk = "0.4"`) and, for the X4 Pro, its core libraries
+  installed, and build again for every release until 1.0 (see
+  [Which build fits](#which-build-fits));
 - never set `RUSTFLAGS`, which would replace the flags that link the
   plugin, and never publish a build made without the remapped paths;
 - put nothing of the moment or the computer into the code (a build

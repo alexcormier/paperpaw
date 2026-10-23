@@ -13,6 +13,7 @@
 use paperpaw_core::{Io, Kernel, ServerCall, ServerEvent, WifiEvent};
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_wifi::{PHONE, Wifi};
+use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::secrets::{FILE, Secrets};
 use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiNetwork, WifiState};
 use paperpaw_sdk::{
@@ -135,6 +136,39 @@ fn answered(io: &[Io]) -> (u16, String) {
         .unwrap()
 }
 
+/// First the step to join: the name and the password, in groups of
+/// five, of letters not taken for one another; not the page yet. A phone
+/// joined (it took an address): on to the page by itself.
+fn on_to_the_page_once_a_phone_joined(t: &mut Test, ssid: &str, password: &str) {
+    let shown = t.shown();
+    assert!(shown.contains(ssid), "{shown}");
+    assert!(
+        shown.contains(&paperpaw_sdk::random::grouped(password)),
+        "{shown}"
+    );
+    assert!(!shown.contains("192.168.4.1"), "{shown}");
+    let readable = |text: &str| {
+        text.chars()
+            .all(|c| paperpaw_sdk::random::READABLE.contains(c))
+    };
+    assert!(readable(password) && password.len() == 15, "{password}");
+    // A phone joined (it took an address): on to the page by itself.
+    t.wifi(WifiEvent::State(WifiState::Hosting {
+        ssid: ssid.to_string(),
+        address: String::from("192.168.4.1"),
+        guests: 1,
+    }));
+    let shown = t.shown();
+    assert!(
+        shown.contains("http://192.168.4.1/") || shown.contains("192.168.4.1/"),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains(&paperpaw_sdk::random::grouped(password)),
+        "{shown}"
+    );
+}
+
 #[test]
 fn a_network_chosen_on_the_phone_is_joined_and_kept() {
     let mut t = Test::new(MemoryStorage::new());
@@ -148,13 +182,15 @@ fn a_network_chosen_on_the_phone_is_joined_and_kept() {
     let Some(WifiCommand::Host { ssid, password }) = Test::radio(&io).pop() else {
         panic!("{io:?}");
     };
-    assert!(ssid.starts_with("PaperPaw-"), "{ssid}");
+    // Named as the device is (its model's, none set).
+    assert_eq!(ssid, "Test device");
     assert!(password.len() >= 8);
     // Open: the page is served there (the kernel lets the server go to
     // the shell without a way out).
     let io = t.wifi(WifiEvent::State(WifiState::Hosting {
         ssid: ssid.clone(),
         address: String::from("192.168.4.1"),
+        guests: 0,
     }));
     let server = io
         .iter()
@@ -167,9 +203,7 @@ fn a_network_chosen_on_the_phone_is_joined_and_kept() {
         server,
         address: String::from("192.168.4.1:80"),
     });
-    let shown = t.shown();
-    assert!(shown.contains(&password), "{shown}");
-    assert!(shown.contains("http://192.168.4.1/"), "{shown}");
+    on_to_the_page_once_a_phone_joined(&mut t, &ssid, &password);
     // The page lists what was found.
     let io = t.server(ServerEvent::Request {
         server,
@@ -238,6 +272,68 @@ fn a_network_chosen_on_the_phone_is_joined_and_kept() {
     assert!(t.shown().contains("Connected to Home"));
 }
 
+/// Where the phone does not say it joined, Next (Select, the page
+/// buttons) goes to the page and back; a phone joining after the reader
+/// went back does not move it on again.
+#[test]
+fn next_goes_on_where_the_phone_does_not_say_it_joined() {
+    let mut t = Test::new(MemoryStorage::new());
+    let now = t.now(100);
+    t.kernel.open_screen(now, PHONE, Params::new());
+    t.wifi(WifiEvent::State(WifiState::On));
+    let io = t.wifi(WifiEvent::Scanned(vec![network("Home")]));
+    let Some(WifiCommand::Host { ssid, .. }) = Test::radio(&io).pop() else {
+        panic!("{io:?}");
+    };
+    let io = t.wifi(WifiEvent::State(WifiState::Hosting {
+        ssid: ssid.clone(),
+        address: String::from("192.168.4.1"),
+        guests: 0,
+    }));
+    let server = io
+        .iter()
+        .find_map(|io| match io {
+            Io::Server(ServerCall::Listen { server, port: 80 }) => Some(*server),
+            _ => None,
+        })
+        .unwrap();
+    t.server(ServerEvent::Started {
+        server,
+        address: String::from("192.168.4.1:80"),
+    });
+    let page = |t: &mut Test| t.shown().contains("192.168.4.1/");
+    assert!(!page(&mut t));
+    let now = t.now(200);
+    let _ = t.kernel.run_action(now, actions::CONFIRM);
+    assert!(page(&mut t));
+    let now = t.now(300);
+    let _ = t.kernel.run_action(now, actions::PREV_PAGE);
+    assert!(!page(&mut t));
+    let now = t.now(400);
+    let _ = t.kernel.run_action(now, actions::NEXT_PAGE);
+    assert!(page(&mut t));
+    let now = t.now(500);
+    let _ = t.kernel.run_action(now, actions::CONFIRM);
+    assert!(!page(&mut t));
+    // Back on the first step by hand: the first phone to join moves it
+    // on, once; one going back after that stays.
+    t.wifi(WifiEvent::State(WifiState::Hosting {
+        ssid: ssid.clone(),
+        address: String::from("192.168.4.1"),
+        guests: 1,
+    }));
+    assert!(page(&mut t), "the first time a phone joins, on");
+    let now = t.now(600);
+    let _ = t.kernel.run_action(now, actions::CONFIRM);
+    assert!(!page(&mut t));
+    t.wifi(WifiEvent::State(WifiState::Hosting {
+        ssid,
+        address: String::from("192.168.4.1"),
+        guests: 2,
+    }));
+    assert!(!page(&mut t), "once only");
+}
+
 #[test]
 fn a_password_not_taken_opens_the_own_network_again() {
     let mut t = Test::new(MemoryStorage::new());
@@ -253,6 +349,7 @@ fn a_password_not_taken_opens_the_own_network_again() {
     let io = t.wifi(WifiEvent::State(WifiState::Hosting {
         ssid: ssid.clone(),
         address: String::from("192.168.4.1"),
+        guests: 0,
     }));
     let Some(Io::Server(ServerCall::Listen { server, .. })) = io.first().cloned() else {
         panic!("{io:?}");
@@ -300,6 +397,7 @@ fn the_own_network_left_alone_closes_after_ten_minutes() {
     t.wifi(WifiEvent::State(WifiState::Hosting {
         ssid,
         address: String::from("192.168.4.1"),
+        guests: 0,
     }));
     assert!(Test::radio(&t.tick(9 * 60 * 1000)).is_empty());
     let io = t.tick(2 * 60 * 1000);

@@ -420,7 +420,7 @@ impl State {
             json::string(&digest),
             json::string(&xpointer),
             progress,
-            json::string(&device_name(env)),
+            json::string(&env.device_name()),
             json::string(&self.device_id),
         );
         let params = Params::new().with(params::PATH, position.path.clone());
@@ -665,11 +665,6 @@ fn remote_progress(text: &str, body: &[(String, json::Value)]) -> Option<f64> {
     let progress = json::number(body, "percentage")
         .or_else(|| json::text(body, "percentage").and_then(|p| p.trim().parse().ok()))?;
     (0.0..=1.0).contains(&progress).then_some(progress)
-}
-
-/// How this device shows up on others.
-fn device_name(env: &Env<'_>) -> String {
-    format!("PaperPaw ({})", env.device.name)
 }
 
 /// The server's base URL.

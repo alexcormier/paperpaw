@@ -15,6 +15,40 @@ use crate::builtin::settings;
 use crate::env::Env;
 use paperpaw_platform::Instant;
 
+/// A monotonic clock in microseconds ([`Env::clock`](crate::Env::clock)),
+/// for measuring how long work takes, e.g. reading a file: the shell's
+/// (`KernelBuilder::clock`). Unlike [`Env::now`](crate::Env::now), it
+/// goes on during a call. Where the shell gives none, nothing is measured.
+#[derive(Clone, Copy, Default)]
+pub struct Clock {
+    micros: Option<fn() -> u64>,
+}
+
+impl Clock {
+    /// No clock: nothing is measured.
+    pub const NONE: Self = Self { micros: None };
+
+    /// The clock `micros`, microseconds since some start (for the kernel).
+    pub const fn new(micros: fn() -> u64) -> Self {
+        Self {
+            micros: Some(micros),
+        }
+    }
+
+    /// Microseconds since some start; `None` without a clock.
+    pub fn micros(&self) -> Option<u64> {
+        self.micros.map(|micros| micros())
+    }
+}
+
+impl core::fmt::Debug for Clock {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Clock")
+            .field("available", &self.micros.is_some())
+            .finish()
+    }
+}
+
 /// The automatic time zone: the system's, or UTC without one.
 pub const AUTO: &str = "core.tz.auto";
 

@@ -22,7 +22,7 @@ paperpaw-fs.workspace = true
 paperpaw-serve.workspace = true
 paperpaw-graphics = { workspace = true, features = ["color"] }
 paperpaw-platform.workspace = true
-png = "0.17"
+png = "0.18"
 softbuffer = { version = "0.4", optional = true }
 # Without client-side decorations on Wayland: they pull in the unmaintained
 # `ttf-parser` (RUSTSEC-2026-0192).
@@ -37,6 +37,8 @@ paperpaw-sample-hello = { path = "../../samples/hello-plugin", optional = true }
 getrandom = "0.4"
 # The computer's time zone for the emulated clock.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Code plugins built for this computer (`native`).
+libloading = "0.9"
 
 [features]
 default = ["window"]

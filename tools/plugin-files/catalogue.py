@@ -7,8 +7,10 @@
 <dist> holds <id>-<version>-<device>.ppn for each reader built. Writes into
 <dist>:
 
-- <id>-<version>.zip: the plugin's folder (its plugin.ini; the code comes
-  as each reader's file), as readers install it;
+- <id>-<version>.zip: the plugin's folder (its plugin.ini, and its How it
+  works, `how/<lang>.txt`, which the store's page of it and readers'
+  store show; the code comes as each reader's file), as readers install
+  it;
 - catalogue/<id>.toml: its entry in the plugin library, as the website's
   catalogue reads it (`catalogue/<id>.toml`, ADR 0023), with this
   version's builds, each
@@ -19,14 +21,17 @@
 Name and summary come from each plugin's translations
 (`<id>.plugin.name`, `<id>.plugin.description`, English and German), the
 author's key from the files' signatures (all must have the same), the
-fingerprint (`abi`) from each file's header. Nothing is invented: a
-plugin without a file, a name or a signature fails.
+fingerprint (`abi`) from each file's header, How it works from the
+plugin's `how/<lang>.txt` (the files its manifest names). Nothing is
+invented: a plugin without a file, a name, a How it works in English or
+a signature fails.
 """
 
 import argparse
 import datetime
 import hashlib
 import pathlib
+import re
 import struct
 import sys
 import zipfile
@@ -84,12 +89,25 @@ def toml(text):
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def folder_zip(path, plugin_ini):
-    """The folder's ZIP, the same bytes for the same contents."""
+def how_files(plugin, plugins=ROOT / "plugins"):
+    """The plugin's How it works as its folder holds it: (`how/<lang>.txt`,
+    text) by language, lines ending in LF as a checkout on any system."""
+    out = []
+    for path in sorted((plugins / plugin / "how").glob("*.txt")):
+        if re.fullmatch(r"[a-z]{2,3}(-[A-Z]{2})?", path.stem):
+            # Read as text: lines end in LF, as from a checkout anywhere.
+            out.append((f"how/{path.name}", path.read_text(encoding="utf-8")))
+    return out
+
+
+def folder_zip(path, plugin_ini, files=()):
+    """The folder's ZIP: `plugin.ini` and `files` (name, text), the same
+    bytes for the same contents."""
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        info = zipfile.ZipInfo("plugin.ini", date_time=(1980, 1, 1, 0, 0, 0))
-        info.external_attr = 0o644 << 16
-        z.writestr(info, plugin_ini)
+        for name, text in [("plugin.ini", plugin_ini), *sorted(files)]:
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.external_attr = 0o644 << 16
+            z.writestr(info, text)
 
 
 def main():
@@ -115,6 +133,9 @@ def main():
             fail(f"{plugin}: no {plugin}.plugin.name or .description in English")
         if len(summary) > 160:
             fail(f"{plugin}: its description is longer than a summary may be (160)")
+        how = how_files(plugin)
+        if "how/en.txt" not in dict(how):
+            fail(f"{plugin}: no How it works in English (plugins/{plugin}/how/en.txt)")
         builds = []
         for device in DEVICES:
             path = dist / f"{plugin}-{version}-{device}.ppn"
@@ -134,7 +155,7 @@ def main():
             f"version = {plugin_version}\n"
         )
         folder = dist / f"{plugin}-{version}.zip"
-        folder_zip(folder, plugin_ini)
+        folder_zip(folder, plugin_ini, how)
         sums.append((sha256(folder), folder.name))
         lines = [
             f"# PaperPaw's own plugin, built for PaperPaw {version} by its release",

@@ -7,13 +7,25 @@ name: Release
 # signature file of its own, and the update file, both signed with the
 # firmware's key (the update is installed on the device); the list of the
 # plugins built in; the fingerprint native code plugins must have to run
-# on it (ADR 0024); their checksums. PaperPaw's own plugins that the store
+# on it (ADR 0024); their checksums. The core libraries code plugins for
+# the ESP32-S3 link with (`paperpaw-xtensa-std-<version>.tar.gz`,
+# tools/xtensa-std), built once here, with a checksum and a signature of
+# their own. PaperPaw's own plugins that the store
 # offers (tools/plugin-files) come as files for each device, signed with
 # the first-party plugin key, with their folders and their entries for
 # the plugin library (`paperpaw-<version>-catalogue.zip`). The web
 # emulator (shells/web) comes as its module and its pages
 # (`paperpaw-web-<version>.zip`), for pages that show PaperPaw in a
-# browser. The release notes come from CHANGELOG.md.
+# browser. For tools that work with a release without a build of their
+# own (the workshop): the desktop emulator for each computer
+# (`paperpaw-emu-<version>-<target>.zip`, with paperpaw-dev for
+# `--check`), driven over `--stdio` and loading code plugins built for
+# the computer, and the handbook (`paperpaw-handbook-<version>.zip`:
+# registry, check codes, docs, samples, the SDK's items and source,
+# PaperPaw's own plugins as examples); each
+# with its SHA-256 and a signature of its own, made with the firmware's
+# key over a domain of its own (`paperpaw-sign check-asset` reads it). The release notes come from
+# CHANGELOG.md.
 on:
   push:
     tags: ["v*"]
@@ -71,7 +83,7 @@ jobs:
           pipx install apksigcopier==1.1.1
           PATH="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION:$PATH" apksigcopier compare \
             "dist/paperpaw-$VERSION.apk" --unsigned target/android/paperpaw-unsigned.apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android
           path: dist/paperpaw-*.apk*
@@ -93,13 +105,106 @@ jobs:
           (cd shells/web/www && zip -q -X "../../../dist/paperpaw-web-$version.zip" \
             paperpaw-web.wasm paperpaw-web.js frame.js frame.html index.html)
           (cd dist && sha256sum "paperpaw-web-$version.zip" > "paperpaw-web-$version.zip.sha256")
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web
           path: dist/paperpaw-web-*
 
+  emulator:
+    name: Emulator (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Intel Macs from an Apple silicon runner (GitHub has retired the
+        # Intel ones): built for x86_64-apple-darwin there, not run.
+        include:
+          - { os: windows-latest, target: windows-x64, rust: "" }
+          - { os: macos-14, target: macos-arm64, rust: "" }
+          - { os: macos-14, target: macos-x64, rust: x86_64-apple-darwin }
+          - { os: ubuntu-latest, target: linux-x64, rust: "" }
+    steps:
+      - uses: actions/checkout@v7
+      # The toolchain of rust-toolchain.toml: code plugins built for the
+      # computer must be built with it (`--stdio` says it).
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the emulator and paperpaw-dev
+        shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.rust }}
+          # What `--stdio` says it is built from (shells/desktop/build.rs;
+          # whether it is the release, Git says by the tag).
+          PAPERPAW_COMMIT: ${{ github.sha }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          built=target/release
+          if [[ -n "$RUST_TARGET" ]]; then
+            rustup target add "$RUST_TARGET"
+            cargo build --release --target "$RUST_TARGET" -p paperpaw-emulator -p paperpaw-dev
+            built="target/$RUST_TARGET/release"
+          else
+            cargo build --release -p paperpaw-emulator -p paperpaw-dev
+          fi
+          exe=""
+          [[ "$RUNNER_OS" == Windows ]] && exe=.exe
+          mkdir -p dist/pkg
+          cp "$built/paperpaw-emu$exe" "$built/paperpaw-dev$exe" dist/pkg/
+          # Where it runs as built: it answers over --stdio, as the
+          # release of its version (the tag is the workspace's version).
+          if [[ -z "$RUST_TARGET" ]]; then
+            printf '%s\n' '{"op": "quit"}' | dist/pkg/paperpaw-emu$exe --stdio > ready.json
+            grep -q '"event": "ready"' ready.json
+            grep -q '"release": true' ready.json
+            rm ready.json
+          fi
+          name="paperpaw-emu-$version-${{ matrix.target }}.zip"
+          py="$(command -v python3 || command -v python)"
+          (cd dist/pkg && "$py" -m zipfile -c "../$name" "paperpaw-emu$exe" "paperpaw-dev$exe")
+          rm -r dist/pkg
+      - uses: actions/upload-artifact@v7
+        with:
+          name: emulator-${{ matrix.target }}
+          path: dist/paperpaw-emu-*.zip
+
+  handbook:
+    name: Handbook
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: The handbook of this release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          cargo run --release -p paperpaw-emulator -- --registry "$RUNNER_TEMP/registry.json"
+          python3 tools/handbook.py "$RUNNER_TEMP/registry.json" "$version" \
+            "dist/paperpaw-handbook-$version.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: handbook
+          path: dist/paperpaw-handbook-*.zip
+
+  # The core libraries code plugins for the ESP32-S3 link with, built once
+  # on Linux: plugins built against them are the same on every computer,
+  # which -Zbuild-std is not (Cargo hashes the libraries' folder as the
+  # system writes it).
+  xtensa-std:
+    name: Core libraries for the ESP32-S3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/xteink-tools
+        with:
+          device: x4-pro
+      - name: Build them
+        run: tools/xtensa-std/build.sh dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: xtensa-std
+          path: dist/paperpaw-xtensa-std-*.tar.gz
+
   firmware:
     name: Firmware (${{ matrix.device }})
+    needs: [xtensa-std]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -123,6 +228,17 @@ jobs:
         with:
           device: ${{ matrix.device }}
           espflash: true
+      # The release's core libraries, which its store plugins for the
+      # ESP32-S3 link with.
+      - uses: actions/download-artifact@v8
+        if: matrix.device != 'x4'
+        with:
+          name: xtensa-std
+          path: ${{ runner.temp }}/xtensa-std
+      - uses: ./.github/actions/xtensa-std
+        if: matrix.device != 'x4'
+        with:
+          archive: ${{ runner.temp }}/xtensa-std/paperpaw-xtensa-std-${{ env.VERSION }}.tar.gz
       # One image for the whole flash (with the partitions of
       # `partitions.csv`, from `espflash.toml`), and the app alone for
       # updates.
@@ -196,22 +312,28 @@ jobs:
           cd dist
           sha256sum "paperpaw-$DEVICE-$VERSION.bin" > "paperpaw-$DEVICE-$VERSION.bin.sha256"
           sha256sum "paperpaw-$DEVICE-$VERSION-update.bin" > "paperpaw-$DEVICE-$VERSION-update.bin.sha256"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.device }}
           path: dist/paperpaw-${{ matrix.device }}-*
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugins-${{ matrix.device }}
           path: dist/plugins/*.ppn
+      # espup's toolchain is cached between runs (xteink-tools): the core
+      # libraries installed into it go again, so that no run finds those
+      # of another commit.
+      - name: The core libraries out of the cached toolchain
+        if: always() && matrix.device != 'x4'
+        run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
 
   release:
     name: Release
-    needs: [android, firmware, web]
+    needs: [android, xtensa-std, firmware, web, emulator, handbook]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -228,6 +350,25 @@ jobs:
             --date "$(date -u +%F)"
           (cd dist/plugins && zip -q -X -r "../paperpaw-$VERSION-catalogue.zip" catalogue)
           mv dist/plugins/SHA256SUMS "dist/paperpaw-$VERSION-plugins.sha256"
+      # The emulators, the handbook and the ESP32-S3's core libraries: a
+      # checksum and a signature of their own each, with the firmware's
+      # key (the workshop and plugin authors pin its public key). The key
+      # is on the disk only while they are signed.
+      - name: Sign the emulators, the handbook and the core libraries
+        env:
+          PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}
+        run: |
+          if [[ -z "$PAPERPAW_SIGNING_KEY" ]]; then
+            echo "::error::no PAPERPAW_SIGNING_KEY: the workshop takes only signed emulators"
+            exit 1
+          fi
+          cargo build -q --release -p paperpaw-sign
+          for file in dist/paperpaw-emu-"$VERSION"-*.zip "dist/paperpaw-handbook-$VERSION.zip" \
+            "dist/paperpaw-xtensa-std-$VERSION.tar.gz"; do
+            target/release/paperpaw-sign sign-asset "$file" "$file.sig"
+            target/release/paperpaw-sign check-asset "$file" "$file.sig"
+            (cd dist && sha256sum "$(basename "$file")" > "$(basename "$file").sha256")
+          done
       - name: Release notes from CHANGELOG.md
         run: |
           # The section of this version, up to the next one.
@@ -260,5 +401,18 @@ jobs:
             "dist/paperpaw-$VERSION-catalogue.zip" "dist/paperpaw-$VERSION-plugins.sha256")
           # The web emulator: its module and pages.
           assets+=("dist/paperpaw-web-$VERSION.zip" "dist/paperpaw-web-$VERSION.zip.sha256")
+          # The desktop emulators and the handbook, for the workshop.
+          for target in windows-x64 macos-arm64 macos-x64 linux-x64; do
+            for part in "" .sha256 .sig; do
+              assets+=("dist/paperpaw-emu-$VERSION-$target.zip$part")
+            done
+          done
+          for part in "" .sha256 .sig; do
+            assets+=("dist/paperpaw-handbook-$VERSION.zip$part")
+          done
+          # The ESP32-S3's core libraries, for building code plugins.
+          for part in "" .sha256 .sig; do
+            assets+=("dist/paperpaw-xtensa-std-$VERSION.tar.gz$part")
+          done
           gh release create "$GITHUB_REF_NAME" "${prerelease[@]}" \
             --title "PaperPaw $VERSION" --notes-file dist/notes.md "${assets[@]}"

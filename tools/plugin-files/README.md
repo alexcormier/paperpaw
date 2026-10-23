@@ -17,8 +17,9 @@ folders and their entries for the plugin library:
 |---|---|
 | `plugins.txt` | the plugins, with their group in the plugin library |
 | `build.sh <device> <out> [--key <file>] [--fingerprint <hex>]` | builds, packs and checks the files for one reader: `<id>-<version>-<device>.ppn` |
+| `anywhere.sh <x4\|x4-pro> [<work-dir>]` | checks that a plugin's file is the same wherever it is built, as the plugin library's rebuild needs: the sample, with the SDK from a registry as an author's repository has it, built in two folders and compared (CI runs it) |
 | `sign.sh <dir> <paperpaw-sign> --key <file>` | signs the files apart from building them, so the key is on the disk only while it signs |
-| `catalogue.py <dist> <version> <base-url>` | each plugin's folder as a ZIP (its `plugin.ini`), its entry `catalogue/<id>.toml` for the plugin library, `SHA256SUMS` |
+| `catalogue.py <dist> <version> <base-url>` | each plugin's folder as a ZIP (its `plugin.ini` and its How it works, `how/<lang>.txt`, which the store shows), its entry `catalogue/<id>.toml` for the plugin library, `SHA256SUMS`; `test_catalogue.py` tests it (`python3 -m unittest discover -s tools/plugin-files`) |
 
 A plugin added to `plugins.txt` gets a binary here (`src/bin/<id>.rs`),
 a dependency in `Cargo.toml`, and its place among the optional plugins

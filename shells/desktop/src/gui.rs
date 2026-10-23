@@ -45,14 +45,14 @@ pub fn run(
     device: Device,
     screenshot_dir: PathBuf,
     recorder: Option<Recorder<std::fs::File>>,
-    stdio: bool,
+    cable: bool,
 ) -> Result<(), String> {
     let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
     let mut app = App {
         device,
         screenshot_dir,
         recorder,
-        stdio: stdio.then(crate::stdio::lines),
+        cable: cable.then(crate::cable::lines),
         window: None,
         surface: None,
         cursor: PhysicalPosition::new(0.0, 0.0),
@@ -72,8 +72,8 @@ struct App {
     screenshot_dir: PathBuf,
     /// Writes what is done as a flow's steps (`--record`).
     recorder: Option<Recorder<std::fs::File>>,
-    /// The cable transfer's lines from standard input (`--stdio`).
-    stdio: Option<std::sync::mpsc::Receiver<String>>,
+    /// The cable transfer's lines from standard input (`--cable`).
+    cable: Option<std::sync::mpsc::Receiver<String>>,
     window: Option<Rc<Window>>,
     surface: Option<softbuffer::Surface<Rc<Window>, Rc<Window>>>,
     cursor: PhysicalPosition<f64>,
@@ -340,7 +340,7 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let before = self.device.next_wake();
         let in_flight = self.device.http.in_flight;
-        if let Some(lines) = &self.stdio {
+        if let Some(lines) = &self.cable {
             let lines: Vec<String> = lines.try_iter().collect();
             for line in &lines {
                 self.device.cable_line(line);
@@ -350,8 +350,8 @@ impl ApplicationHandler for App {
             }
         }
         self.device.tick_if_due();
-        if self.stdio.is_some() {
-            crate::stdio::send(&self.device.take_cable_lines());
+        if self.cable.is_some() {
+            crate::cable::send(&self.device.take_cable_lines());
         }
         if self.device.next_wake() != before || self.device.http.in_flight != in_flight {
             self.after_input();
@@ -375,7 +375,7 @@ impl ApplicationHandler for App {
         if self.device.http.in_flight > 0
             || self.device.servers.any()
             || self.device.sockets.any()
-            || self.stdio.is_some()
+            || self.cable.is_some()
         {
             let at = StdInstant::now() + Duration::from_millis(100);
             deadline = Some(deadline.map_or(at, |d| d.min(at)));

@@ -2,13 +2,13 @@
 """Installs a plugin or adds books on a PaperPaw device over the USB cable,
 with the cable transfer of every firmware (docs/usb-transfer.md): the
 device asks on its screen first, and writes nothing before the reader
-allows it. Also speaks to the desktop emulator (`paperpaw-emu --stdio`).
+allows it. Also speaks to the desktop emulator (`paperpaw-emu --cable`).
 
   python tools/usb-transfer.py hello
   python tools/usb-transfer.py plugins
   python tools/usb-transfer.py install path/to/my-plugin
   python tools/usb-transfer.py books a.epub b.pdf
-  python tools/usb-transfer.py --emulator "paperpaw-emu --stdio" hello
+  python tools/usb-transfer.py --emulator "paperpaw-emu --cable" hello
 
 --port names the serial port (found by itself on an X4 or X4 Pro).
 Needs pyserial for a device: pip install pyserial.
@@ -186,7 +186,7 @@ def books(device, paths):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--port")
-    parser.add_argument("--emulator", help="the emulator's command, e.g. 'paperpaw-emu --stdio'")
+    parser.add_argument("--emulator", help="the emulator's command, e.g. 'paperpaw-emu --cable'")
     parser.add_argument("command", choices=["hello", "plugins", "install", "books"])
     parser.add_argument("paths", nargs="*")
     args = parser.parse_args()

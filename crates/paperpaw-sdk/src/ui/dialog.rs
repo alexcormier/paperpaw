@@ -66,6 +66,16 @@ pub struct Dialog {
     top: usize,
 }
 
+/// The height of a row of a title of `count` lines at `size`: a line, or
+/// a heading's line where it has more, so that they read as one.
+fn title_row(font: &crate::FontHandle<'_>, size: f32, count: usize) -> u16 {
+    if count > 1 {
+        font.heading_line_height(size) as u16
+    } else {
+        font.line_metrics(size).line_height as u16
+    }
+}
+
 impl Dialog {
     /// A dialog as wide as the screen less its margins, as tall as
     /// `title`, `text` (each a paragraph, wrapped) and `buttons` need, at
@@ -137,7 +147,7 @@ impl Dialog {
         let stacked = stacked || label_line > 0;
         let (title_line, text_line, lines) = match style.font(env) {
             Some(font) => (
-                font.line_metrics(style.title).line_height as u16,
+                title_row(&font, style.title, title_lines.len()),
                 font.line_metrics(style.text).line_height as u16,
                 lines_of(&font, style.text),
             ),
@@ -181,8 +191,8 @@ impl Dialog {
                 }
                 let size = Self::title_size_of(style, smaller);
                 dialog.title_size = smaller;
-                dialog.title_line = font.line_metrics(size).line_height as u16;
                 dialog.title = wrap(&font, size, title);
+                dialog.title_line = title_row(&font, size, dialog.title.len());
             }
         }
         dialog.lines.shrink_to_fit();

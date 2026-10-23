@@ -138,6 +138,11 @@ jobs:
             samples/hello-native
             .
           key: ${{ matrix.device }}
+      # Code plugins for the ESP32-S3 link with core libraries built once,
+      # as the release publishes them; installed first, as the release
+      # does, so that everything after builds beside them.
+      - uses: ./.github/actions/xtensa-std
+        if: matrix.device != 'x4'
       - name: Lint and build
         working-directory: shells/xteink
         # Linted with remote control over USB, as for testing, and
@@ -149,6 +154,17 @@ jobs:
       - name: The sample code plugin fits the firmware
         id: native
         uses: ./.github/actions/native-sample
+      # A code plugin's file is the same wherever it is built, as the
+      # plugin library's rebuild needs: the sample, as its author's
+      # repository has it (the SDK from a registry), built in two folders
+      # for each chip and compared byte for byte.
+      - name: Code plugins are the same in any folder
+        if: matrix.device == 'x4-pro'
+        run: |
+          rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' samples/hello-native/rust-toolchain.toml)" \
+            --profile minimal --target riscv32imc-unknown-none-elf
+          tools/plugin-files/anywhere.sh x4 "$RUNNER_TEMP/anywhere-x4"
+          tools/plugin-files/anywhere.sh x4-pro "$RUNNER_TEMP/anywhere-x4-pro"
       # PaperPaw's own plugins that the store offers, as the release
       # builds them (unsigned here): each packs, for this chip, with the
       # firmware's fingerprint.
@@ -165,6 +181,12 @@ jobs:
           tools/plugin-files/sign.sh "$out" target/release/paperpaw-sign --key "$RUNNER_TEMP/ci.key"
           version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
           python3 tools/plugin-files/catalogue.py "$out" "$version" https://example.invalid/ci
+      # espup's toolchain is cached between runs (xteink-tools): the core
+      # libraries installed into it go again, so that no run finds those
+      # of another commit.
+      - name: The core libraries out of the cached toolchain
+        if: always() && matrix.device != 'x4'
+        run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
 
   native:
     name: Native plugins
@@ -203,7 +225,7 @@ jobs:
             "samples/hello-native/rust-toolchain.toml:channel = \"$x4\"" \
             "$template:RUST_X4: \"$x4\"" \
             "$template:RUST_X4_PRO: \"$ESP_RUST_VERSION\"" \
-            "$template:--crosstool-toolchain-version $ESP_GCC_VERSION"; do
+            "$template:ESP_GCC: \"$ESP_GCC_VERSION\""; do
             if ! grep -qF -- "${found#*:}" "${found%%:*}"; then
               echo "::error file=${found%%:*}::should say ${found#*:}, as shells/xteink does"
               status=1
@@ -227,6 +249,10 @@ jobs:
             fi
           done
           exit $status
+      - name: The store's first-party folders carry How it works
+        run: python3 -m unittest discover -s tools/plugin-files
+      - name: The handbook holds the SDK and PaperPaw's own plugins, without tests
+        run: python3 -m unittest discover -s tools -p "test_handbook.py"
 
   emulator:
     name: Emulator (${{ matrix.os }})
@@ -270,6 +296,12 @@ jobs:
             --screenshot out/two-buttons-settings.png
           $emu --headless --profile boox-go-7 --set slots.core.home=diagnostics.screen \
             --script "page-forward,long-tap:600:800"
+          # What a release hands the workshop: the registry, --stdio, the
+          # handbook.
+          $emu --registry out/registry.json
+          printf '%s\n' '{"op": "quit"}' | $emu --stdio | grep -q '"event": "ready"'
+          py="$(command -v python3 || command -v python)"
+          "$py" tools/handbook.py out/registry.json ci out/handbook.zip
       - uses: actions/upload-artifact@v7
         if: matrix.os == 'ubuntu-latest'
         with:

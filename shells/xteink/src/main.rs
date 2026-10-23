@@ -216,6 +216,33 @@ fn random(buf: &mut [u8]) -> bool {
     true
 }
 
+/// How this start came, from the chip's reason for its reset: a sleep
+/// that cut the power ends by the power coming again.
+fn started() -> paperpaw_sdk::power::Start {
+    use esp_hal::rtc_cntl::SocResetReason;
+    use paperpaw_sdk::power::Start;
+    match power::last_run().2 {
+        Some(SocResetReason::ChipPowerOn) => Start::PowerOn,
+        Some(SocResetReason::CoreDeepSleep) => Start::Wake,
+        Some(_) => Start::Restart,
+        None => Start::Unknown,
+    }
+}
+
+/// The heap and the stack free now, for diagnostics and plugins
+/// (`paperpaw_sdk::memory`).
+fn memory() -> Option<paperpaw_sdk::memory::MemoryUse> {
+    let (stack_free, stack_size) = stack::left();
+    let bytes = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    let free = esp_alloc::HEAP.free();
+    Some(paperpaw_sdk::memory::MemoryUse {
+        heap_free: bytes(free),
+        heap_size: bytes(free + esp_alloc::HEAP.used()),
+        stack_free: Some(bytes(stack_free)),
+        stack_size: Some(bytes(stack_size)),
+    })
+}
+
 /// Microseconds since start, for measuring what plugins take.
 pub fn micros() -> u64 {
     esp_hal::time::Instant::now()
@@ -433,6 +460,8 @@ fn kernel(
         .clock(micros)
         // Fully random while the radio is on, as when serving.
         .random(random)
+        .memory(memory)
+        .started(started())
         // The panel refreshes on its own: a mark shows at once while slow
         // work goes on.
         .busy_mark(true)

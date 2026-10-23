@@ -21,9 +21,9 @@ runs:
         echo "the firmware's fingerprint: $fingerprint"
         echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
         # Linked as .cargo/config.toml's flags say, which RUSTFLAGS would
-        # replace.
+        # replace, with its alias for the chip.
         (cd samples/hello-native && env -u RUSTFLAGS \
-          cargo +"$FIRMWARE_TOOLCHAIN" build $FIRMWARE_CARGO)
+          cargo +"$FIRMWARE_TOOLCHAIN" "$PLUGIN_ALIAS")
         ppn="$RUNNER_TEMP/hello-$FIRMWARE_CHIP.ppn"
         cargo run -q --release -p paperpaw-sign -- pack \
           "samples/hello-native/target/$FIRMWARE_TARGET/release/hello" "$ppn"

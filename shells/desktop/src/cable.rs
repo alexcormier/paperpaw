@@ -1,4 +1,4 @@
-//! The cable transfer (USB) on standard input and output (`--stdio`):
+//! The cable transfer (USB) on standard input and output (`--cable`):
 //! the emulator speaks as a device does over its cable
 //! (`docs/usb-transfer.md`), so the workshop and
 //! `tools/usb-transfer.py --emulator` try it without a device. Lines that

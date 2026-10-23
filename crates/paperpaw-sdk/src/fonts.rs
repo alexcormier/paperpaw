@@ -135,6 +135,10 @@ const OTHERS: usize = 4;
 /// Largest font file loaded.
 const MAX_FONT_FILE: u64 = 48 * 1024 * 1024;
 
+/// The lines of a heading or title, as many times its size apart
+/// ([`FontHandle::heading_line_height`]).
+const HEADING_LEADING: f32 = 1.2;
+
 /// All registered fonts, the role bindings and the glyph cache.
 ///
 /// Fonts are bound to *roles* such as
@@ -764,6 +768,19 @@ impl<'a> FontHandle<'a> {
             .line_metrics(self.font().size_for(size, "", self.display))
     }
 
+    /// How far apart the lines of a heading or title set on more lines
+    /// are, in pixels: closer than those of text (its line height, about
+    /// 1.4 times the size with the default font), 1.2 times the size, so
+    /// that a title on two lines reads as one; the highest letters of a
+    /// line (capitals with accents) still stay clear of the lowest of the
+    /// line above (descenders). Text keeps its line height.
+    pub fn heading_line_height(&self, size: f32) -> f32 {
+        let drawn = self.font().size_for(size, "", self.display);
+        // In whole pixels, rounded up (no float rounding in `no_std`).
+        let apart = (drawn * HEADING_LEADING + 0.999) as u32 as f32;
+        apart.min(self.line_metrics(size).line_height)
+    }
+
     /// The font that draws `ch` and its number in the cache: this one,
     /// or the fallback if only that has it.
     fn pick(&self, ch: char) -> (&'a Font, u16) {
@@ -874,15 +891,19 @@ impl<'a> FontHandle<'a> {
         let mut cache = self.cache.borrow_mut();
         let mut ink: Option<(i32, i32)> = None;
         let mut pen = 0.0f32;
+        let mut based = false;
         for ch in text.chars() {
             let (font, index) = self.pick(ch);
             let glyph = cache.glyph(index, font, ch, size);
+            let mark = paperpaw_text::is_mark(ch);
+            // Where it is drawn ([`FontHandle::draw`]).
+            let at = paperpaw_text::glyph_x(pen, glyph.left, mark && !based);
+            based |= !mark;
             let inked = |x: u16| (0..glyph.height).any(|y| glyph.coverage(x, y) >= 128);
             if let (Some(first), Some(last)) = (
                 (0..glyph.width).find(|x| inked(*x)),
                 (0..glyph.width).rev().find(|x| inked(*x)),
             ) {
-                let at = (pen + 0.5) as i32 + i32::from(glyph.left);
                 let (left, right) = (at + i32::from(first), at + i32::from(last) + 1);
                 ink = Some(ink.map_or((left, right), |(l, r)| (l.min(left), r.max(right))));
             }
@@ -936,17 +957,22 @@ impl<'a> FontHandle<'a> {
         let size = self.size_for(size, text);
         let mut cache = self.cache.borrow_mut();
         let mut pen = x;
-        // Runs of characters drawn by the same font.
+        // Runs of characters drawn by the same font; marks at the start of
+        // one sit on the character before it, if there is one.
         let mut rest = text;
+        let mut based = false;
         while let Some(first) = rest.chars().next() {
             let (font, index) = self.pick(first);
             let end = rest
                 .char_indices()
                 .find(|(_, ch)| self.pick(*ch).1 != index)
                 .map_or(rest.len(), |(at, _)| at);
-            let style = paperpaw_text::TextStyle::new(font, index, size, color).bolder(extra);
-            pen +=
-                paperpaw_text::draw_text(canvas, &mut cache, &style, pen, baseline, &rest[..end]);
+            let style = paperpaw_text::TextStyle::new(font, index, size, color)
+                .bolder(extra)
+                .based(based);
+            let run = &rest[..end];
+            pen += paperpaw_text::draw_text(canvas, &mut cache, &style, pen, baseline, run);
+            based |= run.chars().any(|ch| !paperpaw_text::is_mark(ch));
             rest = &rest[end..];
         }
         pen - x

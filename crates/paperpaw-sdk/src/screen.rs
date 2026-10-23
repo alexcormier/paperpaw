@@ -419,6 +419,26 @@ pub trait Screen {
         Handled::No
     }
 
+    /// Whether the screen takes buttons by name now ([`Screen::on_button`]),
+    /// e.g. while a device check or a key binding editor asks for one.
+    /// While it does, a press counts when the button is let go, so a held
+    /// one is told apart, also where nothing is bound to holding it.
+    fn takes_buttons(&self) -> bool {
+        false
+    }
+
+    /// A button pressed (`long`: held), by its name on the device
+    /// ([`InputCaps::keys`](paperpaw_platform::InputCaps), e.g.
+    /// `page-forward`), offered to the screen on top while it
+    /// [takes buttons](Screen::takes_buttons), before the key map turns
+    /// it into an action. Returning [`Handled::Yes`] takes it: no action
+    /// runs, not even *Home* or *Sleep*. Take buttons only while asking
+    /// for them, so the reader can always leave.
+    fn on_button(&mut self, name: &str, long: bool, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = (name, long, cx);
+        Handled::No
+    }
+
     /// How the row of hints below the screen labels the button that runs
     /// `action` here, on devices with buttons in a row under the screen
     /// ([`settings::BUTTON_HINTS`](crate::builtin::settings::BUTTON_HINTS)):

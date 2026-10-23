@@ -29,6 +29,17 @@ pub fn set_free_space(bytes: u64) {
     let _ = FREE_SPACE.set(bytes);
 }
 
+/// Whether the emulated device loads code plugins built for this computer
+/// (`native`): only where the one who starts it says so (`--trust-code`,
+/// `trust_code` over `--stdio`), never because a library says it has
+/// them installed (a library copied from elsewhere would run its code).
+static CODE_PLUGINS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Loads code plugins built for this computer, or none (by default).
+pub fn set_code_plugins(on: bool) {
+    CODE_PLUGINS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// The emulated device's storage in the folder `root`.
 pub fn library(root: &std::path::Path) -> std::io::Result<DirStorage> {
     let storage = DirStorage::new(root)?;
@@ -166,6 +177,9 @@ pub struct Device {
     wall: Option<(Instant, i64, Option<i32>)>,
     /// HTTP requests in flight.
     pub http: crate::http::Http,
+    /// The requests plugins made (method and address), kept where someone
+    /// asks (`--stdio`): none by default.
+    pub requests: Option<Vec<(String, String)>>,
     /// Plugins' servers.
     pub servers: paperpaw_serve::Servers,
     pub sockets: paperpaw_serve::Sockets,
@@ -264,6 +278,7 @@ impl Device {
             gray_shown: false,
             wake_at: None,
             http: crate::http::Http::new(),
+            requests: None,
             servers: servers(),
             sockets: paperpaw_serve::Sockets::new(|| {}),
             wifi: crate::wifi::Wifi::default(),
@@ -314,14 +329,14 @@ impl Device {
     /// (with simulated time a fixed one, so screenshots repeat) and a
     /// battery at 80 %.
     fn status(&self, now: Instant) -> SystemStatus {
-        let clock = match self.clock {
-            _ if let Some((at, unix_millis, utc_offset_minutes)) = self.wall => WallClock {
+        let clock = match (self.wall, &self.clock) {
+            (Some((at, unix_millis, utc_offset_minutes)), _) => WallClock {
                 at,
                 unix_millis,
                 utc_offset_minutes,
             },
             #[cfg(not(target_arch = "wasm32"))]
-            Clock::Real(_) => {
+            (None, Clock::Real(_)) => {
                 let local = chrono::Local::now();
                 WallClock {
                     at: now,
@@ -393,7 +408,7 @@ impl Device {
         self.execute(effects);
     }
 
-    /// A line from the computer at the cable (`--stdio`): the cable
+    /// A line from the computer at the cable (`--cable`): the cable
     /// transfer's requests (see `paperpaw_core::Kernel::cable_line`); the
     /// answers wait in [`Device::take_cable_lines`].
     pub fn cable_line(&mut self, line: &str) {
@@ -418,6 +433,14 @@ impl Device {
         };
         self.execute(effects);
         true
+    }
+
+    /// A phone joins the device's own network, where it has one open
+    /// (scripts' `phone-joins`): the pretend radio reports it at once.
+    pub fn phone_joins(&mut self) {
+        let now = self.now();
+        self.wifi.phone_joins(now);
+        self.tick_if_due();
     }
 
     /// Draws the whole screen again, nothing on it changed (scripts'
@@ -464,7 +487,11 @@ impl Device {
     /// Passes requests to plugins' servers on, and what their sockets
     /// brought.
     pub fn poll_servers(&mut self) {
-        while let Some(event) = self.servers.next() {
+        while let Some(mut event) = self.servers.next() {
+            // In the device's own network at the device's address there.
+            if let paperpaw_core::ServerEvent::Started { address, .. } = &mut event {
+                *address = self.wifi.served_at(address);
+            }
             let now = self.now();
             let effects = budget::track(|| self.kernel.server_event(now, event));
             self.execute(effects);
@@ -636,6 +663,9 @@ impl Device {
         for io in self.kernel.take_io() {
             match io {
                 Io::Http(mut call) => {
+                    if let Some(requests) = &mut self.requests {
+                        requests.push((call.method.clone(), call.url.clone()));
+                    }
                     if let Err(e) = call.load_body(self.kernel.storage()) {
                         let now = self.now();
                         let failed = paperpaw_core::HttpResponse::failed(call.id, &e.to_string());
@@ -803,6 +833,7 @@ fn build_kernel(
             .storage(crate::trace::Traced(storage))
             .clock(crate::host::micros)
             .random(crate::host::random)
+            .memory(budget::memory_use)
             .glyph_cache(profile.glyph_cache)
             .busy_mark(profile.busy_mark)
             .colors(profile.colors)
@@ -826,6 +857,12 @@ fn build_kernel(
         }
         if let Some(light) = profile.light {
             builder = builder.plugin(crate::light::Emulated(light));
+        }
+        // Code plugins built for this computer, from the card.
+        #[cfg(not(target_arch = "wasm32"))]
+        if CODE_PLUGINS.load(std::sync::atomic::Ordering::Relaxed) {
+            builder =
+                builder.code_plugins(crate::native::native(), Box::new(crate::native::HostLoader));
         }
         if let Some(add) = add {
             builder = add(builder);

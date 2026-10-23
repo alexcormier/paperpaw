@@ -696,9 +696,10 @@ mod tests {
     fn long_or_bad_heads_are_refused_at_once() {
         let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
         let port = serving(&mut servers, 18_865);
-        // A line without end, longer than any head.
+        // A line without end, just longer than any head: all of it is read
+        // before the answer, so closing never resets what was answered.
         let mut client = connect(port);
-        let _ = client.write_all(&vec![b'a'; 4 * MAX_REQUEST_HEAD]);
+        let _ = client.write_all(&vec![b'a'; MAX_REQUEST_HEAD + 1]);
         assert!(answer_head(&mut client).starts_with("HTTP/1.1 431 "));
         for bad in [
             &b"PUT / HTTP/1.1\r\nContent-Length: many\r\n\r\n"[..],

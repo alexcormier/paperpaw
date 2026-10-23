@@ -105,6 +105,9 @@ pub struct Scene<'a> {
     /// Texts of the language drawn that hold a "…" of their own
     /// ("Loading…"): a line that ends at it is not shortened.
     pub ellipses: &'a [String],
+    /// The screen is the keyboard's: a row of its keys may be as narrow
+    /// as the screen lets that many keys be.
+    pub keyboard: bool,
 }
 
 impl<'a> Scene<'a> {
@@ -125,7 +128,13 @@ impl<'a> Scene<'a> {
             cell: None,
             labels_whole: false,
             ellipses: &[],
+            keyboard: false,
         }
+    }
+
+    pub fn keyboard(mut self, keyboard: bool) -> Self {
+        self.keyboard = keyboard;
+        self
     }
 
     pub fn ellipses(mut self, ellipses: &'a [String]) -> Self {
@@ -299,6 +308,100 @@ impl Ink {
         }
     }
 
+    /// A box filled with ink in the area (rows of it unbroken across
+    /// three fifths of the area or more, above and below what is in it,
+    /// half the area high or more): where it is (absolute), and a pixel
+    /// of its fill.
+    pub fn filled_box(&self) -> Option<(Rect, (u16, u16))> {
+        let (w, h) = (self.w(), usize::from(self.area.height));
+        let mut rows = Vec::new();
+        for y in 0..h {
+            let (mut start, mut best) = (0, (0, 0));
+            for x in 0..=w {
+                if x < w && self.at(x, y) {
+                    continue;
+                }
+                if x - start > best.1 - best.0 {
+                    best = (start, x);
+                }
+                start = x + 1;
+            }
+            if (best.1 - best.0) * 5 >= w * 3 {
+                rows.push((y, best));
+            }
+        }
+        // Rows above and below the words, as high as half the area or
+        // more between them.
+        let (top, bottom) = (rows.first()?.0, rows.last()?.0);
+        if rows.len() < 3 || (bottom - top) * 2 < h {
+            return None;
+        }
+        let left = rows.iter().map(|r| r.1.0).min()?;
+        let right = rows.iter().map(|r| r.1.1).max()?;
+        let (x, y) = (self.area.x + left as u16, self.area.y + top as u16);
+        let boxed = Rect::new(x, y, (right - left) as u16, (bottom - top + 1) as u16);
+        Some((boxed, (x, y)))
+    }
+
+    /// Whether the ink frames the area: an unbroken line along most of
+    /// its top or bottom edge, or of its left or right one (a box drawn
+    /// round a text), not letters that touch it.
+    pub fn framed(&self) -> bool {
+        let (w, h) = (self.w(), usize::from(self.area.height));
+        if w == 0 || h == 0 {
+            return false;
+        }
+        // The longest unbroken run of ink along an edge: three fifths of
+        // it or more is a line drawn there, not letters (which leave gaps
+        // between lines and words).
+        let run = |cells: &mut dyn Iterator<Item = bool>| {
+            let (mut best, mut now) = (0, 0);
+            for ink in cells {
+                now = if ink { now + 1 } else { 0 };
+                best = best.max(now);
+            }
+            best
+        };
+        let across = |y: usize| run(&mut (0..w).map(|x| self.at(x, y))) * 5 >= w * 3;
+        let down = |x: usize| run(&mut (0..h).map(|y| self.at(x, y))) * 5 >= h * 3;
+        // At an edge or a pixel or two in from it (a frame drawn inside).
+        (0..3.min(h)).any(|y| across(y) || across(h - 1 - y))
+            || (0..3.min(w)).any(|x| down(x) || down(w - 1 - x))
+    }
+
+    /// Leaves out rows of ink set as dots, a quarter of the area or
+    /// more, none of them longer than two pixels: a light line drawn as
+    /// a pattern (a list's separators on black and white), not an icon.
+    pub fn clear_dotted(&mut self) {
+        let w = self.w();
+        for y in 0..usize::from(self.area.height) {
+            let row = &self.cells[y * w..(y + 1) * w];
+            let count = row.iter().filter(|c| **c).count();
+            let longest = row.split(|c| !*c).map(<[bool]>::len).max().unwrap_or(0);
+            if count * 4 >= w && longest <= 2 {
+                self.cells[y * w..(y + 1) * w].fill(false);
+            }
+        }
+    }
+
+    /// Leaves out ink connected to the area's corners: what a box's round
+    /// corners leave there.
+    pub fn clear_corners(&mut self) {
+        let (w, h) = (self.w(), usize::from(self.area.height));
+        let (right, bottom) = (w.saturating_sub(1), h.saturating_sub(1));
+        let mut stack = vec![(0, 0), (right, 0), (0, bottom), (right, bottom)];
+        self.flood(&mut stack);
+    }
+
+    /// Leaves out ink connected to the area's right edge: what reaches in
+    /// from the right (a label's first letter, a line that runs on under
+    /// it), not an icon before it.
+    pub fn clear_right(&mut self) {
+        let (w, h) = (self.w(), usize::from(self.area.height));
+        let mut stack: Vec<(usize, usize)> = (0..h).map(|y| (w.saturating_sub(1), y)).collect();
+        self.flood(&mut stack);
+    }
+
     /// Leaves out ink connected to the area's edges: the frame of a
     /// button around a label (its round corners too), what reaches in
     /// from outside.
@@ -313,6 +416,12 @@ impl Ink {
             stack.push((0, y));
             stack.push((w.saturating_sub(1), y));
         }
+        self.flood(&mut stack);
+    }
+
+    /// Leaves out the ink connected to the points of `stack`.
+    fn flood(&mut self, stack: &mut Vec<(usize, usize)>) {
+        let w = self.w();
         while let Some((x, y)) = stack.pop() {
             if !self.at(x, y) {
                 continue;

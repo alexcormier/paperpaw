@@ -12,11 +12,11 @@
 use std::cell::Cell;
 
 use paperpaw_core::{Kernel, KernelBuilder, WarningSource};
-use paperpaw_sdk::PluginState;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::{
     Command, Id, Manifest, Params, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
 };
+use paperpaw_sdk::{PluginState, SettingKind};
 
 use super::Release;
 use super::folder::{Folder, Line};
@@ -243,6 +243,20 @@ fn settings(kernel: &Kernel, lines: &[Line], out: &mut Vec<Finding>) {
             continue;
         }
         let id = format!("{}.{}", line.section, line.key);
+        // A widget's place of its own (`widgets.clock@2.face`): the kernel
+        // takes no plugin's default for it.
+        if let Some(plain) = Id::parse(&id).ok().and_then(|id| id.unplaced()) {
+            out.push(Finding::error(
+                "package.settings",
+                place,
+                format!(
+                    "`{id}` is the setting of one place of a widget (`@` and a number): \
+                     PaperPaw takes no plugin's default for it, so it does nothing. Give the \
+                     default to `{plain}`, which holds for every place without a value of its own."
+                ),
+            ));
+            continue;
+        }
         setting(
             kernel,
             &id,
@@ -281,14 +295,27 @@ fn setting(
         });
         return;
     };
-    if spec.kind.parse(value.trim()).is_none() {
+    // As the kernel takes a default (`Settings::set_default_from_text`).
+    if spec.parse(value.trim()).is_none() {
+        let value = value.trim();
+        let takes = match &spec.kind {
+            SettingKind::Int { min, max } => {
+                format!("it takes a whole number from {min} to {max}, not made to fit")
+            }
+            SettingKind::Choice(options) => {
+                let options: Vec<&str> = options.iter().collect();
+                format!(
+                    "it takes one of its options, each by its whole id: {}",
+                    options.join(", ")
+                )
+            }
+            SettingKind::Bool => String::from("it takes true or false"),
+            _ => String::from("it takes another kind of value"),
+        };
         out.push(Finding::error(
             check,
             place,
-            format!(
-                "`{}` is no value of `{id}`, so PaperPaw passes over it.",
-                value.trim()
-            ),
+            format!("`{value}` is no value of `{id}` ({takes}), so PaperPaw passes over it."),
         ));
     }
 }

@@ -146,7 +146,7 @@ change the plugin SDK.
   it: a computer that goes on asking does not bring it back. Requests
   and answers are lines over the USB serial link (`docs/usb-transfer.md`),
   sent a line at a time, so little memory is needed. The emulator speaks
-  the same with `--stdio`.
+  the same with `--cable`.
 - SDK: `served::CABLE_PORT` serves over the cable instead of the
   network; the slot `slots::CABLE` is opened when a computer speaks
   there. `Kernel::next_cable_line` gives the lines to send one by one.
@@ -171,6 +171,169 @@ change the plugin SDK.
   the kind to remove. `files::put_in_place` and `files::copy` keep the
   new file where a failed move took the old one.
 
+- A guided device check in the diagnostics plugin (under Tools in the
+  firmware's builds for developers) goes
+  through every part of a device one page at a time: the screen's grays
+  and ghosting, every button by name, touch at the corners and edges,
+  the front light, the battery and charging, the card's speed, the
+  clock, Wi-Fi, sleep and memory. Each step is passed, failed or skipped
+  (parts a device lacks are skipped), and a report goes to
+  `.paperpaw/device-check.txt` for pull requests that add a device
+  ([docs/porting.md](docs/porting.md)).
+- SDK: screens can take buttons by name (`Screen::takes_buttons`,
+  `Screen::on_button`), held ones told apart, before the key map turns
+  them into actions. `Env::memory` says the heap and the stack free
+  where the shell can tell (`paperpaw_sdk::memory`,
+  `KernelBuilder::memory`; the X4s and the emulator do), and
+  `Env::clock` is a monotonic clock in microseconds for measuring work
+  (`paperpaw_sdk::time::Clock`). `Env::started` says how PaperPaw
+  started (`paperpaw_sdk::power::Start`: switched on, woken, started
+  again by a watchdog or a panic; `KernelBuilder::started`, from the
+  chip's reset reason on the X4s).
+- Code plugins for the X4 Pro and the X4 Classic build without
+  `-Zbuild-std`, against core libraries each release builds once on
+  Linux and publishes, signed (`paperpaw-xtensa-std-<version>.tar.gz`,
+  `tools/xtensa-std`, installed into espup's `esp` toolchain). With
+  `-Zbuild-std`, Cargo hashed the libraries' folder as the system writes
+  it, so no build on Windows could match the plugin library's rebuild;
+  now the X4 Pro is as the X4: a Windows build matches where every
+  folder's paths are remapped and Cargo is told the Linux host, which
+  the sample's `build.sh` does not do (see the tool's README). The
+  sample's alias and CI job, the store's plugins
+  and the authors' documents follow; CI checks that a plugin's file is
+  the same in any folder (`tools/plugin-files/anywhere.sh`).
+- Hints covered by another screen (a plugin's question, a notice opened
+  over them) close and show again when their screen does, instead of
+  staying below it, cut.
+- `paperpaw-dev check` knows every file the kernel reads in a data
+  plugin: `marks.ini`, `menus.ini`, `actions.ini`, `icons.ini`,
+  `setup.ini` and `points/*.txt` are no longer said to be unread, their
+  syntax is checked, and one of later data formats in a plugin that says
+  an earlier `formats` is an error (PaperPaw leaves it out). It says
+  too what makes PaperPaw refuse a plugin or pass over a default: an
+  action of more than 16 steps, one running an action of its own file or
+  emitting another plugin's event (`package.actions`), a default out of
+  its range or not one of its options, with what it takes, and one for
+  one place of a widget (`@2`), which no plugin may give
+  (`package.settings`).
+  `docs/data-files.md` lists a data plugin's files and how a
+  `settings.ini` brings a home screen of its own.
+- PaperPaw's own plugins in the store carry their How it works in
+  their folders (`how/<lang>.txt`, `tools/plugin-files/catalogue.py`),
+  so the store's page of each and the readers' store show it; a plugin
+  without one in English fails the release.
+- `paperpaw-emu --stdio` protocol 2 (version 1's requests as they were):
+  `slot`, `set` and `setting`, `emit`, `screens` and `actions`, `wait`,
+  `until` (a text or a screen, with a timeout) and `expect`, as the X4's
+  remote control has them; `described` names the screen; `network`
+  sends plugins' requests to the network, to answers recorded with
+  `fixture` (from a text, or a file of at most 16 MB in the device's
+  folder), or nowhere, and each `request` says how it was answered.
+  `wait` and `until` last at most ten minutes, and `quit` or the end of
+  the input ends them. `ready` says the commit of PaperPaw's source the emulator is built
+  from and whether it is the release of its version (tagged, and nothing
+  changed), so tools can pin
+  `paperpaw-sdk` to exactly that source.
+- Each release also brings, for tools that work with it without a build
+  of their own (the workshop): the desktop emulator for Windows, macOS
+  (Apple silicon and Intel) and Linux with paperpaw-dev beside it
+  (`paperpaw-emu-<version>-<target>.zip`, Intel Macs built on Apple
+  silicon), and the handbook
+  (`paperpaw-handbook-<version>.zip`, `tools/handbook.py`: the registry,
+  the codes of paperpaw-dev's findings, the docs, the samples, the SDK's
+  items and source, and PaperPaw's own plugins as examples of good
+  solutions built against the same SDK; no tests, pictures, fonts or
+  sample books, about 2.3 MB), each with its SHA-256 and a signature of its own
+  with the firmware's key over a domain of its own, so it never holds as
+  a firmware's (`paperpaw-sign sign-asset`, `check-asset`).
+- The desktop emulator loads code plugins built for the computer it runs
+  on (`plugins/<id>/code-host.dll`, `.so` or `.dylib`, the same `plugin!`
+  entry as `.ppn` files), only when the one who starts it says so:
+  `--trust-code`, or `"trust_code": true` when starting over `--stdio`
+  (which installs them first), never by default; copies are loaded from
+  a fresh folder of the process's own. `ready` over `--stdio` now
+  says the fingerprint and compiler they must be built with
+  (`native::CODE_FILES` names them too).
+- `paperpaw-emu --check <plugin folder> [--profile <id>]...` checks a
+  plugin with paperpaw-dev (which the release puts beside it) and writes
+  its findings as JSON on standard output.
+- `paperpaw-emu --stdio`: the emulator driven by another program over its
+  standard input and output, a JSON object a line (protocol version 1):
+  start a profile on a folder, buttons, touches, reload, describe, run,
+  open, shot, quit; it tells frames (only when the panel changed),
+  warnings, plugins' requests and errors. A request line is read up to
+  16 MB; a longer one is said and passed over.
+- `paperpaw-emu --registry <file>` writes what the app offers data
+  plugins as JSON (registry version 2): every setting, widget, action and
+  device profile, for tools that work with a release (the handbook, the
+  workshop) without a build of their own. Profiles say whether their
+  screen is a colour panel (`colour_screen`: the Kobo Libra Colour, not
+  the Boox Go 7) and whether black and white are shown in the colours set
+  (`tinted`; `colors`, which said that, is kept).
+- The screen lock keeps its code with a random salt: the salt was made
+  from the device's id, the time and the code itself, which let a guess
+  be tried with one SHA-1 instead of all 2000 rounds. A code kept so
+  opens the lock as before and is kept anew with a random salt then.
+- The reader can name the device (*Device name* under System; by default
+  the model's, "PaperPaw X4 Pro", "PaperPaw X4", on other devices the
+  model). Calibre, the progress server (kosync), the Wi-Fi transfer
+  page's title and the reader's own network for a phone show it; the X4
+  and X4 Pro give it to the router as their host name (DHCP's option 12,
+  letters, digits and hyphens: "Hannes’ Reader" is `Hannes-Reader`).
+  A change counts from the next time the device connects. Plugins take
+  it from `Env::device_name` (`device_name::SETTING`,
+  `device_name::host_name`, `device_name::ssid`); `wifi::join_code`
+  makes the QR code that joins a network, its signs escaped.
+
+- Setting up Wi-Fi with a phone goes a step at a time: first the code
+  that joins the reader's own network, its name and password large below
+  it, then, once a phone joined it, the code that opens the page with its
+  address. *Next* (Select, the page buttons, a tap) goes on where the
+  phone does not say so. `WifiState::Hosting` says how many devices took
+  an address in the own network (`guests`), on the X4 and X4 Pro from
+  their DHCP server; the emulator's script step `phone-joins` makes one
+  join.
+- What a person reads off the screen and types is drawn from letters not
+  taken for one another (no 0 o 1 l i j 2 z 5 s 6 b 8 9 g q u v):
+  `Random::readable`, `random::READABLE`, `random::readable_letters`,
+  shown in groups of five (`random::grouped`). The own network's name
+  and its password of 15 letters (62 bits) in the phone setup and the
+  transfer without a router, and the keys of served pages
+  (`served::KEY_LETTERS`, 16 letters now) use them.
+
+- A combining mark with no character before it (a caption or line
+  that begins with one) sits at the start of its text instead of
+  reaching back past it, as drawn and as measured by
+  `FontHandle::ink_across` (`paperpaw_text::is_mark`,
+  `paperpaw_text::glyph_x`, `TextStyle::based`).
+- The keyboard's keys are nearly round where they are tapped (about
+  4.7 mm wide and 5.2 mm high on the X4 Pro), every key as wide in every row and a
+  thin seam between them, so the keyboard takes much less of the
+  screen; with buttons only (the X4) the keys stay as they were. German
+  has ten keys a row, as English: ä, ö, ü and ß come from holding a, o,
+  u and s, first in their lists, and with buttons the field says so on
+  those letters. The setting *Umlaut keys* (off by default) gives them
+  keys of their own, in rows of eleven.
+- Titles and headings on more lines have their lines closer than text
+  (1.2 times their size, never so close that accents meet descenders):
+  `FontHandle::heading_line_height`, `widgets::heading_line_height` and
+  `Wrapped::heading`. The reading widgets' book titles, the home screen's
+  book card, header titles that wrap, dialog and choice titles, empty
+  screens and the book information use them; text keeps its line height.
+- Tools (the home screen's grid, all tools) set a name too long for a
+  line on two, hyphenated where one word is too long (by the
+  interface's language), before shortening it, and centre icon and name
+  by their ink; all tools gives every tool room for as many lines as the
+  longest name takes, its rows a line higher where that is two
+  (`grid::draw_tool_lines`, `grid::tool_name_lines`). German has a
+  short name for Wi-Fi transfer there. A focused tool's frame goes round
+  its icon and name with an even room, never through them
+  (`grid::draw_tool_focus`; `grid::draw_tool_lines` returns where they
+  have ink), on the home screen and in all tools. `paperpaw-dev visual` takes a
+  button across the whole width for a row, dotted separators and a
+  label's first letter for no icon, looks at a tool's name apart from
+  its icon, and accepts a keyboard's keys as narrow as the screen lets
+  that many be.
 - No building block shortens a label any more, even at the largest
   text: header bars set a long title on two lines, smaller where needed;
   value, noted and switch rows wrap their titles and grow

@@ -1,0 +1,25 @@
+[package]
+name = "paperpaw-xtensa-std"
+description = "Builds the core libraries code plugins for the ESP32-S3 link with, once per release (see README.md)"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+# A workspace of its own: built for the ESP32-S3 alone.
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+test = false
+bench = false
+
+# As code plugins are built (samples/hello-native, tools/plugin-files),
+# so that the libraries are compiled as before: small code, one unit, no
+# unwinding, lines for naming a crash's calls. Their bitcode goes in too
+# (build.sh), for the plugins' link time optimisation.
+[profile.release]
+opt-level = "s"
+codegen-units = 1
+panic = "abort"
+debug = "line-tables-only"

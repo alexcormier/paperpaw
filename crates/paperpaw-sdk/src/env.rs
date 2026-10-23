@@ -194,6 +194,15 @@ pub struct Env<'a> {
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
     pub random: crate::random::Random,
+    /// How much memory is free now, where the shell can tell (see
+    /// [`memory`](crate::memory)).
+    pub memory: crate::memory::Memory,
+    /// A monotonic clock in microseconds, for measuring how long work
+    /// takes (see [`time::Clock`](crate::time::Clock)).
+    pub clock: crate::time::Clock,
+    /// How PaperPaw started this time, where the shell can tell (see
+    /// [`power::Start`](crate::power::Start)).
+    pub started: crate::power::Start,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -338,6 +347,15 @@ pub struct EnvParts<'a> {
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
     pub random: crate::random::Random,
+    /// How much memory is free now, where the shell can tell (see
+    /// [`memory`](crate::memory)).
+    pub memory: crate::memory::Memory,
+    /// A monotonic clock in microseconds, for measuring how long work
+    /// takes (see [`time::Clock`](crate::time::Clock)).
+    pub clock: crate::time::Clock,
+    /// How PaperPaw started this time, where the shell can tell (see
+    /// [`power::Start`](crate::power::Start)).
+    pub started: crate::power::Start,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -394,6 +412,9 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             catalog_device: p.catalog_device,
             secrets: crate::secrets::Visible::new(p.secrets, p.running),
             random: p.random,
+            memory: p.memory,
+            clock: p.clock,
+            started: p.started,
             storage: p.storage,
         }
     }
@@ -409,6 +430,15 @@ impl fmt::Debug for Env<'_> {
 }
 
 impl<'a> Env<'a> {
+    /// The device's name as others see it, the one the reader set
+    /// ([`device_name::SETTING`](crate::device_name::SETTING)) or its
+    /// model's: what a plugin tells a server or a computer, never one it
+    /// makes itself (see [`device_name`](crate::device_name)).
+    pub fn device_name(&self) -> alloc::string::String {
+        let set = self.settings.read(&crate::device_name::SETTING);
+        crate::device_name::chosen(set, self.device)
+    }
+
     /// The device as a screen made for `area` sees it: the display as
     /// large as `area` (see [`Env::within`]).
     pub fn device_within(&self, area: paperpaw_platform::Rect) -> paperpaw_platform::DeviceInfo {

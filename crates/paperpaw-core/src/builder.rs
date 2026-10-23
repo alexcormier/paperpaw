@@ -35,6 +35,8 @@ pub struct KernelBuilder {
     font_dirs: Vec<String>,
     catalog_device: Option<&'static str>,
     random: paperpaw_sdk::random::Random,
+    memory: paperpaw_sdk::memory::Memory,
+    started: paperpaw_sdk::power::Start,
 }
 
 impl fmt::Debug for KernelBuilder {
@@ -151,6 +153,23 @@ impl KernelBuilder {
     /// by browser).
     pub fn random(mut self, fill: fn(&mut [u8]) -> bool) -> Self {
         self.random = paperpaw_sdk::random::Random::new(fill);
+        self
+    }
+
+    /// The platform's probe of memory ([`paperpaw_sdk::memory`]): `read`
+    /// says what is free now, or `None` where it cannot tell, for
+    /// diagnostics and plugins checking their room. Without, nothing is
+    /// known.
+    pub fn memory(mut self, read: fn() -> Option<paperpaw_sdk::memory::MemoryUse>) -> Self {
+        self.memory = paperpaw_sdk::memory::Memory::new(read);
+        self
+    }
+
+    /// How PaperPaw started this time ([`paperpaw_sdk::power::Start`]),
+    /// for plugins: a wake, the power switched on, a restart by a
+    /// watchdog. Without, it is not known.
+    pub fn started(mut self, start: paperpaw_sdk::power::Start) -> Self {
+        self.started = start;
         self
     }
 
@@ -453,6 +472,8 @@ impl KernelBuilder {
                 catalog_device: self.catalog_device,
                 secrets: Default::default(),
                 random: self.random,
+                memory: self.memory,
+                started: self.started,
                 storage,
                 recall,
                 keymap: Keymap::default(),
@@ -620,7 +641,9 @@ impl Kernel {
             .flat_map(|c| plugin_switches(c, true))
             .collect();
         disabled.extend(off.into_iter().filter(|id| !on.contains(id)));
-        let core: Box<dyn Plugin> = Box::new(CorePlugin);
+        // The device's name the default of its setting.
+        let name = paperpaw_sdk::device_name::default_name(&self.shared.device);
+        let core: Box<dyn Plugin> = Box::new(CorePlugin(name));
         for plugin in core::iter::once(core).chain(plugins) {
             self.add_plugin(plugin.as_ref(), &disabled);
         }
@@ -963,6 +986,8 @@ impl Kernel {
             font_dirs: Vec::new(),
             catalog_device: None,
             random: paperpaw_sdk::random::Random::NONE,
+            memory: paperpaw_sdk::memory::Memory::NONE,
+            started: paperpaw_sdk::power::Start::Unknown,
         }
     }
 }

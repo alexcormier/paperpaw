@@ -219,8 +219,9 @@ Only if the user has one and wants it used. Its README is
   build has the remote control below, released firmware does not.
 - A plugin with code is tried as a file, without building it into the
   firmware: build it as `samples/hello-native` does (`cargo x4`, or
-  `cargo +esp x4pro` for the X4 Pro and the X4 Classic) against the SDK
-  of the firmware on the device, pack it with `paperpaw-sign pack`, put
+  `cargo +esp x4pro` for the X4 Pro and the X4 Classic, with the
+  release's core libraries installed into the `esp` toolchain, see
+  `tools/xtensa-std`) against the SDK of the firmware on the device, pack it with `paperpaw-sign pack`, put
   its folder with the file as `code.ppn` onto the card and name it as
   installed (`python tools/x4-remote.py --push <folder>
   plugins/<id>`, then `--trust-code <id>`), and restart. The plugin

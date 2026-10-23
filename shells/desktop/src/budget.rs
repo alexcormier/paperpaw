@@ -347,6 +347,22 @@ pub fn stats() -> Stats {
     }
 }
 
+/// The heap as the kernel's memory probe reports it
+/// (`KernelBuilder::memory`): the budget and what is left of it; nothing
+/// without a budget, where the heap has no size. The stack is not
+/// modelled.
+pub fn memory_use() -> Option<paperpaw_core::sdk::memory::MemoryUse> {
+    let stats = stats();
+    let size = stats.limit?;
+    let bytes = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    Some(paperpaw_core::sdk::memory::MemoryUse {
+        heap_free: bytes(size.saturating_sub(stats.live)),
+        heap_size: bytes(size),
+        stack_free: None,
+        stack_size: None,
+    })
+}
+
 impl std::fmt::Display for Stats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let kib = |bytes: usize| bytes as f64 / 1024.0;
