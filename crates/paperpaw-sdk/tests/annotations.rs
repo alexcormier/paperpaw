@@ -355,6 +355,39 @@ fn nothing_removed_leaves_the_file_as_it_is() {
     assert_eq!(storage.get(&annotations::file(BOOK)).unwrap(), text);
 }
 
+/// Lines this version does not read (a kind a newer PaperPaw added, or
+/// damaged numbers) are written back as they are, whatever is changed,
+/// and the file is not removed while they are in it.
+#[test]
+fn lines_it_cannot_read_survive_every_change() {
+    let unknown = "u\t2\t10\t2\t20\t9\t0\t0\tunderlined by a newer version\tmy note";
+    let damaged = "h\t1\tsoon\t1\t20\t5\t0\t0\ttext\tother note";
+    let text = format!("h\t1\t10\t1\t20\t5\t0\t0\tsome text\t\n{unknown}\n{damaged}\n");
+    let storage = with_file(text.as_bytes());
+    let path = annotations::file(BOOK);
+    let kept = |storage: &MemoryStorage| {
+        let now = String::from_utf8(storage.get(&path).unwrap_or_default()).unwrap();
+        now.lines().any(|l| l == unknown) && now.lines().any(|l| l == damaged)
+    };
+    assert!(annotations::set_note(
+        &storage,
+        BOOK,
+        Locator::new(1, 10),
+        "noted",
+        5
+    ));
+    assert!(kept(&storage));
+    assert!(annotations::add(
+        &storage,
+        BOOK,
+        annotation(Kind::Bookmark, (3, 0), (3, 0), "", ""),
+    ));
+    assert!(kept(&storage));
+    assert!(annotations::remove(&storage, BOOK, |_| true));
+    assert!(kept(&storage), "the file was removed with lines in it");
+    assert!(annotations::load(&storage, BOOK).is_empty());
+}
+
 #[test]
 fn marks_overlap_only_where_they_share_characters() {
     let m = annotation(Kind::Highlight, (1, 10), (1, 20), "", "").mark;

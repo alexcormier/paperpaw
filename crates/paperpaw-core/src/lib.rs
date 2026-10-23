@@ -983,6 +983,7 @@ impl Kernel {
     /// read, it is left as it is (written, the others in it would be
     /// lost), the change applies until the end, and the user is told; one
     /// readable again takes the place of what could not be read at start.
+    /// A change not written is not [`saved`](paperpaw_sdk::secrets::Secrets::saved).
     pub fn set_secret(&mut self, change: paperpaw_sdk::secrets::SecretChange) {
         use paperpaw_sdk::secrets::{self, Secrets};
         let storage = self.shared.storage.clone();
@@ -996,8 +997,10 @@ impl Kernel {
             self.shared.secrets = Secrets::decode(&text);
             self.secrets_unreadable = false;
         }
+        let id = change.id.clone();
         self.shared.secrets.apply(change);
         if let Err(error) = read {
+            self.shared.secrets.mark_unsaved(&id);
             self.secrets_unreadable = true;
             let file = secrets::FILE;
             self.warn_runtime(format!(
@@ -1019,9 +1022,13 @@ impl Kernel {
         } else {
             storage.write(secrets::FILE, text.as_bytes())
         };
-        if let Err(error) = saved {
-            let message = format!("{}: {error}", secrets::FILE);
-            self.warn_runtime(message);
+        match saved {
+            Ok(()) => self.shared.secrets.mark_saved(),
+            Err(error) => {
+                self.shared.secrets.mark_unsaved(&id);
+                let message = format!("{}: {error}", secrets::FILE);
+                self.warn_runtime(message);
+            }
         }
     }
 

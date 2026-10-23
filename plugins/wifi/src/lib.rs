@@ -320,9 +320,11 @@ impl Plugin for Wifi {
                     return;
                 };
                 let known = wifi::known(env.secrets.iter());
-                let kept = wifi_file_networks(&bytes)
-                    .iter()
-                    .all(|(ssid, _)| known.iter().any(|(k, _)| k == ssid));
+                // Kept on the card, not only until the device restarts.
+                let kept = wifi_file_networks(&bytes).iter().all(|(ssid, _)| {
+                    known.iter().any(|(k, _)| k == ssid)
+                        && env.secrets.saved(&wifi::secret_id(ssid))
+                });
                 if kept {
                     let _ = env.storage.remove(WIFI_FILE);
                 }

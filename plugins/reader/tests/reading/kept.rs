@@ -1,0 +1,92 @@
+//! Places and notes kept from earlier versions or a card that
+//! cannot be read: never written over.
+
+use super::*;
+
+/// Where the reader kept the position of `book` before positions were
+/// shared.
+fn old_progress(book: &str) -> String {
+    format!(
+        ".paperpaw/plugins/reader/books/{:016x}/progress.ini",
+        paperpaw_sdk::digest::fnv1a64(book)
+    )
+}
+
+/// A position that is there but cannot be read (cut by a power cut, or a
+/// card that fails to read it) is not written over by the start of the
+/// book, nor by the reader's old `progress.ini`, when the book is opened
+/// and closed or the device sleeps: only once the reader turns a page.
+#[test]
+fn a_position_that_cannot_be_read_is_not_written_over() {
+    let storage = Shared::default();
+    let file = paperpaw_sdk::positions::file(BOOK);
+    let progress = old_progress(BOOK);
+    storage
+        .write(&progress, b"[progress]\nsection = 0\noffset = 40\n")
+        .unwrap();
+    let name: &'static str = Box::leak(file.clone().into_boxed_str());
+    for (damaged, refused) in [
+        (&b"[position]\nsection = 0\noff"[..], None),
+        (&b"[position]\nsection = 0\noffset = 9000\n"[..], Some(name)),
+    ] {
+        storage.write(&file, damaged).unwrap();
+        // The file is there, but reading it fails.
+        storage.2.set(refused);
+        let mut reading = Reading::new(storage.clone());
+        reading.open();
+        reading.run(core_actions::BACK);
+        reading.now += 10;
+        let effects = reading.kernel.suspend(Instant(reading.now));
+        reading.settle(effects);
+        assert_eq!(storage.0.get(&file).unwrap(), damaged, "written over");
+        assert!(storage.exists(&progress));
+    }
+    // Once a page is turned, the place read on is kept.
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    assert!(reading.kept().1 > 0);
+}
+
+/// The reader's old `progress.ini` is read where no position is kept, kept
+/// as the position, and then removed: it never comes back over a newer
+/// one.
+#[test]
+fn the_old_progress_file_is_taken_over_once() {
+    let storage = Shared::default();
+    let progress = old_progress(BOOK);
+    storage
+        .write(&progress, b"[progress]\nsection = 0\noffset = 40\n")
+        .unwrap();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    let kept = reading.kept();
+    assert!(kept.1 > 0, "{kept:?}");
+    assert!(!storage.exists(&progress), "the old file is still there");
+}
+
+/// The reader's annotations of before are moved where annotations are
+/// kept now, but never over those kept there: then both stay.
+#[test]
+fn old_annotations_never_replace_those_kept_now() {
+    let storage = Shared::default();
+    let old = old_progress(BOOK).replace("progress.ini", "annotations.txt");
+    let new = paperpaw_sdk::annotations::file(BOOK);
+    let (before, now) = (
+        b"b\t0\t0\t0\t0\t1\told\t\n".to_vec(),
+        b"b\t0\t9\t0\t9\t2\t0\t0\tnow\t\n".to_vec(),
+    );
+    storage.write(&old, &before).unwrap();
+    storage.write(&new, &now).unwrap();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    assert_eq!(storage.0.get(&new).unwrap(), now);
+    assert_eq!(storage.0.get(&old).unwrap(), before);
+    // Without annotations kept now, the old ones are moved.
+    storage.0.remove(&new).unwrap();
+    reading.run(core_actions::BACK);
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    assert_eq!(storage.0.get(&new).unwrap(), before);
+    assert!(!storage.exists(&old));
+}

@@ -271,6 +271,9 @@ fn main() -> ! {
     let board = Board::take(p);
 
     let storage = card::mount(board.card);
+    // What the card keeps under PaperPaw's old name, moved before anything
+    // is written to its folder (the kernel does it again, finding nothing).
+    paperpaw_sdk::data::take_over_old_name(storage.as_ref());
     // Wi-Fi the web flasher wrote with the firmware: to the card, for the
     // kernel to keep at its start.
     provision::take(&flash, storage.as_ref());

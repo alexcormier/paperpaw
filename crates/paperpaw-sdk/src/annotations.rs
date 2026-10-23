@@ -190,8 +190,15 @@ fn parse(line: &str) -> Option<Annotation> {
 
 /// Keeps `annotations` as those of the book at `book`, sorted by
 /// position (a note cut at 3 KB); `false` where they could not be
-/// written.
+/// written. Lines of the file this version does not read (a kind a newer
+/// PaperPaw added, or damaged) stay as they are; where the file cannot be
+/// read for them, nothing is written.
 pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) -> bool {
+    let unread =
+        |line: &str| (!line.trim().is_empty() && parse(line).is_none()).then(|| line.to_string());
+    let Ok(unread) = each(storage, book, unread) else {
+        return false;
+    };
     let mut all: Vec<&Annotation> = annotations.iter().collect();
     all.sort_by_key(|a| (a.mark.start, a.mark.end));
     let mut out = String::new();
@@ -210,8 +217,12 @@ pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) -> bo
             a.created,
             a.updated,
             one_line(&a.text),
-            cut(one_line(&a.note), MAX_NOTE)
+            stored_note(&a.note)
         ));
+    }
+    for line in unread {
+        out.push_str(&line);
+        out.push('\n');
     }
     let path = file(book);
     if out.is_empty() {
@@ -242,6 +253,13 @@ fn cut(mut text: String, max: usize) -> String {
         text.push('…');
     }
     text
+}
+
+/// `note` as it is kept: on one line, and cut where it is longer than
+/// a note may be (ending in `…`). For those who compare a note from
+/// elsewhere with one kept here, e.g. a sync.
+pub fn stored_note(note: &str) -> String {
+    cut(one_line(note), MAX_NOTE)
 }
 
 /// `text` on one line: tabs and line breaks become spaces.

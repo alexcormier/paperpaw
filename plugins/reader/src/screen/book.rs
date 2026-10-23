@@ -29,6 +29,12 @@ pub(super) struct Book {
     pub(super) unsaved: bool,
     /// Whether it could not be written once (and the reader was told).
     pub(super) save_failed: bool,
+    /// The position kept is there but could not be read: not written over
+    /// until the reader turns to another page.
+    pub(super) held: bool,
+    /// The position was read from the reader's `progress.ini` of before:
+    /// removed once the position is kept where it is now.
+    pub(super) from_progress: bool,
     /// The conversion of the book its positions are in (see
     /// `reading::conversion`), and whether the position kept holds its
     /// XPointer too, to find it in another; the XPointer found last.
@@ -134,6 +140,27 @@ pub(crate) fn remember_last(storage: &dyn paperpaw_sdk::Storage, path: &str) {
     let _ = storage.write(&state_path(), state.as_bytes());
 }
 
+/// Moves the annotations the reader kept with its data of the book at
+/// `path` before plugins shared them where they are now, if any are
+/// there. Where the book has annotations there too, both stay: a move
+/// would replace them.
+fn move_old_annotations(storage: &dyn paperpaw_sdk::Storage, dir: &str, path: &str) {
+    let old = format!("{dir}/annotations.txt");
+    let new = paperpaw_sdk::annotations::file(path);
+    if storage.exists(&old)
+        && matches!(
+            storage.size(&new),
+            Err(paperpaw_sdk::StorageError::NotFound)
+        )
+    {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "the file of an earlier version: where it stays, it is moved again at the next opening"
+        )]
+        let _ = storage.rename(&old, &new);
+    }
+}
+
 /// The data folder of the book at `path`.
 pub(crate) fn book_dir(path: &str) -> String {
     format!(
@@ -170,18 +197,7 @@ impl Book {
             .unwrap_or_else(|| env.i18n.language().to_string());
         let typography = typography(env, &font, &language, document.whole_pages());
         let dir = book_dir(path);
-        // Kept with the reader's data of the book before plugins shared
-        // them: moved where they are now, if any are there.
-        let old = format!("{dir}/annotations.txt");
-        if env.storage.exists(&old) {
-            #[expect(
-                clippy::let_underscore_must_use,
-                reason = "the file of an earlier version: where it stays, it is moved again at the next opening"
-            )]
-            let _ = env
-                .storage
-                .rename(&old, &paperpaw_sdk::annotations::file(path));
-        }
+        move_old_annotations(env.storage, &dir, path);
         let marks = annotations::marks(env.storage, path);
         let title = document
             .metadata()
@@ -201,6 +217,8 @@ impl Book {
             saved_at: None,
             unsaved: false,
             save_failed: false,
+            held: false,
+            from_progress: false,
             conversion: paperpaw_sdk::reading::conversion(env),
             pointed: true,
             xpointer: None,
@@ -476,17 +494,24 @@ impl Book {
 
     /// The position kept, and whether to keep it anew: found by its
     /// XPointer (kept in another conversion of the book, its own styles
-    /// switched since), or kept where the reader kept it before.
-    pub(super) fn saved_position(&self, env: &Env<'_>) -> Option<(Locator, bool)> {
-        let (kept, before) = match paperpaw_sdk::positions::load(env.storage, &self.path) {
-            Some(kept) => (kept, false),
-            None => {
+    /// switched since), or kept where the reader kept it before. One that
+    /// is there but cannot be read is held: not written over.
+    pub(super) fn saved_position(&mut self, env: &Env<'_>) -> Option<(Locator, bool)> {
+        let (kept, before) = match paperpaw_sdk::positions::load_for_update(env.storage, &self.path)
+        {
+            Ok(Some(kept)) => (kept, false),
+            Ok(None) => {
                 let data =
                     paperpaw_sdk::read_file(env.storage, &self.progress_path(), 4096).ok()?;
                 let text = core::str::from_utf8(&data).ok()?;
                 (paperpaw_sdk::positions::Position::parse(text)?, true)
             }
+            Err(_) => {
+                self.held = true;
+                return None;
+            }
         };
+        self.from_progress = before;
         let found = match (kept.conversion, &kept.xpointer) {
             (Some(conversion), Some(xpointer)) if conversion != self.conversion => {
                 self.document.locate_xpointer(env.storage, xpointer)
@@ -503,6 +528,8 @@ impl Book {
     /// Writes the position now, or soon if it was written a moment ago;
     /// `true` while it waits ([`Book::save_due`]).
     pub(super) fn position_changed(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        // Read on: the new place is kept, over one that could not be read.
+        self.held = false;
         let now = cx.env().now;
         let recent = self
             .saved_at
@@ -529,8 +556,12 @@ impl Book {
 
     /// Writes the position, with its XPointer if `pointed` (finding it
     /// takes a while on the X4, so not at every page); where the storage
-    /// refuses, says so once a book (not at every page).
+    /// refuses, says so once a book (not at every page). A position held
+    /// ([`Book::held`]) is not written over.
     pub(super) fn save_position(&mut self, cx: &mut Cx<'_, '_>, pointed: bool) {
+        if self.held {
+            return;
+        }
         let env = *cx.env();
         self.saved_at = Some(env.now);
         let start = self.page.start;
@@ -546,6 +577,10 @@ impl Book {
         if saved.is_err() && !self.save_failed {
             self.save_failed = true;
             cx.command(Command::Notify(env.i18n.tr("reader.not-saved").to_string()));
+        }
+        // Kept where it is now: the old file would only come back over it.
+        if saved.is_ok() && self.from_progress {
+            self.from_progress = env.storage.remove(&self.progress_path()).is_err();
         }
     }
 

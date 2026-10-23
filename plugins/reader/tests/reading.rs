@@ -1749,3 +1749,6 @@ fn a_book_still_coming_opens_when_it_is_there() {
     reading.run(ARRIVED);
     assert_eq!(asked.get(), 2);
 }
+
+#[path = "reading/kept.rs"]
+mod kept;

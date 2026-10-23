@@ -308,7 +308,7 @@ impl AddScreen {
                     cx.command(Command::Notify(message));
                     return;
                 };
-                cx.command(pages::store(page.slot, &added));
+                cx.command(pages::store(&env, page.slot, &added));
             }
             Some(Row::AddPage) => {
                 // After the others, kept as a space until it is filled.

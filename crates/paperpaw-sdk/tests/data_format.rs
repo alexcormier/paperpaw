@@ -152,6 +152,48 @@ fn the_old_name_is_not_taken_over_where_the_new_one_is_used() {
     assert!(!storage.exists(".paperpaw"));
 }
 
+/// A file written under the new name before the kernel starts (the X4
+/// keeps a crash report or the flasher's Wi-Fi there first) does not keep
+/// the rest from being taken over: entry by entry, what the new folder
+/// has stays.
+#[test]
+fn the_old_folder_is_taken_over_beside_a_file_already_in_the_new_one() {
+    let storage = MemoryStorage::new()
+        .with(".quireink/secrets.txt", "s")
+        .with(".quireink/library/books/a.ini", "a")
+        .with(".quireink/wifi/known.txt", "old")
+        .with(".quireink/crashes.txt", "old crash")
+        .with(".paperpaw/crashes.txt", "new crash")
+        .with(".paperpaw/wifi/wifi.ini", "flashed");
+    data::take_over_old_name(&storage);
+    assert_eq!(storage.get(".paperpaw/secrets.txt").unwrap(), b"s");
+    assert_eq!(storage.get(".paperpaw/library/books/a.ini").unwrap(), b"a");
+    assert_eq!(storage.get(".paperpaw/wifi/known.txt").unwrap(), b"old");
+    assert_eq!(storage.get(".paperpaw/wifi/wifi.ini").unwrap(), b"flashed");
+    assert_eq!(storage.get(".paperpaw/crashes.txt").unwrap(), b"new crash");
+    // What the new folder had is not lost, and the old one keeps its own.
+    assert_eq!(storage.get(".quireink/crashes.txt").unwrap(), b"old crash");
+}
+
+/// The guard against writing over a newer file reads the first line
+/// however its bytes fall: a character cut at the end of what it reads, or
+/// a byte order mark before the mark.
+#[test]
+fn newer_files_are_found_with_a_cut_character_or_a_byte_order_mark() {
+    // 31 bytes, then a two-byte character across the 32nd.
+    let cut = "# format 9\n[profile.1]\nname = N\u{e4}chte\ncore.x = 1\n";
+    assert_eq!(&cut.as_bytes()[..31], b"# format 9\n[profile.1]\nname = N");
+    let bom = "\u{feff}# format 9\nx = 1\n";
+    let storage = MemoryStorage::new()
+        .with("cut.ini", cut)
+        .with("bom.ini", bom);
+    for (path, text) in [("cut.ini", cut), ("bom.ini", bom)] {
+        assert_eq!(FORMAT.load(&storage, path, 1024), Err(Error::Newer(9)));
+        assert_eq!(FORMAT.save(&storage, path, "x"), Err(Error::Newer(9)));
+        assert_eq!(storage.get(path).unwrap(), text.as_bytes());
+    }
+}
+
 #[test]
 #[should_panic(expected = "one upgrade per version after the first")]
 fn a_format_without_its_upgrades_is_refused() {
