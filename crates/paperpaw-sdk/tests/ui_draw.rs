@@ -875,24 +875,20 @@ fn a_qr_code_is_drawn_whole_or_not_at_all() {
 #[test]
 fn a_look_paints_the_parts_and_keeps_what_they_say() {
     use paperpaw_sdk::Color;
-    use paperpaw_sdk::ui::look::{ButtonPart, FocusPart, Look, Painters, SwitchPart};
+    use paperpaw_sdk::ui::look::{ButtonPart, FocusPart, Look, PaintCx, Painters, SwitchPart};
     const SWITCH: Color = Color::gray(100);
     const FOCUS: Color = Color::gray(60);
     const BUTTON: Color = Color::gray(140);
-    fn switch(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &UiStyle, part: &SwitchPart) -> bool {
-        canvas.fill(part.rect, SWITCH);
+    fn switch(cx: &mut PaintCx<'_, '_>, part: &SwitchPart) -> bool {
+        cx.canvas.fill(part.rect, SWITCH);
         true
     }
-    fn focus(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &UiStyle, part: &FocusPart) -> bool {
-        canvas.fill(part.rect, FOCUS);
+    fn focus(cx: &mut PaintCx<'_, '_>, part: &FocusPart) -> bool {
+        cx.canvas.fill(part.rect, FOCUS);
         true
     }
-    fn button(
-        canvas: &mut paperpaw_sdk::Canvas<'_>,
-        _: &UiStyle,
-        part: &ButtonPart,
-    ) -> Option<Color> {
-        canvas.fill(part.rect, BUTTON);
+    fn button(cx: &mut PaintCx<'_, '_>, part: &ButtonPart) -> Option<Color> {
+        cx.canvas.fill(part.rect, BUTTON);
         Some(Color::WHITE)
     }
     static SQUARE: Painters = Painters::new().switch(switch).focus(focus).button(button);

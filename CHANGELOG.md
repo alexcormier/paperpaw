@@ -416,6 +416,9 @@ file to your report.
   `Importance`. A match on them needs an arm for what comes later.
   `Handled` is exhaustive: an event is handled or not, and a plugin
   matches both.
+- SDK: a look's painters take a `ui::look::PaintCx` (the canvas and the
+  style, more to come) and the part: `fn(&mut PaintCx, &SwitchPart) ->
+  bool`.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).
