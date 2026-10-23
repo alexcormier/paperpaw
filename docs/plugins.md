@@ -1467,11 +1467,17 @@ plugins/my-plugin/
   i18n/*.ini     translations, settings.ini, … as for data plugins
 ```
 
+`plugin.ini`'s version is the plugin's: the store, the installer and
+updates go by it. The code's manifest must name the same version;
+code of another is not loaded (`paperpaw-dev package` with the folder
+and `--plugin` says so before).
+
 Copy the folder onto the card, name its code as installed and restart
 (over USB: `python tools/x4-remote.py --push my-plugin plugins/my-plugin
 --trust-code my-plugin`). The plugin manager lists it as one with code,
 and says why one does not run (built for another PaperPaw, damaged, no
-room, not installed, changed since it was installed). Over USB, `native` (and `--info`)
+room, not installed, changed since it was installed, another version
+than its `plugin.ini`). Over USB, `native` (and `--info`)
 says where each plugin lies and what loading it took.
 
 A panic's calls inside a plugin are kept with its name and the offset

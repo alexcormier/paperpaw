@@ -441,6 +441,45 @@ fn extends(kernel: &Kernel, lines: &[Line], out: &mut Vec<Finding>) {
 
 /// Plugins with code named with `--plugin`: the SDK each was built for,
 /// against this PaperPaw and the release.
+/// Code plugins of the app with their folders (`plugin.ini`'s version):
+/// the code's manifest must name the same version, or the device does
+/// not load it.
+pub fn code_versions(
+    context: &Context,
+    folders: &[(String, Version)],
+    report: &mut Report,
+) -> Result<(), String> {
+    let mut own = Context::new(
+        Target {
+            add: context.target.add,
+            ..Target::default()
+        },
+        context.out.clone(),
+    );
+    own.in_memory = context.in_memory;
+    let session = Session::new(&own, &Variant::x4())?;
+    for (id, declared) in folders {
+        let plugins = session.device.kernel.plugins();
+        let Some(info) = plugins.iter().find(|p| p.manifest.id.as_str() == id) else {
+            continue;
+        };
+        let built = info.manifest.version;
+        if built != *declared {
+            report.add(
+                Finding::error(
+                    "package.version",
+                    "plugin.ini",
+                    format!(
+                        "plugin.ini says version {declared}, its code's manifest {built}: the device does not load code of another version. Give both the same."
+                    ),
+                )
+                .plugin(id.as_str()),
+            );
+        }
+    }
+    Ok(())
+}
+
 pub fn code_plugins(
     context: &Context,
     ids: &[&String],

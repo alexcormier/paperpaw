@@ -4881,6 +4881,7 @@ pub paperpaw_sdk::PluginProblem::Mismatch
 pub paperpaw_sdk::PluginProblem::NoRoom
 pub paperpaw_sdk::PluginProblem::NotInstalled
 pub paperpaw_sdk::PluginProblem::OtherBuild
+pub paperpaw_sdk::PluginProblem::OtherVersion
 pub paperpaw_sdk::PluginProblem::SafeMode
 pub paperpaw_sdk::PluginProblem::Unsupported
 #[non_exhaustive] pub enum paperpaw_sdk::PluginState

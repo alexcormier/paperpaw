@@ -21,6 +21,12 @@ change the plugin SDK.
     goes at once, not at the next start.
 - SDK: `install::local::Staging::apart` puts a plugin's files together
   in a folder of its own, for one way of sending.
+- A code plugin's version is its `plugin.ini`'s, everywhere: the
+  plugin manager, the store's updates and the transfer's list all go by
+  it. Code whose manifest names another version is not loaded, and the
+  plugin manager says why; `paperpaw-dev package` finds it before
+  (`package.version`).
+- SDK: `PluginProblem::OtherVersion`.
 - Your data is safer: an audit of everything PaperPaw keeps found ways
   it could lose notes, places, statistics, cards or passwords, and they
   are closed, each with a test.
