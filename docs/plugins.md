@@ -1531,6 +1531,10 @@ plugins/large-print/
   setup.ini      steps of the first-run setup (formats 3)
 ```
 
+[Files on the card](data-files.md#a-data-plugins-files) lists each of them
+with its format, what reads it and an example, and how a `settings.ini`
+brings a home screen of its own.
+
 `plugin.ini` may also bind fonts to roles (formats 3):
 
 ```ini
