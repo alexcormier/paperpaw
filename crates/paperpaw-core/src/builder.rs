@@ -35,6 +35,7 @@ pub struct KernelBuilder {
     font_dirs: Vec<String>,
     catalog_device: Option<&'static str>,
     random: paperpaw_sdk::random::Random,
+    memory: paperpaw_sdk::memory::Memory,
 }
 
 impl fmt::Debug for KernelBuilder {
@@ -151,6 +152,15 @@ impl KernelBuilder {
     /// by browser).
     pub fn random(mut self, fill: fn(&mut [u8]) -> bool) -> Self {
         self.random = paperpaw_sdk::random::Random::new(fill);
+        self
+    }
+
+    /// The platform's probe of memory ([`paperpaw_sdk::memory`]): `read`
+    /// says what is free now, or `None` where it cannot tell, for
+    /// diagnostics and plugins checking their room. Without, nothing is
+    /// known.
+    pub fn memory(mut self, read: fn() -> Option<paperpaw_sdk::memory::MemoryUse>) -> Self {
+        self.memory = paperpaw_sdk::memory::Memory::new(read);
         self
     }
 
@@ -453,6 +463,7 @@ impl KernelBuilder {
                 catalog_device: self.catalog_device,
                 secrets: Default::default(),
                 random: self.random,
+                memory: self.memory,
                 storage,
                 recall,
                 keymap: Keymap::default(),
@@ -961,6 +972,7 @@ impl Kernel {
             font_dirs: Vec::new(),
             catalog_device: None,
             random: paperpaw_sdk::random::Random::NONE,
+            memory: paperpaw_sdk::memory::Memory::NONE,
         }
     }
 }

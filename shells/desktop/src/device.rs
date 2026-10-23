@@ -803,6 +803,7 @@ fn build_kernel(
             .storage(crate::trace::Traced(storage))
             .clock(crate::host::micros)
             .random(crate::host::random)
+            .memory(budget::memory_use)
             .glyph_cache(profile.glyph_cache)
             .busy_mark(profile.busy_mark)
             .colors(profile.colors)

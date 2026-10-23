@@ -65,6 +65,14 @@ impl Meter {
         self.clock.map(|clock| clock())
     }
 
+    /// The clock as plugins get it ([`Env::clock`](paperpaw_sdk::Env::clock)).
+    pub(crate) fn clock(&self) -> paperpaw_sdk::time::Clock {
+        self.clock.map_or(
+            paperpaw_sdk::time::Clock::NONE,
+            paperpaw_sdk::time::Clock::new,
+        )
+    }
+
     /// The row of `plugin`, added the first time.
     fn index(&self, plugin: &str) -> usize {
         let mut table = self.table.borrow_mut();

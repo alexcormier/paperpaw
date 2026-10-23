@@ -2226,6 +2226,19 @@ pub fn paperpaw_sdk::lookup::LookupQuery::answer_entry(&self, &paperpaw_sdk::Id,
 pub fn paperpaw_sdk::lookup::LookupQuery::new(impl core::convert::Into<alloc::string::String>, core::option::Option<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::lookup::LookupQuery::reply(self, paperpaw_sdk::Id) -> Self
 pub type paperpaw_sdk::lookup::LookupFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::lookup::LookupQuery) -> paperpaw_sdk::lookup::LookupAnswer>
+pub mod paperpaw_sdk::memory
+pub struct paperpaw_sdk::memory::Memory
+impl paperpaw_sdk::memory::Memory
+pub const paperpaw_sdk::memory::Memory::NONE: Self
+pub const fn paperpaw_sdk::memory::Memory::new(fn() -> paperpaw_sdk::memory::MemoryUse) -> Self
+pub fn paperpaw_sdk::memory::Memory::read(&self) -> core::option::Option<paperpaw_sdk::memory::MemoryUse>
+impl core::fmt::Debug for paperpaw_sdk::memory::Memory
+pub fn paperpaw_sdk::memory::Memory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_sdk::memory::MemoryUse
+pub paperpaw_sdk::memory::MemoryUse::heap_free: u32
+pub paperpaw_sdk::memory::MemoryUse::heap_size: u32
+pub paperpaw_sdk::memory::MemoryUse::stack_free: core::option::Option<u32>
+pub paperpaw_sdk::memory::MemoryUse::stack_size: core::option::Option<u32>
 pub mod paperpaw_sdk::native
 pub use paperpaw_sdk::native::BadSignature
 pub use paperpaw_sdk::native::Chip
@@ -2956,6 +2969,13 @@ pub mod paperpaw_sdk::text
 pub use paperpaw_sdk::text::OUTLINES
 pub use paperpaw_sdk::text::sfnt
 pub mod paperpaw_sdk::time
+pub struct paperpaw_sdk::time::Clock
+impl paperpaw_sdk::time::Clock
+pub const paperpaw_sdk::time::Clock::NONE: Self
+pub fn paperpaw_sdk::time::Clock::micros(&self) -> core::option::Option<u64>
+pub const fn paperpaw_sdk::time::Clock::new(fn() -> u64) -> Self
+impl core::fmt::Debug for paperpaw_sdk::time::Clock
+pub fn paperpaw_sdk::time::Clock::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::time::LocalTime
 pub paperpaw_sdk::time::LocalTime::day: u8
 pub paperpaw_sdk::time::LocalTime::hour: u8
@@ -3013,6 +3033,7 @@ pub fn paperpaw_sdk::ui::choice::Choice::hints(&self) -> core::option::Option<pa
 pub fn paperpaw_sdk::ui::choice::Choice::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::choice::Choice::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::choice::Choice::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::choice::Choice::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -3027,6 +3048,7 @@ pub fn paperpaw_sdk::ui::choice::Choice::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::choice::Choice::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::choice::Choice::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::takes_double_taps(&self) -> bool
 #[non_exhaustive] pub struct paperpaw_sdk::ui::choice::Picked
 pub paperpaw_sdk::ui::choice::Picked::option: alloc::string::String
@@ -3052,6 +3074,7 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::hints(&self) -> core::option::Option<
 pub fn paperpaw_sdk::ui::confirm::Confirm::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -3066,6 +3089,7 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::confirm::Confirm::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::confirm::Confirm::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::takes_double_taps(&self) -> bool
 pub const paperpaw_sdk::ui::confirm::ANSWER: &str
 pub const paperpaw_sdk::ui::confirm::FOCUS_YES: &str
@@ -3087,6 +3111,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::hints(&self) -> core::option::Optio
 pub fn paperpaw_sdk::ui::items::ItemsScreen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::items::ItemsScreen::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -3101,6 +3126,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::items::ItemsScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::items::ItemsScreen::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::takes_double_taps(&self) -> bool
 pub const paperpaw_sdk::ui::items::LINES: &str
 pub mod paperpaw_sdk::ui::look
@@ -3292,6 +3318,7 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::hints(&self) -> core::option::O
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -3306,6 +3333,7 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::pictures_in_grays(&self) -> boo
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::takes_double_taps(&self) -> bool
 pub struct paperpaw_sdk::ui::widget_list::ListScreen
 impl paperpaw_sdk::ui::widget_list::ListScreen
@@ -3320,6 +3348,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::hints(&self) -> core::option::
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -3334,6 +3363,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::pictures_in_grays(&self) -> bo
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_double_taps(&self) -> bool
 #[non_exhaustive] pub enum paperpaw_sdk::ui::DateOrder
 pub paperpaw_sdk::ui::DateOrder::DayMonthYear
@@ -4962,6 +4992,7 @@ pub paperpaw_sdk::Env::book_fields: &'a [paperpaw_sdk::library::service::BookFie
 pub paperpaw_sdk::Env::caps: paperpaw_sdk::Capabilities
 pub paperpaw_sdk::Env::catalog_device: core::option::Option<&'a str>
 pub paperpaw_sdk::Env::clipboard: bool
+pub paperpaw_sdk::Env::clock: paperpaw_sdk::time::Clock
 pub paperpaw_sdk::Env::content: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::Env::decorators: &'a paperpaw_sdk::decorations::Decorators
 pub paperpaw_sdk::Env::device: &'a paperpaw_platform::DeviceInfo
@@ -4976,6 +5007,7 @@ pub paperpaw_sdk::Env::keys: &'a dyn paperpaw_sdk::keys::KeyBindings
 pub paperpaw_sdk::Env::last_input: paperpaw_sdk::keys::InputMode
 pub paperpaw_sdk::Env::look: paperpaw_sdk::ui::look::Look
 pub paperpaw_sdk::Env::lookup: &'a paperpaw_sdk::lookup::LookupProviders
+pub paperpaw_sdk::Env::memory: paperpaw_sdk::memory::Memory
 pub paperpaw_sdk::Env::menus: &'a paperpaw_sdk::Menus
 pub paperpaw_sdk::Env::metrics: paperpaw_sdk::Metrics
 pub paperpaw_sdk::Env::native: core::option::Option<&'a paperpaw_sdk::native::Native>
@@ -5889,6 +5921,7 @@ pub fn paperpaw_sdk::Screen::hints(&self) -> core::option::Option<paperpaw_sdk::
 pub fn paperpaw_sdk::Screen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::Screen::mirrored(&self) -> bool
 pub fn paperpaw_sdk::Screen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::Screen::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::Screen::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::Screen::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::Screen::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -5903,6 +5936,7 @@ pub fn paperpaw_sdk::Screen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::Screen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::Screen::secret(&self) -> bool
 pub fn paperpaw_sdk::Screen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::Screen::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::Screen::takes_double_taps(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::choice::Choice
 pub fn paperpaw_sdk::ui::choice::Choice::dims_below(&self) -> bool
@@ -5914,6 +5948,7 @@ pub fn paperpaw_sdk::ui::choice::Choice::hints(&self) -> core::option::Option<pa
 pub fn paperpaw_sdk::ui::choice::Choice::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::choice::Choice::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::choice::Choice::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::choice::Choice::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -5928,6 +5963,7 @@ pub fn paperpaw_sdk::ui::choice::Choice::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::choice::Choice::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::choice::Choice::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::takes_double_taps(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::confirm::Confirm
 pub fn paperpaw_sdk::ui::confirm::Confirm::dims_below(&self) -> bool
@@ -5939,6 +5975,7 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::hints(&self) -> core::option::Option<
 pub fn paperpaw_sdk::ui::confirm::Confirm::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -5953,6 +5990,7 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::confirm::Confirm::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::confirm::Confirm::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::takes_double_taps(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::items::ItemsScreen
 pub fn paperpaw_sdk::ui::items::ItemsScreen::dims_below(&self) -> bool
@@ -5964,6 +6002,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::hints(&self) -> core::option::Optio
 pub fn paperpaw_sdk::ui::items::ItemsScreen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::items::ItemsScreen::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -5978,6 +6017,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::items::ItemsScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::items::ItemsScreen::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::takes_double_taps(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::widget_list::AddScreen
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::dims_below(&self) -> bool
@@ -5989,6 +6029,7 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::hints(&self) -> core::option::O
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -6003,6 +6044,7 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::pictures_in_grays(&self) -> boo
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::takes_double_taps(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::widget_list::ListScreen
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::dims_below(&self) -> bool
@@ -6014,6 +6056,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::hints(&self) -> core::option::
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::mirrored(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_button(&mut self, &str, bool, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
@@ -6028,6 +6071,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::pictures_in_grays(&self) -> bo
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_double_taps(&self) -> bool
 pub fn paperpaw_sdk::cover_fit(paperpaw_image::Fit) -> paperpaw_image::Fit
 pub fn paperpaw_sdk::read_file(&dyn paperpaw_platform::storage::Storage, &str, usize) -> core::result::Result<alloc::vec::Vec<u8>, paperpaw_platform::storage::StorageError>

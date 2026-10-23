@@ -1429,6 +1429,8 @@ mod tests {
                 secrets: &self.secrets,
                 running: &crate::secrets::Anyone,
                 random: crate::random::Random::default(),
+                memory: crate::memory::Memory::NONE,
+                clock: crate::time::Clock::NONE,
                 storage: &self.storage,
             })
         }

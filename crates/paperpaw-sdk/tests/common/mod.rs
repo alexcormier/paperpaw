@@ -128,6 +128,8 @@ impl Harness {
             device: &DEVICE,
             now: self.now,
             random: paperpaw_sdk::random::Random::NONE,
+            memory: paperpaw_sdk::memory::Memory::NONE,
+            clock: paperpaw_sdk::time::Clock::NONE,
             metrics: Metrics::new(DEVICE.display.dpi),
             settings: &self.settings,
             i18n: &self.i18n,

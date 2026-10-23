@@ -73,6 +73,7 @@ pub mod layers;
 pub mod library;
 pub mod logo;
 pub mod lookup;
+pub mod memory;
 mod memory_storage;
 mod menus;
 pub mod native;

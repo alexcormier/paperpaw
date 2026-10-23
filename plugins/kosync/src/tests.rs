@@ -291,6 +291,8 @@ impl Harness {
             secrets: &self.secrets,
             running: &paperpaw_sdk::secrets::Anyone,
             random: paperpaw_sdk::random::Random::NONE,
+            memory: paperpaw_sdk::memory::Memory::NONE,
+            clock: paperpaw_sdk::time::Clock::NONE,
             storage: &self.storage,
         })
     }
