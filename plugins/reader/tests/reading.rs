@@ -51,14 +51,15 @@ const EPUB: &str = "books/alice.epub";
 
 /// A storage the test looks into while kernels have it. It refuses to
 /// add to page indexes once the appends in `.1` (if set) are used up, to
-/// read files whose paths end as `.2` says, and to write files whose paths
-/// hold what `.3` says (if set).
+/// read files whose paths end as `.2` says (as often as `.4` says, if
+/// set), and to write files whose paths hold what `.3` says (if set).
 #[derive(Clone, Default)]
 struct Shared(
     Rc<MemoryStorage>,
     Rc<std::cell::Cell<Option<u32>>>,
     Rc<std::cell::Cell<Option<&'static str>>>,
     Rc<RefCell<Option<String>>>,
+    Rc<std::cell::Cell<Option<u32>>>,
 );
 
 impl Shared {
@@ -73,7 +74,14 @@ impl Shared {
 impl Storage for Shared {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
         if self.2.get().is_some_and(|end| path.ends_with(end)) {
-            return Err(StorageError::Io);
+            match self.4.get() {
+                Some(0) => {}
+                Some(left) => {
+                    self.4.set(Some(left - 1));
+                    return Err(StorageError::Io);
+                }
+                None => return Err(StorageError::Io),
+            }
         }
         self.0.read_at(path, offset, buf)
     }
@@ -1752,3 +1760,6 @@ fn a_book_still_coming_opens_when_it_is_there() {
 
 #[path = "reading/kept.rs"]
 mod kept;
+
+#[path = "reading/placed.rs"]
+mod placed;

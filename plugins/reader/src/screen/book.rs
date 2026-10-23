@@ -30,7 +30,7 @@ pub(super) struct Book {
     /// Whether it could not be written once (and the reader was told).
     pub(super) save_failed: bool,
     /// The position kept is there but could not be read: not written over
-    /// until the reader turns to another page.
+    /// until it is moved aside (see [`Book::set_aside`]).
     pub(super) held: bool,
     /// The position was read from the reader's `progress.ini` of before:
     /// removed once the position is kept where it is now.
@@ -198,7 +198,6 @@ impl Book {
         let typography = typography(env, &font, &language, document.whole_pages());
         let dir = book_dir(path);
         move_old_annotations(env.storage, &dir, path);
-        let marks = annotations::marks(env.storage, path);
         let title = document
             .metadata()
             .title
@@ -227,7 +226,7 @@ impl Book {
             document,
             language,
             typography,
-            marks,
+            marks: Vec::new(),
             found: None,
             chapter: None,
             chapter_end: core::cell::Cell::new(None),
@@ -245,6 +244,7 @@ impl Book {
             decorated_for: None,
             dropped: paperpaw_sdk::reading::DroppedRuns::new(),
         };
+        book.reload_marks(env);
         book.chapter_marks = book.chapter_marks(env);
         book.embedded = Embedded::load(env, book.document.as_ref());
         // Kept with another layout maybe: from the start of its line.
@@ -495,10 +495,13 @@ impl Book {
     /// The position kept, and whether to keep it anew: found by its
     /// XPointer (kept in another conversion of the book, its own styles
     /// switched since), or kept where the reader kept it before. One that
-    /// is there but cannot be read is held: not written over.
+    /// is there but cannot be read, also at a second try, is held: not
+    /// written over.
     pub(super) fn saved_position(&mut self, env: &Env<'_>) -> Option<(Locator, bool)> {
-        let (kept, before) = match paperpaw_sdk::positions::load_for_update(env.storage, &self.path)
-        {
+        let load = || paperpaw_sdk::positions::load_for_update(env.storage, &self.path);
+        // A card that failed to read it once may read it now.
+        let loaded = load().or_else(|_| load());
+        let (kept, before) = match loaded {
             Ok(Some(kept)) => (kept, false),
             Ok(None) => {
                 let data =
@@ -521,6 +524,21 @@ impl Book {
         Some(found.map_or((kept.at, before), |at| (at, true)))
     }
 
+    /// Reads where the bookmarks and highlights are, those made in another
+    /// conversion of the book (its own styles switched since, say) found
+    /// by their XPointers first, and those added since taken as of this
+    /// one; `true` where they changed. Where they cannot be read or
+    /// written now, they are shown where they are kept.
+    pub(super) fn reload_marks(&mut self, env: &Env<'_>) -> bool {
+        let doc = self.document.as_ref();
+        let moved =
+            annotations::relocate(env.storage, &self.path, self.conversion, doc).unwrap_or(false);
+        let marks = annotations::marks(env.storage, &self.path);
+        let changed = moved || marks != self.marks;
+        self.marks = marks;
+        changed
+    }
+
     pub(super) fn percent(&self) -> f32 {
         self.document.progress(self.page.start) * 100.0
     }
@@ -528,8 +546,11 @@ impl Book {
     /// Writes the position now, or soon if it was written a moment ago;
     /// `true` while it waits ([`Book::save_due`]).
     pub(super) fn position_changed(&mut self, cx: &mut Cx<'_, '_>) -> bool {
-        // Read on: the new place is kept, over one that could not be read.
-        self.held = false;
+        // Read on: the new place is kept, the one that could not be read
+        // moved aside first.
+        if self.held {
+            self.set_aside(cx);
+        }
         let now = cx.env().now;
         let recent = self
             .saved_at
@@ -539,6 +560,36 @@ impl Book {
             self.save_position(cx, false);
         }
         recent
+    }
+
+    /// Moves the position that could not be read aside, to `<file>.bad`
+    /// (or `.bad2` and on, where that is taken), so that the place read on
+    /// is kept without losing it; says so once. Where it cannot be moved,
+    /// it stays held and the reader is told the place is not kept.
+    fn set_aside(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let file = paperpaw_sdk::positions::file(&self.path);
+        if !env.storage.exists(&file) {
+            self.held = false;
+            return;
+        }
+        let moved = (1..10)
+            .map(|n| match n {
+                1 => format!("{file}.bad"),
+                n => format!("{file}.bad{n}"),
+            })
+            .find(|aside| !env.storage.exists(aside))
+            .is_some_and(|aside| env.storage.rename(&file, &aside).is_ok());
+        let said = if moved {
+            self.held = false;
+            "reader.position-set-aside"
+        } else if !self.save_failed {
+            self.save_failed = true;
+            "reader.not-saved"
+        } else {
+            return;
+        };
+        cx.command(Command::Notify(env.i18n.tr(said).to_string()));
     }
 
     /// Writes the position if it waits; `force` also before its time, and

@@ -540,6 +540,45 @@ fn a_position_stayed_away_from_is_not_offered_again() {
     assert!(offers(&h.answer(fetch(&out), 200, FURTHER_THERE)));
 }
 
+/// Back on the offer means not now for this book: the same position is
+/// not offered again (not after every wake either), and nothing is sent
+/// over it while it is undecided. Moved on the server, it is offered.
+#[test]
+fn an_offer_left_with_back_comes_again_only_when_the_server_moves() {
+    let mut h = Harness::new(true);
+    let request = fetch(&h.emit(&events::BOOK_OPENED, reading(20.0))).clone();
+    assert!(offers(&h.answer(&request, 200, FURTHER_THERE)));
+    let back = confirm::Answered {
+        stay: false,
+        ..stay(BOOK)
+    };
+    assert_eq!(sent(&h.emit(&confirm::ANSWERED, back)), None);
+    // Woken soon after: not even fetched again.
+    h.now += 1_000;
+    assert!(requests(&h.emit(&events::RESUME, ())).is_empty());
+    // Woken later: fetched, but the same position is not offered.
+    h.now += PULL_EVERY_MS;
+    let out = h.emit(&events::RESUME, ());
+    let out = h.answer(fetch(&out), 200, FURTHER_THERE);
+    assert!(!offers(&out));
+    assert_eq!(sent(&out), None);
+    // Nor when the book is opened again.
+    h.now += PULL_EVERY_MS;
+    let out = h.emit(&events::BOOK_OPENED, reading(21.0));
+    assert!(!offers(&h.answer(fetch(&out), 200, FURTHER_THERE)));
+    // Nothing goes over it meanwhile.
+    h.now += PUSH_EVERY_MS;
+    assert_eq!(sent(&h.emit(&events::PAGE_TURNED, reading(22.0))), None);
+    assert_eq!(sent(&h.emit(&events::SUSPEND, ())), None);
+    // Further still on the server: offered again.
+    h.now += PULL_EVERY_MS;
+    let out = h.emit(&events::RESUME, ());
+    let further = FURTHER_THERE.replace("0.8", "0.9");
+    let out = h.answer(fetch(&out), 200, &further);
+    assert!(offers(&out));
+    assert_eq!(sent(&out), None);
+}
+
 #[test]
 fn another_server_signs_out() {
     let mut h = Harness::new(false);

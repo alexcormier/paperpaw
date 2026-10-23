@@ -190,7 +190,7 @@ fn nothing_is_sent_after_a_failed_fetch() {
 fn nothing_is_sent_after_a_failed_fetch_on_waking() {
     let mut sync = with_books();
     opened(&mut sync, BOOK, 10.0);
-    let now = sync.later(100);
+    let now = sync.later(60_000);
     sync.kernel.resume(now);
     let calls = sync.calls();
     assert!(sync.answer(fetch(&calls), 0, "").is_empty());
@@ -222,7 +222,8 @@ fn an_own_position_is_offered_when_the_book_starts_here_anew() {
 }
 
 /// An offer left with Back is no choice: nothing is sent over the
-/// further position, and it is offered again at the next opening.
+/// further position. It means not now: the same position is not offered
+/// again at the next opening, only one the server moved to.
 #[test]
 fn leaving_the_offer_without_a_choice_sends_nothing() {
     let mut sync = with_books();
@@ -238,7 +239,13 @@ fn leaving_the_offer_without_a_choice_sends_nothing() {
     sync.kernel.suspend(now);
     assert!(sync.calls().iter().all(|c| c.method != "PUT"));
     let calls = sync.open(BOOK, 1.0);
-    sync.answer(fetch(&calls), 200, &remote("0.8", "KOBO"));
+    let calls = sync.answer(fetch(&calls), 200, &remote("0.8", "KOBO"));
+    assert!(calls.is_empty(), "{calls:?}");
+    assert_ne!(sync.screen(), Some(CONFIRM));
+    let now = sync.later(60_000);
+    sync.kernel.resume(now);
+    let calls = sync.calls();
+    sync.answer(fetch(&calls), 200, &remote("0.9", "KOBO"));
     assert_eq!(sync.screen(), Some(CONFIRM));
 }
 
@@ -388,7 +395,7 @@ fn staying_is_remembered_for_that_position_only() {
     assert!(sync.gone.borrow().is_empty());
 
     // Back from sleep: fetched again, the same position not offered.
-    let now = sync.later(100);
+    let now = sync.later(60_000);
     sync.kernel.resume(now);
     let calls = sync.calls();
     sync.answer(fetch(&calls), 200, &remote("0.5", "KOBO"));
@@ -401,7 +408,7 @@ fn staying_is_remembered_for_that_position_only() {
     sync.run(actions::BACK);
 
     // Read on there meanwhile: offered by itself again.
-    let now = sync.later(100);
+    let now = sync.later(60_000);
     sync.kernel.resume(now);
     let calls = sync.calls();
     sync.answer(fetch(&calls), 200, &remote("0.6", "KOBO"));

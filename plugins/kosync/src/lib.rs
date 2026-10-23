@@ -12,9 +12,11 @@
 //!   opens and when the app comes back. If another device is further, a dialog offers to
 //!   go there (once for each position).
 //! - Nothing is sent for a book while its progress is being fetched, nor
-//!   while the dialog is open, nor before the server's progress was read
-//!   (a failed fetch is tried again first): a further position on the
-//!   server is never overwritten before the user chose to stay.
+//!   while the dialog is open or was left without a choice (offered
+//!   again when the server's position moves), nor before the server's
+//!   progress was read (a failed fetch is tried again first): a further
+//!   position on the server is never overwritten before the user chose
+//!   to stay.
 //! - *Sync progress* in the reading menu's *More* fetches the latest, then
 //!   sends this device's position unless another device is further.
 //! - The account (settings → *Progress sync*) keeps the user name in the
@@ -86,6 +88,9 @@ const PUSH_DUE: Event = Event::new("kosync.push-due");
 const PUSH_WITHIN: core::time::Duration = core::time::Duration::from_secs(30 * 60);
 /// Books switched from while Offline, their progress sent once allowed.
 const MOST_UNSENT: usize = 4;
+/// Books whose offer was left without a choice, kept so that it does not
+/// come again for the same position.
+const MOST_DISMISSED: usize = 4;
 
 /// Whether sending now keeps no radio on that would be off otherwise: the
 /// system runs Wi-Fi, or PaperPaw's radio is in a network already.
@@ -166,6 +171,10 @@ struct State {
     left: Vec<Hold>,
     /// A position the user chose not to go to: book and progress.
     declined: Option<(String, String)>,
+    /// Offers left without a choice (not now): book and the progress
+    /// offered. Offered again only when the server's progress differs;
+    /// nothing is sent over it meanwhile.
+    dismissed: Vec<(String, String)>,
     /// Book fingerprints already computed.
     digests: Vec<(String, String)>,
     /// Positions of books switched from while Offline, not sent yet.
@@ -559,11 +568,22 @@ impl State {
         // say, its position lost.
         let from_here =
             json::text(&body, "device_id") == Some(self.device_id.as_str()) && local > FURTHER;
+        let offered = format!("{remote}");
         let declined = self
             .declined
             .as_ref()
-            .is_some_and(|(p, r)| p == path && *r == format!("{remote}"));
-        if !from_here && remote > local + FURTHER && (manual || !declined) {
+            .is_some_and(|(p, r)| p == path && *r == offered);
+        let dismissed = self
+            .dismissed
+            .iter()
+            .any(|(p, r)| p == path && *r == offered);
+        let further = !from_here && remote > local + FURTHER;
+        if further && dismissed && !manual {
+            // Not now, the user said: held back still, without asking.
+            self.hold = Some(hold.unwrap_or_else(|| Hold::new(path)));
+            return;
+        }
+        if further && (manual || !declined) {
             // Further on another device: offer to go there, and send
             // nothing until the user chose.
             let device = json::text(&body, "device").unwrap_or("?");
@@ -590,13 +610,18 @@ impl State {
     /// The user closed the offer to go where another device is.
     fn answered(&mut self, env: &Env<'_>, answer: &confirm::Answered, out: &mut Vec<Command>) {
         let hold = self.hold.take_if(|h| h.path == answer.path);
+        self.dismissed.retain(|(p, _)| *p != answer.path);
         // Gone there: the reader tells the new position as it shows it.
         if answer.went {
             return;
         }
         if !answer.stay {
-            // Left without a choice: held back still, and offered again
-            // when the book is next opened.
+            // Left without a choice: not now. Held back still, and offered
+            // again when the server's progress is another.
+            self.dismissed
+                .push((answer.path.clone(), answer.percentage.clone()));
+            let extra = self.dismissed.len().saturating_sub(MOST_DISMISSED);
+            self.dismissed.drain(..extra);
             if self.hold.is_none() {
                 self.hold = Some(hold.unwrap_or_else(|| Hold::new(&answer.path)));
             } else {
@@ -735,6 +760,7 @@ static ACCOUNT: paperpaw_sdk::SettingExtra =
 static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed_text(USER.static_str(), "kosync.setting.user", "", GROUP)
         .with_extra(&ACCOUNT)
+        .kept_on_reset()
         .described("kosync.setting.user.help"),
     SettingSpec::fixed_switch(AUTO.static_str(), "kosync.setting.auto", true, GROUP)
         .described("kosync.setting.auto.help"),
@@ -746,6 +772,7 @@ static SETTINGS: [SettingSpec; 3] = [
         GROUP,
     )
     .with_extra(&ACCOUNT)
+    .kept_on_reset()
     .advanced()
     .described("kosync.setting.server.help"),
 ];
@@ -888,7 +915,8 @@ impl Plugin for Kosync {
             let mut state = s.borrow_mut();
             state.load(env);
             let path = state.current.as_ref().map(|c| c.path.clone());
-            if let Some(path) = path.filter(|_| state.may_send(env)) {
+            if let Some(path) = path.filter(|p| !state.pulled_lately(env, p) && state.may_send(env))
+            {
                 state.pull(env, out, &path, false);
             }
         })?;

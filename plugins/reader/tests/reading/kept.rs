@@ -48,6 +48,54 @@ fn a_position_that_cannot_be_read_is_not_written_over() {
     assert!(reading.kept().1 > 0);
 }
 
+/// A position the card fails to read is moved aside before the place
+/// read on is kept: its text is never lost, and the reader is told once.
+#[test]
+fn a_position_that_cannot_be_read_is_kept_aside() {
+    let storage = Shared::default();
+    let file = paperpaw_sdk::positions::file(BOOK);
+    let kept = b"[position]\nsection = 0\noffset = 9000\n";
+    storage.write(&file, kept).unwrap();
+    storage
+        .2
+        .set(Some(Box::leak(file.clone().into_boxed_str())));
+    let (mut reading, notices) = with_notices(storage.clone());
+    for _ in 0..3 {
+        reading.run(core_actions::NEXT_PAGE);
+    }
+    reading.run(core_actions::BACK);
+    let aside = format!("{file}.bad");
+    let found = [&file, &aside]
+        .into_iter()
+        .any(|path| storage.0.get(path).is_some_and(|data| data == kept));
+    assert!(found, "the position kept is lost");
+    let said = notices
+        .borrow()
+        .iter()
+        .filter(|n| n.contains("kept aside"))
+        .count();
+    assert_eq!(said, 1, "{:?}", notices.borrow());
+}
+
+/// A position the card fails to read once is read at the second try:
+/// the book opens there.
+#[test]
+fn a_position_read_at_the_second_try_opens_the_book_there() {
+    let storage = Shared::default();
+    let file = paperpaw_sdk::positions::file(BOOK);
+    storage
+        .write(&file, b"[position]\nsection = 0\noffset = 9000\n")
+        .unwrap();
+    let mut reading = Reading::new(storage.clone());
+    storage.2.set(Some(Box::leak(file.into_boxed_str())));
+    // Twice: the kernel tries a small file a second time by itself.
+    storage.4.set(Some(2));
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let (_, offset) = reading.kept();
+    assert!(offset > 8000, "opened at {offset}");
+}
+
 /// The reader's old `progress.ini` is read where no position is kept, kept
 /// as the position, and then removed: it never comes back over a newer
 /// one.

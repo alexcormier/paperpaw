@@ -10,6 +10,14 @@
 //! sizes and layouts), the reading progress, when it was made and last
 //! changed (seconds since 1970, 0 if not known), a snippet of the text
 //! and the note on it, separated by tabs.
+//!
+//! Offsets are those of one conversion of the book: with its own styles
+//! or without, say, the same text is at other offsets. So from version 2
+//! on (first line `# format 2`) each line also says, after the times,
+//! which conversion its offsets are in (16 hex digits, see
+//! [`relocate`]) and its start and end as XPointers, which fit every
+//! conversion (empty where there are none; the end is empty where it is
+//! the start). A file without any of that stays in version 1.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -17,7 +25,7 @@ use alloc::vec::Vec;
 use core::ops::ControlFlow;
 
 use crate::builtin::events;
-use crate::document::Locator;
+use crate::document::{Document, Locator};
 use crate::{Command, Storage, StorageError, files};
 
 /// Longest snippet kept with an annotation, in bytes, with the `…` that
@@ -28,6 +36,8 @@ const MAX_TEXT: usize = 240;
 const MAX_NOTE: usize = 3 * 1024;
 /// Longest annotations file changed.
 const MAX_FILE: u64 = 1 << 20;
+/// The version of the file with conversions and XPointers.
+const VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -72,6 +82,22 @@ pub struct Annotation {
     pub note: String,
 }
 
+/// Which conversion of the book an annotation's offsets are in, and its
+/// start and end as XPointers (either empty where there is none).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Anchor {
+    conversion: u64,
+    start: String,
+    end: String,
+}
+
+/// What an annotation is told by: its kind and place.
+type Key = (Kind, Locator, Locator);
+
+fn key(mark: &Mark) -> Key {
+    (mark.kind, mark.start, mark.end)
+}
+
 /// The file with the annotations of the book at `book`.
 pub fn file(book: &str) -> String {
     format!(
@@ -104,31 +130,37 @@ pub fn load_for_update(storage: &dyn Storage, book: &str) -> Result<Vec<Annotati
 /// Only where the annotations are, for drawing them: read line by line,
 /// without their texts.
 pub fn marks(storage: &dyn Storage, book: &str) -> Vec<Mark> {
-    each(storage, book, |line| fields(line).map(|(mark, _)| mark)).unwrap_or_default()
+    each(storage, book, |line, version| {
+        fields(line, version).map(|(mark, _)| mark)
+    })
+    .unwrap_or_default()
 }
 
-/// What `parse` makes of each line of the book's file, as it streams; a
-/// missing file has none. A file a newer PaperPaw marked with a later
-/// version ([`data::Format`](crate::data::Format)) is
+/// What `parse` makes of each line of the book's file (with the file's
+/// version), as it streams; a missing file has none. A file a newer
+/// PaperPaw marked with a later version
+/// ([`data::Format`](crate::data::Format)) is
 /// [`StorageError::InvalidData`]: not read, not written over.
 fn each<T>(
     storage: &dyn Storage,
     book: &str,
-    parse: impl Fn(&str) -> Option<T>,
+    parse: impl Fn(&str, u32) -> Option<T>,
 ) -> Result<Vec<T>, StorageError> {
     let mut all = Vec::new();
     let mut first = true;
     let mut newer = false;
+    let mut version = 1;
     let read = files::for_each_line(storage, &file(book), &mut |line| {
         if core::mem::take(&mut first) && line.starts_with(crate::data::MARK) {
-            newer = crate::data::Format::version_of(line) != 1;
+            version = crate::data::Format::version_of(line);
+            newer = !(1..=VERSION).contains(&version);
             return if newer {
                 ControlFlow::Break(())
             } else {
                 ControlFlow::Continue(())
             };
         }
-        all.extend(parse(line));
+        all.extend(parse(line, version));
         ControlFlow::Continue(())
     });
     match read {
@@ -138,9 +170,11 @@ fn each<T>(
     }
 }
 
-/// The mark a line describes, and the line's fields.
-fn fields(line: &str) -> Option<(Mark, Vec<&str>)> {
-    let fields: Vec<&str> = line.splitn(10, '\t').collect();
+/// The mark a line of a file of `version` describes, and the line's
+/// fields.
+fn fields(line: &str, version: u32) -> Option<(Mark, Vec<&str>)> {
+    let most = if version >= VERSION { 13 } else { 10 };
+    let fields: Vec<&str> = line.splitn(most, '\t').collect();
     let kind = match *fields.first()? {
         "b" => Kind::Bookmark,
         "h" => Kind::Highlight,
@@ -162,30 +196,60 @@ fn fields(line: &str) -> Option<(Mark, Vec<&str>)> {
 }
 
 /// Where the text is among a line's fields: before times were kept, it
-/// followed the progress.
+/// followed the progress; from version 2 on, the conversion and the
+/// XPointers come before it.
 fn text_field(fields: &[&str]) -> usize {
-    if fields.len() == 10 { 8 } else { 6 }
+    match fields.len() {
+        13 => 11,
+        10 => 8,
+        _ => 6,
+    }
 }
 
-fn parse(line: &str) -> Option<Annotation> {
-    let (mark, fields) = fields(line)?;
+fn parse(line: &str, version: u32) -> Option<Annotation> {
+    parse_anchored(line, version).map(|(a, _)| a)
+}
+
+/// The annotation a line describes, and where it was made, if that is
+/// known.
+fn parse_anchored(line: &str, version: u32) -> Option<(Annotation, Option<Anchor>)> {
+    let (mark, fields) = fields(line, version)?;
     let number = |i: usize| fields.get(i)?.parse::<i64>().ok();
     let percent = number(5)?.clamp(0, 100) as u8;
     let rest = text_field(&fields);
-    let (created, updated) = if rest == 8 {
+    let (created, updated) = if rest >= 8 {
         (number(6)?, number(7)?)
     } else {
         (0, 0)
     };
     let field = |i: usize| fields.get(i).copied().unwrap_or_default().to_string();
-    Some(Annotation {
+    let anchor = if rest == 11 {
+        u64::from_str_radix(fields[8], 16)
+            .ok()
+            .map(|conversion| Anchor {
+                conversion,
+                start: field(9),
+                end: field(10),
+            })
+    } else {
+        None
+    };
+    let annotation = Annotation {
         mark,
         percent,
         created,
         updated,
         text: field(rest),
         note: field(rest + 1),
-    })
+    };
+    Some((annotation, anchor))
+}
+
+/// A line of the file as [`save`] keeps it: one it does not read, or
+/// where an annotation was made.
+enum Kept {
+    Unread(String),
+    Anchor(Key, Anchor),
 }
 
 /// Keeps `annotations` as those of the book at `book`, sorted by
@@ -193,22 +257,57 @@ fn parse(line: &str) -> Option<Annotation> {
 /// written. Lines of the file this version does not read (a kind a newer
 /// PaperPaw added, or damaged) stay as they are; where the file cannot be
 /// read for them, nothing is written.
+///
+/// Where each was made stays known (see [`relocate`]) for those at the
+/// same place as before.
 pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) -> bool {
-    let unread =
-        |line: &str| (!line.trim().is_empty() && parse(line).is_none()).then(|| line.to_string());
-    let Ok(unread) = each(storage, book, unread) else {
+    let kept = |line: &str, version| match parse_anchored(line, version) {
+        Some((a, Some(anchor))) => Some(Kept::Anchor(key(&a.mark), anchor)),
+        Some((_, None)) => None,
+        None => (!line.trim().is_empty()).then(|| Kept::Unread(line.to_string())),
+    };
+    let Ok(kept) = each(storage, book, kept) else {
         return false;
     };
-    let mut all: Vec<&Annotation> = annotations.iter().collect();
-    all.sort_by_key(|a| (a.mark.start, a.mark.end));
+    let (mut anchors, mut unread) = (Vec::new(), Vec::new());
+    for line in kept {
+        match line {
+            Kept::Unread(line) => unread.push(line),
+            Kept::Anchor(key, anchor) => anchors.push((key, anchor)),
+        }
+    }
+    let all = annotations
+        .iter()
+        .map(|a| {
+            let found = anchors.iter().position(|(k, _)| *k == key(&a.mark));
+            (a, found.map(|i| anchors.swap_remove(i).1))
+        })
+        .collect();
+    write(storage, book, all, &unread)
+}
+
+/// Writes `all` (each with where it was made, if known) and the lines
+/// `unread` as the annotations of the book at `book`; `false` where they
+/// could not be written.
+fn write(
+    storage: &dyn Storage,
+    book: &str,
+    mut all: Vec<(&Annotation, Option<Anchor>)>,
+    unread: &[String],
+) -> bool {
+    all.sort_by_key(|(a, _)| (a.mark.start, a.mark.end));
+    let anchored = all.iter().any(|(_, anchor)| anchor.is_some());
     let mut out = String::new();
-    for a in all {
+    if anchored {
+        out.push_str(&format!("{}{VERSION}\n", crate::data::MARK));
+    }
+    for (a, anchor) in all {
         let kind = match a.mark.kind {
             Kind::Bookmark => 'b',
             Kind::Highlight => 'h',
         };
         out.push_str(&format!(
-            "{kind}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "{kind}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t",
             a.mark.start.section,
             a.mark.start.offset,
             a.mark.end.section,
@@ -216,12 +315,20 @@ pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) -> bo
             a.percent,
             a.created,
             a.updated,
+        ));
+        match anchor {
+            Some(x) => out.push_str(&format!("{:016x}\t{}\t{}\t", x.conversion, x.start, x.end)),
+            None if anchored => out.push_str("\t\t\t"),
+            None => {}
+        }
+        out.push_str(&format!(
+            "{}\t{}\n",
             one_line(&a.text),
             stored_note(&a.note)
         ));
     }
     for line in unread {
-        out.push_str(&line);
+        out.push_str(line);
         out.push('\n');
     }
     let path = file(book);
@@ -327,6 +434,114 @@ pub fn remove(storage: &dyn Storage, book: &str, remove: impl Fn(&Mark) -> bool)
     all.len() != before && save(storage, book, &all)
 }
 
+/// Finds the annotations of the book at `book` in conversion
+/// `conversion` of it (as `reading::conversion` names it), opened as
+/// `doc`: those made in another conversion by their XPointers, so that
+/// they cover the same text. Those not known in any conversion yet
+/// (added since, or kept before conversions were) are taken as of this
+/// one, and their XPointers kept. One that cannot be found stays as it
+/// is, never removed. `Ok(true)` where they changed and are saved; an
+/// error where the file cannot be read or written, nothing changed then.
+///
+/// A reader calls it when it opens a book and after annotations were
+/// added, before it shows them; so does a plugin that adds annotations
+/// at the places of a conversion it opened. Where all are in this
+/// conversion, the file is only read through, line by line.
+pub fn relocate(
+    storage: &dyn Storage,
+    book: &str,
+    conversion: u64,
+    doc: &dyn Document,
+) -> Result<bool, StorageError> {
+    // Without XPointers nothing can be found again: the offsets stay.
+    if doc.xpointer(storage, Locator::START).is_none() {
+        return Ok(false);
+    }
+    match storage.size(&file(book)) {
+        Err(StorageError::NotFound) => return Ok(false),
+        Err(e) => return Err(e),
+        Ok(size) if size > MAX_FILE => return Err(StorageError::TooLarge),
+        Ok(_) => {}
+    }
+    let due = |line: &str, version| {
+        let (_, anchor) = parse_anchored(line, version)?;
+        anchor
+            .is_none_or(|x| x.conversion != conversion && !x.start.is_empty())
+            .then_some(())
+    };
+    if each(storage, book, due)?.is_empty() {
+        return Ok(false);
+    }
+    let read = |line: &str, version| match parse_anchored(line, version) {
+        Some(read) => Some(Ok(read)),
+        None => (!line.trim().is_empty()).then(|| Err(line.to_string())),
+    };
+    let (mut all, mut unread) = (Vec::new(), Vec::new());
+    for line in each(storage, book, read)? {
+        match line {
+            Ok(read) => all.push(read),
+            Err(line) => unread.push(line),
+        }
+    }
+    let mut changed = false;
+    for (a, anchor) in &mut all {
+        match anchor {
+            Some(x) if x.conversion == conversion || x.start.is_empty() => {}
+            Some(x) => {
+                if let Some((start, end)) = found(storage, doc, x) {
+                    (a.mark.start, a.mark.end) = (start, end);
+                    x.conversion = conversion;
+                    changed = true;
+                }
+            }
+            None => {
+                *anchor = Some(anchor_of(storage, doc, conversion, &a.mark));
+                changed = true;
+            }
+        }
+    }
+    if !changed {
+        return Ok(false);
+    }
+    let all = all.iter_mut().map(|(a, x)| (&*a, x.take())).collect();
+    if write(storage, book, all, &unread) {
+        Ok(true)
+    } else {
+        Err(StorageError::Io)
+    }
+}
+
+/// Where the annotation made at `x` is in `doc`, by its XPointers: its
+/// start and end.
+fn found(storage: &dyn Storage, doc: &dyn Document, x: &Anchor) -> Option<(Locator, Locator)> {
+    let start = doc.locate_xpointer(storage, &x.start)?;
+    if x.end.is_empty() {
+        return Some((start, start));
+    }
+    let end = doc.locate_xpointer(storage, &x.end)?;
+    (start < end).then_some((start, end))
+}
+
+/// Where `mark` is made in conversion `conversion`, opened as `doc`:
+/// without XPointers where it has none.
+fn anchor_of(storage: &dyn Storage, doc: &dyn Document, conversion: u64, mark: &Mark) -> Anchor {
+    let xpointer = |at| {
+        doc.xpointer(storage, at)
+            .filter(|x| !x.is_empty() && !x.contains(['\t', '\n', '\r']))
+    };
+    let end = if mark.end == mark.start {
+        Some(String::new())
+    } else {
+        xpointer(mark.end)
+    };
+    let (start, end) = xpointer(mark.start).zip(end).unwrap_or_default();
+    Anchor {
+        conversion,
+        start,
+        end,
+    }
+}
+
 /// The event telling that the annotations of the book at `book` changed.
 pub fn changed(book: &str) -> Command {
     events::ANNOTATIONS_CHANGED.emit(events::AnnotationsChanged {
@@ -399,7 +614,7 @@ mod tests {
         assert!(!set_note(&storage, book, Locator::new(1, 10), "x", 0));
         assert_eq!(storage.0.get(&file(book)), Some(before));
         // Written by a newer PaperPaw: left as it is.
-        let newer = MemoryStorage::new().with(&file(book), "# format 2\nh\t1\t2\t1\t3\t0\tx\t");
+        let newer = MemoryStorage::new().with(&file(book), "# format 3\nh\t1\t2\t1\t3\t0\tx\t");
         assert!(!add(&newer, book, highlight(1, 2, "x")));
         assert!(load(&newer, book).is_empty());
         assert_eq!(
@@ -433,7 +648,7 @@ mod tests {
 
     #[test]
     fn lines_without_times_are_read() {
-        let a = parse("h\t1\t10\t1\t20\t5\tsome text\tits note").unwrap();
+        let a = parse("h\t1\t10\t1\t20\t5\tsome text\tits note", 1).unwrap();
         assert_eq!((a.created, a.updated), (0, 0));
         assert_eq!(
             (a.text.as_str(), a.note.as_str()),

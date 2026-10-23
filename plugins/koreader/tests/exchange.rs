@@ -316,6 +316,35 @@ fn changes_here_are_passed_on_to_koreader() {
     assert_eq!(device.locate(new.str("pos1").unwrap()), end);
 }
 
+/// Every annotation removed on one side goes on the other too: in
+/// KOReader, they go here when the book is opened; here, KOReader is told
+/// when the reader says so.
+#[test]
+fn everything_removed_on_one_side_goes_on_the_other() {
+    let mut device = Device::new(Some(METADATA.as_bytes()));
+    device.open();
+    assert_eq!(device.ours().len(), 2);
+    device
+        .storage
+        .write(SIDECAR, b"return { [\"annotations\"] = {} }")
+        .unwrap();
+    device.open();
+    assert!(device.ours().is_empty());
+    assert_eq!(device.changed.borrow().len(), 2);
+    assert!(!device.storage.exists(EXCHANGE));
+
+    let mut device = Device::new(Some(METADATA.as_bytes()));
+    device.open();
+    assert!(annotations::remove(&device.storage, BOOK, |_| true));
+    let changed = AnnotationsChanged::new(BOOK.to_string());
+    device.send(events::ANNOTATIONS_CHANGED, &changed);
+    assert!(device.storage.exists(EXCHANGE));
+    assert!(device.passed().is_empty());
+    // Opened again before KOReader took it over: nothing comes back.
+    device.open();
+    assert!(device.ours().is_empty());
+}
+
 #[test]
 fn books_without_a_koreader_folder_are_left_alone() {
     let mut device = Device::new(None);
@@ -470,4 +499,73 @@ fn a_moved_book_takes_its_koreader_folder_along() {
             .storage
             .exists("books/new/wonder.sdr/alice.epub.annotations.lua")
     );
+}
+
+/// The book with styles of its own before the highlighted words: with
+/// them, its text holds runs the conversion without them lacks, so the
+/// words are at other offsets in each.
+fn styled_epub() -> Vec<u8> {
+    let styled = r#"<span style="font-weight: bold">was</span>"#;
+    let ch1 = format!(
+        "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>\
+         <p style=\"text-align: center\">Alice {styled} beginning {styled} tired.</p>\
+         <p>So she was considering in her own mind.</p></body></html>"
+    );
+    ZipBuilder::new()
+        .stored("mimetype", "application/epub+zip")
+        .deflated("META-INF/container.xml", CONTAINER)
+        .deflated("OEBPS/content.opf", OPF)
+        .deflated("OEBPS/ch1.xhtml", ch1)
+        .deflated("OEBPS/ch2.xhtml", CH2)
+        .build()
+}
+
+/// A highlight both sides have stays one highlight when the book's own
+/// styles are switched off: ours is found by its XPointer at the places
+/// of the other conversion, where KOReader's is, so neither is taken for
+/// removed or new, and nothing changes on either side.
+#[test]
+fn switching_the_books_styles_changes_nothing_on_either_side() {
+    let metadata = r#"return { annotations = {
+        { datetime = "2026-10-01 10:00:00", drawer = "lighten", note = "Mine",
+          page = "/body/DocFragment[1]/body/p[2]/text().3",
+          pos0 = "/body/DocFragment[1]/body/p[2]/text().3",
+          pos1 = "/body/DocFragment[1]/body/p[2]/text().6", text = "she" },
+    } }"#;
+    let mut device = Device::new(Some(metadata.as_bytes()));
+    device.storage.write(BOOK, &styled_epub()).unwrap();
+    device.open();
+    let before = device.ours();
+    assert_eq!(before.len(), 1, "{before:?}");
+    assert_eq!(device.changed.borrow().len(), 1);
+    device.now += 100;
+    device
+        .kernel
+        .set_setting(Instant(device.now), "core.publisher-styles", "off")
+        .unwrap();
+    device.open();
+    let ours = device.ours();
+    assert_eq!(ours.len(), 1, "{ours:?}");
+    let plain = device.kernel.formats().options().publisher_styles(false);
+    let doc = device
+        .kernel
+        .formats()
+        .open_with(&device.storage, BOOK, &plain)
+        .unwrap();
+    let at = |x: &str| doc.locate_xpointer(&device.storage, x).unwrap();
+    assert_eq!(
+        (ours[0].mark.start, ours[0].mark.end),
+        (
+            at("/body/DocFragment[1]/body/p[2]/text().3"),
+            at("/body/DocFragment[1]/body/p[2]/text().6")
+        )
+    );
+    assert_ne!(ours[0].mark.start, before[0].mark.start, "the text moved");
+    assert_eq!(
+        (&ours[0].note, ours[0].created),
+        (&before[0].note, before[0].created)
+    );
+    // Neither side changed.
+    assert_eq!(device.changed.borrow().len(), 1);
+    assert!(!device.storage.exists(EXCHANGE));
 }

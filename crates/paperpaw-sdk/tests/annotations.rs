@@ -1,7 +1,9 @@
 //! The annotations file (`.paperpaw/annotations/<hash>.txt`): what is
 //! saved comes back (any text and note, tabs and line breaks folded into
 //! spaces), and hostile files (wrong field counts, bad numbers, invalid
-//! UTF-8, huge lines, duplicates) are read without panics.
+//! UTF-8, huge lines, duplicates) are read without panics. Annotations
+//! made in one conversion of a book are found again in another by their
+//! XPointers, and none is lost on the way.
 
 #![allow(
     clippy::unwrap_used,
@@ -10,7 +12,7 @@
 )]
 
 use paperpaw_sdk::annotations::{self, Annotation, Kind, Mark};
-use paperpaw_sdk::document::Locator;
+use paperpaw_sdk::document::{Block, Document, DocumentError, Locator, Metadata};
 use paperpaw_sdk::{MemoryStorage, Storage};
 use proptest::prelude::*;
 
@@ -442,4 +444,195 @@ fn an_oversized_file_is_not_overwritten_by_add() {
         kept == big.as_bytes(),
         "the annotations kept before are gone"
     );
+}
+
+/// A book in one conversion: each character `scale` bytes from `shift`
+/// on (style runs in between, say), its XPointers `/p/text().<char>`
+/// alike in all. Characters from `lost` on cannot be found by them.
+struct Converted {
+    scale: u32,
+    shift: u32,
+    lost: u32,
+    metadata: Metadata,
+}
+
+impl Converted {
+    fn new(scale: u32, shift: u32) -> Self {
+        Self {
+            scale,
+            shift,
+            lost: u32::MAX,
+            metadata: Metadata::default(),
+        }
+    }
+
+    fn at(&self, section: u32, char: u32) -> Locator {
+        Locator::new(section, self.shift + char * self.scale)
+    }
+}
+
+impl Document for Converted {
+    fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
+
+    fn sections(&self) -> u32 {
+        4
+    }
+
+    fn section_len(&self, _: u32) -> u32 {
+        10_000
+    }
+
+    fn block_at(&self, _: &dyn Storage, _: Locator) -> Result<Option<Block>, DocumentError> {
+        Ok(None)
+    }
+
+    /// Before the first character, the chapter's: found nowhere.
+    fn xpointer(&self, _: &dyn Storage, at: Locator) -> Option<String> {
+        let chapter = format!("/body/DocFragment[{}]/body", at.section + 1);
+        Some(match at.offset.checked_sub(self.shift) {
+            Some(bytes) => format!("{chapter}/p/text().{}", bytes / self.scale),
+            None => chapter,
+        })
+    }
+
+    fn locate_xpointer(&self, _: &dyn Storage, xpointer: &str) -> Option<Locator> {
+        let rest = xpointer.strip_prefix("/body/DocFragment[")?;
+        let (section, rest) = rest.split_once(']')?;
+        let char: u32 = rest.strip_prefix("/body/p/text().")?.parse().ok()?;
+        let section = section.parse::<u32>().ok()?.checked_sub(1)?;
+        (char < self.lost).then(|| self.at(section, char))
+    }
+}
+
+/// The two conversions of a book: with its own styles (conversion 1)
+/// and without them (conversion 2).
+fn conversions() -> (Converted, Converted) {
+    (Converted::new(2, 10), Converted::new(1, 0))
+}
+
+/// A highlight of characters `from..to` in conversion `doc`.
+fn made_in(doc: &Converted, from: u32, to: u32, note: &str) -> Annotation {
+    let mut a = annotation(Kind::Highlight, (1, 0), (1, 0), "words", note);
+    (a.mark.start, a.mark.end) = (doc.at(1, from), doc.at(1, to));
+    a
+}
+
+/// A highlight made in one conversion of the book covers the same text
+/// in another: found by its XPointer when the book is opened so, and
+/// again when it is back in the first. Changes by those who know nothing
+/// of conversions (a note, another annotation) keep where it was made.
+#[test]
+fn a_highlight_is_found_again_in_another_conversion() {
+    let (styled, plain) = conversions();
+    let storage = MemoryStorage::new();
+    let first = made_in(&styled, 5, 9, "");
+    assert!(annotations::add(&storage, BOOK, first.clone()));
+    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
+    assert!(annotations::set_note(
+        &storage,
+        BOOK,
+        first.mark.start,
+        "mine",
+        7
+    ));
+    assert!(annotations::add(
+        &storage,
+        BOOK,
+        made_in(&styled, 20, 30, "")
+    ));
+    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
+    // Nothing to do in the same conversion: the file is not written.
+    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(false));
+    assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(true));
+    let all = annotations::load(&storage, BOOK);
+    let places: Vec<_> = all.iter().map(|a| (a.mark.start, a.mark.end)).collect();
+    assert_eq!(
+        places,
+        [
+            (plain.at(1, 5), plain.at(1, 9)),
+            (plain.at(1, 20), plain.at(1, 30))
+        ]
+    );
+    assert_eq!((all[0].note.as_str(), all[0].updated), ("mine", 7));
+    // Back with the styles: where they were made.
+    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
+    let all = annotations::load(&storage, BOOK);
+    assert_eq!(
+        (all[0].mark.start, all[0].mark.end),
+        (first.mark.start, first.mark.end)
+    );
+    assert_eq!(all[1].mark.start, styled.at(1, 20));
+}
+
+/// Annotations kept before conversions were (version 1, 8 and 10
+/// fields) are taken as of the conversion the book is opened in first,
+/// and none is lost: each keeps its text, note and times, lines not
+/// understood stay as they are, and in another conversion each is found
+/// again.
+#[test]
+fn annotations_of_before_are_taken_over_without_loss() {
+    let (styled, plain) = conversions();
+    let unknown = "u\t1\t12\t1\t20\t9\t0\t0\tunderlined by a newer version\tmy note";
+    let text = format!(
+        "h\t1\t20\t1\t40\t12\tA note of old\n\
+         b\t2\t10\t2\t10\t20\t1760000000\t1760000500\tChapter 2\t\n\
+         {unknown}\n"
+    );
+    let storage = with_file(text.as_bytes());
+    let before = annotations::load(&storage, BOOK);
+    assert_eq!(before.len(), 2);
+    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
+    assert_eq!(annotations::load(&storage, BOOK), before);
+    let file = String::from_utf8(storage.get(&annotations::file(BOOK)).unwrap()).unwrap();
+    assert!(file.starts_with("# format 2\n"), "{file}");
+    assert!(file.lines().any(|l| l == unknown), "{file}");
+    assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(true));
+    let all = annotations::load(&storage, BOOK);
+    assert_eq!(all.len(), 2);
+    assert_eq!(
+        (all[0].mark.start, all[0].mark.end),
+        (plain.at(1, 5), plain.at(1, 15))
+    );
+    assert_eq!(
+        (all[1].mark.start, all[1].mark.end),
+        (plain.at(2, 0), plain.at(2, 0))
+    );
+    for (a, b) in all.iter().zip(&before) {
+        assert_eq!(
+            (&a.text, &a.note, a.created, a.updated),
+            (&b.text, &b.note, b.created, b.updated)
+        );
+    }
+}
+
+/// An annotation that cannot be found in the conversion the book is
+/// opened in is kept where it was, never removed, and found again in its
+/// own.
+#[test]
+fn an_annotation_that_cannot_be_found_is_kept() {
+    let (styled, mut plain) = conversions();
+    plain.lost = 100;
+    let storage = MemoryStorage::new();
+    // Before the first character: its XPointer is found nowhere.
+    let early = annotation(Kind::Bookmark, (1, 2), (1, 2), "first", "");
+    let lost = made_in(&styled, 200, 210, "kept");
+    annotations::save(
+        &storage,
+        BOOK,
+        &[made_in(&styled, 5, 9, ""), lost.clone(), early.clone()],
+    );
+    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
+    assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(true));
+    let all = annotations::load(&storage, BOOK);
+    assert_eq!(all.len(), 3);
+    assert!(all.iter().any(|a| a.mark == early.mark));
+    assert!(all.iter().any(|a| a.mark.start == plain.at(1, 5)));
+    assert!(all.contains(&lost), "{all:?}");
+    // Removing the others leaves it, and in its own conversion it is
+    // where it was made.
+    assert!(annotations::remove(&storage, BOOK, |m| m.start != lost.mark.start));
+    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(false));
+    assert_eq!(annotations::load(&storage, BOOK), [lost]);
 }
