@@ -337,6 +337,58 @@ fn small_touch_targets() {
     assert!(issues[0].message.contains("3.5 mm"), "{issues:?}");
 }
 
+/// Narrow keys pass in a row of many on the keyboard's screen only.
+#[test]
+fn narrow_keys_pass_on_the_keyboard_alone() {
+    let image = paper();
+    let parts: Vec<_> = (0..10u16)
+        .map(|i| d(Role::Button, "q", Rect::new(26 + i * 43, 400, 43, 70)))
+        .collect();
+    let mut scene = scene(&image, parts);
+    scene.ui.finger = 61;
+    assert_eq!(checks(&touch_targets(&scene)), [TOUCH_TARGET]);
+    let scene = scene.keyboard(true);
+    assert!(touch_targets(&scene).is_empty());
+}
+
+/// A word split onto two lines in a box drawn tight round it is still
+/// found; a button's own label is looked at even where it holds a text
+/// of something else.
+#[test]
+fn tight_texts_and_buttons_with_other_words_are_looked_at() {
+    let mut image = paper();
+    word(&mut image, 30, 10, 4, 16);
+    word(&mut image, 30, 30, 3, 16);
+    let tight = vec![d(Role::Text, "Wrapped", Rect::new(30, 10, 70, 36))];
+    assert_eq!(checks(&wrap(&scene(&image, tight))), [WRAP]);
+    let mut image = paper();
+    word(&mut image, 40, 110, 4, 16);
+    word(&mut image, 40, 130, 3, 16);
+    let parts = vec![
+        d(Role::Button, "Wrapped", Rect::new(26, 100, 120, 120)),
+        d(Role::Text, "Note", Rect::new(40, 190, 40, 20)),
+    ];
+    assert_eq!(checks(&wrap(&scene(&image, parts))), [WRAP]);
+}
+
+/// Words on a box filled round them, its corners round (a day marked in
+/// a calendar): one line, not three.
+#[test]
+fn words_on_a_filled_box_with_round_corners_are_one_line() {
+    let mut image = paper();
+    let cell = Rect::new(100, 100, 45, 45);
+    fill(&mut image, cell, INK);
+    // The paper left in its round corners.
+    for (x, y) in [(100, 100), (143, 100), (100, 143), (143, 143)] {
+        fill(&mut image, Rect::new(x, y, 2, 2), PAPER);
+    }
+    for i in 0..2u16 {
+        fill(&mut image, Rect::new(112 + i * 12, 112, 6, 20), PAPER);
+    }
+    let parts = vec![d(Role::Text, "14", cell)];
+    assert!(wrap(&scene(&image, parts)).is_empty());
+}
+
 #[test]
 fn focus_must_change_the_picture() {
     let before = paper();

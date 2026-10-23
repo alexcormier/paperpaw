@@ -279,13 +279,15 @@ pub fn wrap(scene: &Scene<'_>) -> Vec<Issue> {
         if d.role == Role::Text && label.contains(char::is_whitespace) {
             continue;
         }
-        // A button's words told as a text of their own where they are
-        // drawn apart from the rest of the button (a tool's name, maybe
-        // its short one, below its icon): that text is looked at, not the
-        // button with its icon.
+        // A button's label told as a text of its own where it is drawn
+        // apart from the rest of the button (a tool's name, or its short
+        // form, below its icon): that text is looked at, not the button
+        // with its icon.
         let apart = |b: &Described, t: &Described| {
+            let (label, words) = (b.label.trim().to_lowercase(), t.label.trim().to_lowercase());
             t.role == Role::Text
-                && says_something(&t.label)
+                && says_something(&words)
+                && label.contains(&words)
                 && inside(t.area, b.area)
                 && t.area.height * 3 < b.area.height * 2
         };
@@ -315,11 +317,21 @@ pub fn wrap(scene: &Scene<'_>) -> Vec<Issue> {
             continue;
         }
         // Lines of text lie a leading apart; a thin line drawn through
-        // the letters (a flip clock's tiles) is no break.
-        // A frame round it (a button's, a day marked in a calendar) is no
-        // line of it.
+        // the letters (a flip clock's tiles) is no break. A frame round it
+        // (a button's, a day marked in a calendar) is no line of it; the
+        // letters of a text boxed tightly are left as they are.
         let mut ink = text_ink(scene, d, region, INK);
-        ink.clear_edges();
+        // Words in a box filled round them (a day marked in a calendar):
+        // looked at on the box's fill.
+        if let Some((boxed, (x, y))) = ink.filled_box() {
+            let fill = scene.luma(u32::from(x), u32::from(y));
+            ink = scene.ink_with(boxed.inset(1, 1), fill, INK);
+        }
+        if d.role == Role::Button || ink.framed() {
+            ink.clear_edges();
+        }
+        // What a filled box's round corners leave in the corners.
+        ink.clear_corners();
         let tallest = ink.lines(2).iter().map(|l| l.1).max().unwrap_or(0);
         let lines = ink.lines((tallest / 6).max(3));
         if lines.len() >= 2 {
@@ -1001,7 +1013,8 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
             .parts(&[Role::Button])
             .filter(|b| b.area.y == d.area.y && b.area.height == d.area.height)
             .count() as u16;
-        let key = d.role == Role::Button
+        let key = scene.keyboard
+            && d.role == Role::Button
             && peers >= 8
             && d.area.height >= least
             && d.area.width + scene.ui.tolerance() >= scene.screen.width / peers / 2;

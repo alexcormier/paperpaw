@@ -42,17 +42,16 @@ impl DrawerScreen {
         // name takes two (its icon as large as the others').
         let row = (u32::from(area.width) / COLUMNS * 4 / 5).max(style.row);
         let tools: Vec<Id> = pages::tools(env).into_iter().map(|(id, _)| id).collect();
-        let cell = Rect::new(0, 0, (u32::from(area.width) / COLUMNS) as u16, row as u16);
+        // The names' lines as they fall in a row grown by that line.
+        let line = u32::from(paperpaw_sdk::widgets::line_height(env, style.small));
+        let width = (u32::from(area.width) / COLUMNS) as u16;
+        let cell = Rect::new(0, 0, width, (row + line) as u16);
         let lines = tools
             .iter()
             .map(|id| blocks::tool_name_lines(env, cell, id))
             .max()
             .unwrap_or(0);
-        let more = if lines > 1 {
-            u32::from(paperpaw_sdk::widgets::line_height(env, style.small))
-        } else {
-            0
-        };
+        let more = if lines > 1 { line } else { 0 };
         Self {
             list: ListView::new(area, row + more)
                 .columns(COLUMNS)
