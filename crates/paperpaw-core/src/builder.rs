@@ -36,6 +36,7 @@ pub struct KernelBuilder {
     catalog_device: Option<&'static str>,
     random: paperpaw_sdk::random::Random,
     memory: paperpaw_sdk::memory::Memory,
+    started: paperpaw_sdk::power::Start,
 }
 
 impl fmt::Debug for KernelBuilder {
@@ -161,6 +162,14 @@ impl KernelBuilder {
     /// known.
     pub fn memory(mut self, read: fn() -> Option<paperpaw_sdk::memory::MemoryUse>) -> Self {
         self.memory = paperpaw_sdk::memory::Memory::new(read);
+        self
+    }
+
+    /// How PaperPaw started this time ([`paperpaw_sdk::power::Start`]),
+    /// for plugins: a wake, the power switched on, a restart by a
+    /// watchdog. Without, it is not known.
+    pub fn started(mut self, start: paperpaw_sdk::power::Start) -> Self {
+        self.started = start;
         self
     }
 
@@ -464,6 +473,7 @@ impl KernelBuilder {
                 secrets: Default::default(),
                 random: self.random,
                 memory: self.memory,
+                started: self.started,
                 storage,
                 recall,
                 keymap: Keymap::default(),
@@ -973,6 +983,7 @@ impl Kernel {
             catalog_device: None,
             random: paperpaw_sdk::random::Random::NONE,
             memory: paperpaw_sdk::memory::Memory::NONE,
+            started: paperpaw_sdk::power::Start::Unknown,
         }
     }
 }

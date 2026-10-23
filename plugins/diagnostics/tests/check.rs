@@ -1,8 +1,10 @@
 //! The device check with the real kernel: it goes through the steps a
 //! device has and skips the others, takes the buttons by name, fills the
 //! touch targets, tries the card, and writes the report after each
-//! answer; it goes on where it was when opened again, and a sleep counts
-//! once the check shows again.
+//! answer; it goes on where it was when opened again. A sleep counts once
+//! the device went to sleep and woke, not when it started again instead
+//! or never slept; the reader's own light comes back after a check that
+//! ended while trying it.
 
 #![allow(
     clippy::unwrap_used,
@@ -10,14 +12,15 @@
     reason = "tests panic on purpose when something is wrong"
 )]
 
-use paperpaw_core::{Effects, Kernel};
+use paperpaw_core::{Effects, Kernel, KernelBuilder};
 use paperpaw_platform::{
     ButtonState, DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat,
     Point, PointerEvent, PointerPhase, PointerTool, Rotation,
 };
 use paperpaw_plugin_diagnostics::steps::REPORT;
 use paperpaw_plugin_diagnostics::{CHECK, Diagnostics, OPEN_CHECK};
-use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::builtin::{actions, settings};
+use paperpaw_sdk::power::Start;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::{MemoryStorage, Metrics, Storage};
 
@@ -55,17 +58,22 @@ struct Device {
 impl Device {
     /// A device whose card holds `report` already, if any.
     fn new(report: Option<&str>) -> Self {
+        let files: Vec<(&str, &str)> = report.map(|r| (REPORT, r)).into_iter().collect();
+        Self::with(&files, |builder| builder)
+    }
+
+    /// A device whose card holds `files`, its kernel as `setup` makes it.
+    fn with(files: &[(&str, &str)], setup: impl FnOnce(KernelBuilder) -> KernelBuilder) -> Self {
         let storage = MemoryStorage::new();
-        if let Some(report) = report {
-            storage.write(REPORT, report.as_bytes()).unwrap();
+        for (path, text) in files {
+            storage.write(path, text.as_bytes()).unwrap();
         }
-        let kernel = Kernel::builder(DEVICE)
+        let builder = Kernel::builder(DEVICE)
             .storage(storage)
             .user_config("[core]\nlanguage = en\n")
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
-            .plugin(Diagnostics)
-            .build()
-            .unwrap();
+            .plugin(Diagnostics);
+        let kernel = setup(builder).build().unwrap();
         let mut device = Self { kernel, now: 0 };
         let effects = device.kernel.start(Instant(0));
         device.settle(effects);
@@ -179,6 +187,13 @@ impl Device {
         }
     }
 
+    /// Moves the clock on by `ms`, running what is due.
+    fn wait(&mut self, ms: u64) {
+        self.now += ms;
+        let effects = self.kernel.tick(Instant(self.now));
+        self.settle(effects);
+    }
+
     fn report(&self) -> String {
         paperpaw_sdk::files::read_text(self.kernel.storage(), REPORT, 1 << 16).unwrap()
     }
@@ -280,27 +295,103 @@ fn it_goes_on_where_it_was() {
     );
 }
 
+/// Every step before the sleep answered; `sleep` the line about it.
+fn before_sleep(sleep: &str) -> String {
+    format!(
+        "screen: pass\nbuttons: pass\ntouch: pass\nlight: skip\nbattery: skip\n\
+         card: pass\nclock: skip\nwifi: skip\n{sleep}"
+    )
+}
+
+fn has(report: &str, line: &str) -> bool {
+    report.lines().any(|l| l == line)
+}
+
 #[test]
-fn a_sleep_counts_once_the_check_shows_again_and_all_can_start_over() {
-    // Asleep when last seen, every step before it answered.
-    let before = "\
-screen: pass
-buttons: pass
-touch: pass
-light: skip
-battery: skip
-card: pass
-clock: skip
-wifi: skip
-sleep: asleep
-";
-    let mut d = Device::new(Some(before));
+fn a_sleep_ended_by_the_power_counts_and_all_can_start_over() {
+    // Asleep when last seen, then switched on by the power button.
+    let report = before_sleep("sleep: asleep\n");
+    let mut d = Device::with(&[(REPORT, &report)], |b| b.started(Start::PowerOn));
     d.open_check();
-    assert!(d.report().lines().any(|l| l == "sleep: pass (woke)"));
+    assert!(has(&d.report(), "sleep: pass (woke)"), "{}", d.report());
     assert!(d.shows("Memory"), "{:?}", d.texts());
     d.choose("Pass");
     assert!(d.shows("Done"), "{:?}", d.texts());
     d.choose("Start over");
     assert!(d.shows("Screen"), "{:?}", d.texts());
     assert!(!d.report().contains("sleep:"), "{}", d.report());
+}
+
+#[test]
+fn a_start_again_instead_of_a_wake_fails() {
+    let report = before_sleep("sleep: asleep\n");
+    let mut d = Device::with(&[(REPORT, &report)], |b| b.started(Start::Restart));
+    d.open_check();
+    assert!(
+        has(&d.report(), "sleep: fail (started again instead of waking)"),
+        "{}",
+        d.report()
+    );
+}
+
+#[test]
+fn a_sleep_counts_once_the_device_went_to_sleep_and_woke() {
+    let report = before_sleep("");
+    let mut d = Device::with(&[(REPORT, &report)], |b| b.sleep(true));
+    d.open_check();
+    assert!(d.shows("Sleep"), "{:?}", d.texts());
+    d.choose("Sleep now");
+    // Asked, not yet asleep.
+    assert!(!d.report().contains("sleep:"), "{}", d.report());
+    d.now += 100;
+    let effects = d.kernel.suspend(Instant(d.now));
+    d.settle(effects);
+    assert!(has(&d.report(), "sleep: asleep"), "{}", d.report());
+    d.now += 5000;
+    let effects = d.kernel.resume(Instant(d.now));
+    d.settle(effects);
+    assert!(has(&d.report(), "sleep: pass (woke)"), "{}", d.report());
+    assert!(d.shows("Memory"), "{:?}", d.texts());
+}
+
+#[test]
+fn a_device_that_does_not_go_to_sleep_fails() {
+    let report = before_sleep("");
+    let mut d = Device::with(&[(REPORT, &report)], |b| b.sleep(true));
+    d.open_check();
+    d.choose("Sleep now");
+    // The shell never sends the kernel to sleep.
+    d.wait(11_000);
+    assert!(
+        has(&d.report(), "sleep: fail (did not go to sleep)"),
+        "{}",
+        d.report()
+    );
+}
+
+#[test]
+fn the_readers_own_light_comes_back_after_a_check_that_ended_trying_it() {
+    // The check ended while trying the light: the card still keeps the
+    // reader's own, the settings a level tried.
+    let light = paperpaw_sdk::data_path!("device-check-light.txt");
+    let report = "screen: pass\nbuttons: pass\ntouch: pass\n";
+    let mut d = Device::with(&[(REPORT, report), (light, "30 70\n")], |b| {
+        b.frontlight(true)
+    });
+    let level = |d: &Device| {
+        (
+            d.kernel.settings().read(&settings::FRONTLIGHT),
+            d.kernel.settings().read(&settings::FRONTLIGHT_WARMTH),
+        )
+    };
+    d.open_check();
+    assert!(d.shows("Front light"), "{:?}", d.texts());
+    // The light step began again, the reader's own kept as the card had it.
+    let kept = paperpaw_sdk::files::read_text(d.kernel.storage(), light, 64).unwrap();
+    assert_eq!(kept, "30 70\n");
+    for _ in 0..6 {
+        d.wait(1600);
+    }
+    assert_eq!(level(&d), (30, 70));
+    assert!(d.kernel.storage().size(light).is_err(), "kept no longer");
 }

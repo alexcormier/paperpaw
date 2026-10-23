@@ -1344,6 +1344,8 @@ struct Shared {
     random: paperpaw_sdk::random::Random,
     /// What memory is free (see [`KernelBuilder::memory`]).
     memory: paperpaw_sdk::memory::Memory,
+    /// How PaperPaw started (see [`KernelBuilder::started`]).
+    started: paperpaw_sdk::power::Start,
     /// Shared with font packs read where they are (see `Fonts::load`).
     storage: alloc::rc::Rc<dyn Storage>,
     /// What the storage read during the call going on (see `recall`).
@@ -1411,6 +1413,7 @@ impl Shared {
             random: self.random,
             memory: self.memory,
             clock: self.meter.clock(),
+            started: self.started,
             storage: self.storage.as_ref(),
             keys: &self.keymap,
             look: self.look.0,

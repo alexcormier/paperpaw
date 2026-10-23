@@ -177,8 +177,9 @@ Pro's. A port to a board like one PaperPaw knows is mostly a board file.
 Build the firmware with remote control over USB (the feature `remote`,
 on in the cargo aliases), which also builds in the diagnostics plugin.
 Then open **Tools → Device check** on the device. In a shell of another
-kind, the action `diagnostics.open-check` opens it (in the emulator:
-`--script run:diagnostics.open-check`). It walks through
+kind, the action `diagnostics.open-check` opens it (in the emulator,
+which runs scripts without its window:
+`--headless --script run:diagnostics.open-check,shot:check.png`). It walks through
 every part one page at a time, with buttons alone or by touch:
 
 | Page | What it checks |
@@ -201,7 +202,8 @@ to `.paperpaw/device-check.txt` on the card, and it goes on where it was
 when opened again.
 
 `tools/x4-remote.py` takes screenshots, fetches the report
-(`--pull .paperpaw/device-check.txt`) and the log, and says the heap's
+(`--pull .paperpaw/device-check.txt .`, the file and the folder to put
+it in) and the log, and says the heap's
 peak (`--help` lists it all).
 
 ## The pull request

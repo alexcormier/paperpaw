@@ -1431,6 +1431,7 @@ mod tests {
                 random: crate::random::Random::default(),
                 memory: crate::memory::Memory::NONE,
                 clock: crate::time::Clock::NONE,
+                started: crate::power::Start::Unknown,
                 storage: &self.storage,
             })
         }

@@ -200,6 +200,9 @@ pub struct Env<'a> {
     /// A monotonic clock in microseconds, for measuring how long work
     /// takes (see [`time::Clock`](crate::time::Clock)).
     pub clock: crate::time::Clock,
+    /// How PaperPaw started this time, where the shell can tell (see
+    /// [`power::Start`](crate::power::Start)).
+    pub started: crate::power::Start,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -350,6 +353,9 @@ pub struct EnvParts<'a> {
     /// A monotonic clock in microseconds, for measuring how long work
     /// takes (see [`time::Clock`](crate::time::Clock)).
     pub clock: crate::time::Clock,
+    /// How PaperPaw started this time, where the shell can tell (see
+    /// [`power::Start`](crate::power::Start)).
+    pub started: crate::power::Start,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -408,6 +414,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             random: p.random,
             memory: p.memory,
             clock: p.clock,
+            started: p.started,
             storage: p.storage,
         }
     }

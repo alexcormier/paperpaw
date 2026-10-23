@@ -21,7 +21,10 @@ change the plugin SDK.
   where the shell can tell (`paperpaw_sdk::memory`,
   `KernelBuilder::memory`; the X4s and the emulator do), and
   `Env::clock` is a monotonic clock in microseconds for measuring work
-  (`paperpaw_sdk::time::Clock`).
+  (`paperpaw_sdk::time::Clock`). `Env::started` says how PaperPaw
+  started (`paperpaw_sdk::power::Start`: switched on, woken, started
+  again by a watchdog or a panic; `KernelBuilder::started`, from the
+  chip's reset reason on the X4s).
 - Hints covered by another screen (a plugin's question, a notice opened
   over them) close and show again when their screen does, instead of
   staying below it, cut.

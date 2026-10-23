@@ -19,6 +19,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, settings};
+use paperpaw_sdk::power::Start;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::wifi::WifiCommand;
@@ -35,6 +36,12 @@ const WIFI_PAGE: &str = "wifi.open";
 const SCAN_MS: u64 = 20_000;
 /// How long each light level shows.
 const LIGHT_MS: u64 = 1500;
+/// How long the device may take to go to sleep once asked.
+const SLEEP_WAIT_MS: u64 = 10_000;
+/// The reader's own light while the light step changes it, beside the
+/// report: set again from there if the check ends unforeseen (a reset,
+/// the power cut), and removed once it is set again.
+const LIGHT_FILE: &str = paperpaw_sdk::data_path!("device-check-light.txt");
 /// The light's levels tried in turn: brightness and warmth in percent.
 const LIGHT_LEVELS: [(i64, i64); 5] = [(0, 50), (50, 50), (100, 50), (100, 0), (100, 100)];
 /// The card's test file, beside the report, and how it is written: in
@@ -135,11 +142,19 @@ pub(crate) struct Check {
     /// Charging seen and not charging seen, while on the battery page.
     charging_seen: [bool; 2],
     card: Option<CardTest>,
+    /// Why the light step could not begin, if it could not.
+    light_unkept: Option<String>,
+    /// The reader's own light as the card kept it, set again at the
+    /// start: the settings may still hold a level tried.
+    own_light: Option<(i64, i64)>,
     /// Networks found; `None` while looking.
     networks: Option<usize>,
     radio: Option<Radio>,
-    /// When looking for networks began.
+    /// When the radio was asked to come on, then when looking for
+    /// networks began.
     scan_from: Instant,
+    /// When the device was asked to sleep, while it has not gone to sleep.
+    sleep_asked: Option<Instant>,
 }
 
 impl Check {
@@ -161,13 +176,22 @@ impl Check {
             light: None,
             charging_seen: [false; 2],
             card: None,
+            light_unkept: None,
+            own_light: None,
             networks: None,
             radio: None,
             scan_from: env.now,
+            sleep_asked: None,
         };
-        // Asleep when last seen: whatever shows the check now woke.
+        // Asleep when last seen: how PaperPaw started tells whether it
+        // woke or was started again.
         if check.results.get(Step::Sleep) == Some(&Mark::Asleep) {
-            check.mark(env, Step::Sleep, Outcome::Pass, String::from("woke"));
+            let (outcome, note) = match env.started {
+                Start::PowerOn | Start::Wake => (Outcome::Pass, "woke"),
+                Start::Restart => (Outcome::Fail, "started again instead of waking"),
+                _ => (Outcome::Skip, "how it started is not known"),
+            };
+            check.mark(env, Step::Sleep, outcome, String::from(note));
         }
         check.step = check.results.next_open();
         check.layout = check.layout(env);
@@ -223,6 +247,7 @@ impl Check {
             // The card is tried once the page shows it is.
             Some(Step::Card) => cx.wake_at(env.now),
             Some(Step::Wifi) => {
+                // Until the radio is on, then while looking.
                 self.scan_from = env.now;
                 let on = env.wifi.is_some_and(|w| w.state.is_on());
                 self.radio = Some(Radio {
@@ -271,7 +296,10 @@ impl Check {
             Some(Step::Touch) if self.tapped.contains(&false) => return (None, String::new()),
             Some(Step::Touch) => (Outcome::Pass, String::from("corners and edges")),
             Some(Step::Light) if self.light.is_some() => return (None, String::new()),
-            Some(Step::Light) => (Outcome::Pass, String::from("brightness and warmth")),
+            Some(Step::Light) => match &self.light_unkept {
+                Some(e) => (Outcome::Skip, format!("own light not kept: {e}")),
+                None => (Outcome::Pass, String::from("brightness and warmth")),
+            },
             Some(Step::Battery) => steps::battery(env.status.battery, self.charging_seen),
             Some(Step::Card) => match &self.card {
                 Some(test) => test.verdict(),
@@ -295,15 +323,16 @@ impl Check {
     fn wifi_measured(&self, env: &Env<'_>) -> (Option<Outcome>, String) {
         let online = env.wifi.is_some_and(|w| w.state.is_online());
         let timed_out = env.now.since(self.scan_from) >= SCAN_MS;
+        let scanned = self.radio.is_none_or(|r| r.scanned);
+        let fail = |note: String| (Some(Outcome::Fail), note);
         match self.networks {
+            // Joined, the network found before it looked or not.
+            Some(n) if online => (Some(Outcome::Pass), format!("{n} networks found, joined")),
             None if online => (Some(Outcome::Pass), String::from("joined")),
             None if !timed_out => (None, String::new()),
-            None | Some(0) => (Some(Outcome::Fail), String::from("no networks found")),
-            Some(n) if online => (Some(Outcome::Pass), format!("{n} networks found, joined")),
-            Some(n) => (
-                Some(Outcome::Fail),
-                format!("{n} networks found, not joined"),
-            ),
+            None if !scanned => fail(String::from("the radio did not come on")),
+            None | Some(0) => fail(String::from("no networks found")),
+            Some(n) => fail(format!("{n} networks found, not joined")),
         }
     }
 
@@ -338,9 +367,10 @@ impl Check {
             Control::LightAgain => self.start_light(cx),
             Control::WifiPage => cx.command(Command::RunAction(Id::new_static(WIFI_PAGE))),
             Control::SleepNow => {
-                self.results.set(Step::Sleep, Mark::Asleep);
-                self.save(&env);
+                // Marked asleep when the device goes to sleep (SUSPEND).
+                self.sleep_asked = Some(env.now);
                 cx.command(Command::Sleep);
+                cx.wake_at(env.now.add_millis(SLEEP_WAIT_MS));
             }
             Control::StartOver => {
                 self.results = Results::default();
@@ -353,18 +383,38 @@ impl Check {
 
     fn start_light(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let kept = self.light.map_or_else(
-            || {
-                (
-                    env.settings.read(&settings::FRONTLIGHT),
-                    env.settings.read(&settings::FRONTLIGHT_WARMTH),
-                )
-            },
-            |l| l.kept,
-        );
+        let kept = self.own_light.take().unwrap_or_else(|| {
+            (
+                env.settings.read(&settings::FRONTLIGHT),
+                env.settings.read(&settings::FRONTLIGHT_WARMTH),
+            )
+        });
+        // Kept on the card first: nothing is changed unless it is.
+        let line = format!("{} {}\n", kept.0, kept.1);
+        if let Err(e) = env.storage.write(LIGHT_FILE, line.as_bytes()) {
+            self.light_unkept = Some(format!("{e:?}"));
+            self.redraw_page(cx);
+            return;
+        }
+        self.light_unkept = None;
         self.light = Some(LightTest { level: 0, kept });
         set_light(cx, LIGHT_LEVELS[0]);
         cx.wake_at(env.now.add_millis(LIGHT_MS));
+    }
+
+    /// Sets the reader's own light again from the card, where a check that
+    /// ended unforeseen left it while trying the light.
+    fn restore_light(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let Ok(text) = paperpaw_sdk::files::read_text(env.storage, LIGHT_FILE, 64) else {
+            return;
+        };
+        let mut numbers = text.split_whitespace().map(str::parse::<i64>);
+        if let (Some(Ok(brightness)), Some(Ok(warmth))) = (numbers.next(), numbers.next()) {
+            set_light(cx, (brightness, warmth));
+            self.own_light = Some((brightness, warmth));
+        }
+        forget_light(&env);
     }
 
     /// The next light level, or the reader's own again after the last.
@@ -388,6 +438,7 @@ impl Check {
     fn end_light(&mut self, cx: &mut Cx<'_, '_>) {
         if let Some(light) = self.light.take() {
             set_light(cx, light.kept);
+            forget_light(cx.env());
         }
     }
 
@@ -518,6 +569,7 @@ impl Screen for Check {
             self.redraw_page(cx);
         } else {
             self.started = true;
+            self.restore_light(cx);
             self.enter(self.step, cx);
         }
     }
@@ -616,6 +668,17 @@ impl Screen for Check {
             Some(Step::Light) => self.step_light(cx),
             // The search took too long: the page says so.
             Some(Step::Wifi) => self.redraw_page(cx),
+            Some(Step::Sleep)
+                if self
+                    .sleep_asked
+                    .is_some_and(|at| cx.env().now.since(at) >= SLEEP_WAIT_MS) =>
+            {
+                let env = *cx.env();
+                self.sleep_asked = None;
+                let note = String::from("did not go to sleep");
+                self.mark(&env, Step::Sleep, Outcome::Fail, note);
+                self.enter(self.results.next_open(), cx);
+            }
             _ => {}
         }
     }
@@ -641,10 +704,21 @@ impl Screen for Check {
                 {
                     radio.scanned = true;
                     cx.command(Command::Wifi(WifiCommand::Scan));
+                    // The search has its time from now.
+                    self.scan_from = env.now;
+                    cx.wake_at(env.now.add_millis(SCAN_MS));
                 }
                 self.redraw_page(cx);
             }
-            Some(Step::Sleep) if event == events::RESUME.id() => {
+            Some(Step::Sleep) if event == events::SUSPEND.id() && self.sleep_asked.is_some() => {
+                self.sleep_asked = None;
+                self.results.set(Step::Sleep, Mark::Asleep);
+                self.save(&env);
+            }
+            Some(Step::Sleep)
+                if event == events::RESUME.id()
+                    && self.results.get(Step::Sleep) == Some(&Mark::Asleep) =>
+            {
                 self.mark(&env, Step::Sleep, Outcome::Pass, String::from("woke"));
                 self.enter(self.results.next_open(), cx);
             }
@@ -905,6 +979,15 @@ fn card_test(env: &Env<'_>) -> CardTest {
         test.read_us = Some(c - b);
     }
     test
+}
+
+/// Removes the reader's own light kept on the card, once it is set again.
+fn forget_light(env: &Env<'_>) {
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "the file is gone or stays; kept, it only sets the reader's own light once more"
+    )]
+    let _ = env.storage.remove(LIGHT_FILE);
 }
 
 fn set_light(cx: &mut Cx<'_, '_>, (brightness, warmth): (i64, i64)) {

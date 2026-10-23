@@ -215,6 +215,19 @@ fn random(buf: &mut [u8]) -> bool {
     true
 }
 
+/// How this start came, from the chip's reason for its reset: a sleep
+/// that cut the power ends by the power coming again.
+fn started() -> paperpaw_sdk::power::Start {
+    use esp_hal::rtc_cntl::SocResetReason;
+    use paperpaw_sdk::power::Start;
+    match power::last_run().2 {
+        Some(SocResetReason::ChipPowerOn) => Start::PowerOn,
+        Some(SocResetReason::CoreDeepSleep) => Start::Wake,
+        Some(_) => Start::Restart,
+        None => Start::Unknown,
+    }
+}
+
 /// The heap and the stack free now, for diagnostics and plugins
 /// (`paperpaw_sdk::memory`).
 fn memory() -> Option<paperpaw_sdk::memory::MemoryUse> {
@@ -443,6 +456,7 @@ fn kernel(
         // Fully random while the radio is on, as when serving.
         .random(random)
         .memory(memory)
+        .started(started())
         // The panel refreshes on its own: a mark shows at once while slow
         // work goes on.
         .busy_mark(true)

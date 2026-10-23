@@ -2230,7 +2230,7 @@ pub mod paperpaw_sdk::memory
 pub struct paperpaw_sdk::memory::Memory
 impl paperpaw_sdk::memory::Memory
 pub const paperpaw_sdk::memory::Memory::NONE: Self
-pub const fn paperpaw_sdk::memory::Memory::new(fn() -> paperpaw_sdk::memory::MemoryUse) -> Self
+pub const fn paperpaw_sdk::memory::Memory::new(fn() -> core::option::Option<paperpaw_sdk::memory::MemoryUse>) -> Self
 pub fn paperpaw_sdk::memory::Memory::read(&self) -> core::option::Option<paperpaw_sdk::memory::MemoryUse>
 impl core::fmt::Debug for paperpaw_sdk::memory::Memory
 pub fn paperpaw_sdk::memory::Memory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -2367,6 +2367,11 @@ pub paperpaw_sdk::power::PowerLevel::Saving
 impl paperpaw_sdk::power::PowerLevel
 pub const fn paperpaw_sdk::power::PowerLevel::as_str(self) -> &'static str
 pub fn paperpaw_sdk::power::PowerLevel::parse(&str) -> core::option::Option<Self>
+#[non_exhaustive] pub enum paperpaw_sdk::power::Start
+pub paperpaw_sdk::power::Start::PowerOn
+pub paperpaw_sdk::power::Start::Restart
+pub paperpaw_sdk::power::Start::Unknown
+pub paperpaw_sdk::power::Start::Wake
 #[non_exhaustive] pub struct paperpaw_sdk::power::Power
 pub paperpaw_sdk::power::Power::automatic: bool
 pub paperpaw_sdk::power::Power::level: paperpaw_sdk::power::PowerLevel
@@ -5025,6 +5030,7 @@ pub paperpaw_sdk::Env::settings: &'a paperpaw_sdk::Settings
 pub paperpaw_sdk::Env::setup: &'a paperpaw_sdk::setup::SetupSteps
 pub paperpaw_sdk::Env::slots: &'a [paperpaw_sdk::Id]
 pub paperpaw_sdk::Env::stack: &'a [paperpaw_sdk::StackEntry]
+pub paperpaw_sdk::Env::started: paperpaw_sdk::power::Start
 pub paperpaw_sdk::Env::status: &'a paperpaw_platform::status::SystemStatus
 pub paperpaw_sdk::Env::status_items: &'a paperpaw_sdk::status::StatusItems
 pub paperpaw_sdk::Env::storage: &'a dyn paperpaw_platform::storage::Storage
