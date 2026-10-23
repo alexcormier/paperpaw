@@ -170,6 +170,9 @@ file to your report.
 
 #### Touch, buttons and the keyboard
 
+- The quick panel by the buttons: hold Right (on the X4), or choose
+  *Quick panel* at the top of the main menu. The tips on the home screen
+  and in a book say so.
 - The keyboard on touch screens has round keys and takes less of the
   screen; *Shape of keys* makes them a little taller or wider.
   *Keyboard size* (Small, Medium, Large) makes it a quarter lower or

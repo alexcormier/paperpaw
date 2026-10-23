@@ -357,6 +357,7 @@ impl Plugin for Reader {
                 help::Hint::buttons("reader.help.turn"),
                 help::Hint::buttons("reader.help.select"),
                 help::Hint::buttons("reader.help.back"),
+                help::Hint::buttons("reader.help.panel"),
             ],
         )?;
         r.add_reader(paperpaw_sdk::readers::ReaderSpec::new(APP, SCREEN))?;

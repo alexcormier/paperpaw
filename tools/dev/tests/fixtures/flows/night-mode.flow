@@ -4,7 +4,8 @@
 long:confirm
 expect screen menu.list
 expect stack 2
-expect focus "Home"
+expect focus "Quick panel"
+right
 right
 right
 right

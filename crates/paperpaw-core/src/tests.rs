@@ -1364,10 +1364,10 @@ fn menus_follow_order_and_user_definitions() {
     };
     let items = env_items(&kernel);
     // Entries of the core plugin and this plugin, sorted by order: a
-    // short list, the tools in a menu of their own.
+    // short list, the quick panel first, the tools in a menu of their own.
     assert_eq!(
-        items.iter().take(3).map(String::as_str).collect::<Vec<_>>(),
-        ["core.home", "core.home", "core.library"]
+        items.iter().take(4).map(String::as_str).collect::<Vec<_>>(),
+        ["core.quick-panel", "core.home", "core.home", "core.library"]
     );
     assert!(items.iter().any(|i| i == "core.tools"));
     assert!(!kernel.shared.menus.items("core.main")[0].section);
