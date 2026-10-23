@@ -18,12 +18,12 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::{Command, Env, Id, Speech};
+use crate::{Env, Id, Speech};
 
 /// How a voice speaks a text: the commands that start it.
-pub type SpeakFn = Box<dyn Fn(&Env<'_>, &Speech, &mut Vec<Command>)>;
+pub type SpeakFn = Box<dyn Fn(&Env<'_>, &Speech, &mut crate::Commands)>;
 /// How a voice stops.
-pub type StopFn = Box<dyn Fn(&Env<'_>, &mut Vec<Command>)>;
+pub type StopFn = Box<dyn Fn(&Env<'_>, &mut crate::Commands)>;
 
 /// A voice contribution (see the [module documentation](self)): its name
 /// in the setting is the translation of its id.
@@ -50,8 +50,8 @@ impl VoiceSpec {
     /// language.
     pub fn new(
         id: Id,
-        speak: impl Fn(&Env<'_>, &Speech, &mut Vec<Command>) + 'static,
-        stop: impl Fn(&Env<'_>, &mut Vec<Command>) + 'static,
+        speak: impl Fn(&Env<'_>, &Speech, &mut crate::Commands) + 'static,
+        stop: impl Fn(&Env<'_>, &mut crate::Commands) + 'static,
     ) -> Self {
         Self {
             id,

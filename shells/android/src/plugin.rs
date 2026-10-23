@@ -62,7 +62,7 @@ impl Plugin for AndroidPlugin {
         let app = self.app.clone();
         r.add_action(
             ActionSpec::new(ALLOW_STORAGE, "android.allow-storage").handler(
-                move |_: &Env<'_>, _: &mut Vec<Command>| {
+                move |_: &Env<'_>, _: &mut paperpaw_sdk::Commands| {
                     crate::access::request(&app);
                 },
             ),
@@ -188,7 +188,7 @@ impl AndroidPlugin {
         r.subscribe(
             events::SETTING_CHANGED,
             Box::new(
-                move |env: &Env<'_>, params: &Params, _: &mut Vec<Command>| {
+                move |env: &Env<'_>, params: &Params, _: &mut paperpaw_sdk::Commands| {
                     let id = params.get(params::ID).unwrap_or_default();
                     let level = env.settings.int(id) as i32;
                     // Only real changes reach the device: taking over its
@@ -209,7 +209,7 @@ impl AndroidPlugin {
         let following = std::cell::Cell::new(false);
         r.subscribe(
             events::PREVIEW_CHANGED,
-            Box::new(move |env: &Env<'_>, _: &Params, _: &mut Vec<Command>| {
+            Box::new(move |env: &Env<'_>, _: &Params, _: &mut paperpaw_sdk::Commands| {
                 let shown = |id: &Setting<i64>| {
                     env.settings.get(id.as_str()) != env.settings.global(id.as_str())
                 };
@@ -232,7 +232,7 @@ impl AndroidPlugin {
         let app = self.app.clone();
         r.subscribe(
             events::STARTED,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
+            Box::new(move |env: &Env<'_>, _: &Params, out: &mut paperpaw_sdk::Commands| {
                 let levels = [
                     (FRONTLIGHT, lights.brightness(&app)),
                     (WARMTH, lights.warmth(&app)),

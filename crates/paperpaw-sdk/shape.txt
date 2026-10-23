@@ -631,6 +631,7 @@ struct paperpaw_sdk::command::HttpOptions { timeout: core::option::Option<core::
 struct paperpaw_sdk::command::HttpRequest { method: alloc::string::String, url: alloc::string::String, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, body: core::option::Option<alloc::string::String>, body_from: core::option::Option<alloc::string::String>, save_to: core::option::Option<alloc::string::String>, reply: paperpaw_sdk::id::Id, params: paperpaw_sdk::params::Params, options: core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::HttpOptions>> }
 struct paperpaw_sdk::command::ServerResponse { request: u32, status: u16, content_type: alloc::string::String, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, body: alloc::vec::Vec<u8>, body_from: core::option::Option<alloc::string::String> }
 struct paperpaw_sdk::command::Speech { text: alloc::string::String, language: alloc::string::String, rate: u16, reply: paperpaw_sdk::id::Id, params: paperpaw_sdk::params::Params, queue: bool }
+struct paperpaw_sdk::commands::Commands { queued: alloc::vec::Vec<paperpaw_sdk::command::Command> }
 struct paperpaw_sdk::contribution::Registrar { plugin: paperpaw_sdk::id::Id, contributions: alloc::vec::Vec<paperpaw_sdk::contribution::Contribution> }
 struct paperpaw_sdk::data::Format { version: u32, upgrades: &'static [paperpaw_sdk::data::Upgrade] }
 struct paperpaw_sdk::decorations::Decorated { start: paperpaw_document::Locator, end: paperpaw_document::Locator, role: paperpaw_sdk::id::Id }

@@ -25,12 +25,11 @@ mod guide;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, menus, slots};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, RegisterError,
-    Registrar, ScreenSpec, Version, library,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority,
+    RegisterError, Registrar, ScreenSpec, Version, library,
 };
 
 pub const PLUGIN: Id = Id::new_static("setup");
@@ -76,7 +75,7 @@ impl Plugin for Setup {
         ))?;
         r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
         r.add_action(ActionSpec::new(OPEN, "setup.open").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenSlot(slots::SETUP, Params::new()));
             },
         ))?;

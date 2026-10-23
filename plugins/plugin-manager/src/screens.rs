@@ -21,8 +21,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MenuEntry,
-    Params, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    MenuEntry, Params, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use crate::{MORE, PLUGIN};
@@ -45,7 +45,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         Box::new(|env, params| Box::new(Screens::new(env, params))),
     ))?;
     r.add_action(ActionSpec::new(OPEN, "plugin-manager.screens").handler(
-        |_: &Env<'_>, out: &mut Vec<Command>| {
+        |_: &Env<'_>, out: &mut Commands| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         },
     ))?;
@@ -99,7 +99,7 @@ fn known_path() -> String {
 /// Asks once, for a screen newly offered for a slot that has several,
 /// whether to use it now (not where the user chose, nor where it is
 /// used already). The first start only notes what there is.
-fn offer(env: &Env<'_>, out: &mut Vec<Command>) {
+fn offer(env: &Env<'_>, out: &mut Commands) {
     let now: Vec<String> = choosable(env)
         .into_iter()
         .flat_map(|slot| {

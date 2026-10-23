@@ -58,9 +58,9 @@ use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
-    SettingExtra, SettingSpec, StorageError,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, SettingExtra, SettingSpec, StorageError,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -232,7 +232,7 @@ impl Plugin for Vocabulary {
             Box::new(move |env, _| Box::new(WordsScreen::new(env, changes.clone()))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "vocabulary.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -272,7 +272,7 @@ impl Plugin for Vocabulary {
             Box::new(|env, _| Box::new(phone::PhoneScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(CARDS, "vocabulary.cards.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(decks::SCREEN, Params::new()));
             },
         ))?;
@@ -323,7 +323,7 @@ fn record(
 /// screen showed one (*A flash card due*), or where wanted
 /// ([`REVIEW_ON_WAKE`]) and cards are due. Below a lock, as it opens
 /// (the kernel keeps what others open below a screen that guards).
-fn wake(env: &Env<'_>, out: &mut Vec<Command>) {
+fn wake(env: &Env<'_>, out: &mut Commands) {
     let asleep = env.settings.text(SLEEP_SHOW) == SLEEP_CARD;
     let shown = asleep.then(|| sleep::shown(env)).flatten();
     if shown.is_none() && !(env.settings.read(&REVIEW_ON_WAKE) && decks::due_now(env) > 0) {

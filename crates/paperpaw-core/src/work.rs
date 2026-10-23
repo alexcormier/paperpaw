@@ -886,7 +886,7 @@ fn step_job(
     let from = out.len();
     let step = {
         let _running = meter.enter(&entry.owner);
-        (spec.step)(env, &entry.work.params, out)
+        crate::commands::handing(out, |out| (spec.step)(env, &entry.work.params, out))
     };
     // A job is background work: its notices become its plugin's note.
     let mut said = Queue::default();

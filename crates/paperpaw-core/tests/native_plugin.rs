@@ -26,7 +26,7 @@ use paperpaw_platform::{
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::native::support::{Api, ApiSlot, Entry};
 use paperpaw_sdk::native::{FINGERPRINT, take};
-use paperpaw_sdk::{Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, Version};
+use paperpaw_sdk::{Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, Version};
 
 const DEVICE: DeviceInfo = DeviceInfo {
     id: "test",
@@ -141,7 +141,7 @@ impl Plugin for Looks {
         let found = self.0.clone();
         r.on(
             events::STARTED,
-            move |env: &Env<'_>, _, _: &mut Vec<Command>| {
+            move |env: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
                 let services = env.services;
                 found.set((
                     services.get::<Version>("hello.version").copied(),

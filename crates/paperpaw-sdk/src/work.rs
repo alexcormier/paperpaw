@@ -79,7 +79,6 @@ use core::time::Duration;
 
 use paperpaw_platform::Instant;
 
-use crate::command::Command;
 use crate::env::Env;
 use crate::event::EventData;
 use crate::id::Id;
@@ -593,7 +592,7 @@ pub enum Step {
 }
 
 /// One step of a job: the work's parameters, commands to send.
-pub type StepFn = Box<dyn Fn(&Env<'_>, &Params, &mut Vec<Command>) -> Step>;
+pub type StepFn = Box<dyn Fn(&Env<'_>, &Params, &mut crate::Commands) -> Step>;
 
 /// A job: a work done in steps (see the [module](self)), registered with
 /// [`Registrar::add_work`](crate::Registrar::add_work) and run when a
@@ -611,7 +610,7 @@ impl WorkSpec {
     pub fn new(
         id: impl Into<Id>,
         title: impl Into<alloc::borrow::Cow<'static, str>>,
-        step: impl Fn(&Env<'_>, &Params, &mut Vec<Command>) -> Step + 'static,
+        step: impl Fn(&Env<'_>, &Params, &mut crate::Commands) -> Step + 'static,
     ) -> Self {
         Self {
             id: id.into(),

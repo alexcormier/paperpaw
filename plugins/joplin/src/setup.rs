@@ -6,7 +6,6 @@
 
 use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::event::Event;
@@ -15,8 +14,8 @@ use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen,
+    Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
+    RefreshMode, Screen,
 };
 
 use crate::send::notebook_name;
@@ -113,7 +112,7 @@ impl Row {
 
 /// Keeps what was typed for a row of the set-up; whether the password
 /// changed (the settings say themselves when they change).
-pub(crate) fn entered(typed: &Typed, out: &mut Vec<Command>) -> bool {
+pub(crate) fn entered(typed: &Typed, out: &mut Commands) -> bool {
     let Some(row) = typed.context.get(FIELD).and_then(Row::of_field) else {
         return false;
     };

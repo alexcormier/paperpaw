@@ -138,7 +138,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
     // What it does is asked once the book is known (`BOOK_CHOSEN` below).
     r.add_action(
         ActionSpec::new(actions::OPEN_WITH, "core.action.open-with")
-            .handler(|_: &Env<'_>, _: &mut Vec<Command>| {}),
+            .handler(|_: &Env<'_>, _: &mut paperpaw_sdk::Commands| {}),
     )?;
     r.add_menu_entry(MenuEntry::new(menus::BOOK, actions::OPEN_WITH))?;
     r.add_icon(actions::OPEN_WITH, Cow::Borrowed("apps"))?;
@@ -288,12 +288,12 @@ fn register_screen_actions(r: &mut Registrar) -> Result<(), RegisterError> {
 /// kernel's slots and menus.
 fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
     let open = |slot: Id| -> ActionHandler {
-        Box::new(move |_: &Env<'_>, out: &mut Vec<Command>| {
+        Box::new(move |_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
             out.push(Command::open_slot(slot.clone()));
         })
     };
     let forward = |target: Id| -> ActionHandler {
-        Box::new(move |_: &Env<'_>, out: &mut Vec<Command>| {
+        Box::new(move |_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
             out.push(Command::RunAction(target.clone()));
         })
     };
@@ -301,14 +301,14 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::REFRESH_SCREEN,
             "core.action.refresh-screen",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::Redraw(paperpaw_sdk::RefreshMode::Full));
             }),
         ),
         (
             actions::QUICK_PANEL,
             "core.action.quick-panel",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::OpenSlot(
                     slots::PANEL,
                     Params::new()
@@ -331,7 +331,7 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::MENU,
             "core.action.menu",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::OpenSlot(
                     slots::MENU,
                     Params::new().with(params::MENU, menus::MAIN.as_str()),
@@ -343,7 +343,7 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::LONG_CONFIRM,
             "core.action.long-confirm",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::RunAction(actions::MENU));
             }),
         ),
@@ -360,17 +360,17 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::BACK,
             "core.action.back",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| out.push(Command::Back)),
+            Box::new(|_: &Env<'_>, out: &mut paperpaw_sdk::Commands| out.push(Command::Back)),
         ),
         (
             actions::NOTHING,
             "core.action.nothing",
-            Box::new(|_: &Env<'_>, _: &mut Vec<Command>| {}),
+            Box::new(|_: &Env<'_>, _: &mut paperpaw_sdk::Commands| {}),
         ),
         (
             actions::HOME,
             "core.action.home",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::open_slot(slots::HOME));
             }),
         ),
@@ -385,19 +385,19 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::CLEAN_UP,
             "core.action.clean-up",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| ask_clean_up(env, out)),
+            Box::new(|env: &Env<'_>, out: &mut paperpaw_sdk::Commands| ask_clean_up(env, out)),
         ),
         (
             actions::SCREENSHOT,
             "core.action.screenshot",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|env: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::Screenshot(screenshot_path(env)));
             }),
         ),
         (
             actions::TOOLS,
             "core.action.tools",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::OpenSlot(
                     slots::MENU,
                     Params::new().with(params::MENU, menus::TOOLS.as_str()),
@@ -407,7 +407,7 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::SLEEP,
             "core.action.sleep",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|env: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 // The sleep screen first, if there is one, then sleep.
                 if env.caps.sleep && env.has_slot(&slots::SLEEP) {
                     out.push(Command::open_slot(slots::SLEEP));
@@ -418,7 +418,7 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::TOGGLE_NIGHT_MODE,
             "core.action.toggle-night-mode",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|env: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 let night = env.settings.read(&settings::NIGHT_MODE);
                 out.push(Command::set(&settings::NIGHT_MODE, !night));
             }),
@@ -526,7 +526,7 @@ impl Catalog {
     /// Wants the library walked: `now`, or at a calm moment; `anew`
     /// where what a walk under way met may have changed (it starts again),
     /// else one under way, paused or not, goes on.
-    fn want_walk(&self, now: bool, anew: bool, out: &mut Vec<Command>) {
+    fn want_walk(&self, now: bool, anew: bool, out: &mut paperpaw_sdk::Commands) {
         let walking = matches!(*self.job.borrow(), Some(CatalogJob::Walk(_)));
         if walking && !anew {
             self.declare(now, out);
@@ -540,7 +540,7 @@ impl Catalog {
     /// Wants the catalog caught up, with the book at `path` taken from its
     /// details: `now`, or at a calm moment (books coming one after the
     /// other, from Calibre say, caught up once).
-    fn want_catch_up(&self, path: Option<&str>, now: bool, out: &mut Vec<Command>) {
+    fn want_catch_up(&self, path: Option<&str>, now: bool, out: &mut paperpaw_sdk::Commands) {
         if let Some(path) = path {
             let mut fresh = self.fresh.borrow_mut();
             if !fresh.iter().any(|p| p == path) {
@@ -554,7 +554,7 @@ impl Catalog {
     /// while, a book closed, the device plugged in; within a minute at the
     /// latest), never while the device goes to sleep or opens a book. A
     /// calm request does not put off one at once.
-    fn declare(&self, now: bool, out: &mut Vec<Command>) {
+    fn declare(&self, now: bool, out: &mut paperpaw_sdk::Commands) {
         use paperpaw_sdk::work::{Moments, Work};
         self.urgent.set(self.urgent.get() || now);
         let calm = Moments::IDLE | Moments::BOOK_CLOSED | Moments::CHARGING;
@@ -579,7 +579,7 @@ impl Catalog {
     }
 
     /// One step of the job.
-    fn step(&self, env: &Env<'_>, out: &mut Vec<Command>) -> paperpaw_sdk::work::Step {
+    fn step(&self, env: &Env<'_>, out: &mut paperpaw_sdk::Commands) -> paperpaw_sdk::work::Step {
         use paperpaw_sdk::work::Step;
         let storage = env.storage;
         let mut job = self.job.borrow_mut();
@@ -783,7 +783,7 @@ const CLEAN_UP_ANSWERED: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Confi
 /// Declares cleaning up by itself: while charging, a week after it was
 /// last done (a day after the first start). Not without a clock, which
 /// tells the time across starts (on the X4 every wake is one).
-fn declare_clean_up(env: &Env<'_>, out: &mut Vec<Command>) {
+fn declare_clean_up(env: &Env<'_>, out: &mut paperpaw_sdk::Commands) {
     use paperpaw_sdk::work::{Moments, Work};
     let Some(now) = paperpaw_sdk::time::unix_seconds(env) else {
         return;
@@ -924,7 +924,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     // and which opens the menu when bound to a key.
     r.add_action(
         ActionSpec::new(menus::READER_MORE, "core.action.reader-more").handler(Box::new(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::OpenSlot(
                     slots::MENU,
                     Params::new().with(params::MENU, menus::READER_MORE.as_str()),
@@ -941,7 +941,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     // its menu) where plugins put something there: reached with the
     // buttons too, however full the home screen is.
     r.add_action(ActionSpec::new(menus::APPS, "core.action.apps").handler(
-        |_: &Env<'_>, out: &mut Vec<Command>| {
+        |_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
             out.push(Command::OpenSlot(
                 slots::MENU,
                 Params::new().with(params::MENU, menus::APPS.as_str()),

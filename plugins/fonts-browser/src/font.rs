@@ -122,7 +122,7 @@ impl FontScreen {
 
     fn want_sample(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         if self.samples.want(&env, self.font.as_slice(), &mut out) {
             self.redraw(cx);
         }
@@ -144,7 +144,7 @@ impl FontScreen {
                     cx.command(Command::Notify(text));
                     return;
                 }
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 install::start(&env, &font, &mut out);
                 for command in out {
                     cx.command(command);

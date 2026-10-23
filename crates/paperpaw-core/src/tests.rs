@@ -893,7 +893,7 @@ impl Plugin for LifecyclePlugin {
         // Back to the screen below, and at once another over it, as a
         // menu that closes to open a screen does.
         r.add_action(paperpaw_sdk::ActionSpec::new(SWAP, "swap").handler(
-            |_: &Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+            |_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 out.push(paperpaw_sdk::Command::Back);
                 out.push(paperpaw_sdk::Command::OpenScreen(
                     Id::new_static("life.screen"),
@@ -2811,7 +2811,7 @@ impl Plugin for ServicePlugin {
         r.subscribe(
             paperpaw_sdk::builtin::events::STARTED,
             Box::new(
-                move |env: &Env<'_>, _: &paperpaw_sdk::Params, _: &mut Vec<Command>| {
+                move |env: &Env<'_>, _: &paperpaw_sdk::Params, _: &mut paperpaw_sdk::Commands| {
                     let greeting = env.services.get::<&str>("provider.greeting");
                     log.borrow_mut().push(alloc::format!("{greeting:?}"));
                     for (plugin, shape) in env.services.contributions("provider.shapes") {

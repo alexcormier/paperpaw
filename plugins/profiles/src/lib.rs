@@ -32,8 +32,9 @@ use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec,
 };
 
 use crate::profile::Profile;
@@ -56,7 +57,7 @@ const OPTION: &str = "option";
 const NAME: &str = "name";
 
 /// Applies `profile` and says so.
-fn apply(env: &Env<'_>, profile: &Profile, out: &mut Vec<Command>) {
+fn apply(env: &Env<'_>, profile: &Profile, out: &mut Commands) {
     out.extend(profile::apply(env, profile));
     profile::set_last(env.storage, &profile.name);
     out.push(Command::Notify(env.i18n.format(
@@ -90,12 +91,12 @@ impl Plugin for Profiles {
             Box::new(|env, _| Box::new(ListScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "profiles.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
         r.add_action(ActionSpec::new(NEXT, "profiles.next").handler(
-            |env: &Env<'_>, out: &mut Vec<Command>| {
+            |env: &Env<'_>, out: &mut Commands| {
                 let profiles = profile::load(env.storage).unwrap_or_default();
                 let last = profile::last(env.storage);
                 let at = profiles.iter().position(|p| p.name == last);
@@ -197,7 +198,7 @@ impl ListScreen {
         let env = *cx.env();
         match self.rows().get(index).copied() {
             Some(Row::Profile(i)) => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 apply(&env, &self.profiles[i], &mut out);
                 for command in out {
                     cx.command(command);

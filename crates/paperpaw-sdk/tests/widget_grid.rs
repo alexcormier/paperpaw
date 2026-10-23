@@ -21,7 +21,7 @@ use paperpaw_sdk::widgets::grid::{
 };
 use paperpaw_sdk::widgets::{Drawn, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{
-    Canvas, Command, Cx, Env, GestureKind, Id, Output, Params, Point, PointerPhase, Rect,
+    Canvas, Command, Commands, Cx, Env, GestureKind, Id, Output, Params, Point, PointerPhase, Rect,
 };
 use proptest::prelude::*;
 
@@ -822,7 +822,7 @@ impl Widget for Lively {
         _: &Env<'_>,
         input: paperpaw_sdk::widgets::WidgetInput,
         _: Rect,
-        _: &mut Vec<Command>,
+        _: &mut Commands,
     ) -> bool {
         use paperpaw_sdk::widgets::WidgetInput;
         match input {
@@ -1025,7 +1025,7 @@ impl Widget for Paged {
         _: &Env<'_>,
         input: paperpaw_sdk::widgets::WidgetInput,
         _: Rect,
-        _: &mut Vec<Command>,
+        _: &mut Commands,
     ) -> bool {
         use paperpaw_sdk::widgets::WidgetInput;
         match input {

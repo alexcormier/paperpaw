@@ -100,7 +100,7 @@ impl ListScreen {
             self.redraw(cx);
             return false;
         }
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         catalogs::save(env, &self.catalogs, &mut out);
         for command in out {
             cx.command(command);
@@ -113,7 +113,7 @@ impl ListScreen {
         match self.rows().get(index).copied() {
             Some(Row::Sync) => {
                 let mut sync = self.sync.borrow_mut();
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 if sync.running() {
                     sync.stop(&mut out);
                 } else if !env.caps.network {
@@ -173,7 +173,7 @@ impl ListScreen {
                     self.message = Some(env.i18n.tr("opds.no-network").to_string());
                     return self.redraw(cx);
                 }
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 let catalog = self.catalogs[i].clone();
                 self.sync
                     .borrow_mut()

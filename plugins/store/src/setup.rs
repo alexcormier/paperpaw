@@ -171,7 +171,7 @@ impl OfferScreen {
             // This page said what they are: no need to tell it again on
             // a plugin's page.
             trust::tell(env.storage);
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             queue::add_quietly(&env, &fetch, &mut out);
             out.into_iter().for_each(|command| cx.command(command));
         }

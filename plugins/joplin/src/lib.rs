@@ -39,7 +39,6 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::{events, groups, menus};
@@ -47,8 +46,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingExtra, SettingSpec,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Registrar, ScreenSpec, SettingExtra, SettingSpec,
 };
 
 pub use send::DEFAULT_NOTEBOOK;
@@ -142,13 +141,13 @@ impl Plugin for Joplin {
             Box::new(|env, _| Box::new(setup::SetupScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "joplin.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         let state = run.clone();
         r.add_action(ActionSpec::new(SEND, "joplin.send").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, out: &mut Commands| {
                 if env.reader {
                     state.borrow_mut().start(env, Start::Action, out);
                 } else {
@@ -196,7 +195,7 @@ impl Plugin for Joplin {
                 state.borrow_mut().account_changed();
             }
         })?;
-        type Step = fn(&mut Run, &Env<'_>, &HttpReply, &mut Vec<Command>);
+        type Step = fn(&mut Run, &Env<'_>, &HttpReply, &mut Commands);
         let steps: [(Event<HttpReply>, Step); 7] = [
             (send::SIGNED_IN, Run::signed_in),
             (send::CHECKED, Run::checked),
@@ -224,7 +223,7 @@ const RETRY_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("j
 const SEND_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("joplin.send-due");
 
 /// Declares the next try while notes wait.
-fn retry_later(env: &Env<'_>, out: &mut Vec<Command>) {
+fn retry_later(env: &Env<'_>, out: &mut Commands) {
     if !kept::waiting(env.storage).is_empty() {
         let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
             .within(core::time::Duration::from_secs(30 * 60))

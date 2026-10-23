@@ -259,7 +259,7 @@ impl ViewScreen {
                     );
                 }
                 Top::UpdateAll => {
-                    let mut out = Vec::new();
+                    let mut out = paperpaw_sdk::Commands::new();
                     queue::add(&env, &self.updates, &mut out);
                     for command in out {
                         cx.command(command);

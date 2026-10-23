@@ -30,12 +30,11 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::firmware::Firmware;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, MenuNeed, Params, Plugin,
+    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, MenuNeed, Params, Plugin,
     RegisterError, Registrar, ScreenSpec, SettingSpec, Storage, Version,
 };
 
@@ -105,7 +104,7 @@ pub(crate) fn write_pair(storage: &dyn Storage, name: &str, first: &str, second:
 
 /// At start: how the update installed before went, and an update to
 /// offer. A download the restart cut off is let go.
-fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
+fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Commands) {
     let storage = env.storage;
     online::clear_download(storage);
     fetch::interrupted(storage, firmware);
@@ -179,12 +178,12 @@ impl Plugin for Update {
             Box::new(|env, _| Box::new(page::UpdatePage::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "update.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
             },
         ))?;
         r.add_action(ActionSpec::new(CHECK, "update.check").handler(
-            |env: &Env<'_>, out: &mut Vec<Command>| {
+            |env: &Env<'_>, out: &mut Commands| {
                 if env.reader {
                     online::check(env, true, out);
                 } else {

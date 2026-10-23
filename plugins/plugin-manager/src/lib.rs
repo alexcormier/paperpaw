@@ -43,8 +43,8 @@ use paperpaw_sdk::install::{self, Origin};
 use paperpaw_sdk::native::{NotInstalled, NotInstalledReason, SafeMode, SafeModeReason};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
     RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, Version,
 };
 
@@ -82,7 +82,7 @@ impl Plugin for PluginManager {
             Box::new(|env, _| Box::new(PluginList::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "plugin-manager.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;

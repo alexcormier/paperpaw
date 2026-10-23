@@ -17,7 +17,7 @@ use common::*;
 use paperpaw_sdk::builtin::{events, menus};
 use paperpaw_sdk::library::{self, Badge, BookBadge, BookField};
 use paperpaw_sdk::{
-    ActionSpec, Command, Manifest, MenuEntry, Plugin, RegisterError, Registrar, Version,
+    ActionSpec, Commands, Manifest, MenuEntry, Plugin, RegisterError, Registrar, Version,
 };
 
 const TEXT: &[u8] = b"Some text of a book.\n\nAnd more of it.\n";
@@ -53,7 +53,7 @@ impl Plugin for Adds {
         ))?;
         r.add_book_field(BookField::new(Id::new_static("adds.rating"), "adds.rating"))?;
         r.add_action(
-            ActionSpec::new(SEND, "adds.send").handler(|_, _: &mut Vec<Command>| {
+            ActionSpec::new(SEND, "adds.send").handler(|_, _: &mut Commands| {
                 CHOSEN.with(|c| c.borrow_mut().push(String::from("ran")));
             }),
         )?;

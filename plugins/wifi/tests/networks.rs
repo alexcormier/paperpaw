@@ -26,7 +26,7 @@ use paperpaw_plugin_wifi::Wifi;
 use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
-    ActionSpec, Canvas, Command, Cx, DirEntry, Env, Handled, HttpRequest, Id, Manifest,
+    ActionSpec, Canvas, Command, Commands, Cx, DirEntry, Env, Handled, HttpRequest, Id, Manifest,
     MemoryStorage, Params, Plugin, Priority, RegisterError, Registrar, Screen, ScreenSpec, Storage,
     StorageError, Version,
 };
@@ -176,15 +176,15 @@ impl Plugin for NoticeKeeper {
             Priority::DEFAULT,
         )?;
         // Wants the network: a request.
-        r.add_action(ActionSpec::new(FETCH, "Fetch").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(
+            ActionSpec::new(FETCH, "Fetch").handler(|_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::Http(HttpRequest::new(
                     "GET",
                     "http://example.org/",
                     Id::new_static("notices.fetched"),
                 )));
-            },
-        ))
+            }),
+        )
     }
 }
 

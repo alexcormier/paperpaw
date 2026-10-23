@@ -598,7 +598,7 @@ impl GridView {
         let Some(widget) = &mut shown.widget else {
             return false;
         };
-        let mut out = Vec::new();
+        let mut out = crate::Commands::new();
         let taken = widget.on_input(&env, input, shown.area, &mut out);
         if taken {
             cx.request_redraw_area(shown.area);

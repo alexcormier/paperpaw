@@ -402,7 +402,7 @@ impl Screen for ListScreen {
             // Updates waiting since the last visit (a restart, no
             // connection) go on.
             let env = *cx.env();
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             crate::queue::next(&env, &mut out);
             for command in out {
                 cx.command(command);

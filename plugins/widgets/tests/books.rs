@@ -17,7 +17,7 @@ use paperpaw_platform::Rotation;
 use paperpaw_plugin_widgets::Widgets;
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::{
-    ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
+    ActionSpec, Commands, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION,
 };
 
@@ -81,7 +81,7 @@ impl Plugin for StandIn {
         ] {
             let page = self.0.clone();
             r.add_action(ActionSpec::new(id.clone(), "stand-in.action").handler(
-                move |_: &Env<'_>, out: &mut Vec<Command>| {
+                move |_: &Env<'_>, out: &mut Commands| {
                     if id == TURN {
                         page.set(page.get() + 1);
                     }

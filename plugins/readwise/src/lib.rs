@@ -37,7 +37,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::json;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::secrets::SecretChange;
-use paperpaw_sdk::{Command, Id, Manifest, Plugin, RegisterError, Registrar};
+use paperpaw_sdk::{Command, Commands, Id, Manifest, Plugin, RegisterError, Registrar};
 
 use send::{Run, Start};
 
@@ -268,7 +268,7 @@ impl Plugin for Readwise {
 const RETRY_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("readwise.retry");
 
 /// Declares the next try while exports wait.
-fn retry_later(env: &paperpaw_sdk::Env<'_>, out: &mut alloc::vec::Vec<Command>) {
+fn retry_later(env: &paperpaw_sdk::Env<'_>, out: &mut Commands) {
     if !send::waiting(env.storage).is_empty() {
         let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
             .within(core::time::Duration::from_secs(30 * 60))

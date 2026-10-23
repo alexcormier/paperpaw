@@ -45,8 +45,8 @@ use core::cell::{Cell, RefCell};
 use paperpaw_sdk::builtin::{events, menus, settings};
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingValue, time,
+    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, SettingValue, time,
 };
 
 use crate::rule::{Condition, EVERY_DAY, Effect, Levels, Rule, Store, Trigger, WEEKDAYS, WEEKENDS};
@@ -96,7 +96,7 @@ impl State {
         &self,
         env: &Env<'_>,
         depth: u8,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
         applies: impl Fn(&Trigger) -> bool,
     ) {
         let reading = self.reading.get();
@@ -161,14 +161,14 @@ fn holds(env: &Env<'_>, condition: &Condition, reading: bool) -> bool {
 
 /// Sets the timers: to the next time of day a rule waits for, and to the
 /// next minute while rules repeat.
-pub(crate) fn schedule(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
+pub(crate) fn schedule(env: &Env<'_>, store: &Store, out: &mut Commands) {
     schedule_time(env, store, out);
     schedule_tick(env, store, out);
 }
 
 /// Sets the timer to the next time of day a rule waits for, if the clock
 /// is known.
-fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
+fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Commands) {
     let Some(now) = time::local_time(env) else {
         return;
     };
@@ -198,7 +198,7 @@ fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
 
 /// Sets the timer to a minute from now while rules repeat: they count
 /// minutes from the start, so they need no clock.
-fn schedule_tick(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
+fn schedule_tick(env: &Env<'_>, store: &Store, out: &mut Commands) {
     let repeats = store.with(env.storage, |rules| {
         rules
             .iter()
@@ -391,7 +391,7 @@ impl Plugin for Rules {
             Box::new(|env, params| Box::new(screens::PickScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "rules.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
@@ -415,7 +415,7 @@ impl Plugin for Rules {
             let state = state.clone();
             r.subscribe(
                 event,
-                Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
+                Box::new(move |env: &Env<'_>, _: &Params, out: &mut Commands| {
                     if let Some(open) = open {
                         state.reading.set(open);
                     }
@@ -432,25 +432,23 @@ impl Plugin for Rules {
         let timed = state.clone();
         r.subscribe(
             TIME,
-            Box::new(
-                move |env: &Env<'_>, params: &Params, out: &mut Vec<Command>| {
-                    let today = time::local_time(env).map_or(0, |t| t.weekday);
-                    if let Some(at) = params.get(MINUTE).and_then(|m| m.parse::<u16>().ok()) {
-                        timed.run(env, 0, out, |t| {
-                            matches!(t, Trigger::Time { minute, days }
+            Box::new(move |env: &Env<'_>, params: &Params, out: &mut Commands| {
+                let today = time::local_time(env).map_or(0, |t| t.weekday);
+                if let Some(at) = params.get(MINUTE).and_then(|m| m.parse::<u16>().ok()) {
+                    timed.run(env, 0, out, |t| {
+                        matches!(t, Trigger::Time { minute, days }
                             if *minute == at && days & (1 << today) != 0)
-                        });
-                    }
-                    schedule_time(env, &timed.store, out);
-                },
-            ),
+                    });
+                }
+                schedule_time(env, &timed.store, out);
+            }),
         )?;
         // Minutes since the start, for the rules that repeat.
         let minutes = Rc::new(Cell::new(0u32));
         let ticked = state.clone();
         r.subscribe(
             TICK,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
+            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Commands| {
                 let now = minutes.get() + 1;
                 minutes.set(now);
                 ticked.run(
