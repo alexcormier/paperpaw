@@ -41,9 +41,9 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/library/books/<hash>.ini` | SDK `library` | ini: a book's details, cover, progress, fields of plugins (the details read again when their `version` is older) | version 1 |
 | `.paperpaw/library/opened.txt`, `favourites.txt` | SDK `library` | a path per line | version 1 |
 | `.paperpaw/readers/<hash>.txt`, `.paperpaw/readers-folders.txt` | SDK `readers` | the reading app chosen for a book; for folders a line each: reading app, folder (tab separated) | |
-| `.paperpaw/annotations/<hash>.txt` | SDK `annotations` | a line per bookmark or highlight (tab separated; 8 fields before times were kept, 10 since) | version 1 |
+| `.paperpaw/annotations/<hash>.txt` | SDK `annotations` | a line per bookmark or highlight (tab separated; 8 fields before times were kept, 10 since). Version 2 (`# format 2`, written once any annotation says where it was made) has 13: after the times, the conversion its offsets are in (16 hex digits) and its start and end as XPointers (empty where there are none), so it is found again in another conversion; one that cannot be found stays as it is | versions 1 and 2 |
 | `.paperpaw/plugins/reader/state.ini` | reader | ini: the book read last | version 1 |
-| `.paperpaw/positions/<hash>.txt` | SDK `positions` | ini: where a book was left (`[position]` section, offset, percent, `conversion`, `xpointer` when it was closed, `updated`) | |
+| `.paperpaw/positions/<hash>.txt` | SDK `positions` | ini: where a book was left (`[position]` section, offset, percent, `conversion`, `xpointer` when it was closed, `updated`); one the reader cannot read is kept as `<hash>.txt.bad` (or `.bad2` and on) before a new one is written | |
 | `.paperpaw/plugins/reader/books/<hash>/progress.ini` | reader | ini: the position before positions were shared; read while a book has none | version 1 |
 | `.paperpaw/plugins/reader/status-lines.txt` | reader | the status line chosen last at the top, then at the bottom, a line each | version 1 |
 | `.paperpaw/plugins/reader/books/<hash>/settings.ini` | kernel (a book's own settings) | ini, as `paperpaw.ini` | version 1 |
@@ -54,7 +54,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/profiles/last.txt` | profiles | the profile applied last | version 1 |
 | `.paperpaw/plugins/rules/rules.txt` | rules | a rule per line: trigger, effect, target, on, condition (tab separated) | version 1 |
 | `.paperpaw/plugins/vocabulary/words.txt` | vocabulary | a word per line: word, language, place, book, title, sentence (tab separated) | version 1 |
-| `.paperpaw/plugins/vocabulary/cards/decks.txt`, `deck-<id>.txt` | vocabulary | `paperpaw-decks 1` / `paperpaw-cards 1`, then a deck per line (id, name) or a card per line (id, due, last, stability, difficulty, reps, lapses, front, back, example; tab separated, texts escaped) | |
+| `.paperpaw/plugins/vocabulary/cards/decks.txt`, `deck-<id>.txt` | vocabulary | `paperpaw-decks 1` / `paperpaw-cards 1`, then a deck per line (id, name) or a card per line (id, due, last, stability, difficulty, reps, lapses, front, back, example; tab separated, texts escaped); and a line `next`, tab, the id the next deck or card gets (after the version line in `decks.txt`, after the cards in a deck), so no id is given twice. A file without it (from before) goes on after the highest id; the higher of the two counts. Older versions skip the line (a deck keeps it as it is), so the version stays 1 | |
 | `.paperpaw/plugins/vocabulary/cards/answers.txt`, `due.txt`, `state.txt` | vocabulary | answers not yet written into their decks; when each deck's cards are due, by quarter hour; the time last known and the new cards shown that day | |
 | `.paperpaw/plugins/vocabulary/cards/looked-up.txt`, `adding.txt`, `asleep.txt` | vocabulary | words looked up waiting to become cards (word, sentence); the deck cards are being added to; the card the sleep screen showed (deck, id) | |
 | `.paperpaw/plugins/lock/tries.txt` | lock | the wrong tries in a row, a number | version 1 |
@@ -120,7 +120,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/about/licences.md`, `about/plugins.md`, `plugin-manager/how.txt`, `store/how.txt`, `.paperpaw/tmp/` | about, plugin-manager, store, kernel | written when they are opened to read |
 | `.paperpaw/code-room.txt` | SDK `native` | the room code plugins have, as the shell found it at this start |
 | `.paperpaw/plugins/stats/pages.new`, `books.new` | stats | `pages.bin` and `books.ini` while they are written anew: put in place at the start where the file itself is missing, else removed |
-| `~<hash>.TMP`, `~<hash>.NEW` beside a file (the X4's card; seven letters from the file's name) | `paperpaw-fat` | a file while it is written: `.NEW` is whole and takes the file's place where the file is missing |
+| `~<hash>.TMP`, `~<hash>.NEW` beside a file (the X4's card; seven letters from the file's name) | `paperpaw-fat` | a file while it is written: `.NEW` is whole and takes the file's place when its folder is first looked at after a start, unless the file has a newer time; neither listed nor taken by name. `~PPMOVE.BIN` in the root (hidden, kept, not listed): the move being made, cleared after it, settled at the next start where it is not. Left by earlier versions, `~pp<n>.tmp`: removed at a write in their folder where empty or the same as a file beside them, else kept |
 
 ## Foreign
 

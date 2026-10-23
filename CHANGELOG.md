@@ -53,12 +53,46 @@ change the plugin SDK.
     written over after a read error; the word list says it keeps 2000
     words; an OPDS answer that is no book is not saved as one; the
     QuireInk folder is taken over even beside a new one.
+  - The X4's card, further: a file or folder moved or renamed is at its
+    old or its new place after a cut, never at neither, and a move on a
+    full card fails before anything changes. Files being written are
+    not listed and cannot be deleted by name; what a cut left is
+    settled when a folder is first looked at, a file changed since
+    winning over an older new copy. Temporary files of earlier versions
+    go where they are provably copies.
+  - Highlights, bookmarks and notes in EPUB books keep their text when
+    the book's own styles are switched on or off: each records the
+    conversion it was made in and where it lies in the book, and is
+    found there again (annotations file version 2; older files are
+    taken over without loss).
+  - A reading place that cannot be read is tried again, and kept aside
+    (`.bad`) before a new one is saved; you are told once.
+  - KOReader: removing every highlight on one side now reaches the
+    other; a side that cannot be read still changes nothing.
+  - Progress sync: *Back* on an offer means not now for that book,
+    until the server's place changes; it is not offered at every wake.
+  - Statistics sync: a book's statistics deleted in KOReader go here
+    too; where the server file cannot be told from a reset, you are
+    asked (*Remove* or *Keep*).
+  - Vocabulary: card and deck ids are never given twice, and a phone
+    tab that did not see a change cannot change a card; deleting a word
+    asks first.
+  - *Reset to defaults* keeps folders, accounts and passwords.
+    Removing a profile, saving the current settings in one and removing
+    a password ask first. The file manager protects everything in
+    PaperPaw's folders (also the old QuireInk one) and starts its
+    delete question on *Cancel*. The QuireInk folder is merged in at
+    any depth without overwriting.
 - SDK: `Registrar::add_book_cache` names book data that is made again
   from the book (cleaned up by itself); `add_book_data` is for the
   reader's own data, removed only when the reader agrees.
   `library::BookDataKind`, `library::unused_books`,
   `annotations::stored_note`, `positions::load_for_update` and
-  `Secrets::saved` are new. Breaking: `library::clean_up_unused` takes
+  `Secrets::saved` are new, and `annotations::relocate` finds a book's
+  annotations again in another conversion. `SettingSpec::kept_on_reset`
+  keeps a setting through resets (secrets always are). Book data folders
+  outside `.paperpaw/` are refused at registration. Breaking:
+  `library::clean_up_unused` takes
   the kind to remove. `files::put_in_place` and `files::copy` keep the
   new file where a failed move took the old one.
 
