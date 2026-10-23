@@ -636,9 +636,14 @@ fn grays(path: &Path) -> (u32, u32, Vec<u8>) {
 /// The gray of each pixel of a PNG, its size, and how many of its pixels
 /// are in colour.
 fn pixels(path: &Path) -> (u32, u32, Vec<u8>, usize) {
-    let decoder = png::Decoder::new(File::open(path).unwrap());
+    let decoder = png::Decoder::new(std::io::BufReader::new(File::open(path).unwrap()));
     let mut reader = decoder.read_info().unwrap();
-    let mut data = vec![0; reader.output_buffer_size()];
+    let mut data = vec![
+        0;
+        reader
+            .output_buffer_size()
+            .expect("a frame of a size to hold")
+    ];
     let info = reader.next_frame(&mut data).unwrap();
     let data = &data[..info.buffer_size()];
     let colourful = match info.color_type {
@@ -671,7 +676,7 @@ fn write_gray(path: &Path, width: u32, height: u32, gray: &[u8]) {
     let mut encoder = png::Encoder::new(BufWriter::new(File::create(path).unwrap()), width, height);
     encoder.set_color(png::ColorType::Grayscale);
     encoder.set_depth(png::BitDepth::Eight);
-    encoder.set_compression(png::Compression::Best);
+    encoder.set_compression(png::Compression::High);
     let mut writer = encoder.write_header().unwrap();
     writer.write_image_data(gray).unwrap();
 }
