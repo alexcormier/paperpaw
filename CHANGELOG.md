@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- A combining mark with no character before it (a caption or line
+  that begins with one) sits at the start of its text instead of
+  reaching back past it, as drawn and as measured by
+  `FontHandle::ink_across` (`paperpaw_text::is_mark`,
+  `paperpaw_text::glyph_x`, `TextStyle::based`).
+- The keyboard's keys are nearly round where they are tapped (about
+  4.7 mm wide and 5.2 mm high on the X4 Pro), every key as wide in every row and a
+  thin seam between them, so the keyboard takes much less of the
+  screen; with buttons only (the X4) the keys stay as they were. German
+  has ten keys a row, as English: ä, ö, ü and ß come from holding a, o,
+  u and s, first in their lists, and with buttons the field says so on
+  those letters. The setting *Umlaut keys* (off by default) gives them
+  keys of their own, in rows of eleven.
 - Tools (the home screen's grid, all tools) set a name too long for a
   line on two, hyphenated where one word is too long (by the
   interface's language), before shortening it, and centre icon and name

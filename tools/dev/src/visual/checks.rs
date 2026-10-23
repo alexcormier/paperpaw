@@ -988,6 +988,35 @@ pub fn ink_centre(scene: &Scene<'_>) -> Vec<Issue> {
 
 // ---- Touch --------------------------------------------------------------
 
+/// A keyboard's key: on the keyboard's screen, a button as high as the
+/// keys of a row of eight or more (its own, or one like it, e.g. the row
+/// with the space bar below the letters), as wide as the screen lets
+/// that many be and at least 4 mm each way, which a finger hits there
+/// (as the keyboard keeps them). Keys lie a thin seam apart.
+fn keyboard_key(scene: &Scene<'_>, d: &Described) -> bool {
+    if !scene.keyboard || d.role != Role::Button {
+        return false;
+    }
+    let tolerance = scene.ui.tolerance();
+    let least = (4.0 * f32::from(scene.ui.dpi) / 25.4) as u16;
+    let row = |y: u16| {
+        scene
+            .parts(&[Role::Button])
+            .filter(|b| b.area.y == y && b.area.height == d.area.height)
+            .count() as u16
+    };
+    // The most keys of its height in a row.
+    let peers = scene
+        .parts(&[Role::Button])
+        .filter(|b| b.area.height == d.area.height)
+        .map(|b| row(b.area.y))
+        .max()
+        .unwrap_or(0);
+    peers >= 8
+        && d.area.height + tolerance >= least
+        && d.area.width + tolerance >= least.min(scene.screen.width / peers / 2)
+}
+
 /// On touch screens, what a finger presses at least about 7 mm.
 pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
     let finger = scene.ui.finger;
@@ -1007,18 +1036,8 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
         } else {
             d.area.width.min(d.area.height)
         };
-        // A key in a row of many across the screen (a keyboard's): as
-        // wide as the screen lets that many be, high enough for a finger.
-        let peers = scene
-            .parts(&[Role::Button])
-            .filter(|b| b.area.y == d.area.y && b.area.height == d.area.height)
-            .count() as u16;
-        let key = scene.keyboard
-            && d.role == Role::Button
-            && peers >= 8
-            && d.area.height >= least
-            && d.area.width + scene.ui.tolerance() >= scene.screen.width / peers / 2;
-        if size < least && !key {
+        // A keyboard's key: smaller, as many as a row holds.
+        if size < least && !keyboard_key(scene, d) {
             small.push((d, size));
         }
     }
@@ -1163,10 +1182,11 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
             } else {
                 continue;
             };
-            // Tiles of a grid lie edge to edge; overlapping ones are the
-            // overlap check's.
+            // Tiles of a grid lie edge to edge, a keyboard's keys a seam
+            // apart; overlapping ones are the overlap check's.
             let tiles = gap == 0 && tile(a) && tile(b);
-            if !tiles && (0..half - tolerance).contains(&gap) {
+            let keys = gap > 0 && keyboard_key(scene, a) && keyboard_key(scene, b);
+            if !tiles && !keys && (0..half - tolerance).contains(&gap) {
                 found.push((
                     format!("{} and {}", named(a), named(b)),
                     p.union(&q),

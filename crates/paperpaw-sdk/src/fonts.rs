@@ -874,15 +874,19 @@ impl<'a> FontHandle<'a> {
         let mut cache = self.cache.borrow_mut();
         let mut ink: Option<(i32, i32)> = None;
         let mut pen = 0.0f32;
+        let mut based = false;
         for ch in text.chars() {
             let (font, index) = self.pick(ch);
             let glyph = cache.glyph(index, font, ch, size);
+            let mark = paperpaw_text::is_mark(ch);
+            // Where it is drawn ([`FontHandle::draw`]).
+            let at = paperpaw_text::glyph_x(pen, glyph.left, mark && !based);
+            based |= !mark;
             let inked = |x: u16| (0..glyph.height).any(|y| glyph.coverage(x, y) >= 128);
             if let (Some(first), Some(last)) = (
                 (0..glyph.width).find(|x| inked(*x)),
                 (0..glyph.width).rev().find(|x| inked(*x)),
             ) {
-                let at = (pen + 0.5) as i32 + i32::from(glyph.left);
                 let (left, right) = (at + i32::from(first), at + i32::from(last) + 1);
                 ink = Some(ink.map_or((left, right), |(l, r)| (l.min(left), r.max(right))));
             }
@@ -936,17 +940,22 @@ impl<'a> FontHandle<'a> {
         let size = self.size_for(size, text);
         let mut cache = self.cache.borrow_mut();
         let mut pen = x;
-        // Runs of characters drawn by the same font.
+        // Runs of characters drawn by the same font; marks at the start of
+        // one sit on the character before it, if there is one.
         let mut rest = text;
+        let mut based = false;
         while let Some(first) = rest.chars().next() {
             let (font, index) = self.pick(first);
             let end = rest
                 .char_indices()
                 .find(|(_, ch)| self.pick(*ch).1 != index)
                 .map_or(rest.len(), |(at, _)| at);
-            let style = paperpaw_text::TextStyle::new(font, index, size, color).bolder(extra);
-            pen +=
-                paperpaw_text::draw_text(canvas, &mut cache, &style, pen, baseline, &rest[..end]);
+            let style = paperpaw_text::TextStyle::new(font, index, size, color)
+                .bolder(extra)
+                .based(based);
+            let run = &rest[..end];
+            pen += paperpaw_text::draw_text(canvas, &mut cache, &style, pen, baseline, run);
+            based |= run.chars().any(|ch| !paperpaw_text::is_mark(ch));
             rest = &rest[end..];
         }
         pen - x

@@ -109,9 +109,19 @@ fn parse(line: &str) -> Option<Added> {
     if code.is_empty() || rows.is_empty() {
         return None;
     }
-    let variants = fields
-        .next()
-        .unwrap_or_default()
+    let variants = held(fields.next().unwrap_or_default());
+    Some(Added {
+        id: id.to_string(),
+        code,
+        letters: rows.join(" "),
+        variants,
+    })
+}
+
+/// Letters typed by holding another: pairs of a letter, `=` and them,
+/// separated by spaces (`e=éèë i=ïí`).
+fn held(pairs: &str) -> Vec<(char, String)> {
+    pairs
         .split_whitespace()
         .filter_map(|pair| {
             let (base, variants) = pair.split_once('=')?;
@@ -126,85 +136,83 @@ fn parse(line: &str) -> Option<Added> {
                 .collect();
             (!variants.is_empty()).then_some((base, variants))
         })
-        .collect();
-    Some(Added {
-        id: id.to_string(),
-        code,
-        letters: rows.join(" "),
-        variants,
-    })
+        .collect()
 }
 
 /// A built-in layout: its id (also the translation key of its name), the
 /// short code on the key that switches layouts, and the letter rows
-/// separated by spaces.
+/// separated by spaces; letters it types by holding another (`a=ä`, as
+/// added layouts give them, shown first), and its rows with keys of their
+/// own for those (the setting *Umlaut keys*).
 pub(crate) struct Layout {
     pub id: &'static str,
     pub code: &'static str,
     pub letters: &'static str,
+    pub held: &'static str,
+    pub keys: Option<&'static str>,
+}
+
+impl Layout {
+    const fn new(id: &'static str, code: &'static str, letters: &'static str) -> Self {
+        Self {
+            id,
+            code,
+            letters,
+            held: "",
+            keys: None,
+        }
+    }
+
+    /// Its letter rows, with keys of their own for the held letters where
+    /// `keys` (and it has such rows).
+    fn rows(&self, keys: bool) -> &'static str {
+        match self.keys {
+            Some(rows) if keys => rows,
+            _ => self.letters,
+        }
+    }
 }
 
 pub(crate) const LAYOUTS: [Layout; 12] = [
-    Layout {
-        id: "keyboard.layout.en",
-        code: "EN",
-        letters: "qwertyuiop asdfghjkl zxcvbnm",
-    },
+    Layout::new("keyboard.layout.en", "EN", "qwertyuiop asdfghjkl zxcvbnm"),
+    // Ten keys a row, as English: ä, ö, ü and ß by holding a, o, u and s.
     Layout {
         id: "keyboard.layout.de",
         code: "DE",
-        letters: "qwertzuiopü asdfghjklöä yxcvbnmß",
+        letters: "qwertzuiop asdfghjkl yxcvbnm",
+        held: "a=ä o=ö u=ü s=ß",
+        keys: Some("qwertzuiopü asdfghjklöä yxcvbnmß"),
     },
-    Layout {
-        id: "keyboard.layout.fr",
-        code: "FR",
-        letters: "azertyuiop qsdfghjklm wxcvbn",
-    },
-    Layout {
-        id: "keyboard.layout.es",
-        code: "ES",
-        letters: "qwertyuiop asdfghjklñ zxcvbnm",
-    },
-    Layout {
-        id: "keyboard.layout.pt",
-        code: "PT",
-        letters: "qwertyuiop asdfghjklç zxcvbnm",
-    },
-    Layout {
-        id: "keyboard.layout.sv",
-        code: "SV",
-        letters: "qwertyuiopå asdfghjklöä zxcvbnm",
-    },
-    Layout {
-        id: "keyboard.layout.da",
-        code: "DA",
-        letters: "qwertyuiopå asdfghjklæø zxcvbnm",
-    },
-    Layout {
-        id: "keyboard.layout.cs",
-        code: "CS",
-        letters: "qwertzuiopú asdfghjklů yxcvbnm",
-    },
-    Layout {
-        id: "keyboard.layout.tr",
-        code: "TR",
-        letters: "qwertyuıopğü asdfghjklşi zxcvbnmöç",
-    },
-    Layout {
-        id: "keyboard.layout.ru",
-        code: "RU",
-        letters: "йцукенгшщзх фывапролджэ ячсмитьбю",
-    },
-    Layout {
-        id: "keyboard.layout.uk",
-        code: "UK",
-        letters: "йцукенгшщзхї фівапролджє ячсмитьбю",
-    },
-    Layout {
-        id: "keyboard.layout.el",
-        code: "EL",
-        letters: "ςερτυθιοπ ασδφγηξκλ ζχψωβνμ",
-    },
+    Layout::new("keyboard.layout.fr", "FR", "azertyuiop qsdfghjklm wxcvbn"),
+    Layout::new("keyboard.layout.es", "ES", "qwertyuiop asdfghjklñ zxcvbnm"),
+    Layout::new("keyboard.layout.pt", "PT", "qwertyuiop asdfghjklç zxcvbnm"),
+    Layout::new(
+        "keyboard.layout.sv",
+        "SV",
+        "qwertyuiopå asdfghjklöä zxcvbnm",
+    ),
+    Layout::new(
+        "keyboard.layout.da",
+        "DA",
+        "qwertyuiopå asdfghjklæø zxcvbnm",
+    ),
+    Layout::new("keyboard.layout.cs", "CS", "qwertzuiopú asdfghjklů yxcvbnm"),
+    Layout::new(
+        "keyboard.layout.tr",
+        "TR",
+        "qwertyuıopğü asdfghjklşi zxcvbnmöç",
+    ),
+    Layout::new(
+        "keyboard.layout.ru",
+        "RU",
+        "йцукенгшщзх фывапролджэ ячсмитьбю",
+    ),
+    Layout::new(
+        "keyboard.layout.uk",
+        "UK",
+        "йцукенгшщзхї фівапролджє ячсмитьбю",
+    ),
+    Layout::new("keyboard.layout.el", "EL", "ςερτυθιοπ ασδφγηξκλ ζχψωβνμ"),
 ];
 
 /// Letters and signs with variants, and the variants (for lower case;
@@ -264,25 +272,27 @@ pub(crate) fn drawable(env: &Env<'_>, letters: &str) -> bool {
         .all(|c| font.has_char(c))
 }
 
+/// A built-in layout as chosen, with keys of their own for the letters
+/// it holds where `keys`.
+fn builtin(layout: &Layout, code: String, keys: bool) -> Chosen {
+    (code, Cow::Borrowed(layout.rows(keys)), held(layout.held))
+}
+
 /// The layouts chosen in the setting `value` (ids separated by commas),
 /// as their codes and letter rows; the UI language's layout if none.
-/// Layouts the fonts cannot draw are left out.
-pub(crate) fn chosen(env: &Env<'_>, value: &str) -> Vec<Chosen> {
+/// Layouts the fonts cannot draw are left out. `keys`: the letters a
+/// layout types by holding another get keys of their own (*Umlaut keys*).
+pub(crate) fn chosen(env: &Env<'_>, value: &str, keys: bool) -> Vec<Chosen> {
     let mut layouts: Vec<Chosen> = Vec::new();
     let mut added: Option<Vec<Added>> = None;
     for id in value.split(',').map(str::trim).filter(|id| !id.is_empty()) {
         if id == AUTO {
-            let (code, letters) = automatic(env);
-            layouts.push((code, letters, Vec::new()));
+            layouts.push(automatic(env, keys));
         } else if let Some(layout) = LAYOUTS
             .iter()
-            .find(|l| l.id == id && drawable(env, l.letters))
+            .find(|l| l.id == id && drawable(env, l.rows(keys)))
         {
-            layouts.push((
-                layout.code.to_string(),
-                Cow::Borrowed(layout.letters),
-                Vec::new(),
-            ));
+            layouts.push(builtin(layout, layout.code.to_string(), keys));
         } else if let Some(layout) = added
             .get_or_insert_with(|| self::added(env))
             .iter()
@@ -293,15 +303,14 @@ pub(crate) fn chosen(env: &Env<'_>, value: &str) -> Vec<Chosen> {
         }
     }
     if layouts.is_empty() {
-        let (code, letters) = automatic(env);
-        layouts.push((code, letters, Vec::new()));
+        layouts.push(automatic(env, keys));
     }
     layouts
 }
 
 /// The UI language's layout: the built-in one for the language, or its
 /// translation's (`keyboard.letters`, which falls back to English).
-fn automatic(env: &Env<'_>) -> (String, Cow<'static, str>) {
+fn automatic(env: &Env<'_>, keys: bool) -> Chosen {
     let language = env.i18n.language();
     let base = language.split('-').next().unwrap_or(language);
     let code = base.to_uppercase();
@@ -309,9 +318,9 @@ fn automatic(env: &Env<'_>) -> (String, Cow<'static, str>) {
         .iter()
         .find(|l| l.id.rsplit('.').next() == Some(base));
     match (builtin, env.i18n.get("keyboard.letters")) {
-        (Some(layout), _) => (code, Cow::Borrowed(layout.letters)),
-        (None, Some(letters)) => (code, Cow::Owned(letters.to_string())),
-        (None, None) => (code, Cow::Borrowed(LAYOUTS[0].letters)),
+        (Some(layout), _) => self::builtin(layout, code, keys),
+        (None, Some(letters)) => (code, Cow::Owned(letters.to_string()), Vec::new()),
+        (None, None) => (code, Cow::Borrowed(LAYOUTS[0].letters), Vec::new()),
     }
 }
 
@@ -327,6 +336,12 @@ mod tests {
             let key = alloc::format!("{} =", layout.id);
             assert!(en.contains(&key) && de.contains(&key), "{}", layout.id);
             assert_eq!(layout.letters.split(' ').count(), 3, "{}", layout.id);
+            // Every letter held has a key of its own in its other rows.
+            let keys = layout.rows(true);
+            assert_eq!(keys.split(' ').count(), 3, "{}", layout.id);
+            for (_, letters) in held(layout.held) {
+                assert!(letters.chars().all(|c| keys.contains(c)), "{}", layout.id);
+            }
         }
         assert!(en.contains("keyboard.layout.auto ="));
     }
@@ -368,6 +383,35 @@ mod tests {
         for line in ["", "only.id", "id; CODE", "; X; abc", "id;; abc"] {
             assert_eq!(parse(line), None, "{line}");
         }
+    }
+
+    /// German has ten keys a row as English, ä, ö, ü and ß by holding a,
+    /// o, u and s (first there); with *Umlaut keys* they are keys.
+    #[test]
+    fn german_holds_its_umlauts_or_has_keys_for_them() {
+        let de = LAYOUTS.iter().find(|l| l.code == "DE").unwrap();
+        let widths = |rows: &str| {
+            rows.split(' ')
+                .map(|r| r.chars().count())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(widths(de.rows(false)), [10, 9, 7]);
+        assert_eq!(widths(de.rows(true)), [11, 11, 8]);
+        assert_eq!(
+            held(de.held),
+            [
+                ('a', String::from("ä")),
+                ('o', String::from("ö")),
+                ('u', String::from("ü")),
+                ('s', String::from("ß"))
+            ]
+        );
+        assert!(
+            LAYOUTS
+                .iter()
+                .filter(|l| l.code != "DE")
+                .all(|l| l.rows(true) == l.letters)
+        );
     }
 
     #[test]
