@@ -47,6 +47,7 @@ pub paperpaw_sdk::annotations::Mark::start: paperpaw_document::Locator
 impl paperpaw_sdk::annotations::Mark
 pub fn paperpaw_sdk::annotations::Mark::overlaps(&self, paperpaw_document::Locator, paperpaw_document::Locator) -> bool
 pub fn paperpaw_sdk::annotations::add(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_sdk::annotations::Annotation) -> bool
+pub fn paperpaw_sdk::annotations::book(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::library::Fingerprint>
 pub fn paperpaw_sdk::annotations::changed(&str) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::annotations::file(&str) -> alloc::string::String
 pub fn paperpaw_sdk::annotations::load(&dyn paperpaw_platform::storage::Storage, &str) -> alloc::vec::Vec<paperpaw_sdk::annotations::Annotation>
@@ -59,6 +60,7 @@ pub fn paperpaw_sdk::annotations::remove(&dyn paperpaw_platform::storage::Storag
 pub fn paperpaw_sdk::annotations::save(&dyn paperpaw_platform::storage::Storage, &str, &[paperpaw_sdk::annotations::Annotation]) -> bool
 pub fn paperpaw_sdk::annotations::set_note(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_document::Locator, &str, i64) -> bool
 pub fn paperpaw_sdk::annotations::snippet(&str) -> alloc::string::String
+pub fn paperpaw_sdk::annotations::stamp(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::library::Fingerprint) -> core::result::Result<bool, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::annotations::stored_note(&str) -> alloc::string::String
 pub mod paperpaw_sdk::ask
 pub struct paperpaw_sdk::ask::ChoiceQuestion
@@ -2120,6 +2122,13 @@ pub fn paperpaw_sdk::library::service::BookField::new(impl core::convert::Into<p
 pub paperpaw_sdk::library::Deleted::commands: alloc::vec::Vec<paperpaw_sdk::Command>
 pub paperpaw_sdk::library::Deleted::failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>
 pub paperpaw_sdk::library::Deleted::refused: alloc::vec::Vec<alloc::string::String>
+pub struct paperpaw_sdk::library::Fingerprint
+pub paperpaw_sdk::library::Fingerprint::md5: alloc::string::String
+pub paperpaw_sdk::library::Fingerprint::size: u64
+impl paperpaw_sdk::library::Fingerprint
+pub fn paperpaw_sdk::library::Fingerprint::of(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::library::Fingerprint>
+pub fn paperpaw_sdk::library::Fingerprint::parse(&str) -> core::option::Option<paperpaw_sdk::library::Fingerprint>
+pub fn paperpaw_sdk::library::Fingerprint::text(&self) -> alloc::string::String
 #[non_exhaustive] pub struct paperpaw_sdk::library::Provided
 pub paperpaw_sdk::library::Provided::author: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::library::Provided::series: core::option::Option<alloc::string::String>
@@ -2389,10 +2398,12 @@ pub fn paperpaw_sdk::positions::Position::text(&self) -> alloc::string::String
 pub fn paperpaw_sdk::positions::Position::updated(self, i64) -> Self
 pub fn paperpaw_sdk::positions::Position::xpointer(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self
 pub const paperpaw_sdk::positions::DIR: &str
+pub fn paperpaw_sdk::positions::book(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::library::Fingerprint>
 pub fn paperpaw_sdk::positions::file(&str) -> alloc::string::String
 pub fn paperpaw_sdk::positions::load(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::positions::Position>
 pub fn paperpaw_sdk::positions::load_for_update(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<core::option::Option<paperpaw_sdk::positions::Position>, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::positions::save(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::positions::Position) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_sdk::positions::save_with_book(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::positions::Position, core::option::Option<&paperpaw_sdk::library::Fingerprint>) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub mod paperpaw_sdk::power
 #[non_exhaustive] pub enum paperpaw_sdk::power::PowerLevel
 pub paperpaw_sdk::power::PowerLevel::Normal

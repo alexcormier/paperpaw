@@ -704,6 +704,7 @@ struct paperpaw_sdk::library::catalog::Record { path: alloc::string::String, aut
 struct paperpaw_sdk::library::catalog::Rewrite { making: paperpaw_sdk::library::catalog::Making, fresh: alloc::vec::Vec<alloc::string::String>, at: core::option::Option<u64> }
 struct paperpaw_sdk::library::catalog::Status { progress: core::option::Option<u8>, favourite: bool, opened: bool }
 struct paperpaw_sdk::library::catalog::Walk { making: paperpaw_sdk::library::catalog::Making, old: paperpaw_sdk::library::catalog::OldCatalog, fresh: alloc::vec::Vec<alloc::string::String>, dirs: alloc::vec::Vec<alloc::string::String>, dir: core::option::Option<alloc::string::String>, at: u64, listed: core::option::Option<usize> }
+struct paperpaw_sdk::library::fingerprint::Fingerprint { size: u64, md5: alloc::string::String }
 struct paperpaw_sdk::library::index::Index { items: alloc::vec::Vec<paperpaw_sdk::library::index::Item>, series: alloc::vec::Vec<alloc::string::String>, total: usize, archived: usize, dirty: bool, version: core::option::Option<u64> }
 struct paperpaw_sdk::library::index::Item { offset: u32, hash: u32, key: [u8; 8], series: u16, number: u16, progress: u8, recent: u8, flags: u8 }
 struct paperpaw_sdk::library::listing::Entry { name: alloc::string::String, is_dir: bool, rank: u32, size: u64 }

@@ -126,15 +126,49 @@ fn old_annotations_never_replace_those_kept_now() {
     );
     storage.write(&old, &before).unwrap();
     storage.write(&new, &now).unwrap();
+    // Their annotations: the file also says which book they are of.
+    let texts = |path: &str| -> Vec<String> {
+        let all = paperpaw_sdk::annotations::load(&storage, path);
+        all.into_iter().map(|a| a.text).collect()
+    };
     let mut reading = Reading::new(storage.clone());
     reading.open();
-    assert_eq!(storage.0.get(&new).unwrap(), now);
+    assert_eq!(texts(BOOK), ["now"]);
     assert_eq!(storage.0.get(&old).unwrap(), before);
     // Without annotations kept now, the old ones are moved.
     storage.0.remove(&new).unwrap();
     reading.run(core_actions::BACK);
     let mut reading = Reading::new(storage.clone());
     reading.open();
-    assert_eq!(storage.0.get(&new).unwrap(), before);
+    assert_eq!(texts(BOOK), ["old"]);
     assert!(!storage.exists(&old));
+}
+
+/// A book's position and annotations say which book they are of by its
+/// content, its size and KOReader's partial MD5, a text and an EPUB
+/// alike; taken when the book opens, as the book is.
+#[test]
+fn positions_and_annotations_say_which_book_they_are_of() {
+    let text = include_str!("../../../../samples/library/books/alice-in-wonderland.txt");
+    let epub = include_bytes!("../../../../samples/library/books/alice-in-wonderland.epub");
+    for (path, data) in [(BOOK, text.as_bytes()), (EPUB, &epub[..])] {
+        let storage = Shared::default();
+        let mut reading = Reading::with_book(storage.clone(), path, data);
+        reading.open();
+        reading.run(core_actions::NEXT_PAGE);
+        reading.run(actions::TOGGLE_BOOKMARK);
+        reading.run(core_actions::BACK);
+        let fingerprint = paperpaw_sdk::library::Fingerprint::of(&storage, path).unwrap();
+        assert_eq!(fingerprint.size, data.len() as u64);
+        assert_eq!(
+            paperpaw_sdk::positions::book(&storage, path).as_ref(),
+            Some(&fingerprint),
+            "{path}"
+        );
+        assert_eq!(
+            paperpaw_sdk::annotations::book(&storage, path),
+            Some(fingerprint),
+            "{path}"
+        );
+    }
 }
