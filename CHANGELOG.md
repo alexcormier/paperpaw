@@ -15,6 +15,17 @@ change the plugin SDK.
   DNS, TLS, timeout, refused, replaced, cancelled, I/O), and a body cut
   to the most the request takes says so (`truncated`). `EventData`
   types are `Clone`.
+- What a plugin tells of the PaperPaw it runs in comes from the kernel
+  that runs, not the SDK the plugin was built with:
+  `web::user_agent_of(env)` names its version, `install::fits_in(env, ..)`
+  takes its SDK (`install::fits_sdk` where no `Env` is at hand), from
+  `Plugins::kernel`. The kernel's manifest now has the version of its
+  crate. `web::user_agent()` and `install::fits()` stay, for the SDK a
+  plugin is built with; PaperPaw's own plugins use the new ones.
+- The files of a data plugin are checked by their SHA-256 where the
+  plugin library gives it (`sha256` beside `sha1` in `latest.files` and
+  in an update's `files`), else by their SHA-1 as before; downloads
+  kept on the card with `sha1:` go on (`install::Digest::take`).
 - Font size offers only the sizes the reading font has: on the X4 and
   X4 Pro, whose built-in fonts stop at about 12 pt, no larger ones that
   looked the same. A size set before past them gives way to the

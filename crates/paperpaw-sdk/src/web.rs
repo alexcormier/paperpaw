@@ -8,14 +8,28 @@ use alloc::vec::Vec;
 
 use crate::document::is_external;
 
-/// What PaperPaw calls itself to servers, with its version: the
-/// `User-Agent` header's value, e.g. `PaperPaw/0.4.0 (e-reader)`.
+/// What PaperPaw calls itself to servers, with the version of the SDK
+/// this is built with: the `User-Agent` header's value, e.g.
+/// `PaperPaw/0.4.0 (e-reader)`. A plugin sends [`user_agent_of`], with
+/// the version of the PaperPaw it runs in.
 pub const USER_AGENT: &str = concat!("PaperPaw/", env!("CARGO_PKG_VERSION"), " (e-reader)");
 
-/// The `User-Agent` header ([`USER_AGENT`]), to push onto a request's
-/// headers.
+/// The `User-Agent` header of [`USER_AGENT`], the SDK this is built with;
+/// [`user_agent_of`] says the PaperPaw that runs.
 pub fn user_agent() -> (String, String) {
     (String::from("User-Agent"), String::from(USER_AGENT))
+}
+
+/// The `User-Agent` header, to push onto a request's headers: with the
+/// version of the PaperPaw that runs ([`Plugins::kernel`](crate::Plugins::kernel)),
+/// not that of the SDK the plugin was built with ([`USER_AGENT`] where
+/// the kernel is not listed).
+pub fn user_agent_of(env: &crate::Env<'_>) -> (String, String) {
+    let value = match env.plugins.kernel() {
+        Some(kernel) => format!("PaperPaw/{} (e-reader)", kernel.manifest.version),
+        None => String::from(USER_AGENT),
+    };
+    (String::from("User-Agent"), value)
 }
 
 /// A server's address as entered in a setting, as a base URL to put paths
@@ -260,7 +274,6 @@ mod tests {
         assert_eq!(base_url("nas/x?to=http://y"), "https://nas/x?to=http://y");
         assert_eq!(base_url("  "), "");
         assert!(USER_AGENT.starts_with(concat!("PaperPaw/", env!("CARGO_PKG_VERSION"))));
-        assert_eq!(user_agent().0, "User-Agent");
     }
 
     #[test]

@@ -197,6 +197,7 @@ impl BrowseScreen {
         self.say(message, cx);
         let params = Params::new().with(URL, url.to_string());
         cx.command(Command::Http(crate::list_request(
+            &paperpaw_sdk::web::user_agent_of(&env),
             &self.catalog,
             url,
             self.temp.next("xml"),
@@ -267,6 +268,7 @@ impl BrowseScreen {
             (None, Some(Search::Description(url))) => {
                 let url = url.clone();
                 cx.command(Command::Http(request(
+                    &paperpaw_sdk::web::user_agent_of(cx.env()),
                     &self.catalog,
                     &url,
                     self.temp.next("xml"),

@@ -210,6 +210,13 @@ impl Plugins {
         self.list.is_empty()
     }
 
+    /// PaperPaw's kernel as it runs here ([`CORE_PLUGIN`](crate::builtin::CORE_PLUGIN)):
+    /// its manifest says the version of PaperPaw and of its SDK, which a
+    /// plugin built with another SDK may not have.
+    pub fn kernel(&self) -> Option<&PluginInfo> {
+        self.get(crate::builtin::CORE_PLUGIN.as_str())
+    }
+
     pub fn get(&self, id: &str) -> Option<&PluginInfo> {
         self.list.iter().find(|p| p.manifest.id.as_str() == id)
     }

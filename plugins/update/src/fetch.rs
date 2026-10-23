@@ -14,7 +14,7 @@
 //! ```json
 //! "code": [{"id": "stats", "name": "Statistics", "version": "0.5.0",
 //!           "author_key": "…64 hex digits…",
-//!           "files": [{"path": "plugin.ini", "url": "…", "size": 120, "sha1": "…"},
+//!           "files": [{"path": "plugin.ini", "url": "…", "size": 120, "sha256": "…"},
 //!                     {"path": "code.ppn", "url": "…", "size": 412345, "sha256": "…"}]}]
 //! ```
 //!
@@ -99,9 +99,9 @@ pub(crate) fn parse(body: &str) -> Vec<Build> {
                         "path" => file.path = text.to_string(),
                         "url" => file.url = text.to_string(),
                         "size" => file.size = text.parse().unwrap_or(0),
-                        "sha1" => file.digest = Digest::Sha1(text.to_ascii_lowercase()),
-                        "sha256" => file.digest = Digest::Sha256(text.to_ascii_lowercase()),
-                        _ => {}
+                        key => {
+                            file.digest.take(key, text);
+                        }
                     }
                 }
                 _ => {}

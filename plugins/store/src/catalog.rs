@@ -98,6 +98,9 @@ pub(crate) struct Device<'a> {
     pub fingerprint: Option<Fingerprint>,
     pub code_file: &'a str,
     pub plugins: Option<&'a Plugins>,
+    /// The SDK of the kernel that runs, which data plugins must not be
+    /// later than.
+    pub sdk: Version,
     /// The list is PaperPaw's own library ([`OFFICIAL_LIST`]).
     pub official: bool,
 }
@@ -110,6 +113,10 @@ impl<'a> Device<'a> {
             fingerprint: env.native.map(|native| native.fingerprint),
             code_file: env.native.map_or("", |native| &native.file),
             plugins: Some(env.plugins),
+            sdk: env
+                .plugins
+                .kernel()
+                .map_or(paperpaw_sdk::SDK_VERSION, |kernel| kernel.manifest.sdk),
             official: env.settings.read(&crate::CATALOG).trim() == OFFICIAL_LIST,
         })
     }
@@ -322,7 +329,7 @@ impl Item {
             && install::is_plugin_name(&entry.id)
             && !entry.name.is_empty()
             && Version::parse(&entry.version).is_some()
-            && install::fits(&entry.sdk, self.formats)
+            && install::fits_sdk(device.sdk, &entry.sdk, self.formats)
     }
 
     /// Takes what `key` (the path below the plugin) says.
@@ -392,8 +399,9 @@ impl Item {
                     "path" => file.path = value.to_string(),
                     "url" => file.url = value.to_string(),
                     "size" => file.size = value.parse().unwrap_or(0),
-                    "sha1" => file.digest = Digest::Sha1(value.to_ascii_lowercase()),
-                    _ => {}
+                    key => {
+                        file.digest.take(key, value);
+                    }
                 }
             }
             [latest, builds, at, key] if latest == "latest" && builds == "builds" && at == "[]" => {
@@ -1036,6 +1044,7 @@ mod tests {
         fingerprint: Some(Fingerprint(0x0123_4567_89ab_cdef)),
         code_file: "code.ppn",
         plugins: None,
+        sdk: paperpaw_sdk::SDK_VERSION,
         official: true,
     };
 
@@ -1261,6 +1270,17 @@ mod tests {
             ]
         );
         assert_eq!(plugin.author_key, None);
+        assert!(matches!(&package.files[0].digest, Digest::Sha1(hex) if hex == SHA1));
+        // Given with its SHA-256 too, a file is checked by that.
+        let both = file("plugin.ini").replace(
+            &format!(r#""sha1": "{SHA1}""#),
+            &format!(r#""sha1": "{SHA1}", "sha256": "{SHA256}""#),
+        );
+        let plugin = read_plugin(&page(&both), "a.json", &X4, BASE).unwrap();
+        assert_eq!(
+            plugin.package.files[0].digest,
+            Digest::Sha256(SHA256.into())
+        );
     }
 
     #[test]

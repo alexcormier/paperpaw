@@ -19,8 +19,8 @@ use paperpaw_sdk::time::{self, AUTO, CLOCK_12H, CLOCK_24H, TIME_ZONES};
 use paperpaw_sdk::widgets::{self, Drawn, WidgetSpec};
 use paperpaw_sdk::{
     ActionHandler, ActionHint, ActionSpec, Canvas, Color, Command, Commands, Cx, Env, Handled, Id,
-    Manifest, MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingExtra, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, SlotSpec,
+    Manifest, MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, Screen, ScreenSpec,
+    SettingExtra, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, SlotSpec,
     StatusItemSpec, StatusValue,
 };
 
@@ -31,7 +31,7 @@ pub(crate) struct CorePlugin(pub(crate) String);
 
 impl Plugin for CorePlugin {
     fn manifest(&self) -> Manifest {
-        Manifest::new(CORE, "PaperPaw kernel", SDK_VERSION)
+        Manifest::new(CORE, "PaperPaw kernel", paperpaw_sdk::package_version!())
             .description("Runs screens, input, settings and plugins.")
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
