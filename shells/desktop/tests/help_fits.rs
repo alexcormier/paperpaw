@@ -80,9 +80,10 @@ fn look(env: &Env<'_>) {
             }
             let text = env.i18n.tr(key);
             if !ui::note_fits(env, &style, width, text) {
-                CUT.lock()
-                    .unwrap()
-                    .push(format!("{} {language} {} [{key}]: {text}", env.device.id, spec.id));
+                CUT.lock().unwrap().push(format!(
+                    "{} {language} {} [{key}]: {text}",
+                    env.device.id, spec.id
+                ));
             }
         }
     }

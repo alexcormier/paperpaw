@@ -253,10 +253,7 @@ fn by_touch_one_signs_out_and_in_once_while_waiting() {
     assert_eq!(sync.user(), "");
     let shown = sync.shown();
     assert!(!shown.contains("Sign out"), "{shown}");
-    assert!(
-        shown.contains("Sign in with your account"),
-        "{shown}"
-    );
+    assert!(shown.contains("Sign in with your account"), "{shown}");
 
     typed(&mut sync, "user", "alice");
     typed(&mut sync, "password", "secret");
