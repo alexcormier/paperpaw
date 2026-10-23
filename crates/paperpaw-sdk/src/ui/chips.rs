@@ -2,6 +2,7 @@
 //! side, each as wide as its word needs ([`Chips`]). Where the choices
 //! should share the width evenly, use [`Segments`](super::Segments).
 
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_graphics::Canvas;
@@ -23,12 +24,13 @@ use super::UiStyle;
 /// how tall the rows are. With the buttons, left and right move the
 /// focus, *Select* chooses.
 ///
-/// Made once with the layout (it measures the labels); drawing and
-/// hitting allocate nothing. The default is a row of no chips.
+/// Made once with the layout (it measures and keeps the labels); drawing
+/// and hitting allocate nothing. The default is a row of no chips.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Chips {
     /// One per label; empty for those not shown.
     cells: Vec<Rect>,
+    labels: Vec<String>,
 }
 
 impl Chips {
@@ -36,7 +38,10 @@ impl Chips {
     /// size [`draw_button`](super::draw_button) sets them, centred in the
     /// area's height.
     pub fn new(env: &Env<'_>, style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
-        Self::from_widths(style, area, widths(env, style, labels))
+        Self {
+            labels: labels.iter().map(ToString::to_string).collect(),
+            ..Self::from_widths(style, area, widths(env, style, labels))
+        }
     }
 
     /// How tall the chips of `labels` are in an area `width` wide: their
@@ -51,7 +56,8 @@ impl Chips {
     }
 
     /// The chips in `area` with the label widths `widths` already known
-    /// (the room at their sides included): as [`Chips::new`].
+    /// (the room at their sides included): as [`Chips::new`], without
+    /// labels.
     pub(crate) fn from_widths(
         style: &UiStyle,
         area: Rect,
@@ -70,7 +76,10 @@ impl Chips {
             .into_iter()
             .map(|c| Rect::new(c.x, c.y + below, c.width, c.height))
             .collect();
-        Self { cells }
+        Self {
+            cells,
+            labels: Vec::new(),
+        }
     }
 
     /// The height of a row of chips: a button's in a row that can be
@@ -108,18 +117,22 @@ impl Chips {
         }
     }
 
-    /// Draws the chips shown with `labels`, `chosen` on and `focus`
-    /// (where the focus is on them) focused.
+    /// The label of chip `index`.
+    pub fn label(&self, index: usize) -> Option<&str> {
+        self.labels.get(index).map(String::as_str)
+    }
+
+    /// Draws the chips shown, `chosen` on and `focus` (where the focus is
+    /// on them) focused.
     pub fn draw(
         &self,
         canvas: &mut Canvas<'_>,
         env: &Env<'_>,
         style: &UiStyle,
-        labels: &[&str],
         chosen: usize,
         focus: Option<usize>,
     ) {
-        for (i, (cell, label)) in self.cells.iter().zip(labels).enumerate() {
+        for (i, (cell, label)) in self.cells.iter().zip(&self.labels).enumerate() {
             if cell.width == 0 {
                 break;
             }

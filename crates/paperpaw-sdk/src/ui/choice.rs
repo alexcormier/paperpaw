@@ -23,7 +23,7 @@ crate::event_data! {
     /// What was chosen: the option, for the context the choice was
     /// opened for.
     pub struct Picked {
-        /// The context ([`open`]'s `context`).
+        /// The context ([`ask::choice`](crate::ask::choice)'s `context`).
         pub path: alloc::string::String,
         pub option: alloc::string::String,
     }

@@ -548,6 +548,9 @@ file to your report.
   `grid`.
 - SDK: `ui::choice::open` and `GridView::new` are gone (`ask::choice`,
   `GridView::asking`).
+- SDK: `ui::Chips` and `ui::Segments` keep their labels: they are given
+  once when the part is made (`Segments::new` takes the labels, not
+  their count) and `draw` no longer takes them; `label(index)` reads one.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

@@ -230,16 +230,14 @@ impl ShelfRow {
     }
 }
 
-/// Where things go on the screen, and the words of the chips: made anew
-/// when a setting changes (the view, the size of the interface).
+/// Where things go on the screen: made anew when a setting changes (the
+/// view, the size of the interface).
 struct Layout {
     style: UiStyle,
     sizes: Sizes,
     header: ui::Header,
-    /// The filters' chips and their names (larger screens; none on
-    /// small ones).
+    /// The filters' chips (larger screens; none on small ones).
     chips: ui::Chips,
-    chip_labels: Vec<String>,
     /// The filter's row (small screens).
     filter_row: Option<Rect>,
     /// Where the books (or shelves) go.
@@ -255,10 +253,6 @@ impl Layout {
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
         let gap = style.gap();
-        let chip_labels: Vec<String> = Filter::ALL
-            .iter()
-            .map(|f| env.i18n.tr(f.label()).to_string())
-            .collect();
         let (chips, filter_row, top) = if sizes.compact {
             let row = Rect::new(0, header.area().height, display.width, sizes.filter_row);
             (
@@ -269,7 +263,7 @@ impl Layout {
         } else {
             // From margin to margin, with room round them for the focus.
             let margin = style.margin();
-            let labels: Vec<&str> = chip_labels.iter().map(String::as_str).collect();
+            let labels: Vec<&str> = Filter::ALL.iter().map(|f| env.i18n.tr(f.label())).collect();
             let width = display.width.saturating_sub(2 * margin);
             // As many rows as the words need: none is shortened.
             let band = Rect::new(
@@ -289,7 +283,6 @@ impl Layout {
             sizes,
             header,
             chips,
-            chip_labels,
             filter_row,
             area,
             grid,
@@ -1002,14 +995,10 @@ impl Screen for ListScreen {
                     self.filter
                 };
                 let chosen = Filter::ALL.iter().position(|f| *f == shown);
-                // The names as the chips take them, without allocating.
-                let labels: [&str; Filter::ALL.len()] =
-                    core::array::from_fn(|i| layout.chip_labels[i].as_str());
                 layout.chips.draw(
                     canvas,
                     env,
                     &style,
-                    &labels,
                     chosen.unwrap_or(usize::MAX),
                     chosen.filter(|_| focused_filter),
                 );
