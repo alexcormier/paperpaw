@@ -978,7 +978,7 @@ fn page_indexes_of_layouts_left_do_not_pile_up() {
     let storage = Shared::default();
     let mut reading = Reading::new(storage.clone());
     reading.open();
-    for size in 10..20 {
+    for size in 7..=16 {
         set(
             &mut reading,
             settings::FONT_SIZE.static_str(),

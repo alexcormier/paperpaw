@@ -145,6 +145,15 @@ impl StoredPack {
         })
     }
 
+    /// The largest size it has, in pixels (every strike has every
+    /// character).
+    pub fn largest_size(&self) -> Option<f32> {
+        self.strikes
+            .iter()
+            .map(|s| f32::from(s.size) / 4.0)
+            .reduce(f32::max)
+    }
+
     /// The strike closest to `size`.
     fn nearest(&self, size: f32) -> usize {
         let wanted = (size * 4.0) as i32;

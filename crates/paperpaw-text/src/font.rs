@@ -100,6 +100,18 @@ impl Font {
         }
     }
 
+    /// The largest size text can be set in, in pixels: a pack's largest
+    /// with every character; `None` for a scalable font, which has every
+    /// size.
+    pub fn largest_size(&self) -> Option<f32> {
+        match self {
+            Font::Bitmap(font) => font.largest_size(),
+            Font::Stored(font) => font.largest_size(),
+            #[cfg(feature = "outline")]
+            Font::Outline(_) => None,
+        }
+    }
+
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
         match self {
             Font::Bitmap(font) => font.line_metrics(size),

@@ -5209,6 +5209,7 @@ pub fn paperpaw_sdk::FontHandle<'a>::heading_line_height(&self, f32) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::id(&self) -> &'a paperpaw_sdk::Id
 pub fn paperpaw_sdk::FontHandle<'a>::ink(&self, f32, &str) -> core::option::Option<(i32, i32)>
 pub fn paperpaw_sdk::FontHandle<'a>::ink_across(&self, f32, &str) -> core::option::Option<(i32, i32)>
+pub fn paperpaw_sdk::FontHandle<'a>::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_sdk::FontHandle<'a>::line_metrics(&self, f32) -> paperpaw_text::font::LineMetrics
 pub fn paperpaw_sdk::FontHandle<'a>::measure(&self, f32, &str) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::size_for(&self, f32, &str) -> f32

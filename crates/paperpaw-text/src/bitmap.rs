@@ -95,6 +95,20 @@ impl BitmapFont {
         (0..usize::from(self.strikes)).filter_map(|i| self.strike(i).map(|s| s.size))
     }
 
+    /// The largest size text can be set in, in pixels: of the sizes with
+    /// every character (not those made large for a few, a clock's).
+    pub fn largest_size(&self) -> Option<f32> {
+        let strikes: Vec<Strike> = (0..usize::from(self.strikes))
+            .filter_map(|i| self.strike(i))
+            .collect();
+        let full = strikes.iter().map(|s| s.glyphs).max()?;
+        strikes
+            .iter()
+            .filter(|s| s.glyphs >= full)
+            .map(|s| s.size)
+            .reduce(f32::max)
+    }
+
     fn strike(&self, index: usize) -> Option<Strike> {
         let base = HEADER + index * STRIKE;
         let d = &self.data;

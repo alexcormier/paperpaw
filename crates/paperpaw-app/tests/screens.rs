@@ -306,13 +306,19 @@ fn sliders_follow_the_finger_kept_where_it_is_lifted() {
     let y = i32::from(track.y) + i32::from(track.height) / 2;
     let size = "core.font-size";
     let before = app.kernel.settings().int(size);
+    // As far as the reading font's sizes go.
+    let Some(paperpaw_sdk::SettingKind::Int { max, .. }) =
+        app.kernel.settings().spec(size).map(|s| s.kind.clone())
+    else {
+        panic!("a number");
+    };
     // Down at the track's start, moved its whole length: as far, to the
     // end.
     app.finger(PointerPhase::Down, Point::new(i32::from(track.x), y));
     app.finger(PointerPhase::Move, Point::new(track.right() as i32, y));
     let settings = app.kernel.settings();
     assert!(settings.previewing());
-    assert_eq!(settings.int(size), 40, "the end of the track");
+    assert_eq!(settings.int(size), max, "the end of the track");
     assert!(!settings.is_set(size));
     // As far past the start: the start.
     let past = i32::from(track.x) - i32::from(track.width);

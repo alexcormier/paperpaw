@@ -31,6 +31,8 @@ use paperpaw_sdk::{
 pub const PLUGIN: Id = Id::new_static("fonts-browser");
 /// Opens the list of fonts.
 pub const OPEN: Id = Id::new_static("fonts-browser.open");
+/// The same from the reading settings, where larger sizes are found.
+pub const DISCOVER: Id = Id::new_static("fonts-browser.discover");
 const LIST_SCREEN: Id = Id::new_static("fonts-browser.list");
 const FONT_SCREEN: Id = Id::new_static("fonts-browser.font");
 
@@ -75,16 +77,24 @@ impl Plugin for FontsBrowser {
             "fonts-browser.title",
             Box::new(|env, params| Box::new(font::FontScreen::new(env, params))),
         ))?;
-        r.add_action(ActionSpec::new(OPEN, "fonts-browser.more").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
-            },
-        ))?;
+        for (action, title) in [
+            (OPEN, "fonts-browser.more"),
+            (DISCOVER, "fonts-browser.discover"),
+        ] {
+            r.add_action(ActionSpec::new(action.clone(), title).handler(
+                |_: &Env<'_>, out: &mut Vec<Command>| {
+                    out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
+                },
+            ))?;
+            r.add_icon(action, Cow::Borrowed("typography"))?;
+        }
         // After the fonts to choose from, where they are chosen.
         for setting in [settings::READING_FONT, settings::STATUS_FONT] {
             r.add_menu_entry(MenuEntry::new(setting.id().clone(), OPEN))?;
         }
-        r.add_icon(OPEN, Cow::Borrowed("typography"))?;
+        // On the reading settings, below the font size, whose largest
+        // sizes are the font's.
+        r.add_menu_entry(MenuEntry::new(groups::READING, DISCOVER))?;
         // Downloads go on while no screen of the plugin is open; one cut
         // off by a restart is begun anew from the font's page.
         r.on(install::DOWNLOADED, install::received)?;

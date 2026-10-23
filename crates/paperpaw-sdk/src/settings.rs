@@ -1234,16 +1234,6 @@ impl Settings {
         }
     }
 
-    /// Changes a setting's default (e.g. device-specific defaults chosen by
-    /// a shell). The user's own values still take precedence.
-    #[cfg(any(test, feature = "kernel"))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn set_default_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
-        let spec = self.specs.get_mut(id)?;
-        spec.default = spec.parse(text).ok_or(SettingError::InvalidValue)?;
-        Ok(())
-    }
-
     /// The spec of setting `id`; for a placement's (`widgets.clock@2.face`)
     /// the setting's own (`widgets.clock.face`).
     pub fn spec(&self, id: &str) -> Option<&SettingSpec> {
@@ -1562,5 +1552,6 @@ impl Settings {
     }
 }
 
+mod declared;
 #[cfg(test)]
 mod tests;

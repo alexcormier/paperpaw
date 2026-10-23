@@ -1591,8 +1591,8 @@ static READING: [SettingSpec; 19] = [
     SettingSpec::fixed_number(
         settings::FONT_SIZE.static_str(),
         "core.setting.font-size",
-        6,
-        40,
+        crate::plugins::FONT_SIZES.0,
+        crate::plugins::FONT_SIZES.1,
         11,
         groups::READING,
     )
