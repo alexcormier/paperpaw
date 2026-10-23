@@ -588,9 +588,3 @@ pub fn stroke_round(
 ) {
     canvas.stroke_round(area, thickness, style.corner, color);
 }
-
-/// Fills a rectangle.
-#[deprecated(since = "0.4.0", note = "use `Canvas::fill`")]
-pub fn fill(canvas: &mut Canvas<'_>, area: Rect, color: Color) {
-    canvas.fill(area, color);
-}

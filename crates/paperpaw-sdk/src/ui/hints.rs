@@ -8,24 +8,21 @@ use super::*;
 
 /// The height of the row of hints below the screen (see
 /// [`draw_button_hints`]).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn button_hints_height(env: &Env<'_>) -> u16 {
+    hints_height(env)
+}
+
+/// [`button_hints_height`], for the SDK's own parts (a dialog keeps
+/// above the row).
+pub(crate) fn hints_height(env: &Env<'_>) -> u16 {
     let style = UiStyle::new(env);
     let line = style.font(env).map_or(style.small * 1.3, |f| {
         f.line_metrics(style.small).line_height
     });
     ((line * 1.5) as u32 + style.line).max(env.metrics.mm(4)) as u16
 }
-
-/// PaperPaw's paw: the busy mark in a corner of the screen.
-pub const PAW_ICON: &str = "paw";
-
-/// The mark beside a button's label in the row of hints where holding
-/// the button does something too.
-#[deprecated(
-    since = "0.4.0",
-    note = "use `icons::HOLD`, which a theme may draw another way"
-)]
-pub const HOLD_ICON: &str = "hand-click";
 
 /// A line of a hint's words as it is drawn: its size, its words, where
 /// it starts and the line it lies in.
@@ -166,6 +163,8 @@ fn free_span(
 /// button under it does, centred in an equal share of the width, as the
 /// buttons lie. The hint of the button `pressed` is drawn inverted, as a
 /// sign that its press is being worked on.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn draw_button_hints(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

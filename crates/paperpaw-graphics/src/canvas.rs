@@ -129,6 +129,7 @@ impl<'a> Canvas<'a> {
     }
 
     /// This canvas, describing what is drawn into `sink`.
+    #[doc(hidden)]
     pub fn describing(mut self, sink: &'a mut Vec<Described>) -> Self {
         self.described = Some(sink);
         self
@@ -137,6 +138,7 @@ impl<'a> Canvas<'a> {
     /// Whether it keeps no pixels ([`Framebuffer::blind`]): what is drawn
     /// is only described, so drawing that costs (glyphs, pictures) can be
     /// left out.
+    #[doc(hidden)]
     pub fn is_blind(&self) -> bool {
         self.framebuffer.is_blind()
     }
@@ -145,6 +147,7 @@ impl<'a> Canvas<'a> {
     /// ([`Canvas::is_blind`]), for
     /// [`Framebuffer::take_all_pictured`](crate::Framebuffer::take_all_pictured);
     /// its pixels count where they are drawn.
+    #[doc(hidden)]
     pub fn note_picture(&mut self, area: Rect) {
         if !self.framebuffer.is_blind() {
             return;
@@ -205,6 +208,7 @@ impl<'a> Canvas<'a> {
     /// a band drawn again starts from the first row.
     ///
     /// [`Atkinson`]: crate::diffuse::Atkinson
+    #[doc(hidden)]
     pub fn take_diffusion(&mut self, key: u64, y: i32) -> Option<crate::diffuse::Atkinson> {
         let row = u16::try_from(y + self.origin.1).ok()?;
         self.framebuffer.take_diffusion(key, row)
@@ -214,6 +218,7 @@ impl<'a> Canvas<'a> {
     /// ([`Canvas::take_diffusion`]), where this band ends there. Freed
     /// when the next band begins elsewhere or the frame ends
     /// ([`Framebuffer::end_frame`](crate::Framebuffer::end_frame)).
+    #[doc(hidden)]
     pub fn keep_diffusion(&mut self, key: u64, y: i32, atkinson: crate::diffuse::Atkinson) {
         if let Ok(row) = u16::try_from(y + self.origin.1) {
             self.framebuffer.keep_diffusion(key, row, atkinson);
@@ -318,6 +323,7 @@ impl<'a> Canvas<'a> {
     /// not count as pictures that leave ghosts on e-paper, which a full
     /// refresh clears after large ones
     /// ([`Framebuffer::take_pictured`]).
+    #[doc(hidden)]
     pub fn small_pictures(&mut self, draw: impl FnOnce(&mut Canvas<'_>)) {
         let was = self.framebuffer.set_counting(false);
         draw(self);
