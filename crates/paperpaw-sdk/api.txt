@@ -72,6 +72,7 @@ pub fn paperpaw_sdk::ask::ConfirmQuestion::command(self) -> paperpaw_sdk::Comman
 pub fn paperpaw_sdk::ask::ConfirmQuestion::context(self, &paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::ask::ConfirmQuestion::focus_yes(self) -> Self
 pub fn paperpaw_sdk::ask::ConfirmQuestion::no(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ask::ConfirmQuestion::only_yes(self) -> Self
 pub fn paperpaw_sdk::ask::ConfirmQuestion::text(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::ask::ConfirmQuestion::with(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::ask::ConfirmQuestion::yes(self, impl core::convert::Into<alloc::string::String>) -> Self
@@ -3192,6 +3193,7 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::takes_double_taps(&self) -> bool
 pub const paperpaw_sdk::ui::confirm::ANSWER: &str
 pub const paperpaw_sdk::ui::confirm::FOCUS_YES: &str
 pub const paperpaw_sdk::ui::confirm::NO_LABEL: &str
+pub const paperpaw_sdk::ui::confirm::ONLY_YES: &str
 pub const paperpaw_sdk::ui::confirm::YES_LABEL: &str
 pub mod paperpaw_sdk::ui::items
 pub struct paperpaw_sdk::ui::items::ItemsScreen
@@ -3897,6 +3899,7 @@ pub fn paperpaw_sdk::ui::icon_width(&paperpaw_sdk::Env<'_>, &str, f32) -> f32
 pub fn paperpaw_sdk::ui::list_step(&paperpaw_sdk::Id, isize) -> core::option::Option<isize>
 pub fn paperpaw_sdk::ui::message_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16
 pub fn paperpaw_sdk::ui::next_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, i64) -> core::option::Option<paperpaw_sdk::SettingValue>
+pub fn paperpaw_sdk::ui::note_fits(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> bool
 pub fn paperpaw_sdk::ui::note_line_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16
 pub fn paperpaw_sdk::ui::noted_row_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str, &str, &str) -> u16
 pub fn paperpaw_sdk::ui::number_room<'a>(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, impl core::iter::traits::collect::IntoIterator<Item = &'a paperpaw_sdk::SettingSpec>) -> alloc::string::String
