@@ -209,6 +209,9 @@ strip = true
 [profile.dev]
 # Keep debug builds usable on slow machines and in the emulator.
 opt-level = 1
+# Line tables only: backtraces keep file and line, while the build folders
+# of debug builds and tests stay about half as large.
+debug = "line-tables-only"
 
 # Build scripts rasterize fonts; optimize them even in debug builds.
 [profile.dev.build-override]
