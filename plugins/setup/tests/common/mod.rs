@@ -500,6 +500,12 @@ impl App {
     /// Whether the pixel at `x`, `y` shows black, as drawn now.
     pub fn dark(&mut self, x: i32, y: i32) -> bool {
         self.render();
+        self.inked(x, y)
+    }
+
+    /// Whether the pixel at `x`, `y` showed black when last rendered
+    /// ([`App::render`]): for looking at many.
+    pub fn inked(&self, x: i32, y: i32) -> bool {
         let display = self.kernel.device().display;
         let (Ok(x), Ok(y)) = (usize::try_from(x), usize::try_from(y)) else {
             return false;

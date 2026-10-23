@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- First-run setup: the sample of the font size is in the book's font,
+  at the size chosen, as the reader shows it: no longer in the
+  interface's font, its second line cut. The card grows with the size
+  (fewer words where there is no more room), and follows the size as it
+  changes.
 - The web emulator's release asset (`paperpaw-web-<version>.zip`) is
   signed as the emulators are, and holds everything its pages load. Its
   frame loads no inline style or script, so it runs under a strict
