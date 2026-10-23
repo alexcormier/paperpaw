@@ -6,6 +6,18 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Data plugins of formats 3 (not yet released) are written alike in
+  every file. A list is a key a line: an action's steps are a `run`
+  line each, a line one step with its commas, so a value with a comma
+  needs no escape (`entries` and `hide` of `menus.ini` still read ids
+  separated by commas). `notify:` takes a key of the plugin's
+  translations and says its text in the reader's language. In
+  `menus.ini`, `[menu <id>]` is another plugin's menu (`add`, `hide`)
+  and any other section a menu of one's own (`title`, `entries`);
+  `add` and `hide` in a plain section are still read. `paperpaw-dev
+  check` says where a file is written the earlier way
+  (`package.actions`, `package.menus`). The ini files take a section
+  name of words with single spaces between them.
 - First-run setup: the sample of the font size is in the book's font,
   at the size chosen, as the reader shows it: no longer in the
   interface's font, its second line cut. The card grows with the size

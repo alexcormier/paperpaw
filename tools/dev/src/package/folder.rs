@@ -157,6 +157,7 @@ pub fn check(plugin: &DataPlugin, report: &mut Report) -> Option<Folder> {
     folder.has_presets = folder.file("presets.ini").is_some();
     later_formats(&folder, &mut add);
     actions(&folder, folder.id(plugin), &mut add);
+    menus(&folder, &mut add);
     files_and_kinds(plugin, &folder, &mut add);
     catalogs(&folder, &mut add);
     fonts(&folder, &mut add);
@@ -264,9 +265,49 @@ fn later_formats(folder: &Folder, add: &mut dyn FnMut(Finding)) {
     }
 }
 
+/// Whether `value` of a `run` line reads as several steps separated by
+/// commas, as `run` was first written: each part a step (an action, a
+/// setting and a value, `open:`, `emit:`). A step a line now, a comma
+/// part of it.
+fn several_steps(value: &str) -> bool {
+    let step = |part: &str| {
+        let part = part.trim();
+        let id = part.split_once('=').map_or(part, |(id, _)| id).trim();
+        ["notify:", "open:", "emit:"].iter().any(|p| part.starts_with(p))
+            || (!id.is_empty()
+                && id.contains('.')
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"._-@".contains(&b)))
+    };
+    !value.trim_start().starts_with("notify:")
+        && value.matches(',').count() >= 1
+        && value.split(',').all(step)
+}
+
+/// The keys of the plugin's translations, all languages together.
+fn message_keys(folder: &Folder) -> std::collections::BTreeSet<String> {
+    let mut keys = std::collections::BTreeSet::new();
+    for file in &folder.files {
+        let path = file.path.as_str();
+        if !(path.starts_with("i18n/") && path.ends_with(".ini") && path.matches('/').count() == 1)
+        {
+            continue;
+        }
+        let source = String::from_utf8_lossy(&file.bytes).into_owned();
+        if let Ok(catalog) = paperpaw_i18n::Catalog::parse(source) {
+            keys.extend(catalog.keys().map(String::from));
+        }
+    }
+    keys
+}
+
 /// `actions.ini` as the kernel takes it, or refuses it and the plugin
-/// with it: at most [`MAX_STEPS`] steps an action, none running an action
-/// of the same file, events emitted only of the plugin's own.
+/// with it: a step a `run` line, at most [`MAX_STEPS`] steps an action,
+/// none running an action of the same file, events emitted only of the
+/// plugin's own; and what it would show other than meant: steps written
+/// on one line separated by commas (one step now, the commas part of
+/// it), a notification of no translation key.
 fn actions(folder: &Folder, plugin: &str, add: &mut dyn FnMut(Finding)) {
     if folder.file("actions.ini").is_none() {
         return;
@@ -288,16 +329,40 @@ fn actions(folder: &Folder, plugin: &str, add: &mut dyn FnMut(Finding)) {
         if found.last().is_none_or(|(last, ..)| *last != id) {
             found.push((id, line.line, Vec::new()));
         }
-        if line.key == "run"
-            && let Some((.., steps)) = found.last_mut()
-        {
-            steps.extend(
-                line.value
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(String::from),
-            );
+        if line.key != "run" || line.value.trim().is_empty() {
+            continue;
+        }
+        let place = format!("actions.ini:{}", line.line);
+        if several_steps(&line.value) {
+            add(Finding::warning(
+                "package.actions",
+                &place,
+                format!(
+                    "`run = {}` is one step, its commas part of it: PaperPaw takes a step a `run` line. \
+                     Write each step on a `run` line of its own.",
+                    line.value.trim()
+                ),
+            ));
+        }
+        if let Some((.., steps)) = found.last_mut() {
+            steps.push(line.value.trim().to_string());
+        }
+    }
+    let keys = message_keys(folder);
+    for line in lines.iter().filter(|l| l.key == "run") {
+        let Some(key) = line.value.trim().strip_prefix("notify:").map(str::trim) else {
+            continue;
+        };
+        if !keys.contains(key) {
+            add(Finding::warning(
+                "package.actions",
+                &format!("actions.ini:{}", line.line),
+                format!(
+                    "`notify:{key}` names no text of the plugin's translations, so the reader shows \
+                     `{key}` as it is: `notify:` takes a translation key, e.g. \
+                     `notify:{plugin}.<name>` with `{plugin}.<name> = ...` in i18n/en.ini."
+                ),
+            ));
         }
     }
     let ids: Vec<&str> = found.iter().map(|(id, ..)| id.as_str()).collect();
@@ -341,6 +406,41 @@ fn actions(folder: &Folder, plugin: &str, add: &mut dyn FnMut(Finding)) {
                     ),
                 ));
             }
+        }
+    }
+}
+
+/// `menus.ini` as the kernel reads it: another plugin's menu as
+/// `[menu <id>]` (with `add`, `hide`), a menu of one's own as any other
+/// section (with `title`, `entries`).
+fn menus(folder: &Folder, add: &mut dyn FnMut(Finding)) {
+    if folder.file("menus.ini").is_none() {
+        return;
+    }
+    // Its syntax is told already (`later_formats`).
+    for line in lines(folder, "menus.ini", &mut |_| {}) {
+        let place = format!("menus.ini:{}", line.line);
+        let foreign = line.section.strip_prefix("menu ");
+        match (line.key.as_str(), foreign) {
+            ("title" | "entries", Some(menu)) => add(Finding::error(
+                "package.menus",
+                &place,
+                format!(
+                    "`{}` makes a menu of one's own, but [menu {menu}] is another plugin's menu: \
+                     PaperPaw refuses menus.ini, and with it the whole plugin. Put it in a \
+                     section of the menu's own name, e.g. [tools].",
+                    line.key
+                ),
+            )),
+            ("add" | "hide", None) if !line.section.is_empty() => add(Finding::warning(
+                "package.menus",
+                &place,
+                format!(
+                    "`{}` changes another menu: write its section as [menu {}].",
+                    line.key, line.section
+                ),
+            )),
+            _ => {}
         }
     }
 }
@@ -952,7 +1052,7 @@ mod tests {
             ("styles.css", b"p { line-height: 1.6 }\n"),
             ("presets.ini", b"[night]\nkind = core.power-mode\nname = Night\n"),
             ("marks.ini", ini),
-            ("menus.ini", b"[core.reader-menu]\nadd = every.night\n"),
+            ("menus.ini", b"[menu core.reader-menu]\nadd = every.night\n"),
             ("actions.ini", b"[night]\ntitle = Night\nrun = core.night-mode=on\n"),
             ("icons.ini", b"every.night = moon\n"),
             ("setup.ini", b"[size]\nsetting = core.font-size\n"),
@@ -1020,17 +1120,25 @@ mod tests {
     fn actions_the_kernel_refuses_are_said() {
         let manifest: &[u8] =
             b"[plugin]\nid = acts\nname = Acts\ndescription = Actions.\nversion = 1.0.0\nformats = 3\n";
-        let many = vec!["core.home"; MAX_STEPS + 1].join(", ");
+        let many = vec!["run = core.home"; MAX_STEPS + 1].join("\n");
         let source = format!(
-            "[long]\ntitle = Long\nrun = {many}\n\n\
-             [first]\ntitle = First\nrun = core.night-mode=on, acts.second\n\n\
-             [second]\ntitle = Second\nrun = notify:Hello\n\n\
+            "[long]\ntitle = Long\n{many}\n\n\
+             [first]\ntitle = First\nrun = core.night-mode=on\nrun = acts.second\n\n\
+             [second]\ntitle = Second\nrun = notify:acts.hello\n\n\
              [loud]\ntitle = Loud\nrun = emit:core.started\n\n\
-             [fine]\ntitle = Fine\nrun = core.night-mode=on, open:core.library, emit:acts.done, core.home\n"
+             [fine]\ntitle = Fine\nrun = core.night-mode=on\nrun = open:core.library\nrun = emit:acts.done\nrun = core.home\n"
         );
         let found = findings(&folder(
             "acts",
-            &[("plugin.ini", manifest), ("actions.ini", source.as_bytes())],
+            &[
+                ("plugin.ini", manifest),
+                ("actions.ini", source.as_bytes()),
+                (
+                    "i18n/en.ini",
+                    b"[meta]\nlanguage = en\nname = English\nplural = one-other\n\n\
+                      [messages]\nacts.hello = Hello, reader\n",
+                ),
+            ],
         ));
         let actions: Vec<(&str, &str)> = found
             .iter()
@@ -1045,21 +1153,91 @@ mod tests {
         );
         assert!(
             at(
-                "actions.ini:6",
+                "actions.ini:22",
                 "runs `acts.second`, an action of this same file"
             ),
             "{actions:#?}"
         );
         assert!(
-            !actions.iter().any(|(p, _)| *p == "actions.ini:10"),
+            !actions
+                .iter()
+                .any(|(p, _)| ["actions.ini:27", "actions.ini:28"].contains(p)),
             "{actions:#?}"
         );
-        assert!(at("actions.ini:14", "emits `core.started`"), "{actions:#?}");
+        assert!(at("actions.ini:31", "emits `core.started`"), "{actions:#?}");
         assert!(
-            !actions.iter().any(|(p, _)| *p == "actions.ini:18"),
+            !actions.iter().any(|(p, _)| *p == "actions.ini:35"),
             "{actions:#?}"
         );
         assert!(actions.iter().all(|(_, m)| m.contains("shows as Error")));
+    }
+
+    /// Steps written on one line separated by commas, as `run` was first
+    /// written, and a notification of no translation key are said; a
+    /// step a line with commas of its own is not.
+    #[test]
+    fn steps_on_one_line_and_notes_of_no_key_are_said() {
+        let manifest: &[u8] =
+            b"[plugin]\nid = acts\nname = Acts\ndescription = Actions.\nversion = 1.0.0\nformats = 3\n";
+        let source: &[u8] = b"[night]\ntitle = Night\n\
+            run = core.night-mode=on, core.font-size=14, notify:acts.night\n\
+            run = notify:Good night\n\
+            run = acts.label=Hello, reader\n\
+            run = notify:acts.night\n";
+        let found = findings(&folder(
+            "acts",
+            &[
+                ("plugin.ini", manifest),
+                ("actions.ini", source),
+                (
+                    "i18n/de.ini",
+                    b"[meta]\nlanguage = de\nname = Deutsch\nplural = one-other\n\n\
+                      [messages]\nacts.night = Gute Nacht, schlaf gut\n",
+                ),
+            ],
+        ));
+        let actions: Vec<(&str, &str)> = found
+            .iter()
+            .filter(|f| f.1 == "package.actions")
+            .map(|f| (f.2.as_str(), f.3.as_str()))
+            .collect();
+        let at =
+            |place: &str, part: &str| actions.iter().any(|(p, m)| *p == place && m.contains(part));
+        assert!(at("actions.ini:3", "a `run` line of its own"), "{actions:#?}");
+        assert!(at("actions.ini:4", "`notify:Good night` names no text"), "{actions:#?}");
+        assert_eq!(actions.len(), 2, "{actions:#?}");
+        assert!(found.iter().filter(|f| f.1 == "package.actions").all(|f| f.0 == Level::Warning));
+    }
+
+    /// Another plugin's menu changed in a plain section is said, a menu
+    /// of one's own made in `[menu <id>]` refused; each as it is written
+    /// is not.
+    #[test]
+    fn menus_are_told_apart_by_their_section() {
+        let manifest: &[u8] =
+            b"[plugin]\nid = tools\nname = Tools\ndescription = Menus.\nversion = 1.0.0\nformats = 3\n";
+        let source: &[u8] = b"[tools]\ntitle = Tools\nentries = core.home\n\
+            [menu core.reader-menu]\nadd = core.home after core.toc\nhide = core.toc\n\
+            [core.reader-more]\nhide = core.home\n\
+            [menu core.library-menu]\ntitle = Mine\n";
+        let found = findings(&folder(
+            "tools",
+            &[("plugin.ini", manifest), ("menus.ini", source)],
+        ));
+        let menus: Vec<_> = found.iter().filter(|f| f.1 == "package.menus").collect();
+        assert_eq!(menus.len(), 2, "{menus:#?}");
+        assert!(
+            menus.iter().any(|f| f.0 == Level::Warning
+                && f.2 == "menus.ini:8"
+                && f.3.contains("[menu core.reader-more]")),
+            "{menus:#?}"
+        );
+        assert!(
+            menus.iter().any(|f| f.0 == Level::Error
+                && f.2 == "menus.ini:10"
+                && f.3.contains("[menu core.library-menu] is another plugin's menu")),
+            "{menus:#?}"
+        );
     }
 
     #[test]

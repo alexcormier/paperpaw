@@ -160,7 +160,7 @@ later one (`formats = 3`), else left out, and PaperPaw says so.
 | several settings chosen together (a power mode, a theme, a look of widgets) | `presets.ini` | `[night]` `kind = core.power-mode` |
 | what buttons, taps and swipes do | `keymap.ini` | `[keymap.global]` `button.menu = core.refresh-screen` |
 | an action of one's own, made of steps | `actions.ini` | `[night]` `run = core.night-mode=on` |
-| what a menu holds, a menu of one's own | `menus.ini` | `[core.reader-menu]` `add = my.night after core.toc` |
+| what a menu holds, a menu of one's own | `menus.ini` | `[menu core.reader-menu]` `add = my.night after core.toc` |
 | the icon of an action or a setting | `icons.ini` | `my.night = moon` |
 | the words, or a whole new language | `i18n/<lang>.ini` | `[messages]` `my.night = Night reading` |
 | fonts to read with, letters other fonts lack | `fonts/` (and `[extends]`, `[family]` in `plugin.ini`) | `fonts/Fredoka.ttf` |
@@ -188,8 +188,8 @@ so a plugin without code cannot set it.
 | `fonts/*.ppfp` | font packs, named in `plugin.ini` (`[extends]`, `[family]`) | the kernel: letters other fonts lack, a family's faces, icons | 1 |
 | pictures (`.png`, `.jpg`) | a file, or a folder of them, named in `settings.ini` (`logo = plugins/<id>/logo.png`) | the setting that names it: the logo, the sleep screen's pictures | 1 |
 | `marks.ini` | ini: a section per role, `title`, one or more `pattern`, the look (`background`, `line`) | the reader: words marked on book pages | 2 |
-| `menus.ini` | ini: a section per menu, `add = <entry> after <entry>`, `hide = <entry>`; a menu of one's own with `title` and `entries` | the kernel: entries of any menu | 3 |
-| `actions.ini` | ini: a section per action, `title`, `icon`, `run` (steps, at most 16) | the kernel: actions made of steps | 3 |
+| `menus.ini` | ini: another plugin's menu as `[menu <id>]` with `add = <entry> after <entry>`, `hide = <entry>`; a menu of one's own as `[<name>]` with `title` and `entries`; an entry a line | the kernel: entries of any menu | 3 |
+| `actions.ini` | ini: a section per action, `title`, `icon`, `run` (a step a line, at most 16) | the kernel: actions made of steps | 3 |
 | `icons.ini` | ini without sections: `<action or setting> = <icon name>` | the kernel: icons of actions and settings | 3 |
 | `setup.ini` | ini: a section per step, `setting` or `screen`, `order`, `title`, `help` | the first-run setup: steps of its own | 3 |
 | `points/<point>.txt` | text: a line each, `#` lines left out, at most 64 lines in all | the plugin that reads the point (`keyboard.layouts`, `about.lines`) | 3 |
@@ -234,10 +234,21 @@ background = yellow
 [night]
 title = Night reading
 icon = moon
-run = core.night-mode=on, core.font-size=14, notify:Good night
+run = core.night-mode=on
+run = core.font-size=14
+run = notify:night-reader.good-night
+
+# i18n/en.ini
+[meta]
+language = en
+name = English
+plural = one-other
+
+[messages]
+night-reader.good-night = Good night, sleep well
 
 # menus.ini
-[core.reader-menu]
+[menu core.reader-menu]
 add = night-reader.night after core.toc
 
 # icons.ini
@@ -284,17 +295,70 @@ brings the defaults back as they were without it, after the restart.
 
 ### actions.ini
 
-An action runs at most 16 steps in order, separated by commas. A step
-is one of these: a setting and a value, as `core.night-mode=on`;
-`open:<slot>`; `notify:<text>`; `emit:<event>`, with an event of the
-plugin's own named `<plugin>.<name>`; or the id of another action that
-is not in the same file. A step setting a value of the wrong kind is passed over, and one
+An action runs at most 16 steps in order, a step a `run` line. A line
+is one step as it is, commas and all, so a value with a comma needs no
+escape. A step is one of these: a setting and a value, as
+`core.night-mode=on`; `open:<slot>`; `notify:<key>`, which shows the
+text of that key in the plugin's translations, in the reader's
+language (a key the translations lack is shown as it is);
+`emit:<event>`, with an event of the plugin's own named
+`<plugin>.<name>`; or the id of another action that is not in the
+same file. A step setting a value of the wrong kind is passed over, and one
 setting what keeps the device safe is never done. An action of more
 than 16 steps, or one that runs an action of its own file, is no
 mistake PaperPaw passes over: the file is refused, and the plugin with
 it, which the plugin manager then shows as *Error*. `paperpaw-dev check`
-finds this before, as `package.actions`. It also finds a default in
+finds this before, as `package.actions`, and also steps written on one
+line separated by commas (one step to PaperPaw) and a `notify:` key
+the plugin's translations lack. It also finds a default in
 `settings.ini` that PaperPaw would not take, as `package.settings`.
+
+```ini
+[night]
+title = Night reading
+run = core.night-mode=on
+run = my.greeting=Hello, reader
+run = notify:my.good-night
+```
+
+### menus.ini
+
+A section's name says whose menu it is. `[menu <id>]` is another
+plugin's menu, as `[menu core.reader-menu]`: `add = <entry>` puts an
+entry into it, `add = <entry> after <entry>` beside another, and
+`hide = <entry>` takes one out. Any other section is
+a menu of the plugin's own, named like an action (`[tools]` in the
+plugin `my` is `my.tools`): `title` names it, `entries` lists what it
+holds, and other menus list it by its id.
+
+```ini
+[menu core.reader-menu]
+add = my.night after core.toc
+add = my.tools
+
+[menu core.reader-more]
+hide = stats.open
+
+[tools]
+title = My tools
+entries = my.night
+entries = core.library
+```
+
+`title` or `entries` in a `[menu <id>]` section is refused, with the
+file and the plugin, as a step too many is in `actions.ini`. `add` or
+`hide` in a section without `menu` in front is read as before, as
+another plugin's menu; `paperpaw-dev check` says to write it as
+`[menu <id>]` (`package.menus`).
+
+### Lists
+
+A list in `menus.ini` and `actions.ini` is a key a line: `run`,
+`entries`, `add` and `hide` once for each item, in order. `entries`
+and `hide` also read ids separated by commas on one line, as they
+were first written. A setting's value in `settings.ini` and
+`presets.ini` is another thing: it is written as `paperpaw.ini` keeps
+it, a list there being ids separated by commas.
 
 ### A home screen without code
 
