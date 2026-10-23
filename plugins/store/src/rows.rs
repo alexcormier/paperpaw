@@ -97,7 +97,7 @@ pub(crate) fn draw(
                 x,
                 band,
                 &text,
-                style.focus_faint(focused, 80),
+                style.focus_faint(focused, ui::Ink::Detail),
             );
             x
         }
@@ -149,7 +149,7 @@ pub(crate) fn draw(
         f32::from(rect.x) + margin,
         note,
         &summary,
-        style.focus_faint(focused, 80),
+        style.focus_faint(focused, ui::Ink::Detail),
     );
 }
 
@@ -173,7 +173,7 @@ pub(crate) fn draw_note(
     let right = rect.x + rect.width - margin;
     let area = Rect::new(left, band.y + band.height, right.saturating_sub(left), line);
     let x = f32::from(left + margin);
-    let color = style.focus_faint(focused, 80);
+    let color = style.focus_faint(focused, ui::Ink::Detail);
     ui::draw_label(canvas, &font, style.small, x, area, text, color);
 }
 

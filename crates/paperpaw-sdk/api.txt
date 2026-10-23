@@ -3494,7 +3494,7 @@ pub paperpaw_sdk::ui::Focus::Ring
 pub paperpaw_sdk::ui::Focus::Soft
 #[non_exhaustive] pub enum paperpaw_sdk::ui::Ink
 pub paperpaw_sdk::ui::Ink::Card
-pub paperpaw_sdk::ui::Ink::CardPattern
+pub paperpaw_sdk::ui::Ink::Detail
 pub paperpaw_sdk::ui::Ink::Disabled
 pub paperpaw_sdk::ui::Ink::Faint
 pub paperpaw_sdk::ui::Ink::Line
@@ -3508,7 +3508,7 @@ pub paperpaw_sdk::ui::Ink::Rule
 pub paperpaw_sdk::ui::Ink::Section
 pub paperpaw_sdk::ui::Ink::Text
 impl paperpaw_sdk::ui::Ink
-pub const paperpaw_sdk::ui::Ink::ALL: [paperpaw_sdk::ui::Ink; 14]
+pub const paperpaw_sdk::ui::Ink::ALL: &'static [paperpaw_sdk::ui::Ink]
 pub const fn paperpaw_sdk::ui::Ink::name(self) -> &'static str
 #[non_exhaustive] pub enum paperpaw_sdk::ui::ListChange
 pub paperpaw_sdk::ui::ListChange::Focus
@@ -3661,7 +3661,7 @@ pub fn paperpaw_sdk::ui::Pager::tap(&self, paperpaw_platform::geometry::Point) -
 pub struct paperpaw_sdk::ui::Palette(_)
 impl paperpaw_sdk::ui::Palette
 pub const paperpaw_sdk::ui::Palette::DEFAULT: paperpaw_sdk::ui::Palette
-pub fn paperpaw_sdk::ui::Palette::gray(&self, paperpaw_sdk::ui::Ink) -> u8
+pub fn paperpaw_sdk::ui::Palette::color(&self, paperpaw_sdk::ui::Ink) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::ui::Palette::parse(&str) -> paperpaw_sdk::ui::Palette
 impl core::default::Default for paperpaw_sdk::ui::Palette
 pub fn paperpaw_sdk::ui::Palette::default() -> Self
@@ -3831,8 +3831,8 @@ pub paperpaw_sdk::ui::UiStyle::title: f32
 impl paperpaw_sdk::ui::UiStyle
 pub const paperpaw_sdk::ui::UiStyle::PLAIN: paperpaw_sdk::ui::UiStyle
 pub fn paperpaw_sdk::ui::UiStyle::dark_focus(&self) -> bool
-pub fn paperpaw_sdk::ui::UiStyle::faint(&self, u8) -> paperpaw_platform::pixel::Color
-pub fn paperpaw_sdk::ui::UiStyle::focus_faint(&self, bool, u8) -> paperpaw_platform::pixel::Color
+pub fn paperpaw_sdk::ui::UiStyle::faint(&self, paperpaw_sdk::ui::Ink) -> paperpaw_platform::pixel::Color
+pub fn paperpaw_sdk::ui::UiStyle::focus_faint(&self, bool, paperpaw_sdk::ui::Ink) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::ui::UiStyle::focus_ink(&self, bool) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::ui::UiStyle::focus_paper(&self, bool) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::ui::UiStyle::font<'a>(&self, &paperpaw_sdk::Env<'a>) -> core::option::Option<paperpaw_sdk::FontHandle<'a>>

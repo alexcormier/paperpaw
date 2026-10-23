@@ -339,7 +339,7 @@ impl Screen for Summary {
             right,
             header,
             source,
-            style.faint(80),
+            style.faint(ui::Ink::Detail),
         );
         let word = ui::fit(&font, style.title, &self.word, right - margin * 2.0);
         ui::draw_label(

@@ -419,6 +419,14 @@ file to your report.
 - SDK: a look's painters take a `ui::look::PaintCx` (the canvas and the
   style, more to come) and the part: `fn(&mut PaintCx, &SwitchPart) ->
   bool`.
+- SDK: the interface's colours come from the palette: `faint(Ink)` and
+  `focus_faint(focused, Ink)` take a role (`Ink::Note`, the new
+  `Ink::Detail` for what is told beside a row's title, `Ink::Muted` …)
+  in place of a gray; the focus and the header use the palette's text
+  and paper. `Palette` holds colours (`color(ink)`), `Ink::ALL` is a
+  slice, and `Ink::CardPattern` is gone (cards on black and white
+  panels are a sparser pattern of `Ink::Card`). The palette setting
+  names `detail` too.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).

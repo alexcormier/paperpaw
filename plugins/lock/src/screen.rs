@@ -544,7 +544,15 @@ impl LockScreen {
         if let Some(date) = paperpaw_sdk::time::date_text(env) {
             let below = Rect::new(top.x, top.y + big, top.width, line(env, style, style.small));
             let x = (f32::from(below.width) - font.measure(style.small, &date)) / 2.0;
-            ui::draw_label(canvas, &font, style.small, x, below, &date, style.faint(70));
+            ui::draw_label(
+                canvas,
+                &font,
+                style.small,
+                x,
+                below,
+                &date,
+                style.faint(ui::Ink::Detail),
+            );
         }
     }
 

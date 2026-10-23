@@ -92,7 +92,7 @@ impl Screen for SourceScreen {
                 let color = if text == shown {
                     Color::BLACK
                 } else {
-                    style.faint(80)
+                    style.faint(ui::Ink::Detail)
                 };
                 ui::draw_label(canvas, &font, style.small, x, at, part, color);
                 y += small as u16;

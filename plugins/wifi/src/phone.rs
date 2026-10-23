@@ -399,7 +399,7 @@ impl PhoneScreen {
             env.i18n.tr(note),
             style.small,
             small,
-            style.faint(60),
+            style.faint(ui::Ink::Note),
         );
         let label = env.i18n.tr(self.step.button());
         let button = stack.take_bottom(ui::button_height_for(env, &style, inner.width, label));
@@ -441,7 +441,7 @@ impl PhoneScreen {
                 x,
                 row,
                 env.i18n.tr(key),
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
             let (size, value) =
                 widgets::fit_line(&font, big, style.small, value, f32::from(inside.width));

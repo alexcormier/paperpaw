@@ -670,7 +670,7 @@ impl Screen for Browser {
                 style.margin as f32,
                 line,
                 message,
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
         }
         for (i, button) in self.buttons().into_iter().enumerate() {

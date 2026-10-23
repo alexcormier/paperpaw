@@ -518,7 +518,7 @@ fn draw_join(
         f32::from(margin),
         Rect::new(margin, bottom.saturating_sub(small), width, small),
         &note,
-        style.faint(60),
+        style.faint(ui::Ink::Note),
     );
     if let Some(qr) = &own.qr {
         let room = Rect::new(

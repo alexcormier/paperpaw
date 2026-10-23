@@ -650,7 +650,7 @@ impl Screen for Guide {
             style.small,
             &help,
             self.help_lines(),
-            style.faint(60),
+            style.faint(ui::Ink::Note),
         );
         if let Some(card) = l.card {
             self.draw_card(canvas, env, card);

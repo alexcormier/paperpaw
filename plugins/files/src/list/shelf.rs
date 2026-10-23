@@ -350,7 +350,7 @@ impl Screen for ShelfScreen {
             self.list.paging(len),
         );
         let x = style.margin as f32;
-        let faint = style.faint(80);
+        let faint = style.faint(ui::Ink::Detail);
         if let Some(font) = style.font(env) {
             let summary = &self.summary_text;
             ui::draw_label(canvas, &font, style.small, x, self.summary, summary, faint);

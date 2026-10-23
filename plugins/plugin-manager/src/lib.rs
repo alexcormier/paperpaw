@@ -517,7 +517,7 @@ impl Screen for PluginList {
                 style.margin as f32,
                 area,
                 ui::tr_input(env, key),
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
         }
     }

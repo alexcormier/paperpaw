@@ -689,7 +689,7 @@ impl Screen for PageScreen {
         let line = font.line_metrics(style.small).line_height;
         for (icon, fact) in facts {
             let first = Rect::new(0, y as u16, self.list.area().width, line as u16);
-            let ink = style.faint(80);
+            let ink = style.faint(ui::Ink::Detail);
             ui::draw_icon(canvas, env, icon, icon_size, margin, first, ink);
             paragraph(canvas, &mut y, &fact, style.small, ink, 3, room);
             y += style.gap as f32 / 3.0;

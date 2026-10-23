@@ -242,12 +242,18 @@ impl ReviewScreen {
         }
         y += style.gap as u16;
         let rule = Rect::new(margin * 2, y, area.width.saturating_sub(4 * margin), 1);
-        canvas.fill(rule, style.faint(60));
+        canvas.fill(rule, style.faint(ui::Ink::Note));
         y += style.gap as u16 * 2;
         lines(canvas, &mut y, &card.back, style.text, Color::BLACK);
         if !card.example.is_empty() {
             y += style.gap as u16;
-            lines(canvas, &mut y, &card.example, style.small, style.faint(60));
+            lines(
+                canvas,
+                &mut y,
+                &card.example,
+                style.small,
+                style.faint(ui::Ink::Note),
+            );
         }
     }
 }
@@ -325,7 +331,15 @@ impl Screen for ReviewScreen {
                 rect.width,
                 small,
             );
-            ui::draw_label(canvas, &font, style.small, x, above, &wait, style.faint(60));
+            ui::draw_label(
+                canvas,
+                &font,
+                style.small,
+                x,
+                above,
+                &wait,
+                style.faint(ui::Ink::Note),
+            );
         }
     }
 

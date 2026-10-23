@@ -223,7 +223,7 @@ impl Screen for SkimScreen {
                 at,
                 info,
                 &self.chapter,
-                style.faint(80),
+                style.faint(ui::Ink::Detail),
             );
         }
         // The bar has the focus while no button has it, shown as the

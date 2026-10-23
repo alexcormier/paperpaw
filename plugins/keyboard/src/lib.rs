@@ -1029,7 +1029,7 @@ impl KeyboardScreen {
             margin,
             title_area,
             &title,
-            style.faint(90),
+            style.faint(ui::Ink::Muted),
         );
         let box_area = self.text_box();
         ui::stroke_round(canvas, &style, box_area, style.line.max(2), Color::BLACK);

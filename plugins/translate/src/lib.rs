@@ -425,7 +425,7 @@ impl Screen for Panel {
             right,
             header,
             source,
-            style.faint(80),
+            style.faint(ui::Ink::Detail),
         );
         ui::draw_label(
             canvas,

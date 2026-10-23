@@ -426,7 +426,7 @@ impl Dashboard {
                     Rect::new(margin, f.y, width, f.height),
                     [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
                     style.small,
-                    style.faint(60),
+                    style.faint(ui::Ink::Note),
                 );
                 line.draw(canvas, env, &font, &Params::new());
             }
@@ -453,14 +453,22 @@ impl Dashboard {
             icon("plus", self.plus, Color::BLACK);
             icon("check", self.pencil, Color::BLACK);
         } else if env.settings.read(&pages::FOOTER_PENCIL) {
-            icon("pencil", self.pencil, style.faint(60));
+            icon("pencil", self.pencil, style.faint(ui::Ink::Note));
         }
         if !editing {
             for (area, action) in &self.actions {
                 let name = env.menus.icon(action.as_str()).unwrap_or("puzzle");
                 let w = ui::icon_width(env, name, size);
                 let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-                ui::draw_icon(canvas, env, name, size, x, *area, style.faint(60));
+                ui::draw_icon(
+                    canvas,
+                    env,
+                    name,
+                    size,
+                    x,
+                    *area,
+                    style.faint(ui::Ink::Note),
+                );
                 let title = env
                     .menus
                     .title(action.as_str())

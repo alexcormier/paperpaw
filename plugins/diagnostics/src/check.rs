@@ -539,7 +539,7 @@ impl Screen for Check {
             l.help,
             style.small,
             &help,
-            style.faint(60),
+            style.faint(ui::Ink::Note),
         );
         match self.step {
             Some(Step::Screen) => draw_screen_test(canvas, env, l.body, self.flipped),

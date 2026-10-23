@@ -327,7 +327,10 @@ pub(crate) fn paint_frame(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, 
         Frame::Card if style.grays <= 2 => {
             // A light gray would be a heavy pattern on black and white:
             // the sparsest there is, in a thin line as cards in lists.
-            canvas.fill_round_shaded(area, style.corner, style.ink(Ink::CardPattern));
+            let card = style.ink(Ink::Card);
+            let sparser = |c: u8| c + (255 - c) / 2;
+            let pattern = Color::rgb(sparser(card.r), sparser(card.g), sparser(card.b));
+            canvas.fill_round_shaded(area, style.corner, pattern);
             let line = (style.line / 2).max(1);
             canvas.stroke_round(area, line, style.corner, Color::BLACK);
         }

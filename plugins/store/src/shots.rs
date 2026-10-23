@@ -126,7 +126,7 @@ impl Screen for ShotsScreen {
                 let at = Rect::new(self.area.x + (self.area.width - w) / 2, self.area.y, w, h);
                 ui::draw_image(canvas, env.storage, image, at);
                 // A thin frame: the screenshot's own paper apart from ours.
-                canvas.stroke_round(at, style.line.max(1), 0, style.faint(150));
+                canvas.stroke_round(at, style.line.max(1), 0, style.faint(ui::Ink::Rule));
             }
             Picture::Loading => ui::draw_empty(
                 canvas,

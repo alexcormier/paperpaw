@@ -751,7 +751,7 @@ impl Screen for CalibreScreen {
             let text = env
                 .i18n
                 .format("calibre.library", &[("library", Arg::Str(library))]);
-            line(canvas, style.text, &text, style.faint(80));
+            line(canvas, style.text, &text, style.faint(ui::Ink::Detail));
         }
         if self.received > 0 {
             let text = env
@@ -766,7 +766,12 @@ impl Screen for CalibreScreen {
             _ => None,
         };
         if let Some(hint) = hint {
-            line(canvas, style.small, env.i18n.tr(hint), style.faint(80));
+            line(
+                canvas,
+                style.small,
+                env.i18n.tr(hint),
+                style.faint(ui::Ink::Detail),
+            );
         }
         // How to connect or try again: by touch, or the button (named in
         // the row of hints under the screen, where there is one).

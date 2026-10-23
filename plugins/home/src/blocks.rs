@@ -300,7 +300,7 @@ fn draw_status_line(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look
     let color = if look.frame == Frame::Dark {
         look.faint
     } else {
-        style.faint(60)
+        style.faint(ui::Ink::Note)
     };
     let context = Params::new();
     PLACE.draw(canvas, env, &status_frame(env, area, color, &context));

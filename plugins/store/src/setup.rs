@@ -233,7 +233,7 @@ impl Screen for OfferScreen {
                 style.margin as f32,
                 area,
                 ui::tr_input(env, "store.offer.hint"),
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
         }
     }

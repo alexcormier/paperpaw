@@ -364,7 +364,7 @@ impl MenuScreen {
         let state = env.menus.state(env, item.id.as_str());
         let ink = match state.enabled {
             true => style.focus_ink(focused),
-            false => style.faint(60),
+            false => style.faint(ui::Ink::Note),
         };
         // The line under it, below the row.
         let rect = match &item.description {
@@ -375,7 +375,15 @@ impl MenuScreen {
                 let x = f32::from(below.x) + style.margin as f32 + f32::from(self.icon_width);
                 let width = f32::from(below.width) - x - style.margin as f32;
                 let text = ui::fit(&font, style.small, env.i18n.tr(key), width);
-                ui::draw_label(canvas, &font, style.small, x, below, &text, style.faint(80));
+                ui::draw_label(
+                    canvas,
+                    &font,
+                    style.small,
+                    x,
+                    below,
+                    &text,
+                    style.faint(ui::Ink::Detail),
+                );
                 Rect::new(rect.x, rect.y, rect.width, row)
             }
             None => rect,

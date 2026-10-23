@@ -525,7 +525,7 @@ impl Screen for BrowserScreen {
                 style.margin as f32,
                 self.status,
                 message,
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
         }
     }
