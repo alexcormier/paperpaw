@@ -130,6 +130,30 @@ does not read. Some files came with a later version of the data
 formats: they are read only where `plugin.ini` says that version or a
 later one (`formats = 3`), else left out, and PaperPaw says so.
 
+### Which file for what
+
+| To change | File | For example |
+|-----------|------|-------------|
+| any setting's default (sizes, fonts, the look, what a widget shows) | `settings.ini` | `[core]` `font-size = 14` |
+| several settings chosen together (a power mode, a theme, a look of widgets) | `presets.ini` | `[night]` `kind = core.power-mode` |
+| what buttons, taps and swipes do | `keymap.ini` | `[keymap.global]` `button.menu = core.refresh-screen` |
+| an action of one's own, made of steps | `actions.ini` | `[night]` `run = core.night-mode=on` |
+| what a menu holds, a menu of one's own | `menus.ini` | `[core.reader-menu]` `add = my.night after reader.toc` |
+| the icon of an action or a setting | `icons.ini` | `my.night = moon` |
+| the words, or a whole new language | `i18n/<lang>.ini` | `[messages]` `my.night = Night reading` |
+| fonts to read with, letters other fonts lack | `fonts/` (and `[extends]`, `[family]` in `plugin.ini`) | `fonts/Fredoka.ttf` |
+| how books look | `styles.css` | `p { line-height: 1.6 }` |
+| words marked on book pages | `marks.ini` | `[names]` `pattern = ...` |
+| the home screen | `settings.ini` (`home.*`, see below) | `[home]` `page-1 = home.clock 0/0 4x1` |
+| the logo (sleep screen, About, the logo widget) | a picture, named in `settings.ini` | `[core]` `logo = plugins/<id>/logo.png` |
+| the sleep screen's pictures | a folder of pictures, named in `settings.ini` | `[sleep]` `show = sleep.show.picture`, `folder = plugins/<id>/sleep` |
+| the pictures of the picture widget | a folder of pictures, named in `settings.ini` | `[widgets]` `picture.folder = plugins/<id>/pictures` |
+| steps of the first-run setup | `setup.ini` | `[size]` `setting = core.font-size` |
+| keyboard layouts, lines on *About* | `points/<point>.txt` | `points/keyboard.layouts.txt` |
+
+There is no background picture for screens yet: no setting takes one,
+so a plugin without code cannot set it.
+
 | Path | Format | Read by, for | Since formats |
 |------|--------|--------------|---------------|
 | `plugin.ini` | ini: `[plugin]` with `id`, `name`, `description`, `version`, `formats`; `[extends]`, `[family]` and `[fonts]` (formats 3) where it brings fonts | the kernel: the plugin, its fonts, the fonts bound to roles | 1 |
@@ -158,6 +182,10 @@ id = night-reader
 name = Night reader
 description = Reading in the dark, one tap away.
 version = 1.0.0
+# The version of the data formats the files are written in: 1 for
+# settings, presets, key maps, translations, fonts, styles and pictures;
+# 2 where there is a marks.ini; 3 where there is a menus.ini,
+# actions.ini, icons.ini, setup.ini, points/ or [fonts] here.
 formats = 3
 
 # settings.ini
@@ -204,6 +232,45 @@ order = 35
 Night reader is made by Ada.
 ```
 
+### settings.ini
+
+A setting's id is its plugin, a dot and the rest: in `settings.ini` the
+plugin is the section and the rest is the key, so `core.font-size` is
+`font-size` in `[core]`, and `widgets.picture.folder` is
+`picture.folder` in `[widgets]`. The values are written as
+`paperpaw.ini` writes them:
+
+- a switch: `true` or `false` (also `on`, `off`, `yes`, `no`, `1`, `0`);
+- a number: a whole number within the setting's range (the settings
+  list shows it; `paperpaw-emu --registry` names `min` and `max`);
+- a choice: the whole id of the option, as `files.view.covers`, not
+  `covers`;
+- a list: ids separated by commas;
+- a text, a folder or a file: as it is, a path from the top of the card
+  (`plugins/<id>/...`).
+
+A value PaperPaw does not take (a number out of its range, a choice
+that is no option, a setting no plugin has) is not taken, and PaperPaw
+says why; it is not made to fit. A default that keeps the device safe
+(the lock's) is taken only from its own plugin.
+
+These are defaults, nothing more: what the person chose themselves (in
+the settings, kept in `paperpaw.ini`) stays, whichever plugin brings
+another default, and switching the plugin off in the plugin manager
+brings the defaults back as they were without it, after the restart.
+
+### actions.ini
+
+An action runs its steps in order, separated by commas, at most 16: a
+setting and a value (`core.night-mode=on`), `open:<slot>`,
+`notify:<text>`, `emit:<event>` (an event of the plugin's own,
+`<plugin>.<name>`), or the id of another action (not one of the same
+file). A step setting a value of the wrong kind is passed over, and one
+setting what keeps the device safe is never done. An action of more
+than 16 steps, or one that runs an action of its own file, is no
+mistake PaperPaw passes over: the file is refused, and the plugin with
+it, which the plugin manager then shows as *Error*.
+
 ### A home screen without code
 
 The home screen keeps its pages in settings (`plugins/home/src/pages.rs`),
@@ -242,6 +309,14 @@ screen's own are `home.clock`, `home.date`, `home.status`,
 `home.continue`, `home.recent` and `home.tools` (every tool not placed
 otherwise, a cell each). Defaults change only what the reader has not
 chosen: a reader who arranged the home screen by hand keeps that.
+
+A widget's own settings take defaults the same way, by the setting's
+id: `home.clock.date` (whether the clock shows the date) is `clock.date`
+in `[home]`, `widgets.picture.folder` is `picture.folder` in
+`[widgets]`. Such a default holds for every place of the widget that
+has no value of its own. A widget placed twice has its second place
+named with `@2` (`widgets.clock@2` on the page), with settings of its
+own (`widgets.clock@2.face`); those take no default from a plugin.
 
 ## Foreign
 
