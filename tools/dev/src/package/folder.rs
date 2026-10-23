@@ -356,7 +356,7 @@ fn actions(folder: &Folder, plugin: &str, add: &mut dyn FnMut(Finding)) {
         if !keys.contains(key) {
             add(Finding::warning(
                 "package.actions",
-                &format!("actions.ini:{}", line.line),
+                format!("actions.ini:{}", line.line),
                 format!(
                     "`notify:{key}` names no text of the plugin's translations, so the reader shows \
                      `{key}` as it is: `notify:` takes a translation key, e.g. \
