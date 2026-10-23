@@ -260,9 +260,37 @@ pub(crate) fn expand(env: &Env<'_>, items: &[Item]) -> Vec<Item> {
     out
 }
 
-/// The command that keeps `items` as the page in `slot`: a page other
-/// than the first keeps a space when emptied, so that it still shows.
-pub(crate) fn store(slot: usize, items: &[Item]) -> Command {
+/// Whether the page keeps `item` without showing it ([`expand`] leaves it
+/// out): a widget of a plugin not loaded now (switched off, say), the
+/// status line while it shows above the grid, a fill.
+fn hidden(env: &Env<'_>, item: &Item) -> bool {
+    match &item.what {
+        What::Widget(id) if id == TOOLS || id == widgets::SPACE => false,
+        What::Widget(id) => {
+            id == widgets::FILL
+                || (widgets::base(id) == STATUS && env.settings.read(&STATUS_BAR))
+                || !env.widgets.has(id)
+        }
+        _ => false,
+    }
+}
+
+/// The command that keeps `items` (as the page shows them) as the page in
+/// `slot`, with what the page keeps there without showing it.
+pub(crate) fn store(env: &Env<'_>, slot: usize, items: &[Item]) -> Command {
+    let mut items = items.to_vec();
+    for item in grid::parse(env.settings.text(setting(slot).as_str())) {
+        if hidden(env, &item) && !items.iter().any(|i| i.what == item.what) {
+            items.push(item);
+        }
+    }
+    write(slot, &items)
+}
+
+/// The command that keeps `items` as the page in `slot` as they are: a
+/// page other than the first keeps a space when emptied, so that it still
+/// shows.
+fn write(slot: usize, items: &[Item]) -> Command {
     let text = if items.is_empty() && slot > 0 {
         String::from(widgets::SPACE)
     } else {
@@ -271,12 +299,13 @@ pub(crate) fn store(slot: usize, items: &[Item]) -> Command {
     Command::SetSetting(setting(slot), SettingValue::Text(Cow::Owned(text)))
 }
 
-/// The commands that keep `pages` in the first settings, in their order,
-/// and empty the others: once a page was added or removed.
+/// The commands that keep `pages` (as [`pages`] reads them, what they do
+/// not show included) in the first settings, in their order, and empty
+/// the others: once a page was added or removed.
 pub(crate) fn store_all(pages: &[Page]) -> Vec<Command> {
     (0..MAX_PAGES)
         .map(|slot| match pages.get(slot) {
-            Some(page) => store(slot, &page.items),
+            Some(page) => write(slot, &page.items),
             None => Command::SetSetting(setting(slot), SettingValue::Text(Cow::Borrowed(""))),
         })
         .collect()

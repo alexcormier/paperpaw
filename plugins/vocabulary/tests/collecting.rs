@@ -1,7 +1,8 @@
 //! Collecting words with the real kernel: each word the reader announces
 //! as looked up is kept once (newest last in `words.txt`, its sentence
 //! on one line), not when switched off, not when blank; the list shows
-//! them newest first, deletes one held, and exports all for flash cards.
+//! them newest first, deletes one held once asked, and exports all for
+//! flash cards.
 
 #![allow(
     clippy::unwrap_used,
@@ -237,6 +238,22 @@ fn the_list_shows_the_newest_first_and_deletes_a_word_held() {
         "{options:?}"
     );
     vocabulary.press(actions::DOWN);
+    vocabulary.press(actions::CONFIRM);
+    // Asked first: *Keep*, where the focus starts, keeps the word.
+    let asked = vocabulary.described();
+    assert!(
+        asked.iter().any(|l| l.contains("Delete “second”?")),
+        "{asked:?}"
+    );
+    assert!(asked.iter().any(|l| l == "Keep"), "{asked:?}");
+    vocabulary.press(actions::CONFIRM);
+    assert_eq!(vocabulary.screen(), "vocabulary.list");
+    assert_eq!(vocabulary.words(), ["first", "second", "third"]);
+    // Asked again, *Delete* deletes it.
+    vocabulary.press(actions::MENU);
+    vocabulary.press(actions::DOWN);
+    vocabulary.press(actions::CONFIRM);
+    vocabulary.press(actions::LEFT);
     vocabulary.press(actions::CONFIRM);
     assert_eq!(vocabulary.screen(), "vocabulary.list");
     assert_eq!(vocabulary.words(), ["first", "third"]);

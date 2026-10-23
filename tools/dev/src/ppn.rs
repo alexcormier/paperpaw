@@ -130,7 +130,7 @@ pub fn check_file(path: &Path, release: Option<(&str, Option<Fingerprint>)>) -> 
 /// The devices with `chip`.
 fn devices(chip: Chip) -> &'static str {
     match chip {
-        Chip::Esp32C3 => "Xteink X4 and X4 Classic",
+        Chip::Esp32C3 => "Xteink X4",
         Chip::Esp32S3 => "Xteink X4 Pro",
     }
 }

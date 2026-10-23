@@ -449,22 +449,38 @@ impl Kernel {
         )));
     }
 
+    /// Whether the screen on top takes buttons by name now.
+    pub(crate) fn takes_buttons(&self) -> bool {
+        self.stack
+            .last()
+            .is_some_and(|top| top.screen.takes_buttons())
+    }
+
+    /// Button `name` pressed (`long`: held): offered to the screen on
+    /// top where it takes buttons, else through the key map.
+    fn button(&mut self, name: &'static str, long: bool) {
+        self.hint.pressed = self.hint.buttons.iter().position(|b| *b == name);
+        if self.hint.pressed.is_some() {
+            self.show_hints();
+        }
+        if self.takes_buttons()
+            && self.with_top(|screen, cx| screen.on_button(name, long, cx)) == Handled::Yes
+        {
+            return;
+        }
+        let name = Cow::Borrowed(name);
+        if long {
+            let on = self.input.pressed_on;
+            self.route_key_on(InputKey::LongButton(name), on);
+        } else {
+            let double = InputKey::DoubleButton(name.clone());
+            self.single_or_double(InputKey::Button(name), double);
+        }
+    }
+
     pub(crate) fn recognized(&mut self, recognized: Recognized) {
         match recognized {
-            Recognized::Button { name, long } => {
-                self.hint.pressed = self.hint.buttons.iter().position(|b| *b == name);
-                if self.hint.pressed.is_some() {
-                    self.show_hints();
-                }
-                let name = Cow::Borrowed(name);
-                if long {
-                    let on = self.input.pressed_on;
-                    self.route_key_on(InputKey::LongButton(name), on);
-                } else {
-                    let double = InputKey::DoubleButton(name.clone());
-                    self.single_or_double(InputKey::Button(name), double);
-                }
-            }
+            Recognized::Button { name, long } => self.button(name, long),
             Recognized::Gesture(gesture) => {
                 if gesture.kind == GestureKind::Tap
                     && let Some(row) = self.hint_row()

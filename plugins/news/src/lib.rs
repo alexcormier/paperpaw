@@ -149,6 +149,8 @@ impl Feed {
 
 /// Removes the book version 1 kept for `feed`, once no other feed of
 /// `feeds` still reads it (a feed of the same name not fetched since).
+/// Only a page News made ([`convert::HEAD`]): a file of the reader's own
+/// at that name stays.
 fn retire_old_book(storage: &dyn Storage, folder: &str, feeds: &[Feed], feed: &Feed) {
     let old = feed.old_book(folder);
     let needed = feeds.iter().any(|other| {
@@ -156,7 +158,10 @@ fn retire_old_book(storage: &dyn Storage, folder: &str, feeds: &[Feed], feed: &F
             && other.old_book(folder) == old
             && !storage.exists(&other.book(folder))
     });
-    if !needed {
+    let mut start = [0u8; convert::HEAD.len()];
+    let made_here = matches!(storage.read_at(&old, 0, &mut start), Ok(n) if n == start.len())
+        && start == *convert::HEAD.as_bytes();
+    if !needed && made_here {
         let _ = storage.remove(&old);
     }
 }
@@ -660,13 +665,10 @@ impl Screen for FeedsScreen {
                     cx.command(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
                 }
                 "remove" if index < self.feeds.len() => {
-                    let feed = self.feeds.remove(index);
+                    // Its book stays, a book like any other now: the
+                    // reader may have notes in it, and deletes it as any.
+                    self.feeds.remove(index);
                     save(env.storage, &self.feeds);
-                    // Its book goes too, and the one version 1 kept unless
-                    // another feed of its name still reads it.
-                    let folder = folder(&env);
-                    let _ = env.storage.remove(&feed.book(&folder));
-                    retire_old_book(env.storage, &folder, &self.feeds, &feed);
                     self.list.set_len(self.len());
                     self.redraw(cx);
                 }
@@ -773,9 +775,10 @@ mod tests {
         let a = feed("https://a.example/rss", "Daily");
         let b = feed("https://b.example/rss", "Daily");
         let c = feed("https://c.example/rss", "Weekly");
+        let old = format!("{}Daily</title>", convert::HEAD);
         let storage = MemoryStorage::new()
-            .with("News/Daily.html", "old")
-            .with("News/Weekly.html", "old");
+            .with("News/Daily.html", old.as_str())
+            .with("News/Weekly.html", old.as_str());
         assert_eq!(
             a.found_book(&storage, "News").as_deref(),
             Some("News/Daily.html")

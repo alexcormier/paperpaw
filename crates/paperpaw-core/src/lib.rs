@@ -94,6 +94,7 @@ pub use crate::code_plugin::{CodeFile, CodeLoader};
 use crate::config::{mono_coverage, plugin_switches, read_config};
 use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
+pub use crate::io::cable::PREFIX as CABLE_PREFIX;
 pub use crate::io::{
     HttpCall, HttpResponse, Io, MAX_FILE, MAX_RESPONSE, SOCKET_PART, ServedFile, ServerCall,
     ServerEvent, SocketCall, SocketEvent, SpeechCall, WifiEvent,
@@ -613,7 +614,7 @@ impl Kernel {
                 }
                 // Without a long press to tell apart, at once.
                 let long = InputKey::LongButton(Cow::Borrowed(name));
-                let at_once = self.resolve(&long).is_none();
+                let at_once = self.resolve(&long).is_none() && !self.takes_buttons();
                 if let Some(recognized) = self.input.recognizer.button(name, state, now, at_once) {
                     self.recognized(recognized);
                 }
@@ -993,6 +994,7 @@ impl Kernel {
     /// read, it is left as it is (written, the others in it would be
     /// lost), the change applies until the end, and the user is told; one
     /// readable again takes the place of what could not be read at start.
+    /// A change not written is not [`saved`](paperpaw_sdk::secrets::Secrets::saved).
     pub fn set_secret(&mut self, change: paperpaw_sdk::secrets::SecretChange) {
         use paperpaw_sdk::secrets::{self, Secrets};
         let storage = self.shared.storage.clone();
@@ -1006,8 +1008,10 @@ impl Kernel {
             self.shared.secrets = Secrets::decode(&text);
             self.secrets_unreadable = false;
         }
+        let id = change.id.clone();
         self.shared.secrets.apply(change);
         if let Err(error) = read {
+            self.shared.secrets.mark_unsaved(&id);
             self.secrets_unreadable = true;
             let file = secrets::FILE;
             self.warn_runtime(format!(
@@ -1029,9 +1033,13 @@ impl Kernel {
         } else {
             storage.write(secrets::FILE, text.as_bytes())
         };
-        if let Err(error) = saved {
-            let message = format!("{}: {error}", secrets::FILE);
-            self.warn_runtime(message);
+        match saved {
+            Ok(()) => self.shared.secrets.mark_saved(),
+            Err(error) => {
+                self.shared.secrets.mark_unsaved(&id);
+                let message = format!("{}: {error}", secrets::FILE);
+                self.warn_runtime(message);
+            }
         }
     }
 
@@ -1098,6 +1106,22 @@ impl Kernel {
         self.output.commands.push(Command::Emit(event, params));
         self.run_commands();
         self.finish()
+    }
+
+    /// Types `text` into the text field shown, as if on its keys, and
+    /// confirms it with `done` ([`events::TYPE_TEXT`]): for a shell's
+    /// remote control or keys of a keyboard. `None` where no text field
+    /// shows (the screen bound to [`slots::KEYBOARD`] is not on top).
+    pub fn type_text(&mut self, now: Instant, text: &str, done: bool) -> Option<Effects> {
+        let keyboard = self
+            .shared
+            .registry
+            .resolve_slot(slots::KEYBOARD.as_str())?;
+        if self.active_screen() != Some(keyboard) {
+            return None;
+        }
+        let typed = events::TypeText::new(text.into()).done(done);
+        Some(self.send_event(now, events::TYPE_TEXT.id().clone(), typed.to_params()))
     }
 
     /// Returns and clears the collected warnings.
@@ -1342,6 +1366,10 @@ struct Shared {
     secrets: paperpaw_sdk::secrets::Secrets,
     /// Random bytes (see [`KernelBuilder::random`]).
     random: paperpaw_sdk::random::Random,
+    /// What memory is free (see [`KernelBuilder::memory`]).
+    memory: paperpaw_sdk::memory::Memory,
+    /// How PaperPaw started (see [`KernelBuilder::started`]).
+    started: paperpaw_sdk::power::Start,
     /// Shared with font packs read where they are (see `Fonts::load`).
     storage: alloc::rc::Rc<dyn Storage>,
     /// What the storage read during the call going on (see `recall`).
@@ -1407,6 +1435,9 @@ impl Shared {
             secrets: &self.secrets,
             running: &*self.meter,
             random: self.random,
+            memory: self.memory,
+            clock: self.meter.clock(),
+            started: self.started,
             storage: self.storage.as_ref(),
             keys: &self.keymap,
             look: self.look.0,

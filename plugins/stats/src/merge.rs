@@ -8,17 +8,32 @@
 //!   file back.
 //! - What the last uploaded file (`cached`) has but the other side no
 //!   longer has was deleted there: it goes here too. Books and single
-//!   stays alike.
+//!   stays alike; but a book deleted there keeps the stays read here
+//!   since the last upload, and so stays.
+//! - Where the other side's file lacks too much of the last upload (all
+//!   its books, or more than half of its stays), it is told apart what
+//!   happened. Whole books gone, the others' stays there, and a stay of
+//!   a book gone older than one there: they were deleted there. All that
+//!   is lacking newer than all there, and a book there cut short: a
+//!   backup was restored there. A file of another version is replaced
+//!   too. What was replaced counts as not deleted there
+//!   ([`Outcome::kept`]). Where it cannot be told (an empty file: all
+//!   statistics reset there, or another device's file), nothing counts
+//!   as deleted there until the user decides ([`Outcome::unclear`]).
 //! - What the last upload has but this device no longer has is not taken
 //!   for deleted here, as KOReader would take it: PaperPaw deletes no
 //!   statistics, so it was lost, and comes back from the other side.
 //! - The same stay (book, page, start) on both sides keeps the longer
 //!   duration.
 //!
+//! - Stays of a book whose entry was lost here are kept, and books added
+//!   take ids above theirs; they are not uploaded.
+//!
 //! Nothing is merged from what cannot be read whole: an unreadable file
-//! of the other side, `books.ini` or log ends the merge with an error
-//! before anything here is written. A last upload that cannot be read is
-//! left out: then nothing counts as deleted there.
+//! of the other side (also one without a column needed), `books.ini` or
+//! log ends the merge with an error before anything here is written. A
+//! last upload that cannot be read is left out: then nothing counts as
+//! deleted there.
 //!
 //! Everything goes through files sorted in small runs ([`extsort`]), so
 //! memory stays small whatever the number of stays.
@@ -42,6 +57,15 @@ use crate::{extsort, totals};
 pub(crate) struct Outcome {
     pub books: usize,
     pub stays: usize,
+    /// What the other side's file lacks of the last upload was not taken
+    /// for deleted there: the file looks replaced (by another device's
+    /// that started anew, or a backup), or is of another version.
+    pub kept: bool,
+    /// The other side's file lacks much of the last upload, and it cannot
+    /// be told whether that was deleted there or the file replaced:
+    /// nothing was deleted here, and the user is to be asked
+    /// ([`merge_as`]).
+    pub unclear: bool,
 }
 
 /// Why a merge failed. The statistics here are as they were, unless
@@ -112,6 +136,8 @@ struct Known {
 struct Side {
     path: String,
     books: Vec<Known>,
+    /// Its version (`PRAGMA user_version`).
+    version: u32,
 }
 
 impl Side {
@@ -132,6 +158,7 @@ impl Side {
         let side = Self {
             path: path.to_string(),
             books: known,
+            version: db.user_version,
         };
         Ok((side, books))
     }
@@ -151,6 +178,8 @@ struct Files {
     /// The stays merged, by start; then in the order of the log.
     merged: String,
     time: String,
+    /// The stays of the upload: those of the books it has.
+    upload: String,
     /// For sorting, and for writing the upload.
     runs: String,
     write: String,
@@ -165,6 +194,7 @@ impl Files {
             cached: path("merge-cached"),
             merged: path("merge-out"),
             time: path("merge-time"),
+            upload: path("merge-upload"),
             runs: path("merge-run"),
             write: path("merge-write"),
         }
@@ -177,6 +207,7 @@ impl Files {
             &self.cached,
             &self.merged,
             &self.time,
+            &self.upload,
         ] {
             #[expect(
                 clippy::let_underscore_must_use,
@@ -199,8 +230,23 @@ pub(crate) fn merge(
     out: Option<&str>,
     dir: &str,
 ) -> Result<Outcome, Failure> {
+    merge_as(storage, income, cached, out, dir, None)
+}
+
+/// [`merge`], with what the user decided where it is unclear whether
+/// what the other side's file lacks was deleted there
+/// ([`Outcome::unclear`]): `Some(true)` deletes it here too,
+/// `Some(false)` keeps it.
+pub(crate) fn merge_as(
+    storage: &dyn Storage,
+    income: Option<&str>,
+    cached: Option<&str>,
+    out: Option<&str>,
+    dir: &str,
+    decided: Option<bool>,
+) -> Result<Outcome, Failure> {
     let files = Files::in_dir(dir);
-    let result = merge_with(storage, income, cached, out, &files);
+    let result = merge_with(storage, income, cached, out, &files, decided);
     files.remove(storage);
     if result.is_err()
         && let Some(out) = out
@@ -220,6 +266,7 @@ fn merge_with(
     cached: Option<&str>,
     out: Option<&str>,
     files: &Files,
+    decided: Option<bool>,
 ) -> Result<Outcome, Failure> {
     let income = match income {
         Some(path) => Some(Side::open(storage, path).map_err(Failure::Income)?),
@@ -227,17 +274,14 @@ fn merge_with(
     };
     let cached = cached.and_then(|path| Side::open(storage, path).ok().map(|(side, _)| side));
     let books = store::load_books(storage)?;
-    let (books, kept, income) = match income {
+    let highest = write_local(storage, files)?;
+    let (mut books, mut gone, income) = match income {
         Some((side, theirs)) => {
-            let (books, kept) = merge_books(books, &side, theirs, cached.as_ref())?;
-            (books, kept, Some(side))
+            let (books, gone) = merge_books(books, &side, theirs, cached.as_ref(), highest)?;
+            (books, gone, Some(side))
         }
-        None => {
-            let kept = books.iter().map(|b| b.id).collect();
-            (books, kept, None)
-        }
+        None => (books, Vec::new(), None),
     };
-    write_local(storage, &kept, files)?;
     match &income {
         Some(side) => write_side(storage, side, &books, &files.income, &files.runs)?,
         None => storage.write(&files.income, &[])?,
@@ -254,14 +298,34 @@ fn merge_with(
     if !cached_read {
         storage.write(&files.cached, &[])?;
     }
-    let stays = merge_stays(storage, files, income.is_some())?;
-    let per_book = to_time_order(storage, &books, files)?;
+    // Deletions there are taken over only from a file that is a later
+    // state of the last upload, or where the user decided so.
+    let verdict = match (&income, &cached) {
+        (Some(side), Some(before)) if cached_read => Some(judge(storage, side, before, files)?),
+        _ => None,
+    };
+    let deletions = match verdict {
+        Some(Verdict::Later) => true,
+        Some(Verdict::Unclear) => decided == Some(true),
+        Some(Verdict::Replaced) | None => false,
+    };
+    let stays = merge_stays(storage, files, deletions, &mut gone)?;
+    if deletions {
+        // Gone with their stays, unless one was read here since.
+        books.retain(|b| match gone.binary_search_by_key(&b.id, |g| g.0) {
+            Ok(at) => gone[at].1,
+            Err(_) => true,
+        });
+    }
+    let per_book = to_time_order(storage, &books, files, out.is_some())?;
     // The new log replaces the old one.
     store::replace_log(storage, &files.time)?;
     store::save_books(storage, &books)?;
     let outcome = Outcome {
         books: books.len(),
         stays,
+        kept: verdict == Some(Verdict::Replaced),
+        unclear: verdict == Some(Verdict::Unclear) && decided.is_none(),
     };
     if let Some(out) = out {
         write_upload(storage, out, books, &per_book, income.as_ref(), files)
@@ -270,24 +334,33 @@ fn merge_with(
     Ok(outcome)
 }
 
-/// The books here after the merge, by id: those deleted there gone, the
-/// other side's added (named as there); and the ids of those that were
-/// here before, whose stays are kept.
+/// Books deleted there, by id, each with whether a stay of it is kept.
+type Gone = Vec<(u16, bool)>;
+
+/// The books here after the merge, by id: the other side's added (named
+/// as there, with ids above `highest`, the log's highest); and the ids of
+/// those deleted there (in the last upload, not in the other side's
+/// file), each with `false` for no stay of it kept yet. They go once the
+/// stays are merged, unless a stay of them was read here since.
 fn merge_books(
     mut books: Vec<Book>,
     income: &Side,
     theirs: Vec<KoBook>,
     cached: Option<&Side>,
-) -> Result<(Vec<Book>, Vec<u16>), Failure> {
-    // Deleted there: in the last upload, not in the other side's file.
-    if let Some(cached) = cached {
-        books.retain(|b| {
-            let key = Key::of_book(b);
-            cached.find(key).is_none() || income.find(key).is_some()
-        });
-    }
-    let kept: Vec<u16> = books.iter().map(|b| b.id).collect();
-    let mut last = kept.iter().copied().max().unwrap_or(0);
+    highest: u16,
+) -> Result<(Vec<Book>, Gone), Failure> {
+    let gone: Gone = match cached {
+        Some(cached) => books
+            .iter()
+            .filter(|b| {
+                let key = Key::of_book(b);
+                cached.find(key).is_some() && income.find(key).is_none()
+            })
+            .map(|b| (b.id, false))
+            .collect(),
+        None => Vec::new(),
+    };
+    let mut last = books.iter().map(|b| b.id).max().unwrap_or(0).max(highest);
     // This device's books by key (their places in `books`), with those
     // added.
     let mut here: Vec<(Key, usize)> = books
@@ -320,7 +393,154 @@ fn merge_books(
             }
         }
     }
-    Ok((books, kept))
+    Ok((books, gone))
+}
+
+/// What the other side's file is to the last upload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    /// A later state of it: what it lacks was deleted there.
+    Later,
+    /// Another file (a backup, or of another version): what it lacks was
+    /// not deleted there.
+    Replaced,
+    /// Either: the user decides.
+    Unclear,
+}
+
+/// What the other side's file is to the last upload: of another version,
+/// it was replaced. Lacking little (not all books, at most half the
+/// stays), it is a later state. Lacking more, see [`Lack::verdict`].
+fn judge(
+    storage: &dyn Storage,
+    income: &Side,
+    cached: &Side,
+    files: &Files,
+) -> Result<Verdict, Failure> {
+    if income.version != koreader::SCHEMA_VERSION {
+        return Ok(Verdict::Replaced);
+    }
+    let all_gone =
+        !cached.books.is_empty() && cached.books.iter().all(|b| income.find(b.key).is_none());
+    let lack = Lack::of(storage, files)?;
+    if !all_gone && lack.lacking * 2 <= lack.uploaded {
+        return Ok(Verdict::Later);
+    }
+    Ok(lack.verdict())
+}
+
+/// What the other side's stays lack of the last upload's.
+#[derive(Debug, Default)]
+struct Lack {
+    /// The last upload's stays, and those lacking there.
+    uploaded: u64,
+    lacking: u64,
+    /// The same, of the books with stays there.
+    kept: u64,
+    cut: u64,
+    /// The start of the newest stay there, of the oldest lacking, and of
+    /// the oldest of a book without stays there.
+    newest: Option<u32>,
+    oldest: Option<u32>,
+    oldest_gone: Option<u32>,
+}
+
+/// One book's stays, as they are walked.
+#[derive(Debug, Default)]
+struct Group {
+    book: u32,
+    there: bool,
+    uploaded: u64,
+    lacking: u64,
+    oldest: Option<u32>,
+}
+
+impl Lack {
+    /// Walks both sorted files side by side, a book at a time.
+    fn of(storage: &dyn Storage, files: &Files) -> Result<Self, Failure> {
+        let mut there = Source::new(storage, &files.income);
+        let mut before = Source::new(storage, &files.cached);
+        let mut lack = Self::default();
+        let mut group = Group::default();
+        while let Some(next) = [there.peek(), before.peek()]
+            .into_iter()
+            .flatten()
+            .map(|r| key(r))
+            .min()
+        {
+            let book = u32::from_be_bytes([next[0], next[1], next[2], next[3]]);
+            if book != group.book {
+                lack.add(core::mem::take(&mut group));
+                group.book = book;
+            }
+            let theirs = there.peek().is_some_and(|r| key(r) == next);
+            while there.peek().is_some_and(|r| key(r) == next) {
+                there.next();
+            }
+            let ours = before.peek().is_some_and(|r| key(r) == next);
+            while before.peek().is_some_and(|r| key(r) == next) {
+                before.next();
+            }
+            let start = u32::from_be_bytes([next[8], next[9], next[10], next[11]]);
+            if theirs {
+                group.there = true;
+                lack.newest = lack.newest.max(Some(start));
+            } else if ours {
+                group.lacking += 1;
+                group.oldest = Some(group.oldest.map_or(start, |o| o.min(start)));
+            }
+            group.uploaded += u64::from(ours);
+        }
+        lack.add(group);
+        for source in [&mut there, &mut before] {
+            if let Some(e) = source.records.failed.take() {
+                return Err(e.into());
+            }
+        }
+        Ok(lack)
+    }
+
+    fn add(&mut self, group: Group) {
+        let min = |a: Option<u32>, b: Option<u32>| a.into_iter().chain(b).min();
+        self.uploaded += group.uploaded;
+        self.lacking += group.lacking;
+        self.oldest = min(self.oldest, group.oldest);
+        if group.there {
+            self.kept += group.uploaded;
+            self.cut += group.lacking;
+        } else {
+            self.oldest_gone = min(self.oldest_gone, group.oldest);
+        }
+    }
+
+    /// Lacking much: deleted there where whole books are gone, the
+    /// others (nearly) whole, and a stay of a book gone is older than one
+    /// there (a backup has every stay before its newest). Replaced where
+    /// all that is lacking is newer than all there, and a book there is
+    /// cut short (a backup restored). Else, or with no stays there (all
+    /// reset there, or a fresh device's file), it cannot be told.
+    fn verdict(&self) -> Verdict {
+        let Some(newest) = self.newest else {
+            return Verdict::Unclear;
+        };
+        if self.kept > 0
+            && self.cut * 2 <= self.kept
+            && self.oldest_gone.is_some_and(|o| o < newest)
+        {
+            return Verdict::Later;
+        }
+        if self.cut > 0 && self.oldest.is_some_and(|o| o > newest) {
+            return Verdict::Replaced;
+        }
+        Verdict::Unclear
+    }
+}
+
+/// What tells stays apart: book, page and start.
+fn key(record: &[u8]) -> [u8; 12] {
+    let mut k = [0u8; 12];
+    k.copy_from_slice(&record[..12]);
+    k
 }
 
 /// A book here, named as on the other side, with what that side knows
@@ -340,29 +560,25 @@ fn take_names(ours: &mut Book, theirs: &KoBook) {
     }
 }
 
-/// This device's stays of the books `kept` (by id), sorted. A read error
-/// fails the merge: what was not read would look deleted.
-fn write_local(storage: &dyn Storage, kept: &[u16], files: &Files) -> Result<(), Failure> {
+/// All of this device's stays, sorted, also those of books without an
+/// entry; the highest book id of them. A read error fails the merge: what
+/// was not read would look deleted.
+fn write_local(storage: &dyn Storage, files: &Files) -> Result<u16, Failure> {
+    let mut highest = 0;
     let mut file = Appender::new(storage, &files.local)?;
     store::scan(storage, |s| {
-        if kept.binary_search(&s.book).is_ok() {
-            file.push(&stat_record([
-                u32::from(s.book),
-                s.page,
-                s.start,
-                u32::from(s.duration),
-                s.pages,
-            ]));
-        }
+        highest = highest.max(s.book);
+        file.push(&stat_record([
+            u32::from(s.book),
+            s.page,
+            s.start,
+            u32::from(s.duration),
+            s.pages,
+        ]));
     })?;
     file.finish()?;
-    Ok(extsort::sort(
-        storage,
-        &files.local,
-        &files.local,
-        STAT,
-        &files.runs,
-    )?)
+    extsort::sort(storage, &files.local, &files.local, STAT, &files.runs)?;
+    Ok(highest)
 }
 
 /// A side's stays, with the ids of its books here, sorted. What cannot
@@ -411,25 +627,31 @@ fn write_side(
     Ok(extsort::sort(storage, path, path, STAT, runs)?)
 }
 
-/// The three files side by side by (book, page, start): what was deleted
-/// on the other side left out, the longer of a stay on both sides kept;
-/// written by start. How many stays there are.
-fn merge_stays(storage: &dyn Storage, files: &Files, has_income: bool) -> Result<usize, Failure> {
+/// The three files side by side by (book, page, start): with
+/// `deletions`, what was deleted on the other side left out; the longer
+/// of a stay on both sides kept; written by start. The books `gone`
+/// (deleted there, by id) marked where a stay of them is kept. How many
+/// stays there are.
+fn merge_stays(
+    storage: &dyn Storage,
+    files: &Files,
+    deletions: bool,
+    gone: &mut [(u16, bool)],
+) -> Result<usize, Failure> {
     let mut merged = Appender::new(storage, &files.merged)?;
     let mut sources = [
         Source::new(storage, &files.local),
         Source::new(storage, &files.income),
         Source::new(storage, &files.cached),
     ];
-    let key = |r: &Vec<u8>| -> [u8; 12] {
-        let mut k = [0u8; 12];
-        k.copy_from_slice(&r[..12]);
-        k
-    };
     // Whether `b` was read longer than `a`.
     let longer = |a: &Vec<u8>, b: &Vec<u8>| fields(b)[3] > fields(a)[3];
     let mut stays = 0;
-    while let Some(next) = sources.iter().filter_map(|s| s.peek().map(key)).min() {
+    while let Some(next) = sources
+        .iter()
+        .filter_map(|s| s.peek().map(|r| key(r)))
+        .min()
+    {
         // Each side's record for this key, if any (duplicates within a
         // side are merged too).
         let mut found: [Option<Vec<u8>>; 3] = [None, None, None];
@@ -442,7 +664,7 @@ fn merge_stays(storage: &dyn Storage, files: &Files, has_income: bool) -> Result
             }
         }
         let [here, there, before] = found;
-        let deleted_there = has_income && before.is_some() && there.is_none();
+        let deleted_there = deletions && before.is_some() && there.is_none();
         if deleted_there {
             continue;
         }
@@ -454,6 +676,9 @@ fn merge_stays(storage: &dyn Storage, files: &Files, has_income: bool) -> Result
         };
         // In time order next: start first.
         let [book, page, start, duration, pages] = fields(&record).map(|v| v as u32);
+        if let Ok(at) = gone.binary_search_by_key(&(book as u16), |g| g.0) {
+            gone[at].1 = true;
+        }
         merged.push(&stat_record([start, book, page, duration, pages]));
         stays += 1;
     }
@@ -468,20 +693,30 @@ fn merge_stays(storage: &dyn Storage, files: &Files, has_income: bool) -> Result
     Ok(stays)
 }
 
-/// Back to (book, page, start, …) in time order, for the new log and the
-/// upload's rows; each book's totals: the seconds read, and the pages
-/// read as bits.
+/// Back to (book, page, start, …) in time order, for the new log and,
+/// with `upload`, the upload's rows (those of the books); each book's
+/// totals: the seconds read, and the pages read as bits.
 fn to_time_order(
     storage: &dyn Storage,
     books: &[Book],
     files: &Files,
+    upload: bool,
 ) -> Result<Vec<(u64, Vec<u8>)>, Failure> {
     let mut time = Appender::new(storage, &files.time)?;
+    let mut rows = if upload {
+        Some(Appender::new(storage, &files.upload)?)
+    } else {
+        None
+    };
     let mut per_book: Vec<(u64, Vec<u8>)> = vec![(0, Vec::new()); books.len()];
     extsort::each(storage, &files.merged, STAT, |r| {
         let [start, book, page, duration, pages] = fields(r).map(|v| v as u32);
-        time.push(&stat_record([book, page, start, duration, pages]));
+        let record = stat_record([book, page, start, duration, pages]);
+        time.push(&record);
         if let Ok(at) = books.binary_search_by_key(&(book as u16), |b| b.id) {
+            if let Some(rows) = &mut rows {
+                rows.push(&record);
+            }
             let total = &mut per_book[at];
             total.0 += u64::from(duration);
             let now = if books[at].pages > 0 {
@@ -493,6 +728,9 @@ fn to_time_order(
         }
     })?;
     time.finish()?;
+    if let Some(rows) = rows {
+        rows.finish()?;
+    }
     Ok(per_book)
 }
 
@@ -527,7 +765,7 @@ fn write_upload(
             }
         })
         .collect();
-    koreader::write(storage, out, &ko_books, &files.time, &files.write)
+    koreader::write(storage, out, &ko_books, &files.upload, &files.write)
 }
 
 /// Records added to a file a few kilobytes at a time; the first error
@@ -608,399 +846,7 @@ impl<'s> Source<'s> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::store::PageStat;
-    use crate::testing::Faulty;
-    use paperpaw_sdk::MemoryStorage;
-
-    const DIR: &str = ".paperpaw/plugins/stats";
-
-    fn md5(n: u8) -> String {
-        format!("{n:032x}")
-    }
-
-    fn book(id: u16, md5: &str) -> Book {
-        Book {
-            id,
-            title: format!("Ours {id}"),
-            authors: String::from("N/A"),
-            md5: md5.to_string(),
-            pages: 100,
-            language: String::from("de"),
-            series: String::from("N/A"),
-            last_open: 10,
-            path: format!("books/{id}.epub"),
-            finished: 0,
-        }
-    }
-
-    fn stay(book: u16, page: u32, start: u32, duration: u16) -> PageStat {
-        PageStat {
-            book,
-            page,
-            start,
-            duration,
-            pages: 100,
-        }
-    }
-
-    fn log(storage: &dyn Storage) -> Vec<(u16, u32, u32, u16)> {
-        let mut out = Vec::new();
-        store::scan(storage, |s| out.push((s.book, s.page, s.start, s.duration))).unwrap();
-        out
-    }
-
-    /// A KOReader file from another device: its own ids and names.
-    fn other_device(
-        storage: &dyn Storage,
-        path: &str,
-        books: &[(i64, &str, &str)],
-        stays: &[(i64, u32, u32, u32)],
-    ) {
-        let ko: Vec<KoBook> = books
-            .iter()
-            .map(|(id, title, md5)| KoBook {
-                id: *id,
-                title: title.to_string(),
-                authors: String::from("Autorin"),
-                pages: 200,
-                md5: md5.to_string(),
-                series: String::from("N/A"),
-                language: String::from("de"),
-                last_open: 99,
-                ..KoBook::default()
-            })
-            .collect();
-        let mut records = Vec::new();
-        let mut sorted = stays.to_vec();
-        sorted.sort_by_key(|s| s.2);
-        for (book, page, start, duration) in sorted {
-            records.extend_from_slice(&stat_record([book as u32, page, start, duration, 200]));
-        }
-        storage.write("stays.tmp", &records).unwrap();
-        koreader::write(storage, path, &ko, "stays.tmp", "tmp").unwrap();
-        storage.remove("stays.tmp").unwrap();
-    }
-
-    /// Two books here and three stays.
-    fn this_device(storage: &dyn Storage) {
-        store::save_books(storage, &[book(1, &md5(0xa)), book(2, &md5(0xb))]).unwrap();
-        store::append(storage, stay(1, 5, 1000, 30)).unwrap();
-        store::append(storage, stay(1, 6, 1040, 20)).unwrap();
-        store::append(storage, stay(2, 1, 1100, 10)).unwrap();
-    }
-
-    /// The files of the statistics here, to see they did not change.
-    fn files(storage: &MemoryStorage) -> [Option<Vec<u8>>; 2] {
-        ["books.ini", "pages.bin"].map(|name| storage.get(&format!("{DIR}/{name}")))
-    }
-
-    /// What is in the statistics' folder.
-    fn folder(storage: &dyn Storage) -> Vec<String> {
-        let mut names = Vec::new();
-        storage
-            .list(DIR, &mut |entry| names.push(entry.name.to_string()))
-            .unwrap();
-        names.sort();
-        names
-    }
-
-    #[test]
-    fn merges_like_koreader() {
-        let storage = MemoryStorage::new();
-        this_device(&storage);
-        // The other device: book A as its id 7 (a stay the same, one
-        // longer, one new), and a book unknown here.
-        other_device(
-            &storage,
-            "income.db",
-            &[(7, "Their title", &md5(0xa)), (8, "Neu", &md5(0xc))],
-            &[
-                (7, 5, 1000, 25),
-                (7, 6, 1040, 50),
-                (7, 9, 2000, 40),
-                (8, 3, 3000, 60),
-            ],
-        );
-        let outcome = merge(&storage, Some("income.db"), None, Some("out.db"), DIR).unwrap();
-        assert_eq!(outcome, Outcome { books: 3, stays: 5 });
-        let books = store::load_books(&storage).unwrap();
-        assert_eq!(
-            books.iter().map(|b| b.md5.clone()).collect::<Vec<_>>(),
-            [md5(0xa), md5(0xb), md5(0xc)]
-        );
-        // Named as KOReader names them, the path here kept.
-        assert_eq!(
-            (books[0].title.as_str(), books[0].authors.as_str()),
-            ("Their title", "Autorin")
-        );
-        assert_eq!(books[0].path, "books/1.epub");
-        assert_eq!(books[2].id, 3);
-        // In time order; the longer duration of a stay wins.
-        assert_eq!(
-            log(&storage),
-            [
-                (1, 5, 1000, 30),
-                (1, 6, 1040, 50),
-                (2, 1, 1100, 10),
-                (1, 9, 2000, 40),
-                (3, 3, 3000, 60)
-            ]
-        );
-        // The file to upload reads back with the same.
-        let db = Database::open(&storage, "out.db").unwrap();
-        assert_eq!(db.user_version, koreader::SCHEMA_VERSION);
-        let ko = koreader::books(&db).unwrap();
-        assert_eq!(ko.len(), 3);
-        assert_eq!(ko[0].total_read_time, 120);
-        let mut stays = 0;
-        koreader::stats(&db, |_| stays += 1).unwrap();
-        assert_eq!(stays, 5);
-        // Only what was there before, and the upload.
-        assert_eq!(folder(&storage), ["books.ini", "pages.bin"]);
-    }
-
-    /// What was deleted on the other side since the last upload goes here
-    /// too; what was lost here comes back from there.
-    #[test]
-    fn deletions_there_come_here_and_losses_here_come_back() {
-        let storage = MemoryStorage::new();
-        store::save_books(&storage, &[book(1, &md5(0xa)), book(2, &md5(0xb))]).unwrap();
-        store::append(&storage, stay(1, 1, 100, 10)).unwrap();
-        store::append(&storage, stay(1, 2, 200, 10)).unwrap();
-        store::append(&storage, stay(2, 1, 300, 10)).unwrap();
-        // The last upload had both books and four stays; the stay at 250
-        // was lost here since.
-        other_device(
-            &storage,
-            "cached.db",
-            &[(1, "Ours 1", &md5(0xa)), (2, "Ours 2", &md5(0xb))],
-            &[
-                (1, 1, 100, 10),
-                (1, 2, 200, 10),
-                (1, 3, 250, 10),
-                (2, 1, 300, 10),
-            ],
-        );
-        // There, book B and the stay at 200 were deleted since.
-        other_device(
-            &storage,
-            "income.db",
-            &[(4, "Ours 1", &md5(0xa))],
-            &[(4, 1, 100, 10), (4, 3, 250, 10)],
-        );
-        let outcome = merge(&storage, Some("income.db"), Some("cached.db"), None, DIR).unwrap();
-        assert_eq!(outcome, Outcome { books: 1, stays: 2 });
-        assert_eq!(log(&storage), [(1, 1, 100, 10), (1, 3, 250, 10)]);
-        assert_eq!(store::load_books(&storage).unwrap().len(), 1);
-    }
-
-    /// A book lost here (`books.ini` rewritten without it) that the last
-    /// upload had is not taken for deleted: it comes back with its stays,
-    /// and the upload keeps it, so KOReader does not delete it either.
-    #[test]
-    fn a_book_lost_here_comes_back() {
-        let storage = MemoryStorage::new();
-        store::save_books(&storage, &[book(1, &md5(0xa))]).unwrap();
-        store::append(&storage, stay(1, 1, 100, 10)).unwrap();
-        let both = [(1, "Ours 1", md5(0xa)), (2, "Ours 2", md5(0xb))];
-        let both: Vec<(i64, &str, &str)> =
-            both.iter().map(|(i, t, m)| (*i, *t, m.as_str())).collect();
-        let stays = [(1, 1, 100, 10), (2, 1, 300, 10), (2, 2, 400, 20)];
-        other_device(&storage, "cached.db", &both, &stays);
-        other_device(&storage, "income.db", &both, &stays);
-        let outcome = merge(
-            &storage,
-            Some("income.db"),
-            Some("cached.db"),
-            Some("out.db"),
-            DIR,
-        )
-        .unwrap();
-        assert_eq!(outcome, Outcome { books: 2, stays: 3 });
-        assert_eq!(
-            log(&storage),
-            [(1, 1, 100, 10), (2, 1, 300, 10), (2, 2, 400, 20)]
-        );
-        let db = Database::open(&storage, "out.db").unwrap();
-        assert_eq!(koreader::books(&db).unwrap().len(), 2);
-    }
-
-    /// A downloaded file that is no statistics database (a web page with
-    /// status 200), or one cut short: the merge fails and nothing here
-    /// changes, nor is anything written to upload.
-    #[test]
-    fn an_unreadable_income_changes_nothing() {
-        let storage = MemoryStorage::new();
-        this_device(&storage);
-        other_device(
-            &storage,
-            "good.db",
-            &[(1, "Neu", &md5(0xc))],
-            &[(1, 1, 50, 10)],
-        );
-        let good = storage.get("good.db").unwrap();
-        let before = files(&storage);
-        let page = b"<html><body>Log in</body></html>".to_vec();
-        // The first page (with the schema) and no more.
-        let cut = good[..4096 + 100].to_vec();
-        for (what, data) in [("page", page), ("cut", cut), ("empty", Vec::new())] {
-            storage.write("income.db", &data).unwrap();
-            let result = merge(&storage, Some("income.db"), None, Some("out.db"), DIR);
-            assert!(
-                matches!(result, Err(Failure::Income(_))),
-                "{what}: {result:?}"
-            );
-            assert_eq!(files(&storage), before, "{what}");
-            assert!(!storage.exists("out.db"), "{what}");
-            assert_eq!(folder(&storage), ["books.ini", "pages.bin"], "{what}");
-        }
-    }
-
-    /// Statistics here that cannot be read whole are not merged: what was
-    /// not read would look deleted.
-    #[test]
-    fn unreadable_local_statistics_change_nothing() {
-        // `books.ini` saved as Latin-1.
-        let storage = MemoryStorage::new();
-        this_device(&storage);
-        other_device(
-            &storage,
-            "income.db",
-            &[(1, "Neu", &md5(0xc))],
-            &[(1, 1, 50, 10)],
-        );
-        storage
-            .write(
-                &format!("{DIR}/books.ini"),
-                b"[book.1]\ntitle = M\xfcller\n",
-            )
-            .unwrap();
-        let before = files(&storage);
-        let result = merge(&storage, Some("income.db"), None, Some("out.db"), DIR);
-        assert!(matches!(result, Err(Failure::Here(_))), "{result:?}");
-        assert_eq!(files(&storage), before);
-        assert!(!storage.exists("out.db"));
-        // The log cannot be read to the end.
-        let storage = Faulty::new(MemoryStorage::new());
-        this_device(&storage);
-        for i in 0..100 {
-            store::append(&storage, stay(2, i + 2, 2000 + i * 10, 10)).unwrap();
-        }
-        other_device(
-            &storage,
-            "income.db",
-            &[(1, "Neu", &md5(0xc))],
-            &[(1, 1, 50, 10)],
-        );
-        storage.break_at(&format!("{DIR}/pages.bin"), 16 * 70);
-        let before = files(&storage.inner);
-        let result = merge(&storage, Some("income.db"), None, Some("out.db"), DIR);
-        assert_eq!(result, Err(Failure::Here(Error::Storage(StorageError::Io))));
-        assert_eq!(files(&storage.inner), before);
-        assert!(!storage.exists("out.db"));
-    }
-
-    /// A last upload that cannot be read tells nothing: nothing counts as
-    /// deleted there.
-    #[test]
-    fn an_unreadable_last_upload_deletes_nothing() {
-        let storage = MemoryStorage::new();
-        this_device(&storage);
-        other_device(
-            &storage,
-            "income.db",
-            &[(1, "Neu", &md5(0xc))],
-            &[(1, 1, 50, 10)],
-        );
-        storage.write("cached.db", b"not a database").unwrap();
-        let outcome = merge(&storage, Some("income.db"), Some("cached.db"), None, DIR).unwrap();
-        assert_eq!(outcome, Outcome { books: 3, stays: 4 });
-    }
-
-    /// KOReader's books without a file's MD5 are told apart by title and
-    /// authors, as KOReader does, and stay so in later merges.
-    #[test]
-    fn books_without_md5_stay_apart() {
-        let storage = MemoryStorage::new();
-        other_device(
-            &storage,
-            "income.db",
-            &[(1, "Erstes", ""), (2, "Zweites", "")],
-            &[(1, 1, 100, 10), (2, 1, 200, 20)],
-        );
-        let outcome = merge(&storage, Some("income.db"), None, Some("out.db"), DIR).unwrap();
-        assert_eq!(outcome, Outcome { books: 2, stays: 2 });
-        let books = store::load_books(&storage).unwrap();
-        assert_eq!(
-            books.iter().map(|b| b.title.as_str()).collect::<Vec<_>>(),
-            ["Erstes", "Zweites"]
-        );
-        assert_eq!(log(&storage), [(1, 1, 100, 10), (2, 1, 200, 20)]);
-        // Again, with what was uploaded as the last upload.
-        storage.rename("out.db", "cached.db").unwrap();
-        let again = merge(&storage, Some("income.db"), Some("cached.db"), None, DIR).unwrap();
-        assert_eq!(again, outcome);
-        assert_eq!(log(&storage), [(1, 1, 100, 10), (2, 1, 200, 20)]);
-    }
-
-    /// A card that fills up at any point of a merge: the error comes back,
-    /// no working file is left, and the statistics are as they were (or
-    /// merged whole, once the log was swapped).
-    #[test]
-    fn working_files_go_after_an_error() {
-        let make = || {
-            let storage = Faulty::new(MemoryStorage::new());
-            this_device(&storage);
-            other_device(
-                &storage,
-                "income.db",
-                &[(7, "Neu", &md5(0xc))],
-                &[(7, 1, 50, 10), (7, 2, 60, 10)],
-            );
-            storage
-        };
-        let mut failed = 0;
-        for room in 0..200 {
-            let storage = make();
-            let before = files(&storage.inner);
-            storage.fill_after(room);
-            let result = merge(&storage, Some("income.db"), None, Some("out.db"), DIR);
-            if result.is_ok() {
-                break;
-            }
-            failed += 1;
-            assert_eq!(folder(&storage), ["books.ini", "pages.bin"], "room {room}");
-            assert!(!storage.exists("out.db"), "room {room}");
-            let after = files(&storage.inner);
-            let merged = log(&storage).len() == 5;
-            assert!(after == before || merged, "room {room}");
-        }
-        assert!(failed > 10, "{failed}");
-    }
-
-    /// Merges a real KOReader file into made-up statistics and writes the
-    /// result for SQLite to check:
-    /// `PAPERPAW_KO_IN=… PAPERPAW_KO_OUT=… cargo test -p paperpaw-plugin-stats -- --ignored`.
-    #[test]
-    #[ignore]
-    fn real_koreader_file() {
-        extern crate std;
-        let (Ok(input), Ok(output)) = (
-            std::env::var("PAPERPAW_KO_IN"),
-            std::env::var("PAPERPAW_KO_OUT"),
-        ) else {
-            return;
-        };
-        let storage = MemoryStorage::new().with("income.db", std::fs::read(input).unwrap());
-        store::save_books(&storage, &[book(1, &md5(0xd))]).unwrap();
-        store::append(&storage, stay(1, 1, 1_700_000_000, 30)).unwrap();
-        let outcome = merge(&storage, Some("income.db"), None, Some("out.db"), DIR).unwrap();
-        std::println!("{outcome:?}");
-        std::fs::write(output, storage.get("out.db").unwrap()).unwrap();
-    }
-}
+mod tests;
 
 #[cfg(test)]
 mod props_tests;

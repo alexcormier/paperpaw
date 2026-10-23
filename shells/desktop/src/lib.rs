@@ -9,6 +9,8 @@
 //! so that the kernel's heap is counted against the device's budget.
 
 pub mod budget;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod cable;
 pub mod device;
 pub mod headless;
 pub mod host;

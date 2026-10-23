@@ -3,13 +3,9 @@
 # and one split below the limit leaves this list.
 6958 crates/paperpaw-sdk/src/icon_table.rs
 3401 crates/paperpaw-core/src/tests.rs
-2206 crates/paperpaw-core/src/core_plugin.rs
+2162 crates/paperpaw-core/src/core_plugin.rs
 2030 plugins/format-epub/src/convert.rs
-2030 crates/paperpaw-fat/src/lib.rs
-1922 crates/paperpaw-sdk/src/widgets/grid/view.rs
-1897 crates/paperpaw-sdk/src/settings.rs
+1925 crates/paperpaw-sdk/src/widgets/grid/view.rs
 1874 crates/paperpaw-sdk/src/library/catalog.rs
-1751 plugins/reader/tests/reading.rs
-1596 crates/paperpaw-sdk/src/builtin.rs
-1541 crates/paperpaw-sdk/src/library/mod.rs
-1525 plugins/store/src/catalog.rs
+1765 plugins/reader/tests/reading.rs
+1566 crates/paperpaw-sdk/src/settings.rs

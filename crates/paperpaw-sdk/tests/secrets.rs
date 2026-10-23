@@ -117,6 +117,25 @@ fn broken_lines_are_skipped_and_the_rest_read() {
 }
 
 #[test]
+fn lines_it_cannot_read_are_written_back_as_they_are() {
+    let good = kept(&[("a.key".into(), "A".into(), "v".into())]).encode();
+    let newer = "a.five\tlabel\tc\t00\tnewfield";
+    let flags = "a.flags\tlabel\tcx\t00";
+    let mut read = Secrets::decode(&format!("{newer}\n{flags}\n{good}"));
+    read.apply(SecretChange::keep("b.key", "B", "w"));
+    read.apply(SecretChange::remove("a.key"));
+    let text = read.encode();
+    assert!(text.lines().any(|l| l == newer), "{text}");
+    assert!(text.lines().any(|l| l == flags), "{text}");
+    assert_eq!(Secrets::decode(&text).get("b.key"), Some("w"));
+    // A change to such a secret replaces its line.
+    read.apply(SecretChange::keep("a.five", "label", "new"));
+    let text = read.encode();
+    assert!(!text.contains("newfield"), "{text}");
+    assert_eq!(Secrets::decode(&text).get("a.five"), Some("new"));
+}
+
+#[test]
 fn windows_line_ends_and_blank_lines_are_read() {
     let good = kept(&[
         ("a.key".into(), "A".into(), "one".into()),

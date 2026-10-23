@@ -755,8 +755,14 @@ impl Kernel {
             return;
         };
         // The new version in place: the old ones go, what was chosen from
-        // them stays where the new one offers it too.
+        // them stays where the new one offers it too; what its installer
+        // keeps for it (its code named, where it came from) is kept now.
         placed.clear(self.shared.storage.as_ref());
+        paperpaw_sdk::install::marks::settle(
+            self.shared.storage.as_ref(),
+            id.as_str(),
+            &placed.target,
+        );
         // A code plugin's code runs until the restart: the new version
         // takes over then.
         if let Some(info) = self.shared.plugins.get_mut(id.as_str())
@@ -792,6 +798,8 @@ impl Kernel {
             let ours = built_in.contains(&id);
             if let Some(placed) = self.place_plugin(&id, &folder, dirs, ours) {
                 placed.clear(self.shared.storage.as_ref());
+                let storage = self.shared.storage.as_ref();
+                paperpaw_sdk::install::marks::settle(storage, id.as_str(), &placed.target);
             }
         }
     }

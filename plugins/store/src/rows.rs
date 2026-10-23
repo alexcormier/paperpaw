@@ -5,7 +5,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 
-use paperpaw_sdk::install::Progress;
+use paperpaw_sdk::install::{Origins, Progress};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{Canvas, Color, Env, Rect, files};
 
@@ -36,6 +36,7 @@ pub(crate) fn state(
     job: Option<&Progress>,
     queued: &[String],
     plugin: &Entry,
+    origins: &Origins,
 ) -> State {
     if let Some(job) = job.filter(|j| j.plugin == plugin.id) {
         if job.done >= job.total {
@@ -52,7 +53,7 @@ pub(crate) fn state(
         .is_some_and(paperpaw_sdk::PluginInfo::restart_needed);
     if restart {
         State::Busy(env.i18n.tr("store.state.restart").to_string())
-    } else if plugin.newer(env) {
+    } else if plugin.newer_in(env, origins) {
         State::Update
     } else if plugin.installed(env).is_some() {
         State::Installed
@@ -75,6 +76,7 @@ pub(crate) fn draw(
     plugin: &Entry,
     job: Option<&Progress>,
     queued: &[String],
+    origins: &Origins,
 ) {
     let Some(font) = style.font(env) else {
         return;
@@ -84,7 +86,7 @@ pub(crate) fn draw(
     let right = f32::from(rect.x) + f32::from(rect.width) - margin;
     let ink = style.focus_ink(focused);
     // The mark first, from the right margin; the name gets the rest.
-    let mark_left = match state(env, job, queued, plugin) {
+    let mark_left = match state(env, job, queued, plugin, origins) {
         State::Offered(text) | State::Busy(text) => {
             let width = font.measure(style.small, &text);
             let x = right - width;
@@ -130,7 +132,13 @@ pub(crate) fn draw(
         &plugin.name,
         ink,
     );
-    // What it does: one line, shortened where longer.
+    // What it does: one line, shortened where longer; PaperPaw's own
+    // say so first.
+    let summary = if plugin.official {
+        format!("{} · {}", env.i18n.tr("store.official"), plugin.summary)
+    } else {
+        plugin.summary.clone()
+    };
     let below = band.y + band.height;
     let line = (style.small * 1.3) as u16;
     let note = Rect::new(rect.x, below, (right - f32::from(rect.x)) as u16, line);
@@ -140,7 +148,7 @@ pub(crate) fn draw(
         style.small,
         f32::from(rect.x) + margin,
         note,
-        &plugin.summary,
+        &summary,
         style.focus_faint(focused, 80),
     );
 }

@@ -167,10 +167,14 @@ fn run(call: HttpCall) -> HttpResponse {
     if !output.status.success() {
         return failed(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
-    // The body, then lines with the status, the ETag, the content type,
-    // the final address and the headers asked for (`-w`), read from the
-    // end.
-    let mut out = output.stdout;
+    answer(&call, output.stdout)
+}
+
+/// The answer to `call` from what `curl` wrote: the body, then lines with
+/// the status, the ETag, the content type, the final address and the
+/// headers asked for (`-w`), read from the end.
+#[cfg(not(target_arch = "wasm32"))]
+fn answer(call: &HttpCall, mut out: Vec<u8>) -> HttpResponse {
     let mut line = || {
         let at = out.iter().rposition(|&b| b == b'\n').unwrap_or(0);
         let text = String::from_utf8_lossy(&out[at..]).trim().to_string();
@@ -188,6 +192,11 @@ fn run(call: HttpCall) -> HttpResponse {
     let content_type = line();
     let etag = line();
     let status = line().and_then(|s| s.parse().ok()).unwrap_or(0);
+    if out.len() > call.max_response && call.save_to.is_some() {
+        // A file cut short would be saved as if whole.
+        let reason = format!("the answer is larger than {} bytes", call.max_response);
+        return HttpResponse::failed(call.id, &reason);
+    }
     out.truncate(call.max_response);
     HttpResponse {
         id: call.id,
@@ -198,5 +207,49 @@ fn run(call: HttpCall) -> HttpResponse {
         url,
         saved: false,
         headers,
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+
+    fn call(save_to: Option<&str>) -> HttpCall {
+        HttpCall {
+            id: 7,
+            method: String::from("GET"),
+            url: String::from("https://a.example/book.epub"),
+            headers: Vec::new(),
+            body: None,
+            body_from: None,
+            max_response: 4,
+            timeout_ms: 1000,
+            want_headers: Vec::new(),
+            save_to: save_to.map(String::from),
+        }
+    }
+
+    /// An answer longer than wanted is cut, unless it is a file: then it
+    /// fails, so no file is saved cut short as if whole.
+    #[test]
+    fn answers_too_long_for_a_file_fail() {
+        let written = b"PK book
+200
+
+application/epub+zip
+https://a.example/book.epub"
+            .to_vec();
+        let cut = answer(&call(None), written.clone());
+        assert_eq!((cut.status, cut.body.as_slice()), (200, &b"PK b"[..]));
+        let file = answer(&call(Some("Books/a.epub")), written);
+        assert_eq!(file.status, 0, "{file:?}");
+        let whole = b"PK
+200
+
+
+"
+        .to_vec();
+        let fits = answer(&call(Some("Books/a.epub")), whole);
+        assert_eq!((fits.status, fits.body.as_slice()), (200, &b"PK"[..]));
     }
 }

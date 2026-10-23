@@ -373,9 +373,11 @@ fn secrets_typed_in_are_kept_veiled_and_sent_encoded() {
         "grant_type=password&client_id=1_abc&client_secret=s3cr3t-client\
          &username=Jo+Doe&password=p%26ss%3Dw0rd+%C3%BC%2B%25"
     );
-    // Emptied, a secret goes.
+    // An empty answer (confirmed by mistake) keeps what was kept.
     h.send("wallabag.entered", typed("password", "   "));
-    assert_eq!(h.kernel.secrets().get(PASSWORD), None);
+    h.send("wallabag.entered", typed("secret", ""));
+    assert_eq!(h.kernel.secrets().get(PASSWORD), Some("p&ss=w0rd ü+%"));
+    assert_eq!(h.kernel.secrets().get(SECRET), Some("s3cr3t-client"));
 }
 
 #[test]

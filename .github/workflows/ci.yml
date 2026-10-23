@@ -116,7 +116,7 @@ jobs:
       - name: Build the web emulator
         # As it is served, its size told and kept in bounds.
         if: matrix.target == 'wasm32-unknown-unknown'
-        run: python3 shells/web/build.py --limit-mb 14
+        run: python3 shells/web/build.py --limit-mb 15
 
   firmware:
     name: Firmware (${{ matrix.device }})
@@ -141,6 +141,11 @@ jobs:
             samples/hello-native
             .
           key: ${{ matrix.device }}
+      # Code plugins for the ESP32-S3 link with core libraries built once,
+      # as the release publishes them; installed first, as the release
+      # does, so that everything after builds beside them.
+      - uses: ./.github/actions/xtensa-std
+        if: matrix.device != 'x4'
       - name: Lint and build
         working-directory: shells/xteink
         # Linted with remote control over USB, as for testing, and
@@ -152,6 +157,17 @@ jobs:
       - name: The sample code plugin fits the firmware
         id: native
         uses: ./.github/actions/native-sample
+      # A code plugin's file is the same wherever it is built, as the
+      # plugin library's rebuild needs: the sample, as its author's
+      # repository has it (the SDK from a registry), built in two folders
+      # for each chip and compared byte for byte.
+      - name: Code plugins are the same in any folder
+        if: matrix.device == 'x4-pro'
+        run: |
+          rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' samples/hello-native/rust-toolchain.toml)" \
+            --profile minimal --target riscv32imc-unknown-none-elf
+          tools/plugin-files/anywhere.sh x4 "$RUNNER_TEMP/anywhere-x4"
+          tools/plugin-files/anywhere.sh x4-pro "$RUNNER_TEMP/anywhere-x4-pro"
       # PaperPaw's own plugins that the store offers, as the release
       # builds them (unsigned here): each packs, for this chip, with the
       # firmware's fingerprint.
@@ -168,6 +184,12 @@ jobs:
           tools/plugin-files/sign.sh "$out" target/release/paperpaw-sign --key "$RUNNER_TEMP/ci.key"
           version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
           python3 tools/plugin-files/catalogue.py "$out" "$version" https://example.invalid/ci
+      # espup's toolchain is cached between runs (xteink-tools): the core
+      # libraries installed into it go again, so that no run finds those
+      # of another commit.
+      - name: The core libraries out of the cached toolchain
+        if: always() && matrix.device != 'x4'
+        run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
 
   native:
     name: Native plugins

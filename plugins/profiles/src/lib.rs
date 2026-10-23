@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, menus, params};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
@@ -48,6 +48,12 @@ const LIST_SCREEN: Id = Id::new_static("profiles.list");
 const NAMED: Event<Typed> = Event::new("profiles.named");
 const RENAMED: Event<Typed> = Event::new("profiles.renamed");
 const CHOSEN: Event<choice::Picked> = Event::new("profiles.chosen");
+/// The answer to "replace?" or "remove?": the option, the profile's index
+/// and name in its context.
+const CONFIRMED: Event<Confirmed> = Event::new("profiles.confirmed");
+/// Keys of [`CONFIRMED`]'s context.
+const OPTION: &str = "option";
+const NAME: &str = "name";
 
 /// Applies `profile` and says so.
 fn apply(env: &Env<'_>, profile: &Profile, out: &mut Vec<Command>) {
@@ -249,6 +255,46 @@ impl ListScreen {
         false
     }
 
+    /// Asks whether to do `option` (update or remove) to the `i`-th
+    /// profile: either loses what it kept.
+    fn ask_first(&self, option: &str, i: usize, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let name = &self.profiles[i].name;
+        let (yes, no) = match option {
+            "update" => ("profiles.replace", "profiles.cancel"),
+            _ => ("profiles.option.remove", "profiles.keep"),
+        };
+        let arg = [("name", Arg::Str(name))];
+        cx.command(
+            ask::confirm(
+                env.i18n
+                    .format(&alloc::format!("profiles.{option}.question"), &arg),
+                &CONFIRMED,
+            )
+            .text(env.i18n.tr(&alloc::format!("profiles.{option}.text")))
+            .yes(env.i18n.tr(yes))
+            .no(env.i18n.tr(no))
+            .with(params::PATH, i.to_string())
+            .with(OPTION, option)
+            .with(NAME, name.clone())
+            .command(),
+        );
+    }
+
+    /// Saves the current settings in the `i`-th profile.
+    fn update(&mut self, i: usize, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        self.profiles[i].values = profile::capture(&env);
+        let name = self.profiles[i].name.clone();
+        if self.save(cx) {
+            cx.command(Command::Notify(
+                env.i18n
+                    .format("profiles.saved", &[("name", Arg::Str(&name))]),
+            ));
+        }
+        self.redraw(cx);
+    }
+
     /// Whether a profile but the `but`-th is called `name`; if so, says
     /// so.
     fn taken(&self, name: &str, but: Option<usize>, cx: &mut Cx<'_, '_>) -> bool {
@@ -426,22 +472,21 @@ impl Screen for ListScreen {
             && let Some(i) = index(&picked.path)
         {
             match picked.option.as_str() {
-                "update" => {
-                    self.profiles[i].values = profile::capture(&env);
-                    let name = self.profiles[i].name.clone();
-                    if self.save(cx) {
-                        cx.command(Command::Notify(
-                            env.i18n
-                                .format("profiles.saved", &[("name", Arg::Str(&name))]),
-                        ));
-                    }
-                    self.redraw(cx);
-                }
+                option @ ("update" | "remove") => self.ask_first(option, i, cx),
                 "rename" => {
                     let name = self.profiles[i].name.clone();
                     self.ask_name(cx, &RENAMED, &name, &i.to_string());
                 }
-                "remove" => {
+                _ => {}
+            }
+        } else if let Some(answer) = CONFIRMED.read(event, params) {
+            let context = &answer.context;
+            // Still the profile asked about.
+            let at = index(context.get(params::PATH).unwrap_or_default())
+                .filter(|&i| Some(self.profiles[i].name.as_str()) == context.get(NAME));
+            match (answer.yes, at, context.get(OPTION)) {
+                (true, Some(i), Some("update")) => self.update(i, cx),
+                (true, Some(i), Some("remove")) => {
                     self.profiles.remove(i);
                     self.save(cx);
                     self.list.set_len(self.rows().len());

@@ -1,15 +1,16 @@
 # PaperPaw on the Xteink X4
 
-The firmware for the Xteink X4 (ESP32-C3). See
+The firmware for the Xteink X4 and the X4 Pro. See
 [ADR 0013](../../docs/adr/0013-x4-firmware.md) for how it is built; its
 hardware parts are in [`paperpaw-x4`](../../crates/paperpaw-x4) and
 [`paperpaw-fat`](../../crates/paperpaw-fat), tested on a computer.
 
 > Save the stock firmware first (below), so the X4 can always go back.
 
-It is for the X4 and, built with the feature `x4-pro` or `x4-classic`,
-for the X4 Pro and the X4 Classic (both ESP32-S3); the display
-controller (SSD1677, UC8179 or UC8279) is found at start.
+It is for the X4 and, built with the feature `x4-pro`, for the X4 Pro
+(ESP32-S3); the display controller (SSD1677, UC8179 or UC8279) is
+found at start. A build for the X4 Classic is there too, but not part
+of the beta ([below](#the-x4-classic)).
 
 ## Build
 
@@ -47,14 +48,18 @@ cargo run --release
 ```
 
 flashes the X4 and shows its log. Books go on a microSD card formatted
-with FAT32, e.g. in `Books`.
+with FAT32, e.g. in `Books`. PaperPaw does not read exFAT, which large
+cards often come with.
 
 ## Remote control
 
 Over USB, [`tools/x4-remote.py`](../../tools/x4-remote.py) presses the
 X4's buttons, takes screenshots and prints what the screen shows, with
 the steps of the emulator's scripts. Firmware built here has it (the
-`remote` feature, on by default); released firmware leaves it out.
+`remote` feature, on by default); released firmware leaves it out. The
+transfer over the cable, which installs plugins and adds books once the
+reader allows it, is in every firmware
+([docs/usb-transfer.md](../../docs/usb-transfer.md)).
 
 It also waits for and checks what the screen shows (`until:`, `expect:`,
 with an exit code for scripts), taps and swipes (the X4 Pro), runs
@@ -86,6 +91,13 @@ python tools/x4-remote.py --push my-fonts .paperpaw/fonts --info
   or fetched over the network by the `update` plugin.
 - The UltraChip UC8179 of newer X4s as well as the SSD1677, whichever
   answers at the start.
+- Code plugins as files on the card (ADR 0024). After failed starts, or
+  with *Back* held at power-on, PaperPaw starts in safe mode without
+  them. On the X4 Pro, hold *Home*.
+- A crash is written to `.paperpaw/crashes.txt` on the card, for bug
+  reports.
+- The time of day from the network. The X4 forgets it while it is off.
+- Wi-Fi set up with a phone, or the network the web flasher was given.
 
 ## The X4 Pro
 
@@ -115,6 +127,8 @@ network as on the X4, the UC8279 of other X4 Pros. To come: battery life
 measured.
 
 ## The X4 Classic
+
+Not part of the beta: built, but not yet tried on one.
 
 The X4 Classic ("X4 v2") is an ESP32-S3 board like the X4 Pro, with the
 X4's buttons and no touch or front light; an X4 image cannot run on it.

@@ -51,6 +51,21 @@ jobs:
             --crosstool-toolchain-version "$ESP_GCC"
       - name: paperpaw-sign, of the release
         run: cargo "+$RUST_X4" install --locked --git https://github.com/hthoene/paperpaw --tag "v$PAPERPAW" paperpaw-sign
+      # The X4 Pro's core libraries, built once by the release and signed
+      # with PaperPaw's release key, into the esp toolchain (as rustup has
+      # the X4's): every build of the plugin is then the same.
+      - name: The X4 Pro's core libraries, of the release
+        run: |
+          archive="paperpaw-xtensa-std-$PAPERPAW.tar.gz"
+          base="https://github.com/hthoene/paperpaw/releases/download/v$PAPERPAW"
+          curl -sSfL "$base/$archive" -o "$RUNNER_TEMP/$archive"
+          curl -sSfL "$base/$archive.sig" -o "$RUNNER_TEMP/$archive.sig"
+          # PaperPaw's release key, whole (fingerprint 55A9 F626 DB17 EB90).
+          paperpaw-sign check-asset "$RUNNER_TEMP/$archive" "$RUNNER_TEMP/$archive.sig" \
+            | tee /dev/stderr | grep -q "(55a9f626db17eb9058707323d29f52470bfcd09638898e17bd01784ef9df0c51)"
+          sysroot="$(rustc +esp --print sysroot)"
+          rm -rf "$sysroot/lib/rustlib/xtensa-esp32s3-none-elf"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$sysroot"
       - name: The tag is the plugin's version
         if: startsWith(github.ref, 'refs/tags/')
         run: |

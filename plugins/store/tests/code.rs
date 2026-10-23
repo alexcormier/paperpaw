@@ -271,7 +271,7 @@ fn code_that_cannot_be_trusted_is_not_installed() {
     refused(&ppn(BUILD, None), "not signed by its author");
     refused(
         &ppn(Fingerprint(1), Some(&AUTHOR)),
-        "made for another version of PaperPaw",
+        "built for another plugin interface or compiler",
     );
     let mut damaged = ppn(BUILD, Some(&AUTHOR));
     damaged[100] ^= 0xFF;
@@ -366,4 +366,48 @@ fn code_that_just_fits_is_installed() {
         shown.contains("code plugins: 8.0 KB of 8.0 KB used"),
         "{shown}"
     );
+}
+
+/// PaperPaw's own plugins say so on their row and their page; the list's
+/// word alone, with another author's key, gives no such mark.
+#[test]
+fn paperpaws_own_plugins_say_so() {
+    const OURS: &str = "148ccf3ebc30506b355c6b5cb2baf87d9265606cc6a81f085bb3b9740a95aebd";
+    let author = hex(&public_key(&AUTHOR));
+    let claimed = |text: String| {
+        text.replace(
+            r#""author": "Someone","#,
+            r#""author": "Someone", "official": true,"#,
+        )
+    };
+    let code = ppn(BUILD, Some(&AUTHOR));
+
+    let mut shopping = Shopping::on(
+        Some("x4"),
+        Some(native()),
+        &claimed(list("1.0.0")).replace(&author, OURS),
+    );
+    shopping.choose("Reading");
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("By PaperPaw · A clock on the home screen."),
+        "{shown}"
+    );
+    shopping.choose("Clock");
+    let ours = claimed(page("1.0.0", &code)).replace(&author, OURS);
+    shopping.serve(PAGE, ours.as_bytes());
+    let shown = shopping.shown();
+    assert!(shown.contains("By PaperPaw"), "{shown}");
+    assert!(!shown.contains("By Someone"), "{shown}");
+
+    // The same word with the author's own key: no mark.
+    let mut shopping = Shopping::on(Some("x4"), Some(native()), &claimed(list("1.0.0")));
+    shopping.choose("Reading");
+    let shown = shopping.shown();
+    assert!(!shown.contains("By PaperPaw"), "{shown}");
+    shopping.choose("Clock");
+    shopping.serve(PAGE, claimed(page("1.0.0", &code)).as_bytes());
+    let shown = shopping.shown();
+    assert!(shown.contains("By Someone"), "{shown}");
+    assert!(!shown.contains("By PaperPaw"), "{shown}");
 }

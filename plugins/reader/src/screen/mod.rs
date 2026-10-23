@@ -329,7 +329,7 @@ impl ReaderScreen {
                 marks_not_saved(cx);
             }
         }
-        book.marks = annotations::marks(env.storage, &book.path);
+        book.reload_marks(&env);
         cx.command(annotations::changed(&book.path));
         cx.request_redraw_area(book.ribbon_area(&env));
         cx.request_refresh(RefreshMode::Fast);
@@ -915,9 +915,8 @@ impl ReaderScreen {
             .read(event, params)
             .is_some_and(|a| a.path == book.path)
         {
-            let marks = annotations::marks(cx.env().storage, &book.path);
-            if marks != book.marks {
-                book.marks = marks;
+            // Those added there are taken as of this conversion.
+            if book.reload_marks(cx.env()) {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             }

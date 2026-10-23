@@ -187,6 +187,7 @@ fn wrong_script_steps_are_errors_that_name_the_step() {
         ("xteink-x4", "serve:ever", "`ever` is not a number"),
         ("xteink-x4", "a:b:c:d:e:f", "unknown step"),
         ("xteink-x4", "run:Not An Id", "step `run:Not An Id`"),
+        ("xteink-x4", "type:hi", "no text field shows"),
         (
             "xteink-x4",
             "open:settings.group:novalue",
@@ -278,6 +279,21 @@ fn power_sleeps_and_only_power_wakes() {
         woken.stderr
     );
     assert_eq!(woken.screen(), "home.dashboard");
+}
+
+/// `type:` types into the keyboard shown as if on its keys, umlauts and
+/// all; `type-enter:` confirms what was typed, and the keyboard closes.
+#[test]
+fn text_is_typed_into_the_keyboard_shown() {
+    let typed = run(
+        "type",
+        "xteink-x4",
+        "open:keyboard.screen:title=Name,type:Grüße Zoë,describe,type-enter:!",
+        &[],
+    );
+    assert!(typed.ok, "{}", typed.stderr);
+    assert!(typed.stdout.contains("Grüße Zoë"), "{}", typed.stdout);
+    assert_ne!(typed.screen(), "keyboard.screen", "{}", typed.stdout);
 }
 
 /// The screen turned, by the configuration at start or chosen in the

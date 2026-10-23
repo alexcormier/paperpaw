@@ -91,13 +91,16 @@ static SETTINGS: [SettingSpec; 4] = [
         groups::LIBRARY,
     )
     .with_extra(&ON_SETUP)
+    .kept_on_reset()
     .described("joplin.service.help"),
     SettingSpec::fixed_text(ADDRESS.static_str(), "joplin.address", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
+        .kept_on_reset()
         .advanced()
         .described("joplin.address.help"),
     SettingSpec::fixed_text(USER.static_str(), "joplin.user", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
+        .kept_on_reset()
         .advanced()
         .described("joplin.user.help"),
     SettingSpec::fixed_text(
@@ -107,6 +110,7 @@ static SETTINGS: [SettingSpec; 4] = [
         groups::LIBRARY,
     )
     .with_extra(&ON_SETUP)
+    .kept_on_reset()
     .advanced()
     .described("joplin.notebook.help"),
 ];

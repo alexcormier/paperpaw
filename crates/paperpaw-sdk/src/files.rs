@@ -177,10 +177,12 @@ pub fn part_path(path: &str) -> String {
 
 /// Puts the file made at `part` (see [`part_path`]) at `path`, replacing
 /// what is there: what was at `path` stays until the new file is whole.
-/// Where that fails, the part is removed.
+/// Where that fails, the part is removed, unless the failed move took
+/// the old file away (FAT removes it first): then the part is all there is.
 pub fn put_in_place(storage: &dyn Storage, part: &str, path: &str) -> Result<(), StorageError> {
+    let had_old = storage.exists(path);
     let moved = move_to(storage, part, path);
-    if moved.is_err() {
+    if moved.is_err() && (!had_old || storage.exists(path)) {
         let _ = storage.remove(part);
     }
     moved
@@ -216,8 +218,24 @@ pub fn copy(storage: &dyn Storage, from: &str, to: &str) -> Result<(), StorageEr
     }
     let part = part_path(to);
     let copied = copy_file(storage, from, &part);
+    let had_old = storage.exists(to);
     match copied {
-        Ok(()) => put_in_place(storage, &part, to),
+        // Renamed directly, not by `move_to`: where the storage cannot
+        // rename, that would copy the part again through its own part.
+        Ok(()) => match storage.rename(&part, to) {
+            Err(StorageError::Unsupported) => {
+                let _ = storage.remove(&part);
+                copy_file(storage, from, to)
+            }
+            Err(e) => {
+                // As in `put_in_place`: kept where it is the only copy.
+                if !had_old || storage.exists(to) {
+                    let _ = storage.remove(&part);
+                }
+                Err(e)
+            }
+            Ok(()) => Ok(()),
+        },
         Err(e) => {
             let _ = storage.remove(&part);
             Err(e)
@@ -586,6 +604,84 @@ mod tests {
         let s = s.with("x.part", "x");
         assert!(put_in_place(&s, "x.part", "../x").is_err());
         assert!(s.get("x.part").is_none());
+    }
+
+    /// A storage whose renames fail: `Unsupported` every time, or, as FAT
+    /// may, after removing the file at the target. Counts them.
+    struct BadRename {
+        files: MemoryStorage,
+        renames: core::cell::Cell<u32>,
+        fat: bool,
+    }
+
+    impl BadRename {
+        fn new(files: MemoryStorage, fat: bool) -> Self {
+            Self {
+                files,
+                renames: core::cell::Cell::new(0),
+                fat,
+            }
+        }
+    }
+
+    impl Storage for BadRename {
+        fn read_at(&self, path: &str, at: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            self.files.read_at(path, at, buf)
+        }
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            self.files.size(path)
+        }
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.files.write(path, data)
+        }
+        fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.files.append(path, data)
+        }
+        fn list(
+            &self,
+            dir: &str,
+            visit: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
+        ) -> Result<(), StorageError> {
+            self.files.list(dir, visit)
+        }
+        fn remove(&self, path: &str) -> Result<(), StorageError> {
+            self.files.remove(path)
+        }
+        fn rename(&self, _: &str, to: &str) -> Result<(), StorageError> {
+            self.renames.set(self.renames.get() + 1);
+            if self.renames.get() > 10 {
+                // Far past what a move needs: stop the recursion.
+                return Err(StorageError::Io);
+            }
+            if self.fat {
+                self.files.remove(to)?;
+                return Err(StorageError::Io);
+            }
+            Err(StorageError::Unsupported)
+        }
+    }
+
+    #[test]
+    fn moves_where_nothing_renames() {
+        let s = BadRename::new(MemoryStorage::new().with("dl.tmp", "BOOK"), false);
+        assert_eq!(move_to(&s, "dl.tmp", "Books/a.epub"), Ok(()));
+        assert!(s.renames.get() <= 2, "{} renames", s.renames.get());
+        assert_eq!(s.files.get("Books/a.epub").as_deref(), Some(&b"BOOK"[..]));
+        assert_eq!(s.files.get("Books/a.epub.part"), None);
+        assert_eq!(s.files.get("dl.tmp"), None);
+    }
+
+    #[test]
+    fn part_kept_where_a_failed_move_took_the_old_file() {
+        let s = BadRename::new(
+            MemoryStorage::new()
+                .with("a.epub", "old")
+                .with("a.epub.part", "new"),
+            true,
+        );
+        assert!(put_in_place(&s, "a.epub.part", "a.epub").is_err());
+        // The old file is gone: the part is the only copy left.
+        assert_eq!(s.files.get("a.epub.part").as_deref(), Some(&b"new"[..]));
     }
 
     #[test]

@@ -1,0 +1,173 @@
+//! What an installer keeps for a plugin once it is in place: its code
+//! named as installed ([`native::remember_code`]), its author, where it
+//! came from ([`origin`](super::origin)). Kept before the kernel installs
+//! the plugin, each would be wrong where the install fails or the power
+//! is cut first: the version before would be refused at the next start,
+//! or lose its store. So the installer writes them into the folder it
+//! hands over ([`write()`]), and the kernel keeps them once the folder is
+//! the plugin's ([`settle`]): right after the install, or at the next
+//! start where that was cut short. The file is hidden: neither the Wi-Fi
+//! transfer nor the cable reach it.
+
+use alloc::format;
+use alloc::string::String;
+
+use paperpaw_platform::Storage;
+
+use crate::Version;
+use crate::native;
+
+/// The file in a plugin's folder that holds what is to be kept.
+pub const FILE: &str = ".install-marks";
+
+/// Where a plugin being installed came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum From {
+    /// A store, at this version: it offers its updates.
+    Store(Version),
+    /// Any other way: its own, no store's.
+    Local,
+}
+
+/// What is kept once the plugin is in place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Marks {
+    pub from: From,
+    /// Its code, as installers name it (the SHA-256 its file's header
+    /// holds), where the reader or a store let it run.
+    pub code: Option<[u8; 32]>,
+    /// The key of its code's author, to remember (a store's).
+    pub author: Option<[u8; 32]>,
+}
+
+impl Marks {
+    pub fn new(from: From) -> Self {
+        Self {
+            from,
+            code: None,
+            author: None,
+        }
+    }
+
+    #[must_use]
+    pub fn code(mut self, sha256: [u8; 32]) -> Self {
+        self.code = Some(sha256);
+        self
+    }
+
+    #[must_use]
+    pub fn author(mut self, key: [u8; 32]) -> Self {
+        self.author = Some(key);
+        self
+    }
+}
+
+/// Writes `marks` into `folder`, the plugin about to be installed;
+/// `false` if they could not be written (then do not install it).
+pub fn write(storage: &dyn Storage, folder: &str, marks: &Marks) -> bool {
+    let hex = paperpaw_digest::hex::encode;
+    let mut text = match marks.from {
+        From::Store(version) => format!("from store {version}\n"),
+        From::Local => String::from("from local\n"),
+    };
+    if let Some(code) = marks.code {
+        text.push_str(&format!("code {}\n", hex(&code)));
+    }
+    if let Some(author) = marks.author {
+        text.push_str(&format!("author {}\n", hex(&author)));
+    }
+    let path = format!("{}/{FILE}", folder.trim_end_matches('/'));
+    storage.write(&path, text.as_bytes()).is_ok()
+}
+
+/// Keeps what an installer wrote into the folder of plugin `id`, now in
+/// place ([`write()`]), and removes the file; `true` if there was any. The
+/// code is named only where the file in the folder is that code.
+pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
+    let path = format!("{}/{FILE}", folder.trim_end_matches('/'));
+    let Ok(bytes) = crate::read_file(storage, &path, 1024) else {
+        return false;
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    let bytes32 = |hex: &str| -> Option<[u8; 32]> {
+        paperpaw_digest::hex::decode(hex.trim())?.try_into().ok()
+    };
+    let mut kept = true;
+    for line in text.lines() {
+        let (key, value) = line.split_once(' ').unwrap_or((line, ""));
+        kept &= match key {
+            "from" => match value.split_once(' ') {
+                // As its plugin.ini writes it, where that is the version
+                // marked (a beta's pre-release with it).
+                Some(("store", version)) => Version::parse(version.trim()).is_none_or(|v| {
+                    let written = super::folder_release(storage, folder)
+                        .filter(|written| Version::parse(written) == Some(v))
+                        .unwrap_or_else(|| format!("{v}"));
+                    super::remember_store_install(storage, id, written)
+                }),
+                _ => super::forget_store_install(storage, id),
+            },
+            "code" => match bytes32(value) {
+                Some(sha256) if code_is(storage, folder, &sha256) => {
+                    native::remember_code(storage, id, &sha256)
+                }
+                _ => true,
+            },
+            "author" => bytes32(value).is_none_or(|key| native::remember_author(storage, id, &key)),
+            _ => true,
+        };
+    }
+    // Kept for the next start where something could not be kept now.
+    if kept {
+        let _ = storage.remove(&path);
+    }
+    true
+}
+
+/// Whether the code file in `folder` is the code named `sha256`.
+fn code_is(storage: &dyn Storage, folder: &str, sha256: &[u8; 32]) -> bool {
+    native::CODE_FILES.iter().any(|name| {
+        let path = format!("{}/{name}", folder.trim_end_matches('/'));
+        native::read_header(storage, &path).is_some_and(|header| header.sha256 == *sha256)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MemoryStorage;
+    use crate::install::{Origin, origin};
+
+    /// Kept once settled, the file gone; a local one forgets the store.
+    #[test]
+    fn marks_are_kept_once_the_plugin_is_in_place() {
+        let storage = MemoryStorage::new();
+        let v = Version::new(1, 2, 0);
+        assert!(write(
+            &storage,
+            "plugins/dark/",
+            &Marks::new(From::Store(v))
+        ));
+        assert_eq!(origin(&storage, "dark", v), Origin::Local);
+        assert!(settle(&storage, "dark", "plugins/dark"));
+        assert_eq!(origin(&storage, "dark", v), Origin::Store);
+        assert!(!storage.exists("plugins/dark/.install-marks"));
+        assert!(!settle(&storage, "dark", "plugins/dark"));
+        assert!(write(&storage, "plugins/dark", &Marks::new(From::Local)));
+        settle(&storage, "dark", "plugins/dark");
+        assert_eq!(origin(&storage, "dark", v), Origin::Local);
+    }
+
+    /// Code is named only where the folder holds that code: marks put
+    /// beside other code name nothing.
+    #[test]
+    fn code_is_named_only_for_the_code_in_the_folder() {
+        let storage = MemoryStorage::new();
+        let marks = Marks::new(From::Local).code([7; 32]);
+        assert!(write(&storage, "plugins/clock", &marks));
+        settle(&storage, "clock", "plugins/clock");
+        assert_eq!(native::installed_code(&storage, "clock"), None);
+    }
+}

@@ -161,7 +161,7 @@ impl ReaderScreen {
                     marks_not_saved(cx);
                 }
             }
-            book.marks = annotations::marks(env.storage, &book.path);
+            book.reload_marks(&env);
             cx.command(annotations::changed(&book.path));
         } else if *item == crate::actions::NOTE {
             // On the highlight there (made if there is none), typed on
@@ -191,7 +191,7 @@ impl ReaderScreen {
                 );
                 start
             });
-            book.marks = annotations::marks(env.storage, &book.path);
+            book.reload_marks(&env);
             cx.command(annotations::changed(&book.path));
             let note = annotations::note_of(env.storage, &book.path, at);
             cx.command(

@@ -56,11 +56,11 @@ fn flows_pass_and_fail_where_they_should() {
     );
     let file = out.join("snapshots/boox-go-7/battery.png");
     assert!(file.is_file());
-    // Night mode on the devices with the X4's buttons, the battery page
-    // on the Boox only.
-    assert_eq!(found(&report, "flows.passed").len(), 3);
+    // Night mode on the devices with the X4's buttons (the X4 alone of
+    // those checked by default), the battery page on the Boox only.
+    assert_eq!(found(&report, "flows.passed").len(), 2);
     assert!(ran(&report, "night-mode.flow", "xteink-x4"));
-    assert!(ran(&report, "night-mode.flow", "xteink-x4-classic"));
+    assert!(!ran(&report, "night-mode.flow", "xteink-x4-pro"));
     assert!(!ran(&report, "night-mode.flow", "boox-go-7"));
     assert!(ran(&report, "battery.flow", "boox-go-7"));
 

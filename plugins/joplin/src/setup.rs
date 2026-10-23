@@ -111,8 +111,8 @@ impl Row {
     }
 }
 
-/// Keeps what was typed for a row of the set-up; whether it was the
-/// password (the settings say themselves when they change).
+/// Keeps what was typed for a row of the set-up; whether the password
+/// changed (the settings say themselves when they change).
 pub(crate) fn entered(typed: &Typed, out: &mut Vec<Command>) -> bool {
     let Some(row) = typed.context.get(FIELD).and_then(Row::of_field) else {
         return false;
@@ -122,11 +122,16 @@ pub(crate) fn entered(typed: &Typed, out: &mut Vec<Command>) -> bool {
         out.push(Command::set(&setting, Cow::Owned(text.to_string())));
         return false;
     }
-    out.push(Command::SetSecret(if text.is_empty() {
-        SecretChange::remove(PASSWORD)
-    } else {
-        SecretChange::keep(PASSWORD, "joplin.secret", text)
-    }));
+    // An empty answer keeps the password kept: a confirm by mistake on
+    // the empty field (a password is never shown in it) loses nothing.
+    if text.is_empty() {
+        return false;
+    }
+    out.push(Command::SetSecret(SecretChange::keep(
+        PASSWORD,
+        "joplin.secret",
+        text,
+    )));
     true
 }
 

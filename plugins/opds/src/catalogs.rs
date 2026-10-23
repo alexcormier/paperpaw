@@ -117,16 +117,23 @@ fn fill_passwords(env: &Env<'_>, catalogs: &mut [Catalog]) {
 }
 
 /// Moves passwords kept in the list by earlier versions to the other
-/// passwords and keys.
+/// passwords and keys. The list lets go of them only once those hold
+/// them, at a later start: where they could not be saved, the list still
+/// has them.
 pub(crate) fn move_passwords(env: &Env<'_>, out: &mut Vec<Command>) {
     let Ok(Some(mut catalogs)) = read(env.storage) else {
         return;
     };
-    if catalogs.iter().any(|c| !c.password.is_empty()) {
-        // Those moved already stay.
-        fill_passwords(env, &mut catalogs);
-        save(env, &catalogs, out);
+    if catalogs.iter().all(|c| c.password.is_empty()) {
+        return;
     }
+    let kept = |c: &Catalog| env.secrets.get(&secret_id(&c.url)) == Some(c.password.as_str());
+    if !catalogs.iter().all(|c| c.password.is_empty() || kept(c)) {
+        return keep_passwords(env, &catalogs, out);
+    }
+    // Those moved already stay.
+    fill_passwords(env, &mut catalogs);
+    save(env, &catalogs, out);
 }
 
 /// The list as the file has it.
@@ -172,6 +179,20 @@ fn encode(catalogs: &[Catalog]) -> String {
 /// their changes go to `out`. `catalogs` must come from [`load`]: what is
 /// not in it is removed.
 pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Vec<Command>) {
+    keep_passwords(env, catalogs, out);
+    // Those of catalogs removed or moved to another address go.
+    let ids: Vec<String> = catalogs.iter().map(|c| secret_id(&c.url)).collect();
+    for secret in env.secrets.iter() {
+        if secret.id.starts_with(SECRETS) && !ids.contains(&secret.id) {
+            out.push(Command::SetSecret(SecretChange::remove(&secret.id)));
+        }
+    }
+    let _ = env.storage.write(&path(), encode(catalogs).as_bytes());
+}
+
+/// The catalogs' passwords, kept with the other passwords and keys:
+/// their changes go to `out`.
+fn keep_passwords(env: &Env<'_>, catalogs: &[Catalog], out: &mut Vec<Command>) {
     for c in catalogs {
         let id = secret_id(&c.url);
         let kept = env.secrets.get(&id);
@@ -190,14 +211,6 @@ pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Vec<Command>) 
             )));
         }
     }
-    // Those of catalogs removed or moved to another address go.
-    let ids: Vec<String> = catalogs.iter().map(|c| secret_id(&c.url)).collect();
-    for secret in env.secrets.iter() {
-        if secret.id.starts_with(SECRETS) && !ids.contains(&secret.id) {
-            out.push(Command::SetSecret(SecretChange::remove(&secret.id)));
-        }
-    }
-    let _ = env.storage.write(&path(), encode(catalogs).as_bytes());
 }
 
 #[cfg(test)]

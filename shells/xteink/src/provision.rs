@@ -42,8 +42,18 @@ pub fn take(flash: &Flash, storage: &dyn Storage) {
     let Some(text) = record(&sector) else {
         return;
     };
-    let mut file: Vec<u8> =
-        paperpaw_sdk::read_file(storage, WIFI_FILE, 16 * 1024).unwrap_or_default();
+    // A file there that cannot be read is not written over: the record
+    // waits for the next start.
+    let mut file: Vec<u8> = match paperpaw_sdk::read_file(storage, WIFI_FILE, 16 * 1024) {
+        Ok(file) => file,
+        Err(paperpaw_platform::StorageError::NotFound) => Vec::new(),
+        Err(e) => {
+            warn!(
+                "Wi-Fi from the flasher: {WIFI_FILE} cannot be read ({e}); kept for the next start"
+            );
+            return;
+        }
+    };
     if !file.is_empty() && !file.ends_with(b"\n") {
         file.push(b'\n');
     }

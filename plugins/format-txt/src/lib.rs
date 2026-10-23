@@ -50,7 +50,7 @@ impl Plugin for TxtFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // Copies in UTF-8 of UTF-16 files, moved and removed with them.
-        r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
+        r.add_book_cache(Env::plugin_dir(PLUGIN.as_str()), "")?;
         r.add_format(FormatSpec::new(
             FORMAT,
             "format-txt.title",

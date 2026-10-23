@@ -12,7 +12,8 @@
 # repository.
 #
 # Needs: the X4's Rust from rust-toolchain.toml, for the X4 Pro and the
-# X4 Classic espup's `esp` toolchain with its environment. Never set
+# X4 Classic espup's `esp` toolchain with its environment and the
+# release's core libraries in it (tools/xtensa-std). Never set
 # RUSTFLAGS: it would replace .cargo/config.toml's flags, which link the
 # plugins.
 set -euo pipefail

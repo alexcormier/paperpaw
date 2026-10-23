@@ -99,6 +99,7 @@ static SETTINGS: [SettingSpec; 3] = [
         groups::LIBRARY,
     )
     .with_extra(&FOLDER)
+    .kept_on_reset()
     .advanced()
     .described("files.setting.archive.help"),
     SettingSpec::fixed_choice(

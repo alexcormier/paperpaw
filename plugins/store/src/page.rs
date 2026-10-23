@@ -63,6 +63,8 @@ enum Row {
     Cancel,
     /// The update signed by another author: install it anyway.
     Anyway,
+    /// Installed some other way: this store's version in its place.
+    UseStore,
     /// Not installed: there is no room for it.
     NoRoom,
     /// Its screenshots, one after another.
@@ -228,6 +230,8 @@ impl PageScreen {
         if info.enabled {
             if plugin.newer(env) {
                 rows.push(Row::Update);
+            } else if plugin.local(env) {
+                rows.push(Row::UseStore);
             }
             rows.push(Row::Remove);
         }
@@ -352,7 +356,7 @@ impl PageScreen {
             return;
         };
         match self.rows(&env).get(index).copied() {
-            Some(Row::Install | Row::Update) => self.install(cx),
+            Some(Row::Install | Row::Update | Row::UseStore) => self.install(cx),
             Some(Row::NoRoom) => {
                 if let Some(text) = self.room.needs(&env, plugin, self.image_len()) {
                     cx.command(Command::Notify(text));
@@ -447,11 +451,11 @@ impl PageScreen {
     fn row_text(&self, env: &Env<'_>, plugin: &Entry, row: Row) -> (String, String) {
         let tr = |key: &str| env.i18n.tr(key).to_string();
         match row {
-            Row::Install | Row::Update if self.waiting => {
-                let name = if row == Row::Install {
-                    "store.install"
-                } else {
-                    "store.update"
+            Row::Install | Row::Update | Row::UseStore if self.waiting => {
+                let name = match row {
+                    Row::Install => "store.install",
+                    Row::Update => "store.update",
+                    _ => "store.use-store",
                 };
                 (tr(name), tr("store.preparing"))
             }
@@ -464,6 +468,7 @@ impl PageScreen {
                 (tr("store.stop"), format!("{} / {}", job.done, job.total))
             }
             Row::Update => (tr("store.update"), plugin.version.clone()),
+            Row::UseStore => (tr("store.use-store"), plugin.version.clone()),
             Row::Remove => (tr("store.remove"), String::new()),
             Row::Restart => (tr("store.restart"), String::new()),
             Row::Understood => (tr("store.code.understood"), String::new()),
@@ -533,7 +538,9 @@ fn facts(
         Some("unverified") => facts.push(("circle", i18n.tr("store.verified.not").to_string())),
         _ => {}
     }
-    if !plugin.author.is_empty() {
+    if plugin.official {
+        facts.push(("paw", i18n.tr("store.official").to_string()));
+    } else if !plugin.author.is_empty() {
         let by = match more.filter(|m| m.author_since > 0) {
             Some(more) => {
                 let year = (more.author_since / 10000).to_string();

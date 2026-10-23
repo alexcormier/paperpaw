@@ -1,7 +1,11 @@
 # 0013. The Xteink X4's firmware
 
 - Status: Accepted; the X4 Pro is built from the same firmware crate
-  (feature `x4-pro`), and the UC8179 driver is in `paperpaw-x4`
+  (feature `x4-pro`), and the UC8179 driver is in `paperpaw-x4`. A
+  build for the X4 Classic (feature `x4-classic`) is there too, not part
+  of the beta. What the Consequences list as still to come is done:
+  Wi-Fi, lighter sleep, four grays, the UC8179 and the whole flash
+  mapped.
 - Date: 2026-10-15
 
 ## Context

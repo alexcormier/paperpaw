@@ -331,7 +331,17 @@ impl Storage for DirStorage {
     }
 
     fn free_space(&self) -> Option<u64> {
-        self.free.or_else(|| free_space(&self.root))
+        self.free
+            .or_else(|| space(&self.root).map(|(free, _)| free))
+    }
+
+    /// The file system's size; none for an emulated card told its free
+    /// space ([`DirStorage::with_free_space`]).
+    fn total_space(&self) -> Option<u64> {
+        match self.free {
+            Some(_) => None,
+            None => space(&self.root).map(|(_, total)| total),
+        }
     }
 
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
@@ -341,9 +351,9 @@ impl Storage for DirStorage {
     }
 }
 
-/// Bytes the file system of `dir` has free for this user.
+/// Bytes the file system of `dir` has free for this user, and in all.
 #[cfg(unix)]
-fn free_space(dir: &Path) -> Option<u64> {
+fn space(dir: &Path) -> Option<(u64, u64)> {
     use std::os::unix::ffi::OsStrExt;
     let path = std::ffi::CString::new(dir.as_os_str().as_bytes()).ok()?;
     // SAFETY: a valid C string, and a buffer statvfs fills.
@@ -356,12 +366,15 @@ fn free_space(dir: &Path) -> Option<u64> {
         clippy::unnecessary_cast,
         reason = "the fields' types differ by platform: a cast on one is none on another"
     )]
-    Some(stats.f_bavail as u64 * stats.f_frsize as u64)
+    Some((
+        stats.f_bavail as u64 * stats.f_frsize as u64,
+        stats.f_blocks as u64 * stats.f_frsize as u64,
+    ))
 }
 
-/// Bytes the file system of `dir` has free for this user.
+/// Bytes the file system of `dir` has free for this user, and in all.
 #[cfg(windows)]
-fn free_space(dir: &Path) -> Option<u64> {
+fn space(dir: &Path) -> Option<(u64, u64)> {
     use std::os::windows::ffi::OsStrExt;
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -373,22 +386,16 @@ fn free_space(dir: &Path) -> Option<u64> {
         ) -> i32;
     }
     let wide: Vec<u16> = dir.as_os_str().encode_wide().chain([0]).collect();
-    let mut free = 0u64;
-    // SAFETY: a NUL-terminated path, and a number the call fills; the
-    // other numbers may be null.
-    let done = unsafe {
-        GetDiskFreeSpaceExW(
-            wide.as_ptr(),
-            &mut free,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-        )
-    };
-    (done != 0).then_some(free)
+    let (mut free, mut total) = (0u64, 0u64);
+    // SAFETY: a NUL-terminated path, and numbers the call fills; the
+    // last may be null.
+    let done =
+        unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut free, &mut total, std::ptr::null_mut()) };
+    (done != 0).then_some((free, total))
 }
 
 #[cfg(not(any(unix, windows)))]
-fn free_space(_: &Path) -> Option<u64> {
+fn space(_: &Path) -> Option<(u64, u64)> {
     None
 }
 
@@ -416,17 +423,18 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
-    /// The file system says how much it has free; a file written takes
-    /// from it.
+    /// The file system says how much it has free, and in all.
     #[test]
     fn free_space_is_told() {
         let root = std::env::temp_dir().join(format!("paperpaw-free-{}", std::process::id()));
         let storage = DirStorage::new(&root).unwrap();
         let free = storage.free_space().unwrap();
         assert!(free > 0);
-        // Or as much as it is told to say.
+        assert!(storage.total_space().unwrap() >= free);
+        // Or as much as it is told to say, of a size not told.
         let storage = DirStorage::new(&root).unwrap().with_free_space(1234);
         assert_eq!(storage.free_space(), Some(1234));
+        assert_eq!(storage.total_space(), None);
         fs::remove_dir_all(root).unwrap();
     }
 

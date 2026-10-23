@@ -253,10 +253,27 @@ impl App {
         Self::at(device, storage, 0)
     }
 
+    /// The app with `plugin` too, started (a restart leaves it out).
+    pub fn with_plugin(device: DeviceInfo, storage: Shared, plugin: impl Plugin + 'static) -> Self {
+        let builder = Kernel::builder(device)
+            .storage(storage.clone())
+            .plugin(plugin);
+        Self::started(device, storage, 0, builder)
+    }
+
     fn at(device: DeviceInfo, storage: Shared, now: u64) -> Self {
+        let builder = Kernel::builder(device).storage(storage.clone());
+        Self::started(device, storage, now, builder)
+    }
+
+    fn started(
+        device: DeviceInfo,
+        storage: Shared,
+        now: u64,
+        builder: paperpaw_core::KernelBuilder,
+    ) -> Self {
         TYPED.with(|typed| typed.borrow_mut().clear());
         ASKED.with(|asked| asked.borrow_mut().clear());
-        let builder = Kernel::builder(device).storage(storage.clone());
         let mut kernel = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs)
             .plugin(TestKeyboard)
             .build()

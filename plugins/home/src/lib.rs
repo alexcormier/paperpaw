@@ -407,7 +407,7 @@ impl Dashboard {
     fn store(&self, items: &[Item], cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if let Some(page) = pages::pages(&env).get(self.page) {
-            cx.command(pages::store(page.slot, items));
+            cx.command(pages::store(&env, page.slot, items));
         }
     }
 

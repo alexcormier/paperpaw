@@ -123,8 +123,26 @@ pub fn file(book: &str) -> String {
 
 /// Where the book at `book` was left, if it was kept and can be read.
 pub fn load(storage: &dyn Storage, book: &str) -> Option<Position> {
-    let data = crate::read_file(storage, &file(book), LIMIT).ok()?;
-    Position::parse(core::str::from_utf8(crate::files::without_bom(&data)).ok()?)
+    load_for_update(storage, book).ok().flatten()
+}
+
+/// Where the book at `book` was left, `Ok(None)` if none was kept: an
+/// error where the file is there but cannot be read (or is no position),
+/// so it is not written over before the reader moves on.
+pub fn load_for_update(
+    storage: &dyn Storage,
+    book: &str,
+) -> Result<Option<Position>, StorageError> {
+    let data = match crate::read_file(storage, &file(book), LIMIT) {
+        Ok(data) => data,
+        Err(StorageError::NotFound) => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let text = core::str::from_utf8(crate::files::without_bom(&data))
+        .map_err(|_| StorageError::InvalidData)?;
+    Position::parse(text)
+        .map(Some)
+        .ok_or(StorageError::InvalidData)
 }
 
 /// Keeps where the book at `book` was left.
@@ -158,5 +176,26 @@ mod tests {
         let position = Position::parse(old).unwrap();
         assert_eq!(position, Position::new(Locator::new(7, 1234), 41.5));
         assert_eq!(Position::parse("[position]\nsection = 1\n"), None);
+    }
+
+    /// A position file that is there but cannot be read is no missing
+    /// one: it is not to be written over.
+    #[test]
+    fn a_position_that_cannot_be_read_is_told_from_none() {
+        let book = "books/a.epub";
+        let storage = MemoryStorage::new();
+        assert_eq!(load_for_update(&storage, book), Ok(None));
+        storage
+            .write(&file(book), b"[position]\nsection = 1\noff")
+            .unwrap();
+        assert_eq!(
+            load_for_update(&storage, book),
+            Err(StorageError::InvalidData)
+        );
+        assert_eq!(load(&storage, book), None);
+        let failing = crate::memory_storage::Unreadable(
+            MemoryStorage::new().with(&file(book), "[position]\nsection = 1\noffset = 2\n"),
+        );
+        assert!(load_for_update(&failing, book).is_err());
     }
 }

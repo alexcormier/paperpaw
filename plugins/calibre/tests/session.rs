@@ -49,6 +49,13 @@ const fn device(memory: MemoryClass) -> DeviceInfo {
     }
 }
 
+thread_local! {
+    /// Renames fail on this test's thread, as on a failing card.
+    static FAIL_RENAME: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The space the storage tells on this test's thread: free, in all.
+    static SPACE: std::cell::Cell<Option<(u64, u64)>> = const { std::cell::Cell::new(None) };
+}
+
 /// A storage the test looks into while the kernel has it.
 #[derive(Clone)]
 struct Shared(Rc<MemoryStorage>);
@@ -76,10 +83,19 @@ impl Storage for Shared {
         self.0.exists(path)
     }
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        if FAIL_RENAME.get() {
+            return Err(StorageError::Io);
+        }
         self.0.rename(from, to)
     }
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
         self.0.create_dir(path)
+    }
+    fn free_space(&self) -> Option<u64> {
+        SPACE.get().map(|(free, _)| free)
+    }
+    fn total_space(&self) -> Option<u64> {
+        SPACE.get().map(|(_, total)| total)
     }
 }
 
@@ -121,6 +137,19 @@ impl Peer {
                 _ => return,
             }
         }
+    }
+
+    /// Calibre closes the connection: the device's read gets nothing.
+    fn close(&mut self, kernel: &mut Kernel) {
+        let (socket, _) = self.waiting.take().expect("a read waiting");
+        kernel.socket_event(
+            Instant(6),
+            SocketEvent::Data {
+                socket,
+                data: Vec::new(),
+            },
+        );
+        self.pump(kernel);
     }
 
     fn say(&mut self, kernel: &mut Kernel, op: u8, args: &str) {
@@ -306,11 +335,15 @@ fn a_session_with_calibre() {
     );
     assert!(!storage.exists("Ann Author/A Book.epub"));
 
-    // A keep-alive is answered; ejecting ends the connection.
+    // A keep-alive is answered; ejecting is answered, and the device
+    // lets Calibre close (closing first, its answer could be lost on the
+    // way), then closes too.
     calibre.say(&mut kernel, op::NOOP, "{}");
     assert_eq!(calibre.answers().len(), 1);
     calibre.say(&mut kernel, op::NOOP, r#"{"ejecting": true}"#);
     assert_eq!(calibre.answers().len(), 1);
+    assert!(!calibre.closed);
+    calibre.close(&mut kernel);
     assert!(calibre.closed);
 }
 
@@ -404,6 +437,73 @@ fn answer(kernel: &mut Kernel, broadcast: u32, from: &str) -> Vec<SocketCall> {
     socket_calls(kernel)
 }
 
+/// Calibre is told the space the card has free and in all, asked at
+/// once (a card that cannot tell yet: room for books all the same).
+#[test]
+fn calibre_is_told_the_space_the_card_has() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    SPACE.set(Some((3_000_000_000, 31_000_000_000)));
+    calibre.say(&mut kernel, op::FREE_SPACE, "{}");
+    calibre.say(&mut kernel, op::TOTAL_SPACE, "{}");
+    let answers = calibre.answers();
+    assert_eq!(
+        protocol::number(&answers[0].args, "free_space_on_device"),
+        Some(3_000_000_000)
+    );
+    assert_eq!(
+        protocol::number(&answers[1].args, "total_space_on_device"),
+        Some(31_000_000_000)
+    );
+    // Free space told, the size not: never less than what is free.
+    SPACE.set(Some((900_000_000_000, 0)));
+    calibre.say(&mut kernel, op::TOTAL_SPACE, "{}");
+    let total = protocol::number(&calibre.answers()[0].args, "total_space_on_device");
+    assert!(total >= Some(900_000_000_000), "{total:?}");
+    SPACE.set(None);
+    calibre.say(&mut kernel, op::FREE_SPACE, "{}");
+    let free = protocol::number(&calibre.answers()[0].args, "free_space_on_device");
+    assert!(free > Some(1 << 30), "{free:?}");
+}
+
+/// A broadcast that Calibre did not hear (a datagram lost on the way) is
+/// sent again a few times before Calibre counts as not found (said, see
+/// `hostile.rs`); an answer to a later one finds it.
+#[test]
+fn calibre_is_looked_for_again_when_it_does_not_answer() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let mut kernel = kernel(&storage, CONFIG);
+    let mut rounds = 0;
+    let mut last = broadcast(&mut kernel);
+    loop {
+        rounds += 1;
+        kernel.socket_event(Instant(2), SocketEvent::Done { broadcast: last });
+        let calls = socket_calls(&mut kernel);
+        let Some(next) = calls.iter().find_map(|call| match call {
+            SocketCall::Broadcast { broadcast, .. } => Some(*broadcast),
+            _ => None,
+        }) else {
+            break;
+        };
+        last = next;
+        assert!(rounds < 10, "looks for ever");
+    }
+    assert!(rounds >= 3, "{rounds} broadcasts");
+
+    // Heard the second time.
+    let mut kernel = kernel_on(DEVICE, &storage, CONFIG);
+    let first = broadcast(&mut kernel);
+    kernel.socket_event(Instant(2), SocketEvent::Done { broadcast: first });
+    let second = broadcast(&mut kernel);
+    answer(&mut kernel, second, "192.168.1.5");
+    press(&mut kernel, "confirm");
+    let calls = socket_calls(&mut kernel);
+    assert!(
+        matches!(calls.as_slice(), [SocketCall::Connect { .. }]),
+        "{calls:?}"
+    );
+}
+
 /// A kernel connected to Calibre at the address set, and Calibre.
 fn connected(device: DeviceInfo, storage: &Shared) -> (Kernel, Peer) {
     let config = format!("{CONFIG}[calibre]\naddress = 10.0.0.2\n");
@@ -492,6 +592,59 @@ fn calibre_touches_only_its_own_books() {
     // In step all along.
     calibre.say(&mut kernel, op::NOOP, "{}");
     assert_eq!(calibre.answers().len(), 3, "DELETE_BOOK twice, NOOP");
+}
+
+/// A book Calibre deletes leaves the reader's notes and place in it: sent
+/// again, it has them.
+#[test]
+fn books_calibre_deletes_keep_their_notes() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    let notes = paperpaw_sdk::annotations::file("Bo/New.epub");
+    let line = b"h\t1\t0\t1\t20\t5\t0\t0\tSome text\tMy note\n";
+    storage.write(&notes, line).unwrap();
+    calibre.say(
+        &mut kernel,
+        op::DELETE_BOOK,
+        r#"{"lpaths": ["Bo/New.epub"]}"#,
+    );
+    kernel.tick(Instant(20));
+    assert!(!storage.exists("Bo/New.epub"));
+    assert_eq!(storage.0.get(&notes).as_deref(), Some(&line[..]));
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    assert!(storage.exists("Bo/New.epub"));
+    assert_eq!(storage.0.get(&notes).as_deref(), Some(&line[..]));
+}
+
+/// A book sent again that cannot be put in place leaves the one there
+/// as it was, and no part behind.
+#[test]
+fn a_failed_replacement_keeps_the_old_book() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    FAIL_RENAME.set(true);
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"two");
+    FAIL_RENAME.set(false);
+    assert_eq!(storage.0.get("Bo/New.epub").as_deref(), Some(&b"one"[..]));
+    assert!(!storage.exists("Bo/New.epub.part"));
+}
+
+/// A book without its length is refused: it would be taken as empty and
+/// replace the one sent before.
+#[test]
+fn a_book_without_its_length_is_refused() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    calibre.say(
+        &mut kernel,
+        op::SEND_BOOK,
+        r#"{"lpath": "Bo/New.epub", "metadata": {"lpath": "Bo/New.epub", "title": "T"}}"#,
+    );
+    assert_eq!(storage.0.get("Bo/New.epub").as_deref(), Some(&b"one"[..]));
+    assert!(calibre.closed);
 }
 
 #[test]

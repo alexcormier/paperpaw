@@ -10,6 +10,10 @@
 
 /// Bytes of the FAT read at most each time the free space is asked for.
 pub(crate) const STEP: usize = 128 * 1024;
+/// Bytes of the FAT read at once, into a buffer on the stack: nothing is
+/// taken from the heap, which on the X4 is small and in pieces while the
+/// radio is up.
+const SECTOR: usize = 512;
 
 /// Reads bytes of the volume at an offset; `false` if it cannot.
 pub(crate) type Read = dyn Fn(u64, &mut [u8]) -> bool;
@@ -153,6 +157,50 @@ pub(crate) struct Free {
 impl Free {
     /// Counts on (one step), and the free bytes as far as known.
     pub(crate) fn ask(&mut self, read: &Read) -> Option<u64> {
+        let geometry = self.geometry(read)?;
+        let Some((mut next, mut free)) = self.counting else {
+            return self.bytes();
+        };
+        let last = geometry.clusters + 2;
+        // A sector's worth of entries at a time, into a buffer of that
+        // size (an even number of FAT12's, which share bytes in pairs).
+        let per_read = match geometry.bits {
+            12 => (SECTOR as u32 * 2 / 3) & !1,
+            bits => (SECTOR / usize::from(bits / 8)) as u32,
+        };
+        let mut buffer = [0u8; SECTOR];
+        let mut read_so_far = 0;
+        while next < last && read_so_far < STEP {
+            let count = per_read.min(last - next);
+            let (at, len) = geometry.span(next, count);
+            let bytes = &mut buffer[..len];
+            if !read(at, bytes) {
+                self.counting = Some((next, free));
+                return self.bytes();
+            }
+            free += u64::from(geometry.free_in(next, count, bytes));
+            next += count;
+            read_so_far += len;
+        }
+        if next >= last {
+            self.known = Some(free);
+            self.counting = None;
+            self.exact = true;
+        } else {
+            self.counting = Some((next, free));
+        }
+        self.bytes()
+    }
+
+    /// The bytes for files in all, used and free.
+    pub(crate) fn total(&mut self, read: &Read) -> Option<u64> {
+        let geometry = self.geometry(read)?;
+        Some(u64::from(geometry.clusters) * geometry.cluster)
+    }
+
+    /// The volume's geometry, read from its boot sector at the first ask
+    /// (and the card's own count with it).
+    fn geometry(&mut self, read: &Read) -> Option<Geometry> {
         if self.geometry.is_none() {
             let mut boot = [0u8; 512];
             let geometry = read(0, &mut boot).then(|| Geometry::of(&boot)).flatten()?;
@@ -160,29 +208,7 @@ impl Free {
             self.counting = Some((2, 0));
             self.geometry = Some(geometry);
         }
-        let geometry = self.geometry?;
-        if let Some((next, free)) = self.counting {
-            let last = geometry.clusters + 2;
-            let per_step = match geometry.bits {
-                12 => last,
-                bits => (STEP / usize::from(bits / 8)) as u32,
-            };
-            let count = per_step.min(last - next);
-            let (at, len) = geometry.span(next, count);
-            let mut bytes = alloc::vec![0u8; len];
-            if !read(at, &mut bytes) {
-                return self.bytes();
-            }
-            let free = free + u64::from(geometry.free_in(next, count, &bytes));
-            if next + count >= last {
-                self.known = Some(free);
-                self.counting = None;
-                self.exact = true;
-            } else {
-                self.counting = Some((next + count, free));
-            }
-        }
-        self.bytes()
+        self.geometry
     }
 
     fn bytes(&self) -> Option<u64> {

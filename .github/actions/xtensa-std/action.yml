@@ -1,0 +1,29 @@
+name: Xtensa core libraries
+description: >
+  The core libraries code plugins for the ESP32-S3 link with
+  (tools/xtensa-std): built here, or taken from `archive` (the release's,
+  built once), and installed into espup's `esp` toolchain, so that the
+  plugins build without -Zbuild-std. After xteink-tools for the X4 Pro or
+  the X4 Classic. The firmware builds its own with -Zbuild-std, as before.
+inputs:
+  archive:
+    description: An archive made by tools/xtensa-std/build.sh to install; built here without.
+    default: ""
+outputs:
+  archive:
+    description: The archive installed.
+    value: ${{ steps.std.outputs.archive }}
+runs:
+  using: composite
+  steps:
+    - id: std
+      shell: bash
+      env:
+        ARCHIVE: ${{ inputs.archive }}
+      run: |
+        archive="$ARCHIVE"
+        if [[ -z "$archive" ]]; then
+          archive="$(tools/xtensa-std/build.sh "$RUNNER_TEMP/xtensa-std" | tail -n 1)"
+        fi
+        tools/xtensa-std/install.sh "$archive"
+        echo "archive=$archive" >> "$GITHUB_OUTPUT"

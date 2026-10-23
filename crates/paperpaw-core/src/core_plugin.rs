@@ -2,10 +2,13 @@
 //! interface: standard actions, slots, settings, key bindings and the
 //! placeholder screen.
 
+mod clean_up;
+
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use clean_up::{ask_clean_up, register_clean_up};
 
 use paperpaw_sdk::builtin::{
     actions, events, fonts, groups, keymap_presets, menus, params, screens, setting_sections,
@@ -382,10 +385,7 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::CLEAN_UP,
             "core.action.clean-up",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                let text = clean_up(env, out);
-                out.push(Command::Notify(text));
-            }),
+            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| ask_clean_up(env, out)),
         ),
         (
             actions::SCREENSHOT,
@@ -649,10 +649,6 @@ impl Catalog {
 
 /// The library service and what plugins keep for books, which follow
 /// the books.
-#[expect(
-    clippy::too_many_lines,
-    reason = "longer than the limit from before it was set; split it when it is next changed"
-)]
 fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     use alloc::rc::Rc;
     use paperpaw_sdk::work::WorkSpec;
@@ -768,31 +764,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
             }
         })?;
     }
-    // The notes of books are the kernel's.
-    r.add_book_data(paperpaw_sdk::data_path!("annotations"), "")?;
-    r.add_book_data(paperpaw_sdk::positions::DIR, "")?;
-    r.add_book_data(paperpaw_sdk::readers::DIR, "")?;
-    r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
-    r.add_book_data(alloc::format!("{}/covers", library::DIR), "")?;
-    // With the device's settings.
-    r.add_menu_entry(paperpaw_sdk::MenuEntry::new(
-        groups::SYSTEM,
-        actions::CLEAN_UP,
-    ))?;
-    r.add_icon(actions::CLEAN_UP, Cow::Borrowed("eraser"))?;
-    // And by itself now and then, silently.
-    r.add_work(WorkSpec::new(
-        CLEAN_UP_WORK,
-        "core.work.clean-up",
-        |env, _, out| {
-            // What it found is its note, no notice.
-            let text = clean_up(env, out);
-            out.push(Command::Notify(text));
-            paperpaw_sdk::work::Step::Done
-        },
-    ))?;
-    r.on(events::STARTED, |env, (), out| declare_clean_up(env, out))?;
-    Ok(())
+    register_clean_up(r)
 }
 
 /// The work that cleans up the storage by itself.
@@ -804,27 +776,9 @@ const CLEAN_UP_EVERY: i64 = 7 * 24 * 3600;
 /// How long after the first start it is cleaned up by itself first.
 const CLEAN_UP_FIRST: i64 = 24 * 3600;
 
-/// Removes what is kept for files no longer on the storage: of any
-/// format, by any spelling; nothing where a folder could not be read.
-/// Notes the time and declares the next time it is done by itself; what
-/// it did, to say.
-fn clean_up(env: &Env<'_>, out: &mut Vec<Command>) -> String {
-    let library = library::folder(env);
-    let text = match library::clean_up_unused(env.storage, env.book_data, library) {
-        Ok(removed) => env.i18n.format(
-            "core.cleaned-up",
-            &[("count", paperpaw_sdk::Arg::Int(i64::from(removed)))],
-        ),
-        Err(_) => String::from(env.i18n.tr("core.clean-up-failed")),
-    };
-    if let Some(now) = paperpaw_sdk::time::unix_seconds(env) {
-        let _ = env
-            .storage
-            .write(CLEANED_UP, alloc::format!("{now}\n").as_bytes());
-        declare_clean_up(env, out);
-    }
-    text
-}
+/// The answer whether the reader's data of books not found goes.
+const CLEAN_UP_ANSWERED: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Confirmed> =
+    paperpaw_sdk::event::Event::new("core.clean-up-answered");
 
 /// Declares cleaning up by itself: while charging, a week after it was
 /// last done (a day after the first start). Not without a clock, which
@@ -1211,7 +1165,8 @@ static GENERAL: [SettingSpec; 9] = [
     .described("core.setting.edge.help"),
 ];
 
-/// The library folder, chosen with the folder chooser.
+/// The library folder, chosen with the folder chooser: the reader's own,
+/// kept when the settings are reset.
 static FOLDER_EDITOR: SettingExtra = SettingExtra::new().editor(screens::FOLDER_EDITOR);
 static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
     settings::LIBRARY_FOLDER.static_str(),
@@ -1220,6 +1175,7 @@ static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
     groups::LIBRARY,
 )
 .with_extra(&FOLDER_EDITOR)
+.kept_on_reset()
 .described("core.setting.library-folder.help")];
 
 fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {

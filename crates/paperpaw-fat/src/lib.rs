@@ -26,20 +26,48 @@
 //! back when a call that changes the card returns (but
 //! [`Storage::append`]) and on `sync`.
 //!
-//! Files are replaced through a temporary file beside them, written whole
-//! before the old one is removed, so a write cut short reads the old
-//! content or the new one, whole, but in moments that rust-fatfs's own
-//! order leaves open:
+//! Files are written through files beside them named after them
+//! (`Temps`): the new content is written whole under one name (`.TMP`)
+//! and synced. A new file then takes its name; a file there is replaced:
+//! the content is named whole (`.NEW`), then takes the place of the old
+//! file (rust-fatfs's `Dir::replace`, as patched for PaperPaw, writes the
+//! new entry before it removes the old one and that of `.NEW`, and frees
+//! the old clusters last). Cut off at any point, a file reads its old
+//! content or its new one, whole, and is listed. What a cut left of a
+//! file's write is finished (`settled`) when its folder is first looked
+//! at after a start (`settle_folder`), before any file in it is opened:
+//! `.NEW` takes the file's place, unless the file was changed after it
+//! was made, elsewhere or not: `.NEW` is marked with the file's time,
+//! size and first cluster as they were (not told by times alone, as the
+//! X4 sets none). New content an earlier version left unmarked is set
+//! aside as `<name>.unsaved`, the file kept: whether it changed since
+//! cannot be told. A file that cannot be settled is left as it is, its
+//! folder in reach; so are the paths of a move that cannot be settled,
+//! held up until the next start (`held_up`).
+//! The next write, move or removal of a file does the same, so at most
+//! one of each is ever left beside it. They are neither listed nor taken
+//! by name: one may hold the clusters of the file itself. rust-fatfs, as
+//! patched, removes a file's entry before it frees its clusters: cut off
+//! between, they stay taken by no file, never a file pointing at free
+//! ones. A file's size is its entry's, and reading it fails where its
+//! clusters end before (left so by an earlier version).
 //!
-//! - It frees a removed file's clusters before it removes its entry. Cut
-//!   off between, the file reads its first cluster only, and the freed
-//!   ones may be given to another file later. So for a file removed, and
-//!   for the old one of a file written anew.
-//! - It takes no file in place of another: between the removal of the
-//!   old one and the move of the new one into its place, a file written
-//!   anew is only in the temporary file beside it, whole.
-//! - It moves an entry by removing it before it adds the new one: a file
-//!   moved to another folder is at neither place between the two.
+//! rust-fatfs, as patched, moves an entry by adding the new one before
+//! it removes the old one: cut off between, the entry is at both
+//! places, its clusters held by both, never at neither, and a folder
+//! that cannot grow for it (a full card) fails the move before anything
+//! is changed. Where two entries share clusters, one is taken away
+//! without freeing them (`unlink`), as a file's temporary file beside
+//! its new content (`settled`). A move but a file's to another case of
+//! its name is recorded first, in a hidden file of the root
+//! ([`JOURNAL`]), and settled after a start before anything else
+//! (`settle_moves`): its new place kept, the old entry taken away.
+//!
+//! Earlier versions wrote files through temporary files of their own
+//! (`~pp<n>.tmp`). Such a file may be the only copy of a file whose
+//! name is lost, so it is taken away only where it is provably no
+//! file's only copy (`clean_old`). Those that stay never stand in the
+//! way: none are made any more, and at most 64 were made in a folder.
 //!
 //! A name stands for an entry by its long name where it has one, by its
 //! short name only where it has none: `PAPERP~1`, the short name FAT
@@ -56,16 +84,18 @@ extern crate alloc;
 
 mod disk;
 mod free;
+mod settle;
 
 pub use disk::{BLOCK, BlockDisk, Blocks, DiskError, SharedDisk, VolumeError};
 
 use alloc::format;
 use alloc::string::{String, ToString};
-use core::cell::RefCell;
+use alloc::vec::Vec;
+use core::cell::{Cell, RefCell};
 
 use fatfs::{
-    DefaultTimeProvider, Dir, File, FileSystem, LossyOemCpConverter, Read, ReadWriteSeek, Seek,
-    SeekFrom, Write,
+    DefaultTimeProvider, Dir, File, FileAttributes, FileSystem, LossyOemCpConverter, Read,
+    ReadWriteSeek, Seek, SeekFrom, Write,
 };
 use paperpaw_platform::storage::is_valid_path;
 use paperpaw_platform::{DirEntry, Storage, StorageError};
@@ -85,6 +115,9 @@ type FatEntry<IO> = fatfs::DirEntry<'static, IO, DefaultTimeProvider, LossyOemCp
 struct Open<IO: ReadWriteSeek + 'static> {
     path: String,
     file: FatFile<IO>,
+    /// Its size: its entry's, as appended. Its clusters may end before
+    /// (cut off in a remove by an earlier version, see `read_at`).
+    len: u64,
     /// Appended to since it was last written back.
     dirty: bool,
 }
@@ -115,6 +148,19 @@ pub struct FatStorage<IO: ReadWriteSeek + 'static> {
     /// free space a part at a time ([`free`]).
     read: Option<alloc::boxed::Box<free::Read>>,
     free: RefCell<free::Free>,
+    /// A move recorded in [`JOURNAL`] was looked for since the start
+    /// (`settle_moves`).
+    moves_settled: Cell<bool>,
+    /// The folders settled since the start, by a hash of their paths
+    /// (`settle_folder`); none while a move is settled.
+    settled_folders: RefCell<Vec<u64>>,
+    settling: Cell<bool>,
+    /// The paths of a move that could not be settled: held up until the
+    /// next start (see `held_up`).
+    stuck: RefCell<Option<(String, String)>>,
+    /// The folders whose temporary files of earlier versions were looked
+    /// at since the start, by a hash of their paths (`clean_old`).
+    cleaned: RefCell<Vec<u64>>,
 }
 
 impl<IO: ReadWriteSeek + 'static> core::fmt::Debug for FatStorage<IO> {
@@ -134,8 +180,12 @@ fn error<E>(e: fatfs::Error<E>) -> StorageError {
     }
 }
 
+/// Refuses a path PaperPaw does not take, or one of the storage's own:
+/// [`JOURNAL`], or a file a write goes through ([`is_temp_name`]), which
+/// may hold the clusters of the file itself (cut off in a write).
 fn check(path: &str) -> Result<(), StorageError> {
-    if is_valid_path(path) {
+    let own = same_path(path, JOURNAL) || path.split('/').any(is_temp_name);
+    if is_valid_path(path) && !own {
         Ok(())
     } else {
         Err(StorageError::InvalidPath)
@@ -222,6 +272,56 @@ fn entries<IO: ReadWriteSeek + 'static>(
     bounded(dir.iter().map(|entry| entry.map_err(error)))
 }
 
+/// The names a file is written under before it takes its place (see the
+/// [crate documentation](crate)), made from its name: `~` and seven
+/// letters of a hash of it, as FAT compares names. Short names of their
+/// own, so they are found by them where their long names are lost, and
+/// no other name stands for them.
+struct Temps {
+    /// While it is written.
+    tmp: [u8; 12],
+    /// Once it is whole.
+    ready: [u8; 12],
+}
+
+/// FNV-1a over `bytes`.
+fn fnv(bytes: impl Iterator<Item = u8>) -> u64 {
+    bytes.fold(0xcbf2_9ce4_8422_2325, |hash, b| {
+        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+/// A hash of `name` as FAT compares names: over it in upper case.
+fn hash(name: &str) -> u64 {
+    fnv(name.chars().flat_map(char::to_uppercase).flat_map(|c| {
+        let mut utf8 = [0u8; 4];
+        let len = c.encode_utf8(&mut utf8).len();
+        utf8.into_iter().take(len)
+    }))
+}
+
+impl Temps {
+    fn of(name: &str) -> Self {
+        let mut hash = hash(name);
+        let mut tmp = *b"~0000000.TMP";
+        for letter in &mut tmp[1..8] {
+            *letter = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[(hash & 31) as usize];
+            hash >>= 5;
+        }
+        let mut ready = tmp;
+        ready[9..].copy_from_slice(b"NEW");
+        Self { tmp, ready }
+    }
+
+    fn tmp(&self) -> &str {
+        core::str::from_utf8(&self.tmp).unwrap_or_default()
+    }
+
+    fn ready(&self) -> &str {
+        core::str::from_utf8(&self.ready).unwrap_or_default()
+    }
+}
+
 /// What a name stands for in a folder.
 struct Lookup<IO: ReadWriteSeek + 'static> {
     /// The entry it names: by its long name, or by its short name where
@@ -231,6 +331,16 @@ struct Lookup<IO: ReadWriteSeek + 'static> {
     /// name it is, as `PAPERP~1` for `.paperpaw`): the name is not handed
     /// to rust-fatfs then.
     others: bool,
+    /// Another entry has its long name too: the old file and the new one,
+    /// a replace cut off between (see `settled`).
+    twice: bool,
+    /// Its file of [`Temps::tmp`], where looked for.
+    tmp: Option<FatEntry<IO>>,
+    /// Its file of [`Temps::ready`], where looked for.
+    ready: Option<FatEntry<IO>>,
+    /// A temporary file of an earlier version is in the folder, where
+    /// looked for (see [`is_old_temp`]).
+    old: bool,
 }
 
 /// Looks up `name` in `dir`, as PaperPaw names entries (see the [crate
@@ -241,9 +351,24 @@ fn lookup<IO: ReadWriteSeek + 'static>(
     name: &str,
     whole: bool,
 ) -> Result<Lookup<IO>, StorageError> {
+    lookup_with(dir, name, whole, None)
+}
+
+/// [`lookup`], looking for the files of `temps` on the way (all of them
+/// where `name` is not there, or `whole`).
+fn lookup_with<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+    whole: bool,
+    temps: Option<&Temps>,
+) -> Result<Lookup<IO>, StorageError> {
     let mut found = Lookup {
         entry: None,
         others: false,
+        twice: false,
+        tmp: None,
+        ready: None,
+        old: false,
     };
     for entry in entries(dir) {
         let entry = entry?;
@@ -257,8 +382,24 @@ fn lookup<IO: ReadWriteSeek + 'static>(
             if !whole {
                 break;
             }
-        } else if named || other {
+            continue;
+        } else if named {
+            found.twice = true;
+        } else if other {
             found.others = true;
+        }
+        let Some(temps) = temps.filter(|_| entry.is_file()) else {
+            continue;
+        };
+        // By its short name too: a temporary's long name, if lost, was
+        // the same.
+        let is = |temp| long_name_is(&entry, temp) == Some(true) || short_name_is(&entry, temp);
+        if is(temps.tmp()) && found.tmp.is_none() {
+            found.tmp = Some(entry);
+        } else if is(temps.ready()) && found.ready.is_none() {
+            found.ready = Some(entry);
+        } else {
+            found.old |= is_old_temp(&entry);
         }
     }
     Ok(found)
@@ -276,36 +417,198 @@ fn open_dir<IO: ReadWriteSeek + 'static>(
     }
 }
 
-/// File `name` in `dir`.
-fn open_file<IO: ReadWriteSeek + 'static>(
+/// File `name` in `dir` with its size (its entry's), made if it is not
+/// there and `create`; not where `name` is only another entry's short
+/// name then: rust-fatfs would open that entry. Where it is not there
+/// but its new content is whole beside it (a write cut off before it
+/// took its place), that takes its place first.
+fn find_file<IO: ReadWriteSeek + 'static>(
     dir: &FatDir<IO>,
     name: &str,
-) -> Result<FatFile<IO>, StorageError> {
-    match lookup(dir, name, false)?.entry {
-        Some(entry) if entry.is_file() => Ok(entry.to_file()),
-        Some(_) => Err(StorageError::InvalidPath),
-        None => Err(StorageError::NotFound),
+    create: bool,
+) -> Result<(FatFile<IO>, u64), StorageError> {
+    let temps = Temps::of(name);
+    let mut found = lookup_with(dir, name, create, Some(&temps))?;
+    if found.entry.is_none() && found.ready.is_some() && !found.others {
+        dir.replace(temps.ready(), name).map_err(error)?;
+        found = lookup(dir, name, create)?;
     }
-}
-
-/// File `name` in `dir`, made if it is not there. Not where `name` is
-/// only another entry's short name: rust-fatfs would open that entry.
-fn create_file<IO: ReadWriteSeek + 'static>(
-    dir: &FatDir<IO>,
-    name: &str,
-) -> Result<FatFile<IO>, StorageError> {
-    match lookup(dir, name, true)? {
+    match found {
         Lookup {
             entry: Some(entry), ..
-        } if entry.is_file() => Ok(entry.to_file()),
-        Lookup { entry: Some(_), .. } | Lookup { others: true, .. } => {
-            Err(StorageError::InvalidPath)
+        } if entry.is_file() => {
+            let len = entry.len();
+            Ok((entry.to_file(), len))
         }
-        Lookup { .. } => dir.create_file(name).map_err(error),
+        Lookup { entry: Some(_), .. } => Err(StorageError::InvalidPath),
+        Lookup { others: true, .. } if create => Err(StorageError::InvalidPath),
+        Lookup { .. } if create => Ok((dir.create_file(name).map_err(error)?, 0)),
+        Lookup { .. } => Err(StorageError::NotFound),
     }
 }
 
-/// Folder `name` in `dir`, made if it is not there (as [`create_file`]).
+/// Finishes in `dir` a write of file `name` cut off before (see the
+/// [crate documentation](crate)): its new content, whole, takes its
+/// place, or is taken away where it is already there (the same file);
+/// its temporary file, not yet whole, is removed. What `name` stands
+/// for after.
+fn settled<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<Lookup<IO>, StorageError> {
+    let temps = Temps::of(name);
+    let found = lookup_with(dir, name, true, Some(&temps))?;
+    if let Some(tmp) = &found.tmp {
+        // Renamed whole, cut off before its own entry went: its clusters
+        // are those of its new content (or of the file it replaced).
+        let held = [&found.ready, &found.entry]
+            .into_iter()
+            .flatten()
+            .any(|other| shares(tmp, other));
+        match held {
+            true => dir.unlink(temps.tmp()),
+            false => dir.remove(temps.tmp()),
+        }
+        .map_err(error)?;
+    }
+    // Not where rust-fatfs could take another entry for `name` (no
+    // write ever began there then), nor over a folder.
+    let folder = found.entry.as_ref().is_some_and(FatEntry::is_dir);
+    if let Some(ready) = found.ready.as_ref().filter(|_| !found.others && !folder) {
+        // The file changed since its new content was made, elsewhere or
+        // by PaperPaw (not as that is marked, see `state`): that is let
+        // go. Not by times: the X4 sets none, so any file a computer
+        // wrote is newer. Unmarked (left by an earlier version), whether
+        // the file changed cannot be told: the file stays, and the new
+        // content is set aside under a name of its own.
+        let other = !found.twice && found.entry.as_ref().is_some_and(|e| !shares(e, ready));
+        let mark = ready.mark();
+        let changed = other
+            && found
+                .entry
+                .as_ref()
+                .is_some_and(|entry| mark.is_some_and(|mark| mark != state(entry)));
+        if other && mark.is_none() {
+            if let Some(aside) = aside_name(dir, name)? {
+                dir.rename(temps.ready(), dir, &aside).map_err(error)?;
+            }
+        } else {
+            match changed {
+                true => dir.remove(temps.ready()),
+                false => dir.replace(temps.ready(), name),
+            }
+            .map_err(error)?;
+        }
+    }
+    if found.tmp.is_some() || found.ready.is_some() {
+        let mut found_now = lookup(dir, name, true)?;
+        found_now.old = found.old;
+        Ok(found_now)
+    } else {
+        Ok(found)
+    }
+}
+
+/// A free name beside file `name` for new content set aside: `<name>.unsaved`,
+/// else with a number; `None` where none of a few is free (it stays
+/// hidden beside the file then).
+fn aside_name<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<Option<String>, StorageError> {
+    for n in 1..10 {
+        let aside = match n {
+            1 => format!("{name}.unsaved"),
+            n => format!("{name}.unsaved{n}"),
+        };
+        if lookup(dir, &aside, false)?.entry.is_none() {
+            return Ok(Some(aside));
+        }
+    }
+    Ok(None)
+}
+
+/// What tells whether file `entry` was changed: a hash of its time,
+/// size and first cluster. The new content of a file is marked with it
+/// ([`fatfs::File::set_mark`]): where the file is no longer so after a
+/// cut, it was changed since and is kept (see `settled`).
+fn state<IO: ReadWriteSeek + 'static>(entry: &FatEntry<IO>) -> u32 {
+    let fatfs::DateTime { date, time, .. } = entry.modified();
+    let cluster = entry.first_cluster().unwrap_or(0);
+    let words = [
+        date.year, date.month, date.day, time.hour, time.min, time.sec,
+    ];
+    let bytes = words
+        .into_iter()
+        .flat_map(u16::to_le_bytes)
+        .chain(cluster.to_le_bytes())
+        .chain(entry.len().to_le_bytes());
+    fnv(bytes) as u32
+}
+
+/// Whether `name` is one of a file a write goes through ([`Temps`]):
+/// `~`, seven of its letters, `.TMP` or `.NEW`, without regard to case.
+fn is_temp_name(name: &str) -> bool {
+    let name = name.as_bytes();
+    let letter = |b: &u8| matches!(b.to_ascii_uppercase(), b'A'..=b'Z' | b'2'..=b'7');
+    name.len() == 12
+        && name[0] == b'~'
+        && name[1..8].iter().all(letter)
+        && (name[8..].eq_ignore_ascii_case(b".TMP") || name[8..].eq_ignore_ascii_case(b".NEW"))
+}
+
+/// Whether entries `a` and `b` hold the same clusters (a move or a
+/// rename cut off between): never freed for one while the other stays.
+fn shares<IO: ReadWriteSeek + 'static>(a: &FatEntry<IO>, b: &FatEntry<IO>) -> bool {
+    a.first_cluster().is_some() && a.first_cluster() == b.first_cluster()
+}
+
+/// Whether entry `b` is entry `a` at another place, as a move cut off
+/// between leaves it: of one kind, holding the same clusters, or both
+/// files that hold none (empty, the same content).
+fn holds_same<IO: ReadWriteSeek + 'static>(a: &FatEntry<IO>, b: &FatEntry<IO>) -> bool {
+    let empty = |e: &FatEntry<IO>| e.is_file() && e.first_cluster().is_none() && e.len() == 0;
+    a.is_dir() == b.is_dir() && (shares(a, b) || (empty(a) && empty(b)))
+}
+
+/// Whether `entry` is a temporary file of an earlier version: named
+/// `~pp<n>.tmp` (`n` a number below 64, as they were) by its short name
+/// and by its long name, where it has one.
+fn is_old_temp<IO: ReadWriteSeek + 'static>(entry: &FatEntry<IO>) -> bool {
+    let short = entry
+        .short_file_name_as_bytes()
+        .iter()
+        .map(|&b| char::from(b));
+    let long = entry.long_file_name_as_ucs2_units().map(|units| {
+        char::decode_utf16(units.iter().copied()).map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER))
+    });
+    entry.is_file() && is_old_temp_name(short) && long.is_none_or(is_old_temp_name)
+}
+
+/// Whether `name` is `~pp<n>.tmp`, `n` a number below 64, without regard
+/// to case.
+fn is_old_temp_name(name: impl Iterator<Item = char>) -> bool {
+    let mut letters = [0u8; 9];
+    let mut len = 0;
+    for c in name {
+        if len == letters.len() || !c.is_ascii() {
+            return false;
+        }
+        letters[len] = c.to_ascii_uppercase() as u8;
+        len += 1;
+    }
+    let number = letters[..len]
+        .strip_prefix(b"~PP")
+        .and_then(|rest| rest.strip_suffix(b".TMP"));
+    match number {
+        Some([d]) => d.is_ascii_digit(),
+        Some([t @ b'1'..=b'6', d]) => d.is_ascii_digit() && (t - b'0') * 10 + (d - b'0') < 64,
+        _ => false,
+    }
+}
+
+/// Folder `name` in `dir`, made if it is not there (as [`find_file`]
+/// makes a file).
 fn create_dir_in<IO: ReadWriteSeek + 'static>(
     dir: &FatDir<IO>,
     name: &str,
@@ -327,13 +630,43 @@ fn remove_in<IO: ReadWriteSeek + 'static>(
     dir: &FatDir<IO>,
     name: &str,
 ) -> Result<(), StorageError> {
-    match lookup(dir, name, true)? {
+    remove_found(dir, name, lookup(dir, name, true)?)
+}
+
+/// [`remove_in`], `name` looked up whole (`found`).
+fn remove_found<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+    found: Lookup<IO>,
+) -> Result<(), StorageError> {
+    match found {
         Lookup { entry: None, .. } => Ok(()),
         Lookup { others: true, .. } => Err(StorageError::InvalidPath),
         Lookup { .. } => match dir.remove(name) {
             Ok(()) | Err(fatfs::Error::NotFound) => Ok(()),
             Err(e) => Err(error(e)),
         },
+    }
+}
+
+/// The file in the root that records a move while it is made (see the
+/// [crate documentation](crate)). Hidden, and written in its place once
+/// made, so recording takes no cluster: `PPMV`, the length of what
+/// follows and its hash (`fnv`'s lower half) as 4 bytes each, then the
+/// paths moved from and to, a line each. Cleared, it begins with zeros.
+pub const JOURNAL: &str = "~PPMOVE.BIN";
+
+/// Folders whose temporary files of earlier versions are known to have
+/// been looked at (see `clean_old`).
+const CLEANED: usize = 64;
+/// Folders known to be settled (see `settle_folder`).
+const SETTLED: usize = 128;
+
+/// `name` in folder `dir` (`""` for the root).
+fn child(dir: &str, name: &str) -> String {
+    match dir {
+        "" => name.to_string(),
+        _ => format!("{dir}/{name}"),
     }
 }
 
@@ -353,26 +686,10 @@ fn rename_in<IO: ReadWriteSeek + 'static>(
         Lookup {
             entry: None,
             others: false,
+            ..
         } => dir.rename(name, to, to_name).map_err(error),
         Lookup { .. } => Err(StorageError::InvalidPath),
     }
-}
-
-/// A name in `dir` that nothing has, for a moment: short (a file system
-/// short name of its own, so it fits beside a name of any length) and
-/// not taken from another name, so it never stands for a file there.
-fn free_name<IO: ReadWriteSeek + 'static>(dir: &FatDir<IO>) -> Result<String, StorageError> {
-    for n in 0..64 {
-        let temp = format!("~pp{n}.tmp");
-        if let Lookup {
-            entry: None,
-            others: false,
-        } = lookup(dir, &temp, true)?
-        {
-            return Ok(temp);
-        }
-    }
-    Err(StorageError::InvalidPath)
 }
 
 impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
@@ -384,6 +701,11 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             flush_disk: None,
             read: None,
             free: RefCell::default(),
+            moves_settled: Cell::new(false),
+            settled_folders: RefCell::new(Vec::new()),
+            settling: Cell::new(false),
+            stuck: RefCell::new(None),
+            cleaned: RefCell::new(Vec::new()),
         }
     }
 
@@ -496,7 +818,9 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     fn dir(&self, path: &str) -> Result<FatDir<IO>, StorageError> {
         let path = path.trim_matches('/');
         if path.is_empty() {
-            return Ok(self.root());
+            let root = self.root();
+            self.settle_folder("", &root);
+            return Ok(root);
         }
         {
             let mut folders = self.folders.borrow_mut();
@@ -511,6 +835,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         // Looked up in its folder, kept too: the folders of many books'
         // data are not each looked up from the root.
         let dir = open_dir(&self.dir(parent(path))?, name(path))?;
+        self.settle_folder(path, &dir);
         let mut folders = self.folders.borrow_mut();
         if folders.len() == FOLDERS {
             folders.remove(0);
@@ -536,17 +861,19 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         create: bool,
         f: impl FnOnce(&mut Open<IO>) -> Result<T, StorageError>,
     ) -> Result<T, StorageError> {
-        let mut open = self.open.borrow_mut();
         // Spelt as it was opened first: a book is read 4 bytes at a time,
         // many times a page. Then in any case, as FAT names it: one file
         // is open once.
-        let kept = open
-            .iter()
-            .position(|o| o.path == path)
-            .or_else(|| open.iter().position(|o| same_path(&o.path, path)));
+        let kept = {
+            let open = self.open.borrow();
+            open.iter()
+                .position(|o| o.path == path)
+                .or_else(|| open.iter().position(|o| same_path(&o.path, path)))
+        };
         match kept {
             // The latest last.
             Some(i) => {
+                let mut open = self.open.borrow_mut();
                 let file = open.remove(i);
                 open.push(file);
             }
@@ -554,23 +881,27 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
                 // Checked once, when opened: a book is read 4 bytes at a
                 // time, many times a page.
                 check(path)?;
+                self.hold(path)?;
+                if create {
+                    self.create_dirs(parent(path))?;
+                }
+                // Before the open files are taken: a folder looked up
+                // first is settled, closing files (see `settle_folder`).
+                let dir = self.dir(parent(path))?;
+                let mut open = self.open.borrow_mut();
                 if open.len() == OPEN_FILES {
                     open.remove(0).flush()?;
                 }
-                let file = if create {
-                    self.create_dirs(parent(path))?;
-                    create_file(&self.dir(parent(path))?, name(path))
-                } else {
-                    open_file(&self.dir(parent(path))?, name(path))
-                }?;
+                let (file, len) = find_file(&dir, name(path), create)?;
                 open.push(Open {
                     path: path.to_string(),
                     file,
+                    len,
                     dirty: false,
                 });
             }
         }
-        match open.last_mut() {
+        match self.open.borrow_mut().last_mut() {
             Some(file) => f(file),
             None => Err(StorageError::Io),
         }
@@ -612,39 +943,69 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
 
     /// [`Storage::write`], its blocks not yet written back.
     fn write_whole(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
-        check(path)?;
         self.close(path)?;
         self.create_dirs(parent(path))?;
         let dir = self.dir(parent(path))?;
         let name = name(path);
         // Refused before anything is written: no temporary file is left.
-        if lookup(&dir, name, true)?.others {
+        if !fatfs::is_valid_long_name(name) {
             return Err(StorageError::InvalidPath);
         }
-        let temp = free_name(&dir)?;
-        let written = create_file(&dir, &temp).and_then(|mut file| {
-            file.truncate().map_err(error)?;
-            Self::write_all(&mut file, data)
-        });
+        let found = settled(&dir, name)?;
+        let old = found.old;
+        let there = found.entry.is_some();
+        let mark = found.entry.as_ref().map(state);
+        if found.others || found.entry.is_some_and(|entry| entry.is_dir()) {
+            return Err(StorageError::InvalidPath);
+        }
+        // Whole under one name of the moment, synced, then under another
+        // (see the crate documentation): settled, a cut is told by them.
+        let temps = Temps::of(name);
+        let written = dir
+            .create_file(temps.tmp())
+            .map_err(error)
+            .and_then(|mut file| {
+                // The file it replaces, as it is now: changed after a
+                // cut, it is kept (see `settled`).
+                if let Some(mark) = mark {
+                    file.set_mark(mark);
+                }
+                Self::write_all(&mut file, data)
+            });
         if let Err(e) = written {
             // A card that is full keeps no part of the new content.
             #[expect(
                 clippy::let_underscore_must_use,
                 reason = "cleaning up after a failed write, whose own error is the one told"
             )]
-            let _ = remove_in(&dir, &temp);
+            let _ = dir.remove(temps.tmp());
             return Err(e);
         }
-        remove_in(&dir, name)?;
-        rename_in(&dir, &temp, &dir, name)
+        if there {
+            dir.rename(temps.tmp(), &dir, temps.ready())
+                .map_err(error)?;
+            dir.replace(temps.ready(), name).map_err(error)?;
+        } else {
+            // A new file: cut off, it is not there yet, or is there whole
+            // (its temporary file beside it, taken away by `settled`).
+            dir.rename(temps.tmp(), &dir, name).map_err(error)?;
+        }
+        if old {
+            self.clean_old(parent(path), &dir);
+        }
+        Ok(())
     }
 
-    /// [`Storage::remove`], its blocks not yet written back.
-    fn remove_entry(&self, path: &str) -> Result<(), StorageError> {
+    /// [`Storage::remove`], its blocks not yet written back; settled
+    /// first where `settle` (see [`settled`]): no new content of it is
+    /// left to take its place later.
+    fn remove_entry(&self, path: &str, settle: bool) -> Result<(), StorageError> {
         check(path)?;
+        self.hold(path)?;
         self.close(path)?;
         self.forget(path);
         match self.dir(parent(path)) {
+            Ok(dir) if settle => remove_found(&dir, name(path), settled(&dir, name(path))?),
             Ok(dir) => remove_in(&dir, name(path)),
             Err(StorageError::NotFound) => Ok(()),
             Err(e) => Err(e),
@@ -665,32 +1026,62 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         if !same && is_within(to, from) {
             return Err(StorageError::InvalidPath);
         }
-        // Nothing to move (a file or a folder): what is at `to` stays.
-        if !self.is_there(from) {
-            return Err(StorageError::NotFound);
+        // Not to a name FAT does not take: rust-fatfs would find out only
+        // once the entry is gone from where it was.
+        if !fatfs::is_valid_long_name(name(to)) {
+            return Err(StorageError::InvalidPath);
         }
         self.close(from)?;
         self.close(to)?;
         self.forget(from);
         self.forget(to);
-        if same {
+        // No new content of it is left behind (see `settled`).
+        let dir = self.dir(parent(from))?;
+        let is_file = match settled(&dir, name(from))? {
+            // Nothing to move (a file or a folder): what is at `to` stays.
+            Lookup { entry: None, .. } => return Err(StorageError::NotFound),
+            Lookup { others: true, .. } => return Err(StorageError::InvalidPath),
+            Lookup {
+                entry: Some(entry), ..
+            } => entry.is_file(),
+        };
+        // A file goes through the name of its new content: cut off, it
+        // takes its place when looked for (see the crate documentation).
+        let temps = Temps::of(name(to));
+        if same && is_file {
             // rust-fatfs takes a move to its own entry for nothing to do:
-            // it goes through a name of the moment (kept, cut off between).
-            let dir = self.dir(parent(from))?;
-            let temp = free_name(&dir)?;
-            rename_in(&dir, name(from), &dir, &temp)?;
-            return rename_in(&dir, &temp, &dir, name(to));
+            // it goes through a name of the moment. Cut off, `settled`
+            // keeps the file where it was.
+            rename_in(&dir, name(from), &dir, temps.ready())?;
+            return dir.replace(temps.ready(), name(to)).map_err(error);
+        }
+        if same {
+            return self.journaled(from, to, || {
+                rename_in(&dir, name(from), &dir, temps.ready())?;
+                rename_in(&dir, temps.ready(), &dir, name(to))
+            });
         }
         self.create_dirs(parent(to))?;
-        let (dir, to_dir) = (self.dir(parent(from))?, self.dir(parent(to))?);
-        // A file there is replaced.
-        if lookup(&to_dir, name(to), false)?
-            .entry
-            .is_some_and(|entry| entry.is_file())
-        {
-            remove_in(&to_dir, name(to))?;
-        }
-        rename_in(&dir, name(from), &to_dir, name(to))
+        let to_dir = self.dir(parent(to))?;
+        let there = settled(&to_dir, name(to))?;
+        let replaced = match there.entry {
+            _ if there.others => return Err(StorageError::InvalidPath),
+            Some(entry) if entry.is_dir() => return Err(StorageError::InvalidPath),
+            // A file there is replaced.
+            Some(_) => true,
+            None => false,
+        };
+        self.journaled(from, to, || match (replaced, is_file) {
+            (true, true) => {
+                rename_in(&dir, name(from), &to_dir, temps.ready())?;
+                to_dir.replace(temps.ready(), name(to)).map_err(error)
+            }
+            (true, false) => {
+                remove_in(&to_dir, name(to))?;
+                rename_in(&dir, name(from), &to_dir, name(to))
+            }
+            (false, _) => rename_in(&dir, name(from), &to_dir, name(to)),
+        })
     }
 
     /// [`Storage::create_dir`], its blocks not yet written back.
@@ -710,6 +1101,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     /// [`Storage::remove_dir_all`], its blocks not yet written back.
     fn remove_tree(&self, path: &str) -> Result<(), StorageError> {
         check(path)?;
+        self.hold(path)?;
         self.close(path)?;
         self.forget(path);
         let dir = match self.dir(path) {
@@ -718,19 +1110,42 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             Err(e) => return Err(e),
         };
         let mut names: alloc::vec::Vec<(String, bool)> = alloc::vec::Vec::new();
+        // Names of new content left by cuts (see `settled`).
+        let mut ready = alloc::vec::Vec::new();
         for entry in entries(&dir) {
             let entry = entry?;
             let name = entry.file_name();
             if name != "." && name != ".." {
+                if entry.is_file() && name.len() == 12 && name.starts_with('~') {
+                    ready.push(name.to_ascii_uppercase());
+                }
                 names.push((name, entry.is_dir()));
+            }
+        }
+        // A file and its new content may be the same file: settled first,
+        // its clusters are not freed twice.
+        for (name, _) in names
+            .iter()
+            .filter(|(_, is_dir)| !is_dir && !ready.is_empty())
+        {
+            let temps = Temps::of(name);
+            if ready.iter().any(|n| n == temps.ready()) {
+                dir.replace(temps.ready(), name).map_err(error)?;
             }
         }
         for (name, is_dir) in names {
             let child = format!("{path}/{name}");
-            if is_dir {
+            if is_temp_name(&name) {
+                // Not taken by name (see `check`). A folder's new name in a
+                // move cut off holds that folder's clusters: left to it.
+                match is_dir {
+                    true => dir.unlink(&name).map_err(error)?,
+                    false => remove_in(&dir, &name)?,
+                }
+            } else if is_dir {
                 self.remove_tree(&child)?;
             } else {
-                self.remove_entry(&child)?;
+                self.remove_entry(&child, false)?;
             }
         }
         self.forget(path);
@@ -742,15 +1157,22 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
         // Past what FAT holds (4 GiB less a byte): the end of any file.
         let past_any_file = offset > u64::from(u32::MAX);
-        self.with_open(path, false, |Open { file, .. }| {
-            if past_any_file {
+        self.with_open(path, false, |Open { file, len, .. }| {
+            if past_any_file || offset >= *len {
                 return Ok(0);
             }
-            file.seek(SeekFrom::Start(offset)).map_err(error)?;
+            // Up to its size: clusters that end before (freed in a remove
+            // cut off by an earlier version) do not pass for its end.
+            let want = buf
+                .len()
+                .min(usize::try_from(*len - offset).unwrap_or(usize::MAX));
+            if file.seek(SeekFrom::Start(offset)).map_err(error)? != offset {
+                return Err(StorageError::Io);
+            }
             let mut read = 0;
-            while read < buf.len() {
-                match file.read(&mut buf[read..]).map_err(error)? {
-                    0 => break,
+            while read < want {
+                match file.read(&mut buf[read..want]).map_err(error)? {
+                    0 => return Err(StorageError::Io),
                     n => read += n,
                 }
             }
@@ -759,12 +1181,13 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     }
 
     fn size(&self, path: &str) -> Result<u64, StorageError> {
-        self.with_open(path, false, |o| {
-            o.file.seek(SeekFrom::End(0)).map_err(error)
-        })
+        self.with_open(path, false, |o| Ok(o.len))
     }
 
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        check(path)?;
+        self.settle_moves()?;
+        self.hold(path)?;
         let before = self.len_of(path);
         let made = self.new_dirs(parent(path));
         let written = self.written(self.write_whole(path, data));
@@ -777,12 +1200,19 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     /// Kept in the open file until it is written back (see the [crate
     /// documentation](crate)).
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.settle_moves()?;
         let before = self.len_of(path);
         let made = self.new_dirs(parent(path));
         self.with_open(path, true, |o| {
-            o.file.seek(SeekFrom::End(0)).map_err(error)?;
+            // Not after clusters that end before its size (see `read_at`).
+            if o.file.seek(SeekFrom::End(0)).map_err(error)? != o.len {
+                return Err(StorageError::Io);
+            }
             o.dirty = true;
-            o.file.write_all(data).map_err(error)
+            let written = o.file.write_all(data).map_err(error);
+            // As far as it came, where the card is full.
+            o.len = o.file.seek(SeekFrom::Current(0)).map_err(error)?;
+            written
         })?;
         // In whole clusters: what the file takes more, and its folders.
         let more = self.free.borrow().clusters(before + data.len() as u64)
@@ -815,7 +1245,9 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         for entry in entries(&self.dir(dir)?) {
             let entry = entry?;
             let name = entry.file_name();
-            if name == "." || name == ".." {
+            // Nor the storage's own (see `check`).
+            let own = is_temp_name(&name) || (dir.is_empty() && same_path(&name, JOURNAL));
+            if name == "." || name == ".." || own {
                 continue;
             }
             let is_dir = entry.is_dir();
@@ -829,8 +1261,9 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     }
 
     fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.settle_moves()?;
         let before = self.len_of(path);
-        let removed = self.written(self.remove_entry(path));
+        let removed = self.written(self.remove_entry(path, true));
         if removed.is_ok() {
             self.follow(0, before);
         }
@@ -838,6 +1271,11 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     }
 
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        self.settle_moves()?;
+        // None while a move is held up: it would be recorded over it.
+        if self.stuck.borrow().is_some() {
+            return Err(StorageError::Io);
+        }
         // A file it takes the place of is gone.
         let replaced = if from.eq_ignore_ascii_case(to) {
             0
@@ -871,7 +1309,19 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         }
     }
 
+    /// The bytes for files in all, from the boot sector.
+    fn total_space(&self) -> Option<u64> {
+        match &self.read {
+            Some(read) => self.free.borrow_mut().total(read.as_ref()),
+            None => {
+                let stats = self.fs.stats().ok()?;
+                Some(u64::from(stats.total_clusters()) * u64::from(stats.cluster_size()))
+            }
+        }
+    }
+
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+        self.settle_moves()?;
         let made = self.new_dirs(path);
         let created = self.written(self.create_dirs(path));
         if created.is_ok() {
@@ -881,6 +1331,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     }
 
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+        self.settle_moves()?;
         let before = self.tree_len(path);
         let removed = self.written(self.remove_tree(path));
         if removed.is_ok() {
@@ -891,1140 +1342,4 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
 }
 
 #[cfg(test)]
-mod tests {
-    extern crate std;
-
-    use super::*;
-    use alloc::boxed::Box;
-    use alloc::vec;
-    use alloc::vec::Vec;
-    use fatfs::{FormatVolumeOptions, FsOptions, StdIoWrapper};
-    use std::io::Cursor;
-
-    type Disk = StdIoWrapper<Cursor<Vec<u8>>>;
-
-    /// A fresh FAT disk of 4 MB, formatted.
-    fn storage() -> FatStorage<Disk> {
-        let mut disk = StdIoWrapper::from(Cursor::new(vec![0u8; 4 << 20]));
-        fatfs::format_volume(&mut disk, FormatVolumeOptions::new()).unwrap();
-        disk.seek(SeekFrom::Start(0)).unwrap();
-        let fs = FileSystem::new(disk, FsOptions::new()).unwrap();
-        FatStorage::new(Box::leak(Box::new(fs)))
-    }
-
-    fn names(storage: &FatStorage<Disk>, dir: &str) -> Vec<(String, bool, u64)> {
-        let mut out = Vec::new();
-        storage
-            .list(dir, &mut |e| {
-                out.push((e.name.to_string(), e.is_dir, e.size))
-            })
-            .unwrap();
-        out.sort();
-        out
-    }
-
-    /// A card as blocks in memory, to look at as it is (after a cut),
-    /// with every block written to it in order.
-    #[derive(Clone)]
-    struct Cut {
-        data: alloc::rc::Rc<RefCell<Vec<u8>>>,
-        writes: alloc::rc::Rc<RefCell<Vec<Written>>>,
-        /// Blocks read so far.
-        reads: alloc::rc::Rc<core::cell::Cell<usize>>,
-    }
-
-    /// A block written to a card: its index, its bytes.
-    type Written = (u32, [u8; BLOCK]);
-
-    impl Cut {
-        fn new(data: Vec<u8>) -> Self {
-            Self {
-                data: alloc::rc::Rc::new(RefCell::new(data)),
-                writes: alloc::rc::Rc::default(),
-                reads: alloc::rc::Rc::default(),
-            }
-        }
-
-        /// A card of 4 MB, formatted with `options`.
-        fn formatted(options: FormatVolumeOptions) -> Self {
-            Self::formatted_of(4 << 20, options)
-        }
-
-        /// A card of `size` bytes, formatted with `options`.
-        fn formatted_of(size: usize, options: FormatVolumeOptions) -> Self {
-            let mut formatted = StdIoWrapper::from(Cursor::new(vec![0u8; size]));
-            fatfs::format_volume(&mut formatted, options).unwrap();
-            Self::new(formatted.into_inner().into_inner())
-        }
-
-        /// What it holds now.
-        fn image(&self) -> Vec<u8> {
-            self.data.borrow().clone()
-        }
-
-        /// The storage on it as on the X4: the disk shared, its changed
-        /// blocks written back by the storage.
-        fn storage(&self) -> FatStorage<SharedDisk<Cut>> {
-            let disk = SharedDisk::new(BlockDisk::new(self.clone()).unwrap());
-            let fs = FileSystem::new(disk.clone(), FsOptions::new()).unwrap();
-            FatStorage::new(Box::leak(Box::new(fs))).with_disk(disk)
-        }
-    }
-
-    impl Blocks for Cut {
-        fn read_block(&mut self, index: u32, block: &mut [u8; BLOCK]) -> Result<(), DiskError> {
-            let at = index as usize * BLOCK;
-            block.copy_from_slice(&self.data.borrow()[at..at + BLOCK]);
-            self.reads.set(self.reads.get() + 1);
-            Ok(())
-        }
-
-        fn write_block(&mut self, index: u32, block: &[u8; BLOCK]) -> Result<(), DiskError> {
-            let at = index as usize * BLOCK;
-            self.data.borrow_mut()[at..at + BLOCK].copy_from_slice(block);
-            self.writes.borrow_mut().push((index, *block));
-            Ok(())
-        }
-
-        fn blocks(&mut self) -> Result<u32, DiskError> {
-            Ok((self.data.borrow().len() / BLOCK) as u32)
-        }
-    }
-
-    /// The storage on the card `bytes`.
-    fn mounted(bytes: Vec<u8>) -> FatStorage<Disk> {
-        let fs = FileSystem::new(StdIoWrapper::from(Cursor::new(bytes)), FsOptions::new()).unwrap();
-        FatStorage::new(Box::leak(Box::new(fs)))
-    }
-
-    /// The free bytes rust-fatfs counts on the card now (all of the FAT
-    /// read where it must).
-    fn counted(s: &FatStorage<SharedDisk<Cut>>) -> u64 {
-        let stats = s.fs.stats().unwrap();
-        u64::from(stats.free_clusters()) * u64::from(stats.cluster_size())
-    }
-
-    /// Asks for the free space until it is counted exactly, each ask
-    /// reading only a part of the FAT; how many asks it took.
-    fn count_out(card: &Cut, s: &FatStorage<SharedDisk<Cut>>) -> usize {
-        for asks in 1..100 {
-            let before = card.reads.get();
-            s.free_space();
-            let read = card.reads.get() - before;
-            assert!(read <= free::STEP / BLOCK + 2, "{read} blocks at once");
-            if s.free.borrow().exact() {
-                return asks;
-            }
-        }
-        panic!("never counted");
-    }
-
-    /// A FAT32 card of 40 MB in clusters of 512 bytes: its FAT holds
-    /// 320 KB, more than one ask reads.
-    fn fat32() -> Cut {
-        let options = FormatVolumeOptions::new()
-            .fat_type(fatfs::FatType::Fat32)
-            .bytes_per_cluster(512);
-        Cut::formatted_of(40 << 20, options)
-    }
-
-    /// The card's own word serves at once, the FAT is counted a part at a
-    /// time, and what is written and removed is followed.
-    #[test]
-    fn free_space_is_counted_a_part_at_a_time() {
-        let card = fat32();
-        let s = card.storage();
-        let said = s.free_space().unwrap();
-        assert_eq!(said, counted(&s));
-        assert!(count_out(&card, &s) > 1);
-        assert_eq!(s.free_space(), Some(counted(&s)));
-        // Written, appended, made, replaced, moved and removed: followed
-        // cluster by cluster, without counting again.
-        s.write("books/a.bin", &vec![7u8; 64 * 1024]).unwrap();
-        assert_eq!(s.free_space(), Some(counted(&s)));
-        s.append("books/a.bin", &[1u8; 700]).unwrap();
-        s.sync().unwrap();
-        assert_eq!(s.free_space(), Some(counted(&s)));
-        s.write("books/a.bin", b"short").unwrap();
-        assert_eq!(s.free_space(), Some(counted(&s)));
-        s.write("b.bin", &vec![1u8; 3000]).unwrap();
-        s.rename("b.bin", "books/a.bin").unwrap();
-        assert_eq!(s.free_space(), Some(counted(&s)));
-        s.create_dir("x/y/z").unwrap();
-        s.write("x/y/z/c.bin", &vec![2u8; 5000]).unwrap();
-        assert_eq!(s.free_space(), Some(counted(&s)));
-        s.remove_dir_all("x").unwrap();
-        s.remove("books/a.bin").unwrap();
-        assert_eq!(s.free_space(), Some(counted(&s)));
-        // Asked on: nothing more to count.
-        let before = card.reads.get();
-        s.free_space();
-        assert_eq!(card.reads.get(), before);
-    }
-
-    /// A card that was not unmounted (the X4 never unmounts): rust-fatfs
-    /// would read all of its FAT; here the count the card keeps, out of
-    /// date, serves first, and counting a part at a time puts it right.
-    #[test]
-    fn a_card_not_unmounted_is_counted_a_part_at_a_time() {
-        let card = fat32();
-        let first = card.storage();
-        first.free_space();
-        first.write("big.bin", &vec![7u8; 200 * 1024]).unwrap();
-        first.sync().unwrap();
-        // Mounted again from what is on the card.
-        let card = Cut::new(card.image());
-        let s = card.storage();
-        let said = s.free_space().unwrap();
-        count_out(&card, &s);
-        let exact = s.free_space().unwrap();
-        assert_eq!(exact, counted(&s));
-        assert!(
-            said > exact,
-            "the count kept predates the file: {said} {exact}"
-        );
-    }
-
-    /// FAT12 and FAT16 keep no count: theirs is counted.
-    #[test]
-    fn small_cards_are_counted() {
-        for fat in [fatfs::FatType::Fat12, fatfs::FatType::Fat16] {
-            let card = Cut::formatted_of(8 << 20, FormatVolumeOptions::new().fat_type(fat));
-            let s = card.storage();
-            count_out(&card, &s);
-            assert_eq!(s.free_space(), Some(counted(&s)));
-            s.write("a.bin", &vec![1u8; 9000]).unwrap();
-            assert_eq!(s.free_space(), Some(counted(&s)));
-        }
-    }
-
-    #[test]
-    fn synced_is_on_the_card() {
-        let card = Cut::formatted(FormatVolumeOptions::new());
-        let s = card.storage();
-        // Emptied, then appended to in pieces (as files come over USB or
-        // the network): the pieces stay in the open file until written
-        // back.
-        s.write("notes/a book.txt", b"").unwrap();
-        s.append("notes/a book.txt", b"a high").unwrap();
-        s.append("notes/a book.txt", b"light").unwrap();
-        let before = card.image();
-        s.sync().unwrap();
-        // Not on the card before the sync: cut off then, it would be lost.
-        assert_ne!(mounted(before).size("notes/a book.txt"), Ok(11));
-        // The card as it is after it, as after a reset: the file is there.
-        let mut read = [0u8; 32];
-        let n = mounted(card.image())
-            .read_at("notes/a book.txt", 0, &mut read)
-            .unwrap();
-        assert_eq!(&read[..n], b"a highlight");
-    }
-
-    /// What a call changes is on the card when it returns, but appends,
-    /// kept until written back.
-    #[test]
-    fn changes_are_on_the_card_when_calls_return() {
-        let card = Cut::formatted(FormatVolumeOptions::new());
-        let s = card.storage();
-        let on_card = || contents(&mounted(card.image()), "");
-        let file = |path: &str, data: &[u8]| (String::from(path), data.to_vec());
-        s.write("a.txt", b"first").unwrap();
-        assert_eq!(on_card(), [file("a.txt", b"first")]);
-        s.write("a.txt", b"second").unwrap();
-        assert_eq!(on_card(), [file("a.txt", b"second")]);
-        s.rename("a.txt", "b.txt").unwrap();
-        assert_eq!(on_card(), [file("b.txt", b"second")]);
-        s.remove("b.txt").unwrap();
-        assert_eq!(on_card(), []);
-        s.create_dir("Books").unwrap();
-        assert_eq!(
-            mounted(card.image()).size("Books"),
-            Err(StorageError::InvalidPath)
-        );
-        s.write("Books/c.txt", b"c").unwrap();
-        s.remove_dir_all("Books").unwrap();
-        assert!(!mounted(card.image()).exists("Books"));
-        s.append("d.txt", b"appended").unwrap();
-        assert_ne!(on_card(), [file("d.txt", b"appended")]);
-        s.sync().unwrap();
-        assert_eq!(on_card(), [file("d.txt", b"appended")]);
-    }
-
-    /// Every file in `dir` and below on `s`, with what it reads (to its
-    /// end, which comes before its size where its clusters were freed).
-    fn contents(s: &FatStorage<Disk>, dir: &str) -> Vec<(String, Vec<u8>)> {
-        let mut found = Vec::new();
-        s.list(dir, &mut |e| {
-            found.push((e.name.to_string(), e.is_dir, e.size))
-        })
-        .unwrap();
-        let mut out = Vec::new();
-        for (name, is_dir, size) in found {
-            let path = match dir {
-                "" => name,
-                _ => format!("{dir}/{name}"),
-            };
-            if is_dir {
-                out.extend(contents(s, &path));
-            } else {
-                let mut data = vec![0u8; size as usize];
-                let n = s.read_at(&path, 0, &mut data).unwrap();
-                data.truncate(n);
-                out.push((path, data));
-            }
-        }
-        out
-    }
-
-    /// What a card holding `files` holds after `op`, cut off after each
-    /// block it writes (and before the first): the files on it, with what
-    /// they read. As on the X4: the disk shared, the storage writing back
-    /// its blocks.
-    fn cuts(
-        files: &[(&str, &[u8])],
-        op: impl FnOnce(&FatStorage<SharedDisk<Cut>>),
-    ) -> Vec<Vec<(String, Vec<u8>)>> {
-        let card = Cut::formatted(FormatVolumeOptions::new());
-        let s = card.storage();
-        for (path, data) in files {
-            s.write(path, data).unwrap();
-        }
-        s.sync().unwrap();
-        let mut image = card.image();
-        card.writes.borrow_mut().clear();
-        op(&s);
-        let mut cuts = vec![contents(&mounted(image.clone()), "")];
-        for (index, block) in card.writes.borrow().iter() {
-            let at = *index as usize * BLOCK;
-            image[at..at + BLOCK].copy_from_slice(block);
-            cuts.push(contents(&mounted(image.clone()), ""));
-        }
-        cuts
-    }
-
-    /// What `path` reads in `files`, if it is there.
-    fn read<'a>(files: &'a [(String, Vec<u8>)], path: &str) -> Option<&'a [u8]> {
-        files.iter().find(|(p, _)| p == path).map(|(_, d)| &d[..])
-    }
-
-    /// Asserts that the cuts that leave a file not whole (`windows`) come
-    /// one after the other, up to the last block written: the order of
-    /// rust-fatfs's own changes, which cannot be changed here.
-    fn at_the_end(windows: &[usize], cuts: usize) {
-        if let Some(&first) = windows.first() {
-            assert!(windows.iter().copied().eq(first..cuts - 1), "{windows:?}");
-        }
-    }
-
-    /// Two contents over several clusters (2 KB on this card).
-    fn old_and_new() -> (Vec<u8>, Vec<u8>) {
-        let old = (0..7000u32).map(|i| (i % 251) as u8).collect();
-        let new = (0..5000u32).map(|i| (i % 241) as u8 ^ 0x55).collect();
-        (old, new)
-    }
-
-    /// A file written anew, cut off at any point, reads its old or its
-    /// new content whole; no other file is touched, no data is written
-    /// where the card still has another file. Where rust-fatfs leaves
-    /// the name for a moment without either, the new content is whole
-    /// in the temporary file beside it.
-    #[test]
-    fn a_file_written_anew_is_whole_after_any_cut() {
-        let (old, new) = old_and_new();
-        let files = [
-            ("Books/a.txt", &old[..]),
-            ("Books/b.txt", b"beside"),
-            ("notes.txt", b"notes"),
-        ];
-        let cuts = cuts(&files, |s| s.write("Books/a.txt", &new).unwrap());
-        let mut windows = Vec::new();
-        for (n, files) in cuts.iter().enumerate() {
-            assert_eq!(read(files, "Books/b.txt"), Some(&b"beside"[..]), "{n}");
-            assert_eq!(read(files, "notes.txt"), Some(&b"notes"[..]), "{n}");
-            let temp = read(files, "Books/~pp0.tmp");
-            assert!(temp.is_none_or(|t| t.is_empty() || t == new), "{n}");
-            assert!(files.len() <= 4, "{n}: {}", files.len());
-            match read(files, "Books/a.txt") {
-                Some(a) if a == old || a == new => {}
-                // rust-fatfs frees the old file's clusters before it
-                // removes its entry (read then up to the first freed
-                // cluster), and the new one takes its name after.
-                a => {
-                    assert_eq!(temp, Some(&new[..]), "{n}");
-                    assert!(a.is_none_or(|a| old.starts_with(a)), "{n}");
-                    windows.push(n);
-                }
-            }
-        }
-        at_the_end(&windows, cuts.len());
-        assert_eq!(read(&cuts[cuts.len() - 1], "Books/a.txt"), Some(&new[..]));
-    }
-
-    /// A file moved, cut off at any point, is whole at one of its places;
-    /// into another folder, where rust-fatfs removes its entry before it
-    /// adds the new one, for a moment at neither.
-    #[test]
-    fn a_file_moved_is_whole_after_any_cut() {
-        let (old, _) = old_and_new();
-        let files = [("Books/a.txt", &old[..]), ("notes.txt", b"notes")];
-        for (to, beside) in [("Books/c.txt", true), ("Moved/c.txt", false)] {
-            let cuts = cuts(&files, |s| s.rename("Books/a.txt", to).unwrap());
-            let mut windows = Vec::new();
-            for (n, files) in cuts.iter().enumerate() {
-                assert_eq!(read(files, "notes.txt"), Some(&b"notes"[..]), "{n}");
-                let found = [read(files, "Books/a.txt"), read(files, to)];
-                match found {
-                    [Some(a), None] | [None, Some(a)] if a == old => {}
-                    [None, None] => windows.push(n),
-                    _ => panic!("{to}, cut after {n}: {found:?}"),
-                }
-            }
-            if beside {
-                assert!(windows.is_empty(), "{windows:?}");
-            }
-            at_the_end(&windows, cuts.len());
-            assert_eq!(read(&cuts[cuts.len() - 1], to), Some(&old[..]));
-        }
-    }
-
-    /// A file removed, cut off at any point, is whole or gone, but where
-    /// rust-fatfs frees its clusters before it removes its entry.
-    #[test]
-    fn a_file_removed_is_whole_or_gone_after_any_cut() {
-        let (old, _) = old_and_new();
-        let files = [("Books/a.txt", &old[..]), ("notes.txt", b"notes")];
-        let cuts = cuts(&files, |s| s.remove("Books/a.txt").unwrap());
-        let mut windows = Vec::new();
-        for (n, files) in cuts.iter().enumerate() {
-            assert_eq!(read(files, "notes.txt"), Some(&b"notes"[..]), "{n}");
-            match read(files, "Books/a.txt") {
-                None => {}
-                Some(a) if a == old => {}
-                Some(a) => {
-                    assert!(old.starts_with(a), "{n}");
-                    windows.push(n);
-                }
-            }
-        }
-        at_the_end(&windows, cuts.len());
-        assert_eq!(read(&cuts[cuts.len() - 1], "Books/a.txt"), None);
-    }
-
-    /// Changed blocks reach the card in the order they were changed: cut
-    /// off after any block written, the card holds the changes up to one
-    /// of them, none after.
-    #[test]
-    fn blocks_reach_the_card_in_the_order_changed() {
-        // More blocks than are kept, changed here and there, in part and
-        // whole, read between.
-        let blocks = 2 * disk::SLOTS;
-        let card = Cut::new(vec![0; blocks * BLOCK]);
-        let mut disk = BlockDisk::new(card.clone()).unwrap();
-        let mut model = vec![0u8; blocks * BLOCK];
-        // The disk after each change.
-        let mut states = vec![model.clone()];
-        let mut seed = 7u32;
-        let mut next = |below: usize| {
-            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
-            (seed >> 8) as usize % below
-        };
-        for change in 0..600 {
-            // Most often a few blocks, as the FAT and a folder.
-            let block = match next(3) {
-                0 => next(blocks),
-                _ => next(4),
-            };
-            let (at, len) = match next(4) {
-                0 => (block * BLOCK, BLOCK),
-                _ => {
-                    let offset = next(BLOCK);
-                    (block * BLOCK + offset, 1 + next(BLOCK - offset))
-                }
-            };
-            let byte = (change % 255 + 1) as u8;
-            disk.seek(SeekFrom::Start(at as u64)).unwrap();
-            disk.write_all(&vec![byte; len]).unwrap();
-            model[at..at + len].fill(byte);
-            states.push(model.clone());
-            if next(8) == 0 {
-                let mut read = vec![0u8; 3 * BLOCK];
-                let at = next(blocks - 3) * BLOCK;
-                disk.seek(SeekFrom::Start(at as u64)).unwrap();
-                disk.read_exact(&mut read).unwrap();
-                assert_eq!(read, model[at..at + read.len()]);
-            }
-            if next(100) == 0 {
-                disk.flush().unwrap();
-            }
-        }
-        disk.flush().unwrap();
-        let mut image = vec![0u8; blocks * BLOCK];
-        let mut state = 0;
-        for (k, (index, block)) in card.writes.borrow().iter().enumerate() {
-            let at = *index as usize * BLOCK;
-            image[at..at + BLOCK].copy_from_slice(block);
-            while states.get(state).is_some_and(|s| *s != image) {
-                state += 1;
-            }
-            assert!(state < states.len(), "cut after write {k}: no state");
-        }
-        assert_eq!(image, model);
-    }
-
-    #[test]
-    fn a_rename_of_nothing_keeps_what_is_there() {
-        let s = storage();
-        s.write("notes/kept.txt", b"highlights").unwrap();
-        assert_eq!(
-            s.rename("old/gone.txt", "notes/kept.txt"),
-            Err(StorageError::NotFound)
-        );
-        assert_eq!(s.size("notes/kept.txt"), Ok(10));
-    }
-
-    fn entry(name: &str, is_dir: bool, size: u64) -> (String, bool, u64) {
-        (String::from(name), is_dir, size)
-    }
-
-    /// Moved to another case of its own name, a file or a folder stays,
-    /// spelt as asked.
-    #[test]
-    fn a_rename_to_another_case_keeps_it() {
-        let s = storage();
-        s.write("Books/book.epub", b"a book").unwrap();
-        s.rename("Books/book.epub", "books/Book.epub").unwrap();
-        assert_eq!(names(&s, "Books"), [entry("Book.epub", false, 6)]);
-        assert_eq!(s.size("Books/Book.epub"), Ok(6));
-        // Its folder alone in another case: nothing to do.
-        s.rename("BOOKS/Book.epub", "books/Book.epub").unwrap();
-        assert_eq!(names(&s, "Books"), [entry("Book.epub", false, 6)]);
-        // A folder, with all in it.
-        s.rename("Books", "BOOKS").unwrap();
-        assert_eq!(names(&s, ""), [entry("BOOKS", true, 0)]);
-        assert_eq!(s.size("BOOKS/Book.epub"), Ok(6));
-        // Exactly as it is: nothing to do.
-        s.rename("BOOKS", "BOOKS").unwrap();
-        assert_eq!(names(&s, ""), [entry("BOOKS", true, 0)]);
-    }
-
-    /// A folder is not moved into itself (it would be cut off from the
-    /// root), by any case of its name.
-    #[test]
-    fn a_folder_is_not_moved_into_itself() {
-        let s = storage();
-        s.write("Books/a.txt", b"a").unwrap();
-        for to in ["Books/x", "books/x", "BOOKS/x/y"] {
-            assert_eq!(s.rename("Books", to), Err(StorageError::InvalidPath));
-        }
-        assert_eq!(names(&s, ""), [entry("Books", true, 0)]);
-        assert_eq!(names(&s, "Books"), [entry("a.txt", false, 1)]);
-        // A name that only begins as it does is another folder.
-        s.rename("Books", "Books2/x").unwrap();
-        assert_eq!(s.size("books2/X/a.txt"), Ok(1));
-    }
-
-    /// A file open under one case of its path, written anew or removed
-    /// under another, is not read or written where it was: those
-    /// clusters are free, or another file's.
-    #[test]
-    fn open_files_and_kept_folders_follow_any_case() {
-        let s = storage();
-        s.write("Books/x.epub", &[1; 5000]).unwrap();
-        let mut buf = [0u8; 4];
-        assert_eq!(s.read_at("Books/x.epub", 0, &mut buf), Ok(4));
-        s.write("books/X.epub", &[2; 3000]).unwrap();
-        assert_eq!(s.size("Books/x.epub"), Ok(3000));
-        assert_eq!(s.read_at("Books/x.epub", 0, &mut buf), Ok(4));
-        assert_eq!(buf, [2; 4]);
-        // Appended to, removed under another case, its clusters given to
-        // another file: not written back over them.
-        s.append("Books/x.epub", &[3; 100]).unwrap();
-        s.remove("BOOKS/x.EPUB").unwrap();
-        s.write("Books/other.bin", &[4; 8000]).unwrap();
-        s.sync().unwrap();
-        assert_eq!(names(&s, "Books"), [entry("other.bin", false, 8000)]);
-        let mut other = vec![0u8; 8000];
-        assert_eq!(s.read_at("Books/other.bin", 0, &mut other), Ok(8000));
-        assert!(other.iter().all(|&b| b == 4));
-        // A kept folder, removed and made again under another case.
-        s.write("A/b/one.txt", b"1").unwrap();
-        assert_eq!(s.size("A/b/one.txt"), Ok(1));
-        s.remove_dir_all("a/B").unwrap();
-        assert_eq!(s.size("A/b/one.txt"), Err(StorageError::NotFound));
-        s.write("a/b/two.txt", b"22").unwrap();
-        assert_eq!(s.size("A/b/two.txt"), Ok(2));
-        // Moved under another case.
-        s.rename("a/B", "a/c").unwrap();
-        assert_eq!(s.size("A/b/two.txt"), Err(StorageError::NotFound));
-        assert_eq!(s.size("A/C/two.txt"), Ok(2));
-    }
-
-    #[test]
-    fn paths_compared_as_fat_does() {
-        assert!(same_path("Books/x.epub", "books/X.EPUB"));
-        assert!(same_path("B\u{fc}cher/a", "B\u{dc}CHER/A"));
-        assert!(!same_path("Books/x.epub", "Books/x.epu"));
-        assert!(!same_path("B\u{fc}cher/a", "B\u{fc}cher/a/b"));
-        assert!(is_within("Books/Sub/x.txt", "books/sub"));
-        assert!(is_within("books/sub", "Books/Sub"));
-        assert!(!is_within("books/subway", "books/sub"));
-        assert!(!is_within("books", "books/sub"));
-    }
-
-    #[test]
-    fn long_names_written_read_and_listed() {
-        let s = storage();
-        let path = "Books/Lewis Carroll/Alice's Adventures in Wonderland.epub";
-        s.write(path, b"the whole book").unwrap();
-        assert_eq!(s.size(path), Ok(14));
-        let mut buf = [0u8; 5];
-        assert_eq!(s.read_at(path, 4, &mut buf), Ok(5));
-        assert_eq!(&buf, b"whole");
-        assert_eq!(s.read_at(path, 12, &mut buf), Ok(2));
-        assert_eq!(&buf[..2], b"ok");
-        assert_eq!(
-            names(&s, "Books/Lewis Carroll"),
-            [(
-                String::from("Alice's Adventures in Wonderland.epub"),
-                false,
-                14
-            )]
-        );
-        assert_eq!(names(&s, ""), [(String::from("Books"), true, 0)]);
-        // Hidden folders with dots, as PaperPaw keeps its data.
-        s.write(".paperpaw/plugins/reader/annotations.txt", b"a")
-            .unwrap();
-        assert!(s.exists(".paperpaw/plugins/reader/annotations.txt"));
-        assert!(!s.exists("missing.txt"));
-    }
-
-    /// Folders kept from before stay right when folders are removed,
-    /// made again, renamed, or more are used than are kept.
-    #[test]
-    fn kept_folders_follow_changes() {
-        let s = storage();
-        s.write("a/b/one.txt", b"1").unwrap();
-        assert_eq!(s.size("a/b/one.txt"), Ok(1));
-        // Removed and made again under the same name: another folder.
-        s.remove_dir_all("a/b").unwrap();
-        assert_eq!(s.size("a/b/one.txt"), Err(StorageError::NotFound));
-        s.write("a/b/two.txt", b"22").unwrap();
-        assert_eq!(s.size("a/b/two.txt"), Ok(2));
-        assert_eq!(s.size("a/b/one.txt"), Err(StorageError::NotFound));
-        // Renamed: found at the new path only.
-        s.rename("a/b", "a/c").unwrap();
-        assert_eq!(s.size("a/c/two.txt"), Ok(2));
-        assert_eq!(s.size("a/b/two.txt"), Err(StorageError::NotFound));
-        s.write("a/b/three.txt", b"333").unwrap();
-        assert_eq!(names(&s, "a/b").len(), 1);
-        // More folders than are kept, used by turns.
-        for round in 0..2 {
-            for i in 0..FOLDERS * 2 {
-                let path = format!("many/f{i}/x.txt");
-                if round == 0 {
-                    s.write(&path, format!("{i}").as_bytes()).unwrap();
-                }
-                let mut buf = [0u8; 2];
-                let n = s.read_at(&path, 0, &mut buf).unwrap();
-                assert_eq!(&buf[..n], format!("{i}").as_bytes());
-            }
-        }
-    }
-
-    /// A disk of blocks in memory.
-    struct Card {
-        data: Vec<u8>,
-    }
-
-    impl Blocks for Card {
-        fn read_block(&mut self, index: u32, block: &mut [u8; BLOCK]) -> Result<(), DiskError> {
-            let at = index as usize * BLOCK;
-            block.copy_from_slice(self.data.get(at..at + BLOCK).ok_or(DiskError)?);
-            Ok(())
-        }
-        fn write_block(&mut self, index: u32, block: &[u8; BLOCK]) -> Result<(), DiskError> {
-            let at = index as usize * BLOCK;
-            self.data
-                .get_mut(at..at + BLOCK)
-                .ok_or(DiskError)?
-                .copy_from_slice(block);
-            Ok(())
-        }
-        fn blocks(&mut self) -> Result<u32, DiskError> {
-            Ok((self.data.len() / BLOCK) as u32)
-        }
-    }
-
-    #[test]
-    fn whole_blocks_pass_by_the_kept_ones() {
-        let mut disk = BlockDisk::new(Card {
-            data: vec![0; 64 * BLOCK],
-        })
-        .unwrap();
-        // Block 1 kept, changed, not yet written back.
-        disk.seek(SeekFrom::Start(BLOCK as u64 + 10)).unwrap();
-        disk.write_all(&[7; 100]).unwrap();
-        // Four whole blocks over it: three pass by, one goes to its slot.
-        let data: Vec<u8> = (0..4 * BLOCK).map(|i| (i % 251) as u8).collect();
-        disk.seek(SeekFrom::Start(0)).unwrap();
-        disk.write_all(&data).unwrap();
-        let mut back = vec![0u8; 4 * BLOCK];
-        disk.seek(SeekFrom::Start(0)).unwrap();
-        disk.read_exact(&mut back).unwrap();
-        assert_eq!(back, data);
-        disk.flush().unwrap();
-        assert_eq!(&disk.disk().data[..4 * BLOCK], &data[..]);
-    }
-
-    /// A disk of blocks in memory that counts its commands.
-    struct Counted {
-        data: Vec<u8>,
-        commands: usize,
-    }
-
-    impl Blocks for Counted {
-        fn read_block(&mut self, index: u32, block: &mut [u8; BLOCK]) -> Result<(), DiskError> {
-            self.read_blocks(index, block)
-        }
-        fn read_blocks(&mut self, index: u32, data: &mut [u8]) -> Result<(), DiskError> {
-            self.commands += 1;
-            let at = index as usize * BLOCK;
-            data.copy_from_slice(self.data.get(at..at + data.len()).ok_or(DiskError)?);
-            Ok(())
-        }
-        fn write_block(&mut self, _: u32, _: &[u8; BLOCK]) -> Result<(), DiskError> {
-            Err(DiskError)
-        }
-        fn blocks(&mut self) -> Result<u32, DiskError> {
-            Ok((self.data.len() / BLOCK) as u32)
-        }
-    }
-
-    #[test]
-    fn blocks_read_one_after_the_other_are_read_ahead() {
-        let data: Vec<u8> = (0..40 * BLOCK)
-            .map(|i| (i / BLOCK * 7 + i % 13) as u8)
-            .collect();
-        let mut disk = BlockDisk::new(Counted {
-            data: data.clone(),
-            commands: 0,
-        })
-        .unwrap();
-        // A folder's entries, 32 bytes at a time over 12 blocks: the first
-        // block alone, then eight at once, then the rest of eight.
-        let mut entry = [0u8; 32];
-        for at in (0..12 * BLOCK).step_by(32) {
-            disk.read_exact(&mut entry).unwrap();
-            assert_eq!(&entry[..], &data[at..at + 32]);
-        }
-        assert_eq!(disk.disk().commands, 3);
-        // Here and there: a block at a time.
-        for block in [30u64, 20, 25] {
-            disk.seek(SeekFrom::Start(block * BLOCK as u64)).unwrap();
-            disk.read_exact(&mut entry).unwrap();
-            assert_eq!(&entry[..], &data[block as usize * BLOCK..][..32]);
-        }
-        assert_eq!(disk.disk().commands, 6);
-        // Not past the disk's end.
-        disk.seek(SeekFrom::Start(37 * BLOCK as u64)).unwrap();
-        let mut rest = vec![0u8; 3 * BLOCK];
-        for chunk in rest.chunks_mut(100) {
-            disk.read_exact(chunk).unwrap();
-        }
-        assert_eq!(&rest[..], &data[37 * BLOCK..]);
-    }
-
-    #[test]
-    fn on_a_card_of_blocks() {
-        let mut card = BlockDisk::new(Card {
-            data: vec![0; 2 << 20],
-        })
-        .unwrap();
-        fatfs::format_volume(&mut card, FormatVolumeOptions::new()).unwrap();
-        card.flush().unwrap();
-        card.seek(SeekFrom::Start(0)).unwrap();
-        let fs = FileSystem::new(card, FsOptions::new()).unwrap();
-        let s = FatStorage::new(Box::leak(Box::new(fs)));
-        let text: Vec<u8> = (0..3000u32).map(|i| (i % 251) as u8).collect();
-        s.write("Books/A long name.txt", &text).unwrap();
-        let mut buf = [0u8; 700];
-        assert_eq!(s.read_at("Books/A long name.txt", 1000, &mut buf), Ok(700));
-        assert_eq!(&buf[..], &text[1000..1700]);
-        assert_eq!(s.size("Books/A long name.txt"), Ok(3000));
-    }
-
-    /// A card of `blocks` blocks with a FAT volume formatted at block
-    /// `first` and `table` written into its first blocks.
-    fn card_with(blocks: usize, first: usize, table: &[(usize, &[u8])]) -> Card {
-        let mut volume = StdIoWrapper::from(Cursor::new(vec![0u8; (blocks - first) * BLOCK]));
-        fatfs::format_volume(&mut volume, FormatVolumeOptions::new()).unwrap();
-        let mut data = vec![0u8; blocks * BLOCK];
-        data[first * BLOCK..].copy_from_slice(&volume.into_inner().into_inner());
-        for (at, bytes) in table {
-            data[*at..*at + bytes.len()].copy_from_slice(bytes);
-        }
-        Card { data }
-    }
-
-    /// A partition table entry of an MBR (`kind` e.g. 0x0C, FAT32).
-    fn mbr_entry(kind: u8, first: u32, count: u32) -> [u8; 16] {
-        let mut entry = [0u8; 16];
-        entry[4] = kind;
-        entry[8..12].copy_from_slice(&first.to_le_bytes());
-        entry[12..16].copy_from_slice(&count.to_le_bytes());
-        entry
-    }
-
-    fn opens(card: Card) -> Result<(), VolumeError> {
-        let disk = BlockDisk::volume(card)?;
-        let fs = FileSystem::new(disk, FsOptions::new()).unwrap();
-        let s = FatStorage::new(Box::leak(Box::new(fs)));
-        s.write("Books/a.txt", b"found").unwrap();
-        assert_eq!(s.size("Books/a.txt"), Ok(5));
-        Ok(())
-    }
-
-    #[test]
-    fn volumes_found_in_partitions() {
-        let blocks = 8192;
-        // The file system from the first block, without a table.
-        assert_eq!(opens(card_with(blocks, 0, &[])), Ok(()));
-        // An MBR, as on most cards, its partition after an empty one.
-        let first = 2048;
-        let entry = mbr_entry(0x0C, first as u32, (blocks - first) as u32);
-        let table = [(446 + 16, &entry[..]), (510, &[0x55, 0xAA][..])];
-        assert_eq!(opens(card_with(blocks, first, &table)), Ok(()));
-        // Its table saying more blocks than the card has, as an X4 Pro's
-        // card as sold.
-        let entry = mbr_entry(0x0C, first as u32, (blocks - first + 512) as u32);
-        let table = [(446, &entry[..]), (510, &[0x55, 0xAA][..])];
-        assert_eq!(opens(card_with(blocks, first, &table)), Ok(()));
-        // A GPT: a protective MBR, the header in block 1, entries in 2.
-        let protective = mbr_entry(0xEE, 1, (blocks - 1) as u32);
-        let mut header = [0u8; 92];
-        header[..8].copy_from_slice(b"EFI PART");
-        header[72..80].copy_from_slice(&2u64.to_le_bytes());
-        header[80..84].copy_from_slice(&4u32.to_le_bytes());
-        header[84..88].copy_from_slice(&128u32.to_le_bytes());
-        let mut entry = [0u8; 48];
-        entry[..16].copy_from_slice(&[0xA2; 16]);
-        entry[32..40].copy_from_slice(&(first as u64).to_le_bytes());
-        entry[40..48].copy_from_slice(&((blocks - 1) as u64).to_le_bytes());
-        let table = [
-            (446, &protective[..]),
-            (510, &[0x55, 0xAA][..]),
-            (BLOCK, &header[..]),
-            (2 * BLOCK + 128, &entry[..]),
-        ];
-        assert_eq!(opens(card_with(blocks, first, &table)), Ok(()));
-        // exFAT, as cards above 32 GB come.
-        let mut card = card_with(
-            blocks,
-            first,
-            &[
-                (446, &mbr_entry(0x07, 2048, 6144)[..]),
-                (510, &[0x55, 0xAA][..]),
-            ],
-        );
-        card.data[first * BLOCK + 3..first * BLOCK + 11].copy_from_slice(b"EXFAT   ");
-        assert_eq!(opens(card).unwrap_err(), VolumeError::ExFat);
-        // Nothing at all.
-        let card = Card {
-            data: vec![0; blocks * BLOCK],
-        };
-        assert_eq!(opens(card).unwrap_err(), VolumeError::NoFat);
-    }
-
-    #[test]
-    fn many_blocks_and_files_by_turns() {
-        // More blocks than are kept, written and read by turns from more
-        // files than stay open, on a card of blocks.
-        let mut card = BlockDisk::new(Card {
-            data: vec![0; 4 << 20],
-        })
-        .unwrap();
-        fatfs::format_volume(&mut card, FormatVolumeOptions::new()).unwrap();
-        card.flush().unwrap();
-        card.seek(SeekFrom::Start(0)).unwrap();
-        let fs = FileSystem::new(card, FsOptions::new()).unwrap();
-        let s = FatStorage::new(Box::leak(Box::new(fs)));
-        let content =
-            |n: u32| -> Vec<u8> { (0..20_000u32).map(|i| ((i * 7 + n) % 251) as u8).collect() };
-        let names: Vec<String> = (0..6).map(|n| alloc::format!("book/{n}.txt")).collect();
-        for (n, name) in names.iter().enumerate() {
-            s.write(name, &content(n as u32)).unwrap();
-        }
-        let mut buf = [0u8; 300];
-        for round in 0..40u32 {
-            let n = (round * 5 % 6) as usize;
-            let at = u64::from(round * 487 % 19_000);
-            assert_eq!(s.read_at(&names[n], at, &mut buf), Ok(300));
-            let at = at as usize;
-            assert_eq!(
-                &buf[..],
-                &content(n as u32)[at..at + 300],
-                "{} at {at}",
-                names[n]
-            );
-        }
-        // Written again while open: read as written.
-        s.write(&names[0], b"short").unwrap();
-        assert_eq!(s.read_at(&names[0], 0, &mut buf), Ok(5));
-    }
-
-    #[test]
-    fn appended_by_turns_and_written_back() {
-        let s = storage();
-        s.write("book.epub", &[7u8; 5000]).unwrap();
-        let files: Vec<String> = (0..OPEN_FILES + 2)
-            .map(|n| alloc::format!(".cache/{n}.bin"))
-            .collect();
-        let mut buf = [0u8; 100];
-        // More files than stay open, appended to by turns, with a book
-        // read between.
-        for round in 0..30u8 {
-            for (n, name) in files.iter().enumerate() {
-                s.append(name, &[round, n as u8]).unwrap();
-            }
-            assert_eq!(
-                s.read_at("book.epub", u64::from(round) * 100, &mut buf),
-                Ok(100)
-            );
-        }
-        for (n, name) in files.iter().enumerate() {
-            assert_eq!(s.size(name), Ok(60));
-            let mut all = [0u8; 60];
-            assert_eq!(s.read_at(name, 0, &mut all), Ok(60));
-            let want: Vec<u8> = (0..30u8).flat_map(|r| [r, n as u8]).collect();
-            assert_eq!(&all[..], &want[..], "{name}");
-        }
-        // Listed with their sizes as appended.
-        assert!(names(&s, ".cache").iter().all(|(_, _, size)| *size == 60));
-        // Written back on sync: opened anew, a file has it all.
-        s.append(&files[0], b"end").unwrap();
-        s.sync().unwrap();
-        let mut fresh = s.root().open_file(&files[0]).unwrap();
-        assert_eq!(fresh.seek(SeekFrom::End(0)).unwrap(), 63);
-        // And moved with it all.
-        s.append(&files[1], b"end").unwrap();
-        s.rename(&files[1], "moved.bin").unwrap();
-        assert_eq!(s.size("moved.bin"), Ok(63));
-        let mut fresh = s.root().open_file("moved.bin").unwrap();
-        assert_eq!(fresh.seek(SeekFrom::End(0)).unwrap(), 63);
-    }
-
-    #[test]
-    fn written_anew_appended_moved_and_removed() {
-        let s = storage();
-        s.write("a.txt", b"first, longer content").unwrap();
-        // The file read last is open: a new content is seen anyway.
-        let mut buf = [0u8; 32];
-        assert_eq!(s.read_at("a.txt", 0, &mut buf), Ok(21));
-        s.write("a.txt", b"second").unwrap();
-        assert_eq!(s.read_at("a.txt", 0, &mut buf), Ok(6));
-        assert_eq!(&buf[..6], b"second");
-        s.append("a.txt", b" and more").unwrap();
-        assert_eq!(s.size("a.txt"), Ok(15));
-        assert_eq!(
-            names(&s, ""),
-            [(String::from("a.txt"), false, 15)],
-            "no temporary left"
-        );
-        // Moved over another file, into a new folder.
-        s.write("b/c.txt", b"old").unwrap();
-        s.rename("a.txt", "b/c.txt").unwrap();
-        assert!(!s.exists("a.txt"));
-        assert_eq!(s.size("b/c.txt"), Ok(15));
-        s.remove("b/c.txt").unwrap();
-        s.remove("b/c.txt").unwrap();
-        assert!(names(&s, "b").is_empty());
-        // Folders with all in them.
-        s.write("d/e/f.txt", b"x").unwrap();
-        s.create_dir("d/g").unwrap();
-        s.create_dir("d/g").unwrap();
-        s.remove_dir_all("d").unwrap();
-        s.remove_dir_all("d").unwrap();
-        assert_eq!(names(&s, ""), [(String::from("b"), true, 0)]);
-        assert_eq!(
-            s.read_at("../x", 0, &mut buf),
-            Err(StorageError::InvalidPath)
-        );
-    }
-
-    /// The short name FAT keeps beside `long` in folder `dir`.
-    fn short_name(s: &FatStorage<Disk>, dir: &str, long: &str) -> String {
-        s.dir(dir)
-            .unwrap()
-            .iter()
-            .map(Result::unwrap)
-            .find(|entry| entry.file_name() == long)
-            .unwrap()
-            .short_file_name()
-    }
-
-    /// A short name stands for nothing where its entry has a long name:
-    /// `PAPERP~1` does not reach PaperPaw's data, by any call.
-    #[test]
-    fn short_names_of_long_ones_reach_nothing() {
-        let s = storage();
-        s.write(".paperpaw/secrets.txt", b"password").unwrap();
-        s.write(".paperpaw/plugins/wifi/networks.txt", b"home")
-            .unwrap();
-        s.write("Books/A long title.epub", b"a book").unwrap();
-        assert_eq!(short_name(&s, "", ".paperpaw"), "PAPERP~1");
-        assert_eq!(short_name(&s, "Books", "A long title.epub"), "ALONGT~1.EPU");
-        let alias = "PAPERP~1/secrets.txt";
-        let mut buf = [0u8; 16];
-        // Not read, nor found at all.
-        assert_eq!(s.read_at(alias, 0, &mut buf), Err(StorageError::NotFound));
-        assert_eq!(s.size(alias), Err(StorageError::NotFound));
-        assert!(!s.exists("PAPERP~1"));
-        assert!(!s.exists("paperp~1/secrets.txt"));
-        assert_eq!(s.list("PAPERP~1", &mut |_| {}), Err(StorageError::NotFound));
-        assert_eq!(
-            s.list("PAPERP~1/plugins", &mut |_| {}),
-            Err(StorageError::NotFound)
-        );
-        assert_eq!(s.size("Books/ALONGT~1.EPU"), Err(StorageError::NotFound));
-        // Not written, appended to, made, moved or removed through it.
-        assert_eq!(s.write(alias, b"stolen"), Err(StorageError::InvalidPath));
-        assert_eq!(
-            s.append("PAPERP~1/firmware-keys.txt", b"key"),
-            Err(StorageError::InvalidPath)
-        );
-        assert_eq!(
-            s.create_dir("PAPERP~1/plugins"),
-            Err(StorageError::InvalidPath)
-        );
-        assert_eq!(s.write("PAPERP~1", b"x"), Err(StorageError::InvalidPath));
-        assert_eq!(s.create_dir("PAPERP~1"), Err(StorageError::InvalidPath));
-        assert_eq!(s.rename(alias, "stolen.txt"), Err(StorageError::NotFound));
-        assert_eq!(s.rename("PAPERP~1", "stolen"), Err(StorageError::NotFound));
-        assert_eq!(
-            s.rename("Books/A long title.epub", "PAPERP~1/a.epub"),
-            Err(StorageError::InvalidPath)
-        );
-        assert_eq!(
-            s.rename("Books/A long title.epub", "PAPERP~1"),
-            Err(StorageError::InvalidPath)
-        );
-        s.remove(alias).unwrap();
-        s.remove("PAPERP~1").unwrap();
-        s.remove_dir_all("PAPERP~1").unwrap();
-        s.remove_dir_all("PAPERP~1/plugins").unwrap();
-        // All as it was, nothing left beside.
-        assert_eq!(s.read_at(".paperpaw/secrets.txt", 0, &mut buf), Ok(8));
-        assert_eq!(&buf[..8], b"password");
-        assert_eq!(s.size(".paperpaw/plugins/wifi/networks.txt"), Ok(4));
-        assert_eq!(
-            names(&s, ".paperpaw"),
-            [
-                (String::from("plugins"), true, 0),
-                (String::from("secrets.txt"), false, 8)
-            ]
-        );
-        assert_eq!(
-            names(&s, ""),
-            [
-                (String::from(".paperpaw"), true, 0),
-                (String::from("Books"), true, 0)
-            ]
-        );
-        assert_eq!(s.size("Books/A long title.epub"), Ok(6));
-        // A long name reaches its entry, without regard to case.
-        assert_eq!(s.size(".PaperPaw/SECRETS.TXT"), Ok(8));
-        assert_eq!(s.size("books/a LONG title.epub"), Ok(6));
-    }
-
-    /// A card of 4 MB formatted with `options`, `files` written on it.
-    fn card_with_files(options: FormatVolumeOptions, files: &[(&str, &[u8])]) -> Vec<u8> {
-        let card = Cut::formatted(options);
-        let s = card.storage();
-        for (path, data) in files {
-            s.write(path, data).unwrap();
-        }
-        s.sync().unwrap();
-        card.image()
-    }
-
-    /// A card with `files` written, then their long names taken away, as
-    /// systems write names that fit in 8.3.
-    fn short_names_only(files: &[(&str, &[u8])]) -> FatStorage<Disk> {
-        let mut bytes = card_with_files(FormatVolumeOptions::new(), files);
-        // Every long name entry (attributes 0x0F, type 0, no cluster)
-        // marked removed.
-        for entry in bytes.as_chunks_mut::<32>().0 {
-            if entry[11] == 0x0F && entry[12] == 0 && entry[26..28] == [0, 0] && entry[0] != 0 {
-                entry[0] = 0xE5;
-            }
-        }
-        mounted(bytes)
-    }
-
-    #[test]
-    fn folders_end_after_the_most_entries_fat_holds() {
-        // Endless, as the entries of a folder whose clusters run in a loop.
-        let endless = core::iter::repeat_with(|| Ok(()));
-        assert_eq!(bounded(endless).position(|r| r.is_err()), Some(ENTRIES));
-        let few = [Ok(1), Ok(2)].into_iter();
-        assert_eq!(bounded(few).collect::<Vec<_>>(), [Ok(1), Ok(2)]);
-    }
-
-    /// A damaged card, a folder's clusters in a loop: reading the folder
-    /// fails instead of going on for ever.
-    #[test]
-    fn folders_in_a_loop_end() {
-        // Clusters of one block: 16 entries. `.`, `..` and seven files
-        // of two entries each (a long name and a short one) fill the
-        // first; the eighth file takes another.
-        let files: Vec<(String, &[u8])> = (0..8)
-            .map(|n| (alloc::format!("Loop/f{n}.txt"), &b"x"[..]))
-            .collect();
-        let files: Vec<(&str, &[u8])> = files.iter().map(|(p, d)| (p.as_str(), *d)).collect();
-        let options = FormatVolumeOptions::new()
-            .fat_type(fatfs::FatType::Fat16)
-            .bytes_per_cluster(BLOCK as u32);
-        let mut bytes = card_with_files(options, &files);
-        // The folder's first cluster, from its short entry in the root.
-        let entry = bytes
-            .as_chunks::<32>()
-            .0
-            .iter()
-            .find(|e| &e[..11] == b"LOOP       " && e[11] & 0x10 != 0)
-            .unwrap();
-        let cluster = usize::from(u16::from_le_bytes([entry[26], entry[27]]));
-        // Its next cluster in both FATs: itself.
-        let reserved = usize::from(u16::from_le_bytes([bytes[14], bytes[15]]));
-        let per_fat = usize::from(u16::from_le_bytes([bytes[22], bytes[23]]));
-        for fat in 0..usize::from(bytes[16]) {
-            let at = (reserved + fat * per_fat) * BLOCK + cluster * 2;
-            bytes[at..at + 2].copy_from_slice(&(cluster as u16).to_le_bytes());
-        }
-        let s = mounted(bytes);
-        assert_eq!(s.size("Loop/missing.txt"), Err(StorageError::Io));
-        assert_eq!(s.list("Loop", &mut |_| {}), Err(StorageError::Io));
-        assert_eq!(s.write("Loop/new.txt", b"new"), Err(StorageError::Io));
-        assert_eq!(s.remove_dir_all("Loop"), Err(StorageError::Io));
-    }
-
-    /// An entry with a short name alone is found by it.
-    #[test]
-    fn short_names_alone_are_names() {
-        let s = short_names_only(&[("BOOKS/README.TXT", b"read me")]);
-        assert!(
-            s.dir("BOOKS")
-                .unwrap()
-                .iter()
-                .map(Result::unwrap)
-                .all(|entry| entry.long_file_name_as_ucs2_units().is_none())
-        );
-        assert_eq!(names(&s, ""), [(String::from("BOOKS"), true, 0)]);
-        assert_eq!(s.size("BOOKS/README.TXT"), Ok(7));
-        assert_eq!(s.size("books/readme.txt"), Ok(7));
-        s.write("books/readme.txt", b"again").unwrap();
-        s.rename("Books/ReadMe.txt", "books/notes.txt").unwrap();
-        assert_eq!(names(&s, "BOOKS"), [(String::from("notes.txt"), false, 5)]);
-        s.remove("BOOKS/NOTES.TXT").unwrap();
-        assert!(names(&s, "books").is_empty());
-    }
-}
+mod tests;

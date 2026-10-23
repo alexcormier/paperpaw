@@ -54,6 +54,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params, slots};
 use paperpaw_sdk::decorations::{Decoration, LineKind};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
@@ -90,6 +91,11 @@ pub const FROM_LOOKUPS: Setting<bool> = Setting::new("vocabulary.cards-from-look
 pub const LEARNING: Id = Id::new_static("vocabulary.learning");
 const SCREEN: Id = Id::new_static("vocabulary.list");
 const CHOSEN: Event<choice::Picked> = Event::new("vocabulary.chosen");
+/// The answer to whether to delete a word.
+const DELETE: Event<Confirmed> = Event::new("vocabulary.delete");
+/// The word and the language asked about, in the question's context.
+const WORD: &str = "word";
+const LANGUAGE: &str = "language";
 const OPTION_LABELS: &str = "vocabulary.option.";
 /// The dictionary's settings (see the `dictionary` plugin).
 const DICTIONARY_SECTION: &str = "dictionary.section";
@@ -469,6 +475,28 @@ impl WordsScreen {
         cx.command(Command::Notify(message));
     }
 
+    /// The answer to whether to delete a word: deleted where it is yes.
+    fn delete(&mut self, answer: &Confirmed, cx: &mut Cx<'_, '_>) {
+        let Some(word) = answer.context.get(WORD).filter(|_| answer.yes) else {
+            return;
+        };
+        let env = *cx.env();
+        let word = Word {
+            word: word.to_string(),
+            language: answer.context.get(LANGUAGE).unwrap_or("").to_string(),
+            ..Word::default()
+        };
+        let removed = store::remove(env.storage, &word);
+        self.changes.changed();
+        if removed.is_err() {
+            let message = env.i18n.tr("vocabulary.delete-failed").to_string();
+            cx.command(Command::Notify(message));
+        }
+        self.load(&env);
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Partial);
+    }
+
     fn changed(&mut self, change: ListChange, cx: &mut Cx<'_, '_>) {
         if change == ListChange::None {
             return;
@@ -584,6 +612,9 @@ impl Screen for WordsScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        if let Some(answer) = DELETE.read(event, params) {
+            return self.delete(&answer, cx);
+        }
         let Some(picked) = CHOSEN.read(event, params) else {
             return;
         };
@@ -609,16 +640,21 @@ impl Screen for WordsScreen {
                     paperpaw_sdk::document::Locator::new(word.section, word.offset),
                 )));
             }
+            // Asked first: a word deleted cannot be had back.
             "delete" => {
-                let removed = store::remove(env.storage, &word);
-                self.changes.changed();
-                if removed.is_err() {
-                    let message = env.i18n.tr("vocabulary.delete-failed").to_string();
-                    cx.command(Command::Notify(message));
-                }
-                self.load(&env);
-                cx.request_redraw();
-                cx.request_refresh(RefreshMode::Partial);
+                let question = env.i18n.format(
+                    "vocabulary.delete.question",
+                    &[("word", Arg::Str(&word.word))],
+                );
+                cx.command(
+                    paperpaw_sdk::ask::confirm(question, &DELETE)
+                        .text(env.i18n.tr("vocabulary.delete.text"))
+                        .yes(env.i18n.tr("vocabulary.option.delete"))
+                        .no(env.i18n.tr("vocabulary.delete.keep"))
+                        .with(WORD, word.word.clone())
+                        .with(LANGUAGE, word.language.clone())
+                        .command(),
+                );
             }
             _ => {}
         }
