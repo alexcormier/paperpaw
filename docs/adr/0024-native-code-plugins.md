@@ -1,7 +1,9 @@
 # 0024. Native code plugins as files
 
 - Status: Accepted; supersedes the WebAssembly modules of
-  [ADR 0004](0004-everything-is-a-plugin.md)
+  [ADR 0004](0004-everything-is-a-plugin.md); its fingerprint refined by
+  [ADR 0026](0026-plugin-interface-version.md) (a plugin interface version
+  in place of the SDK's version, no build scripts)
 - Date: 2026-10-19
 
 ## Context

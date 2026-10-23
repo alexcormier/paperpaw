@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Code plugins are bound to a plugin interface version, not to a
+  release (ADR 0026): a plugin file runs on every PaperPaw of its
+  interface (`native::INTERFACE`, in the fingerprint's top 16 bits),
+  betas and releases alike, and authors rebuild only when a release
+  raises it. The fingerprint comes from constants (the interface, the
+  chip, the features that change what crosses, `native::LAYOUT`, a
+  digest of the layouts of the types that cross); the build scripts of
+  paperpaw-sdk and paperpaw-native are gone, so a plugin built on Windows
+  is the same as one built on Linux (`tools/reproducible-plugin.py`, in
+  CI on both). A plugin project keeps the linker script
+  `paperpaw-plugin.x` beside its `.cargo/config.toml`, as the sample
+  does. CI fails where what plugins see changes without the interface
+  raised (`crates/paperpaw-sdk/interface.txt`). A file of another
+  interface says so, in the plugin manager and in `paperpaw-sign plugin`.
 - Pre-releases: betas (`0.5.0-beta.1`, `beta.2`, ... `beta.10`) come in
   order before their release, never one back, for updates on the device
   and Android alike (the APK's version code counts the beta,

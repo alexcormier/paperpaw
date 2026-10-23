@@ -16,7 +16,7 @@
 //! the same chip with the features that change what crosses. Until
 //! PaperPaw 1.0 the SDK's types cross between them as they are, so the
 //! compiler is the release's too (`shells/xteink/rust-toolchain.toml`,
-//! `versions.env`), and a new one is a new interface (ADR 0028).
+//! `versions.env`), and a new one is a new interface (ADR 0026).
 //! [`FINGERPRINT`] says which, and a device loads only files with its own
 //! ([`Native::fingerprint`]); its top 16 bits are the interface's version,
 //! so a file of another can say so ([`Fingerprint::interface`]). A plugin
@@ -47,7 +47,7 @@ pub use paperpaw_native::{Chip, HEADER_LEN, Header, Problem, Signature};
 /// The version of the plugin interface: what code plugins are built
 /// against (see the [module documentation](self)). Raised by hand, and
 /// only when what plugins see changes; `crates/paperpaw-sdk/interface.txt`
-/// keeps what it was, and CI fails while they differ (ADR 0028).
+/// keeps what it was, and CI fails while they differ (ADR 0026).
 pub const INTERFACE: u16 = 1;
 
 /// The layouts of the types that cross between a plugin and PaperPaw, as

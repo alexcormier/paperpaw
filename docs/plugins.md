@@ -1379,9 +1379,11 @@ paperpaw_sdk::plugin!(my_plugin::MyPlugin::default());
 
 `plugin!` gives the file its entry, its heap (the kernel's: what the
 plugin boxes, the kernel may drop) and its panic handler. The crate's
-`.cargo/config.toml` links it as a plugin: copy the sample's, which
-links with `paperpaw-plugin.x` (the SDK brings it), keeps the
-relocations, and on the X4 builds with the medium code model and frame
+`.cargo/config.toml` links it as a plugin: copy the sample's, and the
+sample's `paperpaw-plugin.x` beside it at the top of the project (the
+PaperPaw release's own, from `paperpaw-native`; no build script brings
+it, so a build on Windows is the same as one on Linux). It links with
+it, keeps the relocations, and on the X4 builds with the medium code model and frame
 pointers. It also sets `--cfg paperpaw_plugin`, with which the SDK asks
 the firmware for what it has already instead of copying it into the
 file (the names of all icons, some 125 KB in a plugin that draws an icon
@@ -1394,16 +1396,23 @@ cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro and X4 Classic (
 
 ### Which build fits
 
-Until PaperPaw 1.0 a plugin file runs only on the PaperPaw it was built
-for: the same compiler for the same chip from the same SDK with the same
-features (but `kernel` and `unstable`, which only add functions). Its
-fingerprint says so, and a device loads only files with its own;
-*About* shows the device's fingerprint and the compiler to build with.
-Build against the SDK of the release (`paperpaw-sdk = "0.4"`) with the
-toolchain that release names, and build again for every release, until
-1.0: the fingerprint holds the SDK's version, so a release loads no file
-built for another. The
-store and the update check show which plugins wait for a build.
+A plugin file runs on every PaperPaw of the plugin interface it was
+built for ([ADR 0026](adr/0026-plugin-interface-version.md)),
+whichever release made it: its fingerprint holds the interface's
+version (`native::INTERFACE`, in its top 16 bits), the chip and the
+features that change what crosses (`outline`, colour), and a digest of
+the layouts of the types that cross. A device loads only files with its
+own fingerprint; *About* shows it and the compiler to build with, and
+`paperpaw-sign plugin` names a file's interface.
+
+**When to rebuild:** when a release raises the plugin interface (its
+release notes say so, and so does the plugin manager on the reader:
+*Built for another plugin interface*), and only then. Build with the
+toolchain the release names (the sample's `rust-toolchain.toml`, and
+espup's of `versions.env` for the X4 Pro): until 1.0 a new compiler is a
+new interface. A beta or a release that keeps the interface runs the
+plugin as it is. The store and the update check show which plugins wait
+for a build.
 
 ### The file in the emulator
 

@@ -1,4 +1,4 @@
-//! The plugin interface (`native::INTERFACE`, ADR 0028) holds as long as
+//! The plugin interface (`native::INTERFACE`, ADR 0026) holds as long as
 //! what plugins see stays as `interface.txt` keeps it: the SDK's items
 //! (`api.txt`: none gone or changed; new ones are free, a plugin built
 //! before does not use them), the layouts of the types that cross
@@ -58,7 +58,7 @@ fn now() -> Option<String> {
         "ESP_RUST_VERSION",
     );
     Some(format!(
-        "# What code plugins see at this plugin interface (ADR 0028): kept so\n\
+        "# What code plugins see at this plugin interface (ADR 0026): kept so\n\
          # that CI fails where it changes without native::INTERFACE raised.\n\
          # Written by `PAPERPAW_BLESS=1 cargo test -p paperpaw-sdk --test\n\
          # interface`, with interface-api.txt (the SDK's items, api.txt as\n\
