@@ -25,7 +25,7 @@ use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MemoryStorage, Params, Plugin, RegisterError,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MemoryStorage, Params, Plugin, RegisterError,
     Registrar, Version,
 };
 use proptest::prelude::*;
@@ -108,11 +108,11 @@ impl Plugin for Listener {
             heard.borrow_mut().push(typed.clone())
         })?;
         // Copies text with a line break and a tab to the clipboard.
-        r.add_action(ActionSpec::new(COPY, "Copy").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(
+            ActionSpec::new(COPY, "Copy").handler(|_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::SetClipboard("  pasted\nline\tend ".into()));
-            },
-        ))
+            }),
+        )
     }
 }
 

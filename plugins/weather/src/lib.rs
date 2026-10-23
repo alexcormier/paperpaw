@@ -32,7 +32,6 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::{events, params};
@@ -41,8 +40,8 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, time,
+    ActionSpec, Command, Commands, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, time,
 };
 
 use data::{Temperature, Wind};
@@ -347,7 +346,7 @@ enum Why {
 
 /// Fetches the weather if `why` calls for it, and sets the timer for the
 /// next look.
-fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Vec<Command>) {
+fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
     let coordinates = env.settings.read(&COORDINATES).trim().to_string();
     let Some(url) = data::forecast_url(&coordinates) else {
         return;
@@ -402,7 +401,7 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Vec<Command>) {
 }
 
 /// The forecast answered: kept, and shown by the widgets.
-fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Vec<Command>) {
+fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Commands) {
     let mut state = state.borrow_mut();
     state.asked = None;
     state.generation = state.generation.wrapping_add(1);
@@ -437,7 +436,7 @@ fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Vec<Comma
 }
 
 /// The place changed: the weather of another place goes.
-fn place_changed(env: &Env<'_>, state: &Shared, out: &mut Vec<Command>) {
+fn place_changed(env: &Env<'_>, state: &Shared, out: &mut Commands) {
     {
         let mut s = state.borrow_mut();
         s.generation = s.generation.wrapping_add(1);
@@ -484,14 +483,14 @@ impl Plugin for Weather {
         ))?;
         r.add_action(
             ActionSpec::new(CHOOSE_PLACE, "weather.setting.place").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     out.push(Command::OpenScreen(PLACE_SCREEN, Params::new()));
                 },
             ),
         )?;
         let s = state.clone();
         r.add_action(ActionSpec::new(REFRESH, "weather.refresh").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, out: &mut Commands| {
                 if data::split_coordinates(env.settings.read(&COORDINATES)).is_none() {
                     out.push(Command::OpenScreen(PLACE_SCREEN, Params::new()));
                 } else {

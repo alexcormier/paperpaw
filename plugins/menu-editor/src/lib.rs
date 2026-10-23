@@ -24,9 +24,9 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, menus};
 use paperpaw_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec,
+    ActionSpec, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar,
+    Screen, ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("menu-editor");
@@ -80,7 +80,7 @@ impl Plugin for MenuEditor {
             r.add_screen(ScreenSpec::new(id, "menu-editor.title", Box::new(open)))?;
         }
         r.add_action(ActionSpec::new(OPEN, "menu-editor.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(MENUS_SCREEN, Params::new()));
             },
         ))?;

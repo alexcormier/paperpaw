@@ -20,11 +20,10 @@ use alloc::borrow::Cow;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::vec::Vec;
 use core::cell::Cell;
 
 use paperpaw_sdk::widgets;
-use paperpaw_sdk::{Canvas, Command, Env, Id, RegisterError, Registrar, Storage};
+use paperpaw_sdk::{Canvas, Commands, Env, Id, RegisterError, Registrar, Storage};
 
 use crate::{frame_height, today};
 
@@ -64,7 +63,7 @@ impl Changes {
 
     /// What widget `id` keeps changed (a quote turned, an item ticked
     /// off): the screens showing it read it anew.
-    fn changed(&self, out: &mut Vec<Command>, id: &Id) {
+    fn changed(&self, out: &mut Commands, id: &Id) {
         self.0.set(self.0.get().wrapping_add(1));
         out.push(widgets::changed(id));
     }

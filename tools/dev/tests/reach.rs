@@ -18,8 +18,8 @@ use paperpaw_platform::Rect;
 use paperpaw_sdk::builtin::menus;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::{
-    ActionSpec, Canvas, Command, Cx, Env, Handled, Id, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, Screen, ScreenSpec, Version,
+    ActionSpec, Canvas, Command, Commands, Cx, Env, Handled, Id, Manifest, MenuEntry, Params,
+    Plugin, RegisterError, Registrar, Screen, ScreenSpec, Version,
 };
 
 const OPEN: Id = Id::new_static("trapped.open");
@@ -49,7 +49,7 @@ impl Plugin for Trapped {
             Box::new(|_, _| Box::new(Hidden)),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "trapped.open").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(STUCK, Params::new()));
             },
         ))?;

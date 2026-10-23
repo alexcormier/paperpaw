@@ -38,8 +38,9 @@ use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("keys");
@@ -443,7 +444,7 @@ impl Plugin for Keys {
             Box::new(|env, params| Box::new(PlaceScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "keys.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;

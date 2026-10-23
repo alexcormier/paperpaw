@@ -245,7 +245,7 @@ impl Plugin for Recorder {
         )?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(Id::new_static("recorder.info"), "recorder").handler(
-                |_: &Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+                |_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
                     let from = Params::new().with("from", "status");
                     out.push(paperpaw_sdk::Command::OpenSlot(slots::BOOK_INFO, from));
                 },

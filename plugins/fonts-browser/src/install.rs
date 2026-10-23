@@ -4,12 +4,10 @@
 //! chosen); a download goes on when the screens that started it are
 //! closed. Here: which files, and what is said after.
 
-use alloc::vec::Vec;
-
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::{Digest, Installer, Package, PackageFile, Received};
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{Arg, Command, Env};
+use paperpaw_sdk::{Arg, Command, Commands, Env};
 
 use crate::PLUGIN;
 use crate::catalog::Font;
@@ -21,7 +19,7 @@ pub(crate) const DOWNLOADED: Event<HttpReply> = Event::new("fonts-browser.downlo
 pub(crate) const INSTALLER: Installer = Installer::new(PLUGIN, DOWNLOADED);
 
 /// Starts installing `font` (or a newer version of it).
-pub(crate) fn start(env: &Env<'_>, font: &Font, out: &mut Vec<Command>) {
+pub(crate) fn start(env: &Env<'_>, font: &Font, out: &mut Commands) {
     let package = Package::new(font.plugin(), font.name.clone()).files(
         font.files
             .iter()
@@ -49,7 +47,7 @@ fn failed(env: &Env<'_>, name: &str) -> Command {
 
 /// A file arrived (or did not): said once the font is ready, or could
 /// not be downloaded.
-pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     match INSTALLER.received(env, reply, out) {
         Received::Complete(done) => {
             INSTALLER.install(env, out);

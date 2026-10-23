@@ -36,14 +36,13 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::vec::Vec;
 use core::cell::Cell;
 
 use paperpaw_sdk::builtin::{events, groups};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Instant, Manifest, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingSpec, Version,
+    ActionSpec, Command, Commands, Env, Id, Instant, Manifest, Params, Plugin, RegisterError,
+    Registrar, ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("lock");
@@ -109,7 +108,7 @@ const KIND_VALUES: [&str; KINDS.len()] = [
 ];
 
 /// Opens the lock screen, if a lock is set and it is not open yet.
-fn lock(env: &Env<'_>, state: &State, out: &mut Vec<Command>) {
+fn lock(env: &Env<'_>, state: &State, out: &mut Commands) {
     if state.locked.get() || code::active(env).is_none() {
         return;
     }
@@ -182,7 +181,7 @@ impl Plugin for Lock {
         // Sealed: no other plugin's handler may lock in its place.
         r.add_action(
             ActionSpec::new(NOW, "lock.now")
-                .handler(move |env: &Env<'_>, out: &mut Vec<Command>| {
+                .handler(move |env: &Env<'_>, out: &mut Commands| {
                     lock(env, &now, out);
                 })
                 .sealed(),

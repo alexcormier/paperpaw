@@ -23,7 +23,7 @@ use core::time::Duration;
 
 use paperpaw_sdk::firmware::{Firmware, compare_versions};
 use paperpaw_sdk::work::Work;
-use paperpaw_sdk::{Command, Env, PluginInfo, PluginKind, Storage};
+use paperpaw_sdk::{Command, Commands, Env, PluginInfo, PluginKind, Storage};
 
 use crate::online::{self, Offer};
 use crate::{CHECK_DUE, PLUGIN, file};
@@ -267,7 +267,7 @@ fn ask(after: Option<Duration>, within: Duration) -> Command {
 }
 
 /// After an answer that waits: asked again in a day, at a cheap moment.
-pub(crate) fn later(out: &mut Vec<Command>) {
+pub(crate) fn later(out: &mut Commands) {
     let day = Duration::from_secs(DAY_SECONDS as u64);
     out.push(ask(Some(day), day * 2));
 }
@@ -277,7 +277,7 @@ pub(crate) fn later(out: &mut Vec<Command>) {
 /// `waiting.txt`; an update kept from before it was written (or with it
 /// lost) is looked at once and kept so. Nothing waits any more where the
 /// update is gone or what it waits for is no longer in use.
-pub(crate) fn at_start(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) -> bool {
+pub(crate) fn at_start(env: &Env<'_>, firmware: &Firmware, out: &mut Commands) -> bool {
     let storage = env.storage;
     if !online::has_offer(storage) {
         clear(storage);

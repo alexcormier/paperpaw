@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::web::{clean_name, host};
-use paperpaw_sdk::{Arg, Command, Env, Storage, files};
+use paperpaw_sdk::{Arg, Command, Commands, Env, Storage, files};
 
 use crate::PLUGIN;
 
@@ -120,7 +120,7 @@ fn fill_passwords(env: &Env<'_>, catalogs: &mut [Catalog]) {
 /// passwords and keys. The list lets go of them only once those hold
 /// them, at a later start: where they could not be saved, the list still
 /// has them.
-pub(crate) fn move_passwords(env: &Env<'_>, out: &mut Vec<Command>) {
+pub(crate) fn move_passwords(env: &Env<'_>, out: &mut Commands) {
     let Ok(Some(mut catalogs)) = read(env.storage) else {
         return;
     };
@@ -178,7 +178,7 @@ fn encode(catalogs: &[Catalog]) -> String {
 /// Saves the list, and the passwords with the other passwords and keys:
 /// their changes go to `out`. `catalogs` must come from [`load`]: what is
 /// not in it is removed.
-pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Vec<Command>) {
+pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Commands) {
     keep_passwords(env, catalogs, out);
     // Those of catalogs removed or moved to another address go.
     let ids: Vec<String> = catalogs.iter().map(|c| secret_id(&c.url)).collect();
@@ -192,7 +192,7 @@ pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Vec<Command>) 
 
 /// The catalogs' passwords, kept with the other passwords and keys:
 /// their changes go to `out`.
-fn keep_passwords(env: &Env<'_>, catalogs: &[Catalog], out: &mut Vec<Command>) {
+fn keep_passwords(env: &Env<'_>, catalogs: &[Catalog], out: &mut Commands) {
     for c in catalogs {
         let id = secret_id(&c.url);
         let kept = env.secrets.get(&id);

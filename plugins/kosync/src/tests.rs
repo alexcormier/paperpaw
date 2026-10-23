@@ -301,13 +301,13 @@ impl Harness {
     /// Hands event `id` to the plugin's handlers; what they asked for.
     fn dispatch(&self, id: &Id, params: &Params) -> Vec<Command> {
         let env = self.env();
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         for (event, handler) in &self.handlers {
             if event == id {
                 handler(&env, params, &mut out);
             }
         }
-        out
+        out.into_iter().collect()
     }
 
     fn emit<P: EventData>(&self, event: &Event<P>, data: P) -> Vec<Command> {
@@ -316,9 +316,9 @@ impl Harness {
 
     /// Chooses *Sync progress*.
     fn sync_now(&self) -> Vec<Command> {
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         (self.sync_now.as_ref().unwrap())(&self.env(), &mut out);
-        out
+        out.into_iter().collect()
     }
 
     /// The server answers `request` with `status` and `body`.

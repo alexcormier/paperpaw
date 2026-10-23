@@ -16,8 +16,8 @@ use paperpaw_platform::{
 use paperpaw_plugin_store::Store;
 use paperpaw_sdk::builtin::settings;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MemoryStorage, Plugin, RegisterError, Registrar,
-    SDK_VERSION,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MemoryStorage, Plugin, RegisterError,
+    Registrar, SDK_VERSION,
 };
 
 /// The notices, by their translation keys, each taking `{name}`.
@@ -79,7 +79,7 @@ impl Plugin for Probe {
         for (n, key) in NOTICES.into_iter().enumerate() {
             let id = Id::parse(&format!("probe.n{n}")).unwrap();
             r.add_action(ActionSpec::new(id, "probe").handler(
-                move |env: &Env<'_>, out: &mut Vec<Command>| {
+                move |env: &Env<'_>, out: &mut Commands| {
                     let text = env.i18n.format(key, &[("name", Arg::Str(NAME))]);
                     out.push(Command::Notify(text));
                 },

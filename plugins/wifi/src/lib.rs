@@ -30,7 +30,7 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
-    Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
+    Arg, Command, Commands, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
     ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
 };
 
@@ -100,12 +100,12 @@ fn idle_seconds(env: &Env<'_>) -> u64 {
         .map_or(60, |(_, seconds)| *seconds)
 }
 
-fn wifi_commands(out: &mut Vec<Command>, commands: Vec<WifiCommand>) {
+fn wifi_commands(out: &mut Commands, commands: Vec<WifiCommand>) {
     out.extend(commands.into_iter().map(Command::Wifi));
 }
 
 /// Sets the timer to switch the radio off, if nothing keeps it on.
-fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
+fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
     let Some(wifi) = env.wifi else {
         return;
     };
@@ -119,7 +119,7 @@ fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
 /// After a round that joined nothing: sets the timer to try again, if
 /// the network is still wanted (or charging keeps the radio on), or else
 /// the one to switch the radio off.
-fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
+fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
     let Some(wifi) = env.wifi else {
         return;
     };
@@ -135,7 +135,7 @@ fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
 
 /// No network is coming for what waits: it fails now, and the network
 /// counts as no longer wanted.
-fn no_network(policy: &mut Policy, out: &mut Vec<Command>) {
+fn no_network(policy: &mut Policy, out: &mut Commands) {
     policy.asked_at = None;
     out.push(Command::NoNetwork);
 }
@@ -285,7 +285,7 @@ impl Plugin for Wifi {
             .tap(OPEN),
         )?;
         r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "wifi.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
             },
         ))?;

@@ -175,7 +175,7 @@ impl Staging {
         &self,
         env: &Env<'_>,
         commit: Commit,
-        out: &mut Vec<Command>,
+        out: &mut crate::Commands,
     ) -> Result<Committed, Refusal> {
         let checked = self.check(env, commit);
         if !matches!(checked, Ok(_) | Err(Refusal::NeedsApproval)) {

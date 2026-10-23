@@ -31,9 +31,9 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::web::encode;
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
-    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
-    Version,
+    Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
+    Manifest, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("wikipedia");
@@ -129,7 +129,7 @@ fn provide(env: &Env<'_>, query: &LookupQuery) -> LookupAnswer {
 
 /// The summary arrived: the query answered with it, the whole screen
 /// for more; or with why there is none.
-fn provided(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+fn provided(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let context = &reply.context;
     let (Some(word), Some(to)) = (
         context.get(params::WORD),

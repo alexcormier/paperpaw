@@ -44,8 +44,8 @@ use paperpaw_sdk::replies::{Confirmed, ServerNotice};
 use paperpaw_sdk::served::{CABLE_PORT, json_string, param};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Handled, Id, Instant, Params, Rect, RefreshMode, Screen,
-    ScreenKey, ServerResponse, files,
+    Arg, Canvas, Command, Commands, Cx, Env, Handled, Id, Instant, Params, Rect, RefreshMode,
+    Screen, ScreenKey, ServerResponse, files,
 };
 
 use crate::plugins;
@@ -341,7 +341,7 @@ impl CableScreen {
         let json = |status, body: String| {
             ServerResponse::new(number, status, "application/json", body.into_bytes())
         };
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         let response = match (method, path) {
             ("GET", "/api/hello") => json(200, hello(&env)),
             ("GET", "/api/plugins") => json(200, plugins::listing(&env)),
@@ -490,7 +490,7 @@ impl CableScreen {
         env: &Env<'_>,
         path: &str,
         number: u32,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
         cx: &mut Cx<'_, '_>,
     ) -> ServerResponse {
         let json = |status, body: String| {
@@ -556,7 +556,7 @@ impl CableScreen {
         query: &str,
         body: Option<&str>,
         number: u32,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
         cx: &mut Cx<'_, '_>,
     ) -> ServerResponse {
         let json = |status, body: String| {

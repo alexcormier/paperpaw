@@ -13,7 +13,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::{
-    Command, Env, FontHandle, FontSet, HttpRequest, Id, MemoryClass, Params, Storage,
+    Command, Commands, Env, FontHandle, FontSet, HttpRequest, Id, MemoryClass, Params, Storage,
 };
 
 use crate::PLUGIN;
@@ -131,7 +131,7 @@ impl Samples {
     /// Holds the samples of `fonts` kept on the storage, those of other
     /// fonts let go, and asks for the first one missing while there is
     /// room for it; `true` if one more is held.
-    pub(crate) fn want(&mut self, env: &Env<'_>, fonts: &[Font], out: &mut Vec<Command>) -> bool {
+    pub(crate) fn want(&mut self, env: &Env<'_>, fonts: &[Font], out: &mut Commands) -> bool {
         if self
             .held
             .iter()

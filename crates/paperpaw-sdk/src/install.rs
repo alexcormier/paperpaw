@@ -403,7 +403,7 @@ impl Installer {
     /// Has the kernel install the complete job's plugin
     /// ([`Command::InstallPlugin`]) and forgets the job; `None` if there is
     /// no complete job.
-    pub fn install(&self, env: &Env<'_>, out: &mut Vec<Command>) -> Option<Progress> {
+    pub fn install(&self, env: &Env<'_>, out: &mut crate::Commands) -> Option<Progress> {
         let storage = env.storage;
         let job = self.job(storage)?;
         let progress = self.progress(storage)?;
@@ -430,7 +430,7 @@ impl Installer {
     /// passed over (each job has a number of its own, counted in the
     /// owner's folder). `false` (and nothing done) if the package is not
     /// valid ([`Package::is_valid`]) or the job could not be kept.
-    pub fn start(&self, env: &Env<'_>, package: &Package, out: &mut Vec<Command>) -> bool {
+    pub fn start(&self, env: &Env<'_>, package: &Package, out: &mut crate::Commands) -> bool {
         if !package.is_valid() {
             return false;
         }
@@ -471,7 +471,7 @@ impl Installer {
     }
 
     /// Asks for the job's file `n`, its folders made first.
-    fn ask(&self, storage: &dyn Storage, job: &Job, n: usize, out: &mut Vec<Command>) {
+    fn ask(&self, storage: &dyn Storage, job: &Job, n: usize, out: &mut crate::Commands) {
         let Some(file) = self.file(storage, n) else {
             return;
         };
@@ -503,7 +503,7 @@ impl Installer {
 
     /// Removes the data plugin `plugin` ([`Command::RemovePlugin`]),
     /// stopping its installation if one is going on.
-    pub fn remove(&self, env: &Env<'_>, plugin: &Id, out: &mut Vec<Command>) {
+    pub fn remove(&self, env: &Env<'_>, plugin: &Id, out: &mut crate::Commands) {
         if self
             .job(env.storage)
             .is_some_and(|job| job.plugin == plugin.as_str())
@@ -515,7 +515,12 @@ impl Installer {
 
     /// An answer to one of the downloads: the file checked, then the next
     /// one asked for, or the job complete once all are there.
-    pub fn received(&self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) -> Received {
+    pub fn received(
+        &self,
+        env: &Env<'_>,
+        reply: &HttpReply,
+        out: &mut crate::Commands,
+    ) -> Received {
         let storage = env.storage;
         let Some(job) = self.job(storage) else {
             return Received::Other;

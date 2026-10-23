@@ -53,8 +53,8 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, What};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry, Params,
-    Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    Canvas, Color, Command, Commands, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry,
+    Params, Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
     ScreenSpec, Version,
 };
 
@@ -126,7 +126,7 @@ impl Plugin for Home {
         ))?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()));
                 },
             ),
@@ -136,7 +136,7 @@ impl Plugin for Home {
         // editing.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(EDIT_PAGES, "home.edit-pages").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     let params = Params::new().with(params::MODE, "edit");
                     out.push(Command::OpenSlot(slots::HOME, params));
                 },

@@ -38,9 +38,9 @@ use paperpaw_sdk::replies::{SocketNotice, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id,
-    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, SocketRead, Storage,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    Hint, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
+    SDK_VERSION, Screen, ScreenSpec, SettingSpec, SocketRead, Storage,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -132,7 +132,7 @@ impl Plugin for Calibre {
             Box::new(|env, _| Box::new(CalibreScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "calibre.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;

@@ -57,8 +57,8 @@ use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::work::{Moments, Work};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingGroupSpec, SettingSpec,
+    ActionSpec, Arg, Command, Commands, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params,
+    Plugin, RegisterError, Registrar, ScreenSpec, SettingGroupSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("kosync");
@@ -229,7 +229,7 @@ pub(crate) fn sign_out() -> [Command; 3] {
 
 /// Moves a key kept in the plugin's folder by earlier versions to the
 /// other passwords and keys.
-fn move_key(env: &Env<'_>, out: &mut Vec<Command>) {
+fn move_key(env: &Env<'_>, out: &mut Commands) {
     let file = format!("{}/account.ini", dir());
     let Some(old) = read_value(env.storage, &file, "key") else {
         return;
@@ -290,7 +290,7 @@ impl State {
 
     /// Sends what waited while Offline: the books switched from, the open
     /// one's progress, and fetches its latest.
-    fn allowed(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn allowed(&mut self, env: &Env<'_>, out: &mut Commands) {
         if !self.may_send(env) {
             return;
         }
@@ -343,7 +343,7 @@ impl State {
     /// Sends the current position, unless it was sent already or is held
     /// back (see [`Hold`]). The server's progress not read yet for the
     /// book (its fetch failed, say), it is fetched first.
-    fn push(&mut self, env: &Env<'_>, out: &mut Vec<Command>, force: bool) {
+    fn push(&mut self, env: &Env<'_>, out: &mut Commands, force: bool) {
         let Some(position) = self.current.clone() else {
             return;
         };
@@ -368,7 +368,7 @@ impl State {
     }
 
     /// Sends `position`, unless it was sent already (or `force`).
-    fn send(&mut self, env: &Env<'_>, out: &mut Vec<Command>, position: Position, force: bool) {
+    fn send(&mut self, env: &Env<'_>, out: &mut Commands, position: Position, force: bool) {
         if !force && self.sent.as_ref() == Some(&position) {
             return;
         }
@@ -377,13 +377,7 @@ impl State {
 
     /// Puts `position` to the server; `tracked` when it is to be known as
     /// the position sent last.
-    fn transmit(
-        &mut self,
-        env: &Env<'_>,
-        out: &mut Vec<Command>,
-        position: Position,
-        tracked: bool,
-    ) {
+    fn transmit(&mut self, env: &Env<'_>, out: &mut Commands, position: Position, tracked: bool) {
         // Not worth opening the book for.
         if !self.signed_in(env) {
             return;
@@ -437,7 +431,7 @@ impl State {
     /// Asks for the latest position of the book at `path`, holding back
     /// its sending until the answer; *Sync progress* (`manual`) sends after
     /// it unless another device is further.
-    fn pull(&mut self, env: &Env<'_>, out: &mut Vec<Command>, path: &str, manual: bool) {
+    fn pull(&mut self, env: &Env<'_>, out: &mut Commands, path: &str, manual: bool) {
         let local = self
             .current
             .as_ref()
@@ -458,7 +452,7 @@ impl State {
 
     /// Asks for the latest position of a book switched from: `position`
     /// is sent with the answer unless another device is further there.
-    fn pull_left(&mut self, env: &Env<'_>, out: &mut Vec<Command>, position: Position) {
+    fn pull_left(&mut self, env: &Env<'_>, out: &mut Commands, position: Position) {
         if let Some(command) = self.fetch(env, &position.path, position.progress, false) {
             out.push(command);
             self.left.retain(|h| h.path != position.path);
@@ -517,7 +511,7 @@ impl State {
     }
 
     /// Handles the server's answer to a fetch.
-    fn pulled(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn pulled(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let manual = reply.context.get(MANUAL) == Some("1");
         let path = reply.context.get(params::PATH).unwrap_or_default();
         let hold = self.hold.take_if(|h| h.path == path);
@@ -608,7 +602,7 @@ impl State {
     }
 
     /// The user closed the offer to go where another device is.
-    fn answered(&mut self, env: &Env<'_>, answer: &confirm::Answered, out: &mut Vec<Command>) {
+    fn answered(&mut self, env: &Env<'_>, answer: &confirm::Answered, out: &mut Commands) {
         let hold = self.hold.take_if(|h| h.path == answer.path);
         self.dismissed.retain(|(p, _)| *p != answer.path);
         // Gone there: the reader tells the new position as it shows it.
@@ -639,7 +633,7 @@ impl State {
 
     /// The server setting changed: the account's key must not go to
     /// another server.
-    fn server_changed(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn server_changed(&mut self, env: &Env<'_>, out: &mut Commands) {
         let now = server(env);
         let before = self.server.replace(now.clone());
         if before.as_ref() != Some(&now) && self.signed_in(env) {
@@ -940,7 +934,7 @@ impl Plugin for Kosync {
         // "Sync progress" in the reading menu's "More".
         let s = state;
         r.add_action(ActionSpec::new(SYNC_NOW, "kosync.sync-now").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, out: &mut Commands| {
                 let mut state = s.borrow_mut();
                 state.load(env);
                 if !env.caps.network || !state.signed_in(env) {

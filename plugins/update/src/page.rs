@@ -618,7 +618,7 @@ impl UpdatePage {
             Button::Close => cx.command(Command::Back),
             Button::Transfer => cx.command(Command::RunAction(TRANSFER)),
             Button::Check => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 online::check(&env, false, &mut out);
                 out.into_iter().for_each(|command| cx.command(command));
                 self.view = View::Checking;
@@ -636,7 +636,7 @@ impl UpdatePage {
                 let View::Offer { offer, .. } = &self.view else {
                     return;
                 };
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 online::download(&env, offer, &mut out);
                 out.into_iter().for_each(|command| cx.command(command));
                 self.view = View::Downloading(offer.version.clone());
@@ -868,7 +868,7 @@ impl Screen for UpdatePage {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // Plugins for a downloaded update, cut off by a restart: on.
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         crate::fetch::resume(cx.env(), &mut out);
         out.into_iter().for_each(|command| cx.command(command));
         // Back from Wi-Fi transfer: a file may have come.

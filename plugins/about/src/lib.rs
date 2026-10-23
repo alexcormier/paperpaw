@@ -31,8 +31,8 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::menus;
 use paperpaw_sdk::logo;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, Version,
+    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("about");
@@ -214,7 +214,7 @@ impl Plugin for About {
             Box::new(|env, _| Box::new(screen::AboutScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "about.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;

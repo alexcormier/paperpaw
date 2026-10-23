@@ -327,7 +327,7 @@ impl PageScreen {
         }
         match &self.details {
             Details::Here(plugin) => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 trust::expect(env.storage, &plugin.entry.id, plugin.author_key.as_ref());
                 if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
@@ -372,7 +372,7 @@ impl PageScreen {
                     INSTALLER.cancel(env.storage);
                     self.job = None;
                     // The next update waiting has its turn.
-                    let mut out = Vec::new();
+                    let mut out = paperpaw_sdk::Commands::new();
                     queue::next(&env, &mut out);
                     for command in out {
                         cx.command(command);
@@ -384,7 +384,7 @@ impl PageScreen {
                 self.redraw(cx);
             }
             Some(Row::Anyway) => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 if trust::install_anyway(&env, &mut out).is_none() {
                     INSTALLER.cancel(env.storage);
                     out.push(failed(&env, &plugin.name));
@@ -400,7 +400,7 @@ impl PageScreen {
             Some(Row::Stop) => {
                 INSTALLER.cancel(env.storage);
                 // Only this one stops: the next update waiting goes on.
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 queue::next(&env, &mut out);
                 for command in out {
                     cx.command(command);
@@ -782,7 +782,7 @@ impl Screen for PageScreen {
                 && let Ok(plugin) = Id::parse(&picked.path)
             {
                 let env = *cx.env();
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 INSTALLER.remove(&env, &plugin, &mut out);
                 let name = self.plugin.as_ref().map_or("", |p| p.name.as_str());
                 out.push(Command::Notify(

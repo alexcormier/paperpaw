@@ -409,6 +409,12 @@ file to your report.
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
   tell whether they are disabled.
+- SDK: every handler queues its commands in `Commands` instead of a
+  `&mut Vec<Command>`: actions, events, observers, work steps, voices,
+  widgets' input and the installer. It has `push`, `extend` and `emit`
+  and reads as a slice. Its fields are private, so it can carry more
+  later without a new signature. A closure such as `|env, out|` stays as
+  it is; a parameter typed `&mut Vec<Command>` becomes `&mut Commands`.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

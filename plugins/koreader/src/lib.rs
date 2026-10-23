@@ -905,7 +905,7 @@ fn exchange_or_ask(
     removal: Removal,
     asked: &RefCell<Vec<String>>,
     announced: &Announced,
-    out: &mut Vec<paperpaw_sdk::Command>,
+    out: &mut paperpaw_sdk::Commands,
 ) {
     match exchange_book(env, book, removal) {
         Exchanged::Changed => {

@@ -31,9 +31,9 @@ use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, host};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec, SettingSpec, Storage, StorageError,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    HttpRequest, Id, Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode,
+    RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("news");
@@ -230,7 +230,7 @@ fn request(feed: &Feed, index: usize, all: bool, (done, failed): (usize, usize))
 }
 
 /// Starts fetching the feed at `from`, and with `all` those after it.
-fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Vec<Command>) {
+fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Commands) {
     if !env.caps.network {
         out.push(Command::Notify(env.i18n.tr("news.no-network").to_string()));
         return;
@@ -250,7 +250,7 @@ fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Vec<Command>) {
 
 /// A feed answered: made into its book, then the next one. Feeds are
 /// found by their address, as the list may change during a fetch.
-fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let number = |key| reply.context.get(key).and_then(|n| n.parse::<usize>().ok());
     let (Some(url), Some(index)) = (reply.context.get(URL), number(INDEX)) else {
         return;
@@ -413,12 +413,12 @@ impl Plugin for News {
             Box::new(|env, _| Box::new(FeedsScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "news.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         r.add_action(ActionSpec::new(FETCH, "news.fetch").handler(
-            |env: &Env<'_>, out: &mut Vec<Command>| {
+            |env: &Env<'_>, out: &mut Commands| {
                 if env.reader {
                     fetch(env, 0, true, out);
                 } else {
@@ -529,7 +529,7 @@ impl FeedsScreen {
 
 /// The commands of a fetch, given to `cx`.
 fn fetch_into(env: &Env<'_>, from: usize, all: bool, cx: &mut Cx<'_, '_>) {
-    let mut out = Vec::new();
+    let mut out = paperpaw_sdk::Commands::new();
     fetch(env, from, all, &mut out);
     for command in out {
         cx.command(command);

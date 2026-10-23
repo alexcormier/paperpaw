@@ -21,7 +21,7 @@ use paperpaw_platform::{
 };
 use paperpaw_sdk::readers::{self, Choice, ReaderSpec};
 use paperpaw_sdk::{
-    ActionSpec, Canvas, Command, Cx, Env, Handled, Id, Manifest, MemoryStorage, Plugin,
+    ActionSpec, Canvas, Commands, Cx, Env, Handled, Id, Manifest, MemoryStorage, Plugin,
     RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
 };
 
@@ -129,12 +129,12 @@ impl Plugin for Plain {
         )?;
         r.add_action(
             ActionSpec::new(Id::new_static("plain.ask-book"), "plain.ask-book").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| out.push(readers::ask(Choice::Book(TEXT))),
+                |_: &Env<'_>, out: &mut Commands| out.push(readers::ask(Choice::Book(TEXT))),
             ),
         )?;
         r.add_action(
             ActionSpec::new(Id::new_static("plain.ask-folder"), "plain.ask-folder").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     out.push(readers::ask(Choice::Folder("books/plain")))
                 },
             ),
@@ -144,9 +144,10 @@ impl Plugin for Plain {
             ("plain.folder", IN_FOLDER),
             ("plain.epub", EPUB),
         ] {
-            r.add_action(ActionSpec::new(Id::new_static(action), action).handler(
-                move |_: &Env<'_>, out: &mut Vec<Command>| out.push(readers::open(path)),
-            ))?;
+            r.add_action(
+                ActionSpec::new(Id::new_static(action), action)
+                    .handler(move |_: &Env<'_>, out: &mut Commands| out.push(readers::open(path))),
+            )?;
         }
         Ok(())
     }

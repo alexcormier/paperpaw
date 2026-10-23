@@ -781,8 +781,8 @@ impl Kernel {
         let env = self.shared.env(self.now);
         let _running = self.shared.meter.enter(action.namespace());
         match (spec.params_handler(), &spec.handler) {
-            (Some(handler), _) => handler(&env, params, out),
-            (None, Some(handler)) => handler(&env, out),
+            (Some(handler), _) => commands::handing(out, |out| handler(&env, params, out)),
+            (None, Some(handler)) => commands::handing(out, |out| handler(&env, out)),
             (None, None) => {}
         }
     }
@@ -808,7 +808,7 @@ impl Kernel {
         let mut refused_secret = false;
         if let Some((plugin, handler)) = over {
             let _running = self.shared.meter.enter(plugin.as_str());
-            handler(&env, params, &mut self.output.commands);
+            commands::handing(&mut self.output.commands, |out| handler(&env, params, out));
             drop(_running);
             let out = &mut self.output.commands;
             work::quiet(
@@ -854,8 +854,10 @@ impl Kernel {
                     let _running = self.shared.meter.enter(action.namespace());
                     let out = &mut self.output.commands;
                     match (spec.params_handler(), &spec.handler) {
-                        (Some(handler), _) => handler(&env, params, out),
-                        (None, Some(handler)) => handler(&env, out),
+                        (Some(handler), _) => {
+                            commands::handing(out, |out| handler(&env, params, out))
+                        }
+                        (None, Some(handler)) => commands::handing(out, |out| handler(&env, out)),
                         (None, None) => {}
                     }
                     let owner = action.namespace();
@@ -928,7 +930,9 @@ impl Kernel {
             }
             let _running = self.shared.meter.enter(spec.id.namespace());
             let from = self.output.commands.len();
-            (spec.observer)(&env, id, params, &mut self.output.commands);
+            commands::handing(&mut self.output.commands, |out| {
+                (spec.observer)(&env, id, params, out);
+            });
             let top = self.stack.last().map(|s| s.id.namespace());
             let (reader, now) = (self.shared.reader, self.now);
             let out = &mut self.output.commands;

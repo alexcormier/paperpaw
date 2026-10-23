@@ -16,9 +16,9 @@ use paperpaw_core::Kernel;
 use paperpaw_platform::{Rotation, SystemStatus, WallClock};
 use paperpaw_sdk::builtin::{self, events, slots};
 use paperpaw_sdk::{
-    ActionSpec, Canvas, Command, Cx, DeviceInfo, DisplayInfo, Env, Handled, Id, InputCaps, Instant,
-    Manifest, MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Priority, RegisterError,
-    Registrar, SDK_VERSION, Screen, ScreenSpec, Storage, StorageError,
+    ActionSpec, Canvas, Commands, Cx, DeviceInfo, DisplayInfo, Env, Handled, Id, InputCaps,
+    Instant, Manifest, MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Priority,
+    RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, Storage, StorageError,
 };
 
 /// An X4: black and white, buttons.
@@ -84,7 +84,7 @@ impl Plugin for StandIn {
         ] {
             let reading = self.0.clone();
             r.add_action(ActionSpec::new(id, "stand-in.action").handler(
-                move |_: &Env<'_>, out: &mut Vec<Command>| {
+                move |_: &Env<'_>, out: &mut Commands| {
                     out.push(event.emit(reading.borrow().clone()));
                 },
             ))?;

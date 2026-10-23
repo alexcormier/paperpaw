@@ -149,7 +149,7 @@ impl ListScreen {
 
     fn want_samples(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         let shown = Self::shown(&self.list, &self.fonts);
         if self.samples.want(&env, shown, &mut out) {
             self.redraw(cx);

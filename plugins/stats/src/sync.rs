@@ -31,8 +31,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, HttpReply, Typed};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Params, Rect,
-    RefreshMode, Screen,
+    Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
+    Params, Rect, RefreshMode, Screen,
 };
 
 use paperpaw_sdk::secrets::SecretChange;
@@ -147,7 +147,7 @@ fn save_password(password: &str) -> Command {
 /// the other passwords and keys. The old file goes only once the
 /// secrets have a password (at a later start): until then it is the only
 /// copy, e.g. where the secrets could not be saved.
-pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
+pub(crate) fn move_password(env: &Env<'_>, out: &mut Commands) {
     let path = file("webdav.ini");
     let Ok(data) = paperpaw_sdk::read_file(env.storage, &path, 4096) else {
         return;
@@ -187,7 +187,7 @@ impl Sync {
     }
 }
 
-fn done(out: &mut Vec<Command>, message: String) {
+fn done(out: &mut Commands, message: String) {
     out.push(DONE.emit(Finished { text: message }));
 }
 
@@ -230,7 +230,7 @@ fn forget_other_uploads(env: &Env<'_>, keep: &str) {
 
 impl Sync {
     /// Starts a sync, or says why it cannot.
-    pub(crate) fn start(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    pub(crate) fn start(&mut self, env: &Env<'_>, out: &mut Commands) {
         if !env.caps.network {
             return done(out, env.i18n.tr("stats.sync.no-network").to_string());
         }
@@ -248,7 +248,7 @@ impl Sync {
     }
 
     /// The other side's file is here (or not): merge, then upload.
-    pub(crate) fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub(crate) fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
@@ -346,7 +346,7 @@ impl Sync {
     /// whether that was deleted there: nothing is uploaded, and the user
     /// is asked whether to remove it here too. Going back asks again with
     /// the next sync.
-    fn ask(&mut self, env: &Env<'_>, etag: &str, out: &mut Vec<Command>) {
+    fn ask(&mut self, env: &Env<'_>, etag: &str, out: &mut Commands) {
         #[expect(
             clippy::let_underscore_must_use,
             reason = "an upload left behind is written over by the next sync"
@@ -367,7 +367,7 @@ impl Sync {
 
     /// The user decided: the sync starts again, with the decision for the
     /// file asked about.
-    pub(crate) fn decide(&mut self, env: &Env<'_>, answer: &Confirmed, out: &mut Vec<Command>) {
+    pub(crate) fn decide(&mut self, env: &Env<'_>, answer: &Confirmed, out: &mut Commands) {
         if self.running {
             return;
         }
@@ -377,7 +377,7 @@ impl Sync {
     }
 
     /// The merged file is up (or someone was faster).
-    pub(crate) fn uploaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub(crate) fn uploaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
@@ -435,7 +435,7 @@ impl Sync {
         }
     }
 
-    fn fail(&mut self, env: &Env<'_>, status: &str, out: &mut Vec<Command>) {
+    fn fail(&mut self, env: &Env<'_>, status: &str, out: &mut Commands) {
         self.running = false;
         self.attempt = 0;
         let key = match status {
@@ -607,7 +607,7 @@ impl SyncScreen {
                 if self.sync.borrow().running {
                     return;
                 }
-                let mut commands = Vec::new();
+                let mut commands = paperpaw_sdk::Commands::new();
                 self.sync.borrow_mut().start(&env, &mut commands);
                 for command in commands {
                     cx.command(command);
