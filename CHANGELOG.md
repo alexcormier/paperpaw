@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Pre-releases: betas (`0.5.0-beta.1`, `beta.2`, ... `beta.10`) come in
+  order before their release, never one back, for updates on the device
+  and Android alike (the APK's version code counts the beta,
+  `shells/android/version-code.sh`). *Beta updates* in the update's
+  settings, off at first ("Betas are for testing; they may have bugs."),
+  asks the update server for them (`"betas": true`); a device running a
+  beta gets the next anyway. About and the update's texts show a beta
+  calmly, as `0.5.0 Beta 1`. SDK: `firmware::beta`.
 - Hints covered by another screen (a plugin's question, a notice opened
   over them) close and show again when their screen does, instead of
   staying below it, cut.

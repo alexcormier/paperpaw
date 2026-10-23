@@ -57,13 +57,34 @@ const INSTALLING: &str = "installing.txt";
 const OFFERED: &str = "offered.txt";
 
 /// The update server's address, for developers and servers of one's own.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
-    online::SERVER.static_str(),
-    "update.setting.server",
-    online::DEFAULT_SERVER,
-    groups::DEVELOPER,
-)
-.described("update.setting.server.help")];
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed_text(
+        online::SERVER.static_str(),
+        "update.setting.server",
+        online::DEFAULT_SERVER,
+        groups::DEVELOPER,
+    )
+    .described("update.setting.server.help"),
+    SettingSpec::fixed_switch(
+        online::BETAS.static_str(),
+        "update.setting.betas",
+        false,
+        groups::SYSTEM,
+    )
+    .described("update.setting.betas.help"),
+];
+
+/// `version` as the update's texts show it: a beta as `0.5.0 Beta 1`,
+/// calmly, and every other version as it is.
+pub(crate) fn shown_version(i18n: &paperpaw_sdk::Translator, version: &str) -> String {
+    match paperpaw_sdk::firmware::beta(version) {
+        Some((release, number)) => i18n.format(
+            "update.version.beta",
+            &[("version", Arg::Str(release)), ("number", Arg::Str(number))],
+        ),
+        None => String::from(version),
+    }
+}
 
 fn file(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
@@ -92,17 +113,23 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
         let _ = storage.remove(&file(INSTALLING));
         if !firmware.undone && version == firmware.version {
             let _ = storage.remove(&path);
-            out.push(Command::Announce(
-                env.i18n
-                    .format("update.done", &[("version", Arg::Str(&version))]),
-            ));
+            out.push(Command::Announce(env.i18n.format(
+                "update.done",
+                &[(
+                    "version",
+                    Arg::Str(&crate::shown_version(env.i18n, &version)),
+                )],
+            )));
             return;
         }
     }
     if firmware.undone {
         out.push(Command::Announce(env.i18n.format(
             "update.undone",
-            &[("version", Arg::Str(&firmware.version))],
+            &[(
+                "version",
+                Arg::Str(&crate::shown_version(env.i18n, &firmware.version)),
+            )],
         )));
         return;
     }

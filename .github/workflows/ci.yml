@@ -231,6 +231,13 @@ jobs:
         run: python3 -m unittest discover -s tools/plugin-files
       - name: The handbook holds the SDK and PaperPaw's own plugins, without tests
         run: python3 -m unittest discover -s tools -p "test_handbook.py"
+      - name: Android takes each beta over the one before, and the release over its betas
+        run: |
+          for pair in "0.4.0-dev 40000" "0.5.0-beta.1 50001" "0.5.0-beta.2 50002"               "0.5.0-beta.10 50010" "0.5.0 50099" "0.5.1-beta.1 50101"; do
+            set -- $pair
+            got="$(shells/android/version-code.sh "$1")"
+            [[ "$got" == "$2" ]] || { echo "::error::$1 has version code $got, not $2"; exit 1; }
+          done
 
   emulator:
     name: Emulator (${{ matrix.os }})

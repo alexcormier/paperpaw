@@ -90,10 +90,22 @@ pub(crate) fn licences(env: &Env<'_>) -> String {
         }
         String::from("logo.png")
     };
+    let version = shown_version(env.i18n, VERSION);
     format!(
-        "![PaperPaw]({picture})\n\n# PaperPaw {VERSION}\n\n{intro}\n\n{SOURCE}\n\n{}{LICENCES}",
+        "![PaperPaw]({picture})\n\n# PaperPaw {version}\n\n{intro}\n\n{SOURCE}\n\n{}{LICENCES}",
         lines(env),
     )
+}
+
+/// `version` as About shows it: a beta as one, calmly (`0.5.0 Beta 1`).
+fn shown_version(i18n: &paperpaw_sdk::Translator, version: &str) -> String {
+    match paperpaw_sdk::firmware::beta(version) {
+        Some((release, number)) => i18n.format(
+            "about.version.beta",
+            &[("version", Arg::Str(release)), ("number", Arg::Str(number))],
+        ),
+        None => String::from(version),
+    }
 }
 
 /// The lines other plugins add ([`LINES`]), a paragraph each, named by
@@ -221,7 +233,16 @@ mod tests {
 
     use paperpaw_i18n::{Catalog, check};
 
-    use super::LICENCES;
+    use super::{LICENCES, shown_version};
+
+    #[test]
+    fn a_beta_shows_as_one() {
+        let mut i18n = paperpaw_sdk::Translator::new();
+        i18n.add(Catalog::parse(include_str!("../i18n/en.ini")).unwrap());
+        assert_eq!(shown_version(&i18n, "0.5.0-beta.2"), "0.5.0 Beta 2");
+        assert_eq!(shown_version(&i18n, "0.5.0"), "0.5.0");
+        assert_eq!(shown_version(&i18n, "0.5.0-dev"), "0.5.0-dev");
+    }
 
     #[test]
     fn translations_are_complete() {

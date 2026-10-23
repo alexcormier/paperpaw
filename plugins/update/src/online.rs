@@ -62,6 +62,9 @@ use crate::{OFFERED, PAGE, file, read_pair, waiting, write_pair};
 
 /// Where updates are asked for.
 pub const SERVER: Setting<Text> = Setting::new("update.server");
+/// Whether the update server may offer betas too (a device running one
+/// gets them anyway): off, betas are for testing.
+pub const BETAS: Setting<bool> = Setting::new("update.betas");
 /// The update server PaperPaw asks unless [`SERVER`] says otherwise.
 pub const DEFAULT_SERVER: &str = "https://paperpaw.org";
 /// The answer to the question for an update.
@@ -285,7 +288,12 @@ pub(crate) fn server_name(env: &Env<'_>) -> String {
 
 /// The question's body (see the [module](self)): what runs, and the code
 /// plugins installed (`code`, with `native` where they load).
-fn question(firmware: &Firmware, native: Option<&Native>, code: &[(&str, String)]) -> String {
+fn question(
+    firmware: &Firmware,
+    native: Option<&Native>,
+    code: &[(&str, String)],
+    betas: bool,
+) -> String {
     let plugins: Vec<String> = firmware
         .plugins
         .iter()
@@ -309,6 +317,11 @@ fn question(firmware: &Firmware, native: Option<&Native>, code: &[(&str, String)
             code.join(",")
         ));
     }
+    // What the server reads to offer betas (a device on one gets them
+    // anyway).
+    if betas {
+        body.push_str(",\"betas\":true");
+    }
     body.push('}');
     body
 }
@@ -331,7 +344,8 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
         .filter(|p| p.kind == PluginKind::Code)
         .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))
         .collect();
-    request.body = Some(question(firmware, env.native, &code));
+    let betas = env.settings.read(&BETAS);
+    request.body = Some(question(firmware, env.native, &code, betas));
     // Asked: an update waiting is asked for again not before a day.
     waiting::tried(env.storage, paperpaw_sdk::time::unix_seconds(env));
     if quiet {
@@ -385,7 +399,10 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
             // Nothing over reading: the offer waits on the update's page.
             let text = env.i18n.format(
                 "update.offer.title",
-                &[("version", Arg::Str(&offer.version))],
+                &[(
+                    "version",
+                    Arg::Str(&crate::shown_version(env.i18n, &offer.version)),
+                )],
             );
             out.push(Command::Notify(text));
         }
@@ -442,10 +459,13 @@ pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command
                 .unwrap_or_default();
             let _ = storage.remove(&file(OFFER));
             if !fetch::start(env, version, &builds, out) {
-                out.push(Command::Notify(
-                    env.i18n
-                        .format("update.downloaded", &[("version", Arg::Str(version))]),
-                ));
+                out.push(Command::Notify(env.i18n.format(
+                    "update.downloaded",
+                    &[(
+                        "version",
+                        Arg::Str(&crate::shown_version(env.i18n, version)),
+                    )],
+                )));
             }
             return;
         }
@@ -478,7 +498,7 @@ mod tests {
     #[test]
     fn the_question_says_what_runs() {
         assert_eq!(
-            question(&firmware(), None, &[]),
+            question(&firmware(), None, &[], false),
             "{\"project\":\"paperpaw-xteink\",\"chip\":5,\"version\":\"0.4.0\",\
              \"plugins\":[\"paperpaw-plugin-stats 0.4.0\",\"paperpaw-plugin-chess 1.0.0\"]}"
         );
@@ -487,11 +507,48 @@ mod tests {
         native.fingerprint = Fingerprint(0xf1f6_cd5d_d377_bb4d);
         let code = [("hello", String::from("0.1.0"))];
         assert_eq!(
-            question(&firmware(), Some(&native), &code),
+            question(&firmware(), Some(&native), &code, false),
             "{\"project\":\"paperpaw-xteink\",\"chip\":5,\"version\":\"0.4.0\",\
              \"plugins\":[\"paperpaw-plugin-stats 0.4.0\",\"paperpaw-plugin-chess 1.0.0\"],\
              \"abi\":\"f1f6cd5dd377bb4d\",\"code\":[\"hello 0.1.0\"]}"
         );
+    }
+
+    /// Betas asked for where the reader wants them; offered only when
+    /// newer, by beta number, and never one back.
+    #[test]
+    fn betas_are_asked_for_and_offered_only_newer() {
+        assert!(question(&firmware(), None, &[], true).ends_with(",\"betas\":true}"));
+        assert!(!question(&firmware(), None, &[], false).contains("betas"));
+        let on = |version: &str| Firmware {
+            version: version.into(),
+            ..firmware()
+        };
+        let offer = |answer: &str, running: &str| {
+            let body = alloc::format!(r#"{{"version": "{answer}", "url": "u"}}"#);
+            Offer::from_answer(&body, &on(running)).map(|o| o.version)
+        };
+        assert_eq!(
+            offer("0.5.0-beta.2", "0.5.0-beta.1").as_deref(),
+            Some("0.5.0-beta.2")
+        );
+        assert_eq!(
+            offer("0.5.0-beta.10", "0.5.0-beta.2").as_deref(),
+            Some("0.5.0-beta.10")
+        );
+        assert_eq!(offer("0.5.0", "0.5.0-beta.10").as_deref(), Some("0.5.0"));
+        assert_eq!(
+            offer("0.5.0-beta.1", "0.4.0").as_deref(),
+            Some("0.5.0-beta.1")
+        );
+        for (answer, running) in [
+            ("0.5.0-beta.1", "0.5.0-beta.2"),
+            ("0.5.0-beta.2", "0.5.0-beta.10"),
+            ("0.5.0-beta.3", "0.5.0"),
+            ("0.5.0-beta.1", "0.5.0-beta.1"),
+        ] {
+            assert_eq!(offer(answer, running), None, "{answer} on {running}");
+        }
     }
 
     #[test]

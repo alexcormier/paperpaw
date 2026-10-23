@@ -362,10 +362,13 @@ fn next(env: &Env<'_>, version: &str, out: &mut Vec<Command>) {
     }
     let _ = storage.remove(&file(QUEUE));
     let _ = storage.remove(&file(CURRENT));
-    out.push(Command::Notify(
-        env.i18n
-            .format("update.downloaded", &[("version", Arg::Str(version))]),
-    ));
+    out.push(Command::Notify(env.i18n.format(
+        "update.downloaded",
+        &[(
+            "version",
+            Arg::Str(&crate::shown_version(env.i18n, version)),
+        )],
+    )));
     if let Some(names) = failed_names(storage) {
         out.push(Command::Notify(
             env.i18n

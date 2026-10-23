@@ -1111,3 +1111,34 @@ fn a_plugin_without_room_for_its_code_is_not_fetched() {
     );
     assert!(!device.storage.exists("plugins/.stats.next/plugin.ini"));
 }
+
+/// With *Beta updates* on, the question asks for betas; a beta offered
+/// shows as one, calmly, where its version shows.
+#[test]
+fn betas_are_asked_for_when_wanted_and_shown_as_betas() {
+    let mut device = Device::new(Shared::default());
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    let question = String::from_utf8(call.body.clone().unwrap_or_default()).unwrap();
+    assert!(!question.contains("betas"), "off at first: {question}");
+
+    let mut device = Device::new(Shared::default());
+    let _ = device
+        .kernel
+        .set_setting(Instant(1), "update.betas", "true");
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    let question = String::from_utf8(call.body.clone().unwrap_or_default()).unwrap();
+    assert!(question.ends_with(r#","betas":true}"#), "{question}");
+    let file = update_file("0.5.0-beta.2", &[("paperpaw-plugin-stats", "0.5.0-beta.2")]);
+    let answer = offer(file.len()).replace("0.5.0", "0.5.0-beta.2");
+    device.answer(&call, 200, answer.as_bytes());
+    let shown = device.shown();
+    assert!(
+        shown.contains("PaperPaw 0.5.0 Beta 2 is available"),
+        "{shown}"
+    );
+    assert!(!shown.contains("0.5.0-beta.2"), "{shown}");
+}
