@@ -58,6 +58,10 @@ file to your report.
   gives more, and *Discover fonts* on the reading settings opens the
   font browser (or its page in the store, where it is not installed).
   Scalable fonts keep every size.
+- A book that cannot open for lack of memory (on the X4, while Wi-Fi is
+  on) says so. Before, the device could restart, or the book opened at
+  its start and lost your place. A book whose file is gone says that
+  too.
 
 #### Books and fonts
 
@@ -764,6 +768,10 @@ breaking again.
 - `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).
+- `xml::Tokenizer::try_feed` tokenizes as `feed` does, but where the
+  heap has no room for its buffer it returns an error rather than
+  stopping the program. The buffer grows by 512 bytes at a time, never
+  by doubling.
 - `FontHandle::largest_size` says the largest size a font has. For the
   kernel, `Settings::set_range` and `Settings::set_description` narrow a
   setting's range and describe it.

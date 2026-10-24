@@ -181,9 +181,15 @@ impl Book {
         let path = params
             .get(params::PATH)
             .ok_or_else(|| env.i18n().tr("reader.no-book").to_string())?;
+        let tr = |key| env.i18n().tr(key).to_string();
         let error = |e: DocumentError| match e {
-            DocumentError::NotReady => Unopened::NotReady(env.i18n().tr("reader.not-ready").into()),
-            e => Unopened::Failed(format!("{}\n{e}", env.i18n().tr("reader.error"))),
+            DocumentError::NotReady => Unopened::NotReady(tr("reader.not-ready")),
+            // Not the book's fault: it opens with more memory free.
+            DocumentError::OutOfMemory => Unopened::Failed(tr("reader.no-memory")),
+            DocumentError::Storage(paperpaw_sdk::StorageError::NotFound) => {
+                Unopened::Failed(tr("reader.missing"))
+            }
+            e => Unopened::Failed(format!("{}\n{e}", tr("reader.error"))),
         };
         let options = paperpaw_sdk::reading::open_options(env);
         let document = env
@@ -261,6 +267,9 @@ impl Book {
         book.unsaved = saved.is_some_and(|(_, anew)| anew);
         book.page = match book.layout(env, start) {
             Ok(page) if !page.is_past_end() => page,
+            // Not from the start instead: the place read to would be
+            // kept as the start.
+            Err(DocumentError::OutOfMemory) => return Err(error(DocumentError::OutOfMemory)),
             _ if start != Locator::START => book.layout(env, Locator::START).map_err(error)?,
             page => page.map_err(error)?,
         };

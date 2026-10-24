@@ -1424,6 +1424,7 @@ dependencies = [
  "paperpaw-platform",
  "paperpaw-sample-hello",
  "paperpaw-serve",
+ "paperpaw-zip",
  "png",
  "softbuffer",
  "winit",

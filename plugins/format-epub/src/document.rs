@@ -301,7 +301,7 @@ impl EpubDocument {
         let archive = ZipArchive::open(storage, path).map_err(package::error)?;
         let cache = book_cache(path);
         let book = crate::fingerprint(storage, path)?;
-        let package = match package::load(storage, &cache, &book) {
+        let package = match package::load(storage, &cache, &book)? {
             Some(package) => package,
             None => {
                 // Another book, file version or cache format: start over,
@@ -322,8 +322,13 @@ impl EpubDocument {
             let name = path.rsplit('/').next().unwrap_or(path);
             metadata.title = Some(String::from(name.rsplit_once('.').map_or(name, |(s, _)| s)));
         }
+        let mut lengths = Vec::new();
+        lengths
+            .try_reserve_exact(package.spine.len())
+            .map_err(|_| DocumentError::OutOfMemory)?;
+        lengths.resize_with(package.spine.len(), || Cell::new(UNKNOWN));
         Ok(EpubDocument {
-            lengths: package.spine.iter().map(|_| Cell::new(UNKNOWN)).collect(),
+            lengths,
             spine: package.spine,
             metadata,
             toc_len: package.toc_len,
@@ -379,7 +384,7 @@ impl EpubDocument {
                     .entry_by_record(storage, chapter.record)
                     .map_err(package::error)?;
                 let mut rules = if self.styles {
-                    package::styles(storage, &self.cache)
+                    package::styles(storage, &self.cache)?
                 } else {
                     Default::default()
                 };
@@ -400,7 +405,13 @@ impl EpubDocument {
                     self.color,
                     self.image_fit,
                 );
-                converted.inspect_err(|_| slot.set(FAILED))?
+                // Short of memory, it is tried again: with more free, it
+                // may convert.
+                converted.inspect_err(|e| {
+                    if !matches!(e, DocumentError::OutOfMemory) {
+                        slot.set(FAILED);
+                    }
+                })?
             }
         };
         slot.set(length);
