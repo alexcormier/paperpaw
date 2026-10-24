@@ -559,6 +559,12 @@ impl Firmware {
         self.pause_trial();
         let effects = self.kernel.suspend(now());
         self.apply(effects);
+        // Bluetooth down now, asleep on USB too (the kernel asked for it,
+        // but the main loop does not come by while asleep; on battery the
+        // power goes anyway).
+        #[cfg(feature = "bluetooth")]
+        self.network
+            .bluetooth(paperpaw_core::BtCall::Radio { on: false });
         if !self.finish_work() {
             // A press meanwhile: awake after all.
             info!("sleep: a press, awake");

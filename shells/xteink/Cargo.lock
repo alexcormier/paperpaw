@@ -2669,6 +2669,7 @@ dependencies = [
  "critical-section",
  "embassy-futures",
  "embassy-net-driver",
+ "embassy-sync 0.8.0",
  "embassy-time",
  "embassy-time-driver",
  "embedded-hal 1.0.0",

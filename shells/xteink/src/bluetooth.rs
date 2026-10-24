@@ -33,7 +33,8 @@ use core::task::{Context, Poll, Waker};
 use bt_hci::param::FilterDuplicates;
 use embassy_futures::join::{join, join3};
 use embassy_futures::select::{Either, Either3, select, select3};
-use embassy_time::{Duration, with_timeout};
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_time::{Duration, Timer, with_timeout};
 use esp_radio::ble::controller::BleConnector;
 use paperpaw_core::sdk::bluetooth::{
     AttError, BtError, BtOp, GattCharacteristic, GattDescriptor, GattService, Handle, LinkPower,
@@ -65,7 +66,7 @@ const AD_APPEARANCE: u8 = 0x19;
 const AD_SERVICE_DATA_128: u8 = 0x21;
 
 /// Packets the host has at once, at most, and the bytes of each.
-const PACKETS: usize = 16;
+const PACKETS: usize = 24;
 const PACKET_BYTES: usize = 251;
 
 type Hci = ExternalController<BleConnector<'static>, 10>;
@@ -73,6 +74,13 @@ type Pool = HeapPool;
 type Host<'a> = Stack<'a, Hci, Pool>;
 type Resources = HostResources<Hci, Pool, LINKS, 1, 1, 8>;
 type Client<'a> = GattClient<'a, Hci, Pool, SERVICES>;
+/// The device's own attributes, as a central has them: GAP (its name
+/// and appearance) and GATT. A peripheral reads them (keyboards do), and
+/// gives up on the link where nothing answers.
+type Server<'a> = AttributeServer<'a, NoopRawMutex, Pool, ATTRIBUTES, LINKS>;
+const ATTRIBUTES: usize = 10;
+/// The name the device's GAP service gives.
+const NAME: &str = "PaperPaw";
 
 /// embassy-time's clock, for the host's timeouts: the main loop polls
 /// the host while the radio is up, so a timer needs no wake-up of its
@@ -212,7 +220,7 @@ impl Bluetooth {
                 // Dropped: the host, the links and the controller go down,
                 // and everything they had on the heap.
                 self.on = None;
-                log::info!("bluetooth: off");
+                log::info!("bluetooth: off, heap {}", crate::http::heap());
                 self.reports.push(BtReport::Radio { on: false });
             }
             (BtCall::Bonds(bonds), on) => {
@@ -234,9 +242,10 @@ impl Bluetooth {
         // SAFETY: only this module takes the Bluetooth peripheral, and
         // only while no controller holds it (the last one was dropped).
         let bt = unsafe { esp_hal::peripherals::BT::steal() };
+        log::info!("bluetooth: starting, heap {}", crate::http::heap());
         match BleConnector::new(bt, esp_radio::ble::Config::default()) {
             Ok(connector) => {
-                log::info!("bluetooth: on");
+                log::info!("bluetooth: on, heap {}", crate::http::heap());
                 let shared = Rc::new(Shared::default());
                 shared.bonds.borrow_mut().clone_from(&self.bonds);
                 shared.bonds_new.set(true);
@@ -304,12 +313,19 @@ async fn session(shared: Rc<Shared>, connector: BleConnector<'static>) {
     let handler = Advertised { shared: &shared };
     let slots: [RefCell<Slot>; LINKS] = Default::default();
     let scan = ScanWanted::default();
+    let mut table: AttributeTable<'_, NoopRawMutex, ATTRIBUTES> = AttributeTable::new();
+    let mut gap = table.add_service(Service::new(service::GAP));
+    gap.add_characteristic_ro(characteristic::DEVICE_NAME, NAME);
+    gap.add_characteristic_ro(characteristic::APPEARANCE, &appearance::UNKNOWN);
+    gap.build();
+    table.add_service(Service::new(service::GATT));
+    let server: Server<'_> = AttributeServer::new(table);
     let work = join3(
         dispatch(&stack, &shared, &slots, &scan),
         scanning(&stack, &scan),
         join(
-            link(&stack, &slots[0], &shared),
-            link(&stack, &slots[1], &shared),
+            link(&stack, &server, &slots[0], &shared),
+            link(&stack, &server, &slots[1], &shared),
         ),
     );
     if let Either::First(Err(e)) = select(runner.run_with_handler(&handler), work).await {
@@ -566,7 +582,7 @@ fn read_advertised(data: &[u8], found: &mut Found) {
 
 /// A slot's link, again and again: connected when asked, served while
 /// up, reported when gone.
-async fn link(stack: &Host<'_>, slot: &RefCell<Slot>, shared: &Shared) {
+async fn link(stack: &Host<'_>, server: &Server<'_>, slot: &RefCell<Slot>, shared: &Shared) {
     loop {
         let (number, address, power) = poll_fn(|_| {
             let mut slot = slot.borrow_mut();
@@ -579,12 +595,14 @@ async fn link(stack: &Host<'_>, slot: &RefCell<Slot>, shared: &Shared) {
         let reason = match connect(stack, slot, &address, power).await {
             Ok(Some(connection)) => {
                 let (mtu, security) = (connection.att_mtu(), security_of(&connection));
+                log::info!("bluetooth: link {number} up, heap {}", crate::http::heap());
                 shared.report(BtReport::Connected {
                     link: number,
                     mtu,
                     security,
                 });
-                let reason = serve(stack, &connection, number, slot, shared).await;
+                let reason = serve(stack, server, &connection, number, power, slot, shared).await;
+                log::info!("bluetooth: link {number} down: {reason:?}");
                 shared.report(BtReport::Disconnected {
                     link: number,
                     reason,
@@ -666,13 +684,17 @@ struct Known {
     /// The HID input reports subscribed: value handle and report id.
     hid: Vec<(u16, u8)>,
     pairing: Pairing,
+    /// The power the kernel asked for the link (pairing runs faster).
+    power: LinkPower,
 }
 
 /// Serves an established link until it goes; why it went.
 async fn serve(
     stack: &Host<'_>,
+    server: &Server<'_>,
     connection: &Connection<'_, Pool>,
     number: u32,
+    power: LinkPower,
     slot: &RefCell<Slot>,
     shared: &Shared,
 ) -> Option<BtError> {
@@ -689,14 +711,22 @@ async fn serve(
         connection.disconnect();
         return gone(connection).await;
     };
-    let known = RefCell::new(Known::default());
+    // The link's events, and the peer's requests to the attributes.
+    let Ok(gatt) = connection.clone().with_attribute_server(server) else {
+        connection.disconnect();
+        return gone(connection).await;
+    };
+    let known = RefCell::new(Known {
+        power,
+        ..Known::default()
+    });
     let work = async {
         loop {
             let next_call = poll_fn(|_| match slot.borrow_mut().calls.pop_front() {
                 Some(call) => Poll::Ready(call),
                 None => Poll::Pending,
             });
-            match select3(connection.next(), listener.next(), next_call).await {
+            match select3(gatt.next(), listener.next(), next_call).await {
                 Either3::First(event) => {
                     if let Some(reason) =
                         on_event(stack, connection, number, event, &known, shared).await
@@ -716,6 +746,23 @@ async fn serve(
     match select(client.task(), work).await {
         Either::First(_) => gone(connection).await,
         Either::Second(reason) => reason,
+    }
+}
+
+/// The link's intervals for `power`, tried again a few times while the
+/// controller is busy with another procedure (encryption, an update).
+async fn set_power(stack: &Host<'_>, connection: &Connection<'_, Pool>, power: LinkPower) {
+    for _ in 0..4 {
+        match connection
+            .update_connection_params(stack, &link_timing(power))
+            .await
+        {
+            Ok(()) => return,
+            Err(e) => {
+                log::info!("bluetooth: power {power:?}: {e:?}");
+                Timer::after(Duration::from_secs(2)).await;
+            }
+        }
     }
 }
 
@@ -746,7 +793,7 @@ async fn on_event(
     stack: &Host<'_>,
     connection: &Connection<'_, Pool>,
     number: u32,
-    event: ConnectionEvent,
+    event: GattConnectionEvent<'_, '_, Pool>,
     known: &RefCell<Known>,
     shared: &Shared,
 ) -> Option<Option<BtError>> {
@@ -757,27 +804,50 @@ async fn on_event(
         });
     };
     match event {
-        ConnectionEvent::Disconnected { reason } => return Some(reason_of(reason)),
-        ConnectionEvent::RequestConnectionParams(request) => {
+        GattConnectionEvent::Disconnected { reason } => return Some(reason_of(reason)),
+        GattConnectionEvent::Gatt { event } => match event.accept() {
+            Ok(reply) => reply.send().await,
+            Err(e) => log::info!("bluetooth: link {number}: attribute request: {e:?}"),
+        },
+        GattConnectionEvent::ConnectionParamsUpdated {
+            conn_interval,
+            peripheral_latency,
+            ..
+        } => log::info!(
+            "bluetooth: link {number}: interval {} ms, latency {peripheral_latency}",
+            conn_interval.as_millis()
+        ),
+        GattConnectionEvent::RequestConnectionParams(request) => {
             let _ = request.accept(None, stack).await;
         }
-        ConnectionEvent::PassKeyConfirm(key) => {
+        GattConnectionEvent::PassKeyConfirm(key) => {
             known.borrow_mut().pairing = Pairing::Number;
             ask(PairQuestion::Compare(key.value()));
         }
-        ConnectionEvent::PassKeyDisplay(key) => {
+        GattConnectionEvent::PassKeyDisplay(key) => {
             known.borrow_mut().pairing = Pairing::Number;
             ask(PairQuestion::Show(key.value()));
         }
-        ConnectionEvent::PassKeyInput => {
+        GattConnectionEvent::PassKeyInput => {
             // The reader would type a number the device shows: the X4 Pro
             // has no keyboard for that yet.
             let _ = connection.pass_key_cancel();
             known.borrow_mut().pairing = Pairing::No;
             shared.fail(number, BtOp::Pair, None, BtError::Unsupported);
         }
-        ConnectionEvent::PairingComplete { bond, .. } => {
+        GattConnectionEvent::PairingComplete { bond, .. } => {
+            let asked = known.borrow().pairing != Pairing::No;
+            log::info!(
+                "bluetooth: link {number}: paired, bonded {}, asked {asked}",
+                bond.is_some()
+            );
+            if !asked {
+                // A bonded device's link encrypted again: nothing new.
+                return None;
+            }
             known.borrow_mut().pairing = Pairing::No;
+            let power = known.borrow().power;
+            set_power(stack, connection, power).await;
             match bond {
                 Some(bond) => shared.report(BtReport::Paired {
                     link: number,
@@ -786,10 +856,12 @@ async fn on_event(
                 None => shared.fail(number, BtOp::Pair, None, BtError::Unsupported),
             }
         }
-        ConnectionEvent::PairingFailed(e) => {
+        GattConnectionEvent::PairingFailed(e) => {
             log::info!("bluetooth: link {number}: pairing failed: {e:?}");
             let asked = known.borrow().pairing != Pairing::No;
             known.borrow_mut().pairing = Pairing::No;
+            let power = known.borrow().power;
+            set_power(stack, connection, power).await;
             if asked {
                 shared.fail(number, BtOp::Pair, None, BtError::Declined);
             }
@@ -816,6 +888,7 @@ async fn on_notification(
         .iter()
         .find(|(h, _)| *h == handle)
         .map(|(_, id)| *id);
+    log::debug!("bluetooth: link {number}: {handle} {bytes:02x?}");
     match report {
         Some(id) => shared.report(BtReport::HidReport {
             link: number,
@@ -854,12 +927,12 @@ async fn on_call(
     match call {
         BtCall::Disconnect { .. } => connection.disconnect(),
         BtCall::LinkPower { power, .. } => {
-            if let Err(e) = connection
-                .update_connection_params(stack, &link_timing(power))
-                .await
-            {
-                log::info!("bluetooth: link {number}: power: {e:?}");
+            known.borrow_mut().power = power;
+            if known.borrow().pairing != Pairing::No {
+                // Fast until pairing is over.
+                return;
             }
+            set_power(stack, connection, power).await;
         }
         BtCall::Discover { services, .. } => match discover(client, &services, known).await {
             Ok(services) => shared.report(BtReport::Discovered {
@@ -922,6 +995,9 @@ async fn on_call(
             match (pairing, accept) {
                 (Pairing::Asked, true) => {
                     known.borrow_mut().pairing = Pairing::Running;
+                    // Pairing takes some 80 messages each way and the
+                    // device's patience: the shortest intervals meanwhile.
+                    set_power(stack, connection, LinkPower::Burst).await;
                     let started = connection
                         .set_bondable(true)
                         .and_then(|()| connection.request_security());
@@ -1055,6 +1131,7 @@ async fn hid(
         .characteristics::<CHARACTERISTICS>(&service)
         .await
         .map_err(|e| error_of(&e))?;
+    let mut map_len = 0;
     if let Some(map) = characteristics
         .iter()
         .find(|c| c.uuid == Uuid::new_short(REPORT_MAP))
@@ -1065,6 +1142,7 @@ async fn hid(
             .await
             .map_err(|e| error_of(&e))?;
         buffer.truncate(n);
+        map_len = n;
         shared.report(BtReport::HidMap {
             link: number,
             map: buffer,
@@ -1108,6 +1186,10 @@ async fn hid(
     for (handle, _) in &inputs {
         subscribe(client, *handle, true, known).await?;
     }
+    log::info!(
+        "bluetooth: link {number}: HID reports {inputs:?}, map {} bytes",
+        map_len
+    );
     known.borrow_mut().hid = inputs;
     Ok(())
 }
