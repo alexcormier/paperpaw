@@ -517,7 +517,9 @@ fn a_plugins_page_draws_its_parts_apart() {
     shopping.serve(&page_url("apple"), body.as_bytes());
     shopping.kernel.render(&mut |_, _| {});
     let parts = shopping.kernel.describe();
-    let heading = parts.iter().position(|p| format!("{:?}", p.role) == "Heading");
+    let heading = parts
+        .iter()
+        .position(|p| format!("{:?}", p.role) == "Heading");
     let shown: Vec<_> = parts
         .iter()
         .enumerate()
