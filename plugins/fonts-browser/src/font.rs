@@ -279,8 +279,11 @@ impl Screen for FontScreen {
         // what can be done.
         let gap = style.gap();
         self.info.y = bottom + gap;
-        self.list.area().y = self.info.y + self.info.height + gap;
-        self.list.area().height = self.status.y.saturating_sub(self.list.area().y);
+        // The rows right below the information (set, not a copy changed).
+        let mut area = self.list.area();
+        area.y = self.info.y + self.info.height + gap;
+        area.height = self.status.y.saturating_sub(area.y);
+        self.list.set_area(area);
         if let Some(ui_font) = style.font(env) {
             let line = style.small() * 1.4;
             let ascent = ui_font.line_metrics(style.small()).ascent;
