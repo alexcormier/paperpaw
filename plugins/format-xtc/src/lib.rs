@@ -35,7 +35,7 @@ use paperpaw_sdk::document::{
 };
 use paperpaw_sdk::image::{GrayFile, GrayWriter, ImageError, ImageSink};
 use paperpaw_sdk::{
-    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, Storage, StorageError, Version,
+    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("format-xtc");
@@ -488,7 +488,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for XtcFormat {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "XTC", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "XTC", paperpaw_sdk::package_version!())
             .description("Opens XTC and XTCH books, the Xteink readers' pre-rendered pages.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

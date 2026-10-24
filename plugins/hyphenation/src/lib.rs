@@ -12,7 +12,7 @@ use alloc::borrow::Cow;
 
 extern crate alloc;
 
-use paperpaw_sdk::{HyphenationSpec, Id, Manifest, Plugin, RegisterError, Registrar, Version};
+use paperpaw_sdk::{HyphenationSpec, Id, Manifest, Plugin, RegisterError, Registrar};
 
 pub const PLUGIN: Id = Id::new_static("hyphenation");
 pub const GERMAN: Id = Id::new_static("hyphenation.de");
@@ -36,7 +36,7 @@ impl Plugin for Hyphenation {
         Manifest::new(
             PLUGIN,
             "Hyphenation (German, English)",
-            Version::new(0, 1, 0),
+            paperpaw_sdk::package_version!(),
         )
         .description("Hyphenation patterns for German and English, for evenly set text.")
         .how(&HOW)

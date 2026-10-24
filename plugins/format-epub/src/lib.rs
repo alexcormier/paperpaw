@@ -42,7 +42,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 
 use paperpaw_sdk::document::Document;
-use paperpaw_sdk::{FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, Version};
+use paperpaw_sdk::{FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar};
 
 pub use cbz::CbzDocument;
 pub use document::EpubDocument;
@@ -73,7 +73,7 @@ fn manifest(
     description: &'static str,
     how: &'static [(&'static str, &'static str)],
 ) -> Manifest {
-    Manifest::new(id, name, Version::new(0, 1, 0))
+    Manifest::new(id, name, paperpaw_sdk::package_version!())
         .description(description)
         .how(how)
         .uses(paperpaw_sdk::Uses::NOTHING)

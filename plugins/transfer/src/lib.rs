@@ -34,7 +34,7 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec, ServerResponse, Version,
+    Screen, ScreenSpec, ServerResponse,
 };
 
 use paperpaw_sdk::served::{self, Guard};
@@ -77,7 +77,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Transfer {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Transfer", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Transfer", paperpaw_sdk::package_version!())
             .description(
                 "Put books and other files on the device from a browser in the same network.",
             )

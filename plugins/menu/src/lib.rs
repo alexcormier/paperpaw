@@ -28,7 +28,7 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
     Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingKind,
-    SettingSpec, Version,
+    SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("menu");
@@ -68,7 +68,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Menu {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Menu", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Menu", paperpaw_sdk::package_version!())
             .description("The menu at the bottom of the screen, with actions and settings.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

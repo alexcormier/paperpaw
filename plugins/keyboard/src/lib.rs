@@ -57,7 +57,6 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
     Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
-    Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("keyboard");
@@ -187,7 +186,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Keyboard {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Keyboard", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Keyboard", paperpaw_sdk::package_version!())
             .description("Enters text on the screen, by touch or with the buttons.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

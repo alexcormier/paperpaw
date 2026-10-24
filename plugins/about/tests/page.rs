@@ -176,7 +176,8 @@ fn the_page_shows_rows_and_opens_the_licences_in_the_reader() {
     device.run(Id::new_static("about.open"));
     let shown = device.shown();
     assert!(shown.contains("About PaperPaw"), "{shown}");
-    assert!(shown.contains(env!("CARGO_PKG_VERSION")), "{shown}");
+    let paperpaw = paperpaw_sdk::SDK_VERSION.to_string();
+    assert!(shown.contains(&paperpaw), "{shown}");
     assert!(shown.contains("github.com/hthoene/paperpaw"), "{shown}");
     assert!(shown.contains("Licences"), "{shown}");
     // Nothing opened in the reader before a row is chosen.
@@ -190,7 +191,7 @@ fn the_page_shows_rows_and_opens_the_licences_in_the_reader() {
         "{page}"
     );
     // The version as shown: a beta as "0.5.0 Beta 1", so its release part.
-    let release = env!("CARGO_PKG_VERSION").split('-').next().unwrap();
+    let release = paperpaw.split('-').next().unwrap();
     assert!(page.contains(release), "{page}");
     assert!(page.contains("https://github.com/hthoene/paperpaw"));
     // The licences of what it bundles.

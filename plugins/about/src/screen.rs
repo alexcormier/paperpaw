@@ -98,7 +98,7 @@ impl Screen for AboutScreen {
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
             let tr = |key| env.i18n().tr(key);
             match rows[index] {
-                Row::Version => ui::Row::value("PaperPaw", crate::VERSION)
+                Row::Version => ui::Row::value("PaperPaw", &crate::version(env))
                     .note(tr("about.summary"))
                     .focused(focused)
                     .draw(ui, rect),

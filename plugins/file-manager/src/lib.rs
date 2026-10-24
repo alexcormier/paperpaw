@@ -32,7 +32,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, SettingSpec, Storage, StorageError, Version,
+    ScreenSpec, SettingSpec, Storage, StorageError,
 };
 
 use paperpaw_sdk::files::{self as ops, Entry};
@@ -98,7 +98,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for FileManager {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "File manager", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "File manager", paperpaw_sdk::package_version!())
             .description(
                 "Every folder and file on the device: open, rename, move, copy and delete them.",
             )

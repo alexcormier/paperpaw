@@ -42,7 +42,7 @@ use paperpaw_sdk::builtin::{events, groups};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
     ActionSpec, Command, Commands, Env, Id, Instant, Manifest, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingSpec, Version,
+    Registrar, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("lock");
@@ -157,7 +157,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Lock {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Screen lock", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Screen lock", paperpaw_sdk::package_version!())
             .description(
                 "A PIN, a pattern or a password when the device wakes up; touch locked while reading.",
             )

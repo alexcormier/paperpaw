@@ -55,7 +55,7 @@ use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, 
 use paperpaw_sdk::{
     Canvas, Color, Command, Commands, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry,
     Params, Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, Version,
+    ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("home");
@@ -88,7 +88,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Home {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Home screen", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Home screen", paperpaw_sdk::package_version!())
             .description(
                 "The start page: pages of widgets, such as the book being read and the tools.",
             )

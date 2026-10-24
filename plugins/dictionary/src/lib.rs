@@ -41,7 +41,7 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params,
     Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
-    Storage, StorageError, Version,
+    Storage, StorageError,
 };
 use paperpaw_stardict::{Builder, Dictionary};
 
@@ -89,7 +89,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for DictionaryPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Dictionary", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Dictionary", paperpaw_sdk::package_version!())
             .description("Looks up words in StarDict dictionaries.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

@@ -40,7 +40,7 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Color, Command, Commands, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect,
-    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
+    RegisterError, Registrar, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("files");
@@ -147,7 +147,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Files {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "File browser", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "File browser", paperpaw_sdk::package_version!())
             .description("Lists the books and folders on the device and opens them.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

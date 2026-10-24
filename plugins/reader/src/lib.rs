@@ -50,7 +50,7 @@ use paperpaw_sdk::help::{self, Zone};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
     Command, Commands, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar,
-    ScreenSpec, SettingSpec, Version,
+    ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("reader");
@@ -317,7 +317,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Reader {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Reader", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Reader", paperpaw_sdk::package_version!())
             .description("Shows books page by page, with table of contents and reading settings.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

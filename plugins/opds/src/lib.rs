@@ -39,7 +39,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::{
     ActionSpec, Command, Commands, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
+    RegisterError, Registrar, ScreenSpec, SettingSpec,
 };
 
 use crate::catalogs::Catalog;
@@ -220,7 +220,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Opds {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "OPDS catalogs", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "OPDS catalogs", paperpaw_sdk::package_version!())
             .description(
                 "Browses OPDS catalogs, downloads their books and keeps folders in sync with them.",
             )

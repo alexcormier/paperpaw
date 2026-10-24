@@ -23,7 +23,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 
 use paperpaw_sdk::document::Document;
-use paperpaw_sdk::{Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, Version};
+use paperpaw_sdk::{Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar};
 
 pub use document::TxtDocument;
 
@@ -42,7 +42,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for TxtFormat {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Plain text", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Plain text", paperpaw_sdk::package_version!())
             .description("Opens plain text files (.txt).")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

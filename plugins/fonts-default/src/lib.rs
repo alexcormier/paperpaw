@@ -30,9 +30,7 @@ extern crate alloc;
 use alloc::borrow::Cow;
 
 use paperpaw_sdk::builtin::fonts;
-use paperpaw_sdk::{
-    Font, FontSpec, Id, Manifest, Plugin, Priority, RegisterError, Registrar, Version,
-};
+use paperpaw_sdk::{Font, FontSpec, Id, Manifest, Plugin, Priority, RegisterError, Registrar};
 
 pub const PLUGIN: Id = Id::new_static("fonts-default");
 pub const LITERATA: Id = Id::new_static("fonts-default.literata");
@@ -137,7 +135,7 @@ static HOW: [(&str, &str); 2] = [
 ];
 
 fn manifest() -> Manifest {
-    Manifest::new(PLUGIN, "Default fonts", Version::new(0, 1, 0))
+    Manifest::new(PLUGIN, "Default fonts", paperpaw_sdk::package_version!())
         .description("Literata for reading and Source Sans for menus.")
         .how(&HOW)
         .uses(paperpaw_sdk::Uses::NOTHING)

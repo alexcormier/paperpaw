@@ -24,7 +24,7 @@ use paperpaw_sdk::power::{self, PowerLevel, Wear};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
     Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SettingSpec,
-    StatusItemSpec, StatusValue, Version,
+    StatusItemSpec, StatusValue,
 };
 
 pub const PLUGIN: Id = Id::new_static("power");
@@ -160,7 +160,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Power {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Power", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Power", paperpaw_sdk::package_version!())
             .description(
                 "Chooses the power mode, by hand or by the battery: Normal, Saving, Offline.",
             )

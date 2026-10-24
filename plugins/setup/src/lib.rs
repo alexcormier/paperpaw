@@ -29,7 +29,7 @@ use alloc::format;
 use paperpaw_sdk::builtin::{events, menus, slots};
 use paperpaw_sdk::{
     ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority,
-    RegisterError, Registrar, ScreenSpec, Version, library,
+    RegisterError, Registrar, ScreenSpec, library,
 };
 
 pub const PLUGIN: Id = Id::new_static("setup");
@@ -61,7 +61,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Setup {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Setup", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Setup", paperpaw_sdk::package_version!())
             .description("A short guide through the settings that matter, on the first start.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

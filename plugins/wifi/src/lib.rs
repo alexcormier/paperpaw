@@ -31,7 +31,7 @@ use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
     Arg, Command, Commands, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
+    ScreenSpec, SettingSpec, StatusItemSpec, StatusValue,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -259,7 +259,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Wifi {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Wi-Fi", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Wi-Fi", paperpaw_sdk::package_version!())
             .description("Joins Wi-Fi networks when needed and switches the radio off after.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)

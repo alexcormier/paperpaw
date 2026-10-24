@@ -53,7 +53,6 @@ use paperpaw_sdk::widgets::{PlaceKind, WidgetPlace, WidgetStack};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
     Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, ShowsThrough,
-    Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("sleep");
@@ -215,7 +214,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Sleep {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Sleep screen", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Sleep screen", paperpaw_sdk::package_version!())
             .description(
                 "Shows a sleeping cat, the book's cover, your pictures or a message while the device sleeps.",
             )

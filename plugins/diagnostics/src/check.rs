@@ -208,9 +208,15 @@ impl Check {
         let when = env.status().clock.map(|c| {
             paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now())).iso8601()
         });
+        // PaperPaw's: its kernel's (this plugin has a version of its own).
+        let version = env
+            .plugins()
+            .kernel()
+            .map_or(paperpaw_sdk::SDK_VERSION, |k| k.manifest.version)
+            .to_string();
         let about = About {
             device: env.device(),
-            version: env!("CARGO_PKG_VERSION"),
+            version: &version,
             when: when.as_deref(),
         };
         let report = self.results.report(&about);

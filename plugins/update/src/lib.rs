@@ -35,7 +35,7 @@ use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::firmware::Firmware;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, MenuNeed, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingSpec, Storage, Version,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, Storage,
 };
 
 pub const PLUGIN: Id = Id::new_static("update");
@@ -160,7 +160,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Update {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Update", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Update", paperpaw_sdk::package_version!())
             .description(
                 "Installs firmware updates, from the card or downloaded from the internet.",
             )

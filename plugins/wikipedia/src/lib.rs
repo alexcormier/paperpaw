@@ -33,7 +33,7 @@ use paperpaw_sdk::web::encode;
 use paperpaw_sdk::{
     Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, Version,
+    ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("wikipedia");
@@ -160,7 +160,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Wikipedia {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Wikipedia", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Wikipedia", paperpaw_sdk::package_version!())
             .description("Looks words up online, beside the dictionaries.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)

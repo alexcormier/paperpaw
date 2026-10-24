@@ -32,7 +32,7 @@ use paperpaw_sdk::builtin::menus;
 use paperpaw_sdk::logo;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, Version,
+    RegisterError, Registrar, ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("about");
@@ -50,8 +50,15 @@ pub const MOST_LINES: usize = 512;
 const LICENCES: &str = include_str!("../licences.md");
 /// PaperPaw's logo, as the page shows it.
 const LOGO: &[u8] = include_bytes!("../logo.png");
-/// PaperPaw's version.
-pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// PaperPaw's version: its kernel's (this plugin has a version of its
+/// own).
+pub(crate) fn version(env: &Env<'_>) -> String {
+    let kernel = env.plugins().kernel();
+    format!(
+        "{}",
+        kernel.map_or(paperpaw_sdk::SDK_VERSION, |k| k.manifest.version)
+    )
+}
 /// Where PaperPaw's source is.
 pub(crate) const SOURCE: &str = "https://github.com/hthoene/paperpaw";
 
@@ -90,7 +97,7 @@ pub(crate) fn licences(env: &Env<'_>) -> String {
         }
         String::from("logo.png")
     };
-    let version = shown_version(env.i18n(), VERSION);
+    let version = shown_version(env.i18n(), &version(env));
     format!(
         "![PaperPaw]({picture})\n\n# PaperPaw {version}\n\n{intro}\n\n{SOURCE}\n\n{}{LICENCES}",
         lines(env),
@@ -201,7 +208,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for About {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "About", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "About", paperpaw_sdk::package_version!())
             .description("PaperPaw's version and licences.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

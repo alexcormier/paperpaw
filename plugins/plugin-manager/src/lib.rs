@@ -45,7 +45,7 @@ use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
-    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, Version,
+    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("plugin-manager");
@@ -69,7 +69,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for PluginManager {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Plugin manager", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Plugin manager", paperpaw_sdk::package_version!())
             .description("Lists the plugins and switches them on and off.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)

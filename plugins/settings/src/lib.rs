@@ -60,7 +60,7 @@ use paperpaw_sdk::{ActionSpec, MenuEntry};
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Level, Manifest, Params,
     Plugin, PointerEvent, PointerPhase, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue,
 };
 
 use self::chooser::*;
@@ -109,7 +109,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for SettingsPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Settings", Version::new(0, 1, 0))
+        Manifest::new(PLUGIN, "Settings", paperpaw_sdk::package_version!())
             .description("The settings pages, built from the settings of every plugin.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
