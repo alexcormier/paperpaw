@@ -115,7 +115,8 @@ today's reading: sad, so-so, content or happy.
   most two steps away, and it works with buttons only or with touch.
 - **One codebase, many devices.** Today: the Xteink X4 and X4 Pro, the
   desktop emulator, and as a beta Android e-readers such as Boox, in
-  grayscale and colour e-ink. Planned: the Xteink X3, Kobo, Kindle
+  grayscale and colour e-ink. Experimental, not yet tried on a real
+  device: the Xteink X4 Classic. Planned: the Xteink X3, Kobo, Kindle
   (jailbroken), PocketBook and reMarkable. To add a device, see
   [docs/porting.md](docs/porting.md).
 
