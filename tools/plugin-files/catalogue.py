@@ -118,11 +118,12 @@ def main():
     parser.add_argument("--date", default=datetime.date.today().isoformat())
     args = parser.parse_args()
     dist, version, base = args.dist, args.version, args.base_url.rstrip("/")
-    # The plugins' own version: three numbers, as their manifests say it
-    # (`package_version!`) and devices read it; the files keep the
-    # release's name (a release candidate's too).
-    plugin_version = version.split("-")[0]
-    sdk = ".".join(plugin_version.split(".")[:2])
+    # The plugins' own version: the release's whole, a beta's too
+    # (0.5.0-beta.2), as their manifests say it (`package_version!`):
+    # devices and the store order them as SemVer does (beta.1, beta.2,
+    # then 0.5.0), so a beta's fixes come to the one before as updates.
+    plugin_version = version
+    sdk = ".".join(version.split("-")[0].split("+")[0].split(".")[:2])
     (dist / "catalogue").mkdir(parents=True, exist_ok=True)
     keys = set()
     sums = []
