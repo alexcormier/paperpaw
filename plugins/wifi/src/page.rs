@@ -163,9 +163,18 @@ impl WifiPage {
                     let title = env
                         .i18n()
                         .format("wifi.password", &[("ssid", Arg::Str(&network.ssid))]);
+                    // Typed before and not taken (not wrong, e.g. no
+                    // answer): offered again, not typed anew.
+                    let typed = policy
+                        .pending
+                        .as_ref()
+                        .filter(|(ssid, _)| *ssid == network.ssid)
+                        .map(|(_, password)| password.clone())
+                        .unwrap_or_default();
                     cx.command(
                         paperpaw_sdk::ask::text(title, &PASSWORD_ENTERED)
                             .password()
+                            .initial(typed)
                             .with(params::ID, network.ssid.clone())
                             .command(),
                     );

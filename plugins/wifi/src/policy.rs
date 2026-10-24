@@ -23,7 +23,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::Instant;
-use paperpaw_sdk::wifi::{NETWORK_WAIT_MS, Wifi, WifiCommand, WifiNetwork, WifiState};
+use paperpaw_sdk::wifi::{JoinFailure, NETWORK_WAIT_MS, Wifi, WifiCommand, WifiNetwork, WifiState};
 
 /// Scans in a row that find no network joined before, until none counts
 /// as in reach: the first after the radio comes on often finds none.
@@ -51,7 +51,9 @@ pub struct Policy {
     pub scans: u8,
     /// The user switched the radio on (on the page): it stays on.
     pub manual: bool,
-    /// A network chosen with a password not kept yet: kept once joined.
+    /// A network chosen with a password not kept yet: kept once joined,
+    /// and offered again when the network is chosen after a failure
+    /// (let go only when the password was wrong).
     pub pending: Option<(String, String)>,
     /// Counts the times the radio was wanted; a timer to switch it off
     /// carries the count it was set at and does nothing once it changed.
@@ -191,18 +193,21 @@ impl Policy {
         }])
     }
 
-    /// Joining `ssid` failed: the next network joined before, if any is
-    /// wanted. `None` when there is none to try.
+    /// Joining `ssid` failed (`reason`): the next network joined before,
+    /// if any is wanted. `None` when there is none to try. A password
+    /// typed for it is kept to offer again, unless it was wrong.
     pub fn failed(
         &mut self,
         ssid: &str,
+        reason: JoinFailure,
         networks: &[WifiNetwork],
         known: &[(String, String)],
     ) -> Option<Vec<WifiCommand>> {
-        if self
-            .pending
-            .as_ref()
-            .is_some_and(|(pending, _)| pending == ssid)
+        if reason == JoinFailure::Password
+            && self
+                .pending
+                .as_ref()
+                .is_some_and(|(pending, _)| pending == ssid)
         {
             self.pending = None;
         }
@@ -261,10 +266,15 @@ mod tests {
             [join("Office", "pw2")]
         );
         assert_eq!(
-            policy.failed("Office", &networks, &known).unwrap(),
+            policy
+                .failed("Office", JoinFailure::Timeout, &networks, &known)
+                .unwrap(),
             [join("Home", "pw")]
         );
-        assert_eq!(policy.failed("Home", &networks, &known), None);
+        assert_eq!(
+            policy.failed("Home", JoinFailure::Timeout, &networks, &known),
+            None
+        );
         let online = WifiState::Online {
             ssid: String::from("Home"),
             address: String::from("10.0.0.2"),
@@ -324,8 +334,44 @@ mod tests {
             ..Policy::default()
         };
         policy.choose(&WifiState::On, "Cafe", "typo");
-        assert_eq!(policy.failed("Cafe", &[], &[]).unwrap(), []);
+        assert_eq!(
+            policy
+                .failed("Cafe", JoinFailure::Password, &[], &[])
+                .unwrap(),
+            []
+        );
         assert_eq!(policy.pending, None);
         assert_eq!(policy.goal, Goal::Nothing);
+    }
+
+    /// Any other failure (no answer, refused, broken off) keeps what was
+    /// typed, to offer again: the user saw it fail, the password was not
+    /// said to be wrong.
+    #[test]
+    fn another_failure_keeps_what_was_typed() {
+        for reason in [
+            JoinFailure::Timeout,
+            JoinFailure::NotFound,
+            JoinFailure::Other,
+        ] {
+            let mut policy = Policy {
+                pending: Some((String::from("Hannes"), String::from("secret"))),
+                ..Policy::default()
+            };
+            policy.choose(
+                &WifiState::Online {
+                    ssid: "Home".into(),
+                    address: "a".into(),
+                },
+                "Hannes",
+                "secret",
+            );
+            assert_eq!(policy.failed("Hannes", reason, &[], &[]).unwrap(), []);
+            assert_eq!(
+                policy.pending,
+                Some((String::from("Hannes"), String::from("secret"))),
+                "{reason:?}"
+            );
+        }
     }
 }

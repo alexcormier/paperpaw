@@ -775,3 +775,45 @@ fn a_saved_network_not_in_reach_is_said_when_wanted() {
     );
     assert!(device.requests.is_empty());
 }
+
+/// A network that did not answer (or turned the device away) keeps the
+/// password typed: chosen again, the keyboard offers it, and OK joins
+/// with it, not typed anew.
+#[test]
+fn a_password_that_got_no_answer_is_offered_again() {
+    let mut device = Device::new(TOUCH);
+    device.open();
+    device.radio_on_with(vec![network("Hannes", -45, true)]);
+    device.tap("Hannes");
+    device.type_text("secret1");
+    device.told();
+    device.radio(WifiEvent::State(WifiState::Joining {
+        ssid: "Hannes".into(),
+    }));
+    device.radio(WifiEvent::Failed {
+        ssid: "Hannes".into(),
+        reason: JoinFailure::Timeout,
+    });
+    device.radio(WifiEvent::State(WifiState::On));
+    assert_eq!(
+        device.notices.borrow().last().map(String::as_str),
+        Some("Hannes did not answer.")
+    );
+    // Not kept among the secrets before it is joined.
+    assert!(device.saved().is_empty());
+    device.now += 10_000;
+    device.tap("Hannes");
+    device.type_text("");
+    assert_eq!(
+        device.told(),
+        [WifiCommand::Join {
+            ssid: "Hannes".into(),
+            password: "secret1".into()
+        }]
+    );
+    device.radio(WifiEvent::State(WifiState::Online {
+        ssid: "Hannes".into(),
+        address: "10.0.0.7".into(),
+    }));
+    assert_eq!(device.saved(), [("Hannes".into(), "secret1".into())]);
+}

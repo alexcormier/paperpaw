@@ -60,8 +60,11 @@ pub struct Parts {
 type Controller = &'static mut WifiController<'static>;
 
 /// What a background task of the radio brought.
+/// The networks a scan found, and the security each asks for.
+type Found = (Vec<WifiNetwork>, Vec<(String, AuthenticationMethod)>);
+
 enum Outcome {
-    Scanned(Option<Vec<WifiNetwork>>),
+    Scanned(Option<Found>),
     /// Joined, or why not.
     Joined(Result<(), JoinFailure>),
     Left,
@@ -93,6 +96,9 @@ struct On {
     queued: Vec<WifiCommand>,
     /// The power saving set (none yet: the driver's, off).
     saving: Option<bool>,
+    /// The security each network of the last scan asks for, to join it
+    /// so ([`authentication`]).
+    security: Vec<(String, AuthenticationMethod)>,
 }
 
 pub struct Radio {
@@ -128,19 +134,63 @@ async fn within<F: Future>(ms: u64, future: F) -> Option<F::Output> {
     .await
 }
 
-/// Why joining failed, as the SDK says it.
-fn failure(error: &ConnectionError) -> JoinFailure {
+/// How to join a network the last scan found with `method`, with
+/// `password`: with the security it asks for, which the radio takes as
+/// the least it accepts (so WPA2 also joins a WPA2/WPA3 network, and WPA3
+/// where the radio has it); WPA2 where the scan did not say. One this
+/// device cannot join at all is said so at once.
+fn authentication(
+    method: Option<AuthenticationMethod>,
+    password: &str,
+) -> Result<AuthenticationMethodConfig, JoinFailure> {
+    use AuthenticationMethod as M;
+    use AuthenticationMethodConfig as C;
+    if password.is_empty() || method == Some(M::None) {
+        return Ok(C::Open);
+    }
+    let password = || password.try_into().map_err(|_| JoinFailure::Other);
+    Ok(match method {
+        Some(M::Wep) => C::Wep(password()?),
+        Some(M::Wpa) => C::Wpa(password()?),
+        Some(M::WpaWpa2Personal) => C::WpaWpa2Personal(password()?),
+        Some(M::Wpa2Enterprise | M::Wpa3EntSuiteB192Bit | M::WapiPersonal) => {
+            log::info!("wifi: {method:?} is a security this device cannot join");
+            return Err(JoinFailure::Other);
+        }
+        _ => C::Wpa2Personal(password()?),
+    })
+}
+
+/// Why joining failed, as the SDK says it (the radio's own reason is in
+/// the log); `method`, the security the scan found the network with. A
+/// security this device cannot join, or a network turning it away, is
+/// `Other`, as is one broken off while joining.
+fn failure(error: &ConnectionError, method: Option<AuthenticationMethod>) -> JoinFailure {
     use DisconnectReason as R;
     match error {
         ConnectionError::Failed(info) => match info.reason {
-            R::NoAccessPointFound
-            | R::NoAccessPointFoundWithCompatibleSecurity
+            R::NoAccessPointFound | R::NoAccessPointFoundInRssiThreshold => JoinFailure::NotFound,
+            R::NoAccessPointFoundWithCompatibleSecurity
             | R::NoAccessPointFoundInAuthmodeThreshold
-            | R::NoAccessPointFoundInRssiThreshold => JoinFailure::NotFound,
+            | R::GroupCipherInvalid
+            | R::PairwiseCipherInvalid
+            | R::AkmpInvalid
+            | R::CipherSuiteRejected
+            | R::BadCipherOrAkm => JoinFailure::Other,
+            // WPA3 alone: a refused authentication is its security, not
+            // (only) a password.
+            R::AuthenticationFailed if method == Some(AuthenticationMethod::Wpa3Personal) => {
+                JoinFailure::Other
+            }
             R::AuthenticationFailed
             | R::FourWayHandshakeTimeout
             | R::HandshakeTimeout
             | R::MicFailure => JoinFailure::Password,
+            R::AssociationFailed
+            | R::ConnectionFailed
+            | R::AssociationTooMany
+            | R::NotAuthorizedThisLocation => JoinFailure::Other,
+            R::AssociationLeave | R::AuthenticationLeave | R::StationLeaving => JoinFailure::Other,
             R::Timeout | R::BeaconTimeout => JoinFailure::Timeout,
             _ => JoinFailure::Other,
         },
@@ -266,6 +316,7 @@ impl Radio {
             hosting: None,
             queued: Vec::new(),
             saving: None,
+            security: Vec::new(),
         });
         self.stopping = false;
     }
@@ -311,8 +362,10 @@ impl Radio {
     /// What a task brought.
     fn finished(on: &mut On, outcome: Outcome, events: &mut Vec<WifiEvent>) {
         match outcome {
-            Outcome::Scanned(networks) => {
-                events.push(WifiEvent::Scanned(networks.unwrap_or_default()));
+            Outcome::Scanned(found) => {
+                let (networks, security) = found.unwrap_or_default();
+                on.security = security;
+                events.push(WifiEvent::Scanned(networks));
             }
             Outcome::Joined(Ok(())) => {
                 on.linked = true;
@@ -391,8 +444,14 @@ impl Radio {
                 Box::pin(async move {
                     let config = ScanConfig::default().with_max(SCAN_MAX);
                     let found = within(WAIT_MS, controller.scan_async(&config)).await;
-                    let networks = found.and_then(Result::ok).map(|found| {
-                        found
+                    let found = found.and_then(Result::ok).map(|found| {
+                        let security = found
+                            .iter()
+                            .filter_map(|ap| {
+                                Some((String::from(ap.ssid.as_str()), ap.auth_method?))
+                            })
+                            .collect();
+                        let networks = found
                             .into_iter()
                             .map(|ap| {
                                 WifiNetwork::new(
@@ -402,49 +461,65 @@ impl Radio {
                                         .is_some_and(|m| m != AuthenticationMethod::None),
                                 )
                             })
-                            .collect()
+                            .collect();
+                        (networks, security)
                     });
-                    (Outcome::Scanned(networks), controller)
+                    (Outcome::Scanned(found), controller)
                 })
             }
             WifiCommand::Join { ssid, password } => {
                 mark(at::RADIO_CONNECT);
-                let authentication = if password.is_empty() {
-                    Ok(AuthenticationMethodConfig::Open)
-                } else {
-                    password
-                        .as_str()
-                        .try_into()
-                        .map(AuthenticationMethodConfig::Wpa2Personal)
-                };
+                let method = on
+                    .security
+                    .iter()
+                    .find(|(name, _)| *name == ssid)
+                    .map(|(_, method)| *method);
+                log::info!("wifi: joining {ssid} ({method:?})");
+                let authentication = authentication(method, &password);
                 let config = authentication.and_then(|authentication| {
                     // All channels, then the strongest access point: in a
                     // network of several (a mesh), the first one heard may
                     // be a far one that never lets the X4 in. Another one
                     // is tried if it fails.
                     Ok(StationConfig::default()
-                        .with_ssid(ssid.as_str().try_into()?)
+                        .with_ssid(ssid.as_str().try_into().map_err(|_| JoinFailure::Other)?)
                         .with_authentication(authentication)
                         .with_scan_method(ScanMethod::AllChannels)
                         .with_failure_retry_cnt(JOIN_RETRIES))
                 });
+                let target = ssid.clone();
                 on.ssid = Some(ssid);
                 on.linked = false;
                 Box::pin(async move {
                     let config = match config {
                         Ok(config) => config,
-                        Err(_) => return (Outcome::Joined(Err(JoinFailure::Other)), controller),
+                        Err(failure) => return (Outcome::Joined(Err(failure)), controller),
                     };
+                    // Left first: joining another network while still in
+                    // one ended at once, when the one left said so.
+                    if controller.is_connected() {
+                        log::info!("wifi: leaving first");
+                        let _ = within(STOP_MS, controller.disconnect_async()).await;
+                    }
                     if controller.set_config(&Config::Station(config)).is_err() {
                         return (Outcome::Joined(Err(JoinFailure::Other)), controller);
                     }
                     // Bounded: once, after flashing, no answer ever came.
                     let started = esp_hal::time::Instant::now();
-                    let joined = match within(WAIT_MS, controller.connect_async()).await {
+                    let mut answer = within(WAIT_MS, controller.connect_async()).await;
+                    // Another network's leaving (late) is not this one's
+                    // answer: asked once more.
+                    if let Some(Err(ConnectionError::Failed(info))) = &answer
+                        && info.ssid.as_str() != target.as_str()
+                    {
+                        log::info!("wifi: {} left meanwhile, asked again", info.ssid.as_str());
+                        answer = within(WAIT_MS, controller.connect_async()).await;
+                    }
+                    let joined = match answer {
                         Some(Ok(_)) => Ok(()),
                         Some(Err(e)) => {
                             log::info!("wifi: join refused: {e:?}");
-                            Err(failure(&e))
+                            Err(failure(&e, method))
                         }
                         None => {
                             log::info!("wifi: join gave no answer");

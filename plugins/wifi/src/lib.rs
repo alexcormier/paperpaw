@@ -471,7 +471,7 @@ impl Plugin for Wifi {
                 return;
             }
             let chosen = matches!(policy.goal, Goal::Chosen { .. });
-            match policy.failed(ssid, &wifi.networks, &known) {
+            match policy.failed(ssid, reason, &wifi.networks, &known) {
                 Some(commands) if !commands.is_empty() => wifi_commands(out, commands),
                 // The last try (or the user's choice): say why.
                 result => {
