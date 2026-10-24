@@ -1,0 +1,136 @@
+//! Where the settings' specs are kept ([`Specs`]).
+
+use alloc::vec::Vec;
+
+use super::{SettingError, SettingSpec};
+
+/// The settings' specs in registration order, found by id through an
+/// index sorted by it: each id kept once. Specs kept in the program
+/// ([`SettingSpec::fixed`], e.g. in flash) are held as the lists a plugin
+/// gave ([`Registrar::add_settings`](crate::Registrar::add_settings)),
+/// a reference to each list rather than to each spec; the others as they
+/// are.
+#[derive(Debug, Default)]
+pub(super) struct Specs {
+    owned: Vec<SettingSpec>,
+    /// The lists of fixed specs, each with the place of its first spec:
+    /// the places of fixed specs count on through the lists.
+    lists: Vec<(&'static [SettingSpec], u16)>,
+    /// Every spec in registration order: a place in `owned`, or among
+    /// the fixed specs with [`FIXED`] set.
+    order: Vec<u16>,
+    /// The same places, sorted by the specs' ids.
+    by_id: Vec<u16>,
+}
+
+/// Marks a place among the fixed specs.
+const FIXED: u16 = 1 << 15;
+/// Specs of each kind (made at run time, kept in the program) a place of
+/// 15 bits holds: plenty, and two bytes a place on small devices.
+const PLACES: usize = FIXED as usize;
+
+impl Specs {
+    fn at(&self, place: u16) -> &SettingSpec {
+        if place & FIXED == 0 {
+            return &self.owned[usize::from(place)];
+        }
+        let place = place & !FIXED;
+        let list = self.lists.partition_point(|(_, first)| *first <= place) - 1;
+        let (specs, first) = self.lists[list];
+        &specs[usize::from(place - first)]
+    }
+
+    /// Where `id` is in `by_id`, or would go.
+    fn find(&self, id: &str) -> Result<usize, usize> {
+        self.by_id
+            .binary_search_by(|&at| self.at(at).id.as_str().cmp(id))
+    }
+
+    pub(super) fn get(&self, id: &str) -> Option<&SettingSpec> {
+        let at = self.find(id).ok()?;
+        Some(self.at(self.by_id[at]))
+    }
+
+    /// The spec `id` to change: a fixed one is copied first, which needs
+    /// a place of its own.
+    pub(super) fn get_mut(&mut self, id: &str) -> Result<&mut SettingSpec, SettingError> {
+        let at = self.find(id).map_err(|_| SettingError::Unknown)?;
+        let place = self.by_id[at];
+        let place = if place & FIXED == 0 {
+            place
+        } else if self.owned.len() >= PLACES {
+            return Err(SettingError::Full);
+        } else {
+            let copy = self.at(place).clone();
+            let owned = self.owned.len() as u16;
+            self.owned.push(copy);
+            self.by_id[at] = owned;
+            if let Some(o) = self.order.iter_mut().find(|o| **o == place) {
+                *o = owned;
+            }
+            owned
+        };
+        Ok(&mut self.owned[usize::from(place)])
+    }
+
+    /// Adds `place`, whose spec's id is not there yet.
+    fn index(&mut self, id: &str, place: u16) {
+        let Err(at) = self.find(id) else {
+            return;
+        };
+        self.by_id.insert(at, place);
+        self.order.push(place);
+    }
+
+    /// Adds `spec`, whose id is not there yet; `false` when no place is
+    /// left.
+    pub(super) fn insert(&mut self, spec: SettingSpec) -> bool {
+        if self.find(spec.id.as_str()).is_ok() {
+            return true;
+        }
+        if self.owned.len() >= PLACES {
+            return false;
+        }
+        let place = self.owned.len() as u16;
+        let id = spec.id.clone();
+        self.owned.push(spec);
+        self.index(id.as_str(), place);
+        true
+    }
+
+    /// Adds spec `at` of the fixed `list`, whose id is not there yet;
+    /// `false` when no place is left. The specs of a list are added one
+    /// after another, so the list is kept once.
+    pub(super) fn insert_fixed(&mut self, list: &'static [SettingSpec], at: usize) -> bool {
+        let Some(spec) = list.get(at) else {
+            return true;
+        };
+        if self.find(spec.id.as_str()).is_ok() {
+            return true;
+        }
+        let first = match self.lists.last() {
+            Some((last, first)) if core::ptr::eq(*last, list) => *first,
+            last => {
+                let next = last.map_or(0, |(specs, first)| usize::from(*first) + specs.len());
+                if next + list.len() > PLACES {
+                    return false;
+                }
+                self.lists.push((list, next as u16));
+                next as u16
+            }
+        };
+        self.index(spec.id.as_str(), (first + at as u16) | FIXED);
+        true
+    }
+
+    pub(super) fn iter(&self) -> impl Iterator<Item = &SettingSpec> {
+        self.order.iter().map(|&place| self.at(place))
+    }
+
+    pub(super) fn shrink_to_fit(&mut self) {
+        self.owned.shrink_to_fit();
+        self.lists.shrink_to_fit();
+        self.order.shrink_to_fit();
+        self.by_id.shrink_to_fit();
+    }
+}

@@ -442,6 +442,11 @@ file to your report.
 
 #### For developers
 
+- SDK: settings kept in the program take less memory: the kernel holds
+  each list given to `add_settings` once, not each spec, and the network
+  settings it makes for every plugin share one fixed extra
+  (`SettingExtra::section_of_plugin`, shown under the plugin's name). On
+  the X4 the reading flow's heap peak is 9.5 KiB lower.
 - SDK: `Env`'s parts are read through methods (`env.settings()`,
   `env.i18n()`, `env.now()`, one for each part), so what it carries can
   change without a change to plugins. The docs and samples use them; the

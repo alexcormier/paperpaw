@@ -257,7 +257,7 @@ fn placements_have_values_of_their_own() {
         true,
         Id::new_static("widgets.clock"),
     )];
-    s.define_fixed(&SPECS[0]).unwrap();
+    s.define_fixed(&SPECS, 0).unwrap();
     // Unset, a placement has the setting's value.
     assert!(s.bool("widgets.clock@2.date"));
     s.set("widgets.clock@2.date", SettingValue::Bool(false))
@@ -310,8 +310,8 @@ fn previews_show_values_without_keeping_them() {
             Id::new_static("widgets.clock"),
         ),
     ];
-    s.define_fixed(&SPECS[0]).unwrap();
-    s.define_fixed(&SPECS[1]).unwrap();
+    s.define_fixed(&SPECS, 0).unwrap();
+    s.define_fixed(&SPECS, 1).unwrap();
     s.set("widgets.clock.size", SettingValue::Int(7)).unwrap();
     s.set("widgets.clock@2.date", SettingValue::Bool(false))
         .unwrap();

@@ -205,8 +205,8 @@ impl Harness {
         for contribution in r.into_contributions() {
             match contribution {
                 Contribution::FixedSettings(list) => {
-                    for spec in list {
-                        h.settings.define_fixed(spec).unwrap();
+                    for at in 0..list.len() {
+                        h.settings.define_fixed(list, at).unwrap();
                     }
                 }
                 Contribution::SettingGroup(group) => h.settings.add_group(group).unwrap(),
