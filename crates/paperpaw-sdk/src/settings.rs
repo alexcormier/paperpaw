@@ -8,6 +8,7 @@ use crate::collections::VecMap;
 use crate::id::Id;
 use crate::plugin::RegisterError;
 use crate::setting::{Setting, Text};
+use specs::Specs;
 
 /// A setting's value.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -238,6 +239,11 @@ pub struct SettingExtra {
     /// [`setting_sections::FONT`](crate::builtin::setting_sections::FONT)),
     /// shown as a heading above it in large groups.
     pub section: Option<Cow<'static, str>>,
+    /// Its part is the name of the plugin its id ends in
+    /// (`core.network.weather`: the weather plugin's), for settings made
+    /// for each plugin: one fixed extra serves them all
+    /// ([`SettingSpec::section_key`]).
+    pub section_of_plugin: bool,
     /// A secret such as an API key: shown as dots, entered afresh rather
     /// than edited, and kept with the secrets, not the settings: read it
     /// with `env.secrets().get(id)` (see [`secrets`](crate::secrets)).
@@ -307,7 +313,15 @@ impl SettingExtra {
             keeps_unknown: false,
             shown_if: None,
             check: None,
+            section_of_plugin: false,
         }
+    }
+
+    /// Its part is the name of the plugin its id ends in
+    /// ([`SettingExtra::section_of_plugin`]).
+    pub const fn section_of_plugin(mut self) -> Self {
+        self.section_of_plugin = true;
+        self
     }
 
     /// A choice keeping values its options lack
@@ -552,6 +566,17 @@ impl SettingSpec {
 
     /// Its unit, editor, step, slider, section and whether it is a secret
     /// (the defaults for a setting that sets none of them).
+    /// The translation key of the part of its group it is shown in
+    /// ([`SettingExtra::section`], [`SettingExtra::section_of_plugin`]).
+    pub fn section_key(&self) -> Option<Cow<'static, str>> {
+        let extra = self.extra();
+        if extra.section_of_plugin {
+            let plugin = self.id.as_str().rsplit('.').next().unwrap_or_default();
+            return Some(Cow::Owned(alloc::format!("{plugin}.plugin.name")));
+        }
+        extra.section.clone()
+    }
+
     pub fn extra(&self) -> &SettingExtra {
         match &self.extra {
             Some(Extra::Fixed(extra)) => extra,
@@ -851,121 +876,6 @@ impl fmt::Display for SettingError {
 
 impl core::error::Error for SettingError {}
 
-/// The settings' specs in registration order, found by id through an
-/// index sorted by it: each id kept once. Specs registered as fixed
-/// ([`SettingSpec::fixed`], kept in the program, e.g. in flash) are held
-/// by reference, the others as they are.
-#[derive(Debug, Default)]
-struct Specs {
-    owned: Vec<SettingSpec>,
-    fixed: Vec<&'static SettingSpec>,
-    /// Every spec in registration order: a place in `owned`, or in
-    /// `fixed` with [`FIXED`] set.
-    order: Vec<u16>,
-    /// The same places, sorted by the specs' ids.
-    by_id: Vec<u16>,
-}
-
-/// Marks a place in [`Specs::fixed`].
-const FIXED: u16 = 1 << 15;
-/// Specs of each kind (made at run time, kept in the program) a place of
-/// 15 bits holds: plenty, and two bytes a place on small devices.
-const PLACES: usize = FIXED as usize;
-
-impl Specs {
-    fn at(&self, place: u16) -> &SettingSpec {
-        if place & FIXED == 0 {
-            &self.owned[usize::from(place)]
-        } else {
-            self.fixed[usize::from(place & !FIXED)]
-        }
-    }
-
-    /// Where `id` is in `by_id`, or would go.
-    fn find(&self, id: &str) -> Result<usize, usize> {
-        self.by_id
-            .binary_search_by(|&at| self.at(at).id.as_str().cmp(id))
-    }
-
-    fn get(&self, id: &str) -> Option<&SettingSpec> {
-        let at = self.find(id).ok()?;
-        Some(self.at(self.by_id[at]))
-    }
-
-    /// The spec `id` to change: a fixed one is copied first, which needs
-    /// a place of its own.
-    fn get_mut(&mut self, id: &str) -> Result<&mut SettingSpec, SettingError> {
-        let at = self.find(id).map_err(|_| SettingError::Unknown)?;
-        let place = self.by_id[at];
-        let place = if place & FIXED == 0 {
-            place
-        } else if self.owned.len() >= PLACES {
-            return Err(SettingError::Full);
-        } else {
-            let copy = self.fixed[usize::from(place & !FIXED)].clone();
-            let owned = self.owned.len() as u16;
-            self.owned.push(copy);
-            self.by_id[at] = owned;
-            if let Some(o) = self.order.iter_mut().find(|o| **o == place) {
-                *o = owned;
-            }
-            owned
-        };
-        Ok(&mut self.owned[usize::from(place)])
-    }
-
-    /// Adds `place`, whose spec's id is not there yet.
-    fn index(&mut self, id: &str, place: u16) {
-        let Err(at) = self.find(id) else {
-            return;
-        };
-        self.by_id.insert(at, place);
-        self.order.push(place);
-    }
-
-    /// Adds `spec`, whose id is not there yet; `false` when no place is
-    /// left.
-    fn insert(&mut self, spec: SettingSpec) -> bool {
-        if self.find(spec.id.as_str()).is_ok() {
-            return true;
-        }
-        if self.owned.len() >= PLACES {
-            return false;
-        }
-        let place = self.owned.len() as u16;
-        let id = spec.id.clone();
-        self.owned.push(spec);
-        self.index(id.as_str(), place);
-        true
-    }
-
-    /// Adds the fixed `spec`, whose id is not there yet; `false` when no
-    /// place is left.
-    fn insert_fixed(&mut self, spec: &'static SettingSpec) -> bool {
-        if self.find(spec.id.as_str()).is_ok() {
-            return true;
-        }
-        if self.fixed.len() >= PLACES {
-            return false;
-        }
-        let place = self.fixed.len() as u16 | FIXED;
-        self.fixed.push(spec);
-        self.index(spec.id.as_str(), place);
-        true
-    }
-
-    fn iter(&self) -> impl Iterator<Item = &SettingSpec> {
-        self.order.iter().map(|&place| self.at(place))
-    }
-
-    fn shrink_to_fit(&mut self) {
-        self.owned.shrink_to_fit();
-        self.fixed.shrink_to_fit();
-        self.order.shrink_to_fit();
-        self.by_id.shrink_to_fit();
-    }
-}
-
 /// All registered settings and their current values.
 ///
 /// Plugins receive it read-only through [`Env`](crate::Env) and change values
@@ -1194,11 +1104,19 @@ impl Settings {
         Ok(())
     }
 
-    /// Registers a fixed setting ([`SettingSpec::fixed`]), kept by
-    /// reference. Its default must be valid.
+    /// Registers spec `at` of a list of fixed settings
+    /// ([`SettingSpec::fixed`]), kept by a reference to the list. Its
+    /// default must be valid.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn define_fixed(&mut self, spec: &'static SettingSpec) -> Result<(), RegisterError> {
+    pub fn define_fixed(
+        &mut self,
+        list: &'static [SettingSpec],
+        at: usize,
+    ) -> Result<(), RegisterError> {
+        let Some(spec) = list.get(at) else {
+            return Ok(());
+        };
         if self.specs.get(spec.id.as_str()).is_some() {
             return Err(RegisterError::Duplicate {
                 id: spec.id.clone(),
@@ -1209,7 +1127,7 @@ impl Settings {
                 message: Cow::Borrowed("default value does not match the setting kind"),
             });
         }
-        if !self.specs.insert_fixed(spec) {
+        if !self.specs.insert_fixed(list, at) {
             return Err(RegisterError::Invalid {
                 message: Cow::Borrowed("no place left for another setting"),
             });
@@ -1557,5 +1475,6 @@ impl Settings {
 }
 
 mod declared;
+mod specs;
 #[cfg(test)]
 mod tests;

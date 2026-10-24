@@ -5765,6 +5765,7 @@ pub paperpaw_sdk::SettingExtra::follows: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::SettingExtra::keeps_unknown: bool
 pub paperpaw_sdk::SettingExtra::secret: bool
 pub paperpaw_sdk::SettingExtra::section: core::option::Option<alloc::borrow::Cow<'static, str>>
+pub paperpaw_sdk::SettingExtra::section_of_plugin: bool
 pub paperpaw_sdk::SettingExtra::shown_if: core::option::Option<(paperpaw_sdk::Id, &'static str)>
 pub paperpaw_sdk::SettingExtra::slider: bool
 pub paperpaw_sdk::SettingExtra::step: i64
@@ -5778,6 +5779,7 @@ pub const fn paperpaw_sdk::SettingExtra::keeps_unknown(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::new() -> Self
 pub const fn paperpaw_sdk::SettingExtra::secret(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::section(self, &'static str) -> Self
+pub const fn paperpaw_sdk::SettingExtra::section_of_plugin(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::shown_if(self, paperpaw_sdk::Id, &'static str) -> Self
 pub const fn paperpaw_sdk::SettingExtra::slider(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::step(self, i64) -> Self
@@ -5832,6 +5834,7 @@ pub fn paperpaw_sdk::SettingSpec::parse(&self, &str) -> core::option::Option<pap
 pub const fn paperpaw_sdk::SettingSpec::scoped(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::secret(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::section(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_sdk::SettingSpec::section_key(&self) -> core::option::Option<alloc::borrow::Cow<'static, str>>
 pub fn paperpaw_sdk::SettingSpec::slider(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::step(self, i64) -> Self
 pub fn paperpaw_sdk::SettingSpec::switch(&paperpaw_sdk::setting::Setting<bool>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool) -> Self
