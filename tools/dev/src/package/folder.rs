@@ -163,7 +163,39 @@ pub fn check(plugin: &DataPlugin, report: &mut Report) -> Option<Folder> {
     fonts(&folder, &mut add);
     pictures(plugin, &folder, &mut add);
     package(plugin, &folder, &mut add);
+    store_entry(&folder, &mut add);
     Some(folder)
+}
+
+/// The store's groups, as the plugin library and the device's store
+/// (`plugins/store/src/catalog.rs`) have them: keep them in step.
+pub const STORE_GROUPS: [&str; 12] = [
+    "reading", "formats", "library", "sync", "home", "look", "notes", "learning", "news", "tools",
+    "games", "system",
+];
+
+/// `store/store.ini`, what only the store reads: its `group` one of the
+/// store's, as the plugin library refuses others.
+fn store_entry(folder: &Folder, add: &mut dyn FnMut(Finding)) {
+    if folder.file("store/store.ini").is_none() {
+        return;
+    }
+    for line in lines(folder, "store/store.ini", add) {
+        if line.section == "store"
+            && line.key == "group"
+            && !STORE_GROUPS.contains(&line.value.trim())
+        {
+            add(Finding::error(
+                "package.store-group",
+                format!("store/store.ini:{}", line.line),
+                format!(
+                    "`{}` is no group of the store; the plugin library refuses it. One of: {}.",
+                    line.value.trim(),
+                    STORE_GROUPS.join(", ")
+                ),
+            ));
+        }
+    }
 }
 
 /// The extension of `path`, lower-case.
@@ -1056,6 +1088,40 @@ mod tests {
             .into_iter()
             .map(|f| (f.level, f.check, f.place, f.message))
             .collect()
+    }
+
+    /// `store/store.ini` names one of the store's groups, the new ones too.
+    #[test]
+    fn the_store_s_group_is_one_it_has() {
+        let manifest: &[u8] =
+            b"[plugin]\nid = snake\nname = Snake\ndescription = A game.\nversion = 1.0.0\n";
+        let group = |name: &str| {
+            let store = format!("[store]\ngroup = {name}\n");
+            findings(&folder(
+                "snake",
+                &[
+                    ("plugin.ini", manifest),
+                    ("store/store.ini", store.as_bytes()),
+                ],
+            ))
+            .into_iter()
+            .filter(|f| f.1 == "package.store-group")
+            .map(|f| (f.2, f.3))
+            .collect::<Vec<_>>()
+        };
+        for fits in [
+            "games", "learning", "tools", "news", "notes", "reading", "system",
+        ] {
+            assert_eq!(group(fits), [], "{fits}");
+        }
+        let found = group("fun");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].0, "store/store.ini:2");
+        assert!(
+            found[0].1.starts_with("`fun` is no group of the store"),
+            "{}",
+            found[0].1
+        );
     }
 
     /// Every file the kernel reads for a data plugin (`data_plugin.rs`)

@@ -75,9 +75,12 @@ pub(crate) const FIRST_PARTY_KEY: [u8; 32] = [
     0x92, 0x65, 0x60, 0x6c, 0xc6, 0xa8, 0x1f, 0x08, 0x5b, 0xb3, 0xb9, 0x74, 0x0a, 0x95, 0xae, 0xbd,
 ];
 
-/// The groups, in the order the website shows them.
-pub(crate) const GROUPS: [&str; 7] = [
-    "reading", "formats", "library", "sync", "home", "look", "system",
+/// The groups, in the order the website shows them (its `catalogue.rs`,
+/// and paperpaw-dev's `package/folder.rs`: keep them in step). `system`
+/// stays last: it takes a plugin of a group this plugin does not know.
+pub(crate) const GROUPS: [&str; 12] = [
+    "reading", "formats", "library", "sync", "home", "look", "notes", "learning", "news", "tools",
+    "games", "system",
 ];
 
 /// The group of `name`, the last (`system`) for one this plugin does not

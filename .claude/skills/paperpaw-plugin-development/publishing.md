@@ -99,8 +99,10 @@ Ask the user for each, and suggest values from the plugin where you can
   other language) named by its manifest (`Manifest::how`), which the
   plugin manager shows once it is installed; `paperpaw-dev` warns where
   that is missing or short.
-- **group**: `reading`, `formats`, `library`, `sync`, `home`, `look` or
-  `system`.
+- **group**: `reading`, `formats`, `library`, `sync`, `home`, `look`,
+  `notes` (notes, highlights, journals), `learning` (vocabulary,
+  languages, flash cards), `news` (news, feeds, articles, web reading),
+  `tools` (calculators, timers, utilities), `games` or `system`.
 - **tags**: up to five, lower-case letters, digits and hyphens, at most
   24 each.
 - **licence**: an SPDX identifier (`MIT`, `Apache-2.0`,

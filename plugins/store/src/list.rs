@@ -65,13 +65,18 @@ impl Row {
 }
 
 /// The icons of the groups, as [`GROUPS`].
-const GROUP_ICONS: [&str; 7] = [
+const GROUP_ICONS: [&str; 12] = [
     "book",
     "file-text",
     "books",
     "refresh",
     "home",
     "palette",
+    "note",
+    "vocabulary",
+    "rss",
+    "apps",
+    "puzzle",
     "settings",
 ];
 

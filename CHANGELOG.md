@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- The plugin store has five more groups, so every kind of plugin has a
+  place: notes, learning, news, tools and games, before system. Of
+  PaperPaw's own plugins, vocabulary moved to learning; news, wallabag
+  and the browser to news; readwise and joplin to notes.
+- paperpaw-dev checks the group in `store/store.ini` (`package.store-group`).
+
 ## [0.5.0-beta.4] - 2026-10-24
 
 A beta for updates over the air, from testing the update to beta.2 on
