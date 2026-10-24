@@ -99,6 +99,52 @@ impl Screens {
     }
 }
 
+/// The events plugins subscribed to, plugin by plugin in the order they
+/// registered: each plugin's id once, with how many of the handlers after
+/// those of the plugin before are its (a plugin subscribes to a few
+/// events; there are some hundred and fifty subscriptions).
+#[derive(Default)]
+pub(crate) struct Subscriptions {
+    plugins: Vec<(Id, u16)>,
+    handlers: Vec<(Id, paperpaw_sdk::EventHandler)>,
+}
+
+impl Subscriptions {
+    /// Adds `subscriptions` (event, plugin, handler), emptying it.
+    pub(crate) fn append(&mut self, subscriptions: &mut Vec<(Id, Id, paperpaw_sdk::EventHandler)>) {
+        for (event, plugin, handler) in subscriptions.drain(..) {
+            match self.plugins.last_mut() {
+                Some((last, count)) if *last == plugin && *count < u16::MAX => *count += 1,
+                _ => self.plugins.push((plugin, 1)),
+            }
+            self.handlers.push((event, handler));
+        }
+    }
+
+    /// Every subscription: the event, the plugin, its handler.
+    pub(crate) fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&Id, &Id, &paperpaw_sdk::EventHandler)> + '_ {
+        self.plugins
+            .iter()
+            .scan(0, |at, (plugin, count)| {
+                let from = *at;
+                *at += usize::from(*count);
+                Some((plugin, from..*at))
+            })
+            .flat_map(move |(plugin, handlers)| {
+                self.handlers[handlers]
+                    .iter()
+                    .map(move |(event, handler)| (event, plugin, handler))
+            })
+    }
+
+    pub(crate) fn shrink_to_fit(&mut self) {
+        self.plugins.shrink_to_fit();
+        self.handlers.shrink_to_fit();
+    }
+}
+
 /// All active contributions except settings, key maps and translations,
 /// which live in their own stores.
 #[derive(Debug, Default)]
@@ -526,5 +572,43 @@ fn validate_keymap(source: &str) -> Result<(), RegisterError> {
             message: problem.message,
         }),
         None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::boxed::Box;
+    use alloc::string::String;
+
+    /// Subscriptions come back as they were added: in order, each with its
+    /// event and plugin, a plugin's id kept once for its run of them.
+    #[test]
+    fn subscriptions_come_back_in_order_with_their_plugins() {
+        let handler = || -> paperpaw_sdk::EventHandler { Box::new(|_, _, _| {}) };
+        let id = |text: &str| Id::parse(text).unwrap();
+        let mut subscriptions = Subscriptions::default();
+        let mut first = alloc::vec![
+            (id("e.one"), id("a"), handler()),
+            (id("e.two"), id("a"), handler()),
+            (id("e.one"), id("b"), handler()),
+        ];
+        subscriptions.append(&mut first);
+        assert!(first.is_empty());
+        subscriptions.append(&mut alloc::vec![(id("e.three"), id("b"), handler())]);
+        subscriptions.append(&mut alloc::vec![(id("e.one"), id("a"), handler())]);
+        let seen: Vec<(String, String)> = subscriptions
+            .iter()
+            .map(|(event, plugin, _)| (event.as_str().into(), plugin.as_str().into()))
+            .collect();
+        let pairs = [
+            ("e.one", "a"),
+            ("e.two", "a"),
+            ("e.one", "b"),
+            ("e.three", "b"),
+            ("e.one", "a"),
+        ];
+        assert_eq!(seen, pairs.map(|(e, p)| (String::from(e), String::from(p))));
+        assert_eq!(subscriptions.plugins.len(), 3);
     }
 }

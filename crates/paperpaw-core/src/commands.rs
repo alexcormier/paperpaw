@@ -489,7 +489,7 @@ impl Kernel {
         for (_, plugin, handler) in self
             .subscriptions
             .iter()
-            .filter(|(id, plugin, _)| id == event && hears(plugin.as_str()))
+            .filter(|(id, plugin, _)| *id == event && hears(plugin.as_str()))
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
@@ -568,7 +568,7 @@ impl Kernel {
         for (_, plugin, handler) in self
             .subscriptions
             .iter()
-            .filter(|(id, plugin, _)| id == event && owners.iter().any(|o| o == plugin.as_str()))
+            .filter(|(id, plugin, _)| *id == event && owners.iter().any(|o| o == plugin.as_str()))
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();

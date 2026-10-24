@@ -83,10 +83,10 @@ use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::native::{Native, SafeMode};
 use paperpaw_sdk::setting::{Setting, SettingType};
 use paperpaw_sdk::{
-    Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
-    Fonts, Formats, Gesture, GestureKind, Handled, HintVisibility, Hyphenation, Id, Manifest,
-    Menus, Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError,
-    RequiredFor, Screen, Settings, ShowsThrough, StatusItems,
+    Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, Fonts, Formats,
+    Gesture, GestureKind, Handled, HintVisibility, Hyphenation, Id, Manifest, Menus, Metrics,
+    Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor, Screen,
+    Settings, ShowsThrough, StatusItems,
 };
 
 pub use crate::builder::KernelBuilder;
@@ -351,7 +351,7 @@ struct EdgeTouch {
 pub struct Kernel {
     shared: Shared,
     framebuffer: Framebuffer,
-    subscriptions: Vec<(Id, Id, EventHandler)>,
+    subscriptions: crate::registry::Subscriptions,
     /// The lowest screen the last offer of input reached ([`Kernel::offer`]).
     offered_down_to: usize,
     /// The params of the action offered to the screens now, for their

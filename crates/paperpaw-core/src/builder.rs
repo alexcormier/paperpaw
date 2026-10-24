@@ -552,7 +552,7 @@ impl BuilderParts {
             stylesheet_owners: Vec::new(),
             timing: drawing::Timing::default(),
             framebuffer,
-            subscriptions: Vec::new(),
+            subscriptions: crate::registry::Subscriptions::default(),
             offered_down_to: 0,
             action_params: Params::new(),
             action_observers: Vec::new(),
