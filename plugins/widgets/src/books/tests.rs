@@ -179,7 +179,7 @@ fn placed_widgets_draw_from_memory() {
             Rect::new(10, 10, 460, 600),
         ] {
             let env = h.env();
-            let mut widget = env.widgets.make(id, &env).unwrap();
+            let mut widget = env.widgets().make(id, &env).unwrap();
             widget.place(&env, area);
             let drawn = pixels(&env, &*widget, area);
             assert!(drawn.iter().any(|&p| p < 128), "{id} {style:?} {area:?}");
@@ -225,7 +225,7 @@ fn a_logo_picture_draws_from_memory() {
     }
     let env = h.env();
     let area = Rect::new(10, 10, 460, 150);
-    let mut widget = env.widgets.make("widgets.logo", &env).unwrap();
+    let mut widget = env.widgets().make("widgets.logo", &env).unwrap();
     widget.place(&env, area);
     let drawn = pixels(&env, &*widget, area);
     let drawn_logo = paperpaw_sdk::logo::Logo::read(&env, 10, 10);
@@ -255,8 +255,8 @@ fn texts_draw_as_laid_out() {
     let env = h.env();
     for id in ["widgets.highlight", "widgets.note", "widgets.quote"] {
         for area in [Rect::new(10, 10, 230, 200), Rect::new(10, 10, 460, 200)] {
-            let unplaced = env.widgets.make(id, &env).unwrap();
-            let mut placed = env.widgets.make(id, &env).unwrap();
+            let unplaced = env.widgets().make(id, &env).unwrap();
+            let mut placed = env.widgets().make(id, &env).unwrap();
             placed.place(&env, area);
             let drawn = pixels(&env, &*placed, area);
             assert!(drawn.iter().any(|&p| p < 128), "{id} {area:?}");
@@ -268,7 +268,7 @@ fn texts_draw_as_laid_out() {
 /// Draws widget `id` into `area` of a page; how many pixels are dark.
 fn draw(h: &Harness, id: &str, area: Rect) -> usize {
     let env = h.env();
-    let widget = env.widgets.make(id, &env).unwrap();
+    let widget = env.widgets().make(id, &env).unwrap();
     let mut fb = Framebuffer::new(
         DEVICE.display.width,
         DEVICE.display.height,
@@ -360,12 +360,12 @@ fn widgets_show_what_the_library_knows() {
     let h = Harness::new(library());
     let env = h.env();
     // Tapped, the progress opens the book being read.
-    let widget = env.widgets.make("widgets.progress", &env).unwrap();
+    let widget = env.widgets().make("widgets.progress", &env).unwrap();
     let targets = widget.targets(&env, Rect::new(0, 0, 200, 100));
     assert_eq!(targets.len(), 1);
     assert_eq!(targets[0].command, super::open("books/s3.epub"));
     // The series: each book a target, in order.
-    let widget = env.widgets.make("widgets.series", &env).unwrap();
+    let widget = env.widgets().make("widgets.series", &env).unwrap();
     let targets = widget.targets(&env, Rect::new(0, 0, 460, 300));
     let opened: Vec<_> = targets.iter().map(|t| t.command.clone()).collect();
     assert_eq!(
@@ -379,16 +379,16 @@ fn widgets_show_what_the_library_knows() {
         .map(super::open)
     );
     // Next up: the next in the series not read.
-    let widget = env.widgets.make("widgets.next", &env).unwrap();
+    let widget = env.widgets().make("widgets.next", &env).unwrap();
     let targets = widget.targets(&env, Rect::new(0, 0, 200, 100));
     assert_eq!(targets[0].command, super::open("books/s4.epub"));
     // The favourites, the newest first.
-    let widget = env.widgets.make("widgets.favourites", &env).unwrap();
+    let widget = env.widgets().make("widgets.favourites", &env).unwrap();
     let targets = widget.targets(&env, Rect::new(0, 0, 460, 300));
     let opened: Vec<_> = targets.iter().map(|t| t.command.clone()).collect();
     assert_eq!(opened, ["books/s1.epub", "books/a.epub"].map(super::open));
     // The highlight opens its book at its place.
-    let widget = env.widgets.make("widgets.highlight", &env).unwrap();
+    let widget = env.widgets().make("widgets.highlight", &env).unwrap();
     let targets = widget.targets(&env, Rect::new(0, 0, 200, 100));
     assert_eq!(targets.len(), 1);
 }
@@ -523,7 +523,7 @@ fn new_books_in_a_large_library() {
     );
     let pick = |h: &Harness| {
         let env = h.env();
-        let widget = env.widgets.make("widgets.next", &env).unwrap();
+        let widget = env.widgets().make("widgets.next", &env).unwrap();
         let mut described = Vec::new();
         let mut fb = Framebuffer::new(480, 800, PixelFormat::Gray4).unwrap();
         widget.draw(
@@ -610,7 +610,7 @@ fn a_highlight_each_time_it_shows_stays_while_it_shows() {
         SettingValue::Text(Cow::Borrowed("widgets.highlight.all")),
     );
     let env = h.env();
-    let mut widget = env.widgets.make("widgets.highlight", &env).unwrap();
+    let mut widget = env.widgets().make("widgets.highlight", &env).unwrap();
     let area = Rect::new(0, 0, 400, 200);
     widget.place(&env, area);
     let first = pixels(&env, &*widget, area);
@@ -639,7 +639,7 @@ fn the_library_counted() {
     assert_eq!(Numbers::count(1, [Some(100), Some(5)].into_iter()).books, 2);
     let h = Harness::new(library());
     let env = h.env();
-    let mut widget = env.widgets.make("widgets.library", &env).unwrap();
+    let mut widget = env.widgets().make("widgets.library", &env).unwrap();
     assert!(!widget.update(&env));
     assert!(!widget.live());
 }
@@ -871,7 +871,7 @@ fn widgets_keep_inside_small_places() {
         ] {
             let area = Rect::new(30, 30, w, h_);
             let env = h.env();
-            let widget = env.widgets.make(id, &env).unwrap();
+            let widget = env.widgets().make(id, &env).unwrap();
             let mut fb = Framebuffer::new(
                 DEVICE.display.width,
                 DEVICE.display.height,

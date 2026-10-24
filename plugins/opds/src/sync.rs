@@ -192,7 +192,7 @@ impl Sync {
         if let Some(report) = &mut self.report {
             report.catalog = catalog.name.clone();
         }
-        let limit = env.settings.read(&LIMIT).max(1) as usize;
+        let limit = env.settings().read(&LIMIT).max(1) as usize;
         let run = Run {
             number: self.runs,
             agent: paperpaw_sdk::web::user_agent_of(env),
@@ -254,7 +254,7 @@ impl Sync {
     /// A page of the catalog's list arrived.
     pub(crate) fn feed_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         self.read_page(env, reply, out);
-        temp::discard(env.storage, reply);
+        temp::discard(env.storage(), reply);
     }
 
     fn read_page(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
@@ -278,7 +278,7 @@ impl Sync {
         let Some(catalog) = self.run.as_ref().map(|run| run.catalog.clone()) else {
             return;
         };
-        let page = crate::read_list(&catalog, env.storage, file, &base);
+        let page = crate::read_list(&catalog, env.storage(), file, &base);
         let Some(run) = &mut self.run else {
             return;
         };
@@ -291,7 +291,7 @@ impl Sync {
         {
             report.only_lists += 1;
         }
-        let readable = |ext: &str| env.formats.supports(&format!("book.{ext}"));
+        let readable = |ext: &str| env.formats().supports(&format!("book.{ext}"));
         let found: Vec<Item> = page
             .entries
             .iter()
@@ -310,7 +310,7 @@ impl Sync {
             })
             .collect();
         let ids: Vec<&str> = found.iter().map(|item| item.id.as_str()).collect();
-        let Ok(synced) = recorded(env.storage, &record_path(&catalog.url), &ids) else {
+        let Ok(synced) = recorded(env.storage(), &record_path(&catalog.url), &ids) else {
             if let Some(report) = &mut self.report {
                 report.skipped += 1;
             }
@@ -322,7 +322,7 @@ impl Sync {
                     .queue
                     .iter()
                     .any(|queued| queued.id == item.id || queued.name == item.name)
-                || env.storage.exists(&files::join(&run.folder, &item.name));
+                || env.storage().exists(&files::join(&run.folder, &item.name));
             if !known {
                 run.queue.push_back(item);
             }
@@ -358,7 +358,7 @@ impl Sync {
     /// A book arrived.
     pub(crate) fn book_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         self.store_book(env, reply, out);
-        temp::discard(env.storage, reply);
+        temp::discard(env.storage(), reply);
     }
 
     fn store_book(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
@@ -373,17 +373,17 @@ impl Sync {
         };
         let file = temp::file(reply)
             .filter(|_| (200..300).contains(&reply.status))
-            .filter(|file| temp::may_be_book(env.storage, file, &item.name));
+            .filter(|file| temp::may_be_book(env.storage(), file, &item.name));
         let stored = file.and_then(|file| {
-            let _ = env.storage.create_dir(&run.folder);
-            files::put_in_free_place(env.storage, file, &run.folder, &item.name).ok()
+            let _ = env.storage().create_dir(&run.folder);
+            files::put_in_free_place(env.storage(), file, &run.folder, &item.name).ok()
         });
         let report = self.report.get_or_insert_with(Report::default);
         if let Some(path) = stored {
             // In the library: caught up with the others, not walked.
             out.push(paperpaw_sdk::library::added(&path, "opds"));
             run.count += 1;
-            let _ = env.storage.append(
+            let _ = env.storage().append(
                 &record_path(&run.catalog.url),
                 format!("{}\n", item.id).as_bytes(),
             );

@@ -248,7 +248,7 @@ impl Plugin for UiKit {
 /// The choice page: the SDK's choice overlay, three options.
 fn choice(env: &Env<'_>) -> ui::choice::Choice {
     let params = Params::new()
-        .with(params::TITLE, env.i18n.tr("ui-kit.choice"))
+        .with(params::TITLE, env.i18n().tr("ui-kit.choice"))
         .with("labels", "ui-kit.option.")
         .with("options", "light,calm,dark");
     ui::choice::Choice::new(env, &params)
@@ -257,10 +257,10 @@ fn choice(env: &Env<'_>) -> ui::choice::Choice {
 /// The confirm page: the SDK's yes/no question, the focus on No.
 fn confirm(env: &Env<'_>) -> ui::confirm::Confirm {
     let params = Params::new()
-        .with(params::TITLE, env.i18n.tr("ui-kit.confirm"))
-        .with(params::TEXT, env.i18n.tr("ui-kit.confirm.text"))
-        .with(ui::confirm::YES_LABEL, env.i18n.tr("ui-kit.confirm.yes"))
-        .with(ui::confirm::NO_LABEL, env.i18n.tr("ui-kit.confirm.no"));
+        .with(params::TITLE, env.i18n().tr("ui-kit.confirm"))
+        .with(params::TEXT, env.i18n().tr("ui-kit.confirm.text"))
+        .with(ui::confirm::YES_LABEL, env.i18n().tr("ui-kit.confirm.yes"))
+        .with(ui::confirm::NO_LABEL, env.i18n().tr("ui-kit.confirm.no"));
     ui::confirm::Confirm::new(env, &params)
 }
 
@@ -291,7 +291,7 @@ impl Screen for Page {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let display = env.device.display;
+        let display = env.device().display;
         let screen = Rect::new(0, 0, display.width, display.height);
         let mut ui = ui::Ui::new(canvas, env, &style);
         ui.canvas().fill(screen, Color::WHITE);
@@ -300,7 +300,7 @@ impl Screen for Page {
         let margin = style.margin();
         let header = stack.take(style.header());
         let page = format!("{} / {}", self.index + 1, PAGES.len());
-        ui.header(header, env.i18n.tr(title), Some(&page));
+        ui.header(header, env.i18n().tr(title), Some(&page));
         let rest = stack.rest();
         let body = Rect::new(
             margin,
@@ -341,13 +341,13 @@ fn text(ui: &mut ui::Ui<'_>, area: Rect) {
     };
     let mut stack = ui::Stack::new(area, style.gap());
     for (role, name) in [
-        (TextRole::Display, env.i18n.tr("ui-kit.role.display")),
-        (TextRole::Headline, env.i18n.tr("ui-kit.role.headline")),
-        (TextRole::Head, env.i18n.tr("ui-kit.role.head")),
-        (TextRole::Title, env.i18n.tr("ui-kit.role.title")),
-        (TextRole::Body, env.i18n.tr("ui-kit.role.body")),
-        (TextRole::Small, env.i18n.tr("ui-kit.role.small")),
-        (TextRole::Caption, env.i18n.tr("ui-kit.role.caption")),
+        (TextRole::Display, env.i18n().tr("ui-kit.role.display")),
+        (TextRole::Headline, env.i18n().tr("ui-kit.role.headline")),
+        (TextRole::Head, env.i18n().tr("ui-kit.role.head")),
+        (TextRole::Title, env.i18n().tr("ui-kit.role.title")),
+        (TextRole::Body, env.i18n().tr("ui-kit.role.body")),
+        (TextRole::Small, env.i18n().tr("ui-kit.role.small")),
+        (TextRole::Caption, env.i18n().tr("ui-kit.role.caption")),
     ] {
         let size = style.size(role);
         let height = font.line_metrics(size).line_height as u16;
@@ -365,12 +365,12 @@ fn messages(ui: &mut ui::Ui<'_>, area: Rect) {
     let width = area.width;
     let mut stack = ui::Stack::new(area, style.gap());
     let heading = stack.take(ui.heading_height());
-    ui.heading(heading, env.i18n.tr("ui-kit.heading"));
+    ui.heading(heading, env.i18n().tr("ui-kit.heading"));
     // Each as high as all its words need.
-    let text = env.i18n.tr("ui-kit.note");
+    let text = env.i18n().tr("ui-kit.note");
     let note = stack.take(ui.note_line_height(width, text));
     ui.note_line(note, text);
-    let text = env.i18n.tr("ui-kit.message");
+    let text = env.i18n().tr("ui-kit.message");
     let message = stack.take(ui.message_height(width, text));
     ui.message(message, text);
 }
@@ -381,8 +381,8 @@ fn empty(ui: &mut ui::Ui<'_>, area: Rect) {
     ui.empty(
         area,
         "books",
-        env.i18n.tr("ui-kit.empty"),
-        env.i18n.tr("ui-kit.empty.text"),
+        env.i18n().tr("ui-kit.empty"),
+        env.i18n().tr("ui-kit.empty.text"),
     );
 }
 
@@ -390,7 +390,7 @@ fn empty(ui: &mut ui::Ui<'_>, area: Rect) {
 fn rows(ui: &mut ui::Ui<'_>, area: Rect) {
     let (env, style) = (ui.env(), ui.style());
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
+    let tr = |key: &'static str| env.i18n().tr(key);
     let mut stack = ui::Stack::new(area, 0);
     // Each row as tall as its title needs: titles are never shortened.
     let title = tr("ui-kit.switch.focused");
@@ -421,7 +421,7 @@ fn rows(ui: &mut ui::Ui<'_>, area: Rect) {
 fn values(ui: &mut ui::Ui<'_>, area: Rect) {
     let (env, style) = (ui.env(), ui.style());
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
+    let tr = |key: &'static str| env.i18n().tr(key);
     let mut stack = ui::Stack::new(area, 0);
     let (title, value) = (tr("ui-kit.value"), tr("ui-kit.value.value"));
     let row = stack.take(ui::Row::value(title, value).height(env, style, width));
@@ -433,7 +433,7 @@ fn values(ui: &mut ui::Ui<'_>, area: Rect) {
 fn noted(ui: &mut ui::Ui<'_>, area: Rect) {
     let (env, style) = (ui.env(), ui.style());
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
+    let tr = |key: &'static str| env.i18n().tr(key);
     let mut stack = ui::Stack::new(area, 0);
     let (title, value, note) = (
         tr("ui-kit.noted"),
@@ -457,7 +457,7 @@ fn numbers(ui: &mut ui::Ui<'_>, area: Rect) {
     let row = style.row();
     let mut stack = ui::Stack::new(area, 0);
     // Its title beside the − and +, or above them where it needs the room.
-    let title = env.i18n.tr("ui-kit.stepper");
+    let title = env.i18n().tr("ui-kit.stepper");
     let lines = ui::stepper_lines(env, style, area.width, row, title, "100");
     let stepper = stack.take(lines.height);
     ui::draw_stepper_lines(
@@ -484,7 +484,7 @@ fn numbers(ui: &mut ui::Ui<'_>, area: Rect) {
 /// A slider, focused.
 fn sliders(ui: &mut ui::Ui<'_>, area: Rect) {
     let (env, style) = (ui.env(), ui.style());
-    let title = env.i18n.tr("ui-kit.slider");
+    let title = env.i18n().tr("ui-kit.slider");
     let height = ui::slider::row_height_for(env, style, area.width, title, "100 %", false);
     let slider = ui::Stack::new(area, 0).take(height);
     let view = SliderView::new(slider, 40, "40 %")
@@ -499,7 +499,7 @@ fn sliders(ui: &mut ui::Ui<'_>, area: Rect) {
 fn controls(ui: &mut ui::Ui<'_>, area: Rect) {
     let (env, style) = (ui.env(), ui.style());
     let (gap, width) = (style.gap(), area.width);
-    let tr = |key: &'static str| env.i18n.tr(key);
+    let tr = |key: &'static str| env.i18n().tr(key);
     let mut stack = ui::Stack::new(area, style.margin());
     // Side by side where every word fits, else in more rows: never cut.
     let labels = [
@@ -556,9 +556,9 @@ fn layout(ui: &mut ui::Ui<'_>, area: Rect) {
     let mut stack = ui::Stack::new(area, style.margin());
     let cards = stack.take(area.height / 3);
     let frames = [
-        (Frame::Line, env.i18n.tr("ui-kit.frame.line")),
-        (Frame::Card, env.i18n.tr("ui-kit.frame.card")),
-        (Frame::Dark, env.i18n.tr("ui-kit.frame.dark")),
+        (Frame::Line, env.i18n().tr("ui-kit.frame.line")),
+        (Frame::Card, env.i18n().tr("ui-kit.frame.card")),
+        (Frame::Dark, env.i18n().tr("ui-kit.frame.dark")),
     ];
     for (cell, (frame, name)) in ui::columns(cards, 3, gap).into_iter().zip(frames) {
         let inside = ui.card(cell, frame);
@@ -621,8 +621,8 @@ fn share(ui: &mut ui::Ui<'_>, area: Rect) {
         area,
         url,
         qr.as_ref(),
-        env.i18n.tr("ui-kit.address.hint"),
-        Some(env.i18n.tr("ui-kit.address.last")),
+        env.i18n().tr("ui-kit.address.hint"),
+        Some(env.i18n().tr("ui-kit.address.last")),
     );
 }
 
@@ -637,17 +637,17 @@ fn dialog(ui: &mut ui::Ui<'_>) {
     let mut dialog = ui::Dialog::new(
         env,
         style,
-        env.i18n.tr("ui-kit.dialog.title"),
+        env.i18n().tr("ui-kit.dialog.title"),
         &[
-            env.i18n.tr("ui-kit.confirm.text"),
-            env.i18n.tr("ui-kit.dialog.text"),
+            env.i18n().tr("ui-kit.confirm.text"),
+            env.i18n().tr("ui-kit.dialog.text"),
         ],
         &[
-            env.i18n.tr("ui-kit.confirm.yes"),
-            env.i18n.tr("ui-kit.confirm.no"),
+            env.i18n().tr("ui-kit.confirm.yes"),
+            env.i18n().tr("ui-kit.confirm.no"),
         ],
     );
-    let room = env.device.display.height.saturating_sub(dialog.height());
+    let room = env.device().display.height.saturating_sub(dialog.height());
     dialog.place(room / 2);
     dialog.draw(ui, Some(0));
 }
@@ -656,7 +656,7 @@ fn dialog(ui: &mut ui::Ui<'_>) {
 fn inputs(ui: &mut ui::Ui<'_>, area: Rect) {
     let (env, style) = (ui.env(), ui.style());
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
+    let tr = |key: &'static str| env.i18n().tr(key);
     let mut stack = ui::Stack::new(area, 0);
     // Each row as tall as its title needs: titles are never shortened.
     let title = tr("ui-kit.field.focused");
@@ -673,7 +673,7 @@ fn inputs(ui: &mut ui::Ui<'_>, area: Rect) {
 fn ticks(ui: &mut ui::Ui<'_>, area: Rect) {
     let (env, style) = (ui.env(), ui.style());
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
+    let tr = |key: &'static str| env.i18n().tr(key);
     let mut stack = ui::Stack::new(area, 0);
     for (on, focus, key) in [
         (true, true, "ui-kit.check.focused"),
@@ -713,7 +713,7 @@ fn chips(ui: &mut ui::Ui<'_>, area: Rect) {
         rest.width.saturating_sub(2 * margin),
         rest.height.saturating_sub(2 * margin),
     );
-    let text = env.i18n.tr("ui-kit.long-text");
+    let text = env.i18n().tr("ui-kit.long-text");
     let mut view = ui::TextView::new(env, style, text_area, text);
     view.scroll(1);
     view.draw(ui, text);

@@ -52,13 +52,13 @@ type Shared = Rc<RefCell<State>>;
 
 /// The battery and what was done, now.
 fn reading(env: &Env<'_>, state: &State) -> Reading {
-    let battery = env.status.battery;
+    let battery = env.status().battery;
     Reading {
-        ms: env.now.millis(),
+        ms: env.now().millis(),
         millivolts: battery.and_then(|b| b.millivolts),
         percent: battery.map(|b| b.percent),
         charging: battery.is_some_and(|b| b.charging),
-        usage: log::Counts::of(env.usage),
+        usage: log::Counts::of(env.usage()),
         pages: state.pages,
         unix: time::unix_seconds(env),
     }
@@ -74,7 +74,7 @@ fn dir() -> alloc::string::String {
 /// [`log::MAX_BYTES`] by much. Lines not written are lost, nothing else:
 /// the log is a record, not the user's data.
 fn append(env: &Env<'_>, name: &str, old: &str, header: &str, text: &str) {
-    let storage = env.storage;
+    let storage = env.storage();
     let path = format!("{}/{name}", dir());
     match storage.size(&path) {
         Ok(size) if size >= log::MAX_BYTES => {
@@ -97,7 +97,7 @@ fn append(env: &Env<'_>, name: &str, old: &str, header: &str, text: &str) {
 
 /// Adds a line to the log, and what each plugin took when due.
 fn record(env: &Env<'_>, state: &mut State, kind: Kind) {
-    if !env.settings.read(&ENABLED) {
+    if !env.settings().read(&ENABLED) {
         return;
     }
     let now = reading(env, state);
@@ -123,7 +123,7 @@ fn record(env: &Env<'_>, state: &mut State, kind: Kind) {
         // On the card every ten minutes and at sleep or a restart: an
         // empty battery ends it all without warning, and a write to the
         // card each minute wears it for little.
-        let _ = env.storage.sync();
+        let _ = env.storage().sync();
     }
     state.awake = kind != Kind::End;
 }

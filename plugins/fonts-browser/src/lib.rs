@@ -88,7 +88,7 @@ impl Plugin for FontsBrowser {
         // off by a restart is begun anew from the font's page.
         r.on(install::DOWNLOADED, install::received)?;
         r.on(events::STARTED, |env, _, _| {
-            install::INSTALLER.cancel(env.storage)
+            install::INSTALLER.cancel(env.storage())
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

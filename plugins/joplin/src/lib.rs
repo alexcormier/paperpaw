@@ -148,7 +148,7 @@ impl Plugin for Joplin {
         let state = run.clone();
         r.add_action(ActionSpec::new(SEND, "joplin.send").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
-                if env.reader {
+                if env.reader() {
                     state.borrow_mut().start(env, Start::Action, out);
                 } else {
                     let due = SEND_DUE.id().clone();
@@ -170,7 +170,7 @@ impl Plugin for Joplin {
         // Any reader's notes, once exported as Markdown.
         let state = run.clone();
         r.on(events::NOTES_EXPORTED, move |env, exported, out| {
-            if kept::add_waiting(env.storage, &exported.path).is_ok() {
+            if kept::add_waiting(env.storage(), &exported.path).is_ok() {
                 state.borrow_mut().start(env, Start::Export, out);
                 retry_later(env, out);
             }
@@ -224,7 +224,7 @@ const SEND_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("jo
 
 /// Declares the next try while notes wait.
 fn retry_later(env: &Env<'_>, out: &mut Commands) {
-    if !kept::waiting(env.storage).is_empty() {
+    if !kept::waiting(env.storage()).is_empty() {
         let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
             .within(core::time::Duration::from_secs(30 * 60))
             .at_moments(paperpaw_sdk::work::Moments::ONLINE);

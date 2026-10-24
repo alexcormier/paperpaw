@@ -31,7 +31,7 @@ pub(crate) fn decorator(changes: &Changes) -> DecoratorSpec {
     let cache: Cache = RefCell::new(None);
     let (marks, signed) = (changes.clone(), changes.clone());
     DecoratorSpec::new(DECORATOR, "vocabulary.decorator", move |env, page| {
-        decorate(&cache, env.storage, page, &marks)
+        decorate(&cache, env.storage(), page, &marks)
     })
     .switch(&MARK)
     .taps()
@@ -113,7 +113,7 @@ pub(crate) fn tapped(env: &Env<'_>, tapped: &events::DecorationTapped, out: &mut
         slots::LOOKUP,
         Params::new()
             .with(params::WORD, word.to_string())
-            .with(params::LANGUAGE, language_of(env.storage, word)),
+            .with(params::LANGUAGE, language_of(env.storage(), word)),
     ));
 }
 

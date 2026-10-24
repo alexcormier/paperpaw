@@ -107,7 +107,7 @@ impl ShelfScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let shelf = Shelf::of(params.get(params::MODE));
@@ -146,7 +146,7 @@ impl Screen for ShelfScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.names.len();
-        let title = env.i18n.tr(self.title());
+        let title = env.i18n().tr(self.title());
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
@@ -155,7 +155,7 @@ impl Screen for ShelfScreen {
             // An empty view says what would be in it.
             let (icon, text) = match self.shelf {
                 _ if self.collecting => {
-                    let message = env.i18n.tr("files.list.collecting");
+                    let message = env.i18n().tr("files.list.collecting");
                     ui.message(area, message);
                     return;
                 }
@@ -171,11 +171,11 @@ impl Screen for ShelfScreen {
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
             let (name, count) = &names[index];
             let name = if name.is_empty() {
-                env.i18n.tr("files.unknown-author")
+                env.i18n().tr("files.unknown-author")
             } else {
                 name.as_str()
             };
-            let note = env.i18n.plural("files.books", *count as i64, &[]);
+            let note = env.i18n().plural("files.books", *count as i64, &[]);
             ui::Row::value(name, "›")
                 .note(&note)
                 .focused(focused)

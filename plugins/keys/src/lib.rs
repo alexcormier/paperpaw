@@ -128,7 +128,7 @@ impl Place {
 /// the library, then the tools that take gestures their own way.
 fn places(env: &Env<'_>) -> Vec<Place> {
     let place = |title: &str, layers: &[&str]| Place {
-        title: env.i18n.tr(title).to_string(),
+        title: env.i18n().tr(title).to_string(),
         layers: layers.iter().map(|l| l.to_string()).collect(),
     };
     let mut places = Vec::from([
@@ -151,9 +151,9 @@ fn places(env: &Env<'_>) -> Vec<Place> {
         .screens
         .iter()
         // The reader binds on its slot's layer, which is a place already.
-        .filter(|(id, _)| env.keys.bound(&[id.as_str()], POLICY).is_some())
+        .filter(|(id, _)| env.keys().bound(&[id.as_str()], POLICY).is_some())
         .map(|(id, title)| Place {
-            title: env.i18n.tr(title).to_string(),
+            title: env.i18n().tr(title).to_string(),
             layers: Vec::from([id.as_str().to_string(), GLOBAL_KEYMAP_LAYER.to_string()]),
         })
         .collect();
@@ -168,7 +168,7 @@ fn all_screens(env: &Env<'_>) -> Vec<Place> {
         .screens
         .iter()
         .map(|(id, title)| Place {
-            title: env.i18n.tr(title).to_string(),
+            title: env.i18n().tr(title).to_string(),
             layers: Vec::from([id.as_str().to_string(), GLOBAL_KEYMAP_LAYER.to_string()]),
         })
         .collect();
@@ -183,7 +183,7 @@ fn all_screens(env: &Env<'_>) -> Vec<Place> {
 /// where it is a common kind (a choice, a list, a page), else its words.
 fn kind(env: &Env<'_>, layer: &str) -> String {
     let last = layer.rsplit('.').next().unwrap_or(layer);
-    env.i18n
+    env.i18n()
         .get(&format!("keys.kind.{last}"))
         .map_or_else(|| last.replace('-', " "), ToString::to_string)
 }
@@ -221,7 +221,7 @@ fn tell_apart(places: &mut [Place], kind: &dyn Fn(&str) -> String) {
 /// The inputs of the buttons this device has: short, held and pressed
 /// twice.
 fn button_inputs(env: &Env<'_>) -> Vec<String> {
-    let keys = env.device.input.keys;
+    let keys = env.device().input.keys;
     let has: Vec<&str> = BUTTONS
         .iter()
         .copied()
@@ -244,7 +244,7 @@ fn refused(
     action: Option<&Id>,
 ) -> Option<&'static str> {
     let action = action?;
-    if !env.device.input.buttons || env.device.input.touch {
+    if !env.device().input.buttons || env.device().input.touch {
         return None;
     }
     let inputs = button_inputs(env);
@@ -253,12 +253,12 @@ fn refused(
             .iter()
             .any(|i| bound(i).is_some_and(|a| need.contains(&a)))
     };
-    let now = |i: &str| env.keys.bound(layers, i);
+    let now = |i: &str| env.keys().bound(layers, i);
     let then = |i: &str| {
         if i == input {
             Some(action.clone())
         } else {
-            env.keys.bound(layers, i)
+            env.keys().bound(layers, i)
         }
     };
     NEEDED
@@ -271,7 +271,7 @@ fn refused(
 /// binding in a key map section. `None` where the file cannot be read
 /// (not where it is not there: then there are none).
 fn changes(env: &Env<'_>) -> Option<Vec<(String, String)>> {
-    let source = match paperpaw_sdk::read_file(env.storage, CONFIG_FILE, 256 * 1024) {
+    let source = match paperpaw_sdk::read_file(env.storage(), CONFIG_FILE, 256 * 1024) {
         Ok(data) => String::from_utf8(data).ok()?,
         Err(paperpaw_sdk::StorageError::NotFound) => return Some(Vec::new()),
         Err(_) => return None,
@@ -300,7 +300,7 @@ enum Row {
 /// The rows for this device: the place (and its gestures), then the
 /// inputs in sections, gestures first on touch screens, then the reset.
 fn rows(env: &Env<'_>, everywhere: bool) -> Vec<Row> {
-    let input = env.device.input;
+    let input = env.device().input;
     let mut rows = Vec::from([Row::Place]);
     if !everywhere && input.touch {
         rows.push(Row::Policy);
@@ -354,7 +354,7 @@ fn rows(env: &Env<'_>, everywhere: bool) -> Vec<Row> {
         section(&mut rows, heading, inputs);
     }
     // Plugins' inputs and gestures, those this device can make.
-    let own = env.inputs.iter().map(paperpaw_sdk::keys::InputSpec::key);
+    let own = env.inputs().iter().map(paperpaw_sdk::keys::InputSpec::key);
     section(&mut rows, "keys.section.own", own.collect());
     rows.push(Row::Reset);
     rows
@@ -363,7 +363,7 @@ fn rows(env: &Env<'_>, everywhere: bool) -> Vec<Row> {
 /// An input's name: "Page forward", "Hold: Menu", "Tap: top left".
 fn input_name(env: &Env<'_>, input: &str) -> String {
     let (kind, name) = input.split_once('.').unwrap_or((input, ""));
-    let part = |prefix: &str| env.i18n.tr(&format!("keys.{prefix}.{name}")).to_string();
+    let part = |prefix: &str| env.i18n().tr(&format!("keys.{prefix}.{name}")).to_string();
     match kind {
         "button" => part("button"),
         "long" => env
@@ -378,13 +378,13 @@ fn input_name(env: &Env<'_>, input: &str) -> String {
         "double-tap" => env
             .i18n
             .format("keys.double-tap", &[("zone", Arg::Str(&part("zone")))]),
-        "tap2" => env.i18n.tr("keys.tap2").to_string(),
+        "tap2" => env.i18n().tr("keys.tap2").to_string(),
         "input" | "gesture" => env
             .inputs
             .iter()
             .find(|spec| spec.key() == input)
             .map_or(input.to_string(), |spec| {
-                env.i18n.tr(&spec.title).to_string()
+                env.i18n().tr(&spec.title).to_string()
             }),
         "long-tap" => env
             .i18n
@@ -398,10 +398,10 @@ fn input_name(env: &Env<'_>, input: &str) -> String {
 
 /// The name of action `id`.
 fn action_name(env: &Env<'_>, id: &Id) -> String {
-    env.actions
+    env.actions()
         .get(id.as_str())
         .map_or(id.as_str().to_string(), |a| {
-            env.i18n.tr(&a.title).to_string()
+            env.i18n().tr(&a.title).to_string()
         })
 }
 
@@ -533,7 +533,7 @@ impl ListScreen {
 
     /// The rows for the place chosen.
     fn build(&mut self, env: &Env<'_>) {
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + self.style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let focus = self.rows.focus();
@@ -569,7 +569,7 @@ impl ListScreen {
             Some(Row::Policy) => {
                 // Standard, own, off, and round again.
                 let place = self.place().clone();
-                let now = env.keys.bound(&place.layer_refs(), POLICY);
+                let now = env.keys().bound(&place.layer_refs(), POLICY);
                 let at = now
                     .as_ref()
                     .and_then(|id| POLICIES.iter().position(|p| *p == id.as_str()))
@@ -590,11 +590,11 @@ impl ListScreen {
                 ));
             }
             Some(Row::Reset) => {
-                let question = env.i18n.tr("keys.reset.question");
+                let question = env.i18n().tr("keys.reset.question");
                 cx.command(
                     paperpaw_sdk::ask::confirm(question, &RESET_CHOSEN)
-                        .yes(env.i18n.tr("keys.option.reset"))
-                        .no(env.i18n.tr("keys.option.cancel"))
+                        .yes(env.i18n().tr("keys.option.reset"))
+                        .no(env.i18n().tr("keys.option.cancel"))
                         .command(),
                 );
             }
@@ -605,14 +605,16 @@ impl ListScreen {
     /// Every change taken back, as `paperpaw.ini` holds them.
     fn reset(env: &Env<'_>, cx: &mut Cx<'_, '_>) {
         let Some(changes) = changes(env) else {
-            let text = env.i18n.tr("keys.reset.unreadable").to_string();
+            let text = env.i18n().tr("keys.reset.unreadable").to_string();
             cx.command(Command::Notify(text));
             return;
         };
         for (layer, input) in changes {
             cx.command(Command::bind(layer, input, None));
         }
-        cx.command(Command::Notify(env.i18n.tr("keys.reset.done").to_string()));
+        cx.command(Command::Notify(
+            env.i18n().tr("keys.reset.done").to_string(),
+        ));
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
     }
@@ -624,7 +626,7 @@ impl Screen for ListScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("keys.title"),
+            env.i18n().tr("keys.title"),
             None,
             Some(self.rows.paging()),
         );
@@ -636,9 +638,9 @@ impl Screen for ListScreen {
         self.rows.draw(&mut ui, shown, |ui, index, rect, focused| {
             let ink = style.focus_ink(focused);
             match &entries[index] {
-                Row::Heading(key) => ui.heading(rect, env.i18n.tr(key)),
+                Row::Heading(key) => ui.heading(rect, env.i18n().tr(key)),
                 Row::Place => {
-                    let title = env.i18n.tr("keys.place");
+                    let title = env.i18n().tr("keys.place");
                     let note = ui::tr_input(env, "keys.place.help");
                     ui::Row::value(title, &place.title)
                         .note(note)
@@ -646,24 +648,24 @@ impl Screen for ListScreen {
                         .draw(ui, rect);
                 }
                 Row::Policy => {
-                    let now = env.keys.bound(&layers, POLICY);
+                    let now = env.keys().bound(&layers, POLICY);
                     let value = now
                         .as_ref()
                         .filter(|id| POLICIES.contains(&id.as_str()))
                         .map_or(POLICIES[0], Id::as_str);
-                    let title = env.i18n.tr("keys.policy");
+                    let title = env.i18n().tr("keys.policy");
                     let (help, name) = (format!("keys.{value}.help"), format!("keys.{value}"));
-                    let (note, shown) = (env.i18n.tr(&help), env.i18n.tr(&name));
+                    let (note, shown) = (env.i18n().tr(&help), env.i18n().tr(&name));
                     ui::Row::value(title, shown)
                         .note(note)
                         .focused(focused)
                         .draw(ui, rect);
                 }
                 Row::Input(input) => {
-                    let action = env.keys.bound(&layers, input);
+                    let action = env.keys().bound(&layers, input);
                     let does = match &action {
                         Some(id) => action_name(env, id),
-                        None => env.i18n.tr("core.action.nothing").to_string(),
+                        None => env.i18n().tr("core.action.nothing").to_string(),
                     };
                     // Tap zones as a small picture of the screen.
                     let zone = input
@@ -686,8 +688,8 @@ impl Screen for ListScreen {
                         .draw(ui, rect);
                 }
                 Row::Reset => {
-                    let title = env.i18n.tr("keys.reset");
-                    let note = env.i18n.tr("keys.reset.help");
+                    let title = env.i18n().tr("keys.reset");
+                    let note = env.i18n().tr("keys.reset.help");
                     ui::Row::plain(title)
                         .note(note)
                         .focused(focused)
@@ -779,7 +781,7 @@ impl Screen for ListScreen {
         let action = params.get(params::ID).and_then(|id| Id::parse(id).ok());
         let place = self.place();
         if let Some(message) = refused(&env, &place.layer_refs(), input, action.as_ref()) {
-            cx.command(Command::Notify(env.i18n.tr(message).to_string()));
+            cx.command(Command::Notify(env.i18n().tr(message).to_string()));
             return;
         }
         cx.command(Command::bind(
@@ -804,7 +806,7 @@ impl PlaceScreen {
     fn new(env: &Env<'_>, _: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut places = places(env);
@@ -839,7 +841,7 @@ impl Screen for PlaceScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("keys.place"),
+            env.i18n().tr("keys.place"),
             None,
             self.list.paging(len),
         );
@@ -920,7 +922,7 @@ fn group_of(env: &Env<'_>, id: &Id) -> usize {
     if NAVIGATION.contains(&name) {
         return 0;
     }
-    let in_menu = |menu: &str| env.menus.items(menu).iter().any(|item| item.id == id);
+    let in_menu = |menu: &str| env.menus().items(menu).iter().any(|item| item.id == id);
     let reading = [
         menus::READER,
         menus::READER_MORE,
@@ -995,7 +997,7 @@ impl PickScreen {
                 (
                     group_of(env, &a.id),
                     a.id.clone(),
-                    env.i18n.tr(&a.title).to_string(),
+                    env.i18n().tr(&a.title).to_string(),
                 )
             })
             .filter(|(_, _, name)| {
@@ -1009,7 +1011,7 @@ impl PickScreen {
             entries.push(Pick::Standard);
             entries.push(Pick::Action(
                 actions::NOTHING,
-                env.i18n.tr("core.action.nothing").to_string(),
+                env.i18n().tr("core.action.nothing").to_string(),
             ));
         }
         let mut group = None;
@@ -1020,7 +1022,7 @@ impl PickScreen {
             }
             entries.push(Pick::Action(id, name));
         }
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + self.style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let heights = entries
@@ -1043,7 +1045,7 @@ impl PickScreen {
             Some(Pick::Search) => {
                 let env = *cx.env();
                 cx.command(
-                    ask::text(env.i18n.tr("keys.search"), &SEARCHED)
+                    ask::text(env.i18n().tr("keys.search"), &SEARCHED)
                         .initial(self.query.clone())
                         .command(),
                 );
@@ -1075,11 +1077,11 @@ impl Screen for PickScreen {
         self.rows.draw(&mut ui, shown, |ui, index, rect, focused| {
             let ink = style.focus_ink(focused);
             match &entries[index] {
-                Pick::Heading(key) => ui.heading(rect, env.i18n.tr(key)),
+                Pick::Heading(key) => ui.heading(rect, env.i18n().tr(key)),
                 Pick::Search => {
                     let rect = ui.row_icon(rect, room, Some("search"), ink);
                     let title = if query.is_empty() {
-                        env.i18n.tr("keys.search")
+                        env.i18n().tr("keys.search")
                     } else {
                         query.as_str()
                     };
@@ -1087,11 +1089,11 @@ impl Screen for PickScreen {
                 }
                 Pick::Standard => {
                     let rect = ui.row_icon(rect, room, None, ink);
-                    let title = env.i18n.tr("keys.standard");
+                    let title = env.i18n().tr("keys.standard");
                     ui::Row::plain(title).focused(focused).draw(ui, rect);
                 }
                 Pick::Action(id, name) => {
-                    let icon = env.menus.icon(id.as_str());
+                    let icon = env.menus().icon(id.as_str());
                     let rect = ui.row_icon(rect, room, icon, ink);
                     ui::Row::plain(name).focused(focused).draw(ui, rect);
                 }

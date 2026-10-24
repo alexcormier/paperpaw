@@ -52,7 +52,7 @@ pub(crate) struct SkimScreen {
 impl SkimScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         // Its bar and buttons are controls: as large at every size.
         let (margin, gap, row) = (style.margin(), style.gap(), style.control_row());
         // The buttons' row grows with them on touch screens.
@@ -64,7 +64,7 @@ impl SkimScreen {
             let room = width.saturating_sub((columns - 1) * gap) / columns;
             style.font(env).is_none_or(|font| {
                 BUTTONS.iter().all(|key| {
-                    font.measure(style.text(), env.i18n.tr(key)) + 2.0 * style.gap() as f32
+                    font.measure(style.text(), env.i18n().tr(key)) + 2.0 * style.gap() as f32
                         <= f32::from(room)
                 })
             })
@@ -75,7 +75,7 @@ impl SkimScreen {
         // text) each as high as its button, a line higher for each more
         // line a long name takes.
         let slots: [u16; 4] = if columns == 1 {
-            BUTTONS.map(|key| ui::button_height_for(env, &style, width, env.i18n.tr(key)))
+            BUTTONS.map(|key| ui::button_height_for(env, &style, width, env.i18n().tr(key)))
         } else {
             [button_row; 4]
         };
@@ -266,7 +266,7 @@ impl Screen for SkimScreen {
         for (i, (slot, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             ui.button(
                 ui::button_in_slot(&style, *slot),
-                env.i18n.tr(key),
+                env.i18n().tr(key),
                 false,
                 self.focus == Some(i),
             );

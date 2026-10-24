@@ -98,7 +98,7 @@ impl Plugin for MenuEditor {
 
 /// Whether `id` is a menu.
 fn is_menu(env: &Env<'_>, id: &str) -> bool {
-    env.menus.menu_ids().iter().any(|m| m.as_str() == id)
+    env.menus().menu_ids().iter().any(|m| m.as_str() == id)
 }
 
 /// The display name of an entry: an action, a setting or a submenu.
@@ -108,18 +108,18 @@ fn name(env: &Env<'_>, id: &str) -> String {
         .get(id)
         .map(|a| a.title.as_ref())
         .or_else(|| {
-            env.settings
+            env.settings()
                 .specs()
                 .find(|s| s.id.as_str() == id)
                 .map(|s| s.title.as_ref())
         })
         .unwrap_or(id);
-    env.i18n.tr(key).to_string()
+    env.i18n().tr(key).to_string()
 }
 
 /// The entries of `menu` as shown now.
 fn entries(env: &Env<'_>, menu: &str) -> Vec<Id> {
-    env.menus.ids(menu).into_iter().cloned().collect()
+    env.menus().ids(menu).into_iter().cloned().collect()
 }
 
 /// Whether `from` leads to `target`, directly or through submenus, with
@@ -137,11 +137,11 @@ fn reaches(ids: &dyn Fn(&str) -> Vec<Id>, from: &str, target: &Id, seen: &mut Ve
 /// Whether redefining `menu` as `proposed` keeps every protected entry
 /// reachable from every menu that reaches it as its plugins define it.
 fn keeps_access(env: &Env<'_>, menu: &str, proposed: &[Id]) -> bool {
-    let all = env.menus.menu_ids();
+    let all = env.menus().menu_ids();
     let is_menu = |id: &str| all.iter().any(|m| m.as_str() == id);
     let defaults = |m: &str| -> Vec<Id> {
         if is_menu(m) {
-            env.menus.default_ids(m).into_iter().cloned().collect()
+            env.menus().default_ids(m).into_iter().cloned().collect()
         } else {
             Vec::new()
         }
@@ -201,7 +201,7 @@ struct Frame {
 impl Frame {
     fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height - top);
@@ -311,15 +311,15 @@ struct MenusScreen {
 
 impl MenusScreen {
     fn open(env: &Env<'_>) -> Self {
-        let all = env.menus.menu_ids();
+        let all = env.menus().menu_ids();
         let is_sub = |m: &Id| {
             all.iter()
-                .any(|other| env.menus.ids(other.as_str()).contains(&m))
+                .any(|other| env.menus().ids(other.as_str()).contains(&m))
         };
         let mut roots: Vec<(Id, String)> = all
             .iter()
             .filter(|m| !is_sub(m))
-            .map(|m| ((*m).clone(), env.i18n.tr(m.as_str()).to_string()))
+            .map(|m| ((*m).clone(), env.i18n().tr(m.as_str()).to_string()))
             .collect();
         roots.sort_by_key(|(_, name)| name.to_lowercase());
         let mut menus = Vec::new();
@@ -328,7 +328,7 @@ impl MenusScreen {
         }
         // Menus in a circle are no one's root: listed after the others.
         for menu in all {
-            let name = env.i18n.tr(menu.as_str()).to_string();
+            let name = env.i18n().tr(menu.as_str()).to_string();
             add_with_submenus(env, menu.clone(), name, &mut menus);
         }
         let mut screen = Self {
@@ -346,9 +346,9 @@ impl MenusScreen {
             .menus
             .iter()
             .map(|(m, name)| {
-                let changed = env.menus.is_customized(m.as_str());
+                let changed = env.menus().is_customized(m.as_str());
                 let value = if changed {
-                    env.i18n.tr("menu-editor.changed")
+                    env.i18n().tr("menu-editor.changed")
                 } else {
                     ""
                 };
@@ -357,7 +357,7 @@ impl MenusScreen {
             .collect();
         if changed_menus(env).next().is_some() {
             rows.push((
-                env.i18n.tr("menu-editor.reset-all").to_string(),
+                env.i18n().tr("menu-editor.reset-all").to_string(),
                 String::new(),
             ));
         }
@@ -384,7 +384,7 @@ impl MenusScreen {
 
 /// The menus the user changed.
 fn changed_menus<'e>(env: &Env<'e>) -> impl Iterator<Item = &'e Id> {
-    let menus = env.menus;
+    let menus = env.menus();
     menus
         .menu_ids()
         .into_iter()
@@ -408,12 +408,12 @@ fn add_with_submenus(env: &Env<'_>, menu: Id, name: String, out: &mut Vec<(Id, S
 }
 
 fn name_of_menu(env: &Env<'_>, menu: &Id) -> String {
-    env.i18n.tr(menu.as_str()).to_string()
+    env.i18n().tr(menu.as_str()).to_string()
 }
 
 impl Screen for MenusScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let title = env.i18n.tr("menu-editor.title");
+        let title = env.i18n().tr("menu-editor.title");
         let rows = &self.rows;
         let row = |i: usize| (rows[i].0.as_str(), rows[i].1.as_str());
         self.frame.draw(canvas, env, title, rows.len(), row, 0);
@@ -486,9 +486,15 @@ impl EntriesScreen {
                 (name(env, id.as_str()), more.to_string())
             })
             .collect();
-        rows.push((env.i18n.tr("menu-editor.add").to_string(), "›".to_string()));
-        if env.menus.is_customized(&self.menu) {
-            rows.push((env.i18n.tr("menu-editor.reset").to_string(), String::new()));
+        rows.push((
+            env.i18n().tr("menu-editor.add").to_string(),
+            "›".to_string(),
+        ));
+        if env.menus().is_customized(&self.menu) {
+            rows.push((
+                env.i18n().tr("menu-editor.reset").to_string(),
+                String::new(),
+            ));
         }
         rows
     }
@@ -511,7 +517,7 @@ impl EntriesScreen {
 
 impl Screen for EntriesScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let title = env.i18n.tr(&self.menu);
+        let title = env.i18n().tr(&self.menu);
         let rows = &self.rows;
         let row = |i: usize| (rows[i].0.as_str(), rows[i].1.as_str());
         self.frame
@@ -589,7 +595,7 @@ const OPTIONS: [&str; 4] = [
 impl EntryScreen {
     fn open(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         // No higher than the screen: the list pages where its rows are tall.
         let height = (u32::from(style.row()) * (OPTIONS.len() as u32 + 1)
             + u32::from(style.gap()) * 2)
@@ -689,13 +695,13 @@ impl Screen for EntryScreen {
             .color(Color::BLACK)
             .draw_from(&mut ui, x, title_area);
         if self.refused {
-            let message = env.i18n.tr("menu-editor.locked");
+            let message = env.i18n().tr("menu-editor.locked");
             ui.message(self.list.area(), message);
             return;
         }
         self.list
             .draw(&mut ui, OPTIONS.len(), |ui, index, rect, focused| {
-                let label = env.i18n.tr(OPTIONS[index]);
+                let label = env.i18n().tr(OPTIONS[index]);
                 let color = style.focus_ink(focused);
                 ui::Label::new(label)
                     .px(style.text())
@@ -788,10 +794,10 @@ struct Candidate {
 /// Where the candidates come from, in order: an id and the key of its
 /// name.
 fn sources<'e>(env: &'e Env<'_>, menus: &'e [Id]) -> impl Iterator<Item = (&'e Id, &'e str)> {
-    env.actions
+    env.actions()
         .iter()
         .map(|a| (&a.id, a.title.as_ref()))
-        .chain(env.settings.specs().map(|s| (&s.id, s.title.as_ref())))
+        .chain(env.settings().specs().map(|s| (&s.id, s.title.as_ref())))
         .chain(menus.iter().map(|m| (m, m.as_str())))
 }
 
@@ -807,14 +813,14 @@ impl AddScreen {
     fn open(env: &Env<'_>, params: &Params) -> Self {
         let menu = params.get(MENU).unwrap_or_default().to_string();
         let present = entries(env, &menu);
-        let menus: Vec<Id> = env.menus.menu_ids().into_iter().cloned().collect();
-        let actions = env.actions.iter().count();
-        let settings = actions + env.settings.specs().count();
+        let menus: Vec<Id> = env.menus().menu_ids().into_iter().cloned().collect();
+        let actions = env.actions().iter().count();
+        let settings = actions + env.settings().specs().count();
         // An id among two sources once (an action's before a setting's).
         let wanted = |at: usize, id: &Id| {
             !present.contains(id)
-                && (at < actions || !env.actions.contains(id.as_str()))
-                && (at < settings || env.settings.spec(id.as_str()).is_none())
+                && (at < actions || !env.actions().contains(id.as_str()))
+                && (at < settings || env.settings().spec(id.as_str()).is_none())
                 && !makes_circle(env, &menu, id)
         };
         // Counted first, then made: no list or name grows as it is made.
@@ -822,7 +828,7 @@ impl AddScreen {
         for (at, (id, key)) in sources(env, &menus).enumerate() {
             if wanted(at, id) {
                 count += 1;
-                bytes += env.i18n.tr(key).len();
+                bytes += env.i18n().tr(key).len();
             }
         }
         let mut candidates = Vec::with_capacity(count);
@@ -830,14 +836,14 @@ impl AddScreen {
         let mut notes = Vec::new();
         for (at, (id, key)) in sources(env, &menus).enumerate() {
             if candidates.len() < count && wanted(at, id) {
-                let name = env.i18n.tr(key);
+                let name = env.i18n().tr(key);
                 // Taken out of this menu by a plugin: which, beside it.
-                let noted = env.menus.hidden_by(&menu, id.as_str()).map(|by| {
+                let noted = env.menus().hidden_by(&menu, id.as_str()).map(|by| {
                     let plugin = env
                         .plugins
                         .get(by.as_str())
-                        .map_or(by.as_str(), |info| info.name(env.i18n));
-                    env.i18n.format(
+                        .map_or(by.as_str(), |info| info.name(env.i18n()));
+                    env.i18n().format(
                         "menu-editor.hidden-by",
                         &[("plugin", paperpaw_sdk::Arg::Str(plugin))],
                     )
@@ -892,7 +898,7 @@ impl AddScreen {
 
 impl Screen for AddScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let title = env.i18n.tr("menu-editor.add");
+        let title = env.i18n().tr("menu-editor.add");
         let (candidates, names, notes) = (&self.candidates, &self.names, &self.notes);
         let row = |i: usize| {
             let c = &candidates[i];

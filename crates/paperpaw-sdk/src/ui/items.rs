@@ -46,18 +46,18 @@ impl ItemsScreen {
     pub fn open(env: &Env<'_>, params: &Params) -> Self {
         let setting = params.get(params::ID).and_then(|id| Id::parse(id).ok());
         let items = if params.get(params::MODE) == Some(LINES) {
-            env.status_items
+            env.status_items()
                 .lines()
                 .map(|(id, title)| (id.clone(), title.to_string()))
                 .collect()
         } else {
-            env.status_items
+            env.status_items()
                 .iter()
                 .map(|(id, title)| (id.clone(), title.to_string()))
                 .collect()
         };
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height - top);
@@ -79,8 +79,8 @@ impl ItemsScreen {
         let Some(setting) = &self.setting else {
             return chosen;
         };
-        for c in item_ids(env.settings.text(setting.as_str())) {
-            let c = env.status_items.canonical(c);
+        for c in item_ids(env.settings().text(setting.as_str())) {
+            let c = env.status_items().canonical(c);
             if self.items.iter().any(|(id, _)| id.as_str() == c) && !chosen.contains(&c) {
                 chosen.push(c);
             }
@@ -107,11 +107,11 @@ impl ItemsScreen {
         if let Some(setting) = &self.setting {
             // A line by an id it had before is this one, kept by its own.
             let known = |c: &str| {
-                let c = env.status_items.canonical(c);
+                let c = env.status_items().canonical(c);
                 self.items.iter().any(|(id, _)| id.as_str() == c)
             };
             let mut chosen_left = chosen.iter();
-            let mut all: Vec<&str> = item_ids(env.settings.text(setting.as_str()))
+            let mut all: Vec<&str> = item_ids(env.settings().text(setting.as_str()))
                 .filter_map(|c| {
                     if known(c) {
                         chosen_left.next().copied()
@@ -182,10 +182,10 @@ impl Screen for ItemsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = self.setting.as_ref().map_or(String::new(), |s| {
-            env.settings
+            env.settings()
                 .specs()
                 .find(|spec| spec.id == *s)
-                .map_or(String::new(), |spec| env.i18n.tr(&spec.title).to_string())
+                .map_or(String::new(), |spec| env.i18n().tr(&spec.title).to_string())
         });
         let len = self.items.len();
         let mut ui = ui::Ui::new(canvas, env, &style);
@@ -206,12 +206,12 @@ impl Screen for ItemsScreen {
             // Shown items carry their place: "On (2)".
             let value = match on {
                 Some(at) if chosen.len() > 1 => {
-                    format!("{} ({})", env.i18n.tr("core.state.on"), at + 1)
+                    format!("{} ({})", env.i18n().tr("core.state.on"), at + 1)
                 }
-                Some(_) => env.i18n.tr("core.state.on").to_string(),
-                None => env.i18n.tr("core.state.off").to_string(),
+                Some(_) => env.i18n().tr("core.state.on").to_string(),
+                None => env.i18n().tr("core.state.off").to_string(),
             };
-            ui::Row::value(env.i18n.tr(name), &value)
+            ui::Row::value(env.i18n().tr(name), &value)
                 .focused(focused)
                 .draw(ui, rect);
         });
@@ -236,11 +236,11 @@ impl Screen for ItemsScreen {
     }
 
     fn hint(&self, action: &Id, env: &Env<'_>) -> crate::Hint {
-        let done = || crate::Hint::Text(env.i18n.tr("core.grid.done").to_string());
+        let done = || crate::Hint::Text(env.i18n().tr("core.grid.done").to_string());
         match action {
             a if self.moving && [actions::CONFIRM, actions::BACK].contains(a) => done(),
             a if *a == actions::MENU && !self.moving && self.can_move(env) => {
-                crate::Hint::Text(env.i18n.tr("core.move").to_string())
+                crate::Hint::Text(env.i18n().tr("core.move").to_string())
             }
             _ => crate::Hint::Default,
         }

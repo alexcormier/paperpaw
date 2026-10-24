@@ -33,17 +33,17 @@ pub(crate) struct AboutScreen {
 impl AboutScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area =
             paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
         let mut rows = Vec::from([Row::Version, Row::Source]);
-        if env.firmware.is_some_and(|f| !f.plugins.is_empty()) {
+        if env.firmware().is_some_and(|f| !f.plugins.is_empty()) {
             rows.push(Row::BuiltIn);
         }
-        if env.native.is_some() {
+        if env.native().is_some() {
             rows.push(Row::Native);
         }
         rows.push(Row::Licences);
@@ -70,7 +70,7 @@ impl AboutScreen {
 
 /// The plugins built in, by name, for a row's note.
 fn built_in_names(env: &Env<'_>) -> (String, String) {
-    let Some(firmware) = env.firmware else {
+    let Some(firmware) = env.firmware() else {
         return (String::new(), String::new());
     };
     let names: Vec<&str> = firmware
@@ -90,13 +90,13 @@ impl Screen for AboutScreen {
         self.list.set_len(len);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("about.title"),
+            env.i18n().tr("about.title"),
             None,
             self.list.paging(len),
         );
         let rows = &self.rows;
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
-            let tr = |key| env.i18n.tr(key);
+            let tr = |key| env.i18n().tr(key);
             match rows[index] {
                 Row::Version => ui::Row::value("PaperPaw", crate::VERSION)
                     .note(tr("about.summary"))

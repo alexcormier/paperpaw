@@ -81,7 +81,7 @@ impl Layout {
         let Some(font) = style.font(env) else {
             return Self::default();
         };
-        let display = env.device.display;
+        let display = env.device().display;
         let margin = style.margin();
         let gap = style.gap();
         let width = display.width.saturating_sub(2 * margin);
@@ -93,8 +93,8 @@ impl Layout {
         let cover = d.cover.as_ref().map(|image| {
             let (w, h) = ui::fit_image(image, cover_height * 3 / 4, cover_height);
             let at = Rect::new(margin, y, w, h);
-            let format = env.device.display.format;
-            (at, Thumbnail::new(env.storage, image, w, h, format))
+            let format = env.device().display.format;
+            (at, Thumbnail::new(env.storage(), image, w, h, format))
         });
         let text_x = cover
             .as_ref()
@@ -123,7 +123,7 @@ impl Layout {
         let label_width = d
             .rows
             .iter()
-            .map(|(key, _)| font.measure(style.small(), env.i18n.tr(key.as_ref())))
+            .map(|(key, _)| font.measure(style.small(), env.i18n().tr(key.as_ref())))
             .fold(0.0, f32::max)
             + f32::from(gap) * 2.0;
         let rows = y;
@@ -160,7 +160,7 @@ impl Layout {
 
 /// Reads what is known of the book at `path`, and what it is about.
 fn details(env: &Env<'_>, path: &str) -> (Details, String) {
-    let storage = env.storage;
+    let storage = env.storage();
     let name = files::name(path);
     let cached = library::service(env).book(env, path);
     let mut details = Details {
@@ -169,7 +169,7 @@ fn details(env: &Env<'_>, path: &str) -> (Details, String) {
     };
     let mut rows = Vec::new();
     let mut description = String::new();
-    if let Ok(document) = env.formats.open(storage, path) {
+    if let Ok(document) = env.formats().open(storage, path) {
         let metadata = document.metadata().clone();
         if let Some(title) = metadata.title {
             details.title = title;
@@ -180,7 +180,7 @@ fn details(env: &Env<'_>, path: &str) -> (Details, String) {
             let value = match metadata.series_index {
                 Some(number) => format!(
                     "{series} · {}",
-                    env.i18n
+                    env.i18n()
                         .format("files.series-number", &[("number", Arg::Str(&number))])
                 ),
                 None => series,
@@ -206,14 +206,14 @@ fn details(env: &Env<'_>, path: &str) -> (Details, String) {
     }
     // The fields plugins keep with books, where this one has a value.
     if let Some(book) = &cached {
-        for field in env.book_fields {
+        for field in env.book_fields() {
             if let Some(value) = book.field(field.id.as_str()) {
                 rows.push((field.title.clone(), value.to_string()));
             }
         }
     }
     let size = storage.size(path).unwrap_or_default();
-    let file = file_row(name, size, env.i18n.tr("files.decimal"));
+    let file = file_row(name, size, env.i18n().tr("files.decimal"));
     rows.push((Cow::Borrowed("files.info.file"), file));
     rows.push((
         Cow::Borrowed("files.info.folder"),
@@ -240,11 +240,11 @@ impl Screen for InfoScreen {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(&mut ui, env.i18n.tr("files.info"), None, None);
+            .draw(&mut ui, env.i18n().tr("files.info"), None, None);
         let Some(font) = style.font(env) else {
             return;
         };
-        let display = env.device.display;
+        let display = env.device().display;
         let margin = style.margin();
         let gap = style.gap();
         let width = display.width.saturating_sub(2 * margin);
@@ -292,7 +292,7 @@ impl Screen for InfoScreen {
         let mut y = layout.rows;
         for (key, value) in &d.rows {
             let baseline = i32::from(y) + ascent as i32;
-            let label = env.i18n.tr(key.as_ref());
+            let label = env.i18n().tr(key.as_ref());
             let row = Rect::new(margin, y, width, line(style.text()));
             let canvas = ui.canvas();
             canvas.describe(Role::Text, label, row);

@@ -91,7 +91,7 @@ impl Dialog {
         text: &[&str],
         buttons: &[&str],
     ) -> Self {
-        let display = env.device.display;
+        let display = env.device().display;
         let margin = style.margin as u16;
         let width = display.width.saturating_sub(2 * margin);
         let inner = f32::from(width.saturating_sub(2 * margin));

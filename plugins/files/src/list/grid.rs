@@ -40,13 +40,13 @@ const COLUMN_MM: u32 = 26;
 impl Grid {
     /// The grid of a page `height` pixels high.
     pub(crate) fn new(env: &Env<'_>, style: &UiStyle, sizes: &Sizes, height: u16) -> Grid {
-        let width = env.device.display.width;
+        let width = env.device().display.width;
         let margin = style.margin();
         let gap = style.gap();
         let columns = if sizes.compact {
             3
         } else {
-            (u32::from(width) / env.metrics.mm(COLUMN_MM).max(1)).max(3) as u16
+            (u32::from(width) / env.metrics().mm(COLUMN_MM).max(1)).max(3) as u16
         };
         // Covers a gap apart, the first and the last on the margins; the
         // focus a little around each.
@@ -195,7 +195,7 @@ pub(crate) fn prepare_cell(
     let title = if count > 1 { &book.series } else { &book.title };
     book.lines = rows::wrap_lines(env, style, style.small(), title, f32::from(width), lines);
     if count > 1 {
-        book.stack = env.i18n.plural("files.books", i64::from(count), &[]);
+        book.stack = env.i18n().plural("files.books", i64::from(count), &[]);
         book.spoken = rows::spoken(&[&book.series, &book.stack]);
     } else {
         let state = rows::state_words(env, book);
@@ -259,7 +259,7 @@ fn draw_marks(ui: &mut ui::Ui<'_>, sizes: &Sizes, cover: Rect, book: &Loaded, co
             rows::draw_bar(ui, sizes, bar.x, bar, bar.width, p, Color::BLACK);
         }
         _ if book.new => {
-            let label = env.i18n.tr("files.list.new");
+            let label = env.i18n().tr("files.list.new");
             rows::draw_tag(ui, foot.x, foot, label, true, Color::BLACK, Color::WHITE);
         }
         _ => {}

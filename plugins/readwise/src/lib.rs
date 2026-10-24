@@ -225,7 +225,7 @@ impl Plugin for Readwise {
         // Any reader's notes, once exported as Markdown.
         let state = run.clone();
         r.on(events::NOTES_EXPORTED, move |env, exported, out| {
-            if send::add_waiting(env.storage, &exported.path).is_ok() {
+            if send::add_waiting(env.storage(), &exported.path).is_ok() {
                 state.borrow_mut().start(env, Start::Export, None, out);
                 retry_later(env, out);
             }
@@ -269,7 +269,7 @@ const RETRY_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("r
 
 /// Declares the next try while exports wait.
 fn retry_later(env: &paperpaw_sdk::Env<'_>, out: &mut Commands) {
-    if !send::waiting(env.storage).is_empty() {
+    if !send::waiting(env.storage()).is_empty() {
         let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
             .within(core::time::Duration::from_secs(30 * 60))
             .at_moments(paperpaw_sdk::work::Moments::ONLINE);

@@ -136,11 +136,11 @@ pub(crate) fn entered(typed: &Typed, out: &mut Commands) -> bool {
 
 /// How many books wait to be sent, in words, or what happens to notes.
 fn waiting(env: &Env<'_>) -> String {
-    let count = kept::waiting(env.storage).len() as i64;
+    let count = kept::waiting(env.storage()).len() as i64;
     if count == 0 {
-        return env.i18n.tr("joplin.idle").to_string();
+        return env.i18n().tr("joplin.idle").to_string();
     }
-    env.i18n
+    env.i18n()
         .plural("joplin.waiting", count, &[("count", Arg::Int(count))])
 }
 
@@ -160,7 +160,7 @@ impl SetupScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let gap = style.gap();
         let top = header.area().height + gap;
         let height = style.row() * ALL.len() as u16;
@@ -207,9 +207,9 @@ impl SetupScreen {
             }
             Row::Send => cx.command(Command::run(SEND)),
             _ => {
-                let initial = row.setting().map_or("", |s| env.settings.read(&s));
+                let initial = row.setting().map_or("", |s| env.settings().read(&s));
                 let question =
-                    paperpaw_sdk::ask::text(env.i18n.tr(row.title(self.service)), &ENTERED)
+                    paperpaw_sdk::ask::text(env.i18n().tr(row.title(self.service)), &ENTERED)
                         .initial(initial)
                         .with(FIELD, row.field());
                 let question = if row == Row::Password {
@@ -225,13 +225,13 @@ impl SetupScreen {
     /// What a row shows on the right.
     fn value(&self, row: Row, env: &Env<'_>) -> String {
         match row {
-            Row::Service => env.i18n.tr(self.service.key()).to_string(),
+            Row::Service => env.i18n().tr(self.service.key()).to_string(),
             Row::Address => {
                 let url = self.service.base(env);
                 url.strip_prefix("https://").unwrap_or(&url).to_string()
             }
-            Row::User => env.settings.read(&USER).to_string(),
-            Row::Password if env.secrets.get(PASSWORD).is_some() => String::from("••••••"),
+            Row::User => env.settings().read(&USER).to_string(),
+            Row::Password if env.secrets().get(PASSWORD).is_some() => String::from("••••••"),
             Row::Password => String::new(),
             Row::Notebook => notebook_name(env).to_string(),
             Row::Send => String::from("›"),
@@ -243,20 +243,20 @@ impl Screen for SetupScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let title = env.i18n.tr("joplin.title");
+        let title = env.i18n().tr("joplin.title");
         self.header.draw(&mut ui, title, None, None);
         let rows = self.rows();
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let row = rows[index];
-                let title = env.i18n.tr(row.title(self.service));
+                let title = env.i18n().tr(row.title(self.service));
                 let value = self.value(row, env);
                 ui::Row::value(title, &value)
                     .focused(focused)
                     .draw(ui, rect);
             });
         // The help in small letters, to fit on small screens.
-        let help = env.i18n.tr(self.focused().help());
+        let help = env.i18n().tr(self.focused().help());
         let small = style.with_text(style.small());
         ui::draw_message(ui.canvas(), env, &small, self.help, help);
         ui.note_line(self.status, &self.message);

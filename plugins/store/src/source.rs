@@ -51,13 +51,13 @@ impl Screen for SourceScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("store.source");
+        let title = env.i18n().tr("store.source");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, None, None);
         let Some(font) = style.font(env) else {
             return;
         };
-        let display = env.device.display;
+        let display = env.device().display;
         let margin = style.margin();
         let width = display.width.saturating_sub(2 * margin);
         let mut y = self.header.area().height + style.gap() * 2;
@@ -79,7 +79,7 @@ impl Screen for SourceScreen {
         }
         let shown = self.url.strip_prefix("https://").unwrap_or(&self.url);
         let small = font.line_metrics(style.small()).line_height;
-        for text in [shown, env.i18n.tr("store.source.help")] {
+        for text in [shown, env.i18n().tr("store.source.help")] {
             for range in font.wrap(style.small(), text, f32::from(width)) {
                 let part = text[range].trim_end();
                 let x = f32::from(margin)

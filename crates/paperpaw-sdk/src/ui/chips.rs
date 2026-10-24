@@ -146,7 +146,7 @@ impl Chips {
                 env,
                 style,
                 *cell,
-                env.i18n.tr(label),
+                env.i18n().tr(label),
                 i == chosen,
                 focus == Some(i),
             );
@@ -164,7 +164,7 @@ fn widths<'a, L: AsRef<str> + 'a>(
 ) -> impl Iterator<Item = u16> + 'a {
     let font = style.font(env);
     labels.map(move |label| {
-        let label = env.i18n.tr(label.as_ref());
+        let label = env.i18n().tr(label.as_ref());
         let single = label.chars().count() == 1;
         let size = if single { style.text } else { style.small };
         let text = match &font {

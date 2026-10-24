@@ -38,7 +38,7 @@ pub(crate) fn entered(env: &Env<'_>, typed: &Typed, out: &mut Commands) {
         return;
     };
     let text = typed.text.trim();
-    if !text.is_empty() && env.secrets.has(id) {
+    if !text.is_empty() && env.secrets().has(id) {
         out.push(Command::set_secret(SecretChange::keep(id, "", text)));
     }
 }
@@ -80,18 +80,18 @@ impl Screen for SecretList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let len = env.secrets.listed().count();
-        let title = env.i18n.tr("settings.secrets");
+        let len = env.secrets().listed().count();
+        let title = env.i18n().tr("settings.secrets");
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
             let area = self.list.area();
-            ui.message(area, env.i18n.tr("settings.secrets.none"));
+            ui.message(area, env.i18n().tr("settings.secrets.none"));
             return;
         }
-        let secrets: Vec<_> = env.secrets.listed().collect();
+        let secrets: Vec<_> = env.secrets().listed().collect();
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
-            let label = env.i18n.tr(secrets[index].label);
+            let label = env.i18n().tr(secrets[index].label);
             ui::Row::value(label, HIDDEN)
                 .focused(focused)
                 .draw(ui, rect);
@@ -99,7 +99,7 @@ impl Screen for SecretList {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = cx.env().secrets.listed().count();
+        let len = cx.env().secrets().listed().count();
         if let Some(change) = self.list.navigate(action, len) {
             change.request(cx);
             return Handled::Yes;
@@ -115,7 +115,7 @@ impl Screen for SecretList {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let len = cx.env().secrets.listed().count();
+        let len = cx.env().secrets().listed().count();
         let paging = self.list.paging(len);
         let tapped = self
             .header
@@ -156,8 +156,8 @@ impl SecretPage {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let (style, header, area) = page(env);
         let id = params.get(ID).unwrap_or_default().to_string();
-        let secret = env.secrets.listed().find(|s| s.id == id);
-        let title = secret.map_or_else(String::new, |s| env.i18n.tr(s.label).to_string());
+        let secret = env.secrets().listed().find(|s| s.id == id);
+        let title = secret.map_or_else(String::new, |s| env.i18n().tr(s.label).to_string());
         let mut choices = Vec::new();
         if secret.is_some_and(|s| s.changeable) {
             choices.push(Choice::Change);
@@ -182,17 +182,17 @@ impl SecretPage {
                     .command(),
             ),
             // Kept: asked first, as it cannot be had back.
-            Some(Choice::Remove) if cx.env().secrets.has(&self.id) => {
+            Some(Choice::Remove) if cx.env().secrets().has(&self.id) => {
                 let env = *cx.env();
-                let question = env.i18n.format(
+                let question = env.i18n().format(
                     "settings.secret.remove.question",
                     &[("name", paperpaw_sdk::Arg::Str(&self.title))],
                 );
                 cx.command(
                     paperpaw_sdk::ask::confirm(question, &REMOVE)
-                        .text(env.i18n.tr("settings.secret.remove.text"))
-                        .yes(env.i18n.tr("settings.secret.remove"))
-                        .no(env.i18n.tr("settings.secret.keep"))
+                        .text(env.i18n().tr("settings.secret.remove.text"))
+                        .yes(env.i18n().tr("settings.secret.remove"))
+                        .no(env.i18n().tr("settings.secret.keep"))
                         .command(),
                 );
             }
@@ -220,7 +220,7 @@ impl Screen for SecretPage {
                 Choice::Change => "settings.secret.change",
                 Choice::Remove => "settings.secret.remove",
             };
-            ui::Row::value(env.i18n.tr(key), "")
+            ui::Row::value(env.i18n().tr(key), "")
                 .focused(focused)
                 .draw(ui, rect);
         });

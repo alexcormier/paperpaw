@@ -155,8 +155,8 @@ impl Widget for Forecast {
 
 /// The days shown: from today or tomorrow, as many as set.
 fn shown_days(env: &Env<'_>, days: &[Day]) -> Vec<Day> {
-    let skip = usize::from(env.settings.text(&format!("{ID}.start")) == STARTS[1]);
-    let count = env.settings.read(&DAYS).clamp(1, 7) as usize;
+    let skip = usize::from(env.settings().text(&format!("{ID}.start")) == STARTS[1]);
+    let count = env.settings().read(&DAYS).clamp(1, 7) as usize;
     days.iter().skip(skip).take(count).copied().collect()
 }
 
@@ -164,13 +164,16 @@ fn shown_days(env: &Env<'_>, days: &[Day]) -> Vec<Day> {
 fn day_name(env: &Env<'_>, day: &Day, today: Option<i32>, long: bool, initial: bool) -> String {
     let weekday = data::weekday(day.date);
     if today == Some(day.date) && widgets::shows(env, ID.as_str(), "today") && !initial {
-        return env.i18n.tr("weather.today").to_string();
+        return env.i18n().tr("weather.today").to_string();
     }
     if long {
-        return env.i18n.tr(&format!("core.weekday.{weekday}")).to_string();
+        return env
+            .i18n()
+            .tr(&format!("core.weekday.{weekday}"))
+            .to_string();
     }
     let key = format!("weather.weekday.{weekday}");
-    let short = env.i18n.tr(&key);
+    let short = env.i18n().tr(&key);
     if initial {
         short.chars().next().map(String::from).unwrap_or_default()
     } else {
@@ -180,7 +183,7 @@ fn day_name(env: &Env<'_>, day: &Day, today: Option<i32>, long: bool, initial: b
 
 /// How the weekdays are named: (long, initial).
 fn naming(env: &Env<'_>) -> (bool, bool) {
-    let names = env.settings.text(&format!("{ID}.names"));
+    let names = env.settings().text(&format!("{ID}.names"));
     (names == NAMES[2], names == NAMES[1])
 }
 
@@ -188,7 +191,7 @@ fn naming(env: &Env<'_>) -> (bool, bool) {
 fn as_list(env: &Env<'_>, area: Rect, count: usize) -> bool {
     match LAYOUTS
         .iter()
-        .position(|l| *l == env.settings.text(&format!("{ID}.layout")))
+        .position(|l| *l == env.settings().text(&format!("{ID}.layout")))
     {
         Some(1) => false,
         Some(2) => true,
@@ -560,7 +563,7 @@ impl Context<'_, '_> {
         let high_x = right.saturating_sub(high_w);
         let room = high_x.saturating_sub(x + low_w + gap * 2);
         let bars =
-            self.shows("bars") && low_w > 0 && room >= (gap * 2).max(env.metrics.mm(6) as u16);
+            self.shows("bars") && low_w > 0 && room >= (gap * 2).max(env.metrics().mm(6) as u16);
         let (bar_x, bar_w) = if bars {
             (x + low_w + gap, room)
         } else {

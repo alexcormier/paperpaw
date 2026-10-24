@@ -100,7 +100,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// How many headlines it shows at most, by its setting.
 fn count(env: &Env<'_>) -> usize {
-    let value = env.settings.text(&alloc::format!("{NAME}.count"));
+    let value = env.settings().text(&alloc::format!("{NAME}.count"));
     value
         .rsplit('.')
         .next()
@@ -110,7 +110,7 @@ fn count(env: &Env<'_>) -> usize {
 
 /// Lines a headline takes at most, by its setting.
 fn lines_each(env: &Env<'_>) -> u16 {
-    if env.settings.text(&alloc::format!("{NAME}.lines")) == LINES[1] {
+    if env.settings().text(&alloc::format!("{NAME}.lines")) == LINES[1] {
         2
     } else {
         1
@@ -154,12 +154,12 @@ fn empty(env: &Env<'_>, area: Rect) -> Wrapped {
     // The sentence inside the spacing, the short form where it does not
     // fit whole.
     let inner = widgets::widget_look(env, NAME, area).area.height;
-    let long = env.i18n.tr("news.widget.empty");
+    let long = env.i18n().tr("news.widget.empty");
     let wrapped = Wrapped::fitting(env, long, style.text(), style.small(), width, inner);
     if wrapped.whole() {
         return wrapped;
     }
-    let short = env.i18n.tr("news.widget.empty.short");
+    let short = env.i18n().tr("news.widget.empty.short");
     Wrapped::fitting(env, short, style.text(), style.small(), width, height)
 }
 
@@ -222,7 +222,7 @@ impl Widget for Headlines {
             return;
         }
         let rows = rows(env, &look, self.shown.len());
-        let caption = env.i18n.tr("news.title");
+        let caption = env.i18n().tr("news.title");
         if let Some(top) = rows.0 {
             let at = look.within(Rect::new(
                 look.area.x,
@@ -308,7 +308,7 @@ fn rows(env: &Env<'_>, look: &WidgetLook, count: usize) -> (Option<u16>, Vec<Rec
     let row = row_height(env, &font, &style).max(1);
     // The caption where it fits whole, with room for a headline below.
     let caption = caption_room(env);
-    let fits = font.measure(style.small(), env.i18n.tr("news.title")) <= f32::from(area.width);
+    let fits = font.measure(style.small(), env.i18n().tr("news.title")) <= f32::from(area.width);
     let caption = if fits && caption + row <= area.height {
         caption
     } else {

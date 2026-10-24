@@ -149,7 +149,7 @@ impl Browser {
     fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         // The bar of buttons along the bottom: they keep the side margin
         // from the edge too.
         let bar_height = ui::edge_bar_height(&style);
@@ -181,9 +181,9 @@ impl Browser {
 
     fn folder<'a>(&'a self, env: &'a Env<'_>) -> Folder<'a> {
         Folder {
-            storage: env.storage,
+            storage: env.storage(),
             dir: &self.dir,
-            hidden: env.settings.read(&HIDDEN),
+            hidden: env.settings().read(&HIDDEN),
         }
     }
 
@@ -318,7 +318,7 @@ impl Browser {
     /// place), after something was done to it.
     fn reload_at(&mut self, env: &Env<'_>, name: &str) {
         let path = ops::join(&self.dir, name);
-        let entry = Entry::new(name.to_string(), ops::is_dir(env.storage, &path), 0);
+        let entry = Entry::new(name.to_string(), ops::is_dir(env.storage(), &path), 0);
         self.load(env, Some(entry));
     }
 
@@ -343,14 +343,14 @@ impl Browser {
         let path = ops::join(&self.dir, &entry.name);
         let env = *cx.env();
         let mut options = Vec::new();
-        if !entry.is_dir && env.formats.supports_file(env.storage, &path) {
+        if !entry.is_dir && env.formats().supports_file(env.storage(), &path) {
             options.push("open");
             // Where more than one reading app reads it.
-            if env.readers.for_book(&env, &path).len() > 1 {
+            if env.readers().for_book(&env, &path).len() > 1 {
                 options.push("open-with");
             }
         }
-        if entry.is_dir && env.readers.len() > 1 {
+        if entry.is_dir && env.readers().len() > 1 {
             options.push("reading-app");
         }
         options.extend(["rename", "move", "copy", "delete"]);
@@ -366,7 +366,7 @@ impl Browser {
         let env = *cx.env();
         match button {
             Button::NewFolder => cx.command(
-                ask::text(env.i18n.tr("file-manager.new-folder"), &FOLDER_NAMED).command(),
+                ask::text(env.i18n().tr("file-manager.new-folder"), &FOLDER_NAMED).command(),
             ),
             Button::Cancel => {
                 self.picked = None;
@@ -378,18 +378,18 @@ impl Browser {
                 let Some(picked) = self.picked.take() else {
                     return;
                 };
-                let target = ops::free_path(env.storage, &self.dir, ops::name(&picked.path));
+                let target = ops::free_path(env.storage(), &self.dir, ops::name(&picked.path));
                 let mut note = None;
                 let result = if picked.copy {
-                    ops::copy(env.storage, &picked.path, &target)
-                } else if ops::same_path(env.storage, ops::parent(&picked.path), &self.dir) {
+                    ops::copy(env.storage(), &picked.path, &target)
+                } else if ops::same_path(env.storage(), ops::parent(&picked.path), &self.dir) {
                     // Moved where it is: nothing to do.
                     Ok(())
                 } else if let Some(refused) = refused(&env, &picked.path) {
                     self.message = Some(refused);
                     return self.redraw(cx);
                 } else {
-                    let moved = ops::move_to(env.storage, &picked.path, &target);
+                    let moved = ops::move_to(env.storage(), &picked.path, &target);
                     if moved.is_ok() {
                         note = tell_moved(&env, &picked.path, &target, cx);
                     } else {
@@ -424,7 +424,7 @@ impl Browser {
                 paperpaw_sdk::readers::Choice::Folder(path),
             )),
             "rename" => cx.command(
-                ask::text(env.i18n.tr("file-manager.rename"), &RENAMED)
+                ask::text(env.i18n().tr("file-manager.rename"), &RENAMED)
                     .initial(name)
                     .with(params::PATH, path.to_string())
                     .command(),
@@ -440,30 +440,30 @@ impl Browser {
                 } else {
                     "file-manager.picked-move"
                 };
-                self.message = Some(env.i18n.format(key, &[("name", Arg::Str(&name))]));
+                self.message = Some(env.i18n().format(key, &[("name", Arg::Str(&name))]));
                 self.redraw(cx);
             }
-            "delete" if is_own_data(env.storage, path) => {
-                self.message = Some(env.i18n.tr("file-manager.error.own-data").to_string());
+            "delete" if is_own_data(env.storage(), path) => {
+                self.message = Some(env.i18n().tr("file-manager.error.own-data").to_string());
                 self.redraw(cx);
             }
             "delete" => {
                 // What goes: a folder with everything in it, a book with
                 // what is kept for it.
-                let key = if ops::is_dir(env.storage, path) {
+                let key = if ops::is_dir(env.storage(), path) {
                     "file-manager.delete-folder-question"
-                } else if env.formats.supports_file(env.storage, path) {
+                } else if env.formats().supports_file(env.storage(), path) {
                     "file-manager.delete-book-question"
                 } else {
                     "file-manager.delete-question"
                 };
-                let title = env.i18n.format(key, &[("name", Arg::Str(&name))]);
+                let title = env.i18n().format(key, &[("name", Arg::Str(&name))]);
                 // Asked as every yes or no question: the focus starts on
                 // the safe answer.
                 cx.command(
                     ask::confirm(title, &DELETE)
-                        .yes(env.i18n.tr("file-manager.option.delete-yes"))
-                        .no(env.i18n.tr("file-manager.option.cancel"))
+                        .yes(env.i18n().tr("file-manager.option.delete-yes"))
+                        .no(env.i18n().tr("file-manager.option.cancel"))
                         .with(params::PATH, path.to_string())
                         .command(),
                 );
@@ -475,8 +475,8 @@ impl Browser {
     /// Deletes `path`, as the reader answered yes.
     fn delete(&mut self, path: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if is_own_data(env.storage, path) {
-            self.message = Some(env.i18n.tr("file-manager.error.own-data").to_string());
+        if is_own_data(env.storage(), path) {
+            self.message = Some(env.i18n().tr("file-manager.error.own-data").to_string());
             return self.redraw(cx);
         }
         // The books in it, said gone once it is: what is kept for them
@@ -484,17 +484,17 @@ impl Browser {
         // At most `MAX_TOLD`: the data of those beyond stays until the
         // storage is cleaned up.
         let mut books = Vec::new();
-        paperpaw_sdk::library::books_in(env.storage, env.formats, path, &mut |book| {
+        paperpaw_sdk::library::books_in(env.storage(), env.formats(), path, &mut |book| {
             if books.len() < MAX_TOLD {
                 books.push(String::from(book));
             }
         });
         let at = Entry::new(
             ops::name(path).to_string(),
-            ops::is_dir(env.storage, path),
+            ops::is_dir(env.storage(), path),
             0,
         );
-        let deleted = ops::delete(env.storage, path);
+        let deleted = ops::delete(env.storage(), path);
         if deleted.is_ok() {
             for path in books {
                 cx.command(events::BOOK_REMOVED.emit(events::BookRemoved::new(path)));
@@ -503,7 +503,7 @@ impl Browser {
         }
         self.message = deleted.err().map(|e| error(&env, e));
         // Picked to be moved or copied, and gone with it.
-        if (self.picked.as_ref()).is_some_and(|p| ops::is_within(env.storage, &p.path, path)) {
+        if (self.picked.as_ref()).is_some_and(|p| ops::is_within(env.storage(), &p.path, path)) {
             self.picked = None;
         }
         // The focus where it was.
@@ -554,7 +554,7 @@ fn error(env: &Env<'_>, e: paperpaw_sdk::StorageError) -> String {
         E::Full => "file-manager.error.full",
         _ => "file-manager.error.io",
     };
-    env.i18n.tr(key).to_string()
+    env.i18n().tr(key).to_string()
 }
 
 /// A name for a file or folder that every file system takes as it is, the
@@ -608,7 +608,7 @@ impl Screen for Browser {
         let style = self.style;
         let len = self.len;
         let title = if self.dir.is_empty() {
-            env.i18n.tr("file-manager.device").to_string()
+            env.i18n().tr("file-manager.device").to_string()
         } else {
             ops::name(&self.dir).to_string()
         };
@@ -620,10 +620,10 @@ impl Screen for Browser {
                 self.list.area(),
                 "folder-open",
                 "",
-                env.i18n.tr("file-manager.empty"),
+                env.i18n().tr("file-manager.empty"),
             );
         }
-        let decimal = env.i18n.tr("file-manager.decimal");
+        let decimal = env.i18n().tr("file-manager.decimal");
         let room = ui.icon_room(true);
         let (page, first) = (&self.page, self.first);
         let active = self.focus == Focus::List;
@@ -655,7 +655,7 @@ impl Screen for Browser {
                 .draw_from(&mut ui, style.margin() as f32, line);
         }
         for (i, button) in self.buttons().into_iter().enumerate() {
-            let label = env.i18n.tr(match button {
+            let label = env.i18n().tr(match button {
                 Button::NewFolder => "file-manager.new-folder",
                 Button::Paste => "file-manager.paste",
                 Button::Cancel => "file-manager.cancel",
@@ -764,7 +764,7 @@ impl Screen for Browser {
                 .to_string();
             let text = typed.text.as_str();
             let Some(name) = valid_name(text) else {
-                self.message = Some(env.i18n.tr("file-manager.error.invalid").to_string());
+                self.message = Some(env.i18n().tr("file-manager.error.invalid").to_string());
                 return self.redraw(cx);
             };
             if name == ops::name(&path) {
@@ -774,7 +774,7 @@ impl Screen for Browser {
                 self.message = Some(refused);
                 return self.redraw(cx);
             }
-            let at = match rename(env.storage, &path, name) {
+            let at = match rename(env.storage(), &path, name) {
                 Ok(target) => {
                     self.message = tell_moved(&env, &path, &target, cx);
                     ops::name(&target).to_string()
@@ -790,12 +790,12 @@ impl Screen for Browser {
             let text = typed.text.as_str();
             let Some(name) = valid_name(text) else {
                 if !text.trim().is_empty() {
-                    self.message = Some(env.i18n.tr("file-manager.error.invalid").to_string());
+                    self.message = Some(env.i18n().tr("file-manager.error.invalid").to_string());
                     self.redraw(cx);
                 }
                 return;
             };
-            let target = ops::free_path(env.storage, &self.dir, name);
+            let target = ops::free_path(env.storage(), &self.dir, name);
             self.message = env
                 .storage
                 .create_dir(&target)
@@ -829,17 +829,17 @@ fn is_own_data(storage: &dyn Storage, path: &str) -> bool {
 /// folder, or a folder of more books than can be told moving
 /// ([`MAX_TOLD`]), whose notes would stay behind.
 fn refused(env: &Env<'_>, path: &str) -> Option<String> {
-    if is_own_data(env.storage, path) {
-        return Some(env.i18n.tr("file-manager.error.own-data").to_string());
+    if is_own_data(env.storage(), path) {
+        return Some(env.i18n().tr("file-manager.error.own-data").to_string());
     }
-    if !ops::is_dir(env.storage, path) {
+    if !ops::is_dir(env.storage(), path) {
         return None;
     }
     let mut books = 0;
-    paperpaw_sdk::library::books_in(env.storage, env.formats, path, &mut |_| books += 1);
+    paperpaw_sdk::library::books_in(env.storage(), env.formats(), path, &mut |_| books += 1);
     (books > MAX_TOLD).then(|| {
         let most = Arg::Int(MAX_TOLD as i64);
-        env.i18n
+        env.i18n()
             .format("file-manager.too-many-books", &[("count", most)])
     })
 }
@@ -858,15 +858,15 @@ const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Option<String> {
     follow_folders(env, from, to, cx);
     // The reading apps chosen for the folder and those in it go along.
-    let _ = paperpaw_sdk::readers::folder_moved(env.storage, from, to);
+    let _ = paperpaw_sdk::readers::folder_moved(env.storage(), from, to);
     let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
-    if !ops::is_dir(env.storage, to) {
+    if !ops::is_dir(env.storage(), to) {
         cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(from.into(), to.into())));
         return None;
     }
     let mut told = 0;
     let mut more = false;
-    paperpaw_sdk::library::books_in(env.storage, env.formats, to, &mut |book| {
+    paperpaw_sdk::library::books_in(env.storage(), env.formats(), to, &mut |book| {
         let Some(rest) = book.strip_prefix(to) else {
             return;
         };
@@ -880,7 +880,7 @@ fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Optio
             book.to_string(),
         )));
     });
-    more.then(|| env.i18n.tr("file-manager.moved-many").to_string())
+    more.then(|| env.i18n().tr("file-manager.moved-many").to_string())
 }
 
 /// Tells of the books a move cut short moved (copied, then not all
@@ -889,12 +889,12 @@ fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Optio
 fn tell_partly_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
     let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
     let mut told = 0;
-    paperpaw_sdk::library::books_in(env.storage, env.formats, to, &mut |book| {
+    paperpaw_sdk::library::books_in(env.storage(), env.formats(), to, &mut |book| {
         let Some(rest) = book.strip_prefix(to) else {
             return;
         };
         let was = format!("{from}{rest}");
-        if told < MAX_TOLD && !env.storage.exists(&was) {
+        if told < MAX_TOLD && !env.storage().exists(&was) {
             told += 1;
             cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(was, book.to_string())));
         }
@@ -925,7 +925,7 @@ fn moved_folder(storage: &dyn Storage, value: &str, from: &str, to: &str) -> Opt
 /// Settings that name folder `from` or one in it, chosen with the folder
 /// chooser, name it at `to` now.
 fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
-    for spec in env.settings.specs() {
+    for spec in env.settings().specs() {
         let folder = spec
             .extra()
             .editor
@@ -940,8 +940,8 @@ fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
         if !folder {
             continue;
         }
-        let value = env.settings.text(spec.id.as_str());
-        if let Some(moved) = moved_folder(env.storage, value, from, to) {
+        let value = env.settings().text(spec.id.as_str());
+        if let Some(moved) = moved_folder(env.storage(), value, from, to) {
             cx.command(Command::SetSetting(
                 spec.id.clone(),
                 SettingValue::Text(moved.into()),

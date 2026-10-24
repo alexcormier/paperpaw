@@ -73,9 +73,9 @@ pub(crate) fn save(storage: &dyn Storage, path: &str, entries: &[Entry]) {
 /// from, in the language of the device. `None` where they cannot be read:
 /// then none are shown, and none saved over them.
 pub(crate) fn bookmarks(env: &Env<'_>) -> Option<Vec<Entry>> {
-    let saved = load(env.storage, &bookmarks_path()).ok()?;
+    let saved = load(env.storage(), &bookmarks_path()).ok()?;
     Some(saved.unwrap_or_else(|| {
-        let language = env.i18n.language();
+        let language = env.i18n().language();
         let language = language.split(['-', '_']).next().unwrap_or("en");
         Vec::from([
             Entry::new("Wikipedia", &format!("https://{language}.m.wikipedia.org/")),

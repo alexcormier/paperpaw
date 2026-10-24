@@ -125,11 +125,11 @@ fn part(env: &Env<'_>) -> Part {
 
 /// "Good evening", or "Good evening, Anna" with a name.
 fn greeting(env: &Env<'_>, part: Part) -> String {
-    let name = env.settings.read(&NAME).trim();
+    let name = env.settings().read(&NAME).trim();
     if name.is_empty() {
-        String::from(env.i18n.tr(part.key()))
+        String::from(env.i18n().tr(part.key()))
     } else {
-        env.i18n.format(
+        env.i18n().format(
             &format!("{}.named", part.key()),
             &[("name", Arg::Str(name))],
         )
@@ -138,7 +138,7 @@ fn greeting(env: &Env<'_>, part: Part) -> String {
 
 /// The line below it: the date, or nothing.
 fn below(env: &Env<'_>) -> Option<String> {
-    if env.settings.read(&LINE) == LINES[0] {
+    if env.settings().read(&LINE) == LINES[0] {
         return None;
     }
     time::date_text(env)
@@ -178,7 +178,8 @@ fn height(env: &Env<'_>, _: u16) -> u16 {
 )]
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let style = UiStyle::new(env);
-    let (Some(ui_font), Some(font)) = (style.font(env), text::font(env, env.settings.read(&FACE)))
+    let (Some(ui_font), Some(font)) =
+        (style.font(env), text::font(env, env.settings().read(&FACE)))
     else {
         return;
     };
@@ -215,7 +216,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         font.measure(style.small(), text) + icon_width(icon, style.small()) <= width
     };
     if !fits(&text, icon) {
-        text = String::from(env.i18n.tr(part.key()));
+        text = String::from(env.i18n().tr(part.key()));
     }
     if !fits(&text, icon) {
         icon = false;

@@ -257,7 +257,7 @@ impl Plugin for Opds {
         let shared = state.clone();
         r.add_action(ActionSpec::new(SYNC, "opds.sync-all").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
-                if env.reader {
+                if env.reader() {
                     shared.borrow_mut().start(env, marked(env), out);
                 } else {
                     let due = SYNC_DUE.id().clone();
@@ -276,7 +276,7 @@ impl Plugin for Opds {
         r.add_icon(OPEN, Cow::Borrowed("book-download"))?;
         r.add_icon(SYNC, Cow::Borrowed("refresh"))?;
         r.on(events::STARTED, |env, _, out| {
-            temp::clean(env.storage);
+            temp::clean(env.storage());
             catalogs::move_passwords(env, out);
         })?;
         let shared = state.clone();

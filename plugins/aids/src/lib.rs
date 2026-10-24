@@ -162,23 +162,23 @@ impl Plugin for Aids {
             Id::new_static("aids.bold"),
             "aids.setting.bold-beginnings",
             Box::new(|env: &Env<'_>, block: &mut Block| {
-                if env.settings.read(&BOLD_BEGINNINGS) {
+                if env.settings().read(&BOLD_BEGINNINGS) {
                     bold_beginnings(block);
                 }
             }),
-            Box::new(|env: &Env<'_>| u64::from(env.settings.read(&BOLD_BEGINNINGS))),
+            Box::new(|env: &Env<'_>| u64::from(env.settings().read(&BOLD_BEGINNINGS))),
         ))?;
         r.add_text_filter(TextFilterSpec::new(
             Id::new_static("aids.replace"),
             "aids.setting.replace",
             Box::new(|env: &Env<'_>, block: &mut Block| {
-                let list = pairs(env.settings.read(&REPLACE));
+                let list = pairs(env.settings().read(&REPLACE));
                 if !list.is_empty() {
                     replace(block, &list);
                 }
             }),
             Box::new(|env: &Env<'_>| {
-                let list = env.settings.read(&REPLACE);
+                let list = env.settings().read(&REPLACE);
                 let list = list.trim();
                 if list.is_empty() {
                     0

@@ -70,7 +70,7 @@ impl BookSheet {
         let style = UiStyle::new(env);
         let sizes = Sizes::new(env, &style);
         let path = params.get(params::PATH).unwrap_or_default().to_string();
-        let storage = env.storage;
+        let storage = env.storage();
         let details = library::service(env).book(env, &path).unwrap_or_default();
         let opened = library::opened_books(storage).contains(&path);
         let favourite = library::favourites(storage).contains(&path);
@@ -78,9 +78,9 @@ impl BookSheet {
         let record = catalog::Record::of(&path, &details).with_status(status);
         let mut book = Loaded::load(env, record, sizes.cover, "");
         let note = book.author.clone();
-        let width = env.device.display.width;
+        let width = env.device().display.width;
         rows::prepare_row(env, &style, &sizes, width, &mut book, note, false);
-        let tr = |key: &str| env.i18n.tr(key).to_string();
+        let tr = |key: &str| env.i18n().tr(key).to_string();
         let mut actions = Vec::new();
         let open = match book.progress {
             1..=99 => "files.list.continue",
@@ -88,7 +88,7 @@ impl BookSheet {
         };
         actions.push((Action::Open, tr(open)));
         if !book.series.is_empty() {
-            let label = env.i18n.format(
+            let label = env.i18n().format(
                 "files.list.option.series",
                 &[("series", Arg::Str(&book.series))],
             );
@@ -111,22 +111,25 @@ impl BookSheet {
         let mut plugins = Vec::new();
         // As shown now, with the label and badge their plugins give them
         // (*Open with …* only where there is something to choose).
-        for item in env.menus.shown_items(env, menus::BOOK.as_str()) {
+        for item in env.menus().shown_items(env, menus::BOOK.as_str()) {
             if item.section {
                 continue;
             }
-            let label = env.menus.state(env, item.id.as_str()).text(&tr(item.title));
+            let label = env
+                .menus()
+                .state(env, item.id.as_str())
+                .text(&tr(item.title));
             actions.push((Action::Plugin(plugins.len()), label));
             plugins.push(item.id.clone());
         }
         if library::service(env).can_delete(env, &path) {
             actions.push((Action::Delete, tr("files.option.delete")));
         }
-        if !env.device.input.touch {
+        if !env.device().input.touch {
             actions.push((Action::Menu, tr("files.option.menu")));
         }
 
-        let display = env.device.display;
+        let display = env.device().display;
         let gap = style.gap();
         let head_h = sizes.cover.1 + 2 * gap;
         let row = style.touch_row(u32::from(style.row())) as u16;
@@ -211,7 +214,7 @@ impl BookSheet {
         for command in deleted.commands {
             cx.command(command);
         }
-        cx.command(Command::Notify(env.i18n.tr(key).to_string()));
+        cx.command(Command::Notify(env.i18n().tr(key).to_string()));
     }
 
     fn choose(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -239,7 +242,7 @@ impl BookSheet {
                 } else {
                     "files.favourite-removed"
                 };
-                cx.command(Command::Notify(env.i18n.tr(key).to_string()));
+                cx.command(Command::Notify(env.i18n().tr(key).to_string()));
             }
             Action::Info => cx.command(Command::OpenSlot(
                 slots::BOOK_INFO,
@@ -293,7 +296,7 @@ impl Screen for BookSheet {
             let (margin, gap) = (style.margin(), style.gap());
             let width = area.width.saturating_sub(2 * margin);
             let room = answers.area().y.saturating_sub(area.y + 2 * gap);
-            let text = env.i18n.tr("files.delete.question");
+            let text = env.i18n().tr("files.delete.question");
             let (most, least) = (style.text(), style.small());
             let question = widgets::Wrapped::fitting(env, text, most, least, width, room);
             // Told as the heading over the answers, across its room (not
@@ -304,7 +307,7 @@ impl Screen for BookSheet {
             let at = Rect::new(margin, area.y + gap, width, question.height(env).min(room));
             question.draw(ui.canvas(), env, at, widgets::Align::Left, Color::BLACK);
             answers.draw(&mut ui, ANSWERS.len(), |ui, index, rect, focused| {
-                let label = env.i18n.tr(ANSWERS[index].0);
+                let label = env.i18n().tr(ANSWERS[index].0);
                 ui::Row::plain(label).focused(focused).draw(ui, rect);
             });
             return;

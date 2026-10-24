@@ -1310,7 +1310,7 @@ fn remember_clock(storage: &dyn Storage, now: i64) {
 /// The time now, in seconds since 1970: the device's, else the last one
 /// known (time stands still then: what was due is, new cards come).
 pub(crate) fn now(env: &Env<'_>) -> i64 {
-    paperpaw_sdk::time::unix_seconds(env).unwrap_or_else(|| kept(env.storage).clock)
+    paperpaw_sdk::time::unix_seconds(env).unwrap_or_else(|| kept(env.storage()).clock)
 }
 
 /// The local day a time is in.

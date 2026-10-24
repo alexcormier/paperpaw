@@ -159,9 +159,9 @@ impl Recorder {
     }
 
     fn reading(&mut self, env: &Env<'_>, reading: &events::Reading, turned: bool) {
-        let now = env.now.millis();
+        let now = env.now().millis();
         let last = self.last.replace(now);
-        let position = self.position(env.storage);
+        let position = self.position(env.storage());
         if position.path != reading.path {
             position.path = reading.path.clone();
         } else if turned && let Some(last) = last {
@@ -243,12 +243,12 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         let mut recorder = saving.borrow_mut();
         recorder.reading(env, reading, false);
         recorder.last = None;
-        recorder.save(env.storage);
+        recorder.save(env.storage());
     })?;
     for event in [events::SUSPEND, events::STOPPING] {
         let saving = recorder.clone();
         r.on(event, move |env, _, _| {
-            saving.borrow_mut().save(env.storage);
+            saving.borrow_mut().save(env.storage());
         })?;
     }
 
@@ -298,9 +298,9 @@ impl Reading {
 
 impl Widget for Reading {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let shown = current(env.storage).map(|book| {
+        let shown = current(env.storage()).map(|book| {
             let mut recorder = self.recorder.borrow_mut();
-            let position = recorder.position(env.storage);
+            let position = recorder.position(env.storage());
             let position = if position.path == book.path {
                 position.clone()
             } else {
@@ -358,7 +358,7 @@ pub(crate) fn where_text(env: &Env<'_>, book: &Book, position: &Position) -> Str
     let percent = percent_text(env, book.percent());
     match (position.page, position.pages) {
         (Some(page), Some(pages)) if pages > 0 => {
-            let page = env.i18n.format(
+            let page = env.i18n().format(
                 "widgets.reading.page",
                 &[
                     ("page", Arg::Int(i64::from(page))),
@@ -367,7 +367,7 @@ pub(crate) fn where_text(env: &Env<'_>, book: &Book, position: &Position) -> Str
             );
             format!("{page} · {percent}")
         }
-        _ => env.i18n.format(
+        _ => env.i18n().format(
             "widgets.reading.percent",
             &[("percent", Arg::Str(&percent))],
         ),
@@ -385,12 +385,12 @@ fn duration(env: &Env<'_>, seconds: u64, key: &str) -> String {
     let minutes = seconds.div_ceil(60).max(1);
     let (hours, minutes) = (minutes / 60, minutes % 60);
     if hours == 0 {
-        env.i18n.format(
+        env.i18n().format(
             &format!("{key}-minutes"),
             &[("minutes", Arg::Int(minutes as i64))],
         )
     } else {
-        env.i18n.format(
+        env.i18n().format(
             &format!("{key}-hours"),
             &[
                 ("hours", Arg::Int(hours as i64)),
@@ -422,8 +422,8 @@ pub(crate) fn chapter_left_text(
     if left == 0 {
         // The long way, else a short one that still says "chapter", else
         // the long way to be broken in lines.
-        let last = env.i18n.tr("widgets.reading.chapter-last");
-        let short = env.i18n.tr("widgets.reading.chapter-last-short");
+        let last = env.i18n().tr("widgets.reading.chapter-last");
+        let short = env.i18n().tr("widgets.reading.chapter-last-short");
         let shown = if !fits(last) && fits(short) {
             short
         } else {
@@ -432,15 +432,20 @@ pub(crate) fn chapter_left_text(
         return Some(shown.to_string());
     }
     let count = i64::from(left);
-    let long = env.i18n.plural("widgets.reading.chapter-left", count, &[]);
-    let short = titled.then(|| env.i18n.plural("widgets.reading.chapter-short", count, &[]));
+    let long = env
+        .i18n()
+        .plural("widgets.reading.chapter-left", count, &[]);
+    let short = titled.then(|| {
+        env.i18n()
+            .plural("widgets.reading.chapter-short", count, &[])
+    });
     let time = position
         .chapter_seconds()
         .filter(|_| timed)
         .map(|seconds| duration(env, seconds, "widgets.reading.chapter"));
     let with_time = |pages: &str| {
         time.as_ref().map(|time| {
-            env.i18n.format(
+            env.i18n().format(
                 "widgets.reading.chapter-time",
                 &[("left", Arg::Str(pages)), ("time", Arg::Str(time))],
             )
@@ -534,7 +539,7 @@ fn draw(
         font.as_ref()
             .is_none_or(|font| font.measure(style.small(), text) <= width)
     };
-    let caption_text = env.i18n.tr("widgets.reading.caption");
+    let caption_text = env.i18n().tr("widgets.reading.caption");
     let mut parts: Vec<Part> = [
         (Part::Caption, "caption", true),
         (Part::Author, "author", !book.author.is_empty()),
@@ -639,7 +644,7 @@ fn draw(
             let line = small + line_gap;
             let more = usize::from(rest.height.saturating_sub(total) / line);
             let page = counted.map(|(page, pages)| {
-                env.i18n.format(
+                env.i18n().format(
                     "widgets.reading.page",
                     &[
                         ("page", Arg::Int(i64::from(page))),
@@ -687,7 +692,7 @@ fn draw(
         // The long way on a line or in a few, else a short way that fits.
         let last = position.chapter_left == Some(0);
         let long = if last {
-            Some(env.i18n.tr("widgets.reading.chapter-last").to_string())
+            Some(env.i18n().tr("widgets.reading.chapter-last").to_string())
         } else {
             chapter_left_text(env, position, timed, titled, style.small(), rest.width)
         };

@@ -230,7 +230,7 @@ struct Panel {
 impl Panel {
     fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = display.height * 9 / 20;
         let mut panel = Self {
             style,
@@ -244,14 +244,14 @@ impl Panel {
             needs_key: false,
         };
         panel.heading = panel.heading(env);
-        let loading = env.i18n.tr("translate.loading").to_string();
+        let loading = env.i18n().tr("translate.loading").to_string();
         panel.set_text(env, loading);
         panel
     }
 
     /// Where the service's name begins in the header, from the left.
     fn source_x(&self, env: &Env<'_>) -> f32 {
-        let source = env.i18n.tr("translate.source");
+        let source = env.i18n().tr("translate.source");
         let width = self
             .style
             .font(env)
@@ -292,7 +292,7 @@ impl Panel {
     /// Sends the text off with `key`, or says what is missing.
     fn ask(&mut self, env: &Env<'_>, key: &str, cx: &mut Cx<'_, '_>) {
         self.needs_key = key.is_empty();
-        let message = if !env.caps.network {
+        let message = if !env.caps().network {
             Some("translate.no-network")
         } else if self.needs_key {
             Some("translate.needs-key")
@@ -300,19 +300,19 @@ impl Panel {
             None
         };
         if let Some(message) = message {
-            let text = env.i18n.tr(message).to_string();
+            let text = env.i18n().tr(message).to_string();
             self.set_text(env, text);
             cx.request_redraw();
             return;
         }
-        let to = target(env.settings.read(&TO), env.i18n.language());
+        let to = target(env.settings().read(&TO), env.i18n().language());
         cx.command(Command::http(request(key, &self.original, &to)));
     }
 
     /// Asks for the key on the keyboard.
     fn ask_key(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
         cx.command(
-            paperpaw_sdk::ask::text(env.i18n.tr("translate.key"), &KEY_ENTERED)
+            paperpaw_sdk::ask::text(env.i18n().tr("translate.key"), &KEY_ENTERED)
                 .password()
                 .command(),
         );
@@ -335,7 +335,7 @@ impl Panel {
             0 => "translate.unreachable",
             _ => "translate.failed",
         };
-        let text = env.i18n.tr(key).to_string();
+        let text = env.i18n().tr(key).to_string();
         self.set_text(env, text);
     }
 
@@ -387,7 +387,7 @@ impl Screen for Panel {
     /// arrows scroll.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM && !self.needs_key {
-            paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n().tr("core.hint.close").to_string())
         } else {
             paperpaw_sdk::Hint::Default
         }
@@ -415,7 +415,7 @@ impl Screen for Panel {
         // The original on the left, the service on the right.
         let header = self.header();
         let margin = style.margin() as f32;
-        let source = env.i18n.tr("translate.source");
+        let source = env.i18n().tr("translate.source");
         let right = self.source_x(env);
         ui::Label::new(source)
             .px(style.small())
@@ -470,7 +470,7 @@ impl Screen for Panel {
                 "translate.key",
                 &key,
             )));
-            let loading = env.i18n.tr("translate.loading").to_string();
+            let loading = env.i18n().tr("translate.loading").to_string();
             self.set_text(&env, loading);
             self.ask(&env, &key, cx);
         } else {

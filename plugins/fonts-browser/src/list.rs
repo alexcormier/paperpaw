@@ -60,7 +60,7 @@ impl ListScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
@@ -77,7 +77,7 @@ impl ListScreen {
             samples: Samples::new(&style),
             trouble: Trouble::None,
             asked: false,
-            job: INSTALLER.progress(env.storage),
+            job: INSTALLER.progress(env.storage()),
             style,
             header,
         }
@@ -91,11 +91,11 @@ impl ListScreen {
     /// Fetches the catalog anew.
     fn fetch(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if !env.caps.network {
+        if !env.caps().network {
             self.trouble = Trouble::Offline;
             return self.redraw(cx);
         }
-        let url = env.settings.read(&CATALOG);
+        let url = env.settings().read(&CATALOG);
         let mut request = HttpRequest::new("GET", url.trim(), LOADED);
         request = request.save_to(fetched_path());
         cx.command(Command::http(request));
@@ -109,7 +109,7 @@ impl ListScreen {
     fn loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let fetched = fetched_path();
-        let base = env.settings.read(&CATALOG);
+        let base = env.settings().read(&CATALOG);
         let base = reply.final_url.as_deref().unwrap_or(base.trim());
         let fonts = (200..300)
             .contains(&reply.status)
@@ -117,14 +117,14 @@ impl ListScreen {
             .flatten();
         match fonts {
             Some(fonts) => {
-                let _ = files::move_to(env.storage, &fetched, &catalog::path());
+                let _ = files::move_to(env.storage(), &fetched, &catalog::path());
                 samples::prune(&env, &self.samples, &fonts);
                 self.fonts = fonts;
                 self.list.set_len(self.fonts.len());
                 self.trouble = Trouble::None;
             }
             None => {
-                let _ = env.storage.remove(&fetched);
+                let _ = env.storage().remove(&fetched);
                 // The catalog kept still serves; no answer at all is no
                 // connection.
                 if self.fonts.is_empty() {
@@ -189,9 +189,9 @@ impl ListScreen {
         } else if font.installed(env).is_some() {
             "fonts-browser.state.installed"
         } else {
-            return files::size(font.size(), env.i18n.tr("fonts-browser.decimal"));
+            return files::size(font.size(), env.i18n().tr("fonts-browser.decimal"));
         };
-        env.i18n.tr(key).to_string()
+        env.i18n().tr(key).to_string()
     }
 }
 
@@ -200,7 +200,7 @@ pub(crate) fn describe(env: &Env<'_>, font: &Font) -> String {
     let kind = env
         .i18n
         .get(&format!("fonts-browser.category.{}", font.category))
-        .unwrap_or_else(|| env.i18n.tr("fonts-browser.category.other"));
+        .unwrap_or_else(|| env.i18n().tr("fonts-browser.category.other"));
     let styles = env
         .i18n
         .plural("fonts-browser.styles", i64::from(font.styles.max(1)), &[]);
@@ -216,7 +216,7 @@ impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.fonts.len();
-        let title = env.i18n.tr("fonts-browser.title");
+        let title = env.i18n().tr("fonts-browser.title");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
@@ -239,7 +239,7 @@ impl Screen for ListScreen {
             } else {
                 ui::tr_input(env, text)
             };
-            ui.empty(self.list.area(), icon, env.i18n.tr(title), text);
+            ui.empty(self.list.area(), icon, env.i18n().tr(title), text);
             return;
         }
         let (fonts, samples, job) = (&self.fonts, &self.samples, self.job.as_ref());
@@ -283,7 +283,7 @@ impl Screen for ListScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        self.job = INSTALLER.progress(cx.env().storage);
+        self.job = INSTALLER.progress(cx.env().storage());
         if !self.asked {
             self.fetch(cx);
         }
@@ -346,7 +346,7 @@ impl Screen for ListScreen {
             || *event == events::SETTING_CHANGED
         {
             // Progress, or a font installed, removed or chosen.
-            self.job = INSTALLER.progress(cx.env().storage);
+            self.job = INSTALLER.progress(cx.env().storage());
             self.redraw(cx);
         }
     }

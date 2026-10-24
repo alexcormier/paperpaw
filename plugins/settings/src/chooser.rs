@@ -29,7 +29,7 @@ impl Chooser {
             list,
         };
         chooser.read(env, id);
-        let current = env.settings.text(id);
+        let current = env.settings().text(id);
         chooser.list.set_focus(
             chooser
                 .options
@@ -43,7 +43,7 @@ impl Chooser {
     /// The setting's options and more ways to choose, read anew.
     fn read(&mut self, env: &Env<'_>, id: &str) {
         // Of a placement too (`widgets.clock@2.face`), as that one.
-        let spec = env.settings.spec(id).cloned().map(|mut spec| {
+        let spec = env.settings().spec(id).cloned().map(|mut spec| {
             if let Ok(id) = Id::parse(id) {
                 spec.id = id;
             }
@@ -63,11 +63,11 @@ impl Chooser {
             _ => Vec::new(),
         };
         self.more = spec.as_ref().map_or_else(Vec::new, |spec| {
-            env.menus
+            env.menus()
                 .items(spec.id.as_str())
                 .iter()
                 .filter(|item| !item.section)
-                .map(|item| (item.id.clone(), env.i18n.tr(item.title).to_string()))
+                .map(|item| (item.id.clone(), env.i18n().tr(item.title).to_string()))
                 .collect()
         });
         self.spec = spec;
@@ -105,14 +105,14 @@ impl Screen for Chooser {
         let title = self
             .spec
             .as_ref()
-            .map_or("", |spec| env.i18n.tr(&spec.title));
+            .map_or("", |spec| env.i18n().tr(&spec.title));
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
         let (options, more) = (&self.options, &self.more);
         let current = self
             .spec
             .as_ref()
-            .map_or("", |spec| env.settings.text(spec.id.as_str()));
+            .map_or("", |spec| env.settings().text(spec.id.as_str()));
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
             // Lined up with the options, leading on.
             if let Some((_, name)) = index.checked_sub(options.len()).map(|i| &more[i]) {

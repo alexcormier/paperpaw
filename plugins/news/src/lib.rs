@@ -238,20 +238,24 @@ fn request(
 
 /// Starts fetching the feed at `from`, and with `all` those after it.
 fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Commands) {
-    if !env.caps.network {
-        out.push(Command::Notify(env.i18n.tr("news.no-network").to_string()));
+    if !env.caps().network {
+        out.push(Command::Notify(
+            env.i18n().tr("news.no-network").to_string(),
+        ));
         return;
     }
-    let Ok(feeds) = load(env.storage) else {
-        out.push(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
+    let Ok(feeds) = load(env.storage()) else {
+        out.push(Command::Notify(
+            env.i18n().tr("news.unreadable").to_string(),
+        ));
         return;
     };
     match feeds.get(from) {
         Some(feed) => {
-            out.push(Command::Notify(env.i18n.tr("news.fetching").to_string()));
+            out.push(Command::Notify(env.i18n().tr("news.fetching").to_string()));
             out.push(request(env, feed, from, all, (0, 0)));
         }
-        None => out.push(Command::Notify(env.i18n.tr("news.none").to_string())),
+        None => out.push(Command::Notify(env.i18n().tr("news.none").to_string())),
     }
 }
 
@@ -264,9 +268,11 @@ fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     };
     let mut done = number(DONE).unwrap_or(0);
     let mut failed = number(FAILED).unwrap_or(0);
-    let Ok(mut feeds) = load(env.storage) else {
-        let _ = env.storage.remove(&download(url));
-        out.push(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
+    let Ok(mut feeds) = load(env.storage()) else {
+        let _ = env.storage().remove(&download(url));
+        out.push(Command::Notify(
+            env.i18n().tr("news.unreadable").to_string(),
+        ));
         return;
     };
     // A feed removed meanwhile is left out.
@@ -277,13 +283,13 @@ fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
                 done += 1;
                 if feeds[at] != feed {
                     feeds[at] = feed;
-                    save(env.storage, &feeds);
+                    save(env.storage(), &feeds);
                 }
             }
             None => failed += 1,
         }
     }
-    let _ = env.storage.remove(&download(url));
+    let _ = env.storage().remove(&download(url));
     // The next one: after this feed, or in its place if it was removed.
     let next = at.map_or(index, |at| at + 1);
     if reply.context.get(ALL).is_some()
@@ -293,9 +299,9 @@ fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         return;
     }
     let message = if failed == 0 {
-        env.i18n.plural("news.fetched", done as i64, &[])
+        env.i18n().plural("news.fetched", done as i64, &[])
     } else {
-        env.i18n.plural(
+        env.i18n().plural(
             "news.fetched-failed",
             failed as i64,
             &[("done", Arg::Int(done as i64))],
@@ -311,21 +317,27 @@ fn make_book(env: &Env<'_>, reply: &HttpReply, feeds: &[Feed], at: usize) -> Opt
     if !reply.ok() {
         return None;
     }
-    let max_text = if env.device.memory == MemoryClass::Small {
+    let max_text = if env.device().memory == MemoryClass::Small {
         MAX_TEXT_SMALL
     } else {
         MAX_TEXT
     };
-    let articles = env.settings.read(&ARTICLES).clamp(1, 200) as usize;
+    let articles = env.settings().read(&ARTICLES).clamp(1, 200) as usize;
     let folder = folder(env);
-    let _ = env.storage.create_dir(&folder);
+    let _ = env.storage().create_dir(&folder);
     let mut feed = feeds[at].clone();
     let page = data("page.tmp");
-    let converted = convert::convert(env.storage, &download(&feed.url), &page, articles, max_text);
+    let converted = convert::convert(
+        env.storage(),
+        &download(&feed.url),
+        &page,
+        articles,
+        max_text,
+    );
     let converted = match converted {
         Ok(converted) if converted.articles > 0 => converted,
         _ => {
-            let _ = env.storage.remove(&page);
+            let _ = env.storage().remove(&page);
             return None;
         }
     };
@@ -333,12 +345,12 @@ fn make_book(env: &Env<'_>, reply: &HttpReply, feeds: &[Feed], at: usize) -> Opt
         feed.name = short_title(&converted.title);
     }
     let book = feed.book(&folder);
-    if env.storage.rename(&page, &book).is_err() {
-        let _ = env.storage.remove(&page);
+    if env.storage().rename(&page, &book).is_err() {
+        let _ = env.storage().remove(&page);
         return None;
     }
     keep_headlines(env, &book, &converted.headlines);
-    retire_old_book(env.storage, &folder, feeds, &feed);
+    retire_old_book(env.storage(), &folder, feeds, &feed);
     Some(feed)
 }
 
@@ -354,7 +366,7 @@ fn keep_headlines(env: &Env<'_>, book: &str, titles: &[String]) {
         .iter()
         .map(|t| format!("{}\t{book}", t.replace(['\t', '\n'], " ")))
         .collect();
-    if let Ok(old) = paperpaw_sdk::read_file(env.storage, &headlines_file(), 32 * 1024) {
+    if let Ok(old) = paperpaw_sdk::read_file(env.storage(), &headlines_file(), 32 * 1024) {
         for line in String::from_utf8_lossy(&old).lines() {
             if !line.ends_with(&format!("\t{book}")) && lines.len() < 40 {
                 lines.push(line.to_string());
@@ -368,13 +380,13 @@ fn keep_headlines(env: &Env<'_>, book: &str, titles: &[String]) {
 
 /// The newest headlines and their books, at most `max`.
 fn headlines(env: &Env<'_>, max: usize) -> Vec<(String, String)> {
-    let Ok(data) = paperpaw_sdk::read_file(env.storage, &headlines_file(), 32 * 1024) else {
+    let Ok(data) = paperpaw_sdk::read_file(env.storage(), &headlines_file(), 32 * 1024) else {
         return Vec::new();
     };
     String::from_utf8_lossy(&data)
         .lines()
         .filter_map(|l| l.split_once('\t'))
-        .filter(|(_, book)| env.storage.exists(book))
+        .filter(|(_, book)| env.storage().exists(book))
         .take(max)
         .map(|(t, b)| (t.to_string(), b.to_string()))
         .collect()
@@ -426,7 +438,7 @@ impl Plugin for News {
         ))?;
         r.add_action(ActionSpec::new(FETCH, "news.fetch").handler(
             |env: &Env<'_>, _, out: &mut Commands| {
-                if env.reader {
+                if env.reader() {
                     fetch(env, 0, true, out);
                 } else {
                     let due = FETCH_DUE.id().clone();
@@ -464,11 +476,11 @@ struct FeedsScreen {
 impl FeedsScreen {
     fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let feeds = load(env.storage);
+        let feeds = load(env.storage());
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             style,
@@ -500,7 +512,7 @@ impl FeedsScreen {
         let env = *cx.env();
         if self.is_add(row) {
             cx.command(
-                ask::text(env.i18n.tr("news.address"), &ADDED)
+                ask::text(env.i18n().tr("news.address"), &ADDED)
                     .initial("https://")
                     .command(),
             );
@@ -514,7 +526,7 @@ impl FeedsScreen {
         let Some(feed) = self.feeds.get(index) else {
             return;
         };
-        if let Some(book) = feed.found_book(env.storage, &folder(&env)) {
+        if let Some(book) = feed.found_book(env.storage(), &folder(&env)) {
             cx.command(paperpaw_sdk::readers::open(book));
         } else {
             fetch_into(&env, index, false, cx);
@@ -550,20 +562,20 @@ impl Screen for FeedsScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("news.title"),
+            env.i18n().tr("news.title"),
             None,
             self.list.paging(len),
         );
         let feeds = &self.feeds;
         self.list.draw(&mut ui, len, |ui, row, rect, focused| {
             let (title, value, note) = if row + 1 == len {
-                let note = env.i18n.tr("news.add.help").to_string();
-                (env.i18n.tr("news.add").to_string(), "›", note)
+                let note = env.i18n().tr("news.add.help").to_string();
+                (env.i18n().tr("news.add").to_string(), "›", note)
             } else if row == 0 {
                 let note = env
                     .i18n
                     .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))]);
-                (env.i18n.tr("news.fetch").to_string(), "", note)
+                (env.i18n().tr("news.fetch").to_string(), "", note)
             } else {
                 let feed = &feeds[row - 1];
                 (feed.shown(), "", feed.url.clone())
@@ -585,8 +597,8 @@ impl Screen for FeedsScreen {
             ui.empty(
                 below,
                 "rss",
-                env.i18n.tr("news.empty.title"),
-                env.i18n.tr("news.empty"),
+                env.i18n().tr("news.empty.title"),
+                env.i18n().tr("news.empty"),
             );
         }
     }
@@ -639,11 +651,15 @@ impl Screen for FeedsScreen {
         if let Some(typed) = ADDED.read(event, params) {
             let url = typed.text.trim().to_string();
             if !(url.starts_with("http://") || url.starts_with("https://")) || url.len() < 10 {
-                cx.command(Command::Notify(env.i18n.tr("news.bad-address").to_string()));
+                cx.command(Command::Notify(
+                    env.i18n().tr("news.bad-address").to_string(),
+                ));
                 return;
             }
             if !self.readable {
-                cx.command(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
+                cx.command(Command::Notify(
+                    env.i18n().tr("news.unreadable").to_string(),
+                ));
                 return;
             }
             let index = match self.feeds.iter().position(|f| f.url == url) {
@@ -653,7 +669,7 @@ impl Screen for FeedsScreen {
                         url,
                         name: String::new(),
                     });
-                    save(env.storage, &self.feeds);
+                    save(env.storage(), &self.feeds);
                     self.feeds.len() - 1
                 }
             };
@@ -667,13 +683,15 @@ impl Screen for FeedsScreen {
                 "open" => self.open(index + 1, cx),
                 "fetch" => fetch_into(&env, index, false, cx),
                 "remove" if !self.readable => {
-                    cx.command(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
+                    cx.command(Command::Notify(
+                        env.i18n().tr("news.unreadable").to_string(),
+                    ));
                 }
                 "remove" if index < self.feeds.len() => {
                     // Its book stays, a book like any other now: the
                     // reader may have notes in it, and deletes it as any.
                     self.feeds.remove(index);
-                    save(env.storage, &self.feeds);
+                    save(env.storage(), &self.feeds);
                     self.list.set_len(self.len());
                     self.redraw(cx);
                 }
@@ -681,7 +699,7 @@ impl Screen for FeedsScreen {
             }
         } else if *event == FETCHED {
             // Names may have come with the feeds.
-            if let Ok(feeds) = load(env.storage) {
+            if let Ok(feeds) = load(env.storage()) {
                 self.feeds = feeds;
                 self.readable = true;
             }

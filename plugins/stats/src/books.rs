@@ -25,11 +25,11 @@ impl BookList {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height - top);
-        let books = store::books(env.storage);
-        let seconds = totals::seconds_per_book(env.storage, &books);
+        let books = store::books(env.storage());
+        let seconds = totals::seconds_per_book(env.storage(), &books);
         let mut books: Vec<(Book, u64)> = books
             .into_iter()
             .zip(seconds)
@@ -56,12 +56,12 @@ impl Screen for BookList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.books.len();
-        let title = env.i18n.tr("stats.books");
+        let title = env.i18n().tr("stats.books");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
-            ui.message(self.list.area(), env.i18n.tr("stats.no-books"));
+            ui.message(self.list.area(), env.i18n().tr("stats.no-books"));
             return;
         }
         let books = &self.books;
@@ -70,7 +70,7 @@ impl Screen for BookList {
             let mut note = authors(&book.authors);
             if book.last_open > 0 {
                 let day = fmt::day_of(env, book.last_open as u32);
-                let last = env.i18n.format(
+                let last = env.i18n().format(
                     "stats.last-read",
                     &[("date", Arg::Str(&fmt::date(env, day)))],
                 );

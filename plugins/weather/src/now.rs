@@ -228,7 +228,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     }
     if part("condition") {
         lines.push(Line {
-            text: env.i18n.tr(data::condition(current.code).0).to_string(),
+            text: env.i18n().tr(data::condition(current.code).0).to_string(),
             size: style.text(),
             faint: false,
             rank: 5,
@@ -238,7 +238,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     if part("range")
         && let Some(day) = today
     {
-        let text = env.i18n.format(
+        let text = env.i18n().format(
             "weather.range",
             &[
                 ("high", Arg::Str(&degrees(day.high))),
@@ -259,7 +259,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
         && let Some(wind) = current.wind
     {
         let wind_unit = crate::wind_unit(env);
-        let speed = env.i18n.format(
+        let speed = env.i18n().format(
             wind_unit.key(),
             &[("speed", Arg::Int(i64::from(wind_unit.speed(wind))))],
         );
@@ -279,7 +279,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     if part("humidity")
         && let Some(humidity) = current.humidity
     {
-        let text = env.i18n.format(
+        let text = env.i18n().format(
             "weather.humidity",
             &[("percent", Arg::Int(i64::from(humidity)))],
         );
@@ -288,7 +288,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     if part("sun")
         && let Some((rise, set)) = today.and_then(|d| d.sunrise.zip(d.sunset))
     {
-        let text = env.i18n.format(
+        let text = env.i18n().format(
             "weather.sun",
             &[
                 ("rise", Arg::Str(&draw::clock(env, rise))),
@@ -428,8 +428,8 @@ fn temperature_width(font: &FontHandle<'_>, size: f32, text: &str, inline: bool,
 /// Where the symbol goes as set; where it does not fit, the places to try
 /// after it.
 fn placings(env: &Env<'_>, area: Rect) -> &'static [Placing] {
-    let symbol = env.settings.text(&alloc::format!("{ID}.symbol"));
-    let placing = env.settings.text(&alloc::format!("{ID}.placing"));
+    let symbol = env.settings().text(&alloc::format!("{ID}.symbol"));
+    let placing = env.settings().text(&alloc::format!("{ID}.placing"));
     match SYMBOLS.iter().position(|s| *s == symbol) {
         Some(2) => &[Placing::None],
         Some(1) => &[Placing::Inline, Placing::None],

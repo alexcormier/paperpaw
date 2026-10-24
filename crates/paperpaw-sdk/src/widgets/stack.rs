@@ -58,7 +58,7 @@ impl WidgetStack {
                 made.push(None);
                 continue;
             }
-            let Some(widget) = env.widgets.make(id, env) else {
+            let Some(widget) = env.widgets().make(id, env) else {
                 continue;
             };
             let height = widget.height(env, width);

@@ -35,7 +35,7 @@ use crate::{DEPTH, SCREEN, is_menu};
 /// The bar's font: the reading status lines' (it opens over a book), as
 /// `core.status-font` chooses.
 fn bar_font<'e>(env: &Env<'e>) -> Option<paperpaw_sdk::FontHandle<'e>> {
-    env.fonts
+    env.fonts()
         .role(paperpaw_sdk::builtin::fonts::STATUS.as_str())
 }
 
@@ -57,12 +57,12 @@ struct Entry {
 impl Entry {
     /// What it shows now: its label and badge.
     fn label(&self, env: &Env<'_>) -> String {
-        env.menus.state(env, self.id.as_str()).text(&self.title)
+        env.menus().state(env, self.id.as_str()).text(&self.title)
     }
 
     /// It can be chosen now.
     fn enabled(&self, env: &Env<'_>) -> bool {
-        env.menus.state(env, self.id.as_str()).enabled
+        env.menus().state(env, self.id.as_str()).enabled
     }
 }
 
@@ -96,7 +96,7 @@ impl BarScreen {
     )]
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let menu = params.get(params::MENU).unwrap_or_default();
         let entries: Vec<Entry> = env
             .menus
@@ -105,16 +105,16 @@ impl BarScreen {
             .filter(|item| !item.section && !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
             // A setting shown only while another has a value.
             .filter(|item| {
-                env.settings
+                env.settings()
                     .spec(item.id.as_str())
-                    .is_none_or(|s| env.settings.shows(s))
+                    .is_none_or(|s| env.settings().shows(s))
             })
             .map(|item| Entry {
                 id: item.id.clone(),
                 title: env
                     .i18n
                     .get(&alloc::format!("{}.short", item.title))
-                    .unwrap_or(env.i18n.tr(item.title))
+                    .unwrap_or(env.i18n().tr(item.title))
                     .to_string(),
                 icon: item.icon.map(String::from),
             })
@@ -230,13 +230,13 @@ impl BarScreen {
     /// Whether entry `index` is a switch that is on: a setting, or an
     /// entry its plugin shows as one.
     fn on(env: &Env<'_>, id: &Id) -> bool {
-        if let Some(on) = env.menus.state(env, id.as_str()).checked {
+        if let Some(on) = env.menus().state(env, id.as_str()).checked {
             return on;
         }
-        env.settings
+        env.settings()
             .specs()
             .find(|spec| spec.id == *id)
-            .is_some_and(|spec| spec.kind == SettingKind::Bool && env.settings.bool(id.as_str()))
+            .is_some_and(|spec| spec.kind == SettingKind::Bool && env.settings().bool(id.as_str()))
     }
 
     fn run(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -255,7 +255,7 @@ impl BarScreen {
             ));
             return;
         }
-        let Some(spec) = env.settings.specs().find(|spec| spec.id == id) else {
+        let Some(spec) = env.settings().specs().find(|spec| spec.id == id) else {
             cx.command(Command::Back);
             cx.command(Command::run(id));
             return;
@@ -268,7 +268,7 @@ impl BarScreen {
         }
         match &spec.kind {
             SettingKind::Bool => {
-                let value = SettingValue::Bool(!env.settings.bool(id.as_str()));
+                let value = SettingValue::Bool(!env.settings().bool(id.as_str()));
                 cx.command(Command::SetSetting(id, value));
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
@@ -282,7 +282,7 @@ impl BarScreen {
             }
             // Numbers have no room here: their settings page.
             _ => {
-                let group = env.settings.group_of(spec);
+                let group = env.settings().group_of(spec);
                 cx.command(Command::OpenSlot(
                     slots::SETTINGS,
                     Params::new().with(params::ID, group.as_str().to_string()),
@@ -482,7 +482,7 @@ impl Screen for BarScreen {
         if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
             let env = *cx.env();
             let before = self.region;
-            if env.settings.governs(changed.id.as_str()) {
+            if env.settings().governs(changed.id.as_str()) {
                 // Anew, the focus on the entry it was on (where it stays).
                 let focused = self.entries.get(self.focus).map(|e| e.id.clone());
                 let keys = self.keys;

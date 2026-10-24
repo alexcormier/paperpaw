@@ -32,7 +32,7 @@ impl GoalSleep {
 
 impl Screen for GoalSleep {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let display = env.device.display;
+        let display = env.device().display;
         let screen = Rect::new(0, 0, display.width, display.height);
         canvas.fill(screen, Color::WHITE);
         let style = UiStyle::new(env);
@@ -57,7 +57,7 @@ impl Screen for GoalSleep {
         let top = display.height.saturating_sub(h + gap + line) / 2;
         if let Some(image) = &self.image {
             let area = Rect::new((display.width - w) / 2, top, w, h);
-            ui::draw_image(ui.canvas(), env.storage, image, area);
+            ui::draw_image(ui.canvas(), env.storage(), image, area);
             ui.canvas().describe(Role::Image, &self.described, area);
         }
         let width = f32::from(room_w);

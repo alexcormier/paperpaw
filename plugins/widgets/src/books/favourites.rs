@@ -145,11 +145,11 @@ fn favourites(env: &Env<'_>, count: usize) -> Vec<Shelved> {
     let titles = widgets::shows(env, id, "titles");
     let read = widgets::shows(env, id, "read");
     let reading = widgets::shows(env, id, "current")
-        .then(|| current(env.storage).map(|b| b.path))
+        .then(|| current(env.storage()).map(|b| b.path))
         .flatten();
-    library::favourites(env.storage)
+    library::favourites(env.storage())
         .iter()
-        .filter_map(|path| Book::of(env.storage, path))
+        .filter_map(|path| Book::of(env.storage(), path))
         .take(count)
         .map(|book| Shelved {
             label: if titles {
@@ -210,7 +210,7 @@ impl Widget for Favourites {
             draw_message(canvas, env, &look, "widgets.favourites.none");
             return;
         }
-        let title = env.i18n.tr("widgets.favourites");
+        let title = env.i18n().tr("widgets.favourites");
         let rest = Self::content(env, &look);
         let places = self.places(env, rest);
         shelf::draw_caption(canvas, env, WIDGET, &look, rest, &places, title);

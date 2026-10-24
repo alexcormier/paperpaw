@@ -172,13 +172,13 @@ struct Shown {
 fn shown(env: &Env<'_>) -> Option<Shown> {
     let today = fmt::today(env)?;
     let year = fmt::date_of(today).year;
-    let books = store::books(env.storage);
+    let books = store::books(env.storage());
     let year_of = |unix: i64| {
         let unix = unix.clamp(0, i64::from(u32::MAX)) as u32;
         fmt::date_of(fmt::day_of(env, unix)).year
     };
     let read_to_end = |book: &Book| {
-        paperpaw_sdk::library::book(env.storage, &book.path).and_then(|b| b.progress) == Some(100)
+        paperpaw_sdk::library::book(env.storage(), &book.path).and_then(|b| b.progress) == Some(100)
     };
     let (done, last) = finished_in(&books, year, year_of, read_to_end);
     let (ordinal, length) = day_of_year(today);
@@ -230,7 +230,7 @@ impl Widget for Year {
             match chosen(env, id, "style") {
                 s if s == STYLES[1] => line(&font, style.title()) * 2,
                 s if s == STYLES[2] => line(&font, style.small()) * 2,
-                _ => env.metrics.mm(3) as u16,
+                _ => env.metrics().mm(3) as u16,
             }
         } else {
             0
@@ -246,7 +246,7 @@ impl Widget for Year {
         let look = widgets::draw_frame(canvas, env, NAME, area);
         match &self.shown {
             Some(shown) => draw(canvas, env, &look, shown),
-            None => widgets::draw_message(canvas, env, &look, env.i18n.tr("stats.no-clock")),
+            None => widgets::draw_message(canvas, env, &look, env.i18n().tr("stats.no-clock")),
         }
     }
 
@@ -261,7 +261,7 @@ impl Widget for Year {
 /// "3 of 12 books", or "3 books read" without a goal.
 fn headline(env: &Env<'_>, shown: &Shown) -> String {
     match books_goal(env) {
-        Some(goal) => env.i18n.plural(
+        Some(goal) => env.i18n().plural(
             "stats.widget.year.of",
             i64::from(goal),
             &[("done", Arg::Int(i64::from(shown.done)))],
@@ -281,15 +281,15 @@ fn notes(env: &Env<'_>, shown: &Shown) -> Vec<(String, bool)> {
     if let Some(goal) = books_goal(env).filter(|_| widgets::shows(env, id, "plan")) {
         let ahead = plan(shown.done, goal, shown.ordinal, shown.length);
         let note = if shown.done >= goal {
-            env.i18n.tr("stats.widget.year.reached").to_string()
+            env.i18n().tr("stats.widget.year.reached").to_string()
         } else if ahead > 0 {
-            env.i18n
+            env.i18n()
                 .plural("stats.widget.year.ahead", i64::from(ahead), &[])
         } else if ahead < 0 {
-            env.i18n
+            env.i18n()
                 .plural("stats.widget.year.behind", i64::from(-ahead), &[])
         } else {
-            env.i18n.tr("stats.widget.year.on-plan").to_string()
+            env.i18n().tr("stats.widget.year.on-plan").to_string()
         };
         notes.push((note, false));
     }
@@ -317,7 +317,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
         return;
     };
     let id = NAME;
-    let title = env.i18n.format(
+    let title = env.i18n().format(
         "stats.widget.year.caption",
         &[("year", Arg::Int(i64::from(shown.year)))],
     );
@@ -360,7 +360,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
     let dots = style_set == STYLES[2];
     let band = match goal {
         Some(_) if dots => small,
-        Some(_) => env.metrics.mm(3) as u16,
+        Some(_) => env.metrics().mm(3) as u16,
         None => 0,
     };
     let least = line(&font, style.text());
@@ -413,7 +413,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
         if dots {
             draw_dots(&mut ui, look, row(y, band), shown.done, goal);
         } else {
-            let height = env.metrics.mm(1).max(4) as u16;
+            let height = env.metrics().mm(1).max(4) as u16;
             let track = Rect::new(area.x, y + (band - height) / 2, area.width, height);
             let radius = u32::from(height / 2);
             ui.canvas().fill_round_shaded(track, radius, shade(look, 1));
@@ -484,7 +484,7 @@ fn draw_ring(
     let size = fit_size(&font, &style, "00", inner / 2, inner * 2 / 5).max(style.text());
     let big = line(&font, size);
     let of = books_goal(env).map(|g| {
-        env.i18n.format(
+        env.i18n().format(
             "stats.widget.year.of-goal",
             &[("goal", Arg::Int(i64::from(g)))],
         )

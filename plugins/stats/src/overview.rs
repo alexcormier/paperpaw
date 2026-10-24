@@ -63,7 +63,7 @@ impl Overview {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let current = params.get(params::ID).and_then(|id| id.parse::<u16>().ok());
         let mut rows = Vec::new();
         if let Some(book) = current {
@@ -90,7 +90,7 @@ impl Overview {
         // The ways on right below.
         let list_top = (totals.y + totals.height + gap * 2).min(lowest);
         let today = fmt::today(env);
-        let days = store::days(env.storage, |unix| fmt::day_of(env, unix));
+        let days = store::days(env.storage(), |unix| fmt::day_of(env, unix));
         let today_pages = today.map_or(0, |day| distinct_pages(env, day));
         let mut overview = Self {
             list: ListView::new(
@@ -107,7 +107,7 @@ impl Overview {
             totals,
             today,
             days,
-            books: store::books(env.storage).len(),
+            books: store::books(env.storage()).len(),
             today_pages,
             value_size: style.title(),
         };
@@ -128,7 +128,7 @@ impl Overview {
         let least = style.small() * 0.85;
         tiles.iter().enumerate().all(|(i, (label, value, note))| {
             let room = self.tile_room(i) + 1.0;
-            font.measure(least, env.i18n.tr(label)) <= room
+            font.measure(least, env.i18n().tr(label)) <= room
                 && font.measure(self.value_size, value) <= room
                 && font.measure(least, note) <= room
         })
@@ -138,7 +138,7 @@ impl Overview {
     /// above the ways on, the list across the screen below the header.
     fn stack(&mut self, env: &Env<'_>) {
         let style = self.style;
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut entries = alloc::vec![Entry::Tile(0), Entry::Tile(1), Entry::Tile(2), Entry::Chart];
@@ -163,7 +163,7 @@ impl Overview {
             |ui, index, rect, focused| match self.entries[index] {
                 Entry::Tile(i) => {
                     if let Some((label, value, note)) = tiles.as_ref().and_then(|t| t.get(i)) {
-                        let label = env.i18n.tr(label);
+                        let label = env.i18n().tr(label);
                         ui::Row::value(label, value)
                             .note(note)
                             .focused(focused)
@@ -212,12 +212,12 @@ impl Overview {
             (
                 "stats.week",
                 fmt::duration(env, u64::from(week)),
-                env.i18n.tr("stats.last-seven-days").into(),
+                env.i18n().tr("stats.last-seven-days").into(),
             ),
             (
                 "stats.streak",
-                env.i18n.plural("stats.days", i64::from(streak), &[]),
-                env.i18n.tr("stats.in-a-row").into(),
+                env.i18n().plural("stats.days", i64::from(streak), &[]),
+                env.i18n().tr("stats.in-a-row").into(),
             ),
         ])
     }
@@ -289,7 +289,7 @@ impl Overview {
             let least = style.small() * 0.85;
             let lines = [
                 (
-                    env.i18n.tr(label),
+                    env.i18n().tr(label),
                     style.small(),
                     least,
                     style.faint(ui::Ink::Muted),
@@ -326,7 +326,7 @@ impl Overview {
         }
         let title_h = (style.small() * 1.6) as u16;
         let title = Rect::new(c.x, c.y, c.width, title_h);
-        let label = env.i18n.format(
+        let label = env.i18n().format(
             "stats.last-days",
             &[("count", Arg::Int(i64::from(CHART_DAYS)))],
         );
@@ -360,18 +360,21 @@ impl Overview {
     /// All reading: the time, the books and the days.
     fn totals_text(&self, env: &Env<'_>) -> String {
         let total: u64 = self.days.iter().map(|d| u64::from(d.seconds)).sum();
-        env.i18n.format(
+        env.i18n().format(
             "stats.totals",
             &[
                 ("time", Arg::Str(&fmt::duration(env, total))),
                 (
                     "books",
-                    Arg::Str(&env.i18n.plural("stats.books-count", self.books as i64, &[])),
+                    Arg::Str(
+                        &env.i18n()
+                            .plural("stats.books-count", self.books as i64, &[]),
+                    ),
                 ),
                 (
                     "days",
                     Arg::Str(
-                        &env.i18n
+                        &env.i18n()
                             .plural("stats.reading-days", self.days.len() as i64, &[]),
                     ),
                 ),
@@ -412,7 +415,7 @@ fn draw_way(ui: &mut ui::Ui<'_>, rect: Rect, focused: bool, row: Row) {
 pub(crate) fn distinct_pages(env: &Env<'_>, day: i32) -> u32 {
     let since = fmt::unix_near(day).saturating_sub(14 * 3600).max(0) as u32;
     let mut pages: Vec<(u16, u32)> = Vec::new();
-    store::scan_recent(env.storage, since, |stat| {
+    store::scan_recent(env.storage(), since, |stat| {
         if fmt::day_of(env, stat.start) == day {
             pages.push((stat.book, stat.page));
         }
@@ -425,7 +428,7 @@ pub(crate) fn distinct_pages(env: &Env<'_>, day: i32) -> u32 {
 impl Screen for Overview {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("stats.title");
+        let title = env.i18n().tr("stats.title");
         let mut ui = ui::Ui::new(canvas, env, &style);
         if self.stacked {
             let paging = self.list.paging(self.entries.len());
@@ -445,7 +448,7 @@ impl Screen for Overview {
                 self.tiles.width,
                 self.totals.y - self.tiles.y,
             );
-            ui.message(area, env.i18n.tr("stats.no-clock"));
+            ui.message(area, env.i18n().tr("stats.no-clock"));
         }
         if self.today.is_some() || !self.days.is_empty() {
             self.draw_totals(&mut ui);

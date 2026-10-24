@@ -208,10 +208,10 @@ pub(crate) fn comes_back(storage: &dyn Storage, wanted: &[Build], crate_name: &s
 /// the names of those that do not. A build's file is taken as its size,
 /// at most what it needs.
 fn fitting(env: &Env<'_>, builds: Vec<Build>) -> (Vec<Build>, Vec<String>) {
-    let (Some(native_build), Some(room)) = (env.native, native::code_room(env.storage)) else {
+    let (Some(native_build), Some(room)) = (env.native(), native::code_room(env.storage())) else {
         return (builds, Vec::new());
     };
-    let storage = env.storage;
+    let storage = env.storage();
     let (mut taken, mut count) = native::installed_code_need(storage, &room, &native_build.file);
     // Code plugins these builds replace make room for them.
     for build in &builds {
@@ -250,7 +250,7 @@ fn fitting(env: &Env<'_>, builds: Vec<Build>) -> (Vec<Build>, Vec<String>) {
 /// store did not install ([`install::origin`]): it is the reader's own,
 /// never put in place by itself.
 pub(crate) fn wanted(env: &Env<'_>, builds: &[Build]) -> Vec<Build> {
-    if env.native.is_none() {
+    if env.native().is_none() {
         return Vec::new();
     }
     // Those installed before origins were kept: the store's.
@@ -258,10 +258,10 @@ pub(crate) fn wanted(env: &Env<'_>, builds: &[Build]) -> Vec<Build> {
     builds
         .iter()
         .filter(|b| {
-            env.plugins.get(&b.package.plugin).is_some_and(|p| {
+            env.plugins().get(&b.package.plugin).is_some_and(|p| {
                 let version = p.update.unwrap_or(p.manifest.version);
                 let local = p.kind != PluginKind::BuiltIn
-                    && install::origin(env.storage, p.manifest.id.as_str(), version)
+                    && install::origin(env.storage(), p.manifest.id.as_str(), version)
                         == install::Origin::Local;
                 (p.kind == PluginKind::Code || p.enabled) && !local
             })
@@ -291,7 +291,7 @@ pub(crate) fn start(
     if builds.is_empty() {
         return false;
     }
-    let storage = env.storage;
+    let storage = env.storage();
     let _ = storage.create_dir(&paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()));
     let _ = storage.remove(&file(FAILED));
     let _ = match native {
@@ -353,17 +353,17 @@ pub(crate) fn interrupted(storage: &dyn Storage, firmware: &Firmware) {
 
 /// Goes on fetching (from the update page): after a restart cut it off.
 pub(crate) fn resume(env: &Env<'_>, out: &mut Commands) {
-    if INSTALLER.progress(env.storage).is_some() {
+    if INSTALLER.progress(env.storage()).is_some() {
         return;
     }
-    if let Some(version) = fetching(env.storage) {
+    if let Some(version) = fetching(env.storage()) {
         next(env, &version, out);
     }
 }
 
 /// Fetches the next plugin left; when none is, says the update is ready.
 fn next(env: &Env<'_>, version: &str, out: &mut Commands) {
-    let storage = env.storage;
+    let storage = env.storage();
     let mut left = left(storage);
     while !left.is_empty() {
         let build = left[0].clone();
@@ -378,16 +378,16 @@ fn next(env: &Env<'_>, version: &str, out: &mut Commands) {
     }
     let _ = storage.remove(&file(QUEUE));
     let _ = storage.remove(&file(CURRENT));
-    out.push(Command::Notify(env.i18n.format(
+    out.push(Command::Notify(env.i18n().format(
         "update.downloaded",
         &[(
             "version",
-            Arg::Str(&crate::shown_version(env.i18n, version)),
+            Arg::Str(&crate::shown_version(env.i18n(), version)),
         )],
     )));
     if let Some(names) = failed_names(storage) {
         out.push(Command::Notify(
-            env.i18n
+            env.i18n()
                 .format("update.not-fetched", &[("plugins", Arg::Str(&names))]),
         ));
     }
@@ -412,7 +412,7 @@ pub(crate) fn failed_names(storage: &dyn Storage) -> Option<String> {
 /// A download of a plugin's file done: the next one asked for, or the
 /// plugin checked and put in its place, and the next plugin fetched.
 pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
-    let storage = env.storage;
+    let storage = env.storage();
     let Some(version) = paperpaw_sdk::read_file(storage, &file(QUEUE), 64 * 1024)
         .ok()
         .and_then(|t| String::from_utf8(t).ok())
@@ -442,8 +442,8 @@ pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
 /// installs it, its code named as fetched: only by the author known (or,
 /// for one new here, the author the server names).
 fn place(env: &Env<'_>, plugin: &str) -> bool {
-    let storage = env.storage;
-    let (Some(native_build), Some(folder)) = (env.native, INSTALLER.folder(storage)) else {
+    let storage = env.storage();
+    let (Some(native_build), Some(folder)) = (env.native(), INSTALLER.folder(storage)) else {
         return false;
     };
     let Ok((header, Some(signature))) = native::check_file(storage, &native_build.path(&folder))
@@ -500,7 +500,7 @@ fn wanted_native(storage: &dyn Storage) -> Option<(u64, u32)> {
 
 /// Whether the server named `key` as the author of `plugin`, new here.
 fn author_named(env: &Env<'_>, plugin: &str, key: &[u8; 32]) -> bool {
-    let Some(current) = paperpaw_sdk::read_file(env.storage, &file(CURRENT), 1024)
+    let Some(current) = paperpaw_sdk::read_file(env.storage(), &file(CURRENT), 1024)
         .ok()
         .and_then(|t| String::from_utf8(t).ok())
     else {

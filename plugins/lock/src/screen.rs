@@ -116,7 +116,7 @@ fn line(env: &Env<'_>, style: &UiStyle, size: f32) -> u16 {
 
 impl Layout {
     fn new(env: &Env<'_>, style: &UiStyle, header: bool) -> Self {
-        let display = env.device.display;
+        let display = env.device().display;
         let (w, h) = (display.width, display.height);
         let metrics = Metrics::new(display.dpi);
         let row = style.row();
@@ -164,7 +164,7 @@ impl Layout {
         // The pattern: three by three dots in the same room, OK below
         // where there is no touch.
         let ok_h = ui::button_height(style, Rect::new(0, 0, 0, row));
-        let ok_room = if env.device.input.touch {
+        let ok_room = if env.device().input.touch {
             0
         } else {
             ok_h + row
@@ -246,7 +246,7 @@ impl LockScreen {
         self.state
             .wait_until
             .get()
-            .is_some_and(|until| env.now < until)
+            .is_some_and(|until| env.now() < until)
     }
 
     /// A wrong code: counted, and after [`TRIES`] the next one waits.
@@ -255,19 +255,19 @@ impl LockScreen {
         let tries = self.state.failures.get().saturating_add(1).min(TRIES);
         self.state.failures.set(tries);
         if tries >= TRIES {
-            let until = env.now.add_millis(WAIT_MS);
+            let until = env.now().add_millis(WAIT_MS);
             self.state.wait_until.set(Some(until));
             cx.wake_at(until);
         }
-        keep_tries(env.storage, tries);
-        self.message = Some(env.i18n.tr("lock.wrong").to_string());
+        keep_tries(env.storage(), tries);
+        self.message = Some(env.i18n().tr("lock.wrong").to_string());
     }
 
     /// The right code: the tries forgotten.
     fn succeeded(&self, env: &Env<'_>) {
         self.state.wait_until.set(None);
         if self.state.failures.replace(0) > 0 {
-            keep_tries(env.storage, 0);
+            keep_tries(env.storage(), 0);
         }
     }
 
@@ -294,7 +294,7 @@ impl LockScreen {
         let env = *cx.env();
         self.asked = true;
         cx.command(
-            ask::text(env.i18n.tr(self.title_key()), &TYPED)
+            ask::text(env.i18n().tr(self.title_key()), &TYPED)
                 .password()
                 .command(),
         );
@@ -305,7 +305,7 @@ impl LockScreen {
         KINDS
             .iter()
             .copied()
-            .filter(|k| *k != "pattern" || env.device.input.touch)
+            .filter(|k| *k != "pattern" || env.device().input.touch)
             .collect()
     }
 
@@ -327,7 +327,7 @@ impl LockScreen {
         if kind == "off" {
             cx.command(code::forget());
             cx.command(Command::set(&KIND, "lock.kind.off".into()));
-            cx.command(Command::Notify(env.i18n.tr("lock.removed").to_string()));
+            cx.command(Command::Notify(env.i18n().tr("lock.removed").to_string()));
             cx.command(Command::Back);
             return;
         }
@@ -402,13 +402,13 @@ impl LockScreen {
                     cx.command(code::keep(&env, &self.kind, &entered));
                     let kind = alloc::format!("{KIND_PREFIX}{}", self.kind);
                     cx.command(Command::set(&KIND, kind.into()));
-                    cx.command(Command::Notify(env.i18n.tr("lock.done").to_string()));
+                    cx.command(Command::Notify(env.i18n().tr("lock.done").to_string()));
                     cx.command(Command::Back);
                     return;
                 }
                 self.step = Step::New;
                 self.asked = false;
-                self.message = Some(env.i18n.tr("lock.mismatch").to_string());
+                self.message = Some(env.i18n().tr("lock.mismatch").to_string());
             }
             Step::Choose => {}
         }
@@ -448,7 +448,7 @@ impl LockScreen {
     /// The things chosen with the buttons, in order.
     fn targets(&self, env: &Env<'_>) -> usize {
         match self.kind.as_str() {
-            "pattern" if env.device.input.touch => 9,
+            "pattern" if env.device().input.touch => 9,
             "pattern" => 10,
             "password" => 1,
             _ => KEYS.len(),
@@ -623,8 +623,8 @@ impl LockScreen {
                 );
             }
         }
-        if !env.device.input.touch {
-            let ok = env.i18n.tr("lock.ok");
+        if !env.device().input.touch {
+            let ok = env.i18n().tr("lock.ok");
             let focused = self.shown && self.focus == 9;
             ui.button(l.ok, ok, false, focused);
         }
@@ -651,7 +651,7 @@ impl Screen for LockScreen {
             if self.kind == "password" {
                 paperpaw_sdk::Hint::Hidden
             } else {
-                paperpaw_sdk::Hint::Text(env.i18n.tr("lock.delete").to_string())
+                paperpaw_sdk::Hint::Text(env.i18n().tr("lock.delete").to_string())
             }
         } else {
             paperpaw_sdk::Hint::Default
@@ -662,7 +662,7 @@ impl Screen for LockScreen {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
         ui.canvas().clear(Color::WHITE);
-        let title = env.i18n.tr(self.title_key());
+        let title = env.i18n().tr(self.title_key());
         if self.step == Step::Unlock {
             self.draw_clock(&mut ui);
             ui.message(self.layout.title, title);
@@ -673,17 +673,17 @@ impl Screen for LockScreen {
             let seconds = self.state.wait_until.get().map_or(0, |until| {
                 until
                     .millis()
-                    .saturating_sub(env.now.millis())
+                    .saturating_sub(env.now().millis())
                     .div_ceil(1000)
             });
             Some(
-                env.i18n
+                env.i18n()
                     .format("lock.wait", &[("count", Arg::Int(seconds as i64))]),
             )
         } else if self.message.is_none() && self.step == Step::New {
             // What a new code needs.
             let count = Arg::Int(MIN_LENGTH as i64);
-            Some(env.i18n.format("lock.too-short", &[("count", count)]))
+            Some(env.i18n().format("lock.too-short", &[("count", count)]))
         } else {
             self.message.clone()
         };
@@ -697,7 +697,7 @@ impl Screen for LockScreen {
                 .draw(&mut ui, kinds.len(), |ui, i, row, focused| {
                     let kind = kinds[i];
                     let key = alloc::format!("{KIND_PREFIX}{kind}");
-                    let name = env.i18n.tr(&key);
+                    let name = env.i18n().tr(&key);
                     ui::Row::plain(name).focused(focused).draw(ui, row);
                     // The kind in use, ticked.
                     if kind == current {
@@ -714,7 +714,7 @@ impl Screen for LockScreen {
         match self.kind.as_str() {
             "pattern" => self.draw_pattern(&mut ui),
             "password" => {
-                let label = env.i18n.tr("lock.type-password");
+                let label = env.i18n().tr("lock.type-password");
                 let focused = self.shown;
                 ui.button(self.layout.password, label, false, focused);
             }
@@ -772,7 +772,7 @@ impl Screen for LockScreen {
         if self.state.wait_until.get().is_some() && !self.waiting(&env) {
             self.state.wait_until.set(None);
             self.state.failures.set(0);
-            keep_tries(env.storage, 0);
+            keep_tries(env.storage(), 0);
             self.message = None;
             self.redraw(cx);
         }

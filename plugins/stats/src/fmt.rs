@@ -48,16 +48,16 @@ pub(crate) fn duration(env: &Env<'_>, seconds: u64) -> String {
     let minutes = seconds / 60;
     if minutes == 0 {
         if seconds == 0 {
-            return env.i18n.format("stats.minutes", &[("m", Arg::Int(0))]);
+            return env.i18n().format("stats.minutes", &[("m", Arg::Int(0))]);
         }
-        return env.i18n.tr("stats.under-a-minute").to_string();
+        return env.i18n().tr("stats.under-a-minute").to_string();
     }
     if minutes < 60 {
         return env
             .i18n
             .format("stats.minutes", &[("m", Arg::Int(minutes as i64))]);
     }
-    env.i18n.format(
+    env.i18n().format(
         "stats.hours",
         &[
             ("h", Arg::Int((minutes / 60) as i64)),
@@ -69,7 +69,7 @@ pub(crate) fn duration(env: &Env<'_>, seconds: u64) -> String {
 /// `14.10.2026` or `10/14/2026`, as the language writes dates.
 pub(crate) fn date(env: &Env<'_>, day: i32) -> String {
     let d = date_of(day);
-    env.i18n.format(
+    env.i18n().format(
         "stats.date",
         &[
             ("day", Arg::Int(i64::from(d.day))),
@@ -82,7 +82,7 @@ pub(crate) fn date(env: &Env<'_>, day: i32) -> String {
 /// `Dienstag, 14. Oktober`.
 pub(crate) fn long_date(env: &Env<'_>, day: i32) -> String {
     let d = date_of(day);
-    env.i18n.format(
+    env.i18n().format(
         "stats.long-date",
         &[
             ("weekday", Arg::Str(weekday(env, d.weekday))),
@@ -103,7 +103,7 @@ pub(crate) fn weekday<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
         "stats.weekday.5",
         "stats.weekday.6",
     ];
-    env.i18n.tr(KEYS[usize::from(weekday % 7)])
+    env.i18n().tr(KEYS[usize::from(weekday % 7)])
 }
 
 /// The short name of a weekday (two letters), 0 being Sunday.
@@ -117,7 +117,7 @@ pub(crate) fn weekday_short<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
         "stats.weekday-short.5",
         "stats.weekday-short.6",
     ];
-    env.i18n.tr(KEYS[usize::from(weekday % 7)])
+    env.i18n().tr(KEYS[usize::from(weekday % 7)])
 }
 
 /// The name of a month, 1 being January.
@@ -136,7 +136,7 @@ pub(crate) fn month<'a>(env: &Env<'a>, month: u8) -> &'a str {
         "stats.month.11",
         "stats.month.12",
     ];
-    env.i18n.tr(KEYS[usize::from(month.clamp(1, 12) - 1)])
+    env.i18n().tr(KEYS[usize::from(month.clamp(1, 12) - 1)])
 }
 
 /// The first day of the week: 1 for Monday, 0 for Sunday, as set for

@@ -14,7 +14,7 @@ impl Entry {
     /// for a plugin this store installed, never over one put in place
     /// otherwise (see [`install::origin`]).
     pub(crate) fn newer(&self, env: &Env<'_>) -> bool {
-        self.newer_in(env, &Origins::read(env.storage))
+        self.newer_in(env, &Origins::read(env.storage()))
     }
 
     /// The same, the origins read once for many (a list).
@@ -40,7 +40,7 @@ impl Entry {
     }
 
     fn origin(&self, env: &Env<'_>, installed: Version) -> Origin {
-        install::origin(env.storage, &self.id, installed)
+        install::origin(env.storage(), &self.id, installed)
     }
 }
 
@@ -50,7 +50,7 @@ const BETAS: &str = "update.betas";
 /// Whether this device takes betas: it runs one, or the reader asked for
 /// them (*Beta updates*), as firmware updates go.
 fn takes_betas(env: &Env<'_>) -> bool {
-    env.settings.bool(BETAS) || env.firmware.is_some_and(|f| is_pre_release(&f.version))
+    env.settings().bool(BETAS) || env.firmware().is_some_and(|f| is_pre_release(&f.version))
 }
 
 /// Whether `version` is a pre-release (`0.5.0-beta.1`).

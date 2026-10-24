@@ -168,7 +168,9 @@ impl State {
     /// works again.
     fn tell(&mut self, env: &Env<'_>, out: &mut Commands) {
         if self.write_failed == Some(false) {
-            out.push(Command::Notify(env.i18n.tr("stats.not-saved").to_string()));
+            out.push(Command::Notify(
+                env.i18n().tr("stats.not-saved").to_string(),
+            ));
             self.write_failed = Some(true);
         }
         // How long was read today, for those who show it (a reading goal),
@@ -189,7 +191,7 @@ impl State {
         if let Some(today) = self.today.filter(|(d, _)| *d == day) {
             return Some(today);
         }
-        let days = store::days(env.storage, |unix| fmt::day_of(env, unix));
+        let days = store::days(env.storage(), |unix| fmt::day_of(env, unix));
         let seconds = days.iter().find(|d| d.day == day).map_or(0, |d| d.seconds);
         self.today = Some((day, seconds));
         self.today
@@ -204,9 +206,9 @@ impl State {
         let Some(since) = session.since.take() else {
             return;
         };
-        let min = env.settings.read(&MIN_SECONDS);
-        let max = env.settings.read(&MAX_SECONDS);
-        let seconds = i64::try_from(env.now.since(since) / 1000).unwrap_or(i64::MAX);
+        let min = env.settings().read(&MIN_SECONDS);
+        let max = env.settings().read(&MAX_SECONDS);
+        let seconds = i64::try_from(env.now().since(since) / 1000).unwrap_or(i64::MAX);
         let duration = counted(seconds, min, max);
         if duration == 0 || !enabled(env) {
             return;
@@ -226,7 +228,7 @@ impl State {
     /// Once the device knows the time: records the stays kept until then,
     /// and adds the book being read to the books if it is not yet.
     fn date(&mut self, env: &Env<'_>) {
-        let Some(clock) = env.status.clock else {
+        let Some(clock) = env.status().clock else {
             return;
         };
         if self.undated.is_empty() && self.session.as_ref().is_none_or(|s| s.book.is_some()) {
@@ -262,7 +264,7 @@ impl State {
                     duration: stay.duration,
                     pages: stay.pages,
                 };
-                let recorded = self.wrote(store::append(env.storage, stat));
+                let recorded = self.wrote(store::append(env.storage(), stat));
                 if let Some((day, seconds)) = &mut self.today
                     && recorded.is_some()
                     && fmt::day_of(env, start) == *day
@@ -282,7 +284,7 @@ impl State {
         {
             session.book = match ids.iter().find(|(path, _)| *path == session.path) {
                 Some(&(_, id)) => id,
-                None => register_book(env, &session.path, unix(env.now), session.pages),
+                None => register_book(env, &session.path, unix(env.now()), session.pages),
             };
             // A book that cannot be read is not recorded.
             if session.book.is_none() {
@@ -312,9 +314,9 @@ impl State {
         session.page = page;
         session.pages = pages;
         session.at = at;
-        session.since = Some(env.now);
+        session.since = Some(env.now());
         if let Some(id) = counted {
-            let result = store::update_books(env.storage, |books| {
+            let result = store::update_books(env.storage(), |books| {
                 match books.iter_mut().find(|b| b.id == id) {
                     Some(book) => {
                         book.pages = pages;
@@ -344,7 +346,7 @@ impl State {
             page,
             pages,
             at: reading.at(),
-            since: Some(env.now),
+            since: Some(env.now()),
         });
         self.date(env);
     }
@@ -364,16 +366,16 @@ impl State {
 /// where `books.ini` cannot be read or written: it then stays as it was,
 /// and nothing is recorded for the book.
 fn register_book(env: &Env<'_>, path: &str, now: i64, pages: u32) -> Option<u16> {
-    let md5 = md5::partial(env.storage, path)?;
+    let md5 = md5::partial(env.storage(), path)?;
     let mut id = None;
-    store::update_books(env.storage, |books| {
+    store::update_books(env.storage(), |books| {
         let at = match books.iter().position(|b| b.md5 == md5) {
             Some(at) => at,
             None => {
-                let Ok(new) = store::new_id(env.storage, books) else {
+                let Ok(new) = store::new_id(env.storage(), books) else {
                     return false;
                 };
-                let document = env.formats.open(env.storage, path).ok();
+                let document = env.formats().open(env.storage(), path).ok();
                 let metadata = document.as_ref().map(|d| d.metadata().clone());
                 let file = path.rsplit('/').next().unwrap_or(path);
                 let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem);
@@ -431,7 +433,7 @@ fn mark_finished(env: &Env<'_>, path: &str, now: i64) {
         clippy::let_underscore_must_use,
         reason = "books.ini that cannot be read or written stays as it was, as said above"
     )]
-    let _ = store::update_books(env.storage, |books| {
+    let _ = store::update_books(env.storage(), |books| {
         match books.iter_mut().find(|b| b.path == path) {
             Some(book) if book.finished <= 0 || year(book.finished) != year(now) => {
                 book.finished = now;
@@ -546,7 +548,7 @@ impl Plugin for Stats {
         })?;
         let s = state.clone();
         r.on(events::BOOK_MOVED, move |env, moved, out| {
-            let result = store::update_books(env.storage, |books| {
+            let result = store::update_books(env.storage(), |books| {
                 let mut changed = false;
                 for book in books.iter_mut().filter(|b| b.path == moved.from) {
                     book.path = moved.path.clone();
@@ -574,14 +576,14 @@ impl Plugin for Stats {
         // those who show it.
         let s = state.clone();
         r.on(events::STARTED, move |env, _, out| {
-            store::recover(env.storage);
+            store::recover(env.storage());
             s.borrow_mut().tell(env, out)
         })?;
         // Only a book still open goes on being read.
         let s = state.clone();
         r.on(events::RESUME, move |env, _, _| {
             if let Some(session) = &mut s.borrow_mut().session {
-                session.since.get_or_insert(env.now);
+                session.since.get_or_insert(env.now());
             }
         })?;
         // The time became known (or was set anew): what was read before
@@ -627,7 +629,7 @@ impl Plugin for Stats {
                 if let Some(session) = &mut state.session
                     && reading
                 {
-                    session.since = Some(env.now);
+                    session.since = Some(env.now());
                 }
                 let current = state.session.as_ref().and_then(|session| session.book);
                 let params = match current {
@@ -648,7 +650,7 @@ impl Plugin for Stats {
 }
 
 fn enabled(env: &Env<'_>) -> bool {
-    env.settings.read(&ENABLED)
+    env.settings().read(&ENABLED)
 }
 
 #[cfg(test)]

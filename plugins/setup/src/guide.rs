@@ -87,7 +87,7 @@ fn line(env: &Env<'_>, style: &UiStyle, size: f32) -> u16 {
 /// The font a sample of the reading text is in: the reader's (the UI
 /// font's sizes may stop short of those the reader has).
 fn sample_font<'a>(env: &Env<'a>, style: &UiStyle) -> Option<paperpaw_sdk::FontHandle<'a>> {
-    env.fonts
+    env.fonts()
         .role(fonts::READING.as_str())
         .or_else(|| style.font(env))
 }
@@ -169,14 +169,14 @@ fn paragraph(ui: &mut ui::Ui<'_>, area: Rect, size: f32, text: &str, max: usize,
 /// The steps asked on this device now: not those of a setting shown
 /// only while another has another value.
 fn steps(env: &Env<'_>) -> Vec<Id> {
-    env.setup
+    env.setup()
         .applying(env)
         .into_iter()
         .filter(|s| match &s.page {
             paperpaw_sdk::setup::SetupPage::Setting(id) => env
                 .settings
                 .spec(id.as_str())
-                .is_none_or(|spec| env.settings.shows(spec)),
+                .is_none_or(|spec| env.settings().shows(spec)),
             _ => true,
         })
         .map(|s| s.id.clone())
@@ -201,7 +201,7 @@ impl Guide {
     /// The step of the page shown; `None` at the end.
     fn step<'a>(&self, env: &'a Env<'_>) -> Option<&'a paperpaw_sdk::setup::SetupStepSpec> {
         let id = self.steps.get(self.page)?;
-        env.setup.applying(env).into_iter().find(|s| s.id == *id)
+        env.setup().applying(env).into_iter().find(|s| s.id == *id)
     }
 
     /// The setting the page asks for, if it is one.
@@ -209,7 +209,7 @@ impl Guide {
         let SetupPage::Setting(id) = &self.step(env)?.page else {
             return None;
         };
-        env.settings.specs().find(|s| s.id == *id)
+        env.settings().specs().find(|s| s.id == *id)
     }
 
     /// The values of a choice of two, and their names.
@@ -259,8 +259,10 @@ impl Guide {
     /// size of the text (points): as the setting is now.
     fn sample_size(&self, env: &Env<'_>) -> Option<f32> {
         let spec = self.setting(env)?;
-        (spec.extra().unit.as_deref() == Some("core.unit.pt"))
-            .then(|| env.metrics.pt(env.settings.int(spec.id.as_str()) as f32))
+        (spec.extra().unit.as_deref() == Some("core.unit.pt")).then(|| {
+            env.metrics()
+                .pt(env.settings().int(spec.id.as_str()) as f32)
+        })
     }
 
     /// What can be chosen on the page, top to bottom.
@@ -277,29 +279,29 @@ impl Guide {
     fn texts(&self, env: &Env<'_>) -> (String, String) {
         let Some(step) = self.step(env) else {
             return (
-                env.i18n.tr("setup.end.title").to_string(),
-                env.i18n.tr("setup.end.help").to_string(),
+                env.i18n().tr("setup.end.title").to_string(),
+                env.i18n().tr("setup.end.help").to_string(),
             );
         };
         let setting = self.setting(env);
         let title = if step.title.is_empty() {
-            setting.map_or("", |s| env.i18n.tr(&s.title))
+            setting.map_or("", |s| env.i18n().tr(&s.title))
         } else {
-            env.i18n.tr(&step.title)
+            env.i18n().tr(&step.title)
         };
         let help = if step.help.is_empty() {
             setting
                 .and_then(|s| s.description.as_deref())
-                .map_or("", |d| env.i18n.tr(d))
+                .map_or("", |d| env.i18n().tr(d))
         } else {
-            env.i18n.tr(&step.help)
+            env.i18n().tr(&step.help)
         };
         (title.to_string(), help.to_string())
     }
 
     fn layout(&self, env: &Env<'_>) -> Layout {
         let style = &self.style;
-        let display = env.device.display;
+        let display = env.device().display;
         let (w, h) = (display.width, display.height);
         // A little more room than menus have, but not twice theirs, which
         // left wide margins too little width.
@@ -345,7 +347,7 @@ impl Guide {
                 let below = match self.sample_size(env) {
                     Some(size) => {
                         let inner = width.saturating_sub(2 * style.margin());
-                        sample_height(env, style, size, inner, env.i18n.tr("setup.sample"))
+                        sample_height(env, style, size, inner, env.i18n().tr("setup.sample"))
                     }
                     None => line(env, style, style.text()) * 2,
                 };
@@ -428,7 +430,7 @@ impl Guide {
     fn ask_skip(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         cx.command(
-            paperpaw_sdk::ask::choice(env.i18n.tr("setup.skip-question"), &SKIP_CHOSEN)
+            paperpaw_sdk::ask::choice(env.i18n().tr("setup.skip-question"), &SKIP_CHOSEN)
                 .options("setup.option.", &["stay", "skip"])
                 .command(),
         );
@@ -534,7 +536,7 @@ impl Guide {
             return;
         };
         let (label, more) = match (self.step(env).map(|s| &s.page), self.setting(env)) {
-            (Some(SetupPage::Screen(_)), _) => (env.i18n.tr("setup.open-page").to_string(), true),
+            (Some(SetupPage::Screen(_)), _) => (env.i18n().tr("setup.open-page").to_string(), true),
             (_, Some(spec)) => (ui::setting_value(env, spec), ui::opens_screen(env, spec)),
             _ => (String::new(), false),
         };
@@ -553,7 +555,7 @@ impl Guide {
         if let Some(spec) = self.setting(env) {
             match spec.kind {
                 SettingKind::Bool => {
-                    let on = env.settings.bool(spec.id.as_str());
+                    let on = env.settings().bool(spec.id.as_str());
                     ui.switch(inner, on, false);
                     return;
                 }
@@ -589,7 +591,7 @@ impl Guide {
                             (card.y + card.height).saturating_sub(top + style.gap()),
                         );
                         let mut clipped = ui.clipped(sample);
-                        draw_sample(&mut clipped, sample, size, env.i18n.tr("setup.sample"));
+                        draw_sample(&mut clipped, sample, size, env.i18n().tr("setup.sample"));
                     }
                     return;
                 }
@@ -647,8 +649,8 @@ impl Screen for Guide {
             self.draw_card(&mut ui, card);
         }
         let end = self.page >= self.steps.len();
-        let next = env.i18n.tr(if end { "setup.done" } else { "setup.next" });
-        let other = env.i18n.tr(if self.page == 0 {
+        let next = env.i18n().tr(if end { "setup.done" } else { "setup.next" });
+        let other = env.i18n().tr(if self.page == 0 {
             "setup.skip"
         } else {
             "setup.back"
@@ -668,7 +670,7 @@ impl Screen for Guide {
             return self.edit.hint(action, env);
         }
         if *action == actions::BACK && self.page == 0 {
-            paperpaw_sdk::Hint::Text(env.i18n.tr("setup.skip-short").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n().tr("setup.skip-short").to_string())
         } else {
             paperpaw_sdk::Hint::Default
         }
@@ -728,7 +730,7 @@ impl Screen for Guide {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            if env.settings.governs(changed.id.as_str()) {
+            if env.settings().governs(changed.id.as_str()) {
                 let shown = self.steps.get(self.page).cloned();
                 self.steps = steps(&env);
                 self.page = shown

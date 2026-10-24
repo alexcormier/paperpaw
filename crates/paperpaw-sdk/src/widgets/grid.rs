@@ -93,10 +93,10 @@ impl What {
     /// Its name, translated: the widget's, or the action's.
     pub fn title(&self, env: &Env<'_>) -> String {
         let (id, key) = match self {
-            What::Widget(id) => (id.as_str(), env.widgets.title(id)),
-            What::Tool(action) => (action.as_str(), env.menus.title(action.as_str())),
+            What::Widget(id) => (id.as_str(), env.widgets().title(id)),
+            What::Tool(action) => (action.as_str(), env.menus().title(action.as_str())),
         };
-        key.map_or(id, |key| env.i18n.tr(key)).to_string()
+        key.map_or(id, |key| env.i18n().tr(key)).to_string()
     }
 }
 
@@ -292,7 +292,7 @@ impl Geometry {
             What::Tool(_) => (1, 1, 1),
             What::Widget(id) => {
                 // As it says, within the grid, without making it.
-                if let Some(hint) = env.widgets.cells(id) {
+                if let Some(hint) = env.widgets().cells(id) {
                     let w = hint.w.clamp(1, self.columns.max(1));
                     let h = hint.h.clamp(1, self.rows.max(1));
                     let cells = hint.keep(Cells::new(0, 0, w, h), w <= h);
@@ -300,7 +300,7 @@ impl Geometry {
                     return (w, h, hint.min_h.clamp(1, h));
                 }
                 let width = (u16::from(self.columns) * self.cell_w).saturating_sub(self.gap);
-                let (height, least) = env.widgets.make(id, env).map_or((0, 0), |widget| {
+                let (height, least) = env.widgets().make(id, env).map_or((0, 0), |widget| {
                     let height = widget.height(env, width);
                     (height, widget.min_height(env, width).min(height))
                 });
@@ -513,7 +513,7 @@ pub fn tool_name_lines(env: &Env<'_>, area: Rect, action: &Id, label: bool) -> u
     let style = UiStyle::new(env);
     match style.font(env) {
         Some(font) if label => {
-            let state = env.menus.state(env, action.as_str());
+            let state = env.menus().state(env, action.as_str());
             tool_name(env, &style, &font, area, action, &state).2.len()
         }
         _ => 0,
@@ -537,13 +537,13 @@ pub fn draw_tool_lines(
     let Some(font) = style.font(env) else {
         return area;
     };
-    let icon = env.menus.icon(action.as_str()).and_then(|name| {
-        let font = env.fonts.bound(crate::builtin::fonts::ICONS.as_str())?;
+    let icon = env.menus().icon(action.as_str()).and_then(|name| {
+        let font = env.fonts().bound(crate::builtin::fonts::ICONS.as_str())?;
         let ch = crate::icons::char(name)?;
         font.has_char(ch).then_some((font, ch))
     });
     // As its plugin shows it now: a label, a badge, faint, a switch on.
-    let state = env.menus.state(env, action.as_str());
+    let state = env.menus().state(env, action.as_str());
     let on = state.checked == Some(true);
     let ink = match (on, state.enabled) {
         (true, _) => Color::WHITE,
@@ -653,11 +653,11 @@ fn tool_name(
     action: &Id,
     state: &crate::menus::ItemState,
 ) -> (f32, String, Vec<String>) {
-    let title = env.menus.title(action.as_str()).unwrap_or_default();
+    let title = env.menus().title(action.as_str()).unwrap_or_default();
     let name = env
         .i18n
         .get(&format!("{title}.short"))
-        .unwrap_or(env.i18n.tr(title));
+        .unwrap_or(env.i18n().tr(title));
     let name = state.text(name);
     let name = name.as_str();
     let width = area.width.saturating_sub(4);
@@ -697,7 +697,7 @@ fn hyphenated(
         .filter(|(_, c)| *c == '-')
         .map(|(at, _)| (at + 1, false))
         .collect();
-    if let Some(patterns) = env.hyphenation.get(env.i18n.language()) {
+    if let Some(patterns) = env.hyphenation().get(env.i18n().language()) {
         let mut start = None;
         for (at, c) in name
             .char_indices()

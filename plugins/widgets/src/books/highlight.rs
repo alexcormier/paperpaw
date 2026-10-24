@@ -120,7 +120,7 @@ pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(),
         WidgetSpec::new(ID, "widgets.highlight", move |env| {
             // Another each time it shows: made as it shows.
             let showing =
-                (chosen(env, WIDGET, "change") == CHANGES[1]).then(|| shown.show(env.now));
+                (chosen(env, WIDGET, "change") == CHANGES[1]).then(|| shown.show(env.now()));
             Box::new(HighlightWidget {
                 kept: kept.clone(),
                 showing,
@@ -160,10 +160,10 @@ fn annotated(storage: &dyn Storage, path: &str) -> bool {
 /// The books highlights are chosen from: those read lately with
 /// annotations, or every book of the library with annotations.
 fn books(env: &Env<'_>, all: bool) -> Vec<String> {
-    let mut books: Vec<String> = library::opened_books(env.storage)
+    let mut books: Vec<String> = library::opened_books(env.storage())
         .into_iter()
         .take(RECENT_BOOKS)
-        .filter(|path| annotated(env.storage, path))
+        .filter(|path| annotated(env.storage(), path))
         .collect();
     if !all {
         return books;
@@ -173,7 +173,7 @@ fn books(env: &Env<'_>, all: bool) -> Vec<String> {
     let file = annotations::file("");
     let dir = file.rsplit_once('/').map_or("", |(dir, _)| dir);
     let mut hashes = Vec::new();
-    let _ = env.storage.list(dir, &mut |entry| {
+    let _ = env.storage().list(dir, &mut |entry| {
         let hash = entry
             .name
             .strip_suffix(".txt")
@@ -270,9 +270,9 @@ impl HighlightWidget {
             return quote.clone();
         }
         let books = books(env, source == SOURCES[1]);
-        let quote = pick(&books, seed, &mut |path| highlights_of(env.storage, path)).map(
+        let quote = pick(&books, seed, &mut |path| highlights_of(env.storage(), path)).map(
             |(path, (start, end, text, note))| {
-                let book = library::book(env.storage, &path).unwrap_or_default();
+                let book = library::book(env.storage(), &path).unwrap_or_default();
                 Quote {
                     title: book.shown_title(&path).into_owned(),
                     author: book.author.clone().unwrap_or_default(),
@@ -405,7 +405,7 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         let text = if marks {
             quote.text.clone()
         } else {
-            env.i18n.format(
+            env.i18n().format(
                 "widgets.highlight.quoted",
                 &[("text", Arg::Str(&quote.text))],
             )
@@ -464,7 +464,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, quote: &Quote
         env,
         id,
         look,
-        env.i18n.tr("widgets.highlight.caption"),
+        env.i18n().tr("widgets.highlight.caption"),
     );
     let area = laid.block;
     let small = widgets::line_height(env, style.small());

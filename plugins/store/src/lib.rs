@@ -136,7 +136,7 @@ impl Plugin for Store {
         r.add_action(
             ActionSpec::new(DISCOVER_FONTS, "store.discover-fonts").handler(
                 |env: &Env<'_>, _: &Params, out: &mut Commands| {
-                    if env.actions.contains(FONTS.as_str()) {
+                    if env.actions().contains(FONTS.as_str()) {
                         out.push(Command::run(FONTS));
                     } else {
                         let page = Params::new().with(params::ID, "fonts-browser");
@@ -159,7 +159,7 @@ impl Plugin for Store {
             // A download cut off by the restart is begun anew from its
             // page, or first when the queue goes on.
             queue::interrupted(env);
-            INSTALLER.cancel(env.storage);
+            INSTALLER.cancel(env.storage());
             // The setup's plugins go on without the store being opened:
             // the reader asked for them.
             if queue::has_quiet(env) {
@@ -204,12 +204,12 @@ fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
 /// says so; whether it was installed.
 fn finish(env: &Env<'_>, done: &Progress, out: &mut Commands) -> bool {
     let name = [("name", Arg::Str(&done.name))];
-    let folder = INSTALLER.folder(env.storage).unwrap_or_default();
+    let folder = INSTALLER.folder(env.storage()).unwrap_or_default();
     let (key, installed) = match trust::verdict(env, &done.plugin, &folder) {
         Verdict::Install { code } => {
-            let before = env.plugins.get(&done.plugin).is_some();
+            let before = env.plugins().get(&done.plugin).is_some();
             if trust::install(env, code, out).is_none() {
-                INSTALLER.cancel(env.storage);
+                INSTALLER.cancel(env.storage());
                 out.push(failed(env, &done.name));
                 return false;
             }
@@ -224,16 +224,19 @@ fn finish(env: &Env<'_>, done: &Progress, out: &mut Commands) -> bool {
         // It waits on its page for the reader's word.
         Verdict::OtherAuthor { .. } => ("store.other-author.notice", false),
         Verdict::Refused(refusal) => {
-            INSTALLER.cancel(env.storage);
+            INSTALLER.cancel(env.storage());
             (refusal.key(), false)
         }
     };
-    out.push(Command::Notify(env.i18n.format(key, &name)));
+    out.push(Command::Notify(env.i18n().format(key, &name)));
     installed
 }
 
 fn failed(env: &Env<'_>, name: &str) -> Command {
-    Command::Notify(env.i18n.format("store.failed", &[("name", Arg::Str(name))]))
+    Command::Notify(
+        env.i18n()
+            .format("store.failed", &[("name", Arg::Str(name))]),
+    )
 }
 
 #[cfg(test)]

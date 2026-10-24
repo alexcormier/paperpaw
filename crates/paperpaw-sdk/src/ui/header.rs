@@ -173,9 +173,9 @@ impl Header {
     /// A header at the top of the screen; `back` is `false` for root
     /// screens such as the home screen.
     pub fn new(env: &Env<'_>, style: &UiStyle, back: bool) -> Self {
-        let touch = env.device.input.touch;
+        let touch = env.device().input.touch;
         Self {
-            area: Rect::new(0, 0, env.device.display.width, style.header as u16),
+            area: Rect::new(0, 0, env.device().display.width, style.header as u16),
             note_focused: false,
             note_button: false,
             back: back && touch,
@@ -207,7 +207,7 @@ impl Header {
     /// Page `page` (from 0) of its pages, e.g. "2 / 5".
     fn page_label(env: &Env<'_>, page: Paging) -> String {
         let (shown, pages) = (page.page.saturating_add(1), page.pages);
-        env.i18n.format(
+        env.i18n().format(
             "core.page-of",
             &[
                 ("page", paperpaw_i18n::Arg::Int(shown as i64)),
@@ -470,7 +470,7 @@ impl Pager {
     pub fn new(env: &Env<'_>, area: Rect) -> Self {
         Self {
             area,
-            arrows: env.device.input.touch,
+            arrows: env.device().input.touch,
         }
     }
 

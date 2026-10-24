@@ -57,7 +57,7 @@ fn variants(h: &Harness, id: &str) -> Vec<(String, SettingValue)> {
 fn draw_everywhere(h: &Harness, fb: &mut Framebuffer, id: &str) {
     let env = h.env();
     for area in AREAS {
-        let mut widget = env.widgets.make(id, &env).unwrap();
+        let mut widget = env.widgets().make(id, &env).unwrap();
         let _ = widget.height(&env, area.width);
         let _ = widget.min_height(&env, area.width);
         widget.place(&env, area);
@@ -128,7 +128,7 @@ fn time_widgets_say_when_the_time_is_not_known() {
     let message = String::from(h.i18n.get("widgets.time.unknown").unwrap());
     let says = |h: &Harness, fb: &mut Framebuffer, id: &str| {
         let env = h.env();
-        let mut widget = env.widgets.make(id, &env).unwrap();
+        let mut widget = env.widgets().make(id, &env).unwrap();
         widget.place(&env, area);
         let mut described = Vec::new();
         widget.draw(&mut fb.canvas().describing(&mut described), &env, area);
@@ -188,7 +188,7 @@ fn time_and_words_widgets_keep_inside_their_cell() {
                 PixelFormat::Gray4,
             )
             .unwrap();
-            let mut widget = env.widgets.make(id, &env).unwrap();
+            let mut widget = env.widgets().make(id, &env).unwrap();
             widget.place(&env, area);
             let _ = widget.update(&env);
             {

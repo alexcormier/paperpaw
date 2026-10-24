@@ -136,18 +136,19 @@ pub(crate) struct ReaderScreen {
 
 impl ReaderScreen {
     pub(crate) fn open(env: &Env<'_>, params: &Params) -> Self {
-        let prepared = params
-            .get(params::PATH)
-            .is_none_or(|path| env.formats.prepared(env.storage, path, &open_options(env)));
+        let prepared = params.get(params::PATH).is_none_or(|path| {
+            env.formats()
+                .prepared(env.storage(), path, &open_options(env))
+        });
         let (book, preparing, waiting) = if prepared {
             let (book, not_ready) = open_book(env, params);
             (book, None, not_ready.then(|| params.clone()))
         } else {
-            let message = env.i18n.tr("reader.preparing").to_string();
+            let message = env.i18n().tr("reader.preparing").to_string();
             (Err(message), Some(params.clone()), None)
         };
         Self {
-            smooth: env.settings.read(&crate::settings::SMOOTH_TEXT),
+            smooth: env.settings().read(&crate::settings::SMOOTH_TEXT),
             book,
             preparing,
             waiting,
@@ -230,7 +231,7 @@ impl ReaderScreen {
             return;
         }
         book.status_lines[slot] = next;
-        status::save_choice(env.storage, &book.status_lines);
+        status::save_choice(env.storage(), &book.status_lines);
         for (area, at_top) in book.status_areas() {
             if at_top == top {
                 cx.request_redraw_area(area);
@@ -258,7 +259,7 @@ impl ReaderScreen {
             }
             cx.request_refresh(RefreshMode::Fast);
         }
-        let next = paperpaw_sdk::time::next_minute(&env).unwrap_or(env.now.add_millis(60_000));
+        let next = paperpaw_sdk::time::next_minute(&env).unwrap_or(env.now().add_millis(60_000));
         cx.wake_at(next);
         if let Some(at) = self.auto_turn {
             cx.wake_at(at);
@@ -272,11 +273,14 @@ impl ReaderScreen {
             return;
         };
         let question = if *action == crate::actions::SEARCH {
-            ask::text(env.i18n.tr("reader.search.prompt"), &crate::SEARCH_ENTERED)
-                .initial(self.last_search.clone())
+            ask::text(
+                env.i18n().tr("reader.search.prompt"),
+                &crate::SEARCH_ENTERED,
+            )
+            .initial(self.last_search.clone())
         } else if *action == crate::actions::GO_TO_PERCENT {
             ask::text(
-                env.i18n.tr("reader.go-to-percent.prompt"),
+                env.i18n().tr("reader.go-to-percent.prompt"),
                 &crate::PERCENT_ENTERED,
             )
             .number()
@@ -307,12 +311,12 @@ impl ReaderScreen {
         let (start, end) = (book.page.start, book.page.end);
         let on_page = |m: &Mark| m.kind == Kind::Bookmark && m.start >= start && m.start < end;
         if !matches!(
-            annotations::remove(env.storage, &book.path, on_page),
+            annotations::remove(env.storage(), &book.path, on_page),
             Ok(true)
         ) {
             let text = page_text(&book.page.lines);
             let kept = annotations::add(
-                env.storage,
+                env.storage(),
                 &book.path,
                 Annotation {
                     mark: Mark {
@@ -357,7 +361,7 @@ impl Screen for ReaderScreen {
     /// *Select* opens the reading menu, so its hint says so.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM {
-            paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.core.menu").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n().tr("core.hint.core.menu").to_string())
         } else {
             paperpaw_sdk::Hint::Default
         }
@@ -371,7 +375,7 @@ impl Screen for ReaderScreen {
             // With its XPointer, for a sync (found when the place was
             // kept, else now).
             if book.xpointer.is_none() {
-                book.xpointer = book.document.xpointer(env.storage, book.page.start);
+                book.xpointer = book.document.xpointer(env.storage(), book.page.start);
             }
         }
         if let Ok(book) = &self.book
@@ -395,7 +399,7 @@ impl Screen for ReaderScreen {
         // Kept from the first band of a frame to its last only: on the X4
         // a page's words take some 15 KiB.
         if let Ok(book) = &mut self.book
-            && canvas.clip().bottom() >= u32::from(env.device.display.height)
+            && canvas.clip().bottom() >= u32::from(env.device().display.height)
         {
             book.words.take();
         }
@@ -403,7 +407,7 @@ impl Screen for ReaderScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.preparing.is_some() {
             // Shown saying so first, then prepared.
-            let now = cx.env().now;
+            let now = cx.env().now();
             cx.wake_at(now);
             return;
         }
@@ -434,7 +438,7 @@ impl Screen for ReaderScreen {
             }
             // The book shows: its hints may, the first time.
             cx.command(paperpaw_sdk::help::ready(&crate::SCREEN));
-            let now = cx.env().now;
+            let now = cx.env().now();
             cx.wake_at(now);
         }
         // Time passed while another screen was open.
@@ -451,11 +455,11 @@ impl Screen for ReaderScreen {
         };
         book.save_due(cx, false);
         if book.index_step(&env) {
-            let delay = match env.device.memory {
+            let delay = match env.device().memory {
                 paperpaw_sdk::MemoryClass::Small => STEP_DELAY_SMALL_MS,
                 _ => STEP_DELAY_MS,
             };
-            cx.wake_at(env.now.add_millis(delay));
+            cx.wake_at(env.now().add_millis(delay));
         }
         self.auto_turn_due(cx);
         self.let_go_of_other_pages(cx);
@@ -504,7 +508,7 @@ impl Screen for ReaderScreen {
             }
             if *action == actions::NEXT_PAGE || *action == actions::PREV_PAGE {
                 let seconds = self.auto_turn_seconds(&env);
-                self.auto_turn = Some(env.now.add_millis(seconds * 1000));
+                self.auto_turn = Some(env.now().add_millis(seconds * 1000));
                 if let Some(at) = self.auto_turn {
                     cx.wake_at(at);
                 }
@@ -621,7 +625,7 @@ impl Screen for ReaderScreen {
                     crate::actions::READ_ALOUD,
                     crate::actions::QUICK_SETTINGS,
                 ]);
-                if book.document.toc_len(env.storage) == 0 {
+                if book.document.toc_len(env.storage()) == 0 {
                     hide.push(crate::actions::TOC);
                 }
             }
@@ -665,7 +669,7 @@ impl Screen for ReaderScreen {
         // bookmark corner or the way back are).
         if let (GestureKind::Tap, None, Ok(book)) = (gesture.kind, self.selection, &self.book) {
             let p = gesture.start;
-            let corner = env.settings.read(&crate::settings::CORNER_BOOKMARK)
+            let corner = env.settings().read(&crate::settings::CORNER_BOOKMARK)
                 && book.corner_area(&env).contains(p);
             let back = book.back_area(&env).is_some_and(|a| a.contains(p));
             if !corner
@@ -714,7 +718,7 @@ impl Screen for ReaderScreen {
         let tapped = at(gesture.start).and_then(|i| book.tappable_at(words, i));
         match (gesture.kind, self.selection) {
             (GestureKind::Tap, None)
-                if env.settings.read(&crate::settings::CORNER_BOOKMARK)
+                if env.settings().read(&crate::settings::CORNER_BOOKMARK)
                     && book.corner_area(&env).contains(gesture.start) =>
             {
                 self.toggle_bookmark(cx);
@@ -786,7 +790,7 @@ impl ReaderScreen {
         let book = match &mut self.book {
             Ok(book) => book,
             Err(message) => {
-                let area = Rect::from_size(env.device.display.width, env.device.display.height);
+                let area = Rect::from_size(env.device().display.width, env.device().display.height);
                 return ui.message(area, message);
             }
         };
@@ -798,8 +802,8 @@ impl ReaderScreen {
             || book.found.is_some()
             || self.aloud.is_some()
             || !book.links.is_empty()
-            || !env.decorators.is_empty();
-        let layered = !env.page_layers.is_empty();
+            || !env.decorators().is_empty();
+        let layered = !env.page_layers().is_empty();
         book.update_decorations(env);
         let Ok(book) = &self.book else {
             return;
@@ -810,7 +814,7 @@ impl ReaderScreen {
             .aloud
             .filter(|a| {
                 a.now.page == book.page.start
-                    && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
+                    && env.settings().read(&crate::settings::ALOUD_HIGHLIGHT)
             })
             .map(|a| (a.now.from, a.now.to));
         let marks = book.page_marks(env, aloud, words);
@@ -820,13 +824,14 @@ impl ReaderScreen {
         let view = book.page_view(lines);
         let rooms = &book.typography.rooms;
         if layered {
-            env.page_layers.draw(ui.canvas(), env, &view, rooms, true);
+            env.page_layers().draw(ui.canvas(), env, &view, rooms, true);
         }
         marks.draw_behind(ui.canvas(), env);
         book.draw_page(ui.canvas(), env, &marks.inks);
         marks.draw_over(ui.canvas(), env);
         if layered {
-            env.page_layers.draw(ui.canvas(), env, &view, rooms, false);
+            env.page_layers()
+                .draw(ui.canvas(), env, &view, rooms, false);
         }
         book.draw_note_signs(&mut ui, words);
         book.draw_back(&mut ui);
@@ -846,7 +851,7 @@ impl ReaderScreen {
             return;
         };
         let (lo, hi) = selection.range();
-        let line = env.metrics.tenth_mm(4).max(2);
+        let line = env.metrics().tenth_mm(4).max(2);
         for b in selection::line_boxes(words, |i| (lo..=hi).contains(&i)) {
             ui.canvas().stroke_rect(
                 i32::from(b.x) - 4,
@@ -964,12 +969,12 @@ impl ReaderScreen {
             let note = typed.text.as_str();
             let now = paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0);
             if !matches!(
-                annotations::set_note(env.storage, &book.path, at, note, now),
+                annotations::set_note(env.storage(), &book.path, at, note, now),
                 Ok(true)
             ) {
                 marks_not_saved(cx);
             }
-            book.marks = annotations::marks(env.storage, &book.path);
+            book.marks = annotations::marks(env.storage(), &book.path);
             cx.command(annotations::changed(&book.path));
             cx.request_redraw();
             return;
@@ -998,7 +1003,7 @@ impl ReaderScreen {
                 && index.pages() > 0
             {
                 let page = number.clamp(1, index.pages()) - 1;
-                if let Some(start) = index.entry(env.storage, page) {
+                if let Some(start) = index.entry(env.storage(), page) {
                     self.selection = None;
                     book.jump(cx, start);
                 }
@@ -1036,7 +1041,8 @@ impl ReaderScreen {
             // room a plugin's layer takes.
             || changed.is_some() && self.book.as_ref().is_ok_and(|b| b.retyped(cx.env()));
         // A layer switched on or off: drawn again.
-        if changed.is_some() && cx.env().page_layers.get_by_switch(id).is_some() && !font_changed {
+        if changed.is_some() && cx.env().page_layers().get_by_switch(id).is_some() && !font_changed
+        {
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Partial);
             return;
@@ -1053,8 +1059,8 @@ impl ReaderScreen {
                 .any(|s| s.id.as_str() == id && s.group == paperpaw_sdk::builtin::groups::MARKS);
             let marked = book
                 .decorated_for
-                .is_some_and(|(_, signature)| signature != env.decorators.signature(&env))
-                || book.decorated_for.is_none() && !env.decorators.is_empty();
+                .is_some_and(|(_, signature)| signature != env.decorators().signature(&env))
+                || book.decorated_for.is_none() && !env.decorators().is_empty();
             if look || marked {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
@@ -1071,7 +1077,7 @@ impl ReaderScreen {
         }
         if id == crate::settings::SMOOTH_TEXT.as_str() {
             // The same page, shown in grays or not from now on.
-            self.smooth = cx.env().settings.read(&crate::settings::SMOOTH_TEXT);
+            self.smooth = cx.env().settings().read(&crate::settings::SMOOTH_TEXT);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Full);
             return;
@@ -1091,7 +1097,7 @@ impl ReaderScreen {
             self.selection = None;
             self.book = open_book(&env, &Params::new().with(params::PATH, path)).0;
             cx.request_redraw();
-            cx.wake_at(env.now);
+            cx.wake_at(env.now());
             return;
         }
         let filters = env_filters_changed(cx.env(), book);
@@ -1103,7 +1109,7 @@ impl ReaderScreen {
             let env = *cx.env();
             book.relayout(&env);
             cx.request_redraw();
-            let now = env.now;
+            let now = env.now();
             cx.wake_at(now);
         }
     }
@@ -1171,7 +1177,7 @@ pub(super) fn page_text(lines: &[PageLine]) -> String {
 /// Says that a bookmark, highlight or note could not be kept: the book's
 /// annotations could not be read or written.
 pub(super) fn marks_not_saved(cx: &mut Cx<'_, '_>) {
-    let text = cx.env().i18n.tr("reader.marks-not-saved").to_string();
+    let text = cx.env().i18n().tr("reader.marks-not-saved").to_string();
     cx.command(Command::Notify(text));
 }
 

@@ -123,7 +123,7 @@ fn shows(env: &Env<'_>) -> String {
 fn notes(env: &Env<'_>, p: &Progress, short: bool) -> Vec<String> {
     let mut notes = Vec::new();
     if widgets::shows(env, ID.as_str(), "day") {
-        notes.push(env.i18n.format(
+        notes.push(env.i18n().format(
             if short {
                 "widgets.year.day-short"
             } else {
@@ -136,13 +136,16 @@ fn notes(env: &Env<'_>, p: &Progress, short: bool) -> Vec<String> {
         ));
     }
     if widgets::shows(env, ID.as_str(), "week") {
-        notes.push(env.i18n.format(
+        notes.push(env.i18n().format(
             "widgets.year.week",
             &[("week", Arg::Int(i64::from(p.week)))],
         ));
     }
     if widgets::shows(env, ID.as_str(), "left") {
-        notes.push(env.i18n.plural("widgets.year.left", i64::from(p.left), &[]));
+        notes.push(
+            env.i18n()
+                .plural("widgets.year.left", i64::from(p.left), &[]),
+        );
     }
     notes
 }

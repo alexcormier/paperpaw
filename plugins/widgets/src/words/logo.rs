@@ -70,7 +70,7 @@ impl LogoWidget {
         let small = match &logo {
             Logo::Picture(image) => {
                 let (w, h) = logo.fit(side, side);
-                Thumbnail::new(env.storage, image, w, h, env.device.display.format)
+                Thumbnail::new(env.storage(), image, w, h, env.device().display.format)
             }
             Logo::Drawn => None,
             _ => None,
@@ -81,7 +81,7 @@ impl LogoWidget {
 
 impl Widget for LogoWidget {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let set = env.settings.read(&LOGO);
+        let set = env.settings().read(&LOGO);
         if self.set.as_deref() == Some(set) {
             return false;
         }
@@ -136,7 +136,7 @@ fn sizes(env: &Env<'_>) -> (f32, u16) {
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let side = match widgets::size(env, ID.as_str()) {
         // As high as wide, a third of the screen at most.
-        TextSize::Fit => width.min(env.device.display.height / 3),
+        TextSize::Fit => width.min(env.device().display.height / 3),
         _ => sizes(env).1,
     };
     side + frame_height(env, ID.as_str())
@@ -164,7 +164,7 @@ fn draw(
     };
     let (w, h) = logo.fit(side, side);
     // The name a third of the logo's width after it, where it fits.
-    let font = text::font(env, env.settings.read(&FACE));
+    let font = text::font(env, env.settings().read(&FACE));
     let gap = w / 3;
     let name = font
         .as_ref()
@@ -184,7 +184,7 @@ fn draw(
         }
         _ => logo.draw(
             canvas,
-            env.storage,
+            env.storage(),
             Rect::new(x as u16, top, w, h),
             look.ink,
         ),

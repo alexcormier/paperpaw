@@ -52,13 +52,13 @@ pub fn icon_ink(env: &Env<'_>, name: &str, size: f32) -> Option<(i32, i32)> {
 /// plugin named for it, else its default.
 pub(super) fn icon<'f>(env: &Env<'f>, name: &str) -> Option<(FontHandle<'f>, char)> {
     let name = if name.starts_with("core.icon.") {
-        env.menus
+        env.menus()
             .icon(name)
             .or_else(|| crate::icons::default_of(name))?
     } else {
         name
     };
-    let font = env.fonts.bound(crate::builtin::fonts::ICONS.as_str())?;
+    let font = env.fonts().bound(crate::builtin::fonts::ICONS.as_str())?;
     let ch = crate::icons::char(name)?;
     font.has_char(ch).then_some((font, ch))
 }
@@ -289,7 +289,7 @@ pub fn draw_switch_row(
 
 /// Whether icons can be drawn (an icon font is there).
 pub fn has_icons(env: &Env<'_>) -> bool {
-    env.fonts
+    env.fonts()
         .bound(crate::builtin::fonts::ICONS.as_str())
         .is_some()
 }
@@ -300,12 +300,12 @@ pub fn has_icons(env: &Env<'_>) -> bool {
 /// that tell what a tap or a hold does use it, so they never speak of
 /// taps on a device without a touch screen.
 pub fn tr_input<'a>(env: &Env<'a>, key: &'a str) -> &'a str {
-    if !env.device.input.touch
-        && let Some(text) = env.i18n.get(&format!("{key}.buttons"))
+    if !env.device().input.touch
+        && let Some(text) = env.i18n().get(&format!("{key}.buttons"))
     {
         return text;
     }
-    env.i18n.tr(key)
+    env.i18n().tr(key)
 }
 
 /// Draws `text` vertically centred in `area`, starting at `x`; text

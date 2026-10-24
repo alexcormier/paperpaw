@@ -186,7 +186,7 @@ pub(crate) fn each_book(env: &Env<'_>, f: &mut dyn FnMut(catalog::Record)) {
         return library::service(env).each(env, &mut |_, record| f(record));
     }
     let folder = library::folder(env);
-    library::books_in(env.storage, env.formats, folder, &mut |path| {
+    library::books_in(env.storage(), env.formats(), folder, &mut |path| {
         f(catalog::Record::of(path, &library::Book::default()));
     });
 }
@@ -231,12 +231,12 @@ pub(crate) fn add_settings(
 
 // The value of widget `id`'s choice `key`.
 pub(crate) fn chosen<'e>(env: &Env<'e>, id: &str, key: &str) -> &'e str {
-    env.settings.text(&format!("{id}.{key}"))
+    env.settings().text(&format!("{id}.{key}"))
 }
 
 /// Widget `id`'s number `key`, at least 1.
 pub(crate) fn count(env: &Env<'_>, id: &str, key: &str) -> usize {
-    env.settings.int(&format!("{id}.{key}")).max(1) as usize
+    env.settings().int(&format!("{id}.{key}")).max(1) as usize
 }
 
 /// The values of a thickness setting: thin, medium, thick.
@@ -644,7 +644,7 @@ pub(crate) fn two_lines(
 /// The least width of a cover, so that one is still told from another:
 /// smaller ones are left out.
 pub(crate) fn least_cover_width(env: &Env<'_>) -> u16 {
-    env.metrics.mm(5).max(24) as u16
+    env.metrics().mm(5).max(24) as u16
 }
 
 /// The size of a cover fitted into `width` × `height`: as its picture
@@ -673,12 +673,12 @@ impl Covers {
         env: &Env<'_>,
         places: impl IntoIterator<Item = (&'b Book, Rect)>,
     ) -> Self {
-        let format = env.device.display.format;
+        let format = env.device().display.format;
         let made = places
             .into_iter()
             .filter_map(|(book, at)| {
                 let cover = book.cover.as_ref()?;
-                let small = Thumbnail::new(env.storage, cover, at.width, at.height, format)?;
+                let small = Thumbnail::new(env.storage(), cover, at.width, at.height, format)?;
                 Some((at, small))
             })
             .collect();
@@ -713,7 +713,7 @@ pub(crate) fn draw_cover(
     }
     match (&book.cover, covers.at(at)) {
         (Some(_), Some(small)) => small.draw(canvas, at.x, at.y),
-        (Some(cover), None) => ui::draw_small_image(canvas, env.storage, cover, at),
+        (Some(cover), None) => ui::draw_small_image(canvas, env.storage(), cover, at),
         (None, _) => draw_placeholder(canvas, env, look, at, &book.title),
     }
 }
@@ -834,7 +834,7 @@ fn cover_lines(
 
 /// "16 %".
 pub(crate) fn percent_text(env: &Env<'_>, percent: u8) -> String {
-    env.i18n.format(
+    env.i18n().format(
         "widgets.books.percent",
         &[("percent", Arg::Int(i64::from(percent)))],
     )
@@ -978,7 +978,7 @@ pub(crate) fn draw_bar(
 /// Draws the message `key` in the middle of `look`'s area (e.g. "Nothing
 /// read yet").
 pub(crate) fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, key: &str) {
-    widgets::draw_message(canvas, env, look, env.i18n.tr(key));
+    widgets::draw_message(canvas, env, look, env.i18n().tr(key));
 }
 
 /// The caption of widget `id` (key `caption`), drawn at the top of its

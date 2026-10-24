@@ -591,11 +591,13 @@ fn widest_value(env: &Env<'_>, style: &UiStyle, font: &FontHandle<'_>, spec: &Se
             .fold(0.0, f32::max)
     };
     let value = match &spec.kind {
-        SettingKind::Choice(choices) => widest(&mut choices.iter().map(|o| env.i18n.tr(o))),
-        SettingKind::Language => widest(&mut env.i18n.languages().into_iter().map(|(_, n)| n)),
-        SettingKind::Bool => {
-            widest(&mut ["core.on", "core.off"].into_iter().map(|k| env.i18n.tr(k)))
-        }
+        SettingKind::Choice(choices) => widest(&mut choices.iter().map(|o| env.i18n().tr(o))),
+        SettingKind::Language => widest(&mut env.i18n().languages().into_iter().map(|(_, n)| n)),
+        SettingKind::Bool => widest(
+            &mut ["core.on", "core.off"]
+                .into_iter()
+                .map(|k| env.i18n().tr(k)),
+        ),
         _ => font.measure(size, &plain_setting_value(env, spec)),
     };
     let scoped = if spec.scoped {
@@ -618,7 +620,7 @@ fn fits_beside(env: &Env<'_>, style: &UiStyle, spec: &SettingSpec, line: Rect, r
     let Some(font) = style.font(env) else {
         return true;
     };
-    let title = env.i18n.tr(&spec.title);
+    let title = env.i18n().tr(&spec.title);
     let margin = style.margin as f32;
     let room_for_title = match spec.kind {
         SettingKind::Int { .. } => {
@@ -737,7 +739,7 @@ pub fn row_lines(
             ..RowLines::one(line)
         };
     }
-    let high = own_title_height(env, style, width, env.i18n.tr(&spec.title));
+    let high = own_title_height(env, style, width, env.i18n().tr(&spec.title));
     let title = Rect::new(line.x, line.y, line.width, high);
     let control = Rect::new(line.x, title.bottom() as u16, line.width, line.height);
     RowLines {
@@ -911,7 +913,7 @@ pub fn number_room<'a>(
         };
         for v in [min, max] {
             let text = match &spec.extra().unit {
-                Some(unit) => env.i18n.plural(unit, v, &[]),
+                Some(unit) => env.i18n().plural(unit, v, &[]),
                 None => format!("{v}"),
             };
             let text = if spec.scoped {
@@ -1166,7 +1168,7 @@ pub(super) fn draw_focused_steps(
 pub fn setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
     let value = plain_setting_value(env, spec);
     // Set for the scope (e.g. this book only): marked.
-    if env.settings.is_scoped(spec.id.as_str()) {
+    if env.settings().is_scoped(spec.id.as_str()) {
         format!("• {value}")
     } else {
         value
@@ -1174,11 +1176,11 @@ pub fn setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
 }
 
 pub(super) fn plain_setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
-    match env.settings.get(spec.id.as_str()) {
-        Some(SettingValue::Bool(true)) => env.i18n.tr("core.on").to_string(),
-        Some(SettingValue::Bool(false)) => env.i18n.tr("core.off").to_string(),
+    match env.settings().get(spec.id.as_str()) {
+        Some(SettingValue::Bool(true)) => env.i18n().tr("core.on").to_string(),
+        Some(SettingValue::Bool(false)) => env.i18n().tr("core.off").to_string(),
         Some(SettingValue::Int(v)) => match &spec.extra().unit {
-            Some(unit) => env.i18n.plural(unit, *v, &[]),
+            Some(unit) => env.i18n().plural(unit, *v, &[]),
             None => format!("{v}"),
         },
         // Kept with the secrets: dots where there is one.
@@ -1208,16 +1210,19 @@ pub fn option_name(env: &Env<'_>, spec: &SettingSpec, value: &str) -> String {
             .find(|(tag, _)| *tag == value)
             .map_or(value.to_string(), |(_, name)| name.to_string()),
         // Choices are ids; their translation is their display name.
-        SettingKind::Choice(_) => env.i18n.tr(value).to_string(),
+        SettingKind::Choice(_) => env.i18n().tr(value).to_string(),
         SettingKind::List => {
             let names: Vec<&str> = crate::status::item_ids(value)
                 .map(|id| {
-                    let title = env.status_items.title(id).or_else(|| env.widgets.title(id));
-                    env.i18n.tr(title.unwrap_or(id))
+                    let title = env
+                        .status_items()
+                        .title(id)
+                        .or_else(|| env.widgets().title(id));
+                    env.i18n().tr(title.unwrap_or(id))
                 })
                 .collect();
             if names.is_empty() {
-                env.i18n.tr("core.list.none").to_string()
+                env.i18n().tr("core.list.none").to_string()
             } else {
                 names.join(", ")
             }
@@ -1231,12 +1236,12 @@ pub fn option_name(env: &Env<'_>, spec: &SettingSpec, value: &str) -> String {
 /// list that would only offer that one (fewer presses).
 pub fn two_options(env: &Env<'_>, spec: &SettingSpec) -> bool {
     // More ways to choose are listed with the options.
-    if !env.menus.items(spec.id.as_str()).is_empty() {
+    if !env.menus().items(spec.id.as_str()).is_empty() {
         return false;
     }
     match &spec.kind {
         SettingKind::Choice(options) => options.len() == 2,
-        SettingKind::Language => env.i18n.languages().len() == 2,
+        SettingKind::Language => env.i18n().languages().len() == 2,
         _ => false,
     }
 }
@@ -1255,7 +1260,7 @@ pub fn setting_opens(env: &Env<'_>, spec: &SettingSpec) -> Option<crate::Command
     match spec.kind {
         SettingKind::Text => {
             let question = crate::ask::text(
-                env.i18n.tr(&spec.title),
+                env.i18n().tr(&spec.title),
                 &crate::builtin::events::SETTING_TYPED,
             )
             .with(crate::builtin::params::ID, spec.id.as_str().to_string());
@@ -1287,7 +1292,7 @@ pub fn opens_screen(env: &Env<'_>, spec: &SettingSpec) -> bool {
 /// moves by `step` within its range, a choice or language moves to the
 /// next (or previous) option. `None` for text.
 pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<SettingValue> {
-    let current = env.settings.get(spec.id.as_str())?;
+    let current = env.settings().get(spec.id.as_str())?;
     let cycle = |options: &[&str], value: &str| -> SettingValue {
         let len = options.len().max(1) as i64;
         // From a value not among the options, the first step on is the
@@ -1314,7 +1319,7 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
             cycle(&options, v)
         }
         (SettingKind::Language, SettingValue::Text(v)) => {
-            let tags: Vec<&str> = env.i18n.languages().into_iter().map(|(t, _)| t).collect();
+            let tags: Vec<&str> = env.i18n().languages().into_iter().map(|(t, _)| t).collect();
             cycle(&tags, v)
         }
         _ => return None,

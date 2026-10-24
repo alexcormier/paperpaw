@@ -31,7 +31,7 @@ pub(super) fn aloud_area(
     words: &[WordBox],
     range: core::ops::Range<usize>,
 ) -> Option<Rect> {
-    let line = env.metrics.tenth_mm(5).max(2) as u16;
+    let line = env.metrics().tenth_mm(5).max(2) as u16;
     selection::line_boxes(words, |i| range.contains(&i))
         .into_iter()
         .map(|b| Rect::new(b.x, b.y, b.width, b.height + 2 * line))
@@ -44,14 +44,14 @@ impl ReaderScreen {
         let env = *cx.env();
         if self.auto_turn.take().is_some() {
             cx.command(Command::Notify(
-                env.i18n.tr("reader.auto-turn.stopped").to_string(),
+                env.i18n().tr("reader.auto-turn.stopped").to_string(),
             ));
             self.hands_free_shown(cx);
             return;
         }
         let seconds = self.auto_turn_seconds(&env);
-        self.auto_turn = Some(env.now.add_millis(seconds * 1000));
-        cx.command(Command::Notify(env.i18n.format(
+        self.auto_turn = Some(env.now().add_millis(seconds * 1000));
+        cx.command(Command::Notify(env.i18n().format(
             "reader.auto-turn.started",
             &[("seconds", Arg::Int(seconds as i64))],
         )));
@@ -60,7 +60,7 @@ impl ReaderScreen {
     }
 
     pub(super) fn auto_turn_seconds(&self, env: &Env<'_>) -> u64 {
-        env.settings
+        env.settings()
             .int(crate::settings::AUTO_TURN_SECONDS.as_str())
             .clamp(5, 600) as u64
     }
@@ -68,7 +68,7 @@ impl ReaderScreen {
     /// Turns the page if it is time; stops at the end of the book.
     pub(super) fn auto_turn_due(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if !self.auto_turn.is_some_and(|at| env.now >= at) {
+        if !self.auto_turn.is_some_and(|at| env.now() >= at) {
             return;
         }
         let seconds = self.auto_turn_seconds(&env);
@@ -78,7 +78,7 @@ impl ReaderScreen {
         let end = book.page.end;
         self.auto_turn = book
             .show(cx, end, true)
-            .then(|| env.now.add_millis(seconds * 1000));
+            .then(|| env.now().add_millis(seconds * 1000));
         if self.auto_turn.is_none() {
             self.hands_free_shown(cx);
         }
@@ -88,9 +88,9 @@ impl ReaderScreen {
     /// that was on this page, where the device can.
     pub(super) fn start_aloud(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if !env.caps.speech {
+        if !env.caps().speech {
             cx.command(Command::Notify(
-                env.i18n.tr("reader.aloud.unavailable").to_string(),
+                env.i18n().tr("reader.aloud.unavailable").to_string(),
             ));
             return;
         }
@@ -101,9 +101,9 @@ impl ReaderScreen {
             Some((page, word)) if page == book.page.start => word,
             _ => 0,
         };
-        let until = crate::aloud::timer_minutes(&env).map(|m| env.now.add_millis(m * 60_000));
+        let until = crate::aloud::timer_minutes(&env).map(|m| env.now().add_millis(m * 60_000));
         cx.command(Command::Notify(
-            env.i18n.tr("reader.aloud.started").to_string(),
+            env.i18n().tr("reader.aloud.started").to_string(),
         ));
         self.begin_aloud(from, until, cx);
     }
@@ -120,7 +120,7 @@ impl ReaderScreen {
         let Ok(book) = &self.book else {
             return;
         };
-        let turn = env.settings.read(&crate::settings::ALOUD_TURN);
+        let turn = env.settings().read(&crate::settings::ALOUD_TURN);
         let (now, text) = book.sentence(&env, &book.page, from, turn);
         book.speak(&env, text, false, cx);
         let next = book.following(&env, &now, turn).map(|(next, text)| {
@@ -161,7 +161,7 @@ impl ReaderScreen {
         self.hands_free_shown(cx);
         let env = *cx.env();
         cx.command(Command::Notify(
-            env.i18n.tr("reader.aloud.paused").to_string(),
+            env.i18n().tr("reader.aloud.paused").to_string(),
         ));
     }
 
@@ -177,7 +177,7 @@ impl ReaderScreen {
         let Ok(book) = &self.book else {
             return;
         };
-        if !env.settings.read(&crate::settings::ALOUD_HIGHLIGHT) {
+        if !env.settings().read(&crate::settings::ALOUD_HIGHLIGHT) {
             return;
         }
         let words = book.words(&env);
@@ -206,18 +206,18 @@ impl ReaderScreen {
             self.pause_aloud(cx);
             self.resume = None;
             cx.command(Command::Notify(
-                env.i18n.tr("reader.aloud.failed").to_string(),
+                env.i18n().tr("reader.aloud.failed").to_string(),
             ));
             return;
         }
-        if aloud.until.is_some_and(|until| env.now >= until) {
+        if aloud.until.is_some_and(|until| env.now() >= until) {
             self.pause_aloud(cx);
             cx.command(Command::Notify(
-                env.i18n.tr("reader.aloud.timer-done").to_string(),
+                env.i18n().tr("reader.aloud.timer-done").to_string(),
             ));
             return;
         }
-        let turn = env.settings.read(&crate::settings::ALOUD_TURN);
+        let turn = env.settings().read(&crate::settings::ALOUD_TURN);
         let Some(next) = aloud.next else {
             // The end of the book, or of the page.
             self.aloud = None;
@@ -225,7 +225,7 @@ impl ReaderScreen {
             self.hands_free_shown(cx);
             if !turn {
                 cx.command(Command::Notify(
-                    env.i18n.tr("reader.aloud.page-done").to_string(),
+                    env.i18n().tr("reader.aloud.page-done").to_string(),
                 ));
             }
             return;

@@ -280,7 +280,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         Box::new(|env, cx| {
             let page = cx.get(PRINTED_CONTEXT)?;
             Some(StatusValue::Text(
-                env.i18n
+                env.i18n()
                     .format("reader.printed-page", &[("page", Arg::Str(page))]),
             ))
         }),
@@ -290,7 +290,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         "reader.status.item.chapter-page",
         Box::new(|env, cx| {
             let (page, pages) = chapter_pages(cx)?;
-            Some(StatusValue::Text(env.i18n.format(
+            Some(StatusValue::Text(env.i18n().format(
                 "reader.page",
                 &[("page", Arg::Int(page)), ("pages", Arg::Int(pages))],
             )))
@@ -311,7 +311,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         Box::new(|env, cx| {
             let (page, pages) = chapter_pages(cx)?;
             let left = pages - page;
-            Some(StatusValue::Text(env.i18n.plural(
+            Some(StatusValue::Text(env.i18n().plural(
                 "reader.chapter-left",
                 left,
                 &[("count", Arg::Int(left))],
@@ -331,7 +331,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         "reader.status.item.progress",
         Box::new(|env, cx| {
             let percent: f32 = cx.get(params::PROGRESS)?.parse().ok()?;
-            Some(StatusValue::Text(env.i18n.format(
+            Some(StatusValue::Text(env.i18n().format(
                 "reader.percent",
                 &[("percent", Arg::Int(percent as i64))],
             )))
@@ -359,18 +359,19 @@ pub(crate) fn frame<'a>(
     let place = if top { TOP_PLACE } else { BOTTOM_PLACE };
     StatusFrame::new(area, top, size(env), color(env), context)
         .place(place)
-        .percent(env.settings.read(&PERCENT))
+        .percent(env.settings().read(&PERCENT))
 }
 
 /// Where a tap on the line shown at the top (or bottom) in `frame` does
 /// something.
 pub(crate) fn targets(env: &Env<'_>, id: &str, frame: &StatusFrame<'_>) -> Vec<StatusTarget> {
-    env.status_items.line_targets(id, env, frame)
+    env.status_items().line_targets(id, env, frame)
 }
 
 /// The text size of status lines in pixels.
 pub(crate) fn size(env: &Env<'_>) -> f32 {
-    env.metrics.pt(env.settings.read(&SIZE).clamp(5, 16) as f32)
+    env.metrics()
+        .pt(env.settings().read(&SIZE).clamp(5, 16) as f32)
 }
 
 /// The height of a status line's place.
@@ -380,7 +381,7 @@ pub(crate) fn height(env: &Env<'_>) -> f32 {
 
 /// The lines to switch between at the top (or bottom).
 pub(crate) fn rotation<'e>(env: &Env<'e>, top: bool) -> Vec<&'e str> {
-    item_ids(env.settings.text(LINES[usize::from(!top)].as_str())).collect()
+    item_ids(env.settings().text(LINES[usize::from(!top)].as_str())).collect()
 }
 
 /// The line showing at the top (or bottom): the one chosen last if it is
@@ -441,7 +442,7 @@ pub(crate) fn color(env: &Env<'_>) -> paperpaw_sdk::Color {
 /// The book as a bar from the left, filled up to where the page is, with
 /// a mark where each chapter begins; the page on the right.
 fn draw_progress(canvas: &mut Canvas<'_>, env: &Env<'_>, frame: &StatusFrame<'_>) {
-    let Some(font) = env.fonts.role(fonts::STATUS.as_str()) else {
+    let Some(font) = env.fonts().role(fonts::STATUS.as_str()) else {
         return;
     };
     let area = frame.area;
@@ -505,7 +506,7 @@ pub(crate) fn signature(env: &Env<'_>, context: &Params, chosen: &[String; 2]) -
         let id = current(env, top, &chosen[usize::from(!top)]);
         hash.feed(id.as_bytes());
         hash.feed(
-            &env.status_items
+            &env.status_items()
                 .line_signature(id, env, context)
                 .to_le_bytes(),
         );

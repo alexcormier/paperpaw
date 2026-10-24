@@ -378,7 +378,7 @@ impl Segments {
         labels: impl IntoIterator<Item = L>,
     ) -> Self {
         let labels = keep(labels);
-        let shown: Vec<&str> = labels.iter().map(|l| env.i18n.tr(l)).collect();
+        let shown: Vec<&str> = labels.iter().map(|l| env.i18n().tr(l)).collect();
         Self {
             cells: button_cells(env, style, area, &shown, style.gap as u16),
             labels,
@@ -388,7 +388,7 @@ impl Segments {
     /// The height [`Segments::fitted`] takes for `labels` in an area
     /// `width` wide: [`Segments::height`] where they fit side by side.
     pub fn height_for(env: &Env<'_>, style: &UiStyle, width: u16, labels: &[&str]) -> u16 {
-        let shown: Vec<&str> = labels.iter().map(|l| env.i18n.tr(l)).collect();
+        let shown: Vec<&str> = labels.iter().map(|l| env.i18n().tr(l)).collect();
         button_cells_height(env, style, width, &shown, style.gap as u16)
     }
 
@@ -439,7 +439,7 @@ impl Segments {
                 env,
                 style,
                 *cell,
-                env.i18n.tr(label),
+                env.i18n().tr(label),
                 i == chosen,
                 focus == Some(i),
             );

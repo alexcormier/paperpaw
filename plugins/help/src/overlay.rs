@@ -40,19 +40,19 @@ impl Overlay {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let screen = String::from(params.get(params::ID).unwrap_or_default());
-        let display = env.device.display;
+        let display = env.device().display;
         let whole = Rect::new(0, 0, display.width, display.height);
         let (mut zones, mut lines) = (Vec::new(), Vec::new());
         for HelpHint { text, zone, .. } in paperpaw_sdk::help::hints(env, &screen) {
-            let text = String::from(env.i18n.tr(&text));
+            let text = String::from(env.i18n().tr(&text));
             match zone {
                 Some(zone) => zones.push((zone.on(whole), text, Rect::new(0, 0, 0, 0))),
                 None => lines.push(text),
             }
         }
         let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
-        let buttons = [env.i18n.tr("help.got-it"), env.i18n.tr("help.no-more")];
-        let dialog = ui::Dialog::new(env, &style, env.i18n.tr("help.title"), &lines, &buttons);
+        let buttons = [env.i18n().tr("help.got-it"), env.i18n().tr("help.no-more")];
+        let dialog = ui::Dialog::new(env, &style, env.i18n().tr("help.title"), &lines, &buttons);
         let mut overlay = Self {
             style,
             screen,
@@ -67,7 +67,7 @@ impl Overlay {
     /// The zones' frames and their texts' boxes, then where the box goes.
     fn lay_out(&mut self, env: &Env<'_>) {
         let style = self.style;
-        let display = env.device.display;
+        let display = env.device().display;
         let Some(font) = style.font(env) else {
             return;
         };
@@ -146,7 +146,7 @@ impl Screen for Overlay {
             } else {
                 "help.no-more"
             };
-            paperpaw_sdk::Hint::Text(env.i18n.tr(key).into())
+            paperpaw_sdk::Hint::Text(env.i18n().tr(key).into())
         } else if *action == actions::BACK || *action == actions::LEFT || *action == actions::RIGHT
         {
             paperpaw_sdk::Hint::Default
@@ -156,7 +156,7 @@ impl Screen for Overlay {
     }
 
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
-        let display = env.device.display;
+        let display = env.device().display;
         Some(Rect::new(0, 0, display.width, display.height))
     }
 
@@ -167,7 +167,7 @@ impl Screen for Overlay {
 
     /// Seen as it shows: never again, unless asked for.
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        crate::mark_seen(cx.env().storage, &self.screen);
+        crate::mark_seen(cx.env().storage(), &self.screen);
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -256,7 +256,7 @@ pub(crate) struct Again {
 
 impl Again {
     pub(crate) fn new(env: &Env<'_>) -> Self {
-        crate::again(env.storage);
+        crate::again(env.storage());
         Self {
             style: UiStyle::new(env),
         }
@@ -269,11 +269,11 @@ impl Screen for Again {
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let display = env.device.display;
+        let display = env.device().display;
         let area = Rect::new(0, 0, display.width, display.height);
         let mut ui = ui::Ui::new(canvas, env, &self.style);
         ui.canvas().fill(area, Color::WHITE);
-        ui.message(area, env.i18n.tr("help.again-done"));
+        ui.message(area, env.i18n().tr("help.again-done"));
     }
 
     fn on_action(&mut self, _: &Id, cx: &mut Cx<'_, '_>) -> Handled {

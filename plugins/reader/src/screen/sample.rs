@@ -39,25 +39,25 @@ impl Sample {
 
 /// How high the sample is: a fifth of the screen.
 fn height(env: &Env<'_>) -> u16 {
-    env.device.display.height / SHARE
+    env.device().display.height / SHARE
 }
 
 /// The sample's text: its paragraphs, one to a line.
 fn text(env: &Env<'_>) -> String {
     format!(
         "{}\n{}",
-        env.i18n.tr("reader.sample.1"),
-        env.i18n.tr("reader.sample.2")
+        env.i18n().tr("reader.sample.1"),
+        env.i18n().tr("reader.sample.2")
     )
 }
 
 impl Widget for Sample {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let Some(font) = env.fonts.role(fonts::READING.as_str()) else {
+        let Some(font) = env.fonts().role(fonts::READING.as_str()) else {
             return false;
         };
-        let language = env.i18n.language();
-        let pad = env.metrics.mm(2) as f32;
+        let language = env.i18n().language();
+        let pad = env.metrics().mm(2) as f32;
         let t = Typography::sample(env, &font, language, f32::from(height(env)), pad);
         let text = text(env);
         let shown = format!("{}|{text}", t.key);
@@ -70,7 +70,7 @@ impl Widget for Sample {
         let patterns = t
             .hyphenation
             .as_deref()
-            .and_then(|language| env.hyphenation.get(language));
+            .and_then(|language| env.hyphenation().get(language));
         let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| {
             if let Some(patterns) = patterns {
                 patterns.hyphenate(word, out);
@@ -85,7 +85,7 @@ impl Widget for Sample {
         // In the frame chosen, as book pages are.
         let page = t
             .lay_out(Locator::new(0, 0), |width, height, at| {
-                let cx = LayoutContext::new(&filtered, env.storage, width, &t.style, &faces)
+                let cx = LayoutContext::new(&filtered, env.storage(), width, &t.style, &faces)
                     .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
                 layout_page(&cx, at, height)
             })

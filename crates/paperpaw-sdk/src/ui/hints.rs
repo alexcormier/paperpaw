@@ -21,7 +21,7 @@ pub(crate) fn hints_height(env: &Env<'_>) -> u16 {
     let line = style.font(env).map_or(style.small * 1.3, |f| {
         f.line_metrics(style.small).line_height
     });
-    ((line * 1.5) as u32 + style.line).max(env.metrics.mm(4)) as u16
+    ((line * 1.5) as u32 + style.line).max(env.metrics().mm(4)) as u16
 }
 
 /// A line of a hint's words as it is drawn: its size, its words, where

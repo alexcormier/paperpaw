@@ -45,7 +45,7 @@ pub(crate) const FOOTER_ITEMS: Setting<Text> = Setting::new("home.footer.items")
 /// corners round, else square.
 pub(crate) fn draw_dot(ui: &mut ui::Ui<'_>, (x, y): (i32, i32), size: u32, filled: bool) {
     let (env, style) = (ui.env(), ui.style());
-    let corners = env.settings.text(settings::UI_CORNERS.as_str());
+    let corners = env.settings().text(settings::UI_CORNERS.as_str());
     let round = style.pill() || settings::CORNERS[2..].contains(&corners);
     let radius = if round { size / 2 } else { 0 };
     if filled {
@@ -224,7 +224,7 @@ pub(crate) fn pages(env: &Env<'_>) -> Vec<Page> {
     (0..MAX_PAGES)
         .map(|slot| Page {
             slot,
-            items: grid::parse(env.settings.text(setting(slot).as_str())),
+            items: grid::parse(env.settings().text(setting(slot).as_str())),
         })
         .filter(|page| page.slot == 0 || !page.items.is_empty())
         .collect()
@@ -248,8 +248,8 @@ pub(crate) fn expand(env: &Env<'_>, items: &[Item]) -> Vec<Item> {
             What::Widget(id)
                 if id == widgets::SPACE
                     || id == widgets::FILL
-                    || (widgets::base(id) == STATUS && env.settings.read(&STATUS_BAR)) => {}
-            What::Widget(id) if !env.widgets.has(id) => {}
+                    || (widgets::base(id) == STATUS && env.settings().read(&STATUS_BAR)) => {}
+            What::Widget(id) if !env.widgets().has(id) => {}
             _ => out.push(item.clone()),
         }
     }
@@ -264,8 +264,8 @@ fn hidden(env: &Env<'_>, item: &Item) -> bool {
         What::Widget(id) if id == TOOLS || id == widgets::SPACE => false,
         What::Widget(id) => {
             id == widgets::FILL
-                || (widgets::base(id) == STATUS && env.settings.read(&STATUS_BAR))
-                || !env.widgets.has(id)
+                || (widgets::base(id) == STATUS && env.settings().read(&STATUS_BAR))
+                || !env.widgets().has(id)
         }
         _ => false,
     }
@@ -275,7 +275,7 @@ fn hidden(env: &Env<'_>, item: &Item) -> bool {
 /// `slot`, with what the page keeps there without showing it.
 pub(crate) fn store(env: &Env<'_>, slot: usize, items: &[Item]) -> Command {
     let mut items = items.to_vec();
-    for item in grid::parse(env.settings.text(setting(slot).as_str())) {
+    for item in grid::parse(env.settings().text(setting(slot).as_str())) {
         if hidden(env, &item) && !items.iter().any(|i| i.what == item.what) {
             items.push(item);
         }
@@ -356,12 +356,12 @@ pub(crate) fn slot_of(id: &str) -> Option<usize> {
 pub(crate) fn tools(env: &Env<'_>) -> Vec<(Id, String)> {
     let mut items: Vec<(Id, String)> = Vec::new();
     for menu in [ACTIONS, menus::TOOLS, menus::APPS] {
-        for item in env.menus.items(menu.as_str()) {
+        for item in env.menus().items(menu.as_str()) {
             // A screenshot from here shows only the home screen: it is
             // for the tools opened over a book (unless listed above).
             let here_useless = menu == menus::TOOLS && *item.id == actions::SCREENSHOT;
             // Hidden by its plugin now (e.g. *Apps* with nothing in it).
-            let hidden = !env.menus.state(env, item.id.as_str()).shown;
+            let hidden = !env.menus().state(env, item.id.as_str()).shown;
             if !item.section
                 && !here_useless
                 && !hidden

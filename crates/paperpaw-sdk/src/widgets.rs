@@ -598,9 +598,9 @@ impl SizeClass {
     /// The class of `area` on this screen.
     pub fn of(env: &Env<'_>, area: Rect) -> Self {
         let short = u32::from(area.width.min(area.height));
-        if short < env.metrics.mm(20) {
+        if short < env.metrics().mm(20) {
             Self::Small
-        } else if short <= env.metrics.mm(45) {
+        } else if short <= env.metrics().mm(45) {
             Self::Medium
         } else {
             Self::Large
@@ -668,7 +668,7 @@ impl WidgetPlace {
     pub fn shows(&self, env: &Env<'_>) -> bool {
         self.shown_if
             .as_ref()
-            .is_none_or(|(setting, value)| env.settings.text(setting.as_str()) == *value)
+            .is_none_or(|(setting, value)| env.settings().text(setting.as_str()) == *value)
     }
 
     /// The widgets it shows now: their ids, a placement's (`home.clock@2`)
@@ -676,8 +676,8 @@ impl WidgetPlace {
     pub fn widgets<'e>(&self, env: &Env<'e>) -> Vec<&'e str> {
         self.settings
             .iter()
-            .flat_map(|setting| listed(env.settings.text(setting.as_str())))
-            .filter(|id| env.widgets.has(id))
+            .flat_map(|setting| listed(env.settings().text(setting.as_str())))
+            .filter(|id| env.widgets().has(id))
             .collect()
     }
 }
@@ -745,7 +745,7 @@ pub fn refresh(event: &Id, params: &Params, own: &str, shown: &[String]) -> Refr
 /// When live widgets are read anew next: at the next full minute, when a
 /// clock shows another time (a minute from now without a clock).
 pub fn next_minute(env: &Env<'_>) -> crate::Instant {
-    crate::time::next_minute(env).unwrap_or(env.now.add_millis(60_000))
+    crate::time::next_minute(env).unwrap_or(env.now().add_millis(60_000))
 }
 
 /// The registered widgets.
@@ -832,7 +832,7 @@ impl Widgets {
                 place
                     .settings
                     .iter()
-                    .flat_map(|setting| listed(env.settings.text(setting.as_str())))
+                    .flat_map(|setting| listed(env.settings().text(setting.as_str())))
                     .any(|listed| base(listed) == id)
             })
     }
@@ -922,7 +922,7 @@ struct Placed {
 
 impl Placed {
     fn with<R>(&self, env: &Env<'_>, f: impl FnOnce() -> R) -> R {
-        env.settings.with_placement(Some(&self.placement), f)
+        env.settings().with_placement(Some(&self.placement), f)
     }
 }
 
@@ -950,7 +950,7 @@ impl Widget for Placed {
 
     fn place(&mut self, env: &Env<'_>, area: Rect) {
         let placement = core::mem::take(&mut self.placement);
-        env.settings
+        env.settings()
             .with_placement(Some(&placement), || self.inner.place(env, area));
         self.placement = placement;
     }
@@ -966,7 +966,7 @@ impl Widget for Placed {
     fn context(&mut self, env: &Env<'_>, context: &WidgetContext<'_>) {
         let placement = core::mem::take(&mut self.placement);
         let own = context.placement(Some(&placement));
-        env.settings
+        env.settings()
             .with_placement(Some(&placement), || self.inner.context(env, &own));
         self.placement = placement;
     }
@@ -979,7 +979,7 @@ impl Widget for Placed {
         out: &mut crate::Commands,
     ) -> bool {
         let placement = core::mem::take(&mut self.placement);
-        let taken = env.settings.with_placement(Some(&placement), || {
+        let taken = env.settings().with_placement(Some(&placement), || {
             self.inner.on_input(env, input, area, out)
         });
         self.placement = placement;
@@ -1013,7 +1013,7 @@ pub fn free_placement(env: &Env<'_>, id: &str, used: impl Fn(&str) -> bool) -> S
     (1..=256)
         .map(|n| plain.placement(n))
         .find(|placed| {
-            !used(placed.as_str()) && env.settings.placement_values(placed.as_str()).is_empty()
+            !used(placed.as_str()) && env.settings().placement_values(placed.as_str()).is_empty()
         })
         .map_or_else(|| String::from(id), |placed| String::from(placed.as_str()))
 }
@@ -1113,16 +1113,16 @@ pub const fn align_spec(id: &'static str, widget: Id, default: Align) -> Setting
 /// id holding settings, see [`settings_group`]).
 pub fn has_settings(env: &Env<'_>, id: &str) -> bool {
     let id = base(id);
-    env.settings.groups().any(|group| group.id.as_str() == id)
+    env.settings().groups().any(|group| group.id.as_str() == id)
         && env
             .settings
             .specs()
-            .any(|spec| env.settings.group_of(spec).as_str() == id)
+            .any(|spec| env.settings().group_of(spec).as_str() == id)
 }
 
 /// Where `widget`'s text sits, by its [`align_setting`]; left without one.
 pub fn align(env: &Env<'_>, widget: &str) -> Align {
-    Align::of(env.settings.text(&alloc::format!("{widget}.align")))
+    Align::of(env.settings().text(&alloc::format!("{widget}.align")))
 }
 
 #[cfg(test)]

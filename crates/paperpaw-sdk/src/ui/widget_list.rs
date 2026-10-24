@@ -50,7 +50,7 @@ impl Target {
     /// Its widgets.
     fn widgets(&self, env: &Env<'_>) -> Vec<String> {
         match self {
-            Target::Setting(id) => item_ids(env.settings.text(id))
+            Target::Setting(id) => item_ids(env.settings().text(id))
                 .map(ToString::to_string)
                 .collect(),
         }
@@ -82,7 +82,7 @@ impl Target {
                 .settings
                 .specs()
                 .find(|s| s.id.as_str() == id)
-                .map_or(id.clone(), |s| env.i18n.tr(&s.title).to_string()),
+                .map_or(id.clone(), |s| env.i18n().tr(&s.title).to_string()),
         }
     }
 }
@@ -108,7 +108,7 @@ impl ListScreen {
     pub fn open(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         Self {
@@ -163,7 +163,7 @@ impl ListScreen {
                 let title = env
                     .widgets
                     .title(id)
-                    .map_or(id.as_str(), |t| env.i18n.tr(t));
+                    .map_or(id.as_str(), |t| env.i18n().tr(t));
                 cx.command(
                     crate::ask::choice(title, &CHOSEN)
                         .about(format!("{at}"))
@@ -225,12 +225,12 @@ impl Screen for ListScreen {
                 let (icon, title, value) = match rows[index] {
                     Row::Widget(at) => {
                         let id = list.get(at).map_or("", String::as_str);
-                        let name = env.widgets.title(id).map_or(id, |t| env.i18n.tr(t));
+                        let name = env.widgets().title(id).map_or(id, |t| env.i18n().tr(t));
                         (None, name.to_string(), "")
                     }
                     Row::Add => (
                         Some("plus"),
-                        env.i18n.tr("core.widgets.edit.add").to_string(),
+                        env.i18n().tr("core.widgets.edit.add").to_string(),
                         "›",
                     ),
                 };
@@ -339,7 +339,7 @@ impl AddScreen {
     pub fn open(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let target = target_of(params);
@@ -354,7 +354,7 @@ impl AddScreen {
             .collect();
         // By their kind, as `categories::ALL` orders them (the spaces,
         // which are room, after the widgets that show something).
-        let kind = |id: &Id| env.widgets.category(id.as_str()).unwrap_or_default();
+        let kind = |id: &Id| env.widgets().category(id.as_str()).unwrap_or_default();
         let rank = |id: &Id| {
             let kind = kind(id);
             let order = widgets::categories::ALL.iter().position(|k| *k == kind);
@@ -392,11 +392,11 @@ impl Screen for AddScreen {
         let style = self.style;
         let len = self.widgets.len();
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let title = env.i18n.tr("core.widgets.edit.add");
+        let title = env.i18n().tr("core.widgets.edit.add");
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
-            let all = env.i18n.tr("core.widgets.edit.all-shown");
+            let all = env.i18n().tr("core.widgets.edit.all-shown");
             return ui.message(self.list.area(), all);
         }
         let widgets = &self.widgets;
@@ -404,9 +404,9 @@ impl Screen for AddScreen {
             // Its kind beside it, so that widgets of a kind are seen
             // together.
             let (id, title) = &widgets[index];
-            let kind = env.widgets.category(id.as_str()).unwrap_or_default();
-            let title = env.i18n.tr(title);
-            ui::Row::value(title, env.i18n.tr(kind))
+            let kind = env.widgets().category(id.as_str()).unwrap_or_default();
+            let title = env.i18n().tr(title);
+            ui::Row::value(title, env.i18n().tr(kind))
                 .focused(focused)
                 .draw(ui, rect);
         });

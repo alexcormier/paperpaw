@@ -80,7 +80,7 @@ impl Plugin for Probe {
             let id = Id::parse(&format!("probe.n{n}")).unwrap();
             r.add_action(ActionSpec::new(id, "probe").handler(
                 move |env: &Env<'_>, _, out: &mut Commands| {
-                    let text = env.i18n.format(key, &[("name", Arg::Str(NAME))]);
+                    let text = env.i18n().format(key, &[("name", Arg::Str(NAME))]);
                     out.push(Command::Notify(text));
                 },
             ))?;

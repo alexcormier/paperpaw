@@ -37,7 +37,7 @@ pub(crate) fn markdown(env: &Env<'_>, title: &str, author: &str, all: &[Annotati
         .filter(|a| a.mark.kind == Kind::Highlight)
         .collect();
     if !highlights.is_empty() {
-        text.push_str(&format!("## {}\n\n", env.i18n.tr("reader.highlights")));
+        text.push_str(&format!("## {}\n\n", env.i18n().tr("reader.highlights")));
         for a in highlights {
             text.push_str(&format!("> {}\n>\n> {} %\n\n", a.text, a.percent));
             if !a.note.is_empty() {
@@ -50,7 +50,7 @@ pub(crate) fn markdown(env: &Env<'_>, title: &str, author: &str, all: &[Annotati
         .filter(|a| a.mark.kind == Kind::Bookmark)
         .collect();
     if !bookmarks.is_empty() {
-        text.push_str(&format!("## {}\n\n", env.i18n.tr("reader.bookmarks")));
+        text.push_str(&format!("## {}\n\n", env.i18n().tr("reader.bookmarks")));
         for a in bookmarks {
             text.push_str(&format!("- {} %: {}\n", a.percent, a.text));
         }
@@ -83,9 +83,9 @@ pub(crate) struct AnnotationsScreen {
 impl AnnotationsScreen {
     pub(crate) fn open(env: &Env<'_>, params: &Params) -> Self {
         let path = params.get(params::PATH).unwrap_or_default().to_string();
-        let annotations = load(env.storage, &path);
+        let annotations = load(env.storage(), &path);
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -102,7 +102,7 @@ impl AnnotationsScreen {
     fn export(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let options = crate::screen::open_options(&env);
-        let (title, author) = match env.formats.open_with(env.storage, &self.path, &options) {
+        let (title, author) = match env.formats().open_with(env.storage(), &self.path, &options) {
             Ok(document) => {
                 let m = document.metadata();
                 (m.title.clone().unwrap_or_default(), m.authors.join(", "))
@@ -126,22 +126,22 @@ impl AnnotationsScreen {
             clippy::let_underscore_must_use,
             reason = "made where missing; writing the notes into it tells if it is not there"
         )]
-        let _ = env.storage.create_dir(&dir);
+        let _ = env.storage().create_dir(&dir);
         let file = format!("{dir}/{name}.md");
         let text = markdown(&env, &title, &author, &self.annotations);
-        let message = match env.storage.write(&file, text.as_bytes()) {
+        let message = match env.storage().write(&file, text.as_bytes()) {
             Ok(()) => {
                 // Plugins read the file (e.g. `readwise`), so its form
                 // (see [`markdown`]) stays as it is.
                 cx.command(
                     events::NOTES_EXPORTED.emit(events::NotesExported::new(file.clone(), title)),
                 );
-                env.i18n.format(
+                env.i18n().format(
                     "reader.exported",
                     &[("path", paperpaw_sdk::Arg::Str(&file))],
                 )
             }
-            Err(_) => env.i18n.tr("reader.export-failed").to_string(),
+            Err(_) => env.i18n().tr("reader.export-failed").to_string(),
         };
         cx.command(Command::Notify(message));
     }
@@ -174,7 +174,7 @@ impl Screen for AnnotationsScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("reader.annotations"),
+            env.i18n().tr("reader.annotations"),
             None,
             self.list.paging(len),
         );
@@ -182,7 +182,7 @@ impl Screen for AnnotationsScreen {
             ui.empty(
                 self.list.area(),
                 "bookmarks",
-                env.i18n.tr("reader.annotations.empty.title"),
+                env.i18n().tr("reader.annotations.empty.title"),
                 ui::tr_input(env, "reader.annotations.empty"),
             );
             return;
@@ -190,8 +190,8 @@ impl Screen for AnnotationsScreen {
         let annotations = &self.annotations;
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
             let Some(a) = annotations.get(index) else {
-                let title = env.i18n.tr("reader.export");
-                let note = env.i18n.tr("reader.export.help");
+                let title = env.i18n().tr("reader.export");
+                let note = env.i18n().tr("reader.export.help");
                 ui::Row::value(title, "›")
                     .note(note)
                     .focused(focused)
@@ -202,7 +202,7 @@ impl Screen for AnnotationsScreen {
                 Kind::Bookmark => ("reader.bookmark", a.text.clone()),
                 Kind::Highlight => (
                     "reader.highlight",
-                    env.i18n.format(
+                    env.i18n().format(
                         "reader.quoted",
                         &[("text", paperpaw_sdk::Arg::Str(&a.text))],
                     ),
@@ -210,7 +210,7 @@ impl Screen for AnnotationsScreen {
                 _ => ("reader.highlight", a.text.clone()),
             };
             let what = if a.note.is_empty() {
-                env.i18n.tr(kind)
+                env.i18n().tr(kind)
             } else {
                 a.note.as_str()
             };

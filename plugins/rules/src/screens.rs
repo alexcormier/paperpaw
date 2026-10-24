@@ -136,7 +136,7 @@ impl RulesScreen {
     pub(crate) fn new(env: &Env<'_>, state: Shared) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
@@ -163,11 +163,11 @@ impl RulesScreen {
 
     /// The rules as kept; where they cannot be read, none, and a word why.
     fn reload(&mut self, env: &Env<'_>) {
-        let loaded = self.state.store.get(env.storage);
+        let loaded = self.state.store.get(env.storage());
         self.readable = loaded.is_some();
         self.rules = loaded.unwrap_or_default();
         if !self.readable {
-            self.message = Some(env.i18n.tr("rules.unreadable").to_string());
+            self.message = Some(env.i18n().tr("rules.unreadable").to_string());
         }
     }
 
@@ -191,12 +191,12 @@ impl RulesScreen {
             && self
                 .state
                 .store
-                .save(env.storage, self.rules.clone())
+                .save(env.storage(), self.rules.clone())
                 .is_ok();
         if !saved {
             self.reload(&env);
             if self.readable {
-                self.message = Some(env.i18n.tr("rules.not-saved").to_string());
+                self.message = Some(env.i18n().tr("rules.not-saved").to_string());
             }
         }
         let mut out = paperpaw_sdk::Commands::new();
@@ -217,7 +217,7 @@ impl RulesScreen {
             Some(Row::Add) => {
                 self.draft = Draft::default();
                 cx.command(
-                    paperpaw_sdk::ask::choice(env.i18n.tr("rules.when"), &TRIGGER_CHOSEN)
+                    paperpaw_sdk::ask::choice(env.i18n().tr("rules.when"), &TRIGGER_CHOSEN)
                         .options("rules.trigger.", &TRIGGERS)
                         .command(),
                 );
@@ -271,7 +271,7 @@ impl RulesScreen {
     fn ask_effect(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         cx.command(
-            paperpaw_sdk::ask::choice(env.i18n.tr("rules.what"), &EFFECT_CHOSEN)
+            paperpaw_sdk::ask::choice(env.i18n().tr("rules.what"), &EFFECT_CHOSEN)
                 .options("rules.effect.", &EFFECTS)
                 .command(),
         );
@@ -292,7 +292,7 @@ impl Screen for RulesScreen {
         let rows = self.rows();
         self.header.draw(
             &mut ui,
-            env.i18n.tr("rules.title"),
+            env.i18n().tr("rules.title"),
             None,
             self.list.paging(rows.len()),
         );
@@ -310,7 +310,7 @@ impl Screen for RulesScreen {
                             .draw(ui, rect);
                     }
                     Row::Add => {
-                        let title = env.i18n.tr("rules.add");
+                        let title = env.i18n().tr("rules.add");
                         ui::Row::value(title, "+").focused(focused).draw(ui, rect);
                     }
                 }
@@ -327,8 +327,8 @@ impl Screen for RulesScreen {
             ui.empty(
                 area,
                 "automation",
-                env.i18n.tr("rules.empty.title"),
-                env.i18n.tr("rules.empty"),
+                env.i18n().tr("rules.empty.title"),
+                env.i18n().tr("rules.empty"),
             );
             if self.message.is_none() {
                 return;
@@ -435,11 +435,9 @@ impl RulesScreen {
                 "battery" => return ask_text(cx, "rules.battery-title", "20", &BATTERY_ENTERED),
                 // Which level, with what to know about it.
                 "battery-at" => {
-                    cx.command(
-                        paperpaw_sdk::ask::choice(env.i18n.tr("rules.level-title"), &LEVEL_CHOSEN)
-                            .options("rules.level.", &LEVELS)
-                            .command(),
-                    );
+                    let title = env.i18n().tr("rules.level-title");
+                    let ask = paperpaw_sdk::ask::choice(title, &LEVEL_CHOSEN);
+                    cx.command(ask.options("rules.level.", &LEVELS).command());
                     return;
                 }
                 "switch-on" | "switch-off" => {
@@ -460,12 +458,12 @@ impl RulesScreen {
                 Some(minute) => {
                     self.draft.minute = Some(minute);
                     cx.command(
-                        paperpaw_sdk::ask::choice(env.i18n.tr("rules.days-title"), &DAYS_CHOSEN)
+                        paperpaw_sdk::ask::choice(env.i18n().tr("rules.days-title"), &DAYS_CHOSEN)
                             .options("rules.days.", &DAYS)
                             .command(),
                     );
                 }
-                None => cx.command(Command::Notify(env.i18n.tr("rules.bad-time").to_string())),
+                None => cx.command(Command::Notify(env.i18n().tr("rules.bad-time").to_string())),
             }
         } else if *event == DAYS_CHOSEN {
             let days = match option {
@@ -501,7 +499,7 @@ impl RulesScreen {
                 rule::parse_percent(level).map(Trigger::BatteryAtLeast)
             };
             let Some(trigger) = trigger else {
-                let text = env.i18n.tr("rules.bad-number").to_string();
+                let text = env.i18n().tr("rules.bad-number").to_string();
                 cx.command(Command::Notify(text));
                 return;
             };
@@ -558,11 +556,11 @@ impl RulesScreen {
                     let Some((min, max)) = range(&env, &id) else {
                         return;
                     };
-                    let title = env.i18n.format(
+                    let title = env.i18n().format(
                         "rules.number-title",
                         &[("min", Arg::Int(min)), ("max", Arg::Int(max))],
                     );
-                    let now = env.settings.int(id.as_str()).to_string();
+                    let now = env.settings().int(id.as_str()).to_string();
                     self.draft.number = Some(id);
                     cx.command(ask::text(title, &NUMBER_ENTERED).initial(now).command());
                     return;
@@ -579,7 +577,7 @@ impl RulesScreen {
                     self.finish(Effect::Number(id, v), cx);
                 }
                 _ => {
-                    let text = env.i18n.tr("rules.bad-number").to_string();
+                    let text = env.i18n().tr("rules.bad-number").to_string();
                     cx.command(Command::Notify(text));
                 }
             }
@@ -605,7 +603,7 @@ impl RulesScreen {
                     ..Draft::default()
                 };
                 cx.command(
-                    paperpaw_sdk::ask::choice(env.i18n.tr("rules.only-if"), &CONDITION_CHOSEN)
+                    paperpaw_sdk::ask::choice(env.i18n().tr("rules.only-if"), &CONDITION_CHOSEN)
                         .options("rules.condition.", &CONDITIONS)
                         .command(),
                 );
@@ -633,7 +631,7 @@ impl RulesScreen {
             self.set_condition(condition, cx);
         } else if *event == FROM_ENTERED || *event == TO_ENTERED {
             let Some(minute) = rule::parse_time(text) else {
-                cx.command(Command::Notify(env.i18n.tr("rules.bad-time").to_string()));
+                cx.command(Command::Notify(env.i18n().tr("rules.bad-time").to_string()));
                 return;
             };
             if *event == FROM_ENTERED {
@@ -724,7 +722,7 @@ impl<'a> Answer<'a> {
 fn ask_text(cx: &mut Cx<'_, '_>, title: &str, initial: &str, reply: &Event<Typed>) {
     let env = *cx.env();
     cx.command(
-        ask::text(env.i18n.tr(title), reply)
+        ask::text(env.i18n().tr(title), reply)
             .initial(initial)
             .command(),
     );
@@ -732,7 +730,7 @@ fn ask_text(cx: &mut Cx<'_, '_>, title: &str, initial: &str, reply: &Event<Typed
 
 /// The range of number setting `id`.
 fn range(env: &Env<'_>, id: &Id) -> Option<(i64, i64)> {
-    env.settings.specs().find_map(|s| match s.kind {
+    env.settings().specs().find_map(|s| match s.kind {
         SettingKind::Int { min, max } if s.id == *id => Some((min, max)),
         _ => None,
     })
@@ -755,12 +753,12 @@ impl PickScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mode = params.get(params::MODE).unwrap_or(ACTION);
         let mut entries: Vec<(Id, String)> = if mode == SWITCH || mode == NUMBER {
-            env.settings
+            env.settings()
                 .specs()
                 // "Only this book" means nothing outside a book.
                 .filter(|s| match s.kind {
@@ -768,12 +766,12 @@ impl PickScreen {
                     SettingKind::Int { .. } => mode == NUMBER,
                     _ => false,
                 })
-                .map(|s| (s.id.clone(), env.i18n.tr(&s.title).to_string()))
+                .map(|s| (s.id.clone(), env.i18n().tr(&s.title).to_string()))
                 .collect()
         } else {
-            env.actions
+            env.actions()
                 .iter()
-                .map(|a| (a.id.clone(), env.i18n.tr(&a.title).to_string()))
+                .map(|a| (a.id.clone(), env.i18n().tr(&a.title).to_string()))
                 .collect()
         };
         entries.sort_by_key(|e| e.1.to_lowercase());

@@ -68,7 +68,7 @@ impl Screen for PagesScreen {
         }
         // A switch of the setting, as the quick panel's and Settings' are.
         if *action == actions::CONFIRM {
-            let on = cx.env().settings.read(&LOCKED);
+            let on = cx.env().settings().read(&LOCKED);
             cx.command(paperpaw_sdk::Command::set(&LOCKED, !on));
             return Handled::Yes;
         }

@@ -370,7 +370,7 @@ impl Slider {
 /// ([`SettingExtra::slider`](crate::SettingExtra::slider)), on a touch
 /// screen. With buttons alone it keeps its compact row with `−` and `+`.
 pub fn shows(env: &Env<'_>, spec: &SettingSpec) -> bool {
-    env.device.input.touch && marked(spec)
+    env.device().input.touch && marked(spec)
 }
 
 /// Whether `spec` is a number marked to be set with a slider, wherever

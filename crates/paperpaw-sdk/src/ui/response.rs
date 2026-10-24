@@ -92,5 +92,5 @@ impl<T> Response<T> {
 /// ([`Env::last_input`]). A finger points at what it means; a focus
 /// would only stand in its way.
 pub fn focus_shown(env: &Env<'_>) -> bool {
-    !env.device.input.touch || env.last_input == InputMode::Buttons
+    !env.device().input.touch || env.last_input() == InputMode::Buttons
 }

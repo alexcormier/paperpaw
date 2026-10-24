@@ -134,7 +134,7 @@ impl Widget for Settable {
 /// The name of the value of `widget`'s choice `key`: the part after the
 /// last dot (e.g. `circle` of `widgets.mark.circle`).
 fn chosen_name<'a>(env: &'a Env<'_>, widget: &str, key: &str) -> &'a str {
-    let value = env.settings.text(&format!("{widget}.{key}"));
+    let value = env.settings().text(&format!("{widget}.{key}"));
     value.rsplit('.').next().unwrap_or(value)
 }
 
@@ -159,7 +159,7 @@ fn weekday_name<'a>(env: &'a Env<'_>, n: u8) -> &'a str {
         "core.weekday.5",
         "core.weekday.6",
     ];
-    env.i18n.tr(KEYS[usize::from(n % 7)])
+    env.i18n().tr(KEYS[usize::from(n % 7)])
 }
 
 /// The name of month `n` (1 to 12).
@@ -178,7 +178,7 @@ fn month_name<'a>(env: &'a Env<'_>, n: u8) -> &'a str {
         "core.month.11",
         "core.month.12",
     ];
-    env.i18n.tr(KEYS[usize::from(n.clamp(1, 12) - 1)])
+    env.i18n().tr(KEYS[usize::from(n.clamp(1, 12) - 1)])
 }
 
 /// The short name of month `n` (1 to 12): "Oct".
@@ -197,7 +197,7 @@ fn month_short<'a>(env: &'a Env<'_>, n: u8) -> &'a str {
         "core.month.short.11",
         "core.month.short.12",
     ];
-    env.i18n.tr(KEYS[usize::from(n.clamp(1, 12) - 1)])
+    env.i18n().tr(KEYS[usize::from(n.clamp(1, 12) - 1)])
 }
 
 /// The short name of weekday `n` (0: Sunday): "Wed".
@@ -211,7 +211,7 @@ fn weekday_short<'a>(env: &'a Env<'_>, n: u8) -> &'a str {
         "core.weekday.short.5",
         "core.weekday.short.6",
     ];
-    env.i18n.tr(KEYS[usize::from(n % 7)])
+    env.i18n().tr(KEYS[usize::from(n % 7)])
 }
 
 /// The values of a date format setting ([`date_format_spec`]).
@@ -257,7 +257,7 @@ fn date_text(
     ];
     match chosen_name(env, widget, "date-format") {
         "iso" => format!("{year:04}-{month:02}-{day:02}"),
-        "numeric" => env.i18n.format(
+        "numeric" => env.i18n().format(
             "widgets.date.numeric",
             &[
                 ("day", Arg::Str(&format!("{day:02}"))),
@@ -265,9 +265,9 @@ fn date_text(
                 ("year", Arg::Int(i64::from(year))),
             ],
         ),
-        "weekday" => env.i18n.format("core.date", &args),
-        _ if with_year => env.i18n.format("widgets.date.long", &args),
-        _ => env.i18n.format("widgets.date.short", &args),
+        "weekday" => env.i18n().format("core.date", &args),
+        _ if with_year => env.i18n().format("widgets.date.long", &args),
+        _ => env.i18n().format("widgets.date.short", &args),
     }
 }
 
@@ -289,7 +289,7 @@ fn twelve(hour: u8) -> u8 {
 /// what a widget would show of it: on a device without a clock of its
 /// own, until Wi-Fi sets it.
 fn draw_no_time(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook) {
-    widgets::draw_message(canvas, env, look, env.i18n.tr("widgets.time.unknown"));
+    widgets::draw_message(canvas, env, look, env.i18n().tr("widgets.time.unknown"));
 }
 
 /// What a widget that shows the date shows: drawn again when the day

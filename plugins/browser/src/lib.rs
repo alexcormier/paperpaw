@@ -138,7 +138,7 @@ impl BrowserScreen {
     fn new(env: &Env<'_>, params: &Params, session: Rc<RefCell<Session>>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let line = style.row();
         let status = Rect::new(0, display.height - line, display.width, line);
@@ -159,7 +159,7 @@ impl BrowserScreen {
             status,
             bookmarks_read: bookmarks.is_some(),
             bookmarks: bookmarks.unwrap_or_default(),
-            history: store::load(env.storage, &store::history_path())
+            history: store::load(env.storage(), &store::history_path())
                 .ok()
                 .flatten()
                 .unwrap_or_default(),
@@ -201,15 +201,15 @@ impl BrowserScreen {
     /// Asks for an address or words to search for.
     fn ask(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        cx.command(ask::text(env.i18n.tr("browser.address"), &ADDRESS).command());
+        cx.command(ask::text(env.i18n().tr("browser.address"), &ADDRESS).command());
     }
 
     /// Loads `url`; what it is decides where it goes once it is there.
     fn load(&mut self, url: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let host = paperpaw_sdk::web::host(url).to_string();
-        if !env.caps.network {
-            let message = env.i18n.tr("browser.no-network").to_string();
+        if !env.caps().network {
+            let message = env.i18n().tr("browser.no-network").to_string();
             return self.say(message, cx);
         }
         self.loading = Some(url.to_string());
@@ -232,7 +232,7 @@ impl BrowserScreen {
     /// Shows page `entry` (already loaded) in the reader.
     fn show(&mut self, entry: Entry, cx: &mut Cx<'_, '_>) {
         let path = store::page_path(&entry.url);
-        if let Some(history) = store::remember(cx.env().storage, entry.clone()) {
+        if let Some(history) = store::remember(cx.env().storage(), entry.clone()) {
             self.history = history;
         }
         self.session.borrow_mut().pages.push(entry);
@@ -266,15 +266,15 @@ impl BrowserScreen {
         // An error's page comes as text, not saved to the download file
         // (so a download never holds an error page): kept there to show.
         if status >= 400 {
-            let _ = env.storage.write(&tmp, &reply.body);
+            let _ = env.storage().write(&tmp, &reply.body);
         }
         let mut head = [0u8; 512];
-        let n = env.storage.read_at(&tmp, 0, &mut head).unwrap_or(0);
+        let n = env.storage().read_at(&tmp, 0, &mut head).unwrap_or(0);
         let kind = web::kind(reply.content_type.as_deref(), &url, &head[..n]);
         // Error pages are shown like pages; other errors are told.
         if status >= 400 && kind != Kind::Page {
-            let _ = env.storage.remove(&tmp);
-            let message = env.i18n.format(
+            let _ = env.storage().remove(&tmp);
+            let message = env.i18n().format(
                 "browser.error",
                 &[
                     ("host", Arg::Str(&host)),
@@ -286,25 +286,25 @@ impl BrowserScreen {
         match kind {
             Kind::Page => {
                 let path = store::page_path(&url);
-                if web::keep_page(env.storage, &tmp, &path, &url).is_err() {
-                    let message = env.i18n.tr("browser.cannot-save").to_string();
+                if web::keep_page(env.storage(), &tmp, &path, &url).is_err() {
+                    let message = env.i18n().tr("browser.cannot-save").to_string();
                     return self.say(message, cx);
                 }
-                let title = web::title(env.storage, &path).unwrap_or(host);
+                let title = web::title(env.storage(), &path).unwrap_or(host);
                 self.show(Entry::new(&title, &url), cx);
             }
             Kind::Book => {
                 let dir = paperpaw_sdk::library::folder(&env).to_string();
                 self.save(&tmp, &dir, &url, "browser.saved-book", true, cx);
             }
-            Kind::Font => match env.font_dirs.first() {
+            Kind::Font => match env.font_dirs().first() {
                 Some(dir) => {
                     let dir = dir.clone();
                     self.save(&tmp, &dir, &url, "browser.saved-font", false, cx);
                 }
                 None => {
-                    let _ = env.storage.remove(&tmp);
-                    let message = env.i18n.tr("browser.no-fonts").to_string();
+                    let _ = env.storage().remove(&tmp);
+                    let message = env.i18n().tr("browser.no-fonts").to_string();
                     self.say(message, cx);
                 }
             },
@@ -324,12 +324,12 @@ impl BrowserScreen {
         cx: &mut Cx<'_, '_>,
     ) {
         let env = *cx.env();
-        let _ = env.storage.create_dir(dir);
+        let _ = env.storage().create_dir(dir);
         let name = paperpaw_sdk::web::file_name(url);
-        let target = files::free_path(env.storage, dir, &name);
-        if files::move_to(env.storage, tmp, &target).is_err() {
-            let _ = env.storage.remove(tmp);
-            let message = env.i18n.tr("browser.cannot-save").to_string();
+        let target = files::free_path(env.storage(), dir, &name);
+        if files::move_to(env.storage(), tmp, &target).is_err() {
+            let _ = env.storage().remove(tmp);
+            let message = env.i18n().tr("browser.cannot-save").to_string();
             return self.say(message, cx);
         }
         // Books by their author and title, not the server's file name.
@@ -339,11 +339,11 @@ impl BrowserScreen {
             target
         };
         let name = files::name(&target).to_string();
-        let text = env.i18n.format(
+        let text = env.i18n().format(
             message,
             &[("name", Arg::Str(&name)), ("folder", Arg::Str(dir))],
         );
-        if book && env.formats.supports_file(env.storage, &target) {
+        if book && env.formats().supports_file(env.storage(), &target) {
             self.message = None;
             cx.command(
                 paperpaw_sdk::ask::choice(&text, &CHOSEN)
@@ -421,18 +421,18 @@ impl BrowserScreen {
             ("history", "bookmark") => {
                 self.bookmarks.retain(|b| b.url != entry.url);
                 self.bookmarks.push(entry);
-                store::save(env.storage, &store::bookmarks_path(), &self.bookmarks);
+                store::save(env.storage(), &store::bookmarks_path(), &self.bookmarks);
                 self.redraw(cx);
             }
             ("bookmark", "delete") => {
                 self.bookmarks.remove(i);
-                store::save(env.storage, &store::bookmarks_path(), &self.bookmarks);
+                store::save(env.storage(), &store::bookmarks_path(), &self.bookmarks);
                 self.redraw(cx);
             }
             ("history", "delete") => {
                 self.history.remove(i);
-                let _ = env.storage.remove(&store::page_path(&entry.url));
-                store::save(env.storage, &store::history_path(), &self.history);
+                let _ = env.storage().remove(&store::page_path(&entry.url));
+                store::save(env.storage(), &store::history_path(), &self.history);
                 self.redraw(cx);
             }
             _ => {}
@@ -458,7 +458,7 @@ impl BrowserScreen {
 /// Renames the book at `path` after its author and title; returns where
 /// it is then.
 fn named_book(env: &Env<'_>, path: &str) -> Option<String> {
-    let document = env.formats.open(env.storage, path).ok()?;
+    let document = env.formats().open(env.storage(), path).ok()?;
     let metadata = document.metadata();
     let title = metadata.title.as_deref()?.trim();
     let name = match metadata.authors.first() {
@@ -472,8 +472,8 @@ fn named_book(env: &Env<'_>, path: &str) -> Option<String> {
     if files::name(path) == format!("{name}.{extension}") {
         return None;
     }
-    let target = files::free_path(env.storage, dir, &format!("{name}.{extension}"));
-    files::move_to(env.storage, path, &target).ok()?;
+    let target = files::free_path(env.storage(), dir, &format!("{name}.{extension}"));
+    files::move_to(env.storage(), path, &target).ok()?;
     Some(target)
 }
 
@@ -489,7 +489,7 @@ impl Screen for BrowserScreen {
         let rows = self.rows();
         self.header.draw(
             &mut ui,
-            env.i18n.tr("browser.title"),
+            env.i18n().tr("browser.title"),
             None,
             self.list.paging(rows.len()),
         );
@@ -498,7 +498,7 @@ impl Screen for BrowserScreen {
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value) = match rows[index] {
                     Row::Address => (
-                        env.i18n.tr("browser.address").to_string(),
+                        env.i18n().tr("browser.address").to_string(),
                         String::from("›"),
                     ),
                     Row::Bookmark(i) => (
@@ -537,10 +537,10 @@ impl Screen for BrowserScreen {
         };
         let env = *cx.env();
         match previous {
-            Some(page) if env.storage.exists(&store::page_path(&page.url)) => self.show(page, cx),
+            Some(page) if env.storage().exists(&store::page_path(&page.url)) => self.show(page, cx),
             Some(page) => self.load(&page.url, cx),
             None => {
-                self.history = store::load(env.storage, &store::history_path())
+                self.history = store::load(env.storage(), &store::history_path())
                     .ok()
                     .flatten()
                     .unwrap_or_default();

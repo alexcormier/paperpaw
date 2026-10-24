@@ -116,7 +116,7 @@ impl ReaderScreen {
     pub(super) fn open_link(&mut self, href: &str, label: &str, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
         let popup =
-            env.settings.read(&crate::settings::FOOTNOTES) == crate::settings::FOOTNOTES_POPUP;
+            env.settings().read(&crate::settings::FOOTNOTES) == crate::settings::FOOTNOTES_POPUP;
         if popup
             && !paperpaw_sdk::document::is_external(href)
             && crate::footnote::note_like(label)
@@ -153,11 +153,11 @@ impl ReaderScreen {
                 slots::BROWSER,
                 Params::new()
                     .with(params::URL, href.to_string())
-                    .with(params::ID, format!("{}", env.now.0)),
+                    .with(params::ID, format!("{}", env.now().0)),
             ));
             return Handled::Yes;
         }
-        let Some(target) = book.document.link_target(env.storage, href) else {
+        let Some(target) = book.document.link_target(env.storage(), href) else {
             return Handled::No;
         };
         let start = book.page_start(&env, target);
@@ -194,7 +194,7 @@ pub(super) fn draw_linking(ui: &mut ui::Ui<'_>, book: &Book, words: &[WordBox], 
     let target = linking
         .focus
         .and_then(|i| book.targets(env).get(i).copied());
-    let line = env.metrics.tenth_mm(4).max(2);
+    let line = env.metrics().tenth_mm(4).max(2);
     // A layer's room, framed whole.
     if let Some(Target::Layer(i)) = target
         && let Some((_, room)) = book.typography.rooms.get(i)
@@ -239,29 +239,29 @@ pub(super) fn draw_linking(ui: &mut ui::Ui<'_>, book: &Book, words: &[WordBox], 
             let place = if paperpaw_sdk::document::is_external(href) {
                 paperpaw_sdk::web::host(href).to_string()
             } else {
-                env.i18n.tr("reader.link.in-book").to_string()
+                env.i18n().tr("reader.link.in-book").to_string()
             };
-            format!("{place} · {}", env.i18n.tr("reader.link.hint"))
+            format!("{place} · {}", env.i18n().tr("reader.link.hint"))
         }
         Some(Target::Mark(i)) => {
             // The name of the plugin's decorator, as it marks the word.
             let name = book
                 .decorated
                 .get(i)
-                .and_then(|m| env.decorators.get(&m.decorator))
-                .map_or("", |d| env.i18n.tr(&d.title));
-            format!("{name} · {}", env.i18n.tr("reader.link.hint"))
+                .and_then(|m| env.decorators().get(&m.decorator))
+                .map_or("", |d| env.i18n().tr(&d.title));
+            format!("{name} · {}", env.i18n().tr("reader.link.hint"))
         }
         Some(Target::Layer(i)) => {
             let name = book
                 .typography
                 .rooms
                 .get(i)
-                .and_then(|(id, _)| env.page_layers.get(id))
-                .map_or("", |l| env.i18n.tr(&l.title));
-            format!("{name} · {}", env.i18n.tr("reader.link.hint"))
+                .and_then(|(id, _)| env.page_layers().get(id))
+                .map_or("", |l| env.i18n().tr(&l.title));
+            format!("{name} · {}", env.i18n().tr("reader.link.hint"))
         }
-        None => env.i18n.tr("reader.link.none").to_string(),
+        None => env.i18n().tr("reader.link.none").to_string(),
     };
     let margin = style.margin() as f32;
     let text = ui::fit(

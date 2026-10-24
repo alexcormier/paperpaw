@@ -104,7 +104,7 @@ fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
         time
     };
     let second = match goal(env) {
-        None => env.i18n.format(
+        None => env.i18n().format(
             "stats.widget.this-week",
             &[(
                 "time",
@@ -120,12 +120,12 @@ fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
                 0 => line,
                 days => format!(
                     "{line} · {}",
-                    env.i18n.plural("stats.goal.streak", i64::from(days), &[])
+                    env.i18n().plural("stats.goal.streak", i64::from(days), &[])
                 ),
             }
         }
         Some(_) => match numbers.streak {
-            0 | 1 => env.i18n.tr("stats.goal.reached").to_string(),
+            0 | 1 => env.i18n().tr("stats.goal.reached").to_string(),
             days => env
                 .i18n
                 .plural("stats.goal.reached-days", i64::from(days), &[]),
@@ -177,7 +177,7 @@ impl Widget for Today {
         let look = widgets::draw_frame(canvas, env, NAME, area);
         match &self.numbers {
             Some(numbers) => draw(canvas, env, &look, numbers),
-            None => widgets::draw_message(canvas, env, &look, env.i18n.tr("stats.no-clock")),
+            None => widgets::draw_message(canvas, env, &look, env.i18n().tr("stats.no-clock")),
         }
     }
 
@@ -189,7 +189,7 @@ impl Widget for Today {
 /// The height of the goal's bar with the room around it, if it shows.
 fn bar_band(env: &Env<'_>) -> u16 {
     if goal(env).is_some() && widgets::shows(env, NAME, "bar") {
-        env.metrics.mm(3) as u16
+        env.metrics().mm(3) as u16
     } else {
         0
     }
@@ -207,7 +207,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook, numb
         return;
     };
     let id = NAME;
-    let label = env.i18n.tr("stats.today");
+    let label = env.i18n().tr("stats.today");
     let mut caption = super::caption(env, id, look.area, &[label]);
     let mut area = super::below_caption(env, caption, look.area);
     let (first, second) = lines(env, numbers);
@@ -269,7 +269,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook, numb
     let mut y = block.y + big;
     if band > 0 {
         // A bar filled up to today's share of the goal, its ends round.
-        let height = env.metrics.mm(1).max(4) as u16;
+        let height = env.metrics().mm(1).max(4) as u16;
         let track = Rect::new(area.x, y + (band - height) / 2, area.width, height);
         let radius = u32::from(height / 2);
         ui.canvas().fill_round_shaded(track, radius, shade(look, 1));

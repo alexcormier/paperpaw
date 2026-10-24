@@ -74,7 +74,7 @@ impl Font {
 
     /// Whether it is installed, and in which version.
     pub(crate) fn installed(&self, env: &Env<'_>) -> Option<Version> {
-        env.plugins
+        env.plugins()
             .get(&self.plugin())
             .map(|info| info.manifest.version)
     }
@@ -90,7 +90,7 @@ impl Font {
     /// Whether it is the font chosen for `setting` (its family is named
     /// as the font).
     pub(crate) fn chosen_for(&self, env: &Env<'_>, setting: &str) -> bool {
-        self.installed(env).is_some() && env.settings.text(setting) == self.name
+        self.installed(env).is_some() && env.settings().text(setting) == self.name
     }
 
     /// Fit for this device: something to download, nothing that leaves
@@ -170,7 +170,7 @@ fn plain(text: &str) -> String {
 
 /// Whether this device takes font files rather than packs.
 fn outlines(env: &Env<'_>) -> bool {
-    paperpaw_sdk::text::OUTLINES && env.device.memory == MemoryClass::Large
+    paperpaw_sdk::text::OUTLINES && env.device().memory == MemoryClass::Large
 }
 
 /// Whether `id` is usable in a plugin's id and a file's name.
@@ -203,13 +203,13 @@ pub(crate) fn path() -> String {
 
 /// The catalog kept from the last visit.
 pub(crate) fn kept(env: &Env<'_>) -> Vec<Font> {
-    let base = env.settings.read(&crate::CATALOG);
-    read(env.storage, &path(), base.trim(), outlines(env)).unwrap_or_default()
+    let base = env.settings().read(&crate::CATALOG);
+    read(env.storage(), &path(), base.trim(), outlines(env)).unwrap_or_default()
 }
 
 /// The catalog fetched just now, kept at `path`.
 pub(crate) fn fetched(env: &Env<'_>, path: &str, base: &str) -> Option<Vec<Font>> {
-    read(env.storage, path, base, outlines(env))
+    read(env.storage(), path, base, outlines(env))
 }
 
 /// The fonts of the catalog file at `path` fit for this device (font

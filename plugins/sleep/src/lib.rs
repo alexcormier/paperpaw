@@ -263,10 +263,10 @@ impl Plugin for Sleep {
 /// The cover of the book read last, as the library knows it: the book is
 /// opened for it only once (memory is short while a book is open).
 fn cover(env: &Env<'_>) -> Option<ImageRef> {
-    let path = library::opened_books(env.storage).into_iter().next()?;
+    let path = library::opened_books(env.storage()).into_iter().next()?;
     library::indexed(env, &path)
         .cover
-        .filter(|image| env.storage.exists(&image.path))
+        .filter(|image| env.storage().exists(&image.path))
 }
 
 /// PaperPaw's sleeping cat: made for PaperPaw (see `NOTICE`), shipped
@@ -292,7 +292,7 @@ pub mod cat {
 
     /// The cat decoded for this screen.
     pub fn image(env: &Env<'_>) -> Option<ImageRef> {
-        let display = env.device.display;
+        let display = env.device().display;
         let room = 2 * margin(env);
         let side = display
             .width
@@ -302,7 +302,7 @@ pub mod cat {
         // A file for each size: decoded once, again only where the screen
         // turns or its margins change.
         let file = super::data(&format!("cat-{side}.gray"));
-        if let Some(kept) = ImageFile::open(env.storage, &file) {
+        if let Some(kept) = ImageFile::open(env.storage(), &file) {
             return Some(ImageRef {
                 path: kept.path,
                 width: kept.width,
@@ -310,22 +310,22 @@ pub mod cat {
             });
         }
         let fit = Fit::side(u32::from(side));
-        paperpaw_sdk::image::picture_from_bytes(env.storage, PICTURE, &file, fit, false)
+        paperpaw_sdk::image::picture_from_bytes(env.storage(), PICTURE, &file, fit, false)
     }
 }
 
 /// The next picture of the folder, decoded to fit the screen.
 fn picture(env: &Env<'_>) -> Option<ImageRef> {
     let path = next_from_folder(env)?;
-    let display = env.device.display;
+    let display = env.device().display;
     let fit = paperpaw_sdk::image::Fit::screen(display.width.into(), display.height.into());
     // In colour on colour screens (ADR 0015).
     paperpaw_sdk::image::picture_from_file(
-        env.storage,
+        env.storage(),
         &path,
         &data("picture.gray"),
         fit,
-        env.device.display.format.is_color(),
+        env.device().display.format.is_color(),
     )
 }
 
@@ -338,7 +338,7 @@ pub(crate) fn next_from_folder(env: &Env<'_>) -> Option<String> {
         .trim_matches('/')
         .to_string();
     let mut pictures = Vec::new();
-    let _ = env.storage.list(&folder, &mut |entry| {
+    let _ = env.storage().list(&folder, &mut |entry| {
         let name = entry.name.to_lowercase();
         if !entry.is_dir
             && !entry.name.starts_with('.')
@@ -354,9 +354,9 @@ pub(crate) fn next_from_folder(env: &Env<'_>) -> Option<String> {
     }
     pictures.sort_unstable();
     // One after the other, from where the last sleep left off.
-    let next = next_picture(env.storage);
+    let next = next_picture(env.storage());
     let name = &pictures[next % pictures.len()];
-    let _ = env.storage.write(
+    let _ = env.storage().write(
         &data("next.txt"),
         format!("{}", next.wrapping_add(1)).as_bytes(),
     );
@@ -383,7 +383,7 @@ struct SleepScreen {
 
 impl SleepScreen {
     fn new(env: &Env<'_>) -> Self {
-        let mut show = env.settings.read(&SHOW).to_string();
+        let mut show = env.settings().read(&SHOW).to_string();
         // What goes over the page where it is used now, and there is
         // something; else the cover. Why not is kept for the picker.
         let mut over_page = None;
@@ -422,10 +422,10 @@ impl SleepScreen {
             None if wants_cat => (cat::image(env), true),
             image => (image, false),
         };
-        let display = env.device.display;
+        let display = env.device().display;
         let screen = Rect::new(0, 0, display.width, display.height);
         let list = if show == WIDGETS {
-            env.settings.read(&WIDGET_LIST)
+            env.settings().read(&WIDGET_LIST)
         } else {
             ""
         };
@@ -459,7 +459,7 @@ impl Screen for SleepScreen {
         }
         // The page stays: nothing is drawn over it, or the picture over
         // all of it, the page drawn below (`shows_through`).
-        let display = env.device.display;
+        let display = env.device().display;
         match self.show.as_str() {
             PAGE => Some(Rect::new(0, 0, 0, 0)),
             OVERLAY => Some(Rect::new(0, 0, display.width, display.height)),
@@ -490,7 +490,7 @@ impl Screen for SleepScreen {
             overlay::draw(canvas, env, over, *area, *opacity);
             return;
         }
-        let display = env.device.display;
+        let display = env.device().display;
         let screen = Rect::new(0, 0, display.width, display.height);
         if !self.widgets.is_empty() {
             self.widgets.draw(canvas, env);
@@ -507,8 +507,8 @@ impl Screen for SleepScreen {
                     display.height.saturating_sub(room),
                 );
                 let area = Rect::new((display.width - w) / 2, (display.height - h) / 2, w, h);
-                ui::draw_image(canvas, env.storage, image, area);
-                let what = env.i18n.tr("sleep.show.cat");
+                ui::draw_image(canvas, env.storage(), image, area);
+                let what = env.i18n().tr("sleep.show.cat");
                 canvas.describe(Role::Image, what, area);
             }
             Some(image) => {
@@ -516,12 +516,12 @@ impl Screen for SleepScreen {
                 canvas.fill(screen, Color::BLACK);
                 let (w, h) = ui::fit_image(image, display.width, display.height);
                 let area = Rect::new((display.width - w) / 2, (display.height - h) / 2, w, h);
-                ui::draw_image(canvas, env.storage, image, area);
+                ui::draw_image(canvas, env.storage(), image, area);
             }
             None => {
                 let style = UiStyle::new(env);
                 let mut ui = ui::Ui::new(canvas, env, &style);
-                let text = env.i18n.tr("sleep.sleeping");
+                let text = env.i18n().tr("sleep.sleeping");
                 let Some(logo) = &self.logo else {
                     ui.message(screen, text);
                     return;
@@ -533,7 +533,7 @@ impl Screen for SleepScreen {
                 let gap = style.gap() * 2;
                 let top = display.height.saturating_sub(h + gap + line) / 2;
                 let area = Rect::new(0, top, display.width, h);
-                logo.draw(ui.canvas(), env.storage, area, Color::BLACK);
+                logo.draw(ui.canvas(), env.storage(), area, Color::BLACK);
                 let below = Rect::new(0, top + h + gap, display.width, line);
                 ui.message(below, text);
             }
@@ -612,7 +612,7 @@ const BUILT_IN: [&str; 7] = [CAT, COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAG
 
 /// The logo's size on the sleep screen: a third of the screen across.
 fn logo_side(env: &Env<'_>) -> u16 {
-    let display = env.device.display;
+    let display = env.device().display;
     display.width.min(display.height) / 3
 }
 

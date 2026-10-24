@@ -55,8 +55,8 @@ impl Sizes {
         let gap = style.gap();
         let finger = style.finger();
         let pill = (small_line + gap * 2 / 3).max(finger);
-        let bar = env.metrics.tenth_mm(9).max(4) as u16;
-        let compact = u32::from(env.device.display.width) < env.metrics.mm(COMPACT_MM);
+        let bar = env.metrics().tenth_mm(9).max(4) as u16;
+        let compact = u32::from(env.device().display.width) < env.metrics().mm(COMPACT_MM);
         if compact {
             // Title on two lines and one line of details beside a cover
             // as high, with a gap and a half above and below.
@@ -150,8 +150,8 @@ impl Loaded {
     /// made small to `cover`, kept as `variant` (each size its own, so
     /// that the rows' small covers are not made anew for the card's).
     pub(crate) fn load(env: &Env<'_>, record: Record, cover: (u16, u16), variant: &str) -> Loaded {
-        let storage = env.storage;
-        let format = env.device.display.format;
+        let storage = env.storage();
+        let format = env.device().display.format;
         let book = library::service(env).book(env, &record.path);
         let thumb = book.as_ref().and_then(|book| {
             library::cover_variant(
@@ -344,9 +344,9 @@ fn tag_width(env: &Env<'_>, style: &UiStyle, label: &str) -> u16 {
 /// How wide a bar of how far a book is read is in a row `width` wide.
 fn bar_width(env: &Env<'_>, sizes: &Sizes, width: u16) -> u16 {
     if sizes.compact {
-        env.metrics.mm(10) as u16
+        env.metrics().mm(10) as u16
     } else {
-        (width / 3).min(env.metrics.mm(20) as u16)
+        (width / 3).min(env.metrics().mm(20) as u16)
     }
 }
 
@@ -359,11 +359,11 @@ fn state_width(env: &Env<'_>, style: &UiStyle, bar: u16, book: &Loaded) -> u16 {
     match book.progress {
         100 => {
             let icon = ui::icon_width(env, "circle-check", style.small() * 1.15);
-            let label = font.measure(style.small(), env.i18n.tr("files.finished"));
+            let label = font.measure(style.small(), env.i18n().tr("files.finished"));
             (icon + label) as u16 + gap / 3
         }
         p if p > 0 => bar + gap / 2 + font.measure(style.small(), &book.percent) as u16,
-        _ if book.new => tag_width(env, style, env.i18n.tr("files.list.new")),
+        _ if book.new => tag_width(env, style, env.i18n().tr("files.list.new")),
         _ => 0,
     }
 }
@@ -393,7 +393,7 @@ fn draw_state(
             let size = style.small() * 1.15;
             let w = ui.icon("circle-check", size, f32::from(x), area, ink);
             let at = f32::from(x) + w + f32::from(gap / 3);
-            let label = env.i18n.tr("files.finished");
+            let label = env.i18n().tr("files.finished");
             let end = ui::Label::new(label)
                 .px(style.small())
                 .color(faint)
@@ -411,7 +411,7 @@ fn draw_state(
         }
         _ if book.new => {
             let paper = style.focus_paper(focused);
-            let label = env.i18n.tr("files.list.new");
+            let label = env.i18n().tr("files.list.new");
             x + draw_tag(ui, x, area, label, false, ink, paper)
         }
         _ => x,
@@ -464,9 +464,9 @@ pub(crate) fn spoken(words: &[&str]) -> String {
 /// or nothing.
 pub(crate) fn state_words<'a>(env: &Env<'a>, book: &'a Loaded) -> &'a str {
     match book.progress {
-        100 => env.i18n.tr("files.finished"),
+        100 => env.i18n().tr("files.finished"),
         p if p > 0 => &book.percent,
-        _ if book.new => env.i18n.tr("files.list.new"),
+        _ if book.new => env.i18n().tr("files.list.new"),
         _ => "",
     }
 }
@@ -496,7 +496,7 @@ pub(crate) fn prepare_row(
     book.lines = wrap_lines(env, style, style.text(), &book.title, f32::from(room), 2);
     let note = book.with_badges(note);
     let next_word = if next {
-        env.i18n.tr("files.list.next")
+        env.i18n().tr("files.list.next")
     } else {
         ""
     };
@@ -520,7 +520,7 @@ pub(crate) fn prepare_row(
         end = right.saturating_sub(state);
     }
     if next {
-        let w = tag_width(env, style, env.i18n.tr("files.list.next"));
+        let w = tag_width(env, style, env.i18n().tr("files.list.next"));
         end = end.saturating_sub(w + if state > 0 { gap / 2 } else { 0 });
     }
     let room = end.saturating_sub(x + if end < right { gap } else { 0 });
@@ -570,7 +570,7 @@ pub(crate) fn prepare_card(
 ) {
     let (_, room) = text_room(style, sizes.card_cover.0, width);
     book.lines = wrap_lines(env, style, style.title(), &book.title, f32::from(room), 2);
-    let eyebrow = env.i18n.tr("files.list.continue-reading");
+    let eyebrow = env.i18n().tr("files.list.continue-reading");
     book.spoken = spoken(&[&book.title, eyebrow, &book.author, &book.percent]);
 }
 
@@ -633,7 +633,7 @@ pub(crate) fn draw_book_row(
         let mut at = x;
         if next {
             let paper = style.focus_paper(focused);
-            let label = env.i18n.tr("files.list.next");
+            let label = env.i18n().tr("files.list.next");
             at += draw_tag(ui, at, area, label, true, ink, paper) + gap / 2;
         }
         let bar = bar_width(env, sizes, width);
@@ -699,7 +699,7 @@ fn draw_compact_row(
         draw_state(ui, sizes, end, line, bar, book, focused);
     }
     if next && !book.state_hidden {
-        let label = env.i18n.tr("files.list.next");
+        let label = env.i18n().tr("files.list.next");
         let w = tag_width(env, style, label);
         let at = end.saturating_sub(w + if state > 0 { gap / 2 } else { 0 });
         let paper = style.focus_paper(focused);
@@ -734,7 +734,7 @@ fn draw_compact_card(ui: &mut ui::Ui<'_>, sizes: &Sizes, rect: Rect, focused: bo
     let right = x + width;
     let block = 2 * sizes.small_line + book.lines.len() as u16 * sizes.title_line + gap / 2;
     let mut y = rect.y + rect.height.saturating_sub(block) / 2;
-    let eyebrow = env.i18n.tr("files.list.continue-reading");
+    let eyebrow = env.i18n().tr("files.list.continue-reading");
     let area = Rect::new(x, y, width, sizes.small_line);
     ui::Label::new(eyebrow)
         .px(style.small())
@@ -840,7 +840,7 @@ pub(crate) fn draw_card(
         .draw_from(ui, at, area);
     y += sizes.small_line + gap / 2;
     // The button: dark, or light on the dark focus.
-    let label = env.i18n.tr("files.list.continue-reading");
+    let label = env.i18n().tr("files.list.continue-reading");
     let pad = gap;
     let w = font.measure(style.small(), label) as u16 + 2 * pad;
     let button = Rect::new(x, y, w, sizes.pill);

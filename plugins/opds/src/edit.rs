@@ -96,7 +96,7 @@ impl EditScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let index = params
@@ -121,7 +121,7 @@ impl EditScreen {
     /// kept.
     fn save(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
         let Ok(mut all) = catalogs::load(env) else {
-            let message = env.i18n.tr("opds.unreadable").to_string();
+            let message = env.i18n().tr("opds.unreadable").to_string();
             return cx.command(Command::Notify(message));
         };
         if let Some(slot) = all.get_mut(self.index) {
@@ -174,7 +174,7 @@ impl EditScreen {
             );
             return;
         }
-        let question = ask::text(env.i18n.tr(field.key()), &ENTERED).with(FIELD, field.key());
+        let question = ask::text(env.i18n().tr(field.key()), &ENTERED).with(FIELD, field.key());
         let question = match field {
             Field::Password => question.password(),
             Field::Folder => question.initial(self.catalog.sync_folder(&env)),
@@ -210,8 +210,8 @@ impl Screen for EditScreen {
         self.list
             .draw(&mut ui, FIELDS.len(), |ui, index, rect, focused| {
                 let field = FIELDS[index];
-                let title = env.i18n.tr(field.key());
-                let note = env.i18n.tr(field.help(catalog));
+                let title = env.i18n().tr(field.key());
+                let note = env.i18n().tr(field.help(catalog));
                 if field == Field::Sync || field == Field::WebDav {
                     let on = if field == Field::Sync { on } else { webdav };
                     ui::Row::switch(title, on)

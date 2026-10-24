@@ -117,7 +117,7 @@ impl ViewScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let view = View::of(params);
         // The installed list says at its foot how much room is left.
@@ -136,11 +136,11 @@ impl ViewScreen {
             header,
             view,
             order,
-            index: Index::kept(env.storage),
+            index: Index::kept(env.storage()),
             top: Vec::new(),
             hits: 0,
             page: Vec::new(),
-            job: INSTALLER.progress(env.storage),
+            job: INSTALLER.progress(env.storage()),
             updates: Vec::new(),
             origins: Origins::default(),
             queued: queue::waiting(env),
@@ -155,7 +155,7 @@ impl ViewScreen {
         let Some(index) = &self.index else {
             return;
         };
-        let storage = env.storage;
+        let storage = env.storage();
         let mut updates = Vec::new();
         self.origins = Origins::read(storage);
         let origins = &self.origins;
@@ -190,7 +190,7 @@ impl ViewScreen {
         self.top.clear();
         match self.view {
             View::Group(group) => {
-                let fonts = env.actions.contains(crate::FONTS.as_str());
+                let fonts = env.actions().contains(crate::FONTS.as_str());
                 if fonts && catalog::GROUPS[group] == "look" {
                     self.top.push(Top::Fonts);
                 }
@@ -225,8 +225,8 @@ impl ViewScreen {
         let first = self.list.page() * rows;
         for row in first..(first + rows).min(self.len()) {
             if let Some(hit) = self.hit_of(row)
-                && let Some(n) = catalog::hit(env.storage, hit)
-                && let Some(plugin) = index.entry(env.storage, n)
+                && let Some(n) = catalog::hit(env.storage(), hit)
+                && let Some(plugin) = index.entry(env.storage(), n)
             {
                 self.page.push((n, plugin));
             }
@@ -253,7 +253,7 @@ impl ViewScreen {
                 Top::Sort => {
                     let options: Vec<&str> = Order::ALL.iter().map(|o| o.key()).collect();
                     cx.command(
-                        paperpaw_sdk::ask::choice(env.i18n.tr("store.sort"), &SORTED)
+                        paperpaw_sdk::ask::choice(env.i18n().tr("store.sort"), &SORTED)
                             .options("store.order.", &options)
                             .command(),
                     );
@@ -264,7 +264,7 @@ impl ViewScreen {
                     for command in out {
                         cx.command(command);
                     }
-                    self.job = INSTALLER.progress(env.storage);
+                    self.job = INSTALLER.progress(env.storage());
                     self.queued = queue::waiting(&env);
                     self.redraw(cx);
                 }
@@ -297,8 +297,8 @@ impl ViewScreen {
     fn title(&self, env: &Env<'_>) -> String {
         match &self.view {
             View::Group(group) => group_name(env, *group),
-            View::Installed => env.i18n.tr("store.installed-list").to_string(),
-            View::New => env.i18n.tr("store.new").to_string(),
+            View::Installed => env.i18n().tr("store.installed-list").to_string(),
+            View::New => env.i18n().tr("store.new").to_string(),
             View::Search(text) => env
                 .i18n
                 .format("store.search.title", &[("query", Arg::Str(text))]),
@@ -326,11 +326,11 @@ impl Screen for ViewScreen {
             ui.empty(
                 self.list.area(),
                 icon,
-                env.i18n.tr(title),
+                env.i18n().tr(title),
                 if text.is_empty() {
                     ""
                 } else {
-                    env.i18n.tr(text)
+                    env.i18n().tr(text)
                 },
             );
             return;
@@ -349,18 +349,18 @@ impl Screen for ViewScreen {
             if let Some(&top) = top.get(row) {
                 let ink = style.focus_ink(focused);
                 let (icon, name, value) = match top {
-                    Top::Fonts => ("typography", env.i18n.tr("store.fonts"), "›".to_string()),
+                    Top::Fonts => ("typography", env.i18n().tr("store.fonts"), "›".to_string()),
                     Top::Sort => {
                         let key = alloc::format!("store.order.{}", order.key());
                         (
                             "sort-ascending",
-                            env.i18n.tr("store.sort"),
-                            env.i18n.tr(&key).to_string(),
+                            env.i18n().tr("store.sort"),
+                            env.i18n().tr(&key).to_string(),
                         )
                     }
                     Top::UpdateAll => (
                         "circle-arrow-up",
-                        env.i18n.tr("store.update-all"),
+                        env.i18n().tr("store.update-all"),
                         String::new(),
                     ),
                 };
@@ -386,7 +386,7 @@ impl Screen for ViewScreen {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        self.job = INSTALLER.progress(env.storage);
+        self.job = INSTALLER.progress(env.storage());
         self.queued = queue::waiting(&env);
     }
 
@@ -458,7 +458,7 @@ impl Screen for ViewScreen {
                 self.redraw(cx);
             }
         } else if DOWNLOADED.read(event, params).is_some() || *event == events::PLUGINS_CHANGED {
-            self.job = INSTALLER.progress(env.storage);
+            self.job = INSTALLER.progress(env.storage());
             self.queued = queue::waiting(&env);
             // What is installed and has updates changed.
             if *event == events::PLUGINS_CHANGED && self.view == View::Installed {

@@ -247,8 +247,8 @@ struct Series {
 
 impl Series {
     fn read(&self, env: &Env<'_>) -> Shown {
-        let current = current(env.storage);
-        let named = env.settings.read(&NAME).trim().to_string();
+        let current = current(env.storage());
+        let named = env.settings().read(&NAME).trim().to_string();
         let name = if named.is_empty() {
             current
                 .as_ref()
@@ -284,7 +284,7 @@ impl Series {
         let mut kept = self.kept.borrow_mut();
         if kept.as_ref().is_none_or(|(k, _)| *k != key) {
             let finished = |path: &str| {
-                paperpaw_sdk::library::book(env.storage, path)
+                paperpaw_sdk::library::book(env.storage(), path)
                     .is_some_and(|b| b.progress == Some(100))
             };
             *kept = Some((key, members(env, &name, near.as_deref(), &finished)));
@@ -310,7 +310,7 @@ impl Series {
         let titles = widgets::shows(env, id, "titles");
         let mut books = Vec::new();
         for member in &members[shown] {
-            let Some(book) = Book::of(env.storage, &member.path) else {
+            let Some(book) = Book::of(env.storage(), &member.path) else {
                 continue;
             };
             let label = match (numbers && !member.number.is_empty(), titles) {
@@ -377,7 +377,7 @@ impl Series {
     /// "Discworld · 3 of 41 read".
     fn caption(&self, env: &Env<'_>) -> String {
         if self.shown.read > 0 {
-            env.i18n.format(
+            env.i18n().format(
                 "widgets.series.caption-read",
                 &[
                     ("series", Arg::Str(&self.shown.name)),
@@ -386,7 +386,7 @@ impl Series {
                 ],
             )
         } else {
-            env.i18n.format(
+            env.i18n().format(
                 "widgets.series.caption",
                 &[
                     ("series", Arg::Str(&self.shown.name)),

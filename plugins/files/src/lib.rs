@@ -209,7 +209,7 @@ impl Plugin for Files {
             paperpaw_sdk::ActionSpec::new(SEARCH, "files.search").handler(
                 |env: &Env<'_>, _, out: &mut Commands| {
                     out.push(
-                        ask::text(env.i18n.tr("files.search.prompt"), &SEARCH_ENTERED).command(),
+                        ask::text(env.i18n().tr("files.search.prompt"), &SEARCH_ENTERED).command(),
                     );
                 },
             ),
@@ -367,8 +367,8 @@ pub(crate) fn draw_placeholder(
 /// Whether the book at `path` may move to the archive: there is one, and
 /// the book is not in it.
 pub(crate) fn can_archive(env: &Env<'_>, path: &str) -> bool {
-    let archive = env.settings.read(&ARCHIVE).trim_matches('/');
-    !archive.is_empty() && !files::same_path(env.storage, files::parent(path), archive)
+    let archive = env.settings().read(&ARCHIVE).trim_matches('/');
+    !archive.is_empty() && !files::same_path(env.storage(), files::parent(path), archive)
 }
 
 /// Moves the book at `path` to the archive folder, and says how it went.
@@ -382,15 +382,15 @@ pub(crate) fn archive(env: &Env<'_>, path: &str, cx: &mut Cx<'_, '_>) {
         clippy::let_underscore_must_use,
         reason = "made where missing; moving the book into it tells if it is not there"
     )]
-    let _ = env.storage.create_dir(&archive);
-    let target = files::free_path(env.storage, &archive, files::name(path));
-    match files::move_to(env.storage, path, &target) {
+    let _ = env.storage().create_dir(&archive);
+    let target = files::free_path(env.storage(), &archive, files::name(path));
+    match files::move_to(env.storage(), path, &target) {
         Ok(()) => {
             cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(path.to_string(), target)));
-            cx.command(Command::Notify(env.i18n.tr("files.archived").to_string()));
+            cx.command(Command::Notify(env.i18n().tr("files.archived").to_string()));
         }
         Err(_) => cx.command(Command::Notify(
-            env.i18n.tr("files.archive-failed").to_string(),
+            env.i18n().tr("files.archive-failed").to_string(),
         )),
     }
 }

@@ -98,7 +98,7 @@ pub fn choose(env: &Env<'_>) -> (Id, bool) {
         // A level to come: everything as configured.
         _ => power::NORMAL,
     };
-    let chosen = env.settings.read(&MODE);
+    let chosen = env.settings().read(&MODE);
     let level = match chosen {
         "power.mode.normal" => Some(PowerLevel::Normal),
         "power.mode.saving" => Some(PowerLevel::Saving),
@@ -113,18 +113,18 @@ pub fn choose(env: &Env<'_>) -> (Id, bool) {
 
 /// What Automatic chooses by the battery: Normal without one.
 fn automatic(env: &Env<'_>) -> PowerLevel {
-    let Some(battery) = env.status.battery else {
+    let Some(battery) = env.status().battery else {
         return PowerLevel::Normal;
     };
-    if battery.charging && env.settings.read(&NORMAL_WHILE_CHARGING) {
+    if battery.charging && env.settings().read(&NORMAL_WHILE_CHARGING) {
         return PowerLevel::Normal;
     }
     let percent = i64::from(battery.percent);
     // Wearing one already: kept until the charge is clearly above it.
-    let now = env.power.level;
+    let now = env.power().level;
     let below = |level: &Setting<i64>, current: PowerLevel| {
         let margin = if now >= current { MARGIN } else { 0 };
-        percent < env.settings.read(level) + margin
+        percent < env.settings().read(level) + margin
     };
     if below(&OFFLINE_BELOW, PowerLevel::Offline) {
         PowerLevel::Offline
@@ -138,7 +138,7 @@ fn automatic(env: &Env<'_>) -> PowerLevel {
 /// Wears the mode chosen now, if another is worn.
 fn wear(env: &Env<'_>, out: &mut paperpaw_sdk::Commands) {
     let (mode, automatic) = choose(env);
-    if env.power.mode == mode && env.power.automatic == automatic {
+    if env.power().mode == mode && env.power().automatic == automatic {
         return;
     }
     let wear = Wear::new(mode);
@@ -184,7 +184,7 @@ impl Plugin for Power {
                 STATUS,
                 "power.status.item",
                 Box::new(|env, _| {
-                    let icon = match env.power.level {
+                    let icon = match env.power().level {
                         PowerLevel::Normal => return None,
                         PowerLevel::Saving => "leaf",
                         PowerLevel::Offline => "wifi-off",

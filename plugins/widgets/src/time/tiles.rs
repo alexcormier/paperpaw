@@ -140,7 +140,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             "core.clock.pm"
         };
         String::from(
-            env.i18n
+            env.i18n()
                 .format(key, &[("time", paperpaw_sdk::Arg::Str(""))])
                 .trim(),
         )

@@ -44,7 +44,7 @@ pub(crate) fn hash(salt: &str, code: &str) -> String {
 /// The kind of the lock in use (`pin`, `pattern`, `password`): one whose
 /// code is kept and that the setting names.
 pub(crate) fn active(env: &Env<'_>) -> Option<String> {
-    let setting = env.settings.read(&KIND);
+    let setting = env.settings().read(&KIND);
     let kind = setting.strip_prefix(KIND_PREFIX).unwrap_or(setting);
     kept_kind(env).filter(|kept| kind != "off" && kept == kind)
 }
@@ -52,7 +52,7 @@ pub(crate) fn active(env: &Env<'_>) -> Option<String> {
 /// The kind of the code kept, if one is whole (kind, salt and hash): a
 /// damaged one locks nothing, as no code could open it.
 pub(crate) fn kept_kind(env: &Env<'_>) -> Option<String> {
-    let stored = env.secrets.get(SECRET)?;
+    let stored = env.secrets().get(SECRET)?;
     let mut parts = stored.splitn(3, ':');
     let (Some(kind), Some(salt), Some(hashed)) = (parts.next(), parts.next(), parts.next()) else {
         return None;
@@ -68,7 +68,7 @@ pub(crate) fn kept_kind(env: &Env<'_>) -> Option<String> {
 
 /// Whether `code` is the code in use.
 pub(crate) fn check(env: &Env<'_>, code: &str) -> bool {
-    let Some(stored) = env.secrets.get(SECRET) else {
+    let Some(stored) = env.secrets().get(SECRET) else {
         return false;
     };
     let mut parts = stored.splitn(3, ':');
@@ -82,7 +82,7 @@ pub(crate) fn check(env: &Env<'_>, code: &str) -> bool {
 /// opened the lock and its salt was made from it (kept before salts were
 /// random); `None` where nothing is to change.
 pub(crate) fn renewed(env: &Env<'_>, code: &str) -> Option<Command> {
-    let stored = env.secrets.get(SECRET)?;
+    let stored = env.secrets().get(SECRET)?;
     let mut parts = stored.splitn(3, ':');
     let (Some(kind), Some(salt)) = (parts.next(), parts.next()) else {
         return None;
@@ -94,10 +94,10 @@ pub(crate) fn renewed(env: &Env<'_>, code: &str) -> Option<Command> {
 /// without a source of random numbers) of the device's id and the time,
 /// never of the code.
 fn salt(env: &Env<'_>) -> String {
-    let letters = env.random.token(SALT_LETTERS).unwrap_or_else(|| {
+    let letters = env.random().token(SALT_LETTERS).unwrap_or_else(|| {
         let mut sha = Sha1::new();
-        sha.update(env.device.id.as_bytes());
-        sha.update(&env.now.millis().to_le_bytes());
+        sha.update(env.device().id.as_bytes());
+        sha.update(&env.now().millis().to_le_bytes());
         let mut text = sha.hex();
         text.truncate(SALT_LETTERS);
         text

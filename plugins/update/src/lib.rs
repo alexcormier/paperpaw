@@ -105,29 +105,29 @@ pub(crate) fn write_pair(storage: &dyn Storage, name: &str, first: &str, second:
 /// At start: how the update installed before went, and an update to
 /// offer. A download the restart cut off is let go.
 fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Commands) {
-    let storage = env.storage;
+    let storage = env.storage();
     online::clear_download(storage);
     fetch::interrupted(storage, firmware);
     if let Some((path, version)) = read_pair(storage, INSTALLING) {
         let _ = storage.remove(&file(INSTALLING));
         if !firmware.undone && version == firmware.version {
             let _ = storage.remove(&path);
-            out.push(Command::Announce(env.i18n.format(
+            out.push(Command::Announce(env.i18n().format(
                 "update.done",
                 &[(
                     "version",
-                    Arg::Str(&crate::shown_version(env.i18n, &version)),
+                    Arg::Str(&crate::shown_version(env.i18n(), &version)),
                 )],
             )));
             return;
         }
     }
     if firmware.undone {
-        out.push(Command::Announce(env.i18n.format(
+        out.push(Command::Announce(env.i18n().format(
             "update.undone",
             &[(
                 "version",
-                Arg::Str(&crate::shown_version(env.i18n, &firmware.version)),
+                Arg::Str(&crate::shown_version(env.i18n(), &firmware.version)),
             )],
         )));
         return;
@@ -184,7 +184,7 @@ impl Plugin for Update {
         ))?;
         r.add_action(ActionSpec::new(CHECK, "update.check").handler(
             |env: &Env<'_>, _, out: &mut Commands| {
-                if env.reader {
+                if env.reader() {
                     online::check(env, true, out);
                 } else {
                     let due = CHECK_DUE.id().clone();
@@ -207,7 +207,7 @@ impl Plugin for Update {
         r.set_menu_need(OPEN, MenuNeed::Firmware)?;
         r.add_icon(OPEN, Cow::Borrowed("circle-arrow-up"))?;
         r.on(events::STARTED, |env, _, out| {
-            if let Some(firmware) = env.firmware {
+            if let Some(firmware) = env.firmware() {
                 started(env, firmware, out);
             }
         })?;

@@ -61,7 +61,7 @@ impl FontScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let samples = Samples::new(&style);
-        let display = env.device.display;
+        let display = env.device().display;
         let gap = style.gap();
         let top = header.area().height + gap;
         let line = (style.row()) * 3 / 2;
@@ -90,7 +90,7 @@ impl FontScreen {
             status,
             font,
             samples,
-            job: INSTALLER.progress(env.storage),
+            job: INSTALLER.progress(env.storage()),
             style,
             header,
         }
@@ -139,8 +139,8 @@ impl FontScreen {
         let name = || SettingValue::Text(font.name.clone().into());
         match self.rows(&env).get(index).copied() {
             Some(Row::Download | Row::Update) => {
-                if !env.caps.network {
-                    let text = env.i18n.tr("fonts-browser.offline").to_string();
+                if !env.caps().network {
+                    let text = env.i18n().tr("fonts-browser.offline").to_string();
                     cx.command(Command::Notify(text));
                     return;
                 }
@@ -149,12 +149,12 @@ impl FontScreen {
                 for command in out {
                     cx.command(command);
                 }
-                self.job = INSTALLER.progress(env.storage);
+                self.job = INSTALLER.progress(env.storage());
                 self.list.set_focus(0);
                 self.redraw(cx);
             }
             Some(Row::Stop) => {
-                INSTALLER.cancel(env.storage);
+                INSTALLER.cancel(env.storage());
                 self.job = None;
                 self.redraw(cx);
             }
@@ -171,14 +171,14 @@ impl FontScreen {
                 ));
             }
             Some(Row::Remove) => {
-                let title = env.i18n.format(
+                let title = env.i18n().format(
                     "fonts-browser.remove-question",
                     &[("name", Arg::Str(&font.name))],
                 );
                 cx.command(
                     paperpaw_sdk::ask::confirm(&title, &REMOVE)
-                        .yes(env.i18n.tr("fonts-browser.option.remove"))
-                        .no(env.i18n.tr("fonts-browser.option.keep"))
+                        .yes(env.i18n().tr("fonts-browser.option.remove"))
+                        .no(env.i18n().tr("fonts-browser.option.keep"))
                         .with("plugin", font.plugin())
                         .command(),
                 );
@@ -190,7 +190,7 @@ impl FontScreen {
     /// A row's name and what it says at its end.
     fn row_text(env: &Env<'_>, job: Option<&Progress>, font: &Font, row: Row) -> (String, String) {
         let name = Arg::Str(&font.name);
-        let decimal = env.i18n.tr("fonts-browser.decimal");
+        let decimal = env.i18n().tr("fonts-browser.decimal");
         let chosen = |setting: &str| {
             if font.chosen_for(env, setting) {
                 String::from("•")
@@ -200,31 +200,31 @@ impl FontScreen {
         };
         match row {
             Row::Download => (
-                env.i18n.tr("fonts-browser.download").to_string(),
+                env.i18n().tr("fonts-browser.download").to_string(),
                 files::size(font.size(), decimal),
             ),
             Row::Stop => {
                 let job = job.cloned().unwrap_or_default();
                 (
-                    env.i18n.tr("fonts-browser.stop").to_string(),
+                    env.i18n().tr("fonts-browser.stop").to_string(),
                     format!("{} / {}", job.done, job.total),
                 )
             }
             Row::Read => (
-                env.i18n
+                env.i18n()
                     .format("fonts-browser.read-with", &[("name", name)]),
                 chosen(settings::READING_FONT.as_str()),
             ),
             Row::Status => (
-                env.i18n.tr("fonts-browser.status-lines").to_string(),
+                env.i18n().tr("fonts-browser.status-lines").to_string(),
                 chosen(settings::STATUS_FONT.as_str()),
             ),
             Row::Update => (
-                env.i18n.tr("fonts-browser.update").to_string(),
+                env.i18n().tr("fonts-browser.update").to_string(),
                 font.version.clone(),
             ),
             Row::Remove => (
-                env.i18n.tr("fonts-browser.remove").to_string(),
+                env.i18n().tr("fonts-browser.remove").to_string(),
                 String::new(),
             ),
         }
@@ -243,8 +243,8 @@ impl Screen for FontScreen {
             ui.empty(
                 self.list.area(),
                 "typography",
-                env.i18n.tr("fonts-browser.gone"),
-                env.i18n.tr("fonts-browser.gone.help"),
+                env.i18n().tr("fonts-browser.gone"),
+                env.i18n().tr("fonts-browser.gone.help"),
             );
             return;
         };
@@ -284,7 +284,7 @@ impl Screen for FontScreen {
         if let Some(ui_font) = style.font(env) {
             let line = style.small() * 1.4;
             let ascent = ui_font.line_metrics(style.small()).ascent;
-            let licence = env.i18n.format(
+            let licence = env.i18n().format(
                 "fonts-browser.licence",
                 &[("licence", Arg::Str(&font.licence))],
             );
@@ -311,13 +311,13 @@ impl Screen for FontScreen {
             });
         ui.canvas().fill(self.status, Color::WHITE);
         if rows.first() == Some(&Row::Stop) {
-            let note = env.i18n.tr("fonts-browser.downloading");
+            let note = env.i18n().tr("fonts-browser.downloading");
             ui.note_line(self.status, note);
         }
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        self.job = INSTALLER.progress(cx.env().storage);
+        self.job = INSTALLER.progress(cx.env().storage());
         self.want_sample(cx);
     }
 
@@ -371,7 +371,7 @@ impl Screen for FontScreen {
             || *event == events::PLUGINS_CHANGED
             || *event == events::SETTING_CHANGED
         {
-            self.job = INSTALLER.progress(cx.env().storage);
+            self.job = INSTALLER.progress(cx.env().storage());
             let len = self.rows(cx.env()).len();
             self.list.set_len(len);
             self.redraw(cx);

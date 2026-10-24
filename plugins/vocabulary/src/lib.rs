@@ -209,15 +209,15 @@ impl Plugin for Vocabulary {
         // A list or a deck left half written by a power cut is put right
         // first, and the answers of a review cut off go into the decks.
         r.on(events::STARTED, |env, _, _| {
-            store::recover(env.storage);
-            cards::recover(env.storage);
+            store::recover(env.storage());
+            cards::recover(env.storage());
         })?;
         // The changes to the words, for the marks and the list.
         let changes = store::Changes::default();
         let recorded = changes.clone();
         r.on(events::WORD_LOOKED_UP, move |env, looked_up, out| {
             if record(env, looked_up, &recorded).is_err() {
-                let message = env.i18n.tr("vocabulary.save-failed").to_string();
+                let message = env.i18n().tr("vocabulary.save-failed").to_string();
                 out.push(Command::Notify(message));
             }
         })?;
@@ -291,7 +291,7 @@ fn record(
     looked_up: &events::WordLookedUp,
     changes: &store::Changes,
 ) -> Result<(), StorageError> {
-    if !env.settings.read(&COLLECT) {
+    if !env.settings().read(&COLLECT) {
         return Ok(());
     }
     let word = looked_up.word.trim();
@@ -299,7 +299,7 @@ fn record(
         return Ok(());
     }
     let result = store::add(
-        env.storage,
+        env.storage(),
         &Word {
             word: word.to_string(),
             language: looked_up.language.clone(),
@@ -313,8 +313,8 @@ fn record(
     changes.changed();
     // A card to be: a line appended, the deck not read now (see
     // `take_lookups`); the word is kept whether or not that works.
-    if env.settings.read(&FROM_LOOKUPS) {
-        let _ = cards::queue_lookup(env.storage, word, &looked_up.text);
+    if env.settings().read(&FROM_LOOKUPS) {
+        let _ = cards::queue_lookup(env.storage(), word, &looked_up.text);
     }
     result
 }
@@ -324,9 +324,9 @@ fn record(
 /// ([`REVIEW_ON_WAKE`]) and cards are due. Below a lock, as it opens
 /// (the kernel keeps what others open below a screen that guards).
 fn wake(env: &Env<'_>, out: &mut Commands) {
-    let asleep = env.settings.text(SLEEP_SHOW) == SLEEP_CARD;
+    let asleep = env.settings().text(SLEEP_SHOW) == SLEEP_CARD;
     let shown = asleep.then(|| sleep::shown(env)).flatten();
-    if shown.is_none() && !(env.settings.read(&REVIEW_ON_WAKE) && decks::due_now(env) > 0) {
+    if shown.is_none() && !(env.settings().read(&REVIEW_ON_WAKE) && decks::due_now(env) > 0) {
         return;
     }
     let params = match shown {
@@ -340,8 +340,8 @@ fn wake(env: &Env<'_>, out: &mut Commands) {
 /// *Looked up* now (each front once, its sentence the example). Where
 /// there is no room (no more decks, a full deck) they wait on.
 pub(crate) fn take_lookups(env: &Env<'_>) {
-    let name = env.i18n.tr("vocabulary.cards.looked-up");
-    let _ = cards::take_lookups(env.storage, name);
+    let name = env.i18n().tr("vocabulary.cards.looked-up");
+    let _ = cards::take_lookups(env.storage(), name);
 }
 
 /// The folder exports go to: `Notes` beside the library folder.
@@ -374,7 +374,7 @@ struct WordsScreen {
 impl WordsScreen {
     fn new(env: &Env<'_>, changes: store::Changes) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -394,7 +394,7 @@ impl WordsScreen {
     /// Counts the words and reads the visible page.
     fn load(&mut self, env: &Env<'_>) {
         self.read_after = self.changes.count();
-        self.count = store::count(env.storage);
+        self.count = store::count(env.storage());
         let len = self.len();
         if self.list.focus() >= len {
             self.list.set_focus(len.saturating_sub(1));
@@ -410,7 +410,7 @@ impl WordsScreen {
             self.count.saturating_sub(last),
             self.count - first.min(self.count),
         );
-        self.visible = store::range(env.storage, from, to)
+        self.visible = store::range(env.storage(), from, to)
             .into_iter()
             .map(|(n, word)| (self.count - 1 - n, n, word))
             .collect();
@@ -449,7 +449,7 @@ impl WordsScreen {
             return;
         };
         let mut options = alloc::vec!["look-up"];
-        if !word.path.is_empty() && cx.env().storage.exists(&word.path) {
+        if !word.path.is_empty() && cx.env().storage().exists(&word.path) {
             options.push("go-to");
         }
         options.push("delete");
@@ -464,13 +464,13 @@ impl WordsScreen {
     fn export(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let dir = notes_dir(&env);
-        let _ = env.storage.create_dir(&dir);
+        let _ = env.storage().create_dir(&dir);
         let file = format!("{dir}/{EXPORT_NAME}");
-        let message = if store::export(env.storage, &file) {
-            env.i18n
+        let message = if store::export(env.storage(), &file) {
+            env.i18n()
                 .format("vocabulary.exported", &[("path", Arg::Str(&file))])
         } else {
-            env.i18n.tr("vocabulary.export-failed").to_string()
+            env.i18n().tr("vocabulary.export-failed").to_string()
         };
         cx.command(Command::Notify(message));
     }
@@ -486,10 +486,10 @@ impl WordsScreen {
             language: answer.context.get(LANGUAGE).unwrap_or("").to_string(),
             ..Word::default()
         };
-        let removed = store::remove(env.storage, &word);
+        let removed = store::remove(env.storage(), &word);
         self.changes.changed();
         if removed.is_err() {
-            let message = env.i18n.tr("vocabulary.delete-failed").to_string();
+            let message = env.i18n().tr("vocabulary.delete-failed").to_string();
             cx.command(Command::Notify(message));
         }
         self.load(&env);
@@ -521,7 +521,7 @@ impl Screen for WordsScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("vocabulary.title"),
+            env.i18n().tr("vocabulary.title"),
             None,
             self.list.paging(len),
         );
@@ -529,8 +529,8 @@ impl Screen for WordsScreen {
             ui.empty(
                 self.list.area(),
                 "vocabulary",
-                env.i18n.tr("vocabulary.empty.title"),
-                env.i18n.tr("vocabulary.empty"),
+                env.i18n().tr("vocabulary.empty.title"),
+                env.i18n().tr("vocabulary.empty"),
             );
             return;
         }
@@ -538,8 +538,8 @@ impl Screen for WordsScreen {
         let visible = &self.visible;
         self.list.draw(&mut ui, len, |ui, row, rect, focused| {
             if row == count {
-                let title = env.i18n.tr("vocabulary.export");
-                let note = env.i18n.tr("vocabulary.export.help");
+                let title = env.i18n().tr("vocabulary.export");
+                let note = env.i18n().tr("vocabulary.export.help");
                 ui::Row::value(title, "›")
                     .note(note)
                     .focused(focused)
@@ -643,15 +643,15 @@ impl Screen for WordsScreen {
             }
             // Asked first: a word deleted cannot be had back.
             "delete" => {
-                let question = env.i18n.format(
+                let question = env.i18n().format(
                     "vocabulary.delete.question",
                     &[("word", Arg::Str(&word.word))],
                 );
                 cx.command(
                     paperpaw_sdk::ask::confirm(question, &DELETE)
-                        .text(env.i18n.tr("vocabulary.delete.text"))
-                        .yes(env.i18n.tr("vocabulary.option.delete"))
-                        .no(env.i18n.tr("vocabulary.delete.keep"))
+                        .text(env.i18n().tr("vocabulary.delete.text"))
+                        .yes(env.i18n().tr("vocabulary.option.delete"))
+                        .no(env.i18n().tr("vocabulary.delete.keep"))
                         .with(WORD, word.word.clone())
                         .with(LANGUAGE, word.language.clone())
                         .command(),

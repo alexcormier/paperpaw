@@ -131,10 +131,10 @@ impl Plugin for Help {
 /// Opens the hints over `screen`, where it has some, they are on, and
 /// they were not shown yet.
 fn explain(env: &Env<'_>, screen: &Id, out: &mut Commands) {
-    if !env.settings.read(&SHOW)
+    if !env.settings().read(&SHOW)
         || screen.namespace() == PLUGIN.as_str()
         || help::hints(env, screen.as_str()).is_empty()
-        || seen(env.storage, screen.as_str())
+        || seen(env.storage(), screen.as_str())
     {
         return;
     }
@@ -149,12 +149,12 @@ fn covered(env: &Env<'_>, shown: &Id, out: &mut Commands) {
     if *shown == OVERLAY {
         return;
     }
-    for (index, entry) in env.stack.iter().enumerate() {
+    for (index, entry) in env.stack().iter().enumerate() {
         if entry.screen != OVERLAY {
             continue;
         }
-        if let Some(below) = index.checked_sub(1).and_then(|i| env.stack.get(i)) {
-            forget_seen(env.storage, below.screen.as_str());
+        if let Some(below) = index.checked_sub(1).and_then(|i| env.stack().get(i)) {
+            forget_seen(env.storage(), below.screen.as_str());
         }
         out.push(Command::Close(entry.key));
     }

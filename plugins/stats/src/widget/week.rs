@@ -153,7 +153,7 @@ impl Widget for Week {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, NAME, area);
         if self.days.is_empty() {
-            widgets::draw_message(canvas, env, &look, env.i18n.tr("stats.no-clock"));
+            widgets::draw_message(canvas, env, &look, env.i18n().tr("stats.no-clock"));
             return;
         }
         draw_week(canvas, env, &look, &self.days);
@@ -183,10 +183,10 @@ fn total(env: &Env<'_>, days: &[Shown]) -> alloc::string::String {
 fn label(env: &Env<'_>, days: &[Shown]) -> alloc::string::String {
     let time = total(env, days);
     if days.iter().any(|d| d.to_come) || chosen(env, NAME, "period") == PERIODS[1] {
-        env.i18n
+        env.i18n()
             .format("stats.widget.this-week", &[("time", Arg::Str(&time))])
     } else {
-        env.i18n.format(
+        env.i18n().format(
             "stats.widget.days-label",
             &[
                 ("count", Arg::Int(days.len() as i64)),
@@ -264,7 +264,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[
     for (i, day) in days.iter().enumerate() {
         let (left, column) = column_of(i as u32);
         let cx = i32::from(area.x) + (left + column / 2) as i32;
-        let bar_w = (column * 2 / 5).clamp(2, env.metrics.mm(3).max(2));
+        let bar_w = (column * 2 / 5).clamp(2, env.metrics().mm(3).max(2));
         let bx = cx - (bar_w / 2) as i32;
         let radius = if round { bar_w / 4 } else { 0 };
         if day.seconds > 0 {

@@ -117,14 +117,14 @@ impl Plugin for DictionaryPlugin {
 /// The entries for `word` in the dictionaries whose indexes are ready
 /// (preparing them is the panel's: a provider answers at once).
 fn look_up_ready(env: &Env<'_>, word: &str) -> Vec<LookupEntry> {
-    let folder = env.settings.read(&FOLDER);
-    let found = find_dictionaries(env.storage, folder.trim_matches('/')).unwrap_or_default();
+    let folder = env.settings().read(&FOLDER);
+    let found = find_dictionaries(env.storage(), folder.trim_matches('/')).unwrap_or_default();
     let mut entries = Vec::new();
     for ifo in found {
-        let Ok(dictionary) = Dictionary::open(env.storage, &ifo, &cache_of(&ifo)) else {
+        let Ok(dictionary) = Dictionary::open(env.storage(), &ifo, &cache_of(&ifo)) else {
             continue;
         };
-        if dictionary.builders(env.storage).is_empty() {
+        if dictionary.builders(env.storage()).is_empty() {
             entries.extend(entries_of(env, &dictionary, word));
         }
     }
@@ -134,7 +134,7 @@ fn look_up_ready(env: &Env<'_>, word: &str) -> Vec<LookupEntry> {
 /// The definitions of `word` in `dictionary`, one entry each.
 fn entries_of(env: &Env<'_>, dictionary: &Dictionary, word: &str) -> Vec<LookupEntry> {
     dictionary
-        .lookup(env.storage, word)
+        .lookup(env.storage(), word)
         .unwrap_or_default()
         .into_iter()
         .map(|definition| LookupEntry::new(dictionary.info.name.clone(), definition.text))
@@ -288,7 +288,7 @@ impl core::fmt::Debug for Popup {
 impl Popup {
     fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = display.height * 9 / 20;
         let mut popup = Self {
             word: params.get(params::WORD).unwrap_or_default().to_string(),
@@ -309,21 +309,21 @@ impl Popup {
             style,
             region: Rect::new(0, top, display.width, display.height - top),
         };
-        let folder = env.settings.read(&FOLDER).trim_matches('/');
-        let found = find_dictionaries(env.storage, folder);
+        let folder = env.settings().read(&FOLDER).trim_matches('/');
+        let found = find_dictionaries(env.storage(), folder);
         if let Ok(found) = &found {
-            forget_others(env.storage, found);
+            forget_others(env.storage(), found);
         }
         let mut builders = Vec::new();
         for ifo in found.unwrap_or_default() {
             let cache = cache_of(&ifo);
-            let Ok(dictionary) = Dictionary::open(env.storage, &ifo, &cache) else {
+            let Ok(dictionary) = Dictionary::open(env.storage(), &ifo, &cache) else {
                 continue;
             };
-            let missing = dictionary.builders(env.storage);
+            let missing = dictionary.builders(env.storage());
             if missing.is_empty() {
                 popup.dictionaries.push(dictionary);
-            } else if !failed_before(env.storage, &cache, &missing) {
+            } else if !failed_before(env.storage(), &cache, &missing) {
                 // Damaged ones are not read again with every word.
                 let stamp = stamp(&missing);
                 builders.extend(
@@ -334,7 +334,7 @@ impl Popup {
                 popup.dictionaries.push(dictionary);
             }
         }
-        let others = env.lookup.fitting(env, &popup.query(), false).count() > 1;
+        let others = env.lookup().fitting(env, &popup.query(), false).count() > 1;
         if popup.dictionaries.is_empty() && !others {
             let message = env
                 .i18n
@@ -363,7 +363,7 @@ impl Popup {
             .iter()
             .flat_map(|dictionary| entries_of(env, dictionary, &self.word))
             .collect();
-        let asked = env.lookup.ask(env, &self.query(), false, &[PROVIDER]);
+        let asked = env.lookup().ask(env, &self.query(), false, &[PROVIDER]);
         self.entries.extend(asked.entries);
         self.pending.retain(|(_, online)| *online);
         self.pending
@@ -385,7 +385,7 @@ impl Popup {
     /// Waits [`ANSWER_MS`] for the providers asked, from now.
     fn wait(&mut self, cx: &mut Cx<'_, '_>) {
         if !self.pending.is_empty() {
-            let until = cx.env().now.add_millis(ANSWER_MS);
+            let until = cx.env().now().add_millis(ANSWER_MS);
             self.waiting_until = Some(until);
             cx.wake_at(until);
         }
@@ -420,7 +420,7 @@ impl Popup {
                 text.push('\n');
                 let start = text.len();
                 let source = Arg::Str(&entry.source);
-                text.push_str(&env.i18n.format("dictionary.more", &[("source", source)]));
+                text.push_str(&env.i18n().format("dictionary.more", &[("source", source)]));
                 mores.push(More {
                     begins,
                     line: start..text.len(),
@@ -520,7 +520,7 @@ impl Popup {
         let margin = self.style.margin() as f32;
         let note_width = font.measure(self.style.small(), note);
         let gap = if note.is_empty() { 0.0 } else { margin };
-        let label = font.measure(self.style.small(), env.i18n.tr("dictionary.online"));
+        let label = font.measure(self.style.small(), env.i18n().tr("dictionary.online"));
         let right = f32::from(header.width) - margin - note_width - gap;
         let x = (right - label).max(0.0);
         Some(Rect::new(
@@ -546,7 +546,7 @@ impl Popup {
     /// providers were asked, not again (also while they answer, or after
     /// one failed): their entries open more.
     fn can_go_online(&self, env: &Env<'_>) -> bool {
-        env.caps.network
+        env.caps().network
             && !self.asked_online
             && (self.providers_online(env) || env.has_slot(&slots::LOOKUP_ONLINE))
     }
@@ -558,7 +558,7 @@ impl Popup {
         let env = *cx.env();
         let query = self.query();
         if self.providers_online(&env) {
-            let asked = env.lookup.ask(&env, &query, true, &[]);
+            let asked = env.lookup().ask(&env, &query, true, &[]);
             self.asked_online = true;
             self.online_entries.extend(asked.entries);
             self.pending
@@ -586,13 +586,13 @@ impl Popup {
         let rows = self.rows(env);
         match &self.state {
             State::Ready if !self.pending.is_empty() => {
-                env.i18n.tr("dictionary.asking").to_string()
+                env.i18n().tr("dictionary.asking").to_string()
             }
-            State::Preparing(_, done, total) => env.i18n.format(
+            State::Preparing(_, done, total) => env.i18n().format(
                 "dictionary.preparing",
                 &[("percent", Arg::Int((done * 100 / (*total).max(1)) as i64))],
             ),
-            State::Ready if self.lines.len() > rows => env.i18n.format(
+            State::Ready if self.lines.len() > rows => env.i18n().format(
                 "dictionary.page",
                 &[
                     ("page", Arg::Int((self.top / rows + 1) as i64)),
@@ -658,9 +658,9 @@ impl Screen for Popup {
             let line = &self.text[more.line.clone()];
             paperpaw_sdk::Hint::Text(line.trim_end_matches(" ›").to_string())
         } else if *action == actions::CONFIRM {
-            paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n().tr("core.hint.close").to_string())
         } else if *action == actions::MENU && self.online_area(env, "").is_some() {
-            paperpaw_sdk::Hint::Text(env.i18n.tr("dictionary.online").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n().tr("dictionary.online").to_string())
         } else {
             paperpaw_sdk::Hint::Default
         }
@@ -697,7 +697,7 @@ impl Screen for Popup {
         let note_x = f32::from(header.width) - margin - note_width;
         let mut right = note_x;
         if let Some(online) = self.online_area(env, &note) {
-            ui::Label::new(env.i18n.tr("dictionary.online"))
+            ui::Label::new(env.i18n().tr("dictionary.online"))
                 .px(style.small())
                 .color(Color::BLACK)
                 .draw_from(&mut ui, f32::from(online.x), header);
@@ -757,7 +757,7 @@ impl Screen for Popup {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         self.run_commands(cx);
         if matches!(self.state, State::Preparing(..)) {
-            let now = cx.env().now;
+            let now = cx.env().now();
             cx.wake_at(now);
         }
     }
@@ -767,7 +767,7 @@ impl Screen for Popup {
         let env = *cx.env();
         // Providers that did not answer in time: waited for no more.
         if let Some(until) = self.waiting_until
-            && env.now >= until
+            && env.now() >= until
             && !self.pending.is_empty()
         {
             self.pending.clear();
@@ -782,7 +782,7 @@ impl Screen for Popup {
         let finished = match builders.last_mut() {
             Some((builder, cache, stamp)) => {
                 let before = builder.progress().0;
-                let finished = builder.step(env.storage, STEP_BYTES);
+                let finished = builder.step(env.storage(), STEP_BYTES);
                 *done += builder.progress().0 - before;
                 match finished {
                     Ok(false) => false,
@@ -795,7 +795,7 @@ impl Screen for Popup {
                     // tried again).
                     Err(e) => {
                         if matches!(e, paperpaw_stardict::Error::Malformed(_)) {
-                            let _ = env.storage.write(&failed_file(cache), stamp.as_bytes());
+                            let _ = env.storage().write(&failed_file(cache), stamp.as_bytes());
                         }
                         let cache = cache.clone();
                         builders.retain(|(_, c, _)| *c != cache);
@@ -809,7 +809,7 @@ impl Screen for Popup {
             self.look_up(&env);
             self.run_commands(cx);
         } else {
-            cx.wake_at(env.now.add_millis(1));
+            cx.wake_at(env.now().add_millis(1));
         }
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);

@@ -119,8 +119,8 @@ impl Plugin for SettingsPlugin {
             Box::new(|env, params| {
                 let group = params.get(ID).and_then(|id| Id::parse(id).ok());
                 // A setting to focus: on its page, unless a group is named.
-                let focus = params.get(FOCUS).and_then(|id| env.settings.spec(id));
-                let group = group.or_else(|| focus.map(|spec| env.settings.group_of(spec)));
+                let focus = params.get(FOCUS).and_then(|id| env.settings().spec(id));
+                let group = group.or_else(|| focus.map(|spec| env.settings().group_of(spec)));
                 match group {
                     Some(group) => {
                         let mut page = GroupPage::new(env, group);
@@ -195,11 +195,11 @@ impl Plugin for SettingsPlugin {
 /// Asks whether to reset the settings of `group` (all for `None`).
 fn ask_reset(env: &Env<'_>, group: Option<(&Id, &str)>) -> Command {
     let question = match group {
-        Some((_, title)) => env.i18n.format(
+        Some((_, title)) => env.i18n().format(
             "settings.reset-page.question",
             &[("page", paperpaw_sdk::Arg::Str(title))],
         ),
-        None => env.i18n.tr("settings.reset-all.question").to_string(),
+        None => env.i18n().tr("settings.reset-all.question").to_string(),
     };
     let context = group.map_or("", |(id, _)| id.as_str());
     paperpaw_sdk::ask::choice(&question, &CHOSEN)
@@ -217,18 +217,22 @@ fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
     let group = Id::parse(&picked.path).ok();
     // A placement's: what it set goes, the widget's own values apply.
     if let Some(group) = group.as_ref().filter(|g| g.as_str().contains('@')) {
-        for value in env.settings.placement_values(group.as_str()) {
+        for value in env.settings().placement_values(group.as_str()) {
             cx.command(Command::ResetSetting(value));
         }
         cx.command(Command::Notify(
-            env.i18n.tr("settings.reset-done").to_string(),
+            env.i18n().tr("settings.reset-done").to_string(),
         ));
         return;
     }
     let language = paperpaw_sdk::builtin::settings::LANGUAGE;
-    for spec in env.settings.specs().filter(|spec| !spec.is_kept_on_reset()) {
+    for spec in env
+        .settings()
+        .specs()
+        .filter(|spec| !spec.is_kept_on_reset())
+    {
         let chosen = match &group {
-            Some(group) => env.settings.group_of(spec) == *group && visible(env, spec),
+            Some(group) => env.settings().group_of(spec) == *group && visible(env, spec),
             None => spec.id != *language.id(),
         };
         if chosen {
@@ -236,14 +240,14 @@ fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
         }
     }
     cx.command(Command::Notify(
-        env.i18n.tr("settings.reset-done").to_string(),
+        env.i18n().tr("settings.reset-done").to_string(),
     ));
 }
 
 fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
     // "Only this book" and the like mean nothing outside a scope.
     let scope_only = spec.id == paperpaw_sdk::builtin::settings::SCOPE_ONLY;
-    if scope_only && env.settings.scope().is_none() {
+    if scope_only && env.settings().scope().is_none() {
         return false;
     }
     // Nothing to choose (e.g. no plugin frames pages otherwise).
@@ -254,17 +258,17 @@ fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
     }
     // Not for this device (e.g. reading aloud without a speaker), or not
     // while another setting has another value.
-    if !env.menus.available(spec.id.as_str()) || !env.settings.shows(spec) {
+    if !env.menus().available(spec.id.as_str()) || !env.settings().shows(spec) {
         return false;
     }
     // For developers, once they asked for it; then without the advanced
     // switch.
-    if env.settings.group_of(spec) == groups::DEVELOPER {
+    if env.settings().group_of(spec) == groups::DEVELOPER {
         return env
             .settings
             .bool(paperpaw_sdk::builtin::settings::DEVELOPER.as_str());
     }
-    spec.level == Level::Basic || env.settings.read(&ADVANCED)
+    spec.level == Level::Basic || env.settings().read(&ADVANCED)
 }
 
 /// The header, list area and list for a screen; rows have notes if
@@ -282,7 +286,7 @@ fn frame(env: &Env<'_>, noted: bool) -> (UiStyle, ui::Header, ListView) {
 /// The style, header and the area below it for the list of a page.
 fn page(env: &Env<'_>) -> (UiStyle, ui::Header, Rect) {
     let style = UiStyle::new(env);
-    let display = env.device.display;
+    let display = env.device().display;
     let header = ui::Header::new(env, &style, true);
     let top = header.area().height + style.gap();
     let height = display.height.saturating_sub(top);
@@ -323,7 +327,7 @@ fn navigate_rows(rows: &mut ui::Rows, keys: &mut bool, action: &Id) -> Option<Li
 
 /// Shows the values kept again, if values were shown without being kept.
 fn end_preview(env: &Env<'_>, cx: &mut Cx<'_, '_>) {
-    if env.settings.previewing() {
+    if env.settings().previewing() {
         cx.command(Command::PreviewSettings(Vec::new()));
     }
 }
@@ -342,7 +346,7 @@ impl Covered {
     /// again (see the pages' `on_timer`).
     fn changed(&mut self, cx: &mut Cx<'_, '_>) -> bool {
         if self.hidden && !self.stale {
-            let now = cx.env().now;
+            let now = cx.env().now();
             cx.wake_at(now);
         }
         self.stale |= self.hidden;

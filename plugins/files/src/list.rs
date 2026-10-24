@@ -120,7 +120,7 @@ pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
 
 /// The index of every book, from the library service.
 fn make_index(env: &Env<'_>) -> Index {
-    library::service(env).index(env, cap(env.device.memory), &archive(env))
+    library::service(env).index(env, cap(env.device().memory), &archive(env))
 }
 
 /// Whether the catalog is still to be made (none yet).
@@ -134,7 +134,7 @@ fn collecting(env: &Env<'_>) -> bool {
 /// The archive folder, as the setting names it: its books are on the
 /// shelves, not in the list.
 fn archive(env: &Env<'_>) -> String {
-    env.settings
+    env.settings()
         .read(&crate::ARCHIVE)
         .trim_matches('/')
         .to_string()
@@ -192,25 +192,27 @@ impl ShelfRow {
 
     /// Writes its icon, title and note.
     fn word(&mut self, env: &Env<'_>) {
-        let books = env.i18n.plural("files.books", self.count as i64, &[]);
+        let books = env.i18n().plural("files.books", self.count as i64, &[]);
         let (icon, title, note) = match self.kind {
             _ if self.next => (
                 "arrow-bar-to-right",
-                env.i18n.tr("files.list.show.next").to_string(),
+                env.i18n().tr("files.list.show.next").to_string(),
                 books,
             ),
-            shelf::Kind::Favourites => ("star", env.i18n.tr("files.favourites").to_string(), books),
+            shelf::Kind::Favourites => {
+                ("star", env.i18n().tr("files.favourites").to_string(), books)
+            }
             shelf::Kind::Authors => (
                 "user",
-                env.i18n.tr("files.list.authors").to_string(),
-                env.i18n
+                env.i18n().tr("files.list.authors").to_string(),
+                env.i18n()
                     .plural("files.list.authors.count", self.count as i64, &[]),
             ),
             shelf::Kind::Series => {
-                let series = env.i18n.tr("files.list.series");
+                let series = env.i18n().tr("files.list.series");
                 let note = if self.finished > 0 {
                     let finished =
-                        env.i18n
+                        env.i18n()
                             .plural("files.list.finished.count", self.finished as i64, &[]);
                     format!("{series} · {books} · {finished}")
                 } else {
@@ -221,7 +223,7 @@ impl ShelfRow {
             _ => (
                 "folder",
                 paperpaw_sdk::files::name(&self.name).to_string(),
-                format!("{} · {books}", env.i18n.tr("files.folder")),
+                format!("{} · {books}", env.i18n().tr("files.folder")),
             ),
         };
         self.icon = icon;
@@ -251,7 +253,7 @@ impl Layout {
         let style = UiStyle::new(env);
         let sizes = Sizes::new(env, &style);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let gap = style.gap();
         let (chips, filter_row, top) = if sizes.compact {
             let row = Rect::new(0, header.area().height, display.width, sizes.filter_row);
@@ -276,7 +278,7 @@ impl Layout {
             (chips, None, band.y + band.height)
         };
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let grid = (env.settings.read(&crate::VIEW) == crate::VIEW_COVERS)
+        let grid = (env.settings().read(&crate::VIEW) == crate::VIEW_COVERS)
             .then(|| grid::Grid::new(env, &style, &sizes, area.height));
         Layout {
             style,
@@ -347,7 +349,7 @@ impl ListScreen {
             index: make_index(env),
             collecting: collecting(env),
             filter: Filter::All,
-            by_recent: env.settings.read(&crate::SORT) != crate::SORT_NAME,
+            by_recent: env.settings().read(&crate::SORT) != crate::SORT_NAME,
             order: Vec::new(),
             counts: Vec::new(),
             shelves: Vec::new(),
@@ -456,13 +458,13 @@ impl ListScreen {
             .unwrap_or(0);
         let mut key = String::from("files.list.show.");
         key.push_str(SHOW_OPTIONS[shown]);
-        self.filter_label = env.i18n.tr(&key).to_string();
+        self.filter_label = env.i18n().tr(&key).to_string();
         let total = self.index.total;
         self.filter_end = if self.filter == Filter::Shelves {
             String::new()
         } else if self.filter == Filter::All && total > self.index.items.len() {
             // Some left out: said, not hidden.
-            env.i18n.format(
+            env.i18n().format(
                 "files.list.left-out",
                 &[
                     ("shown", Arg::Int(self.index.items.len() as i64)),
@@ -470,22 +472,22 @@ impl ListScreen {
                 ],
             )
         } else {
-            env.i18n.plural("files.books", self.len() as i64, &[])
+            env.i18n().plural("files.books", self.len() as i64, &[])
         };
         (self.empty_title, self.empty_text) = if self.collecting && self.index.items.is_empty() {
             (
                 String::new(),
-                env.i18n.tr("files.list.collecting").to_string(),
+                env.i18n().tr("files.list.collecting").to_string(),
             )
         } else if self.index.items.is_empty() && self.index.archived > 0 {
             (
                 String::new(),
-                env.i18n.tr("files.list.none.all").to_string(),
+                env.i18n().tr("files.list.none.all").to_string(),
             )
         } else if self.index.items.is_empty() {
             (
-                env.i18n.tr("files.empty.title").to_string(),
-                env.i18n
+                env.i18n().tr("files.empty.title").to_string(),
+                env.i18n()
                     .format("files.empty", &[("dir", Arg::Str(&self.root))]),
             )
         } else {
@@ -495,7 +497,7 @@ impl ListScreen {
                 Filter::Next => "files.list.none.next",
                 _ => "files.list.none.finished",
             };
-            (String::new(), env.i18n.tr(key).to_string())
+            (String::new(), env.i18n().tr(key).to_string())
         };
         self.find = self.find_button(env);
     }
@@ -504,7 +506,7 @@ impl ListScreen {
     /// authors, then the series and the folders, each with how many books
     /// it has (and how many are finished), from one pass over the catalog.
     fn make_shelves(&self, env: &Env<'_>) -> Vec<ShelfRow> {
-        let favourites = library::favourites(env.storage).len();
+        let favourites = library::favourites(env.storage()).len();
         let mut authors: Vec<String> = Vec::new();
         let mut series: Vec<ShelfRow> = Vec::new();
         let mut folders: Vec<ShelfRow> = Vec::new();
@@ -832,7 +834,7 @@ impl ListScreen {
         }
         let path = book.path.clone();
         let env = *cx.env();
-        if env.storage.exists(&path) {
+        if env.storage().exists(&path) {
             read(&path, cx);
             return;
         }
@@ -841,7 +843,9 @@ impl ListScreen {
         self.gone.push(hash(&path));
         cx.command(library::request_catalog_anew());
         self.refilter_in_place(&env);
-        cx.command(Command::Notify(env.i18n.tr("files.list.gone").to_string()));
+        cx.command(Command::Notify(
+            env.i18n().tr("files.list.gone").to_string(),
+        ));
         cx.request_redraw();
     }
 
@@ -861,7 +865,7 @@ impl ListScreen {
     /// filter's row, or in the header left of the page arrows (as
     /// [`ui::Header`] places them).
     fn find_button(&self, env: &Env<'_>) -> Option<Rect> {
-        if !env.device.input.touch || !self.index.has_books() {
+        if !env.device().input.touch || !self.index.has_books() {
             return None;
         }
         let style = &self.layout.style;
@@ -903,7 +907,7 @@ impl ListScreen {
     /// Offers what to show: the filters and "Find".
     fn choose_shown(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let title = env.i18n.tr("files.list.show");
+        let title = env.i18n().tr("files.list.show");
         cx.command(
             paperpaw_sdk::ask::choice(title, &SHOWN)
                 .options("files.list.show.", &SHOW_OPTIONS)
@@ -954,7 +958,7 @@ impl Screen for ListScreen {
         let style = layout.style;
         let len = self.len();
         let paging = (len > 0).then(|| ui::Paging::new(self.page_of(self.focus), self.pages()));
-        let title = env.i18n.tr("files.title");
+        let title = env.i18n().tr("files.title");
         let mut ui = ui::Ui::new(canvas, env, &style);
         layout.header.draw(&mut ui, title, None, paging);
         let has_books = self.index.has_books();
@@ -1054,7 +1058,7 @@ impl Screen for ListScreen {
             cx.request_redraw();
         }
         // The index kept once it is settled.
-        cx.wake_at(env.now);
+        cx.wake_at(env.now());
     }
 
     fn on_hide(&mut self) {
@@ -1082,7 +1086,7 @@ impl Screen for ListScreen {
                 clippy::let_underscore_must_use,
                 reason = "made where missing; keeping the index tells if it fails"
             )]
-            let _ = env.storage.create_dir(".paperpaw/plugins/files");
+            let _ = env.storage().create_dir(".paperpaw/plugins/files");
             let kept = library::service(&env).keep_index(&env, &self.index, KEPT, &self.archive);
             self.index.dirty = !kept;
         }
@@ -1090,7 +1094,7 @@ impl Screen for ListScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
-        let touch = cx.env().device.input.touch;
+        let touch = cx.env().device().input.touch;
         let side = *a == actions::LEFT || *a == actions::RIGHT;
         if side && self.filter_focused && self.layout.filter_row.is_none() {
             // On the chips, left and right go from chip to chip.
@@ -1203,7 +1207,7 @@ impl Screen for ListScreen {
                 self.rebuild(&env);
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
-                cx.wake_at(env.now);
+                cx.wake_at(env.now());
             }
             return;
         }
@@ -1222,7 +1226,7 @@ impl Screen for ListScreen {
                 self.loaded_page = None;
                 self.refilter_in_place(&env);
                 cx.request_redraw();
-                cx.wake_at(env.now);
+                cx.wake_at(env.now());
             }
             return;
         }
@@ -1258,7 +1262,7 @@ impl Screen for ListScreen {
                 // The view, the order, the size of the interface: laid out
                 // anew, the focus on its book; another archive folder: the
                 // index anew.
-                self.by_recent = env.settings.read(&crate::SORT) != crate::SORT_NAME;
+                self.by_recent = env.settings().read(&crate::SORT) != crate::SORT_NAME;
                 self.layout = Layout::new(&env);
                 if archive(&env) != self.archive {
                     self.archive = archive(&env);
@@ -1268,12 +1272,12 @@ impl Screen for ListScreen {
                 self.refilter_in_place(&env);
             } else {
                 // Laid out anew when it shows.
-                self.by_recent = env.settings.read(&crate::SORT) != crate::SORT_NAME;
+                self.by_recent = env.settings().read(&crate::SORT) != crate::SORT_NAME;
                 self.layout = Layout::new(&env);
             }
             cx.request_redraw();
             if !self.covered {
-                cx.wake_at(env.now);
+                cx.wake_at(env.now());
             }
         }
     }

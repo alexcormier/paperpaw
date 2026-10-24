@@ -137,16 +137,16 @@ pub(crate) fn set_last(storage: &dyn Storage, name: &str) {
 
 /// The current values of the settings a profile keeps.
 pub(crate) fn capture(env: &Env<'_>) -> Vec<(Id, String)> {
-    env.settings
+    env.settings()
         .specs()
-        .filter(|spec| GROUPS.contains(&env.settings.group_of(spec)))
+        .filter(|spec| GROUPS.contains(&env.settings().group_of(spec)))
         // Folders and languages belong to the device, not to a way of
         // reading.
         .filter(|spec| !matches!(spec.kind, SettingKind::Text | SettingKind::Language))
         // Neither is a way of reading.
         .filter(|spec| spec.id != settings::SCOPE_ONLY && spec.id != settings::NOTICE_SECONDS)
         .filter_map(|spec| {
-            let value = env.settings.get(spec.id.as_str())?;
+            let value = env.settings().get(spec.id.as_str())?;
             Some((spec.id.clone(), value.to_config_text()))
         })
         .collect()
@@ -159,9 +159,9 @@ pub(crate) fn apply(env: &Env<'_>, profile: &Profile) -> Vec<Command> {
         .values
         .iter()
         .filter_map(|(id, text)| {
-            let spec = env.settings.specs().find(|s| s.id == *id)?;
+            let spec = env.settings().specs().find(|s| s.id == *id)?;
             let value = spec.kind.parse(text).filter(|v| spec.kind.accepts(v))?;
-            (env.settings.get(id.as_str()) != Some(&value))
+            (env.settings().get(id.as_str()) != Some(&value))
                 .then(|| Command::SetSetting(id.clone(), value))
         })
         .collect()

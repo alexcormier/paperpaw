@@ -187,7 +187,7 @@ impl Widget for Streak {
         let look = widgets::draw_frame(canvas, env, NAME, area);
         match &self.shown {
             Some(shown) => draw(canvas, env, &look, shown),
-            None => widgets::draw_message(canvas, env, &look, env.i18n.tr("stats.no-clock")),
+            None => widgets::draw_message(canvas, env, &look, env.i18n().tr("stats.no-clock")),
         }
     }
 
@@ -199,7 +199,7 @@ impl Widget for Streak {
 /// The marks' place across `width` (as large as they may be for 0): how
 /// wide each one's column is and how large the mark.
 fn mark_size(env: &Env<'_>, width: u16, count: usize) -> (u32, u32) {
-    let most = env.metrics.mm(4);
+    let most = env.metrics().mm(4);
     // A mark and a half for each, at most: together, not spread out.
     let column = match width {
         0 => most * 3 / 2,
@@ -230,14 +230,14 @@ fn texts(env: &Env<'_>, streaks: Streaks) -> (String, String) {
         .i18n
         .plural("stats.days", i64::from(streaks.current), &[]);
     let second = if streaks.current == 0 {
-        String::from(env.i18n.tr("stats.widget.streak.start"))
+        String::from(env.i18n().tr("stats.widget.streak.start"))
     } else if widgets::shows(env, NAME, "longest") {
-        env.i18n.format(
+        env.i18n().format(
             "stats.widget.streak.longest",
             &[("count", Arg::Int(i64::from(streaks.longest)))],
         )
     } else {
-        String::from(env.i18n.tr("stats.in-a-row"))
+        String::from(env.i18n().tr("stats.in-a-row"))
     };
     (first, second)
 }
@@ -249,7 +249,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
         return;
     };
     let id = NAME;
-    let title = env.i18n.tr("stats.widget.streak.caption");
+    let title = env.i18n().tr("stats.widget.streak.caption");
     let (first, second) = texts(env, shown.streaks);
     let mut caption = super::caption(env, id, look.area, &[title]);
     let mut area = super::below_caption(env, caption, look.area);
@@ -268,7 +268,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
         size => size.text(&style),
     };
     let least = line(&font, headline) + small;
-    let roomy = u32::from(area.width) * 3 / 5 >= env.metrics.mm(3) * shown.marks.len() as u32;
+    let roomy = u32::from(area.width) * 3 / 5 >= env.metrics().mm(3) * shown.marks.len() as u32;
     if area.width >= area.height * 3 && roomy {
         // Wide and low: the marks beside the text, if there is room, the
         // two placed together as the alignment says.
@@ -277,7 +277,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
         // two would not fit together otherwise.
         let space = style.gap();
         let needs = font.measure(headline, &first) as u16 + 1;
-        let least_marks = (env.metrics.mm(3) * shown.marks.len() as u32) as u16;
+        let least_marks = (env.metrics().mm(3) * shown.marks.len() as u32) as u16;
         let side = needs
             .max(area.width * 2 / 5)
             .min(area.width.saturating_sub(least_marks + space));
@@ -380,13 +380,13 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
     // begin one in short.
     let second = note
         .then(|| {
-            let in_a_row = env.i18n.tr("stats.in-a-row");
-            let start = env.i18n.tr("stats.widget.streak.start");
+            let in_a_row = env.i18n().tr("stats.in-a-row");
+            let start = env.i18n().tr("stats.widget.streak.start");
             let wide = font.measure(style.small(), second) > width;
             if wide && second.starts_with(in_a_row) {
                 in_a_row
             } else if wide && second == start {
-                env.i18n.tr("stats.widget.streak.start-short")
+                env.i18n().tr("stats.widget.streak.start-short")
             } else {
                 second
             }

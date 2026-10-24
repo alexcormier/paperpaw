@@ -286,7 +286,7 @@ fn size_of(size: &str) -> u32 {
 /// keys. The shape gives the height at Medium, and the size scales the
 /// whole keyboard from there.
 fn tapped_height(env: &Env<'_>, style: &UiStyle, letter: u32, count: u16, around: u16) -> u16 {
-    let shape = env.settings.read(&KEY_SHAPE);
+    let shape = env.settings().read(&KEY_SHAPE);
     let border = 2 * ui::button_border(style) as u16;
     let touch_row = style.touch_row(u32::from(style.row())) as u16;
     let height = (letter * height_of(shape) / 100) as u16;
@@ -301,18 +301,18 @@ fn tapped_height(env: &Env<'_>, style: &UiStyle, letter: u32, count: u16, around
     };
     let count = count.max(1);
     let medium = u32::from(around) + u32::from(count) * u32::from(shaped);
-    let target = medium * size_of(env.settings.read(&KEY_SIZE)) / 100;
+    let target = medium * size_of(env.settings().read(&KEY_SIZE)) / 100;
     let sized = (target.saturating_sub(u32::from(around)) / u32::from(count)) as u16;
     // Larger keys stop where the keyboard would take more than half the
     // screen.
-    let half = (env.device.display.height / 2).saturating_sub(around) / count;
+    let half = (env.device().display.height / 2).saturating_sub(around) / count;
     let sized = if sized > shaped {
         sized.min(half.max(shaped))
     } else {
         sized
     };
     // Never smaller than a finger hits, nor than the letter on the key.
-    let least = (env.metrics.mm(LEAST_TAP_MM) as u16).max(style.text() as u16 + border);
+    let least = (env.metrics().mm(LEAST_TAP_MM) as u16).max(style.text() as u16 + border);
     sized.max(least)
 }
 
@@ -466,17 +466,17 @@ impl KeyboardScreen {
         } else {
             Layer::Letters
         };
-        let keys = env.settings.read(&UMLAUT_KEYS);
-        let layouts = layouts::chosen(env, env.settings.read(&LAYOUTS_SETTING), keys);
+        let keys = env.settings().read(&UMLAUT_KEYS);
+        let layouts = layouts::chosen(env, env.settings().read(&LAYOUTS_SETTING), keys);
         if current.get() >= layouts.len() {
             current.set(0);
         }
-        let display = env.device.display;
-        let touch = env.device.input.touch;
+        let display = env.device().display;
+        let touch = env.device().input.touch;
         // As many units in a row as leave a letter (2 units) its least
         // width.
         let least = if touch { LEAST_TAP_MM } else { LEAST_KEY_MM };
-        let unit = (env.metrics.mm(least) / 2).max(1);
+        let unit = (env.metrics().mm(least) / 2).max(1);
         let most = (u32::from(display.width) - 2 * u32::from(style.margin())) / unit;
         let letters = &layouts[current.get()].1;
         // As high as the layer with the most rows needs, so that turning
@@ -542,7 +542,7 @@ impl KeyboardScreen {
             key_height: keys_height / count as u16,
             most,
             touch,
-            shape: env.settings.read(&KEY_SHAPE).to_string(),
+            shape: env.settings().read(&KEY_SHAPE).to_string(),
         };
         screen.buttons = screen.field_buttons(env);
         screen
@@ -579,10 +579,10 @@ impl KeyboardScreen {
             return Vec::new();
         };
         let mut kinds = Vec::new();
-        if env.caps.network && env.has_slot(&slots::REMOTE_KEYBOARD) {
+        if env.caps().network && env.has_slot(&slots::REMOTE_KEYBOARD) {
             kinds.push(FieldButton::Phone);
         }
-        if env.clipboard {
+        if env.clipboard() {
             kinds.push(FieldButton::Paste);
         }
         let b = self.text_box();
@@ -595,7 +595,7 @@ impl KeyboardScreen {
             .into_iter()
             .rev()
             .map(|kind| {
-                let label = env.i18n.tr(kind.label());
+                let label = env.i18n().tr(kind.label());
                 let label_width = (font.measure(self.style.small(), label) + 1.0) as u16;
                 let width = label_width + self.style.gap() * 3;
                 let area = Rect::new(right - width, b.y + pad, width, height);
@@ -682,10 +682,10 @@ impl KeyboardScreen {
     fn label(&self, env: &Env<'_>, key: Key) -> String {
         match key {
             Key::Char(c) => self.cased(c).to_string(),
-            Key::Layer(Layer::Letters) => env.i18n.tr("keyboard.letters-key").to_string(),
-            Key::Layer(_) => env.i18n.tr("keyboard.symbols-key").to_string(),
+            Key::Layer(Layer::Letters) => env.i18n().tr("keyboard.letters-key").to_string(),
+            Key::Layer(_) => env.i18n().tr("keyboard.symbols-key").to_string(),
             Key::NextLayout => self.layouts[self.current.get()].0.clone(),
-            Key::Done => env.i18n.tr("keyboard.done").to_string(),
+            Key::Done => env.i18n().tr("keyboard.done").to_string(),
             Key::Shift | Key::Delete | Key::Space => String::new(),
         }
     }
@@ -696,7 +696,7 @@ impl KeyboardScreen {
         self.text.extend(text.chars().take(room));
         if text.chars().nth(room).is_some() {
             let env = *cx.env();
-            let full = env.i18n.format(
+            let full = env.i18n().format(
                 "keyboard.full",
                 &[("count", paperpaw_sdk::Arg::Int(MAX_CHARS as i64))],
             );
@@ -1073,7 +1073,7 @@ impl KeyboardScreen {
         );
         for (index, &(kind, area)) in self.buttons.iter().enumerate() {
             let focused = self.focus == Some((PASTE_ROW, index));
-            let label = env.i18n.tr(kind.label());
+            let label = env.i18n().tr(kind.label());
             ui.button(area, label, false, focused);
         }
     }
@@ -1090,7 +1090,7 @@ impl KeyboardScreen {
             .iter()
             .find(|(base, _)| c.to_lowercase().eq(core::iter::once(*base)))?;
         let letters: String = letters.chars().map(|l| self.cased(l)).collect();
-        Some(env.i18n.format(
+        Some(env.i18n().format(
             "keyboard.hold-for",
             &[("letters", paperpaw_sdk::Arg::Str(&letters))],
         ))
@@ -1156,7 +1156,7 @@ impl KeyboardScreen {
             }
         };
         // The key drawn: an arrow, a space.
-        let name = env.i18n.tr(name);
+        let name = env.i18n().tr(name);
         let ink = ui.icon_button(r, name, active, focused);
         let size = (style.text() * 0.6) as i32;
         let (cx, cy) = (

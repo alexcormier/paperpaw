@@ -180,28 +180,28 @@ impl Book {
     pub(super) fn open(env: &Env<'_>, params: &Params) -> Result<Book, Unopened> {
         let path = params
             .get(params::PATH)
-            .ok_or_else(|| env.i18n.tr("reader.no-book").to_string())?;
+            .ok_or_else(|| env.i18n().tr("reader.no-book").to_string())?;
         let error = |e: DocumentError| match e {
-            DocumentError::NotReady => Unopened::NotReady(env.i18n.tr("reader.not-ready").into()),
-            e => Unopened::Failed(format!("{}\n{e}", env.i18n.tr("reader.error"))),
+            DocumentError::NotReady => Unopened::NotReady(env.i18n().tr("reader.not-ready").into()),
+            e => Unopened::Failed(format!("{}\n{e}", env.i18n().tr("reader.error"))),
         };
         let options = paperpaw_sdk::reading::open_options(env);
         let document = env
             .formats
-            .open_with(env.storage, path, &options)
+            .open_with(env.storage(), path, &options)
             .map_err(error)?;
         let font = env
             .fonts
             .role(fonts::READING.as_str())
-            .ok_or_else(|| env.i18n.tr("reader.no-font").to_string())?;
+            .ok_or_else(|| env.i18n().tr("reader.no-font").to_string())?;
         let language = document
             .metadata()
             .language
             .clone()
-            .unwrap_or_else(|| env.i18n.language().to_string());
+            .unwrap_or_else(|| env.i18n().language().to_string());
         let typography = typography(env, &font, &language, document.whole_pages());
         let dir = book_dir(path);
-        move_old_annotations(env.storage, &dir, path);
+        move_old_annotations(env.storage(), &dir, path);
         let title = document
             .metadata()
             .title
@@ -225,7 +225,7 @@ impl Book {
             conversion: paperpaw_sdk::reading::conversion(env),
             pointed: true,
             xpointer: None,
-            fingerprint: paperpaw_sdk::library::Fingerprint::of(env.storage, path),
+            fingerprint: paperpaw_sdk::library::Fingerprint::of(env.storage(), path),
             dir,
             title,
             document,
@@ -239,7 +239,7 @@ impl Book {
             embedded: None,
             links: Vec::new(),
             returns: Vec::new(),
-            status_lines: status::load_choice(env.storage),
+            status_lines: status::load_choice(env.storage()),
             chapter_marks: String::new(),
             landed: None,
             page_back: params.get(paperpaw_sdk::readers::PAGE).is_some(),
@@ -269,7 +269,7 @@ impl Book {
         book.update_chapter(env);
         book.update_links(env);
         if !book.web() {
-            remember_last(env.storage, &book.path);
+            remember_last(env.storage(), &book.path);
         }
         Ok(book)
     }
@@ -282,7 +282,7 @@ impl Book {
             .index
             .as_ref()
             .filter(|i| i.is_complete())
-            .and_then(|index| match index.locate(env.storage, self.page.start) {
+            .and_then(|index| match index.locate(env.storage(), self.page.start) {
                 Some((page, true)) => Some((page + 1, index.pages())),
                 _ => None,
             });
@@ -317,7 +317,7 @@ impl Book {
                 _ => {
                     // The page the next chapter starts on, or the one
                     // before if it starts with its page.
-                    let last = match index.locate(env.storage, next)? {
+                    let last = match index.locate(env.storage(), next)? {
                         (page, true) => page.checked_sub(1)?,
                         (page, false) => page,
                     };
@@ -343,7 +343,7 @@ impl Book {
         {
             return Some(first);
         }
-        let (first, _) = index.locate(env.storage, *start)?;
+        let (first, _) = index.locate(env.storage(), *start)?;
         self.chapter_first.set(Some((*start, index.pages(), first)));
         Some(first)
     }
@@ -353,7 +353,7 @@ impl Book {
     /// removes those of other layouts once more than a few are kept;
     /// switching back finds the others.
     pub(super) fn open_index(&self, env: &Env<'_>) -> PageIndex {
-        let storage = env.storage;
+        let storage = env.storage();
         let size = storage.size(&self.path).unwrap_or(0);
         let name = format!(
             "pages-{:016x}.bin",
@@ -415,7 +415,7 @@ impl Book {
     /// out in (a frame chosen, a layer's room); asked only where there
     /// are layers or frames.
     pub(super) fn retyped(&self, env: &Env<'_>) -> bool {
-        !env.page_layers.is_idle()
+        !env.page_layers().is_idle()
             && self.font(env).is_some_and(|font| {
                 let whole = self.document.whole_pages();
                 typography(env, &font, &self.language, whole).key != self.typography.key
@@ -428,7 +428,7 @@ impl Book {
     pub(super) fn prepare_images(&mut self, env: &Env<'_>) {
         let document = &self.document;
         for shown in &mut self.page.images {
-            if let Some(image) = document.prepare_image(env.storage, &shown.image) {
+            if let Some(image) = document.prepare_image(env.storage(), &shown.image) {
                 shown.image = image;
             }
         }
@@ -441,7 +441,7 @@ impl Book {
     }
 
     pub(super) fn font<'a>(&self, env: &Env<'a>) -> Option<FontHandle<'a>> {
-        env.fonts.role(fonts::READING.as_str())
+        env.fonts().role(fonts::READING.as_str())
     }
 
     /// The start of the line `at` is in, as this book is laid out now
@@ -477,7 +477,7 @@ impl Book {
         let patterns = t
             .hyphenation
             .as_deref()
-            .and_then(|language| env.hyphenation.get(language));
+            .and_then(|language| env.hyphenation().get(language));
         let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| {
             if let Some(patterns) = patterns {
                 patterns.hyphenate(word, out);
@@ -486,7 +486,7 @@ impl Book {
         let filtered = FilteredDocument::new(self.document.as_ref(), env)
             .in_book(&self.path, &self.language)
             .remembering(&self.dropped);
-        let cx = LayoutContext::new(&filtered, env.storage, width, &t.style, &faces)
+        let cx = LayoutContext::new(&filtered, env.storage(), width, &t.style, &faces)
             .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         Some(f(&cx))
     }
@@ -503,14 +503,14 @@ impl Book {
     /// is there but cannot be read, also at a second try, is held: not
     /// written over.
     pub(super) fn saved_position(&mut self, env: &Env<'_>) -> Option<(Locator, bool)> {
-        let load = || paperpaw_sdk::positions::load_for_update(env.storage, &self.path);
+        let load = || paperpaw_sdk::positions::load_for_update(env.storage(), &self.path);
         // A card that failed to read it once may read it now.
         let loaded = load().or_else(|_| load());
         let (kept, before) = match loaded {
             Ok(Some(kept)) => (kept, false),
             Ok(None) => {
                 let data =
-                    paperpaw_sdk::read_file(env.storage, &self.progress_path(), 4096).ok()?;
+                    paperpaw_sdk::read_file(env.storage(), &self.progress_path(), 4096).ok()?;
                 let text = core::str::from_utf8(&data).ok()?;
                 (paperpaw_sdk::positions::Position::parse(text)?, true)
             }
@@ -522,7 +522,7 @@ impl Book {
         self.from_progress = before;
         let found = match (kept.conversion, &kept.xpointer) {
             (Some(conversion), Some(xpointer)) if conversion != self.conversion => {
-                self.document.locate_xpointer(env.storage, xpointer)
+                self.document.locate_xpointer(env.storage(), xpointer)
             }
             _ => None,
         };
@@ -537,15 +537,15 @@ impl Book {
     pub(super) fn reload_marks(&mut self, env: &Env<'_>) -> bool {
         let doc = self.document.as_ref();
         let moved =
-            annotations::relocate(env.storage, &self.path, self.conversion, doc).unwrap_or(false);
+            annotations::relocate(env.storage(), &self.path, self.conversion, doc).unwrap_or(false);
         if let Some(fingerprint) = &self.fingerprint {
             #[expect(
                 clippy::let_underscore_must_use,
                 reason = "which book they are of: where it cannot be written now, it is at the next opening"
             )]
-            let _ = annotations::stamp(env.storage, &self.path, fingerprint);
+            let _ = annotations::stamp(env.storage(), &self.path, fingerprint);
         }
-        let marks = annotations::marks(env.storage, &self.path);
+        let marks = annotations::marks(env.storage(), &self.path);
         let changed = moved || marks != self.marks;
         self.marks = marks;
         changed
@@ -563,7 +563,7 @@ impl Book {
         if self.held {
             self.set_aside(cx);
         }
-        let now = cx.env().now;
+        let now = cx.env().now();
         let recent = self
             .saved_at
             .is_some_and(|at| now.since(at) < SAVE_EVERY_MS);
@@ -581,7 +581,7 @@ impl Book {
     fn set_aside(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let file = paperpaw_sdk::positions::file(&self.path);
-        if !env.storage.exists(&file) {
+        if !env.storage().exists(&file) {
             self.held = false;
             return;
         }
@@ -590,8 +590,8 @@ impl Book {
                 1 => format!("{file}.bad"),
                 n => format!("{file}.bad{n}"),
             })
-            .find(|aside| !env.storage.exists(aside))
-            .is_some_and(|aside| env.storage.rename(&file, &aside).is_ok());
+            .find(|aside| !env.storage().exists(aside))
+            .is_some_and(|aside| env.storage().rename(&file, &aside).is_ok());
         let said = if moved {
             self.held = false;
             "reader.position-set-aside"
@@ -601,13 +601,13 @@ impl Book {
         } else {
             return;
         };
-        cx.command(Command::Notify(env.i18n.tr(said).to_string()));
+        cx.command(Command::Notify(env.i18n().tr(said).to_string()));
     }
 
     /// Writes the position if it waits; `force` also before its time, and
     /// with its XPointer (the book is closed, the device goes to sleep).
     pub(super) fn save_due(&mut self, cx: &mut Cx<'_, '_>, force: bool) {
-        let now = cx.env().now;
+        let now = cx.env().now();
         let due = self
             .saved_at
             .is_none_or(|at| now.since(at) >= SAVE_EVERY_MS);
@@ -626,10 +626,10 @@ impl Book {
             return;
         }
         let env = *cx.env();
-        self.saved_at = Some(env.now);
+        self.saved_at = Some(env.now());
         let start = self.page.start;
         if pointed {
-            self.xpointer = self.document.xpointer(env.storage, start);
+            self.xpointer = self.document.xpointer(env.storage(), start);
         }
         self.pointed = pointed;
         let position = paperpaw_sdk::positions::Position::new(start, self.percent())
@@ -637,18 +637,20 @@ impl Book {
             .xpointer(self.xpointer.clone().filter(|_| pointed))
             .updated(paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0));
         let saved = paperpaw_sdk::positions::save_with_book(
-            env.storage,
+            env.storage(),
             &self.path,
             &position,
             self.fingerprint.as_ref(),
         );
         if saved.is_err() && !self.save_failed {
             self.save_failed = true;
-            cx.command(Command::Notify(env.i18n.tr("reader.not-saved").to_string()));
+            cx.command(Command::Notify(
+                env.i18n().tr("reader.not-saved").to_string(),
+            ));
         }
         // Kept where it is now: the old file would only come back over it.
         if saved.is_ok() && self.from_progress {
-            self.from_progress = env.storage.remove(&self.progress_path()).is_err();
+            self.from_progress = env.storage().remove(&self.progress_path()).is_err();
         }
     }
 
@@ -660,12 +662,12 @@ impl Book {
         }
         let here = self.page.start;
         if let Some(index) = &self.index {
-            match index.locate(env.storage, here) {
+            match index.locate(env.storage(), here) {
                 Some((0, true)) => return None,
-                Some((page, true)) => return index.entry(env.storage, page - 1),
+                Some((page, true)) => return index.entry(env.storage(), page - 1),
                 // Inside a page whose end the index knows: its start.
                 Some((page, false)) if index.is_complete() || page + 1 < index.pages() => {
-                    return index.entry(env.storage, page);
+                    return index.entry(env.storage(), page);
                 }
                 // Past the pages counted so far.
                 _ => {}
@@ -688,7 +690,7 @@ impl Book {
         let length = end.saturating_sub(page.start.offset).max(MIN_PAGE_BACK);
         // At the start of its section, the end of the one before.
         let first = document
-            .block_at(env.storage, Locator::new(here.section, 0))
+            .block_at(env.storage(), Locator::new(here.section, 0))
             .ok()
             .flatten()
             .map_or(0, |block| block.start);
@@ -750,7 +752,7 @@ impl Book {
         self.chapter_first(&env);
         self.update_links(&env);
         if self.position_changed(cx) {
-            cx.wake_at(env.now.add_millis(SAVE_EVERY_MS));
+            cx.wake_at(env.now().add_millis(SAVE_EVERY_MS));
         }
         if !self.web() {
             cx.command(events::PAGE_TURNED.emit(self.reading(&env)));
@@ -782,12 +784,12 @@ impl Book {
         let index = self.index.as_ref()?;
         let mut next = match self.indexing {
             Some(next) => next,
-            None => match index.last(env.storage) {
+            None => match index.last(env.storage()) {
                 Some(last) => self.layout(env, last).ok()?.end,
                 None => Locator::START,
             },
         };
-        let per_step = match env.device.memory {
+        let per_step = match env.device().memory {
             paperpaw_sdk::MemoryClass::Small => PAGES_PER_STEP_SMALL,
             _ => PAGES_PER_STEP,
         };
@@ -809,11 +811,11 @@ impl Book {
         }
         let index = self.index.as_mut()?;
         // A storage that is read-only or full.
-        if !index.append(env.storage, &starts) {
+        if !index.append(env.storage(), &starts) {
             return None;
         }
         if done {
-            index.finish(env.storage);
+            index.finish(env.storage());
         }
         self.indexing = Some(next);
         Some(!done)
@@ -823,9 +825,9 @@ impl Book {
     pub(super) fn position_label(&self, env: &Env<'_>) -> String {
         if let Some(index) = &self.index
             && index.is_complete()
-            && let Some((page, true)) = index.locate(env.storage, self.page.start)
+            && let Some((page, true)) = index.locate(env.storage(), self.page.start)
         {
-            return env.i18n.format(
+            return env.i18n().format(
                 "reader.page",
                 &[
                     ("page", Arg::Int(i64::from(page) + 1)),
@@ -833,7 +835,7 @@ impl Book {
                 ],
             );
         }
-        env.i18n.format(
+        env.i18n().format(
             "reader.percent",
             &[("percent", Arg::Int(self.percent() as i64))],
         )
@@ -856,7 +858,7 @@ impl Book {
         };
         self.links = self
             .document
-            .links(env.storage, start.section, start.offset, to);
+            .links(env.storage(), start.section, start.offset, to);
     }
 
     /// What the buttons choose on the page, in reading order: the links
@@ -885,7 +887,7 @@ impl Book {
                 .rooms
                 .iter()
                 .enumerate()
-                .filter(|(_, (id, _))| env.page_layers.on(env).any(|l| l.taps && l.id == *id))
+                .filter(|(_, (id, _))| env.page_layers().on(env).any(|l| l.taps && l.id == *id))
                 .map(|(i, _)| Target::Layer(i)),
         );
         targets
@@ -911,7 +913,7 @@ impl Book {
         // As the page shows it.
         let filtered =
             FilteredDocument::new(self.document.as_ref(), env).in_book(&self.path, &self.language);
-        paperpaw_sdk::reading::note_text(&filtered, env.storage, href)
+        paperpaw_sdk::reading::note_text(&filtered, env.storage(), href)
     }
 
     /// The link `word` is part of, if any.
@@ -986,10 +988,10 @@ impl Book {
         match kind {
             "page" => {
                 if let Some(index) = pages
-                    && let Some((page, _)) = index.locate(env.storage, self.page.start)
+                    && let Some((page, _)) = index.locate(env.storage(), self.page.start)
                 {
                     let target = (i64::from(page) + value).clamp(0, i64::from(index.pages()) - 1);
-                    return index.entry(env.storage, target as u32);
+                    return index.entry(env.storage(), target as u32);
                 }
                 let at = (self.percent() as f64 * 10.0 + value as f64).clamp(0.0, 999.0);
                 Some(self.locator_at(at / 1000.0))
@@ -998,14 +1000,14 @@ impl Book {
                 let fraction = value.clamp(0, 999) as f64 / 1000.0;
                 if let Some(index) = pages {
                     let page = (fraction * f64::from(index.pages())) as u32;
-                    return index.entry(env.storage, page.min(index.pages() - 1));
+                    return index.entry(env.storage(), page.min(index.pages() - 1));
                 }
                 Some(self.locator_at(fraction))
             }
             "chapter" => {
                 // Where the entries begin, exactly (their anchors): the
                 // chapters the status lines name, also those in parts.
-                let storage = env.storage;
+                let storage = env.storage();
                 let mut starts: Vec<Locator> = (0..self.document.toc_len(storage).min(2000))
                     .filter_map(|i| self.document.toc_target(storage, i))
                     .collect();
@@ -1052,9 +1054,9 @@ impl Book {
         let Some(index) = &self.index else {
             return at;
         };
-        match index.locate(env.storage, at) {
+        match index.locate(env.storage(), at) {
             Some((page, _)) if index.is_complete() || page + 1 < index.pages() => {
-                index.entry(env.storage, page).unwrap_or(at)
+                index.entry(env.storage(), page).unwrap_or(at)
             }
             _ => at,
         }
@@ -1072,7 +1074,7 @@ impl Book {
             return;
         }
         self.chapter = None;
-        let (document, storage) = (&self.document, env.storage);
+        let (document, storage) = (&self.document, env.storage());
         let mut chapter = (Locator::START, None, String::new());
         for index in 0..document.toc_len(storage) {
             let Some(entry) = document.toc_entry(storage, index) else {
@@ -1098,5 +1100,5 @@ impl Book {
 /// Whether the text filters do something else now than when the pages
 /// were laid out.
 pub(super) fn env_filters_changed(env: &Env<'_>, book: &Book) -> bool {
-    book.typography.filters != env.text_filters.signature(env)
+    book.typography.filters != env.text_filters().signature(env)
 }

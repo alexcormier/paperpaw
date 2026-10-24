@@ -23,7 +23,7 @@ pub(crate) fn shown_file() -> String {
 
 /// The card shown asleep, if one was: its deck and id.
 pub(crate) fn shown(env: &Env<'_>) -> Option<(u32, u32)> {
-    let text = paperpaw_sdk::read_file(env.storage, &shown_file(), 32).ok()?;
+    let text = paperpaw_sdk::read_file(env.storage(), &shown_file(), 32).ok()?;
     let text = core::str::from_utf8(&text).ok()?;
     let (deck, id) = text.trim().split_once(' ')?;
     Some((deck.parse().ok()?, id.parse().ok()?))
@@ -40,24 +40,24 @@ impl SleepCard {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let now = cards::now(env);
         let day = Day::now(env, now);
-        let per_day = env.settings.read(&NEW_PER_DAY).clamp(0, 1000) as u32;
-        let new = cards::new_left(env.storage, day, per_day);
-        let next = cards::due(env.storage, day.end, new, 1, None)
+        let per_day = env.settings().read(&NEW_PER_DAY).clamp(0, 1000) as u32;
+        let new = cards::new_left(env.storage(), day, per_day);
+        let next = cards::due(env.storage(), day.end, new, 1, None)
             .into_iter()
             .next()
-            .and_then(|due| Some((due, cards::card_at(env.storage, due.deck, due.offset)?)));
-        let _ = env.storage.remove(&shown_file());
+            .and_then(|due| Some((due, cards::card_at(env.storage(), due.deck, due.offset)?)));
+        let _ = env.storage().remove(&shown_file());
         let front = next.map(|(due, card)| {
             let kept = format!("{} {}\n", due.deck, due.state.id);
-            let _ = env.storage.write(&shown_file(), kept.as_bytes());
+            let _ = env.storage().write(&shown_file(), kept.as_bytes());
             card.front
         });
         let note = match front {
             Some(_) => {
                 let count = decks::due_now(env) as i64;
-                env.i18n.plural("vocabulary.sleep-card.due", count, &[])
+                env.i18n().plural("vocabulary.sleep-card.due", count, &[])
             }
-            None => env.i18n.tr("vocabulary.sleep-card.none").into(),
+            None => env.i18n().tr("vocabulary.sleep-card.none").into(),
         };
         Self { front, note }
     }
@@ -65,7 +65,7 @@ impl SleepCard {
 
 impl Screen for SleepCard {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let display = env.device.display;
+        let display = env.device().display;
         let style = UiStyle::new(env);
         let mut ui = ui::Ui::new(canvas, env, &style);
         ui.canvas()

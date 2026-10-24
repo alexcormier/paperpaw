@@ -69,7 +69,7 @@ impl Control {
 
     /// It can be used now: its entry is not shown faint.
     fn enabled(&self, env: &Env<'_>) -> bool {
-        env.menus.state(env, self.id().as_str()).enabled
+        env.menus().state(env, self.id().as_str()).enabled
     }
 }
 
@@ -105,7 +105,7 @@ pub(crate) struct PanelScreen {
 }
 
 fn spec<'e>(env: &Env<'e>, id: &Id) -> Option<&'e SettingSpec> {
-    env.settings.specs().find(|spec| spec.id == *id)
+    env.settings().specs().find(|spec| spec.id == *id)
 }
 
 /// What a row of the panel shows, before it is placed.
@@ -287,15 +287,15 @@ impl PanelScreen {
         let menu = params.get(params::MENU).unwrap_or_default();
         let top = params.get(params::MODE) == Some("top");
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let width = display.width;
         let margin = style.margin();
-        let mut items = env.menus.shown_items(env, menu);
+        let mut items = env.menus().shown_items(env, menu);
         // A setting shown only while another has a value.
         items.retain(|item| {
-            env.settings
+            env.settings()
                 .spec(item.id.as_str())
-                .is_none_or(|s| env.settings.shows(s))
+                .is_none_or(|s| env.settings().shows(s))
         });
         // Labels as wide as the longest needs, at most half the row;
         // sliders have their titles above them.
@@ -305,7 +305,7 @@ impl PanelScreen {
             .iter()
             .filter_map(|item| spec(env, item.id))
             .filter(|s| !matches!(s.kind, SettingKind::Bool) && !ui::slider::shows(env, s))
-            .map(|s| measure(env.i18n.tr(&s.title)))
+            .map(|s| measure(env.i18n().tr(&s.title)))
             .fold(0.0, f32::max);
         let label =
             ((longest as u16).saturating_add(style.gap() * 2)).min((width - 2 * margin) / 2);
@@ -318,7 +318,7 @@ impl PanelScreen {
             0
         };
         // By touch, buttons a fingertip large and a little apart.
-        let touch = env.device.input.touch;
+        let touch = env.device().input.touch;
         let geometry = Geometry {
             width,
             height: display.height,
@@ -369,7 +369,7 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
     let label_of = |control: &Control| -> String {
         match control {
             Control::Toggle(id) => spec(env, id).map_or(String::new(), |s| {
-                alloc::format!("• {}", button_text(env, id, env.i18n.tr(&s.title)))
+                alloc::format!("• {}", button_text(env, id, env.i18n().tr(&s.title)))
             }),
             Control::Run(id) => button_text(env, id, &action_title(env, id)),
             _ => String::new(),
@@ -517,7 +517,7 @@ impl PanelScreen {
         };
         let id = spec.id.clone();
         if let Some(step) = ui::slider::key_step(action) {
-            let value = slider.stepped(env.settings.int(id.as_str()), step);
+            let value = slider.stepped(env.settings().int(id.as_str()), step);
             show(cx, id, value);
             return Handled::Yes;
         }
@@ -526,7 +526,7 @@ impl PanelScreen {
             return Handled::No;
         }
         self.editing = None;
-        let value = env.settings.int(id.as_str());
+        let value = env.settings().int(id.as_str());
         let row = self.rows_of(&id).unwrap_or(self.region);
         done(
             &env,
@@ -586,13 +586,13 @@ impl PanelScreen {
             return;
         }
         let set = |cx: &mut Cx<'_, '_>, id: &Id, value: SettingValue| {
-            if env.settings.get(id.as_str()) != Some(&value) {
+            if env.settings().get(id.as_str()) != Some(&value) {
                 cx.command(Command::SetSetting(id.clone(), value));
             }
         };
         match control {
             Control::Toggle(id) => {
-                let on = env.settings.bool(id.as_str());
+                let on = env.settings().bool(id.as_str());
                 set(cx, id, SettingValue::Bool(!on));
             }
             Control::Step(id, step) => {
@@ -635,11 +635,11 @@ impl PanelScreen {
 
     fn draw_control(&self, ui: &mut ui::Ui<'_>, control: &Control, rect: Rect, focused: bool) {
         let env = ui.env();
-        let state = env.menus.state(env, control.id().as_str());
+        let state = env.menus().state(env, control.id().as_str());
         let (on, label): (bool, String) = match control {
             Control::Toggle(id) => {
-                let name = spec(env, id).map_or("", |s| env.i18n.tr(&s.title));
-                let mark = if env.settings.is_scoped(id.as_str()) {
+                let name = spec(env, id).map_or("", |s| env.i18n().tr(&s.title));
+                let mark = if env.settings().is_scoped(id.as_str()) {
                     "• "
                 } else {
                     ""
@@ -647,7 +647,7 @@ impl PanelScreen {
                 (
                     state
                         .checked
-                        .unwrap_or_else(|| env.settings.bool(id.as_str())),
+                        .unwrap_or_else(|| env.settings().bool(id.as_str())),
                     alloc::format!("{mark}{}", state.text(name)),
                 )
             }
@@ -661,8 +661,8 @@ impl PanelScreen {
                 return draw_slider(ui, id, rect, focus);
             }
             Control::Option(id, option) => (
-                env.settings.text(id.as_str()) == option,
-                env.i18n.tr(option).to_string(),
+                env.settings().text(id.as_str()) == option,
+                env.i18n().tr(option).to_string(),
             ),
             Control::Open(id) => {
                 // A row: the setting's name, its value and an arrow.
@@ -673,7 +673,7 @@ impl PanelScreen {
                     ui.focus(rect);
                 }
                 let value = alloc::format!("{} ›", ui::setting_value(env, spec));
-                let title = state.text(env.i18n.tr(&spec.title));
+                let title = state.text(env.i18n().tr(&spec.title));
                 ui::Row::value(&title, &value)
                     .focused(focused)
                     .draw(ui, rect);
@@ -706,8 +706,8 @@ fn draw_slider(ui: &mut ui::Ui<'_>, id: &Id, rect: Rect, focus: ui::slider::Slid
     }
     let shown = ui::setting_value(env, spec);
     let room = ui::number_room(env, style, [spec]);
-    let view = ui::slider::SliderView::new(rect, env.settings.int(id.as_str()), &shown)
-        .title(env.i18n.tr(&spec.title))
+    let view = ui::slider::SliderView::new(rect, env.settings().int(id.as_str()), &shown)
+        .title(env.i18n().tr(&spec.title))
         .room(&room)
         .focus(focus);
     slider.draw_row(ui.canvas(), env, style, &view);
@@ -718,7 +718,7 @@ fn draw_slider(ui: &mut ui::Ui<'_>, id: &Id, rect: Rect, focus: ui::slider::Slid
 /// the same for every value, so its band stays where it was laid out.
 fn slider_extra(env: &Env<'_>, style: &UiStyle, width: u16, spec: &SettingSpec) -> u16 {
     let room = ui::number_room(env, style, [spec]);
-    ui::slider::title_extra(env, style, width, env.i18n.tr(&spec.title), &room)
+    ui::slider::title_extra(env, style, width, env.i18n().tr(&spec.title), &room)
 }
 
 /// The title of action `id`, translated.
@@ -727,13 +727,13 @@ fn action_title(env: &Env<'_>, id: &Id) -> String {
         .actions
         .get(id.as_str())
         .map_or(id.as_str(), |a| a.title.as_ref());
-    env.i18n.tr(title).to_string()
+    env.i18n().tr(title).to_string()
 }
 
 /// What the button of entry `id` titled `title` says now: the label and
 /// badge its plugin gives it.
 fn button_text(env: &Env<'_>, id: &Id, title: &str) -> String {
-    env.menus.state(env, id.as_str()).text(title)
+    env.menus().state(env, id.as_str()).text(title)
 }
 
 /// Shows `value` for setting `id` without keeping it yet.
@@ -752,7 +752,7 @@ fn done(env: &Env<'_>, cx: &mut Cx<'_, '_>, id: Id, value: Option<i64>, row: Rec
     if let Some(value) = value {
         cx.command(Command::SetSetting(id, SettingValue::Int(value)));
     }
-    let moved = env.settings.previewing();
+    let moved = env.settings().previewing();
     if moved {
         cx.command(Command::PreviewSettings(Vec::new()));
     }
@@ -780,7 +780,7 @@ fn fits_segments(
     let cell = f32::from(area.width) / options.len() as f32 - 2.0 * style.gap() as f32;
     options
         .iter()
-        .all(|o| font.measure(style.small(), env.i18n.tr(o)) <= cell)
+        .all(|o| font.measure(style.small(), env.i18n().tr(o)) <= cell)
 }
 
 /// `area` without `margin` left and right and a little above and below.
@@ -815,7 +815,7 @@ impl Screen for PanelScreen {
             return;
         };
         if self.rows.is_empty() {
-            ui.message(r, env.i18n.tr("menu.empty"));
+            ui.message(r, env.i18n().tr("menu.empty"));
             return;
         }
         for (first, row) in self.visible_rows() {
@@ -832,7 +832,7 @@ impl Screen for PanelScreen {
                     Some(f) if f == first + 1 => Some(true),
                     _ => None,
                 };
-                let title = env.i18n.tr(&spec.title);
+                let title = env.i18n().tr(&spec.title);
                 let value = ui::setting_value(env, spec);
                 ui::Row::number(title, &value, &value)
                     .step_focus(focus)
@@ -848,7 +848,7 @@ impl Screen for PanelScreen {
                 let x = style.margin() as f32;
                 let first = row.controls.first().map_or(r.width, |(_, c)| c.x);
                 let room = f32::from(first) - x - style.gap() as f32;
-                let name = ui::fit(&font, style.text(), env.i18n.tr(&spec.title), room);
+                let name = ui::fit(&font, style.text(), env.i18n().tr(&spec.title), room);
                 ui::Label::new(&name)
                     .px(style.text())
                     .color(Color::BLACK)
@@ -877,7 +877,7 @@ impl Screen for PanelScreen {
             match control {
                 // A slider chosen: the buttons move it now.
                 Some(Control::Slide(id)) => {
-                    self.editing = Some(cx.env().settings.int(id.as_str()));
+                    self.editing = Some(cx.env().settings().int(id.as_str()));
                     self.redraw(cx);
                 }
                 Some(control) => self.activate(&control, cx),
@@ -976,7 +976,7 @@ impl Screen for PanelScreen {
 
     fn on_pointer(&mut self, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
-        if !env.device.input.touch {
+        if !env.device().input.touch {
             return Handled::No;
         }
         // The row of the knob taken, or of a finger coming down.
@@ -1002,7 +1002,7 @@ impl Screen for PanelScreen {
         };
         let extra = spec(&env, &id).map_or(0, |s| slider_extra(&env, &self.style, area.width, s));
         let band = ui::slider::band_below(&self.style, area, extra);
-        let value = env.settings.int(id.as_str());
+        let value = env.settings().int(id.as_str());
         let Some(step) = self
             .drag
             .on_pointer(event, &self.style, &slider, band, value)
@@ -1056,7 +1056,7 @@ impl Screen for PanelScreen {
         if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
             let env = *cx.env();
             let before = self.region;
-            if env.settings.governs(changed.id.as_str()) {
+            if env.settings().governs(changed.id.as_str()) {
                 // Anew, the focus on the control it was on (where it stays).
                 let focused = self
                     .focus

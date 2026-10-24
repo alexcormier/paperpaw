@@ -89,7 +89,10 @@ struct BatteryWidget {
 
 impl Widget for BatteryWidget {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let charge = env.status.battery.map(|b| (b.percent.min(100), b.charging));
+        let charge = env
+            .status()
+            .battery
+            .map(|b| (b.percent.min(100), b.charging));
         let changed = charge != self.charge;
         self.charge = charge;
         changed
@@ -128,11 +131,11 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, percent: u8, 
         env,
         id,
         look,
-        env.i18n.tr("widgets.battery.caption"),
+        env.i18n().tr("widgets.battery.caption"),
     );
     let gap = style.gap();
     let charging = charging && widgets::shows(env, id, "charging");
-    let low = i64::from(percent) <= env.settings.read(&BATTERY_LOW);
+    let low = i64::from(percent) <= env.settings().read(&BATTERY_LOW);
     let number = Number {
         font: &font,
         text: percent.to_string(),

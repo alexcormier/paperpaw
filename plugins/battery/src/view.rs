@@ -52,11 +52,11 @@ fn duration(env: &Env<'_>, ms: u64) -> String {
     let minutes = ms / 60_000;
     let (h, m) = ((minutes / 60) as i64, (minutes % 60) as i64);
     if minutes == 0 {
-        env.i18n.tr("battery.under-a-minute").into()
+        env.i18n().tr("battery.under-a-minute").into()
     } else if h == 0 {
-        env.i18n.format("battery.minutes", &[("m", Arg::Int(m))])
+        env.i18n().format("battery.minutes", &[("m", Arg::Int(m))])
     } else {
-        env.i18n
+        env.i18n()
             .format("battery.hours", &[("h", Arg::Int(h)), ("m", Arg::Int(m))])
     }
 }
@@ -64,15 +64,15 @@ fn duration(env: &Env<'_>, ms: u64) -> String {
 /// A share of the battery with one decimal, e.g. `4.2 %`.
 fn percent(env: &Env<'_>, value: f32) -> String {
     let tenths = (value * 10.0 + 0.5) as u32;
-    let point = env.i18n.tr("battery.decimal-point");
+    let point = env.i18n().tr("battery.decimal-point");
     let number = format!("{}{point}{}", tenths / 10, tenths % 10);
-    env.i18n
+    env.i18n()
         .format("battery.percent", &[("value", Arg::Str(&number))])
 }
 
 /// The voltage, e.g. `4.01 V`.
 fn volts(env: &Env<'_>, millivolts: u16) -> String {
-    let point = env.i18n.tr("battery.decimal-point");
+    let point = env.i18n().tr("battery.decimal-point");
     // Rounded to hundredths first, so that 3999 mV is 4.00 V.
     let hundredths = (u32::from(millivolts) + 5) / 10;
     format!("{}{point}{:02} V", hundredths / 100, hundredths % 100)
@@ -83,9 +83,9 @@ const PLUGINS_SHOWN: usize = 4;
 
 /// A plugin's name; the kernel's work is PaperPaw's.
 fn plugin_name(env: &Env<'_>, id: &str) -> String {
-    match env.plugins.get(id) {
-        Some(info) => String::from(info.name(env.i18n)),
-        None if id == "core" => String::from(env.i18n.tr("battery.core")),
+    match env.plugins().get(id) {
+        Some(info) => String::from(info.name(env.i18n())),
+        None if id == "core" => String::from(env.i18n().tr("battery.core")),
         None => String::from(id),
     }
 }
@@ -93,13 +93,15 @@ fn plugin_name(env: &Env<'_>, id: &str) -> String {
 /// What the reader set for `plugin`'s network, where it is not the
 /// default: off, as in Normal while saving, only when asked.
 fn network_setting(env: &Env<'_>, plugin: &str) -> String {
-    let off = env.settings.get(&format!("core.network.{plugin}"))
+    let off = env.settings().get(&format!("core.network.{plugin}"))
         == Some(&paperpaw_sdk::SettingValue::Bool(false));
     if off {
-        return String::from(env.i18n.tr("battery.network-off"));
+        return String::from(env.i18n().tr("battery.network-off"));
     }
-    match env.settings.text(&format!("core.saving.{plugin}")) {
-        choice @ ("core.saving.normal" | "core.saving.manual") => String::from(env.i18n.tr(choice)),
+    match env.settings().text(&format!("core.saving.{plugin}")) {
+        choice @ ("core.saving.normal" | "core.saving.manual") => {
+            String::from(env.i18n().tr(choice))
+        }
         _ => String::new(),
     }
 }
@@ -107,7 +109,7 @@ fn network_setting(env: &Env<'_>, plugin: &str) -> String {
 /// Microseconds as seconds with a decimal, e.g. `3.2 s`.
 fn seconds(env: &Env<'_>, micros: u64) -> String {
     let tenths = micros / 100_000;
-    let point = env.i18n.tr("battery.decimal-point");
+    let point = env.i18n().tr("battery.decimal-point");
     format!("{}{point}{} s", tenths / 10, tenths % 10)
 }
 
@@ -119,7 +121,7 @@ fn session_line(env: &Env<'_>, s: &Session) -> Line {
     let used = s.used().unwrap_or(0);
     Line::Value(
         format!("{} · {pages}", duration(env, s.millis())),
-        env.i18n.format(
+        env.i18n().format(
             "battery.used-percent",
             &[("value", Arg::Int(i64::from(used)))],
         ),
@@ -134,8 +136,8 @@ impl BatteryView {
     pub(crate) fn new(env: &Env<'_>, now: Reading, dir: &str) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let tr = |key: &str| String::from(env.i18n.tr(key));
-        let mut sessions = Sessions::read(env.storage, dir);
+        let tr = |key: &str| String::from(env.i18n().tr(key));
+        let mut sessions = Sessions::read(env.storage(), dir);
         // This time awake up to now.
         sessions.feed(Kind::Sample, now);
         let mut lines = Vec::new();
@@ -168,7 +170,7 @@ impl BatteryView {
             if let (Some(from), Some(to)) = (current.first.percent, current.last.percent) {
                 lines.push(Line::Value(
                     tr("battery.from-to"),
-                    env.i18n.format(
+                    env.i18n().format(
                         "battery.percent-from-to",
                         &[
                             ("from", Arg::Int(i64::from(from))),
@@ -201,7 +203,7 @@ impl BatteryView {
                 if let Some(hours) = now.percent.and_then(|p| totals.hours_left(p)) {
                     lines.push(Line::Value(
                         tr("battery.left"),
-                        env.i18n.format(
+                        env.i18n().format(
                             "battery.about-hours",
                             &[("h", Arg::Int((hours + 0.5) as i64))],
                         ),
@@ -216,7 +218,7 @@ impl BatteryView {
         let developer = env
             .settings
             .bool(paperpaw_sdk::builtin::settings::DEVELOPER.as_str())
-            && env.settings.read(&crate::BY_PLUGIN);
+            && env.settings().read(&crate::BY_PLUGIN);
         // Asked for only where shown (a copy of the kernel's table).
         let usage = if developer {
             env.plugin_usage()
@@ -234,7 +236,7 @@ impl BatteryView {
                 let refreshes = i64::from(p.refreshes.total());
                 lines.push(Line::Value(
                     plugin_name(env, p.plugin.as_str()),
-                    env.i18n.plural(
+                    env.i18n().plural(
                         "battery.shown-refreshes",
                         refreshes,
                         &[
@@ -270,7 +272,7 @@ impl BatteryView {
             lines.push(Line::Heading(tr("battery.network")));
             for p in net.into_iter().take(PLUGINS_SHOWN) {
                 let id = p.plugin.as_str();
-                let value = env.i18n.plural(
+                let value = env.i18n().plural(
                     "battery.requests",
                     i64::from(p.requests),
                     &[("count", Arg::Int(i64::from(p.requests)))],
@@ -279,7 +281,7 @@ impl BatteryView {
                 // Below: what was held back, what the reader set for it.
                 let mut more = Vec::new();
                 if p.refused > 0 {
-                    more.push(env.i18n.plural(
+                    more.push(env.i18n().plural(
                         "battery.refused",
                         i64::from(p.refused),
                         &[("count", Arg::Int(i64::from(p.refused)))],
@@ -293,7 +295,7 @@ impl BatteryView {
                     lines.push(Line::Message(more.join(" · ")));
                 }
                 if let Ok(owner) = Id::parse(id)
-                    && let Some(note) = env.work.note(&owner)
+                    && let Some(note) = env.work().note(&owner)
                 {
                     lines.push(Line::Message(note.text.clone()));
                 }
@@ -311,7 +313,7 @@ impl BatteryView {
             .settings
             .read(&paperpaw_sdk::builtin::settings::DEVELOPER)
         {
-            env.i18n.format(
+            env.i18n().format(
                 "battery.log-file",
                 &[("path", Arg::Str(&format!("{dir}/{}", log::FILE)))],
             )
@@ -341,7 +343,7 @@ impl BatteryView {
     /// The room for lines: below the header, above the footer.
     fn room(&self, env: &Env<'_>) -> (u16, u16) {
         let top = self.header.area().y + self.header.area().height;
-        let bottom = env.device.display.height.saturating_sub(self.style.row());
+        let bottom = env.device().display.height.saturating_sub(self.style.row());
         (top, bottom)
     }
 
@@ -389,8 +391,8 @@ impl Screen for BatteryView {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(&mut ui, env.i18n.tr("battery.title"), None, self.paging());
-        let display = env.device.display;
+            .draw(&mut ui, env.i18n().tr("battery.title"), None, self.paging());
+        let display = env.device().display;
         let footer_height = style.row();
         let (mut y, bottom) = self.room(env);
         let first = self.pages.get(self.page).copied().unwrap_or(0);

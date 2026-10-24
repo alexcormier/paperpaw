@@ -70,7 +70,7 @@ pub(crate) struct AccountScreen {
 impl AccountScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         // No longer than the screen: the list pages where its rows are tall.
@@ -80,7 +80,7 @@ impl AccountScreen {
             u32::from(style.row()),
         )
         .focus_on_keys(env);
-        let signed_in = env.settings.read(&USER).to_string();
+        let signed_in = env.settings().read(&USER).to_string();
         let mut screen = Self {
             style,
             header,
@@ -128,7 +128,7 @@ impl AccountScreen {
             .saturating_mul(rows as u16)
             .min(self.list_area.height);
         let top = self.list_area.y + shown + style.gap();
-        let bottom = env.device.display.height.saturating_sub(style.margin());
+        let bottom = env.device().display.height.saturating_sub(style.margin());
         let width = self.list_area.width;
         // As high as the message needs, right below the rows.
         let needs = ui::message_height(env, style, width, &self.message);
@@ -137,17 +137,17 @@ impl AccountScreen {
 
     /// What the line below says when nothing happened yet.
     fn state_message(&self, env: &Env<'_>) -> String {
-        if !env.caps.network {
-            env.i18n.tr("kosync.no-network").to_string()
+        if !env.caps().network {
+            env.i18n().tr("kosync.no-network").to_string()
         } else if self.signed_in.is_empty() {
-            env.i18n.tr("kosync.signed-out").to_string()
+            env.i18n().tr("kosync.signed-out").to_string()
         } else {
             let url = server(env);
             let args = [
                 ("user", Arg::Str(&self.signed_in)),
                 ("server", Arg::Str(server_label(&url))),
             ];
-            env.i18n.format("kosync.signed-in", &args)
+            env.i18n().format("kosync.signed-in", &args)
         }
     }
 
@@ -161,26 +161,26 @@ impl AccountScreen {
         let env = *cx.env();
         match row {
             Row::Server => cx.command(
-                ask::text(env.i18n.tr("kosync.server"), &SERVER_ENTERED)
+                ask::text(env.i18n().tr("kosync.server"), &SERVER_ENTERED)
                     .initial(server(&env))
                     .command(),
             ),
             Row::User => cx.command(
-                ask::text(env.i18n.tr("kosync.user"), &USER_ENTERED)
+                ask::text(env.i18n().tr("kosync.user"), &USER_ENTERED)
                     .initial(self.user.clone())
                     .command(),
             ),
             Row::Password => cx.command(
-                ask::text(env.i18n.tr("kosync.password"), &PASSWORD_ENTERED)
+                ask::text(env.i18n().tr("kosync.password"), &PASSWORD_ENTERED)
                     .password()
                     .command(),
             ),
             Row::SignIn | Row::Create => {
-                if !env.caps.network {
-                    return self.show(cx, env.i18n.tr("kosync.no-network").to_string());
+                if !env.caps().network {
+                    return self.show(cx, env.i18n().tr("kosync.no-network").to_string());
                 }
                 let Some(key) = self.key.clone().filter(|_| !self.user.is_empty()) else {
-                    return self.show(cx, env.i18n.tr("kosync.missing").to_string());
+                    return self.show(cx, env.i18n().tr("kosync.missing").to_string());
                 };
                 let request = if row == Row::SignIn {
                     let auth = Some((self.user.as_str(), key.as_str()));
@@ -211,10 +211,10 @@ impl AccountScreen {
                 };
                 cx.command(Command::http(request));
                 self.busy = true;
-                self.show(cx, env.i18n.tr("kosync.connecting").to_string());
+                self.show(cx, env.i18n().tr("kosync.connecting").to_string());
             }
             Row::More => cx.command(
-                ask::confirm(env.i18n.tr("kosync.group"), &READ)
+                ask::confirm(env.i18n().tr("kosync.group"), &READ)
                     .text(self.message.clone())
                     .only_yes()
                     .command(),
@@ -253,7 +253,7 @@ impl AccountScreen {
             "402" if created => "kosync.taken",
             _ => crate::failure(status),
         };
-        let message = env.i18n.format(key, &[("status", Arg::Str(status))]);
+        let message = env.i18n().format(key, &[("status", Arg::Str(status))]);
         self.show(cx, message);
     }
 }
@@ -264,9 +264,9 @@ impl Screen for AccountScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         let rows = self.rows(env);
         self.list.set_len(rows.len());
-        let title = env.i18n.tr("kosync.group");
+        let title = env.i18n().tr("kosync.group");
         self.header.draw(&mut ui, title, None, None);
-        let i18n = env.i18n;
+        let i18n = env.i18n();
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let url = server(env);
@@ -353,7 +353,7 @@ impl Screen for AccountScreen {
                     "kosync.server-set"
                 };
                 let args = [("server", Arg::Str(server_label(&url)))];
-                self.message = cx.env().i18n.format(key, &args);
+                self.message = cx.env().i18n().format(key, &args);
             }
             // Next: the user name.
             self.list.set_focus(1);

@@ -32,7 +32,7 @@ impl NumberEdit {
 
     /// Starts changing `spec` with the buttons.
     pub fn start(&mut self, env: &Env<'_>, spec: &SettingSpec, cx: &mut Cx<'_, '_>) {
-        self.before = env.settings.get(spec.id.as_str()).cloned();
+        self.before = env.settings().get(spec.id.as_str()).cloned();
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
     }
@@ -78,7 +78,7 @@ impl NumberEdit {
         let before = self.before.take();
         if keep
             && let Some(spec) = spec
-            && let Some(shown) = env.settings.get(spec.id.as_str())
+            && let Some(shown) = env.settings().get(spec.id.as_str())
             && Some(shown) != before.as_ref()
         {
             cx.command(Command::SetSetting(spec.id.clone(), shown.clone()));
@@ -114,16 +114,18 @@ pub fn editing_hint(action: &Id, env: &Env<'_>) -> Hint {
         Some(step) if step < 0 => Hint::Text(String::from("−")),
         Some(_) => Hint::Text(String::from("+")),
         None if *action == actions::CONFIRM => {
-            Hint::Text(env.i18n.tr("core.hint.keep").to_string())
+            Hint::Text(env.i18n().tr("core.hint.keep").to_string())
         }
-        None if *action == actions::BACK => Hint::Text(env.i18n.tr("core.hint.cancel").to_string()),
+        None if *action == actions::BACK => {
+            Hint::Text(env.i18n().tr("core.hint.cancel").to_string())
+        }
         None => Hint::Default,
     }
 }
 
 /// Moves `spec` by `step`: shown at once, kept when chosen.
 fn preview_step(env: &Env<'_>, spec: &SettingSpec, step: i64, cx: &mut Cx<'_, '_>) {
-    let current = env.settings.get(spec.id.as_str());
+    let current = env.settings().get(spec.id.as_str());
     if let Some(value) = next_value(env, spec, step).filter(|v| Some(v) != current) {
         cx.command(Command::PreviewSettings(vec![(
             spec.id.clone(),
@@ -134,7 +136,7 @@ fn preview_step(env: &Env<'_>, spec: &SettingSpec, step: i64, cx: &mut Cx<'_, '_
 
 /// Ends showing settings changed but not kept.
 fn end_preview(env: &Env<'_>, cx: &mut Cx<'_, '_>) {
-    if env.settings.previewing() {
+    if env.settings().previewing() {
         cx.command(Command::PreviewSettings(alloc::vec::Vec::new()));
     }
 }

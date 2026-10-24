@@ -67,7 +67,7 @@ fn number_of(value: &str) -> Option<u32> {
 
 /// The daily goal in seconds, if one is set.
 pub(crate) fn goal(env: &Env<'_>) -> Option<u64> {
-    number_of(env.settings.text(GOAL.as_str()))
+    number_of(env.settings().text(GOAL.as_str()))
         .filter(|&m| m > 0)
         .map(|m| u64::from(m) * 60)
 }
@@ -109,22 +109,22 @@ fn offer_widget(env: &Env<'_>, out: &mut Commands) {
         "{}/goal-widget-offered",
         Env::plugin_dir(crate::PLUGIN.as_str())
     );
-    if env.storage.exists(&offered) {
+    if env.storage().exists(&offered) {
         return;
     }
     let pages: [&str; 4] = ["home.page-1", "home.page-2", "home.page-3", "home.page-4"];
     let shown = pages.iter().any(|page| {
         // Also placed in a grid: `stats.today 0/2 4x1`.
-        paperpaw_sdk::status::item_ids(env.settings.text(page))
+        paperpaw_sdk::status::item_ids(env.settings().text(page))
             .any(|item| item.split_whitespace().next() == Some(TODAY.as_str()))
     });
-    let first = match env.settings.get(pages[0]) {
+    let first = match env.settings().get(pages[0]) {
         Some(SettingValue::Text(list)) => Some(list),
         _ => None,
     };
     // Nothing to offer it on (another home screen), or not kept as
     // offered (it would come back at every change of the goal).
-    if (first.is_none() && !shown) || env.storage.write(&offered, b"").is_err() {
+    if (first.is_none() && !shown) || env.storage().write(&offered, b"").is_err() {
         return;
     }
     if let Some(list) = first.filter(|_| !shown) {
@@ -144,7 +144,7 @@ fn offer_widget(env: &Env<'_>, out: &mut Commands) {
 
 /// The value of widget `widget`'s choice `key`.
 fn chosen<'e>(env: &Env<'e>, widget: &str, key: &str) -> &'e str {
-    env.settings.text(&alloc::format!("{widget}.{key}"))
+    env.settings().text(&alloc::format!("{widget}.{key}"))
 }
 
 /// The height `widget`'s frame takes (the SDK's).
@@ -375,7 +375,7 @@ pub(super) struct Stamp(Option<i32>, (u64, u64));
 /// Whether what a widget read for `last` is out of date; `last` becomes
 /// what it is read for now.
 fn stale(env: &Env<'_>, last: &mut Option<Stamp>) -> bool {
-    let now = Some(Stamp(fmt::today(env), store::sizes(env.storage)));
+    let now = Some(Stamp(fmt::today(env), store::sizes(env.storage())));
     if *last == now {
         return false;
     }
@@ -388,7 +388,7 @@ fn days(env: &Env<'_>) -> Option<(i32, Vec<Day>)> {
     let today = fmt::today(env)?;
     Some((
         today,
-        store::days(env.storage, |unix| fmt::day_of(env, unix)),
+        store::days(env.storage(), |unix| fmt::day_of(env, unix)),
     ))
 }
 

@@ -127,7 +127,7 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
     r.add_settings(&SETTINGS)?;
     let changed = changes.clone();
     r.on(NEXT, move |env, _, out| {
-        Turns::turn(env.storage, &turns_file(), today(env), daily(env));
+        Turns::turn(env.storage(), &turns_file(), today(env), daily(env));
         changed.changed(out, &ID);
     })?;
     let changes = changes.clone();
@@ -135,7 +135,7 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
     r.add_widget(
         WidgetSpec::new(ID, "widgets.quote", move |env| {
             // Another quote each time it shows: made as it shows.
-            let showing = if daily(env) { 0 } else { shown.show(env.now) };
+            let showing = if daily(env) { 0 } else { shown.show(env.now()) };
             Box::new(QuoteWidget {
                 showing,
                 changes: changes.clone(),
@@ -148,7 +148,7 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
 
 /// Whether another quote shows each day (else each time it shows).
 fn daily(env: &Env<'_>) -> bool {
-    env.settings.read(&CHANGE) != CHANGES[1]
+    env.settings().read(&CHANGE) != CHANGES[1]
 }
 
 /// A quote and who said it (empty if no one is known).
@@ -233,15 +233,15 @@ fn quote_at(
 /// Today's quote, turned on as often as tapped (and, where another
 /// shows each time, as often as shown: `showing`).
 fn quote_of_the_day(env: &Env<'_>, day: i64, showing: u32) -> Option<Quote> {
-    let source = env.settings.read(&SOURCE);
+    let source = env.settings().read(&SOURCE);
     let daily = daily(env);
-    let turns = Turns::load(env.storage, &turns_file())
+    let turns = Turns::load(env.storage(), &turns_file())
         .on(day, daily)
         .wrapping_add(showing);
-    let shipped = (source != SOURCES[1]).then(|| shipped(env.i18n.language()));
+    let shipped = (source != SOURCES[1]).then(|| shipped(env.i18n().language()));
     let own = own_file();
     let own = (source != SOURCES[0]).then_some(own.as_str());
-    quote_at(env.storage, shipped, own, |total| {
+    quote_at(env.storage(), shipped, own, |total| {
         let first = if daily { of_the_day(day, total) } else { 0 };
         first + turns as usize
     })
@@ -288,9 +288,9 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         let height = widgets::caption_height(env).min(area.height);
         area = Rect::new(area.x, area.y + height, area.width, area.height - height);
     }
-    let font = text::font(env, env.settings.read(&FACE))?;
+    let font = text::font(env, env.settings().read(&FACE))?;
     let style = UiStyle::new(env);
-    let language = env.i18n.language();
+    let language = env.i18n().language();
     let shown = if widgets::shows(env, ID.as_str(), MARKS) {
         text::quoted(&quote.text, language)
     } else {
@@ -406,7 +406,7 @@ impl Widget for QuoteWidget {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
         let Some(quote) = &self.quote else {
-            let message = env.i18n.tr("widgets.quote.none");
+            let message = env.i18n().tr("widgets.quote.none");
             super::draw_empty(canvas, env, &look, message);
             return;
         };
@@ -419,15 +419,15 @@ impl Widget for QuoteWidget {
             },
         };
         if laid.caption {
-            let caption = env.i18n.tr("widgets.quote.caption");
+            let caption = env.i18n().tr("widgets.quote.caption");
             widgets::draw_caption(canvas, env, ID.as_str(), &look, caption);
         }
-        let Some(font) = text::font(env, env.settings.read(&FACE)) else {
+        let Some(font) = text::font(env, env.settings().read(&FACE)) else {
             return;
         };
         let style = UiStyle::new(env);
         let mut ui = paperpaw_sdk::ui::Ui::new(canvas, env, &style);
-        let language = env.i18n.language();
+        let language = env.i18n().language();
         let (area, size, layout) = (laid.area, laid.size, laid.layout);
         let width = f32::from(area.width);
         let mut top = laid.top;
