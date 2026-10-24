@@ -64,7 +64,8 @@ pub struct Firmware {
     pub network: Network,
     /// Updates, where the flash has room for them.
     pub ota: Option<Ota>,
-    /// Holds the battery's power on.
+    /// Holds the battery's power on (the X4s); the X3's card power (see
+    /// its board). Low before deep sleep.
     pub power_latch: Output<'static>,
     /// High while on USB power.
     pub usb_power: crate::board::UsbPower,

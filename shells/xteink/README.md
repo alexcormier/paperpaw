@@ -154,6 +154,12 @@ FreeInk SDK's and Papyrix's notes; not yet tried on one.
 Experimental: built (`cargo x3`), but not yet tried on one, and not
 part of a release.
 
+> **Only for unlocked X3s.** Units from xteink.com are not locked; some
+> sold elsewhere are, and need the Xteink Unlocker, which officially
+> supports only CrossPoint and CrossInk. Another firmware on a locked
+> unit may brick it or leave it with no way back, and the maker's
+> warranty excludes damage from unofficial firmware.
+
 The X3 has the X4's chip (ESP32-C3), bus, card and buttons, a 3.68"
 panel of 792 × 528 with a UC8253 controller, and on I²C (data GPIO 20,
 clock GPIO 0) a BQ27220 fuel gauge and a DS3231 clock. It is a build of
@@ -171,14 +177,23 @@ their notice in `crates/paperpaw-x4/src/uc8253.rs`. It takes the plugin
 library's X4 builds (the same chip and fingerprint). Not yet known
 without a device, and marked so in the code:
 
-- whether GPIO 13 holds the battery's power (as on the X4) or the card's
-  power rail; it is held high and let go in sleep, which fits either;
+- GPIO 13 is the card's power rail (as Papyrix has it), on from the
+  start and off only before deep sleep, the X3's off; not proven on a
+  device;
 - which way the panel lies and whether it is mirrored (taken as the
   X4's), and whether partial windows and its 10 MHz bus behave as the
   SDK's;
 - whether its buttons' levels and order are the X4's;
-- whether a charger alone counts as USB power: it has no pin for it
-  (the gauge's current says it, but is not read for that yet);
-- units with the newer UC8279d controller are not driven (the log says
-  so), and grays fall back to black and white;
-- the tilt sensor (QMI8658) is left out.
+- it counts as on USB power while the fuel gauge says the battery
+  charges or the chip's own USB is connected (a full battery on the
+  cable has no current); how that behaves on a charger alone is not
+  tried;
+- the fuel gauge forgets the cell's capacity when it loses power and
+  says TI's 3000 mAh: the firmware writes 650 mAh back at the next start
+  (some seconds, then sealed again), as the FreeInk SDK and Papyrix do;
+- units with the newer UC8279d controller (from about July 2026) are
+  not driven: nothing shows on them. The log says so, and an update that
+  brought this build goes back to the firmware before. Grays fall back
+  to black and white on the UC8253;
+- the tilt sensor (QMI8658) is left out, and NFC, which the maker
+  mentions, is not used.

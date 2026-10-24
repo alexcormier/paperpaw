@@ -2,17 +2,31 @@
 //! whose USB comes through pogo pins, and on the X3, whose pin for it is
 //! its I²C bus now: they all use it.
 
+use core::sync::atomic::{AtomicBool, Ordering};
+
 use esp_hal::delay::Delay;
 use esp_hal::gpio::Input;
+
+/// The X3's fuel gauge said the battery charges, at its last reading
+/// (the main loop reads it with the battery).
+static GAUGE_CHARGING: AtomicBool = AtomicBool::new(false);
+
+/// What the X3's gauge said of charging; `None` where it did not answer
+/// (kept as it was).
+#[cfg_attr(feature = "esp32s3", expect(dead_code, reason = "the X3's"))]
+pub fn gauge_says(charging: Option<bool>) {
+    if let Some(charging) = charging {
+        GAUGE_CHARGING.store(charging, Ordering::Relaxed);
+    }
+}
 
 /// Whether the device is on outer power. It has no pin that says so: it
 /// counts as on USB while it charges (the charging pin low) or while a
 /// computer talks to it (the USB frames' number moves on, a frame a
 /// millisecond), so it stays awake and in reach of the computer then.
 pub struct UsbPower {
-    /// Low while charging; the X3 has none (its fuel gauge knows, but
-    /// the input interrupt owns the bus: uncertain without a device
-    /// whether a charger alone keeps it awake).
+    /// Low while charging; the X3 has none: its fuel gauge says it
+    /// ([`gauge_says`]).
     charging: Option<Input<'static>>,
     /// When the frames were last looked at (ms), and whether they moved.
     seen: core::cell::Cell<(u64, bool)>,
@@ -37,10 +51,11 @@ impl UsbPower {
         }
     }
 
-    /// Without a charging pin: on USB while a computer talks to it (and
-    /// for a while after starting).
+    /// The X3's: charging as its fuel gauge says it, or the chip's own
+    /// USB connected (a full battery on the cable has no current), and
+    /// for a while after starting.
     #[cfg_attr(feature = "esp32s3", expect(dead_code, reason = "the X3's"))]
-    pub fn without_charging() -> Self {
+    pub fn from_gauge() -> Self {
         Self {
             charging: None,
             seen: core::cell::Cell::new((0, false)),
@@ -48,7 +63,11 @@ impl UsbPower {
     }
 
     pub fn is_high(&self) -> bool {
-        if self.charging.as_ref().is_some_and(Input::is_low) {
+        let charging = match &self.charging {
+            Some(pin) => pin.is_low(),
+            None => GAUGE_CHARGING.load(Ordering::Relaxed),
+        };
+        if charging {
             return true;
         }
         let now = esp_hal::time::Instant::now()
