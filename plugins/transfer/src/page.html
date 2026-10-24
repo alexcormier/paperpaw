@@ -28,6 +28,10 @@ li .acts{display:flex;gap:6px;margin-left:auto}
 li a{flex:1 1 12em;min-width:0;color:var(--fg);text-decoration:none;overflow-wrap:anywhere}
 li .size{color:var(--mute);white-space:nowrap}
 li button{padding:4px 10px}
+#queue{border-top:0;margin-bottom:12px}
+#queue li{padding:6px 0}
+#queue .name{flex:1 1 12em;min-width:0;overflow-wrap:anywhere}
+#queue .state{color:var(--mute);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -42,6 +46,7 @@ li button{padding:4px 10px}
 <div id="moving" hidden><p id="movingText"></p><div class="bar"><button id="moveHere"></button><button id="moveCancel"></button></div></div>
 <div id="hint" hidden><p id="outside"></p><div class="bar"><button id="toLibrary"></button><button id="here"></button></div></div>
 <div id="drop"></div>
+<ul id="queue"></ul>
 <div id="status"></div>
 <ul id="list"></ul>
 </main>
@@ -133,67 +138,113 @@ async function load() {
     li.textContent = T.empty;
     list.append(li);
   }
-  for (const entry of entries) {
-    const path = join(here, entry.name);
-    const li = document.createElement('li');
-    const a = document.createElement('a');
-    if (entry.dir) {
-      a.href = '#'; a.textContent = entry.name + '/';
-      a.onclick = e => { e.preventDefault(); open(path); };
-    } else {
-      a.href = '/api/file?' + query(path); a.download = entry.name;
-      a.textContent = entry.name;
-    }
-    li.append(a);
-    if (!entry.dir) {
-      const s = document.createElement('span');
-      s.className = 'size'; s.textContent = size(entry.size);
-      li.append(s);
-    }
-    const acts = document.createElement('span');
-    acts.className = 'acts';
-    const action = (label, run) => {
-      const b = document.createElement('button');
-      b.textContent = label; b.onclick = run;
-      acts.append(b);
-      return b;
-    };
-    action(T.move, () => { moving = {path, name: entry.name}; showMoving(); window.scrollTo(0, 0); });
-    action(T.rename, () => {
-      const name = prompt(T.newName, entry.name);
-      if (name && name !== entry.name) move(path, here, name);
-    });
-    const remove = action(T.delete, null);
-    remove.onclick = async () => {
-      if (!confirm(named(T.deleteQuestion, entry.name))) return;
-      const answer = await fetch('/api/delete?' + query(path), {method: 'POST'});
-      say(answer.ok ? T.done : T.failed);
-      load();
-    };
-    li.append(acts);
-    list.append(li);
-  }
+  for (const entry of entries) list.append(row(entry, here));
 }
 
-function put(file, folder) {
-  return new Promise((done, fail) => {
+// The row of `entry` in folder `here`: its name (a folder opens, a file
+// downloads), its size, and what can be done with it.
+function row(entry, here) {
+  const path = join(here, entry.name);
+  const li = document.createElement('li');
+  const a = document.createElement('a');
+  if (entry.dir) {
+    a.href = '#'; a.textContent = entry.name + '/';
+    a.onclick = e => { e.preventDefault(); open(path); };
+  } else {
+    a.href = '/api/file?' + query(path); a.download = entry.name;
+    a.textContent = entry.name;
+  }
+  li.append(a);
+  if (!entry.dir) {
+    const s = document.createElement('span');
+    s.className = 'size'; s.textContent = size(entry.size);
+    li.append(s);
+  }
+  const acts = document.createElement('span');
+  acts.className = 'acts';
+  const action = (label, run) => {
+    const b = document.createElement('button');
+    b.textContent = label; b.onclick = run;
+    acts.append(b);
+  };
+  action(T.move, () => { moving = {path, name: entry.name}; showMoving(); window.scrollTo(0, 0); });
+  action(T.rename, () => {
+    const name = prompt(T.newName, entry.name);
+    if (name && name !== entry.name) move(path, here, name);
+  });
+  action(T.delete, async () => {
+    if (!confirm(named(T.deleteQuestion, entry.name))) return;
+    const answer = await fetch('/api/delete?' + query(path), {method: 'POST'});
+    say(answer.ok ? T.done : T.failed);
+    load();
+  });
+  li.append(acts);
+  return li;
+}
+
+// Files sent one after the other, each with its row in the queue:
+// waiting, sent so far, sent (and in the folder's list at once), or not
+// sent with why, to be tried again alone.
+const queue = [];
+let sending = false;
+
+function put(item) {
+  return new Promise(done => {
     const request = new XMLHttpRequest();
-    request.open('PUT', '/api/file?' + query(join(folder, file.name)));
+    request.open('PUT', '/api/file?' + query(join(item.folder, item.file.name)));
     request.upload.onprogress = e => {
-      if (e.lengthComputable) say(named(T.uploading, file.name) + ' ' + Math.round(e.loaded * 100 / e.total) + ' %');
+      if (e.lengthComputable) show(item, Math.round(e.loaded * 100 / e.total) + ' %');
     };
-    request.onload = () => request.status == 200 ? done() : fail();
-    request.onerror = fail;
-    request.send(file);
+    request.onload = () => done(request.status == 200 ? null : (request.responseText || request.status));
+    request.onerror = () => done(T.failed);
+    request.send(item.file);
   });
 }
 
-async function send(files, folder) {
-  for (const file of files) {
-    try { await put(file, folder); } catch (e) { say(T.failed + ' (' + file.name + ')'); load(); return; }
+function show(item, state, retry) {
+  item.state.textContent = state;
+  item.retry.hidden = !retry;
+}
+
+async function run() {
+  if (sending) return;
+  sending = true;
+  let item;
+  while ((item = queue.find(i => i.waiting))) {
+    item.waiting = false;
+    show(item, '0 %');
+    const failed = await put(item);
+    if (failed) { show(item, T.notSent.replace('{reason}', failed), true); continue; }
+    show(item, T.sent);
+    // In the list at once where it is shown.
+    if (item.folder === dir()) {
+      const empty = [...$('list').children].find(li => !li.querySelector('a'));
+      if (empty) empty.remove();
+      $('list').append(row({name: item.file.name, dir: false, size: item.file.size}, item.folder));
+    }
   }
+  sending = false;
   say(T.done);
   load();
+}
+
+function send(files, folder) {
+  for (const file of files) {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.className = 'name'; name.textContent = file.name;
+    const state = document.createElement('span');
+    state.className = 'state';
+    const retry = document.createElement('button');
+    retry.textContent = T.retry;
+    const item = {file, folder, state, retry, waiting: true};
+    retry.onclick = () => { item.waiting = true; show(item, T.waiting); run(); };
+    li.append(name, state, retry);
+    $('queue').append(li);
+    show(item, T.waiting);
+    queue.push(item);
+  }
+  run();
 }
 
 // Whether the library reads what is in `folder`: it or one in it.
@@ -212,7 +263,7 @@ function upload(files) {
   $('outside').textContent = T.outside;
   $('toLibrary').textContent = T.toLibrary.replace('{folder}', shown(T.library));
   $('here').textContent = T.here;
-  $('toLibrary').onclick = () => { hint.hidden = true; send(files, T.library).then(() => open(T.library)); };
+  $('toLibrary').onclick = () => { hint.hidden = true; open(T.library); send(files, T.library); };
   $('here').onclick = () => { hint.hidden = true; send(files, here); };
   hint.hidden = false;
 }

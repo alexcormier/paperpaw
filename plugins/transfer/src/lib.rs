@@ -473,7 +473,6 @@ fn page(env: &Env<'_>) -> String {
         ("delete", "transfer.web.delete"),
         ("deleteQuestion", "transfer.web.delete-question"),
         ("empty", "transfer.web.empty"),
-        ("uploading", "transfer.web.uploading"),
         ("done", "transfer.web.done"),
         ("failed", "transfer.web.failed"),
         ("target", "transfer.web.target"),
@@ -486,6 +485,10 @@ fn page(env: &Env<'_>) -> String {
         ("moveHere", "transfer.web.move-here"),
         ("cancel", "transfer.web.cancel"),
         ("newName", "transfer.web.new-name"),
+        ("waiting", "transfer.web.waiting"),
+        ("sent", "transfer.web.sent"),
+        ("notSent", "transfer.web.not-sent"),
+        ("retry", "transfer.web.retry"),
     ];
     let mut json = String::from("{");
     for (i, (name, key)) in texts.iter().enumerate() {
