@@ -334,8 +334,10 @@ fn main() -> ! {
 /// little else: its start goes deepest.
 #[inline(never)]
 fn start() -> Firmware {
-    let ready = prepare();
-    Firmware {
+    let mut ready = prepare();
+    let bundle = ready.staged.other_slot.take();
+    let flash = ready.flash.clone();
+    let firmware = Firmware {
         panel: ready.panel,
         network: ready.network,
         ota: ready.ota,
@@ -350,7 +352,13 @@ fn start() -> Firmware {
         state: State::default(),
         // Last, and built right in its place: the kernel is large.
         kernel: kernel(ready.storage, ready.firmware, ready.code, ready.staged),
+    };
+    // Its plugins installed: the web flasher's bundle goes (see
+    // `native::bundle`).
+    if let Some(at) = bundle {
+        native::bundle::forget(&flash, at);
     }
+    firmware
 }
 
 /// What [`prepare`] made ready for the firmware and its kernel.
@@ -368,6 +376,8 @@ struct Ready {
     firmware: Option<paperpaw_sdk::firmware::Firmware>,
     code: CodePlugins,
     staged: native::bundle::Staged,
+    /// The flash, to let the web flasher's bundle go once installed.
+    flash: ota::Flash,
 }
 
 /// The chip, the board and the card, up to the kernel.
@@ -488,6 +498,7 @@ fn prepare() -> Ready {
         storage,
         code,
         staged,
+        flash,
     }
 }
 

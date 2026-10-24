@@ -12,10 +12,16 @@
 //! (`native::remember_code`: only that file runs); code signed by another
 //! author than the version installed before is not installed, and the plugin manager says
 //! so (`Native::not_installed`): the reader decides in the store, warned.
-//! Once they are all on the card, the bundle's first sector is erased
-//! (on the X4 its code plugins go there; in the other app partition an
-//! update goes there, which writes it whole anyway). A power cut before
-//! that leaves the bundle as it was: copied again at the next start.
+//! Behind the image, the bundle's first sector is erased once they are
+//! all on the card (on the X4 its code plugins go there, and are placed
+//! as the kernel installs them). In the other app partition it is erased
+//! only once the kernel installed them ([`forget`], `main`): a power cut
+//! before that, while copying or installing, leaves it as it was, and the
+//! next start copies and installs it again, each plugin in place of what
+//! it left; never half of one. Without a card it waits; an update, which
+//! goes into that partition, needs the card and comes from the kernel,
+//! so only after it was installed. A partition that holds no bundle (an
+//! image, another firmware's, CrossPoint's) is never written.
 //!
 //! A bundle for another image, or one that is damaged, is erased without
 //! installing anything; one that cannot be copied (no card, a card full)
@@ -74,11 +80,19 @@ impl Source for InFlash<'_> {
 }
 
 /// What a bundle brought: each plugin to install, by its id and the
-/// folder it is in, and those not installed.
+/// folder it is in, and those not installed; and where the bundle lies in
+/// the other app partition, to [`forget`] once the kernel installed them.
 #[derive(Default)]
 pub struct Staged {
     pub installs: Vec<(Id, String)>,
     pub not_installed: Vec<NotInstalled>,
+    pub other_slot: Option<u32>,
+}
+
+/// The bundle at `at`, in the other app partition, installed: erased.
+pub fn forget(flash: &Flash, at: u32) {
+    erase(&mut flash.borrow_mut(), at);
+    info!("bundle: installed, erased at {at:#x}");
 }
 
 /// Copies the plugins of the bundle behind the image onto the card, if
@@ -154,7 +168,11 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
             warn!("bundle: {plugin}: its code not named as installed");
         }
     }
-    erase(&mut flash, start);
+    if start == behind.start {
+        erase(&mut flash, start);
+    } else {
+        staged.other_slot = Some(start);
+    }
     info!(
         "bundle: {} plugins copied onto the card in {} ms, {} not installed",
         staged.installs.len(),
