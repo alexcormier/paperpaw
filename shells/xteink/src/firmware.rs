@@ -41,6 +41,9 @@ const IDLE_FAST_MS: u64 = 10;
 /// How often the buttons are read while awake (`input`'s timer): the
 /// rest while a press settles.
 const SAMPLE_MS: u64 = 5;
+/// How long the kernel's time waits at most for a press or release that
+/// settles (`buttons::DEBOUNCE_MS` and a reading more).
+const SETTLE_MS: u64 = 25;
 /// How long after the last refresh the panel's power goes off: soon
 /// where powering up again costs nothing; where it makes the next
 /// refresh slower, once refreshes do not follow each other (menus,
@@ -424,6 +427,21 @@ impl Firmware {
     fn tick(&mut self) {
         if !self.state.wake_at.is_some_and(|due| due <= now()) {
             return;
+        }
+        // The presses and releases that came meanwhile (while a frame
+        // refreshed) first, also those that come while their frames
+        // refresh, and one settling (a little while at most): a release
+        // still waiting would leave its button held at this time, a click
+        // taken for a long press.
+        let settled_by = now().0 + SETTLE_MS;
+        loop {
+            if input::waiting() {
+                self.buttons();
+            } else if input::settling() && now().0 < settled_by {
+                self.delay.delay_millis(SAMPLE_MS as u32);
+            } else {
+                break;
+            }
         }
         power::mark(power::at::TICK);
         let started = now();

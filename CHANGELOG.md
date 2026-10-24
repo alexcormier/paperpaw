@@ -11,6 +11,8 @@ change the plugin SDK.
 - On the X4 and X4 Pro on battery, clicks made while the screen refreshes
   are no longer lost, and a quick click is no longer taken as a long
   press (which opened the quick panel while turning pages).
+- On the X4 and X4 Pro, a click of Right while a page is shown is no
+  longer taken for a long press (which opened the quick panel).
 
 ## [0.5.0-beta.1] - 2026-10-24
 
