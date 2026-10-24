@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.2] - 2026-10-24
+
+The second beta: the fixes from testing beta.1, as a new user would use
+it, from the web flasher to the plugin workshop. Store plugins now
+update from beta to beta. Code plugins built for beta.1 run unchanged:
+the plugin interface stays 2.
+
 ### Added
 
 - Restart now, last in the settings: asked once, it saves what is open
