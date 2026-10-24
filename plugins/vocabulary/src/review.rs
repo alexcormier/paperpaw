@@ -5,9 +5,12 @@
 //! *Good* and goes left and right, *Select* answers; by touch, a tap on
 //! one does.
 //!
-//! A card answered *Again* comes again in this review, a few cards
-//! later. Each answer is kept at once (see [`cards::record`]); the decks
-//! are written with them when the review closes.
+//! A card answered *Again* comes again in this review once its time has
+//! come (the 10 minutes its button says), before the next card due;
+//! while only such cards are left, the screen says when the next comes
+//! and shows it then (or later, from home). Each answer is kept at once
+//! (see [`cards::record`]); the decks are written with them when the
+//! review closes.
 
 use alloc::collections::VecDeque;
 use alloc::string::String;
@@ -32,8 +35,6 @@ pub(crate) const DECK: &str = "deck";
 pub(crate) const FIRST: &str = "first";
 /// Cards due taken into a review at most.
 const MOST: usize = 200;
-/// Cards shown before one answered *Again* comes again.
-const AGAIN_AFTER: usize = 3;
 
 const ANSWER_KEYS: [&str; 4] = [
     "vocabulary.review.again",
@@ -46,6 +47,8 @@ pub(crate) struct ReviewScreen {
     style: UiStyle,
     header: ui::Header,
     queue: VecDeque<Due>,
+    /// Cards answered *Again*, until their time has come (`state.due`).
+    waiting: Vec<Due>,
     /// The card shown and its texts.
     current: Option<(Due, Card)>,
     revealed: bool,
@@ -86,6 +89,7 @@ impl ReviewScreen {
             header: ui::Header::new(env, &style, true),
             style,
             queue,
+            waiting: Vec::new(),
             current: None,
             revealed: false,
             focus: 2,
@@ -98,12 +102,25 @@ impl ReviewScreen {
         screen
     }
 
-    /// Shows the next card, if any is left.
+    /// Shows the next card, if any is left: one answered *Again* whose
+    /// time has come, else the next due.
     fn next(&mut self, env: &Env<'_>) {
         self.revealed = false;
         self.focus = 2;
         self.current = None;
-        while let Some(due) = self.queue.pop_front() {
+        let now = cards::now(env);
+        let ready = self
+            .waiting
+            .iter()
+            .enumerate()
+            .filter(|(_, due)| due.state.due <= now)
+            .min_by_key(|(_, due)| due.state.due)
+            .map(|(at, _)| at);
+        let ready = ready.map(|at| self.waiting.remove(at));
+        for due in ready
+            .into_iter()
+            .chain(core::iter::from_fn(|| self.queue.pop_front()))
+        {
             // A card deleted or changed since is left out.
             if let Some(card) = cards::card_at(env.storage(), due.deck, due.offset)
                 && card.state.id == due.state.id
@@ -112,7 +129,12 @@ impl ReviewScreen {
                 return;
             }
         }
-        self.message = if self.answered > 0 {
+        self.message = if let Some(at) = self.soonest() {
+            env.i18n().format(
+                "vocabulary.review.next-in",
+                &[("wait", Arg::Str(&wait_text(env, at - now)))],
+            )
+        } else if self.answered > 0 {
             env.i18n()
                 .plural("vocabulary.review.done", self.answered as i64, &[])
         } else {
@@ -125,6 +147,25 @@ impl ReviewScreen {
                 None => env.i18n().tr("vocabulary.review.nothing").into(),
             }
         };
+    }
+
+    /// When the first card answered *Again* is due, if one waits.
+    fn soonest(&self) -> Option<i64> {
+        self.waiting.iter().map(|due| due.state.due).min()
+    }
+
+    /// Where only cards answered *Again* are left: a call when the first
+    /// of them is due, to show it (the screen sleeps meanwhile).
+    fn wake_for_next(&self, cx: &mut Cx<'_, '_>) {
+        if self.current.is_some() {
+            return;
+        }
+        let Some(at) = self.soonest() else {
+            return;
+        };
+        let wait = (at - cards::now(cx.env())).max(0) as u64;
+        let when = cx.env().now().add_millis(wait * 1000);
+        cx.wake_at(when);
     }
 
     fn content(&self, env: &Env<'_>) -> Rect {
@@ -185,16 +226,13 @@ impl ReviewScreen {
         }
         self.answered += 1;
         if grade == Grade::Again {
-            let at = AGAIN_AFTER.min(self.queue.len());
-            self.queue.insert(
-                at,
-                Due {
-                    state: after,
-                    ..due
-                },
-            );
+            self.waiting.push(Due {
+                state: after,
+                ..due
+            });
         }
         self.next(&env);
+        self.wake_for_next(cx);
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
     }
@@ -300,7 +338,7 @@ impl Screen for ReviewScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n().tr("vocabulary.review.title");
-        let count = self.queue.len() + usize::from(self.current.is_some());
+        let count = self.queue.len() + self.waiting.len() + usize::from(self.current.is_some());
         let left = env
             .i18n()
             .plural("vocabulary.review.left", count as i64, &[]);
@@ -404,6 +442,18 @@ impl Screen for ReviewScreen {
             return Handled::Yes;
         }
         Handled::No
+    }
+
+    /// A card answered *Again* is due: shown, if none is.
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        if self.current.is_some() {
+            return;
+        }
+        let env = *cx.env();
+        self.next(&env);
+        self.wake_for_next(cx);
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Partial);
     }
 
     fn on_close_request(&mut self, _: CloseCause, cx: &mut Cx<'_, '_>) -> Handled {
