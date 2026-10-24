@@ -155,6 +155,13 @@ impl Reader {
         self.settle(effects);
     }
 
+    /// Lets `millis` pass, the device left alone.
+    fn wait(&mut self, millis: u64) {
+        self.now += millis;
+        let effects = self.kernel.tick(Instant(self.now));
+        self.settle(effects);
+    }
+
     fn parts(&mut self) -> Vec<Part> {
         self.kernel.render(&mut |_, _| {});
         self.kernel.describe()
@@ -226,7 +233,8 @@ fn cards_are_reviewed_with_buttons_alone() {
     let focused = reader.parts().into_iter().find(|p| p.focused).unwrap();
     assert_eq!(focused.label, "Good");
     reader.run(actions::CONFIRM);
-    // Then the new ones, in their order; Again brings one back.
+    // Then the new ones, in their order; Again brings one back, once its
+    // 10 minutes are over.
     assert!(reader.shown().contains("Hund\n"));
     reader.run(actions::CONFIRM);
     reader.run(actions::LEFT);
@@ -235,6 +243,7 @@ fn cards_are_reviewed_with_buttons_alone() {
     assert!(reader.shown().contains("Katze\n"));
     reader.run(actions::CONFIRM);
     reader.run(actions::CONFIRM);
+    reader.wait(10 * 60 * 1000);
     assert!(reader.shown().contains("Hund\n"), "Again: Hund once more");
     reader.run(actions::CONFIRM);
     reader.run(actions::CONFIRM);
@@ -257,6 +266,38 @@ fn cards_are_reviewed_with_buttons_alone() {
         .map(|l| l.split('\t').nth(5).unwrap())
         .collect();
     assert_eq!(reps, ["2", "1", "2"], "{deck}");
+}
+
+/// A card answered Again waits the 10 minutes its button says: the
+/// cards after it come in their order, then the screen says when it
+/// comes, and shows it by itself once it is due.
+#[test]
+fn again_waits_its_ten_minutes() {
+    let mut reader = Reader::new(BUTTONS, card(), "");
+    reader.open("vocabulary.review");
+    assert!(reader.shown().contains("Maus\n"));
+    reader.run(actions::CONFIRM);
+    reader.run(actions::LEFT);
+    reader.run(actions::LEFT);
+    reader.run(actions::CONFIRM);
+    // Not at once: the next ones first, in their order.
+    for next in ["Hund\n", "Katze\n"] {
+        let shown = reader.shown();
+        assert!(shown.contains(next), "{next}: {shown}");
+        reader.run(actions::CONFIRM);
+        reader.run(actions::CONFIRM);
+    }
+    let shown = reader.shown();
+    assert!(shown.contains("Next card in 10 min."), "{shown}");
+    assert!(!shown.contains("Maus"), "{shown}");
+    // Not before its time.
+    reader.wait(8 * 60 * 1000);
+    assert!(!reader.shown().contains("Maus"), "{}", reader.shown());
+    // Then by itself.
+    reader.wait(2 * 60 * 1000);
+    let shown = reader.shown();
+    assert!(shown.contains("Maus\n"), "{shown}");
+    assert!(shown.contains("1 left"), "{shown}");
 }
 
 #[test]
