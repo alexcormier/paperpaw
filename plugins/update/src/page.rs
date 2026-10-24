@@ -144,7 +144,7 @@ impl UpdatePage {
             style,
             view: View::Nothing,
             focus: 0,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             anyway: false,
             help: None,
         };
@@ -586,9 +586,9 @@ impl UpdatePage {
     fn button_rects(&self, env: &Env<'_>, buttons: &[Button]) -> Vec<Rect> {
         let style = &self.style;
         let display = env.device.display;
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let width = display.width.saturating_sub(2 * margin);
-        let row = style.touch_row(style.control_row) as u16;
+        let row = style.touch_row(u32::from(style.control_row())) as u16;
         let mut bottom = display.height.saturating_sub(ui::edge_room(style, row));
         // From the bottom up, each in a touch row, higher where its word
         // takes more lines.
@@ -616,9 +616,9 @@ impl UpdatePage {
         let env = *cx.env();
         match button {
             Button::Close => cx.command(Command::Back),
-            Button::Transfer => cx.command(Command::RunAction(TRANSFER)),
+            Button::Transfer => cx.command(Command::run(TRANSFER)),
             Button::Check => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 online::check(&env, false, &mut out);
                 out.into_iter().for_each(|command| cx.command(command));
                 self.view = View::Checking;
@@ -636,7 +636,7 @@ impl UpdatePage {
                 let View::Offer { offer, .. } = &self.view else {
                     return;
                 };
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 online::download(&env, offer, &mut out);
                 out.into_iter().for_each(|command| cx.command(command));
                 self.view = View::Downloading(offer.version.clone());
@@ -656,11 +656,11 @@ impl UpdatePage {
                 write_pair(env.storage, INSTALLING, &update.path, &update.info.version);
                 // What the reader saw and chose: the key shown, a version
                 // not newer said to be so.
-                cx.command(Command::Firmware(FirmwareCommand::Install {
-                    path: update.path.clone(),
-                    key: (*signer == Signer::Unknown).then_some(update.trailer.key),
-                    older: !age.is_gt(),
-                }));
+                cx.command(Command::Firmware(FirmwareCommand::install(
+                    update.path.clone(),
+                    (*signer == Signer::Unknown).then_some(update.trailer.key),
+                    !age.is_gt(),
+                )));
                 self.view = View::Installing {
                     done: 0,
                     total: u64::from(update.trailer.image_len),
@@ -684,30 +684,26 @@ impl UpdatePage {
         self.redraw(cx, RefreshMode::Fast);
     }
 
-    fn draw_progress(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        area: Rect,
-        done: u64,
-        total: u64,
-    ) {
+    fn draw_progress(&self, ui: &mut ui::Ui<'_>, area: Rect, done: u64, total: u64) {
         let style = &self.style;
         let percent = (done * 100).checked_div(total).unwrap_or(0).min(100);
         let permille = (done * 1000).checked_div(total).unwrap_or(0).min(1000) as u16;
-        ui::draw_progress(canvas, style, area, permille, Color::BLACK);
+        ui.progress(area, permille, Color::BLACK);
         let text = alloc::format!("{percent} %");
-        canvas.describe(Role::Text, &text, area);
-        if let Some(font) = style.font(env) {
+        ui.canvas().describe(Role::Text, &text, area);
+        if let Some(font) = ui.font() {
             let label = Rect::new(
                 area.x,
-                area.y + area.height + style.gap as u16,
+                area.y + area.height + style.gap(),
                 area.width,
-                style.row as u16,
+                style.row(),
             );
-            let tx =
-                f32::from(area.x) + (f32::from(area.width) - font.measure(style.text, &text)) / 2.0;
-            ui::draw_label(canvas, &font, style.text, tx, label, &text, Color::BLACK);
+            let tx = f32::from(area.x)
+                + (f32::from(area.width) - font.measure(style.text(), &text)) / 2.0;
+            ui::Label::new(&text)
+                .px(style.text())
+                .color(Color::BLACK)
+                .draw_from(ui, tx, label);
         }
     }
 }
@@ -739,16 +735,14 @@ fn paragraph_fits(
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
 fn paragraph(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
+    ui: &mut ui::Ui<'_>,
     area: Rect,
     size: f32,
     text: &str,
     max: usize,
     color: Color,
 ) -> u16 {
-    let Some(font) = style.font(env) else {
+    let Some(font) = ui.font() else {
         return 0;
     };
     let width = f32::from(area.width);
@@ -766,7 +760,7 @@ fn paragraph(
     let lines = font.wrap(size, text, width);
     let cut = lines.len() > max;
     let used = height * lines.len().min(max) as u16;
-    canvas.describe(
+    ui.canvas().describe(
         Role::Text,
         text,
         Rect::new(area.x, area.y, area.width, used),
@@ -781,7 +775,10 @@ fn paragraph(
         } else {
             alloc::borrow::Cow::Borrowed(&text[range])
         };
-        ui::draw_label(canvas, &font, size, f32::from(area.x), row, &line, color);
+        ui::Label::new(&line)
+            .px(size)
+            .color(color)
+            .draw_from(ui, f32::from(area.x), row);
         top += height;
     }
     top - area.y
@@ -791,12 +788,13 @@ impl Screen for UpdatePage {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, env.i18n.tr("update.title"), None, None);
+            .draw(&mut ui, env.i18n.tr("update.title"), None, None);
         // Within the margins other pages keep, below the header as their
         // content.
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         let width = env.device.display.width.saturating_sub(2 * margin);
         let (title, help) = self.texts(env);
         let mut y = self.header.area().height + gap;
@@ -806,16 +804,7 @@ impl Screen for UpdatePage {
             width,
             env.device.display.height.saturating_sub(y),
         );
-        y += paragraph(
-            canvas,
-            env,
-            &style,
-            area,
-            style.title,
-            &title,
-            3,
-            Color::BLACK,
-        ) + gap;
+        y += paragraph(&mut ui, area, style.title(), &title, 3, Color::BLACK) + gap;
         let buttons = self.buttons(env);
         let rects = self.button_rects(env, &buttons);
         // The words keep clear of the buttons.
@@ -823,14 +812,12 @@ impl Screen for UpdatePage {
             .first()
             .map_or(env.device.display.height, |r| r.y.saturating_sub(gap));
         let area = Rect::new(margin, y, width, bottom.saturating_sub(y));
-        if paragraph_fits(env, &style, area, style.small, &help, HELP_LINES) {
+        if paragraph_fits(env, &style, area, style.small(), &help, HELP_LINES) {
             self.help = None;
             y += paragraph(
-                canvas,
-                env,
-                &style,
+                &mut ui,
                 area,
-                style.small,
+                style.small(),
                 &help,
                 HELP_LINES,
                 style.ink(ui::Ink::Note),
@@ -842,18 +829,18 @@ impl Screen for UpdatePage {
                 self.help = Some((ui::TextView::new(env, &style, area, &help), area));
             }
             if let Some((view, _)) = &self.help {
-                view.draw(canvas, env, &style, &help);
+                view.draw(&mut ui, &help);
             }
             y += area.height + gap * 2;
         }
         if let View::Installing { done, total } = self.view {
             let bar = Rect::new(margin, y, width, gap * 3);
-            self.draw_progress(canvas, env, bar, done, total);
+            self.draw_progress(&mut ui, bar, done, total);
         }
         for (i, (button, rect)) in buttons.iter().zip(rects).enumerate() {
             let label = self.label(env, *button);
             let focused = self.shown && self.focus == i;
-            ui::draw_button(canvas, env, &style, rect, label, i == 0, focused);
+            ui.button(rect, label, i == 0, focused);
         }
     }
 
@@ -868,7 +855,7 @@ impl Screen for UpdatePage {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // Plugins for a downloaded update, cut off by a restart: on.
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         crate::fetch::resume(cx.env(), &mut out);
         out.into_iter().for_each(|command| cx.command(command));
         // Back from Wi-Fi transfer: a file may have come.
@@ -891,7 +878,7 @@ impl Screen for UpdatePage {
         } else if [actions::PREV_PAGE, actions::NEXT_PAGE].contains(a)
             && let Some((view, _)) = &mut self.help
         {
-            if view.on_action(a) {
+            if view.on_action(a).changed() {
                 self.redraw(cx, RefreshMode::Fast);
             }
         } else if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
@@ -922,7 +909,7 @@ impl Screen for UpdatePage {
         if let Some((view, area)) = &mut self.help
             && area.contains(gesture.start)
         {
-            if view.on_gesture(&gesture) {
+            if view.on_gesture(&gesture).changed() {
                 self.redraw(cx, RefreshMode::Fast);
             }
             return Handled::Yes;
@@ -932,7 +919,7 @@ impl Screen for UpdatePage {
         }
         let env = *cx.env();
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         self.shown = false;
@@ -962,7 +949,7 @@ impl Screen for UpdatePage {
                     View::Unreachable {
                         status: reply.status,
                         reason: if reply.status == 0 {
-                            reply.body.clone()
+                            reply.text().into_owned()
                         } else {
                             String::new()
                         },

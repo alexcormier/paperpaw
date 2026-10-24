@@ -1,4 +1,4 @@
-//! Voices: what speaks text aloud ([`Command::Speak`]) besides the
+//! Voices: what speaks text aloud ([`Command::Speak`](crate::Command::Speak)) besides the
 //! system's.
 //!
 //! A plugin's voice ([`VoiceSpec`], `Registrar::add_voice`) gets each
@@ -7,7 +7,7 @@
 //! text's language; the system's voice speaks the rest. It answers as the
 //! system does: once a text is spoken (or could not be), it emits the
 //! text's reply ([`Speech::answer`]). Stopping
-//! ([`Command::StopSpeaking`], or the screen that spoke closing) calls
+//! ([`Command::StopSpeaking`](crate::Command::StopSpeaking), or the screen that spoke closing) calls
 //! its `stop`.
 //!
 //! A device has speech ([`Capabilities::speech`](crate::Capabilities))
@@ -18,12 +18,12 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::{Command, Env, Id, Speech};
+use crate::{Env, Id, Speech};
 
 /// How a voice speaks a text: the commands that start it.
-pub type SpeakFn = Box<dyn Fn(&Env<'_>, &Speech, &mut Vec<Command>)>;
+pub type SpeakFn = Box<dyn Fn(&Env<'_>, &Speech, &mut crate::Commands)>;
 /// How a voice stops.
-pub type StopFn = Box<dyn Fn(&Env<'_>, &mut Vec<Command>)>;
+pub type StopFn = Box<dyn Fn(&Env<'_>, &mut crate::Commands)>;
 
 /// A voice contribution (see the [module documentation](self)): its name
 /// in the setting is the translation of its id.
@@ -50,8 +50,8 @@ impl VoiceSpec {
     /// language.
     pub fn new(
         id: Id,
-        speak: impl Fn(&Env<'_>, &Speech, &mut Vec<Command>) + 'static,
-        stop: impl Fn(&Env<'_>, &mut Vec<Command>) + 'static,
+        speak: impl Fn(&Env<'_>, &Speech, &mut crate::Commands) + 'static,
+        stop: impl Fn(&Env<'_>, &mut crate::Commands) + 'static,
     ) -> Self {
         Self {
             id,
@@ -121,7 +121,7 @@ impl Voices {
     /// where the system cannot speak (`system` false), else the first that
     /// does. `None`: the system's.
     pub fn chosen(&self, env: &Env<'_>, language: &str, system: bool) -> Option<&VoiceSpec> {
-        let chosen = env.settings.read(&crate::builtin::settings::VOICE);
+        let chosen = env.settings().read(&crate::builtin::settings::VOICE);
         let fitting = |v: &&VoiceSpec| v.speaks(language);
         self.get(chosen)
             .filter(fitting)

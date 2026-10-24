@@ -7,12 +7,52 @@ use paperpaw_platform::{Rect, RefreshMode};
 
 use crate::id::Id;
 
+/// Refreshes of the screen, by mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct Refreshes {
+    pub fast: u32,
+    /// Partial ones, and modes to come between fast and full.
+    pub partial: u32,
+    pub full: u32,
+}
+
+impl Refreshes {
+    pub const fn new(fast: u32, partial: u32, full: u32) -> Self {
+        Self {
+            fast,
+            partial,
+            full,
+        }
+    }
+
+    /// Refreshes of every mode together.
+    pub fn total(&self) -> u32 {
+        self.fast
+            .saturating_add(self.partial)
+            .saturating_add(self.full)
+    }
+
+    /// Counts a refresh in `mode`.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn count(&mut self, mode: RefreshMode) {
+        let count = match mode {
+            RefreshMode::Fast => &mut self.fast,
+            RefreshMode::Full => &mut self.full,
+            _ => &mut self.partial,
+        };
+        *count = count.saturating_add(1);
+    }
+}
+
 /// Counts since PaperPaw started (on a device whose sleep cuts the power,
 /// since it last woke).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct Usage {
-    /// Refreshes of the screen asked for, by mode: fast, partial, full.
-    pub refreshes: [u32; 3],
+    /// Refreshes of the screen asked for, by mode.
+    pub refreshes: Refreshes,
     /// Pixels refreshed, all refreshes together.
     pub pixels: u64,
     /// Button presses and releases, taps and swipes handled.
@@ -26,6 +66,7 @@ pub struct Usage {
 
 /// What a plugin took ([`Env::plugin_usage`](crate::Env::plugin_usage)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct PluginUsage {
     pub plugin: Id,
     /// Time its code ran (its screens drawing and handling input, its
@@ -35,8 +76,8 @@ pub struct PluginUsage {
     pub calls: u32,
     /// Time one of its screens was on top, in milliseconds.
     pub shown_ms: u64,
-    /// Refreshes while one of its screens was on top: fast, partial, full.
-    pub refreshes: [u32; 3],
+    /// Refreshes while one of its screens was on top.
+    pub refreshes: Refreshes,
     /// Pixels refreshed then.
     pub pixels: u64,
     /// Bytes of storage its code read and wrote.
@@ -51,12 +92,19 @@ pub struct PluginUsage {
 
 impl Default for PluginUsage {
     fn default() -> Self {
+        Self::new(Id::new_static("core"))
+    }
+}
+
+impl PluginUsage {
+    /// Nothing taken yet by `plugin`.
+    pub fn new(plugin: Id) -> Self {
         Self {
-            plugin: Id::new_static("core"),
+            plugin,
             busy_us: 0,
             calls: 0,
             shown_ms: 0,
-            refreshes: [0; 3],
+            refreshes: Refreshes::default(),
             pixels: 0,
             read: 0,
             written: 0,
@@ -71,13 +119,7 @@ impl Usage {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn refreshed(&mut self, mode: RefreshMode, area: Rect) {
-        let index = match mode {
-            RefreshMode::Fast => 0,
-            RefreshMode::Full => 2,
-            // Partial, and modes to come between fast and full.
-            _ => 1,
-        };
-        self.refreshes[index] = self.refreshes[index].saturating_add(1);
+        self.refreshes.count(mode);
         self.pixels = self
             .pixels
             .saturating_add(u64::from(area.width) * u64::from(area.height));
@@ -85,9 +127,7 @@ impl Usage {
 
     /// Refreshes of every mode together.
     pub fn total_refreshes(&self) -> u32 {
-        self.refreshes
-            .iter()
-            .fold(0u32, |a, &b| a.saturating_add(b))
+        self.refreshes.total()
     }
 }
 
@@ -101,7 +141,7 @@ mod tests {
         usage.refreshed(RefreshMode::Fast, Rect::new(0, 0, 10, 10));
         usage.refreshed(RefreshMode::Full, Rect::new(5, 5, 480, 800));
         usage.refreshed(RefreshMode::Full, Rect::new(0, 0, 1, 1));
-        assert_eq!(usage.refreshes, [1, 0, 2]);
+        assert_eq!(usage.refreshes, Refreshes::new(1, 0, 2));
         assert_eq!(usage.pixels, 100 + 480 * 800 + 1);
         assert_eq!(usage.total_refreshes(), 3);
     }

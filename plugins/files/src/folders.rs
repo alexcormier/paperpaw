@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::event::{Event, EventData};
-use paperpaw_sdk::replies::{Chosen, Typed};
+use paperpaw_sdk::replies::{FolderChosen, Typed};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
@@ -94,7 +94,7 @@ impl FolderChooser {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         Self {
             setting,
@@ -103,7 +103,7 @@ impl FolderChooser {
             len: 0,
             page: Vec::new(),
             first: 0,
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
             // Read once the screen shows.
@@ -184,7 +184,7 @@ impl FolderChooser {
                     cx.command(Command::SetSetting(id, value));
                 }
                 if let Some((reply, params)) = &self.reply {
-                    let chosen = Chosen::new(self.dir.clone(), params.clone());
+                    let chosen = FolderChosen::new(self.dir.clone(), params.clone());
                     cx.command(Command::Emit(reply.clone(), chosen.to_params()));
                 }
             }
@@ -261,9 +261,9 @@ impl Screen for FolderChooser {
             // Long paths keep their end, which tells where one is.
             Some(font) => {
                 let width = f32::from(self.header.area().width) * 0.6;
-                if font.measure(style.title, &title) > width {
+                if font.measure(style.title(), &title) > width {
                     let tail: String = title.chars().rev().collect();
-                    let fitted = ui::fit(&font, style.title, &tail, width);
+                    let fitted = ui::fit(&font, style.title(), &tail, width);
                     fitted.chars().rev().collect()
                 } else {
                     title
@@ -271,14 +271,15 @@ impl Screen for FolderChooser {
             }
             None => title,
         };
+        let mut ui = ui::Ui::new(canvas, env, &style);
         if self.pending.is_some() {
-            self.header.draw(canvas, env, &style, &title, None, None);
+            self.header.draw(&mut ui, &title, None, None);
             let text = env.i18n.tr("files.choose.opening");
-            ui::draw_message(canvas, env, &style, self.list.area(), text);
+            ui.message(self.list.area(), text);
             return;
         }
         self.header
-            .draw(canvas, env, &style, &title, None, self.list.paging(len));
+            .draw(&mut ui, &title, None, self.list.paging(len));
         let this = &*self;
         let rows: Vec<(usize, String, &str)> = (0..len)
             .skip(this.list.page() * this.list.rows())
@@ -293,12 +294,11 @@ impl Screen for FolderChooser {
                 })
             })
             .collect();
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                if let Some((_, title, value)) = rows.iter().find(|(i, _, _)| *i == index) {
-                    ui::draw_value_row(canvas, env, &style, rect, focused, title, value);
-                }
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            if let Some((_, title, value)) = rows.iter().find(|(i, _, _)| *i == index) {
+                ui::Row::value(title, value).focused(focused).draw(ui, rect);
+            }
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -383,7 +383,7 @@ impl Screen for FolderChooser {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.len()) {

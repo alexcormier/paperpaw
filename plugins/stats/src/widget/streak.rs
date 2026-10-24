@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Point, Rect, RegisterError, Registrar, SettingSpec};
 
@@ -32,32 +32,32 @@ const DAYS: [&str; 2] = ["stats.marks.7", "stats.marks.14"];
 static SETTINGS: [SettingSpec; 11] = [
     widgets::frame_spec("stats.widget.streak.frame", STREAK, Frame::None),
     widgets::padding_spec("stats.widget.streak.padding", STREAK, Padding::Auto),
-    widgets::size_spec("stats.widget.streak.size", STREAK, Size::Medium, true),
+    widgets::size_spec("stats.widget.streak.size", STREAK, TextSize::Medium, true),
     widgets::align_spec("stats.widget.streak.align", STREAK, Align::Center),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.streak.counts",
         "stats.setting.counts",
         &COUNTS,
         COUNTS[0],
         STREAK,
     )
-    .described("stats.setting.counts.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.counts.help"),
+    SettingSpec::choice(
         "stats.widget.streak.style",
         "stats.setting.marks",
         &MARKS,
         MARKS[1],
         STREAK,
     )
-    .described("stats.setting.marks.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.marks.help"),
+    SettingSpec::choice(
         "stats.widget.streak.days",
         "stats.setting.days",
         &DAYS,
         DAYS[0],
         STREAK,
     )
-    .described("stats.setting.days.help"),
+    .description("stats.setting.days.help"),
     widgets::part_spec(
         "stats.widget.streak.caption",
         STREAK,
@@ -76,7 +76,7 @@ static SETTINGS: [SettingSpec; 11] = [
         "stats.part.marks",
         true,
     )
-    .described("stats.part.marks.help"),
+    .description("stats.part.marks.help"),
     widgets::part_spec(
         "stats.widget.streak.weekdays",
         STREAK,
@@ -86,7 +86,11 @@ static SETTINGS: [SettingSpec; 11] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&STREAK, "stats.widget.streak"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(STREAK, "stats.widget.streak");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(STREAK, "stats.widget.streak", |_| {
@@ -171,7 +175,7 @@ impl Widget for Streak {
         };
         let id = NAME;
         let size = widgets::size(env, id).text(&style);
-        let small = line(&font, style.small);
+        let small = line(&font, style.small());
         frame_height(env, id)
             + caption_room(env, id)
             + line(&font, size)
@@ -217,7 +221,7 @@ fn marks_height(env: &Env<'_>, small: u16, width: u16, weekdays: bool) -> u16 {
         7
     };
     let (_, d) = mark_size(env, width, count);
-    d as u16 + style.gap as u16 / 2 + if weekdays { small } else { 0 }
+    d as u16 + style.gap() / 2 + if weekdays { small } else { 0 }
 }
 
 /// "5 days", and below it "in a row, longest 12" (or how to begin one).
@@ -238,9 +242,10 @@ fn texts(env: &Env<'_>, streaks: Streaks) -> (String, String) {
     (first, second)
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -254,12 +259,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         caption = None;
         area = look.area;
     }
-    let small = line(&font, style.small);
-    let gap = style.gap as u16 / 2;
+    let small = line(&font, style.small());
+    let gap = style.gap() / 2;
     let weekdays = widgets::shows(env, id, "weekdays");
     let align = widgets::align(env, id);
     let headline = match widgets::size(env, id) {
-        Size::Fit => style.text,
+        TextSize::Fit => style.text(),
         size => size.text(&style),
     };
     let least = line(&font, headline) + small;
@@ -270,7 +275,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         // The text two fifths (more where the streak needs it), the marks
         // the rest; the gap between them taken from the marks where the
         // two would not fit together otherwise.
-        let space = style.gap as u16;
+        let space = style.gap();
         let needs = font.measure(headline, &first) as u16 + 1;
         let least_marks = (env.metrics.mm(3) * shown.marks.len() as u32) as u16;
         let side = needs
@@ -282,7 +287,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
             (h > 0 && h - gap <= area.height).then_some((h - gap, weekdays))
         };
         if let Some((marks, weekdays)) = fits(weekdays).or_else(|| fits(false)) {
-            let area = super::captioned(canvas, env, id, look, caption, area.height);
+            let area = super::captioned(ui.canvas(), env, id, look, caption, area.height);
             let side_area = Rect::new(area.x, area.y, side, area.height);
             let laid = lay_texts(env, side_area, (&first, &second));
             let (mut column, mut d) = mark_size(env, rest, shown.marks.len());
@@ -296,11 +301,11 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
             let group = u32::from(laid.width) + space + span;
             let left = align.x(area, group as f32) as u16;
             let text = Rect::new(left, area.y, laid.width, area.height);
-            draw_texts(canvas, env, look, text, &laid, Align::Left);
+            draw_texts(&mut ui, look, text, &laid, Align::Left);
             let x = left + laid.width + space as u16;
             let width = (column * shown.marks.len() as u32) as u16;
             let at = middle(Rect::new(x, area.y, width, area.height), marks);
-            draw_marks(canvas, env, look, at, &shown.marks, (Align::Left, weekdays));
+            draw_marks(&mut ui, look, at, &shown.marks, (Align::Left, weekdays));
             return;
         }
     }
@@ -325,12 +330,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     );
     let laid = lay_texts(env, room, (&first, &second));
     // The text and the marks below it, together in the middle.
-    let block = super::captioned(canvas, env, id, look, caption, laid.height + marks);
+    let block = super::captioned(ui.canvas(), env, id, look, caption, laid.height + marks);
     let at = Rect::new(area.x, block.y, area.width, laid.height);
-    draw_texts(canvas, env, look, at, &laid, align);
+    draw_texts(&mut ui, look, at, &laid, align);
     if marks > 0 {
         let at = Rect::new(area.x, block.y + laid.height + gap, area.width, marks - gap);
-        draw_marks(canvas, env, look, at, &shown.marks, (align, weekdays));
+        draw_marks(&mut ui, look, at, &shown.marks, (align, weekdays));
     }
 }
 
@@ -352,14 +357,14 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return Texts {
-            size: style.text,
+            size: style.text(),
             first: String::new(),
             second: None,
             width: 0,
             height: 0,
         };
     };
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let width = f32::from(area.width);
     let room = area.height.saturating_sub(small);
     let with_note = super::text_size(env, &font, NAME, first, area.width, room);
@@ -367,7 +372,7 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
     // The note where there is room for it below the streak, and where it
     // does not make the streak smaller than the body's size.
     let note = line(&font, with_note) + small <= area.height
-        && (with_note >= style.text || with_note >= alone);
+        && (with_note >= style.text() || with_note >= alone);
     let size = if note { with_note } else { alone };
     let shown = super::number_if_narrow(&font, size, first, area.width);
     let shown = ui::fit(&font, size, shown, width);
@@ -377,7 +382,7 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
         .then(|| {
             let in_a_row = env.i18n.tr("stats.in-a-row");
             let start = env.i18n.tr("stats.widget.streak.start");
-            let wide = font.measure(style.small, second) > width;
+            let wide = font.measure(style.small(), second) > width;
             if wide && second.starts_with(in_a_row) {
                 in_a_row
             } else if wide && second == start {
@@ -388,12 +393,12 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
         })
         // Left out where not even that fits whole: a note shortened says
         // little.
-        .filter(|text| font.measure(style.small, text) <= width)
+        .filter(|text| font.measure(style.small(), text) <= width)
         .map(String::from);
     let wide = font.measure(size, &shown).max(
         second
             .as_ref()
-            .map_or(0.0, |s| font.measure(style.small, s)),
+            .map_or(0.0, |s| font.measure(style.small(), s)),
     );
     let height = line(&font, size) + if second.is_some() { small } else { 0 };
     Texts {
@@ -407,67 +412,59 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
 
 /// Draws the streak and the note below it, as laid out, in the middle
 /// of `area` as `align` places them.
-fn draw_texts(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    look: &Look,
-    area: Rect,
-    laid: &Texts,
-    align: Align,
-) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+fn draw_texts(ui: &mut ui::Ui<'_>, look: &WidgetLook, area: Rect, laid: &Texts, align: Align) {
+    let style = *ui.style();
+    let Some(font) = ui.font() else {
         return;
     };
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let big = line(&font, laid.size);
     let block = middle(area, laid.height);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     let x = align.x(area, font.measure(laid.size, &laid.first));
-    ui::draw_label(
-        canvas,
-        &font,
-        laid.size,
-        x,
-        row(block.y, big),
-        &laid.first,
-        look.ink,
-    );
+    ui::Label::new(&laid.first)
+        .px(laid.size)
+        .color(look.ink)
+        .draw_from(ui, x, row(block.y, big));
     if let Some(second) = &laid.second {
-        let x = align.x(area, font.measure(style.small, second));
+        let x = align.x(area, font.measure(style.small(), second));
         let at = row(block.y + big, small);
-        ui::draw_label(canvas, &font, style.small, x, at, second, look.faint);
+        ui::Label::new(second)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(ui, x, at);
     }
 }
 
 /// A mark a day in `area`, placed as `align` says, the weekdays below if
 /// `weekdays`.
 fn draw_marks(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    look: &Look,
+    ui: &mut ui::Ui<'_>,
+    look: &WidgetLook,
     area: Rect,
     marks: &[Mark],
     (align, weekdays): (Align, bool),
 ) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let env = ui.env();
+    let style = *ui.style();
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let n = marks.len().max(1) as u32;
     let (column, d) = mark_size(env, area.width, marks.len());
     // The weekdays where their letters have room.
     let weekdays = weekdays
-        && (0..7).all(|w| font.measure(style.small, super::initial(env, w)) * 1.3 <= column as f32);
+        && (0..7)
+            .all(|w| font.measure(style.small(), super::initial(env, w)) * 1.3 <= column as f32);
     let labels = if weekdays { small } else { 0 };
     let d = d.min(u32::from(area.height.saturating_sub(labels)));
     if d < 4 {
         return;
     }
     let checks = chosen(env, id, "style") == MARKS[1];
-    let thin = style.line.max(1);
+    let thin = u32::from(style.line()).max(1);
     // Flush with the text: the outer marks' edges on its margins.
     let inset = (column - d) / 2;
     let span = (column * n - 2 * inset) as f32;
@@ -477,35 +474,31 @@ fn draw_marks(
         let cx = left + (column * i as u32 + column / 2) as i32;
         let center = Point::new(cx, i32::from(area.y) + radius as i32);
         if mark.counts {
-            canvas.fill_circle(center, radius, look.ink);
+            ui.canvas().fill_circle(center, radius, look.ink);
             if checks && d >= 10 {
-                draw_check(canvas, center, radius, look);
+                draw_check(ui.canvas(), center, radius, look);
             }
         } else if mark.today {
-            canvas.stroke_circle(center, radius, (thin * 2).min(radius / 3).max(1), look.ink);
+            ui.canvas()
+                .stroke_circle(center, radius, (thin * 2).min(radius / 3).max(1), look.ink);
         } else {
-            canvas.stroke_circle(center, radius, thin, look.faint);
+            ui.canvas().stroke_circle(center, radius, thin, look.faint);
         }
         if weekdays {
             let name = super::initial(env, mark.weekday);
-            let w = font.measure(style.small, name);
+            let w = font.measure(style.small(), name);
             let row = Rect::new(area.x, area.y + d as u16, area.width, labels);
             let color = if mark.today { look.ink } else { look.faint };
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                cx as f32 - w / 2.0,
-                row,
-                name,
-                color,
-            );
+            ui::Label::new(name)
+                .px(style.small())
+                .color(color)
+                .draw_from(ui, cx as f32 - w / 2.0, row);
         }
     }
 }
 
 /// A check in the paper's colour on a filled mark.
-fn draw_check(canvas: &mut Canvas<'_>, center: Point, radius: u32, look: &Look) {
+fn draw_check(canvas: &mut Canvas<'_>, center: Point, radius: u32, look: &WidgetLook) {
     let r = radius as i32;
     let at = |x: i32, y: i32| Point::new(center.x + x * r / 100, center.y + y * r / 100);
     let width = (radius / 4).max(1);

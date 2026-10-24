@@ -44,8 +44,8 @@ use paperpaw_sdk::replies::{Confirmed, ServerNotice};
 use paperpaw_sdk::served::{CABLE_PORT, json_string, param};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Handled, Id, Instant, Params, Rect, RefreshMode, Screen,
-    ScreenKey, ServerResponse, files,
+    Arg, Canvas, Command, Commands, Cx, Env, Handled, Id, Instant, Params, Rect, RefreshMode,
+    Screen, ScreenKey, ServerResponse, files,
 };
 
 use crate::plugins;
@@ -341,7 +341,7 @@ impl CableScreen {
         let json = |status, body: String| {
             ServerResponse::new(number, status, "application/json", body.into_bytes())
         };
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         let response = match (method, path) {
             ("GET", "/api/hello") => json(200, hello(&env)),
             ("GET", "/api/plugins") => json(200, plugins::listing(&env)),
@@ -362,7 +362,7 @@ impl CableScreen {
             _ => json(404, String::from("{\"why\":\"not found\"}")),
         };
         // A body not taken goes (the kernel removes it once answered).
-        out.push(Command::Respond(response));
+        out.push(Command::respond(response));
         for command in out {
             cx.command(command);
         }
@@ -490,7 +490,7 @@ impl CableScreen {
         env: &Env<'_>,
         path: &str,
         number: u32,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
         cx: &mut Cx<'_, '_>,
     ) -> ServerResponse {
         let json = |status, body: String| {
@@ -556,7 +556,7 @@ impl CableScreen {
         query: &str,
         body: Option<&str>,
         number: u32,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
         cx: &mut Cx<'_, '_>,
     ) -> ServerResponse {
         let json = |status, body: String| {
@@ -667,10 +667,11 @@ impl Screen for CableScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("transfer.cable.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(&mut ui, title, None, None);
         let display = env.device.display;
-        let top = self.header.area().height + style.gap as u16;
+        let top = self.header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let state = match self.permission {
             Permission::Allowed => "transfer.cable.allowed",
@@ -682,7 +683,7 @@ impl Screen for CableScreen {
             text.push_str("\n\n");
             text.push_str(last);
         }
-        ui::draw_message(canvas, env, &style, area, &text);
+        ui.message(area, &text);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

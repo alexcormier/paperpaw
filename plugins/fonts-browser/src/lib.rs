@@ -19,13 +19,12 @@ mod samples;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, groups, settings};
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingSpec,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Registrar, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("fonts-browser");
@@ -38,13 +37,13 @@ const FONT_SCREEN: Id = Id::new_static("fonts-browser.font");
 pub const CATALOG: Setting<paperpaw_sdk::setting::Text> = Setting::new("fonts-browser.catalog");
 
 /// The font library's address, for developers and libraries of one's own.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     CATALOG.static_str(),
     "fonts-browser.setting.catalog",
     "https://paperpaw.org/api/v1/fonts.json",
     groups::DEVELOPER,
 )
-.described("fonts-browser.setting.catalog.help")];
+.description("fonts-browser.setting.catalog.help")];
 
 /// The fonts browser.
 #[derive(Debug, Default)]
@@ -76,7 +75,7 @@ impl Plugin for FontsBrowser {
             Box::new(|env, params| Box::new(font::FontScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "fonts-browser.more").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;

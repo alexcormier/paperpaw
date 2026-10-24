@@ -14,59 +14,259 @@ use super::*;
 #[non_exhaustive]
 pub struct UiStyle {
     /// Body text size.
-    pub text: f32,
+    pub(crate) text: f32,
     /// Secondary text (status lines, hints).
-    pub small: f32,
+    pub(crate) small: f32,
     /// Titles (e.g. of dialogs and widgets).
-    pub title: f32,
+    pub(crate) title: f32,
     /// The titles of headers (core.ui-title), larger than [`title`] in
     /// some themes.
     ///
-    /// [`title`]: UiStyle::title
-    pub head: f32,
+    /// [`title`]: UiStyle::title()
+    pub(crate) head: f32,
     /// Height of a list row.
-    pub row: u32,
+    pub(crate) row: u32,
     /// The row height controls are sized from (buttons, switches, ticks,
-    /// pickers): [`UiStyle::row`], except where rows grow to hold a label
+    /// pickers): [`UiStyle::row()`], except where rows grow to hold a label
     /// on two lines at the largest sizes while controls keep their size.
-    pub control_row: u32,
+    pub(crate) control_row: u32,
     /// Height of a header bar.
-    pub header: u32,
+    pub(crate) header: u32,
     /// Horizontal margin of content.
-    pub margin: u32,
+    pub(crate) margin: u32,
     /// Standard gap between elements.
-    pub gap: u32,
+    pub(crate) gap: u32,
     /// Width of lines and borders.
-    pub line: u32,
+    pub(crate) line: u32,
     /// Headers on a dark bar, else on a light one with a line below.
-    pub dark_header: bool,
+    pub(crate) dark_header: bool,
     /// Radius of the corners of highlights, buttons and boxes (0: square).
-    pub corner: u32,
+    pub(crate) corner: u32,
     /// Gray text is drawn black (see [`UiStyle::faint`]).
-    pub strong: bool,
+    pub(crate) strong: bool,
     /// Buttons, switches, the focus and other small shapes as pills,
     /// their ends round (see [`UiStyle::radius`]), with round or soft
     /// corners; else with [`corner`].
     ///
-    /// [`corner`]: UiStyle::corner
-    pub pill: bool,
+    /// [`corner`]: UiStyle::corner()
+    pub(crate) pill: bool,
     /// How the focus of rows and items is drawn.
-    pub focus: Focus,
+    pub(crate) focus: Focus,
     /// The lines between rows, below light headers and above notes.
-    pub separators: Separators,
+    pub(crate) separators: Separators,
     /// Headers without a bar or a line: the title on the page itself.
-    pub plain_header: bool,
+    pub(crate) plain_header: bool,
     /// The entries of a list's sections on rounded cards.
-    pub cards: bool,
+    pub(crate) cards: bool,
     /// The grays the panel shows (2 for black and white alone).
-    pub grays: u16,
+    pub(crate) grays: u16,
     /// The least size of what a finger sets or presses, about 7 mm, on
     /// touch screens; 0 with buttons alone (see [`UiStyle::touch_row`]).
-    pub finger: u32,
+    pub(crate) finger: u32,
     /// The look a plugin gave the parts (see [`look`](super::look)).
-    pub look: super::look::Look,
+    pub(crate) look: super::look::Look,
     /// The grays of the interface (see [`UiStyle::ink`]).
-    pub palette: Palette,
+    pub(crate) palette: Palette,
+}
+
+/// How a header is drawn ([`UiStyle::header_kind`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum HeaderKind {
+    /// On a light bar with a line below.
+    Light,
+    /// On a dark bar.
+    Dark,
+    /// Without a bar or a line: the title on the page itself.
+    Plain,
+}
+
+/// What the style is: its sizes in pixels and its looks. A style is made
+/// with [`UiStyle::new`]; the `with_` methods change one part of it, e.g.
+/// for a screen of its own.
+impl UiStyle {
+    /// Body text size.
+    pub fn text(&self) -> f32 {
+        self.text
+    }
+
+    /// Secondary text (status lines, hints).
+    pub fn small(&self) -> f32 {
+        self.small
+    }
+
+    /// Titles (e.g. of dialogs and widgets).
+    pub fn title(&self) -> f32 {
+        self.title
+    }
+
+    /// The titles of headers, larger than [`title`](Self::title) in some
+    /// themes.
+    pub fn head(&self) -> f32 {
+        self.head
+    }
+
+    /// Height of a list row.
+    pub fn row(&self) -> u16 {
+        px(self.row)
+    }
+
+    /// The row height controls are sized from (buttons, switches, ticks,
+    /// pickers): [`row`](Self::row), except where rows grow to hold a
+    /// label on two lines at the largest sizes while controls keep their
+    /// size.
+    pub fn control_row(&self) -> u16 {
+        px(self.control_row)
+    }
+
+    /// Height of a header bar.
+    pub fn header(&self) -> u16 {
+        px(self.header)
+    }
+
+    /// Horizontal margin of content.
+    pub fn margin(&self) -> u16 {
+        px(self.margin)
+    }
+
+    /// Standard gap between elements.
+    pub fn gap(&self) -> u16 {
+        px(self.gap)
+    }
+
+    /// Width of lines and borders.
+    pub fn line(&self) -> u16 {
+        px(self.line)
+    }
+
+    /// Radius of the corners of highlights, buttons and boxes (0: square).
+    pub fn corner(&self) -> u16 {
+        px(self.corner)
+    }
+
+    /// The least size of what a finger sets or presses, about 7 mm, on
+    /// touch screens; 0 with buttons alone (see
+    /// [`touch_row`](Self::touch_row)).
+    pub fn finger(&self) -> u16 {
+        px(self.finger)
+    }
+
+    /// Gray text is drawn black (see [`faint`](Self::faint)).
+    pub fn strong(&self) -> bool {
+        self.strong
+    }
+
+    /// Buttons, switches, the focus and other small shapes as pills, their
+    /// ends round (see [`radius`](Self::radius)); else with
+    /// [`corner`](Self::corner).
+    pub fn pill(&self) -> bool {
+        self.pill
+    }
+
+    /// How the focus of rows and items is drawn.
+    pub fn focus(&self) -> Focus {
+        self.focus
+    }
+
+    /// The lines between rows, below light headers and above notes.
+    pub fn separators(&self) -> Separators {
+        self.separators
+    }
+
+    /// The entries of a list's sections on rounded cards.
+    pub fn cards(&self) -> bool {
+        self.cards
+    }
+
+    /// How headers are drawn.
+    pub fn header_kind(&self) -> HeaderKind {
+        if self.plain_header {
+            HeaderKind::Plain
+        } else if self.dark_header {
+            HeaderKind::Dark
+        } else {
+            HeaderKind::Light
+        }
+    }
+
+    /// The panel shows black and white alone (no grays between).
+    pub fn black_and_white(&self) -> bool {
+        self.grays <= 2
+    }
+
+    /// The panel shows grays smoothly (16 or more), not a few steps.
+    pub fn smooth_grays(&self) -> bool {
+        self.grays >= 16
+    }
+
+    /// The look a plugin gave the parts (see [`look`](super::look)).
+    pub fn look(&self) -> super::look::Look {
+        self.look
+    }
+
+    /// The grays of the interface (see [`ink`](Self::ink)).
+    pub fn palette(&self) -> Palette {
+        self.palette
+    }
+
+    /// With body text `text` large.
+    pub fn with_text(mut self, text: f32) -> Self {
+        self.text = text;
+        self
+    }
+
+    /// With the parts in `look`.
+    pub fn with_look(mut self, look: super::look::Look) -> Self {
+        self.look = look;
+        self
+    }
+
+    /// With rows `row` high.
+    pub fn with_row(mut self, row: u16) -> Self {
+        self.row = u32::from(row);
+        self
+    }
+
+    /// With a margin of `margin`.
+    pub fn with_margin(mut self, margin: u16) -> Self {
+        self.margin = u32::from(margin);
+        self
+    }
+
+    /// With corners of radius `corner`.
+    pub fn with_corner(mut self, corner: u16) -> Self {
+        self.corner = u32::from(corner);
+        self
+    }
+
+    /// With small shapes as pills, or not.
+    pub fn with_pill(mut self, pill: bool) -> Self {
+        self.pill = pill;
+        self
+    }
+
+    /// With gray text drawn black, or not.
+    pub fn with_strong(mut self, strong: bool) -> Self {
+        self.strong = strong;
+        self
+    }
+
+    /// With `separators` between rows.
+    pub fn with_separators(mut self, separators: Separators) -> Self {
+        self.separators = separators;
+        self
+    }
+
+    /// With the grays of `palette`.
+    pub fn with_palette(mut self, palette: Palette) -> Self {
+        self.palette = palette;
+        self
+    }
+}
+
+/// A size in pixels as the getters give it.
+fn px(value: u32) -> u16 {
+    u16::try_from(value).unwrap_or(u16::MAX)
 }
 
 /// What a colour is for ([`UiStyle::ink`]): the grays of the interface,
@@ -81,6 +281,9 @@ pub enum Ink {
     Paper,
     /// Notes below the titles of rows, what an empty screen explains.
     Note,
+    /// What is told beside or below a row's title: details, the notes of
+    /// lists, hints on a page.
+    Detail,
     /// Headings of sections, a widget's lesser text.
     Muted,
     /// The least of text, e.g. what an empty screen says.
@@ -97,20 +300,20 @@ pub enum Ink {
     OnFocusMuted,
     /// Lesser text on a dark card.
     OnDarkMuted,
-    /// Cards, e.g. the frames of widgets.
+    /// Cards, e.g. the frames of widgets (on panels of black and white
+    /// alone, a sparser pattern of it).
     Card,
-    /// Cards on panels of black and white alone, drawn as a pattern.
-    CardPattern,
     /// The cards a list's sections are on.
     Section,
 }
 
 impl Ink {
     /// Every role, in the order of [`Palette`]'s values.
-    pub const ALL: [Ink; 14] = [
+    pub const ALL: &'static [Ink] = &[
         Ink::Text,
         Ink::Paper,
         Ink::Note,
+        Ink::Detail,
         Ink::Muted,
         Ink::Faint,
         Ink::Disabled,
@@ -120,7 +323,6 @@ impl Ink {
         Ink::OnFocusMuted,
         Ink::OnDarkMuted,
         Ink::Card,
-        Ink::CardPattern,
         Ink::Section,
     ];
 
@@ -130,6 +332,7 @@ impl Ink {
             Ink::Text => "text",
             Ink::Paper => "paper",
             Ink::Note => "note",
+            Ink::Detail => "detail",
             Ink::Muted => "muted",
             Ink::Faint => "faint",
             Ink::Disabled => "disabled",
@@ -139,28 +342,36 @@ impl Ink {
             Ink::OnFocusMuted => "on-focus-muted",
             Ink::OnDarkMuted => "on-dark-muted",
             Ink::Card => "card",
-            Ink::CardPattern => "card-pattern",
             Ink::Section => "section",
         }
     }
 
     /// Text, which strong contrast draws black.
     const fn is_text(self) -> bool {
-        matches!(self, Ink::Note | Ink::Muted | Ink::Faint)
+        matches!(self, Ink::Note | Ink::Detail | Ink::Muted | Ink::Faint)
     }
 }
 
-/// The gray of each [`Ink`] (0 black, 255 white), read from the setting
-/// `core.ui-palette`: names and values separated by spaces, e.g.
+/// The colour of each [`Ink`], read from the setting `core.ui-palette`:
+/// names and grays (0 black, 255 white) separated by spaces, e.g.
 /// `muted=60 line=170`; what it leaves out has its default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Palette([u8; 14]);
+pub struct Palette([Color; 14]);
 
 impl Palette {
     /// The interface's own grays.
-    pub const DEFAULT: Palette = Palette([
-        0, 255, 60, 90, 120, 150, 150, 190, 210, 215, 200, 225, 240, 238,
-    ]);
+    pub const DEFAULT: Palette = {
+        const GRAYS: [u8; 14] = [
+            0, 255, 60, 80, 90, 120, 150, 150, 190, 210, 215, 200, 225, 238,
+        ];
+        let mut colors = [Color::BLACK; 14];
+        let mut at = 0;
+        while at < GRAYS.len() {
+            colors[at] = Color::gray(GRAYS[at]);
+            at += 1;
+        }
+        Palette(colors)
+    };
 
     /// The default with what `text` sets; names it does not know and bad
     /// values are left out.
@@ -176,13 +387,13 @@ impl Palette {
             ) else {
                 continue;
             };
-            palette.0[at] = value;
+            palette.0[at] = Color::gray(value);
         }
         palette
     }
 
-    /// The gray of `ink`.
-    pub fn gray(&self, ink: Ink) -> u8 {
+    /// The colour of `ink`.
+    pub fn color(&self, ink: Ink) -> Color {
         let at = Ink::ALL.iter().position(|i| *i == ink).unwrap_or(0);
         self.0[at]
     }
@@ -361,9 +572,9 @@ impl UiStyle {
     /// white on a dark focus, else black.
     pub fn focus_ink(&self, focused: bool) -> Color {
         if focused && self.dark_focus() {
-            Color::WHITE
+            self.ink(Ink::Paper)
         } else {
-            Color::BLACK
+            self.ink(Ink::Text)
         }
     }
 
@@ -371,19 +582,19 @@ impl UiStyle {
     /// be cleared to (black on a dark focus).
     pub fn focus_paper(&self, focused: bool) -> Color {
         if focused && self.dark_focus() {
-            Color::BLACK
+            self.ink(Ink::Text)
         } else {
-            Color::WHITE
+            self.ink(Ink::Paper)
         }
     }
 
     /// The colour of gray text (notes) on a row or item, `focused` or not
     /// (light on a dark focus).
-    pub fn focus_faint(&self, focused: bool, gray: u8) -> Color {
+    pub fn focus_faint(&self, focused: bool, ink: Ink) -> Color {
         if focused && self.dark_focus() {
             self.ink(Ink::OnFocusMuted)
         } else {
-            self.faint(gray)
+            self.faint(ink)
         }
     }
 
@@ -402,7 +613,7 @@ impl UiStyle {
         if self.strong && ink.is_text() {
             Color::BLACK
         } else {
-            Color::gray(self.palette.gray(ink))
+            self.palette.color(ink)
         }
     }
 
@@ -420,23 +631,24 @@ impl UiStyle {
         }
     }
 
-    /// The colour of gray text such as hints and notes: `gray`, or black
-    /// for strong contrast.
-    pub fn faint(&self, gray: u8) -> Color {
+    /// The colour of gray text such as hints and notes, of `ink`'s role
+    /// in the palette; black for strong contrast.
+    pub fn faint(&self, ink: Ink) -> Color {
         if self.strong {
-            Color::BLACK
+            self.ink(Ink::Text)
         } else {
-            Color::gray(gray)
+            self.palette.color(ink)
         }
     }
 
-    /// A header's background and text: black and white, or the other way
-    /// round for light headers.
+    /// A header's background and text: the palette's text and paper, the
+    /// other way round for light headers.
     pub fn header_colors(&self) -> (Color, Color) {
+        let (text, paper) = (self.ink(Ink::Text), self.ink(Ink::Paper));
         if self.dark_header {
-            (Color::BLACK, Color::WHITE)
+            (text, paper)
         } else {
-            (Color::WHITE, Color::BLACK)
+            (paper, text)
         }
     }
 

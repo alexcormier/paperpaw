@@ -5,7 +5,7 @@
 
 use super::*;
 use paperpaw_sdk::builtin::events;
-use paperpaw_sdk::{CloseCause, Gesture, Hints, Outside, Params};
+use paperpaw_sdk::{CloseCause, Gesture, HintVisibility, Outside, Params};
 
 const SCREEN: Id = Id::new_static("s.screen");
 const HOME: Id = Id::new_static("s.home");
@@ -74,8 +74,8 @@ impl Screen for Configured {
         self.says("pass").is_some()
     }
 
-    fn hints(&self) -> Option<Hints> {
-        self.says("hints").map(|_| Hints::Hidden)
+    fn hints(&self) -> Option<HintVisibility> {
+        self.says("hints").map(|_| HintVisibility::Hidden)
     }
 
     fn on_close_request(&mut self, why: CloseCause, _: &mut Cx<'_, '_>) -> Handled {
@@ -153,7 +153,7 @@ fn stack_kernel(log: &Log) -> Kernel {
 
 fn names(kernel: &Kernel) -> Vec<String> {
     let env = kernel.shared.env(Instant(0));
-    env.stack
+    env.stack()
         .iter()
         .map(|entry| {
             let overlay = if entry.overlay { " (overlay)" } else { "" };

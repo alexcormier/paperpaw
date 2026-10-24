@@ -142,8 +142,8 @@ const fn list(
     default: &'static str,
     extra: &'static SettingExtra,
 ) -> SettingSpec {
-    SettingSpec::fixed(
-        id.static_str(),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(id.static_str()),
         title,
         SettingKind::List,
         SettingValue::Text(Cow::Borrowed(default)),
@@ -159,7 +159,7 @@ const fn part(
     default: &'static str,
     extra: &'static SettingExtra,
 ) -> SettingSpec {
-    list(id, title, default, extra).described("reader.status.part.help")
+    list(id, title, default, extra).description("reader.status.part.help")
 }
 
 /// The text size and place of the lines, which lines show above and
@@ -168,22 +168,22 @@ const fn part(
 /// time and the battery with the page, and Wi-Fi while it is in use),
 /// and the battery's percent.
 static SETTINGS: [SettingSpec; 11] = [
-    SettingSpec::fixed_number(SIZE.static_str(), "reader.status.size", 5, 16, 6, GROUP)
+    SettingSpec::number(SIZE.static_str(), "reader.status.size", 5, 16, 6, GROUP)
         .with_extra(&PT)
-        .described("reader.status.size.help"),
-    SettingSpec::fixed_number(EDGE.static_str(), "reader.status.edge", 0, 150, 15, GROUP)
+        .description("reader.status.size.help"),
+    SettingSpec::number(EDGE.static_str(), "reader.status.edge", 0, 150, 15, GROUP)
         .advanced()
         .with_extra(&TENTH_MM_5)
-        .described("reader.status.edge.help"),
+        .description("reader.status.edge.help"),
     list(TOP_LINES, "reader.status.top-lines", "", &TOP_LINES_EXTRA)
-        .described("reader.status.lines.help"),
+        .description("reader.status.lines.help"),
     list(
         BOTTOM_LINES,
         "reader.status.bottom-lines",
         "core.status-line.items, reader.status-line.progress, reader.status-line.empty",
         &BOTTOM_LINES_EXTRA,
     )
-    .described("reader.status.lines.help"),
+    .description("reader.status.lines.help"),
     part(TOP_LEFT, "reader.status.top-left", "", &TOP_ITEMS),
     part(TOP_CENTER, "reader.status.top-center", "", &TOP_ITEMS),
     part(TOP_RIGHT, "reader.status.top-right", "", &TOP_ITEMS),
@@ -205,13 +205,13 @@ static SETTINGS: [SettingSpec; 11] = [
         "lock.touch-status, wifi.status, power.status, core.status.battery, reader.status.page",
         &BOTTOM_ITEMS,
     ),
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         PERCENT.static_str(),
         "reader.status.battery-percent",
         true,
         GROUP,
     )
-    .described("reader.status.battery-percent.help"),
+    .description("reader.status.battery-percent.help"),
 ];
 
 #[expect(
@@ -230,12 +230,13 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(draw_progress),
         )
         .signature(Box::new(|_, cx| {
-            format!(
-                "{}|{}|{}",
-                cx.get(params::PROGRESS).unwrap_or_default(),
-                cx.get(context::PAGE).unwrap_or_default(),
-                cx.get(context::CHAPTERS).unwrap_or_default().len(),
-            )
+            let mut hash = paperpaw_sdk::digest::Fnv1a64::new();
+            hash.feed(cx.get(params::PROGRESS).unwrap_or_default().as_bytes());
+            hash.feed(b"|");
+            hash.feed(cx.get(context::PAGE).unwrap_or_default().as_bytes());
+            let chapters = cx.get(context::CHAPTERS).unwrap_or_default().len();
+            hash.feed(&chapters.to_le_bytes());
+            hash.value()
         })),
     )?;
     r.add_status_line(
@@ -244,7 +245,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             "reader.status.line.empty",
             Box::new(|_, _, _| {}),
         )
-        .signature(Box::new(|_, _| String::new())),
+        .signature(Box::new(|_, _| 0)),
     )?;
     let text = |value: Option<&str>| value.map(|v| StatusValue::Text(v.to_string()));
     // The book's and the chapter's titles give way first where a line
@@ -434,7 +435,7 @@ pub(crate) fn save_choice(storage: &dyn Storage, chosen: &[String; 2]) {
 
 /// The colour of status lines: gray, or black for strong contrast.
 pub(crate) fn color(env: &Env<'_>) -> paperpaw_sdk::Color {
-    UiStyle::new(env).faint(80)
+    UiStyle::new(env).faint(paperpaw_sdk::ui::Ink::Detail)
 }
 
 /// The book as a bar from the left, filled up to where the page is, with
@@ -498,16 +499,18 @@ pub(crate) fn shown(env: &Env<'_>, top: bool) -> bool {
 }
 
 /// What the lines shown now show, to notice when they need a redraw.
-pub(crate) fn signature(env: &Env<'_>, context: &Params, chosen: &[String; 2]) -> String {
-    let mut out = String::new();
+pub(crate) fn signature(env: &Env<'_>, context: &Params, chosen: &[String; 2]) -> u64 {
+    let mut hash = paperpaw_sdk::digest::Fnv1a64::new();
     for top in [true, false] {
         let id = current(env, top, &chosen[usize::from(!top)]);
-        out.push_str(id);
-        out.push('|');
-        out.push_str(&env.status_items.line_signature(id, env, context));
-        out.push('|');
+        hash.feed(id.as_bytes());
+        hash.feed(
+            &env.status_items
+                .line_signature(id, env, context)
+                .to_le_bytes(),
+        );
     }
-    out
+    hash.value()
 }
 
 #[cfg(test)]

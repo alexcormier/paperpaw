@@ -12,7 +12,8 @@ use crate::plural::PluralRule;
 ///
 /// Messages are not copied: the catalog keeps its source (usually text
 /// built into the program) and an index of where each message's line
-/// starts in it, 4 bytes per message; the key and value are read from the
+/// starts in it, 2 bytes per message (4 in a source of 32 KiB or more);
+/// the key and value are read from the
 /// line when looked up. Messages the line does not give plainly (quoted
 /// values, escape sequences) are kept as byte ranges instead, and only
 /// values with escape sequences are stored decoded. A catalog of an
@@ -31,7 +32,7 @@ pub struct Catalog {
     /// The messages, sorted by key; empty while unloaded. Each is where
     /// its line's key starts in the source or, with [`OTHER`] set, the
     /// place of its key and value in `others`.
-    index: Box<[u32]>,
+    index: Index,
     /// Messages whose line does not give them plainly.
     others: Box<[(Span, Span)]>,
     loaded: bool,
@@ -47,6 +48,71 @@ struct Span {
 const ESCAPED: u32 = 1 << 31;
 /// In the index: a message of `others`.
 const OTHER: u32 = 1 << 31;
+
+/// The index of a catalog: its entries (see [`OTHER`]) in two bytes each
+/// where they fit, as in most catalogs (of a source under 32 KiB).
+#[derive(Debug, Clone)]
+enum Index {
+    Narrow(Box<[u16]>),
+    Wide(Box<[u32]>),
+}
+
+/// In a narrow index: a message of `others`.
+const NARROW_OTHER: u16 = 1 << 15;
+
+impl Default for Index {
+    fn default() -> Self {
+        Index::Narrow(Box::default())
+    }
+}
+
+impl Index {
+    /// `entries` (sorted), narrow where every one fits.
+    fn of(entries: Vec<u32>) -> Self {
+        let narrow = |at: u32| -> Option<u16> {
+            let place = at & !OTHER;
+            let place = u16::try_from(place)
+                .ok()
+                .filter(|p| p & NARROW_OTHER == 0)?;
+            Some(if at & OTHER != 0 {
+                place | NARROW_OTHER
+            } else {
+                place
+            })
+        };
+        match entries
+            .iter()
+            .map(|at| narrow(*at))
+            .collect::<Option<Vec<u16>>>()
+        {
+            Some(narrow) => Index::Narrow(narrow.into_boxed_slice()),
+            None => Index::Wide(entries.into_boxed_slice()),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Index::Narrow(entries) => entries.len(),
+            Index::Wide(entries) => entries.len(),
+        }
+    }
+
+    /// Entry `i`, as a wide index has it.
+    fn at(&self, i: usize) -> u32 {
+        match self {
+            Index::Narrow(entries) => {
+                let at = entries[i];
+                let place = u32::from(at & !NARROW_OTHER);
+                if at & NARROW_OTHER != 0 {
+                    place | OTHER
+                } else {
+                    place
+                }
+            }
+            Index::Wide(entries) => entries[i],
+        }
+    }
+}
 
 /// The key of the message line starting at `start`: its characters (see
 /// [`plain`]). Only the key is read, as looking a message up compares
@@ -125,7 +191,7 @@ impl Catalog {
             plural: PluralRule::OneOther,
             escaped: String::new(),
             meta_len: 0,
-            index: Box::default(),
+            index: Index::default(),
             others: Box::default(),
             loaded: false,
         };
@@ -221,7 +287,7 @@ impl Catalog {
         self.escaped = escaped;
         // Boxed: they no longer change, and a box is smaller than a
         // vector (one of each per catalog, of every plugin).
-        self.index = index.into_boxed_slice();
+        self.index = Index::of(index);
         self.others = others.into_boxed_slice();
         self.loaded = true;
         Ok(())
@@ -229,7 +295,7 @@ impl Catalog {
 
     /// Drops the message index (keeps language, name and plural rule).
     pub fn unload(&mut self) {
-        self.index = Box::default();
+        self.index = Index::default();
         self.others = Box::default();
         self.escaped.truncate(self.meta_len as usize);
         self.escaped.shrink_to_fit();
@@ -272,11 +338,19 @@ impl Catalog {
 
     /// The message for `key`, if this catalog has one and is loaded.
     pub fn get(&self, key: &str) -> Option<&str> {
-        let i = self
-            .index
-            .binary_search_by(|at| self.key(*at).cmp(key))
-            .ok()?;
-        let at = self.index[i];
+        let (mut low, mut high) = (0, self.index.len());
+        let at = loop {
+            if low >= high {
+                return None;
+            }
+            let middle = low + (high - low) / 2;
+            let at = self.index.at(middle);
+            match self.key(at).cmp(key) {
+                core::cmp::Ordering::Less => low = middle + 1,
+                core::cmp::Ordering::Greater => high = middle,
+                core::cmp::Ordering::Equal => break at,
+            }
+        };
         if at & OTHER != 0 {
             let (_, value) = self.others.get((at & !OTHER) as usize)?;
             Some(self.text(*value))
@@ -287,7 +361,7 @@ impl Catalog {
 
     /// All message keys, sorted.
     pub fn keys(&self) -> impl Iterator<Item = &str> {
-        self.index.iter().map(|at| self.key(*at))
+        (0..self.index.len()).map(|i| self.key(self.index.at(i)))
     }
 
     pub fn len(&self) -> usize {
@@ -295,7 +369,7 @@ impl Catalog {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.index.is_empty()
+        self.index.len() == 0
     }
 }
 

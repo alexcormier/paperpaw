@@ -17,7 +17,7 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage};
 
@@ -53,15 +53,15 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.next.align", ID, Align::Left),
     widgets::frame_spec("widgets.next.frame", ID, Frame::None),
     widgets::padding_spec("widgets.next.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.next.size", ID, Size::Medium, false),
-    SettingSpec::fixed_choice(
+    widgets::size_spec("widgets.next.size", ID, TextSize::Medium, false),
+    SettingSpec::choice(
         "widgets.next.pick",
         "widgets.books.setting.pick",
         &PICKS,
         PICKS[0],
         ID,
     )
-    .described("widgets.books.setting.pick.help"),
+    .description("widgets.books.setting.pick.help"),
     widgets::part_spec(
         "widgets.next.caption",
         ID,
@@ -74,7 +74,15 @@ static SETTINGS: [SettingSpec; 9] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
-    add_settings(r, &ID, "widgets.next", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.next");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     let kept: Kept = Rc::default();
     let generation = generation.clone();
     r.add_widget(
@@ -299,7 +307,7 @@ impl Next {
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match (self.area, &self.book) {
             (Some(area), Some(book)) => {
-                let look = widgets::look::look(env, WIDGET, area);
+                let look = widgets::widget_look(env, WIDGET, area);
                 let at = layout(env, &look, book).cover;
                 Covers::make(env, at.map(|at| (book, at)))
             }
@@ -358,11 +366,11 @@ impl Widget for Next {
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 3) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 3) as u16 + frame_height(env, WIDGET)
     }
 
     fn min_height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 2) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 2) as u16 + frame_height(env, WIDGET)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -377,7 +385,7 @@ impl Widget for Next {
         let command = self
             .book
             .as_ref()
-            .map_or(Command::RunAction(actions::LIBRARY), Book::open);
+            .map_or(Command::run(actions::LIBRARY), Book::open);
         alloc::vec![WidgetTarget::new(area, command)]
     }
 }
@@ -410,10 +418,10 @@ struct Layout<'b> {
 /// the text alone; where wide enough, the cover on the left and the text
 /// beside it; else the cover above and the text below (what fits in
 /// half), or the cover alone.
-fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
+fn layout<'b>(env: &Env<'b>, look: &WidgetLook, book: &'b Book) -> Layout<'b> {
     let style = UiStyle::new(env);
     let id = WIDGET;
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let area = look.area;
     let align = widgets::align(env, id);
     let mut lines = Lines::new();
@@ -421,7 +429,7 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     if caption {
         lines.add(
             Role::Caption,
-            style.small,
+            style.small(),
             env.i18n.tr("widgets.next.caption"),
             look.faint,
         );
@@ -433,10 +441,15 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
         look.ink,
     );
     if widgets::shows(env, id, "author") {
-        lines.add(Role::Note, style.small, book.author.as_str(), look.faint);
+        lines.add(Role::Note, style.small(), book.author.as_str(), look.faint);
     }
     if widgets::shows(env, id, "series") {
-        lines.add(Role::Note, style.small, series_text(env, book), look.faint);
+        lines.add(
+            Role::Note,
+            style.small(),
+            series_text(env, book),
+            look.faint,
+        );
     }
     if !widgets::shows(env, id, "cover") {
         return Layout {
@@ -447,7 +460,7 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     }
     let (w, h) = cover_size(book, area.width * 2 / 5, area.height);
     let text_room = f32::from(area.width.saturating_sub(w + gap));
-    if area.width >= area.height && text_room >= style.small * 7.0 {
+    if area.width >= area.height && text_room >= style.small() * 7.0 {
         // Wide: the cover on the left, the text beside it.
         let shift = (w + gap).min(area.width);
         return Layout {
@@ -484,7 +497,7 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     }
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, covers: &Covers) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, book: &Book, covers: &Covers) {
     let Layout {
         cover,
         mut lines,

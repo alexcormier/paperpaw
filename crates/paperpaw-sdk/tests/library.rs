@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use paperpaw_sdk::builtin::events::Reading;
 use paperpaw_sdk::document::{DocumentError, ImageRef};
 use paperpaw_sdk::library::listing::{Entry, Listing, UNRANKED};
-use paperpaw_sdk::library::{self, Book, BookData, catalog};
+use paperpaw_sdk::library::{self, Book, BookData, BookDataKind, catalog};
 use paperpaw_sdk::{FormatSpec, Formats, Id, MemoryStorage, Storage};
 use proptest::prelude::*;
 
@@ -100,7 +100,7 @@ proptest! {
     #[test]
     fn book_details_come_back(book in any_book()) {
         let storage = MemoryStorage::new();
-        library::save(&storage, PATH, &book);
+        library::save(&storage, PATH, &book).unwrap();
         let read = library::book_sized(&storage, PATH, book.size);
         prop_assert_eq!(read, Some(book.clone()));
         if book.size != u64::MAX {
@@ -256,7 +256,7 @@ proptest! {
                 catalog::Record::of(&format!("books/{i}{name}.txt"), &book)
             })
             .collect();
-        catalog::write(&storage, &records);
+        catalog::write(&storage, &records).unwrap();
         let mut read = Vec::new();
         catalog::each(&storage, &mut |r| read.push(r));
         prop_assert_eq!(read, records);
@@ -358,7 +358,7 @@ fn a_title_from_the_reader_is_kept_until_the_book_is_read() {
     let mut book = library::book(&h.storage, "b/a.txt").unwrap();
     book.indexed = true;
     book.title = Some("Its own".into());
-    library::save(&h.storage, "b/a.txt", &book);
+    library::save(&h.storage, "b/a.txt", &book).unwrap();
     library::record(&env, &reading("b/a.txt", "Another", 2.0), false);
     assert_eq!(
         library::book(&h.storage, "b/a.txt")
@@ -465,11 +465,11 @@ fn moved_and_removed_books_take_their_place_in_the_lists() {
 
 #[test]
 fn book_data_entries_are_named_by_sixteen_small_hex_digits() {
-    let data = BookData {
-        folder: Cow::Borrowed("cache"),
-        prefix: Cow::Borrowed("epub-"),
-        ..BookData::default()
-    };
+    let data = BookData::new(
+        Cow::Borrowed("cache"),
+        Cow::Borrowed("epub-"),
+        BookDataKind::default(),
+    );
     let key = "0123456789abcdef";
     assert_eq!(data.key_of(&format!("epub-{key}")), Some((key, "")));
     assert_eq!(data.key_of(&format!("epub-{key}.ini")), Some((key, ".ini")));
@@ -560,7 +560,8 @@ fn catalog_searches_every_word_without_regard_to_case() {
             catalog::Record::of("b/2.txt", &book("Apple Pie", "Bob", &["Food", "Kids"])),
             catalog::Record::of("b/3.txt", &book("Cars", "Ann Lee", &[])),
         ],
-    );
+    )
+    .unwrap();
     let titles = |q: &str| -> Vec<String> {
         catalog::search(&storage, q)
             .into_iter()

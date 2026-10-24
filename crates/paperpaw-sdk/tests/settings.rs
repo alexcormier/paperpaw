@@ -54,17 +54,40 @@ fn value() -> impl Strategy<Value = SettingValue> {
 /// Settings with a size, a switch, a choice and a text.
 fn some_settings() -> Settings {
     let mut s = Settings::new();
-    s.define(SettingSpec::number(&SIZE, "a.size", 1, 9, 5).scoped())
-        .unwrap();
-    s.define(SettingSpec::switch(&ON, "a.on", true)).unwrap();
-    s.define(SettingSpec::choice(
-        &MODE,
-        "a.mode",
-        Choices::Fixed(&["a.light", "a.dark"]),
-        "a.light",
+    s.define(
+        SettingSpec::number(
+            SIZE.static_str(),
+            "a.size",
+            1,
+            9,
+            5,
+            paperpaw_sdk::builtin::groups::OTHER,
+        )
+        .scoped(),
+    )
+    .unwrap();
+    s.define(SettingSpec::switch(
+        ON.static_str(),
+        "a.on",
+        true,
+        paperpaw_sdk::builtin::groups::OTHER,
     ))
     .unwrap();
-    s.define(SettingSpec::text(&NAME, "a.name", "")).unwrap();
+    s.define(SettingSpec::choice(
+        MODE.static_str(),
+        "a.mode",
+        &["a.light", "a.dark"],
+        "a.light",
+        paperpaw_sdk::builtin::groups::OTHER,
+    ))
+    .unwrap();
+    s.define(SettingSpec::text(
+        NAME.static_str(),
+        "a.name",
+        "",
+        paperpaw_sdk::builtin::groups::OTHER,
+    ))
+    .unwrap();
     s
 }
 
@@ -222,56 +245,64 @@ fn choices_kept_in_the_program_or_made_at_run_time() {
 }
 
 #[test]
-fn extras_are_kept_in_the_program_and_copied_when_changed() {
+fn extras_are_kept_in_the_program_or_made_from_data() {
     static PERCENT: SettingExtra = SettingExtra::new().unit("u.percent").step(10).slider();
     static SPECS: [SettingSpec; 1] =
         [
-            SettingSpec::fixed_number("a.zoom", "a.zoom", 50, 200, 100, groups::OTHER)
+            SettingSpec::number("a.zoom", "a.zoom", 50, 200, 100, groups::OTHER)
                 .with_extra(&PERCENT),
         ];
     assert_eq!(SPECS[0].extra().step, 10);
     assert!(SPECS[0].extra().slider);
-    // A builder on a spec with a fixed extra keeps what it had.
-    let changed = SPECS[0].clone().section("a.section").secret();
+    // One made at run time, for a setting from data, takes its place.
+    let mut owned = PERCENT.clone();
+    owned.section = Some("a.section".into());
+    let changed = SPECS[0].clone().with_owned_extra(owned);
     let extra = changed.extra();
-    assert_eq!(
-        (
-            extra.unit.as_deref(),
-            extra.step,
-            extra.slider,
-            extra.secret
-        ),
-        (Some("u.percent"), 10, true, true)
-    );
+    assert_eq!((extra.unit.as_deref(), extra.step), (Some("u.percent"), 10));
     assert_eq!(extra.section.as_deref(), Some("a.section"));
-    assert!(PERCENT.section.is_none() && !PERCENT.secret);
+    assert!(PERCENT.section.is_none());
     // Steps are at least 1.
     assert_eq!(SettingExtra::new().step(0).step, 1);
     assert_eq!(SettingExtra::new().step(-5).step, 1);
-    let spec = SettingSpec::number(&SIZE, "", 0, 9, 1).step(0);
+    static NO_STEP: SettingExtra = SettingExtra::new().step(0);
+    let spec = SettingSpec::number(
+        SIZE.static_str(),
+        "",
+        0,
+        9,
+        1,
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&NO_STEP);
     assert_eq!(spec.extra().step, 1);
-    assert_eq!(
-        SettingSpec::number(&SIZE, "", 0, 9, 1)
-            .step(i64::MIN)
-            .extra()
-            .step,
-        1
-    );
+    assert_eq!(SettingExtra::new().step(i64::MIN).step, 1);
     // Without any: the defaults.
-    let plain = SettingSpec::switch(&ON, "", false);
+    let plain = SettingSpec::switch(
+        ON.static_str(),
+        "",
+        false,
+        paperpaw_sdk::builtin::groups::OTHER,
+    );
     assert_eq!(plain.extra(), &SettingExtra::default());
-    let editor = plain
+    static EDITED: SettingExtra = SettingExtra::new()
         .editor(Id::new_static("a.edit"))
-        .unit("u")
-        .description("d")
-        .advanced();
+        .unit("u");
+    let editor = plain.with_extra(&EDITED).description("d").advanced();
     assert_eq!(
         editor.extra().editor,
         Some(paperpaw_sdk::Editor::Screen(Id::new_static("a.edit")))
     );
     // A slot's screen edits it, whichever plugin fills the slot.
-    let folder = SettingSpec::switch(&ON, "", false)
-        .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
+    static FOLDER: SettingExtra =
+        SettingExtra::new().editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
+    let folder = SettingSpec::switch(
+        ON.static_str(),
+        "",
+        false,
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&FOLDER);
     let opens = folder.extra().editor.as_ref().unwrap().open(&folder.id);
     assert_eq!(
         opens,
@@ -281,9 +312,9 @@ fn extras_are_kept_in_the_program_and_copied_when_changed() {
         )
     );
     assert_eq!(editor.level, Level::Advanced);
-    let fixed = SettingSpec::fixed_switch("a.x", "a.x", true, groups::OTHER)
-        .described("help")
-        .for_advanced();
+    let fixed = SettingSpec::switch("a.x", "a.x", true, groups::OTHER)
+        .description("help")
+        .advanced();
     assert_eq!(fixed.description.as_deref(), Some("help"));
     assert_eq!(fixed.level, Level::Advanced);
 }
@@ -291,23 +322,37 @@ fn extras_are_kept_in_the_program_and_copied_when_changed() {
 #[test]
 fn fixed_specs_are_copied_before_they_change() {
     static SPECS: [SettingSpec; 2] = [
-        SettingSpec::fixed_choice(
+        SettingSpec::choice(
             "b.face",
             "b.face",
             &["b.plain", "b.ticks"],
             "b.ticks",
             groups::OTHER,
         ),
-        SettingSpec::fixed_text("b.label", "b.label", "x", groups::OTHER),
+        SettingSpec::text("b.label", "b.label", "x", groups::OTHER),
     ];
     let mut s = Settings::new();
-    s.define(SettingSpec::switch(&ON, "", false)).unwrap();
-    for spec in &SPECS {
-        s.define_fixed(spec).unwrap();
+    s.define(SettingSpec::switch(
+        ON.static_str(),
+        "",
+        false,
+        paperpaw_sdk::builtin::groups::OTHER,
+    ))
+    .unwrap();
+    for at in 0..SPECS.len() {
+        s.define_fixed(&SPECS, at).unwrap();
     }
-    s.define(SettingSpec::number(&SIZE, "", 0, 9, 1)).unwrap();
+    s.define(SettingSpec::number(
+        SIZE.static_str(),
+        "",
+        0,
+        9,
+        1,
+        paperpaw_sdk::builtin::groups::OTHER,
+    ))
+    .unwrap();
     assert!(matches!(
-        s.define_fixed(&SPECS[0]),
+        s.define_fixed(&SPECS, 0),
         Err(RegisterError::Duplicate { .. })
     ));
     // Choices made at run time replace the fixed ones; the order of the
@@ -373,8 +418,16 @@ fn values_read_by_another_type_are_empty() {
 #[test]
 fn scopes_take_only_scoped_values_that_fit() {
     let mut s = some_settings();
-    s.define(SettingSpec::switch(&SCOPE_ONLY, "", false).scoped())
-        .unwrap();
+    s.define(
+        SettingSpec::switch(
+            SCOPE_ONLY.static_str(),
+            "",
+            false,
+            paperpaw_sdk::builtin::groups::OTHER,
+        )
+        .scoped(),
+    )
+    .unwrap();
     // No scope: nothing goes there.
     assert_eq!(
         s.set_in_scope(SIZE.as_str(), SettingValue::Int(3)),
@@ -411,7 +464,7 @@ fn scopes_take_only_scoped_values_that_fit() {
 
 #[test]
 fn previews_and_placements_together() {
-    static SPECS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+    static SPECS: [SettingSpec; 1] = [SettingSpec::number(
         "w.clock.size",
         "",
         1,
@@ -420,7 +473,7 @@ fn previews_and_placements_together() {
         groups::OTHER,
     )];
     let mut s = Settings::new();
-    s.define_fixed(&SPECS[0]).unwrap();
+    s.define_fixed(&SPECS, 0).unwrap();
     s.set("w.clock@2.size", SettingValue::Int(2)).unwrap();
     s.set("w.clock@3.size", SettingValue::Int(3)).unwrap();
     s.set_preview(vec![
@@ -506,7 +559,7 @@ fn presets_read_their_lines_as_written() {
 
 #[test]
 fn presets_set_placements_and_leave_out_what_does_not_fit() {
-    static SPECS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+    static SPECS: [SettingSpec; 1] = [SettingSpec::number(
         "w.clock.size",
         "",
         1,
@@ -515,7 +568,7 @@ fn presets_set_placements_and_leave_out_what_does_not_fit() {
         groups::OTHER,
     )];
     let mut s = Settings::new();
-    s.define_fixed(&SPECS[0]).unwrap();
+    s.define_fixed(&SPECS, 0).unwrap();
     let preset = Preset::new(
         Id::new_static("p.one"),
         Id::new_static("p.kind"),
@@ -595,6 +648,7 @@ fn more_than_32768_settings_are_refused_not_mixed_up() {
             "",
             SettingKind::Bool,
             SettingValue::Bool(false),
+            paperpaw_sdk::builtin::groups::OTHER,
         ))
     };
     for i in 0..32_768u32 {
@@ -613,7 +667,7 @@ fn more_than_32768_settings_are_refused_not_mixed_up() {
 /// `set_choices` telling it did nothing.
 #[test]
 fn a_full_store_says_so_when_a_fixed_setting_is_changed() {
-    static LOOK: SettingSpec = SettingSpec::fixed_choice(
+    static LOOK: SettingSpec = SettingSpec::choice(
         "a.look",
         "",
         &["a.plain", "a.bold"],
@@ -621,7 +675,7 @@ fn a_full_store_says_so_when_a_fixed_setting_is_changed() {
         groups::DISPLAY,
     );
     let mut s = Settings::new();
-    s.define_fixed(&LOOK).unwrap();
+    s.define_fixed(core::slice::from_ref(&LOOK), 0).unwrap();
     for i in 0..32_768u32 {
         let id = Id::parse(&format!("a.s{i}")).unwrap();
         s.define(SettingSpec::new(
@@ -629,6 +683,7 @@ fn a_full_store_says_so_when_a_fixed_setting_is_changed() {
             "",
             SettingKind::Bool,
             SettingValue::Bool(false),
+            paperpaw_sdk::builtin::groups::OTHER,
         ))
         .unwrap();
     }
@@ -657,14 +712,38 @@ fn settings_show_on_a_condition_and_refuse_what_their_check_refuses() {
             _ => Ok(()),
         }
     }
-    static WHILE_ON: SettingExtra = SettingExtra::new().shown_if("a.on", "true");
+    static WHILE_ON: SettingExtra = SettingExtra::new().shown_if(Id::new_static("a.on"), "true");
     static CHECKED: SettingExtra = SettingExtra::new().check(small);
     let mut s = Settings::new();
-    s.define(SettingSpec::switch(&ON, "a.on", false)).unwrap();
-    s.define(SettingSpec::text(&NAME, "a.name", "").with_extra(&WHILE_ON))
-        .unwrap();
-    s.define(SettingSpec::number(&SIZE, "a.size", 1, 9, 3).with_extra(&CHECKED))
-        .unwrap();
+    s.define(SettingSpec::switch(
+        ON.static_str(),
+        "a.on",
+        false,
+        paperpaw_sdk::builtin::groups::OTHER,
+    ))
+    .unwrap();
+    s.define(
+        SettingSpec::text(
+            NAME.static_str(),
+            "a.name",
+            "",
+            paperpaw_sdk::builtin::groups::OTHER,
+        )
+        .with_extra(&WHILE_ON),
+    )
+    .unwrap();
+    s.define(
+        SettingSpec::number(
+            SIZE.static_str(),
+            "a.size",
+            1,
+            9,
+            3,
+            paperpaw_sdk::builtin::groups::OTHER,
+        )
+        .with_extra(&CHECKED),
+    )
+    .unwrap();
     let name = s.spec("a.name").unwrap().clone();
     assert!(!s.shows(&name));
     // Screens listing settings make themselves anew when `a.on` changes.
@@ -685,22 +764,42 @@ fn settings_show_on_a_condition_and_refuse_what_their_check_refuses() {
 
 /// The reader's own (an account, a folder) and every secret are left as
 /// they are by the resets of the settings pages; the rest is not.
+
 #[test]
 fn accounts_folders_and_secrets_are_kept_on_reset() {
     static SECRET: SettingExtra = SettingExtra::new().secret();
     static FIXED: [SettingSpec; 3] = [
-        SettingSpec::fixed_text("a.server", "a.server", "", groups::OTHER).kept_on_reset(),
-        SettingSpec::fixed_text("a.key", "a.key", "", groups::OTHER).with_extra(&SECRET),
-        SettingSpec::fixed_number("a.count", "a.count", 0, 9, 1, groups::OTHER),
+        SettingSpec::text("a.server", "a.server", "", groups::OTHER).kept_on_reset(),
+        SettingSpec::text("a.key", "a.key", "", groups::OTHER).with_extra(&SECRET),
+        SettingSpec::number("a.count", "a.count", 0, 9, 1, groups::OTHER),
     ];
     let kept: Vec<bool> = FIXED.iter().map(SettingSpec::is_kept_on_reset).collect();
     assert_eq!(kept, [true, true, false]);
-    let built = SettingSpec::text(&NAME, "a.name", "").kept_on_reset();
+    let built = SettingSpec::text(
+        NAME.static_str(),
+        "a.name",
+        "",
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+    .kept_on_reset();
     assert!(built.is_kept_on_reset() && built.kept_on_reset);
     assert!(
-        SettingSpec::text(&NAME, "a.name", "")
-            .secret()
-            .is_kept_on_reset()
+        SettingSpec::text(
+            NAME.static_str(),
+            "a.name",
+            "",
+            paperpaw_sdk::builtin::groups::OTHER
+        )
+        .with_extra(&SECRET)
+        .is_kept_on_reset()
     );
-    assert!(!SettingSpec::text(&NAME, "a.name", "").is_kept_on_reset());
+    assert!(
+        !SettingSpec::text(
+            NAME.static_str(),
+            "a.name",
+            "",
+            paperpaw_sdk::builtin::groups::OTHER
+        )
+        .is_kept_on_reset()
+    );
 }

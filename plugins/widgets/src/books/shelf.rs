@@ -6,7 +6,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{Align, Look, line_height};
+use paperpaw_sdk::widgets::{Align, WidgetLook, line_height};
 use paperpaw_sdk::{Canvas, Env, Point, Rect};
 
 use super::{Book, Covers, cover_size, draw_cover, draw_line, least_cover_width};
@@ -47,7 +47,7 @@ pub(crate) fn places(
     if count == 0 || area.width == 0 || area.height <= label {
         return Vec::new();
     }
-    let gap = UiStyle::new(env).gap as u16;
+    let gap = UiStyle::new(env).gap();
     let (w, h) = (u32::from(area.width), u32::from(area.height));
     let size = |columns: u32, rows: u32| -> u32 {
         let by_width = w.saturating_sub(u32::from(gap) * (columns - 1)) / columns;
@@ -135,7 +135,7 @@ pub(crate) fn pack(
     area: Rect,
     align: Align,
 ) {
-    let gap = UiStyle::new(env).gap as u16;
+    let gap = UiStyle::new(env).gap();
     let right = area.x + area.width;
     let count = places.len().min(books.len());
     let mut start = 0;
@@ -177,7 +177,7 @@ pub(crate) fn draw_caption(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     id: &str,
-    look: &Look,
+    look: &WidgetLook,
     rest: Rect,
     places: &[Place],
     text: &str,
@@ -196,14 +196,14 @@ pub(crate) fn draw_caption(
 /// The height of a label below a cover.
 pub(crate) fn label_height(env: &Env<'_>) -> u16 {
     let style = UiStyle::new(env);
-    line_height(env, style.small) + style.gap as u16 / 4
+    line_height(env, style.small()) + style.gap() / 4
 }
 
 /// The height of the line below the cover of the book being read, where
 /// it has no label, and of the room above it.
 pub(crate) fn mark_height(env: &Env<'_>) -> u16 {
     let style = UiStyle::new(env);
-    (style.line as u16 * 3).max(3) + (style.gap as u16 / 4).max(1)
+    (style.line() * 3).max(3) + (style.gap() / 4).max(1)
 }
 
 /// Where `book`'s cover goes in `place`: at its bottom (covers of other
@@ -237,7 +237,7 @@ pub(crate) fn covers(env: &Env<'_>, places: &[Place], books: &[Shelved]) -> Cove
 pub(crate) fn draw(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     places: &[Place],
     books: &[Shelved],
     covers: &Covers,
@@ -254,8 +254,8 @@ pub(crate) fn draw(
         let labelled = font.is_some() && !shelved.label.is_empty() && label.height > 0;
         if shelved.current && !labelled {
             // A line below the cover: here one is.
-            let line = (style.line as u16 * 3).max(3);
-            let gap = (style.gap as u16 / 4).max(1);
+            let line = (style.line() * 3).max(3);
+            let gap = (style.gap() / 4).max(1);
             canvas.fill(
                 Rect::new(at.x, at.y + at.height + gap, at.width, line),
                 look.ink,
@@ -264,21 +264,21 @@ pub(crate) fn draw(
         let Some(font) = font.as_ref().filter(|_| labelled) else {
             continue;
         };
-        let row_h = line_height(env, style.small).min(label.height);
+        let row_h = line_height(env, style.small()).min(label.height);
         let row = Rect::new(label.x, label.y + label.height - row_h, label.width, row_h);
         if shelved.current {
             // The book being read: its label light on dark.
             let text =
-                paperpaw_sdk::ui::fit(font, style.small, &shelved.label, f32::from(row.width));
-            let pad = style.gap as u16 / 2;
-            let w = (font.measure(style.small, &text) as u16 + 2 * pad).min(row.width);
+                paperpaw_sdk::ui::fit(font, style.small(), &shelved.label, f32::from(row.width));
+            let pad = style.gap() / 2;
+            let w = (font.measure(style.small(), &text) as u16 + 2 * pad).min(row.width);
             let pill = Rect::new(row.x + (row.width - w) / 2, row.y, w, row.height);
             canvas.fill_round(pill, u32::from(row.height / 2), look.ink);
             draw_line(
                 canvas,
                 env,
                 font,
-                style.small,
+                style.small(),
                 row,
                 Align::Center,
                 &text,
@@ -289,7 +289,7 @@ pub(crate) fn draw(
                 canvas,
                 env,
                 font,
-                style.small,
+                style.small(),
                 row,
                 Align::Center,
                 &shelved.label,
@@ -300,10 +300,10 @@ pub(crate) fn draw(
 }
 
 /// A round mark with a tick at the top right corner of a cover: read.
-fn draw_read_mark(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, cover: Rect) {
+fn draw_read_mark(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, cover: Rect) {
     let style = UiStyle::new(env);
     let radius = u32::from(cover.width / 6)
-        .min(style.small as u32 * 2 / 3)
+        .min(style.small() as u32 * 2 / 3)
         .max(5);
     let inset = (radius / 3) as i32;
     let center = Point::new(

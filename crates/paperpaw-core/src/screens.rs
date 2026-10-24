@@ -24,7 +24,7 @@ impl Kernel {
         let entry = paperpaw_sdk::StackEntry::new(id.clone(), slot.clone(), false, key);
         // Made once, at the size it asked for: above the row of hints, or
         // all of the screen, less the bars shown over it.
-        let mut hinted = self.shared.registry.hints_of(&id) == Hints::Shown;
+        let mut hinted = self.shared.registry.hints_of(&id) == HintVisibility::Shown;
         let mut area = self.layout(hinted, Some(&entry), None);
         set_area(&mut self.shared.device, &mut self.shared.content, area);
         let running = self.shared.meter.enter(id.namespace());
@@ -32,7 +32,7 @@ impl Kernel {
         // It says otherwise of the row of hints: made again for the part
         // of the screen it then has.
         if let Some(own) = screen.hints()
-            && (own == Hints::Shown) != hinted
+            && (own == HintVisibility::Shown) != hinted
         {
             hinted = !hinted;
             area = self.layout(hinted, Some(&entry), None);
@@ -565,7 +565,9 @@ impl Kernel {
         let env = base.within(&device, area);
         let running = self.shared.meter.enter(active.id.namespace());
         let key = paperpaw_sdk::ScreenKey::new(active.serial);
-        let mut cx = Cx::new(&env, &mut self.output).for_screen(key);
+        let mut cx = Cx::new(&env, &mut self.output)
+            .for_screen(key)
+            .with_params(&self.action_params);
         let handled = f(active.screen.as_mut(), &mut cx);
         drop(running);
         // A part it asked to draw again is in its own coordinates.
@@ -694,7 +696,7 @@ impl Kernel {
 /// Where the notice `screen` shows on the screen: in the part of the
 /// screen on top (`env`'s), from its corner.
 pub(crate) fn notice_area(screen: &dyn Screen, env: &Env<'_>) -> Rect {
-    let content = env.content;
+    let content = env.content();
     let all = Rect::new(0, 0, content.width, content.height);
     chrome::on_screen(screen.region(env).unwrap_or(all), content)
 }

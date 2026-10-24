@@ -64,7 +64,7 @@ impl Plugin for Hello {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, out| {
+        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, _, out| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         }))?;
         r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(90))?;
@@ -93,6 +93,12 @@ emit an event, run an action, show a short message, make an HTTP
 request, keep a password, and so on. The kernel runs the commands after
 the plugin's code returns.
 
+A handler queues its commands in the `Commands` it is handed (`out` in
+the examples): `out.push(..)`, `out.extend(..)`, `out.emit(..)`. It
+reads as the slice of what is queued so far. Its fields are private, so
+that it can grow: what PaperPaw adds to it later reaches every handler
+without a new signature.
+
 This keeps plugins simple to test and the API message-based. It does
 not confine them: a plugin runs as native code without a sandbox (see
 [Plugins as files](#plugins-as-files)).
@@ -106,8 +112,9 @@ long presses and swipes; `on_event` to events while it is open:
 ```rust
 impl Screen for HelloScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let title = env.i18n.tr("hello.title");
-        self.header.draw(canvas, env, &self.style, title, None, None);
+        // What the screen draws with: canvas, environment and style.
+        let mut ui = ui::Ui::new(canvas, env, &self.style);
+        self.header.draw(&mut ui, env.i18n().tr("hello.title"), None, None);
         // … the greeting, centred below
     }
 
@@ -130,6 +137,11 @@ Screens are made by a factory each time they open
 `Handled::No` for what a screen does not handle: the kernel then runs
 the action's own handler (e.g. the menu button opens the menu).
 
+An action can be run with params: `Command::RunAction(id, params)`, or
+`Command::run(id)` without. Its handler gets them as its second argument
+(`.handler(|env, params, out| ..)`), and a screen reads them with
+`cx.params()` in `on_action`. From a button or a gesture there are none.
+
 A screen that needs time to pass asks for it with `cx.wake_at(when)`,
 and `on_timer` comes then. Long work goes in steps, each asking for the
 next wake. `on_close_request` may keep a screen open, for example to
@@ -141,7 +153,11 @@ Some rules every screen should follow:
 - **Touch and buttons alike.** Some devices have only buttons (the
   Xteink X4), some mostly touch (the Boox). Everything must be easy with
   either: buttons move a focus and confirm, taps act at once. Show the
-  focus only once buttons are used (`ListView::focus_on_keys`).
+  focus only once buttons are used (`ui::focus_shown`,
+  `ListView::focus_on_keys`). The building blocks that take the buttons'
+  actions and gestures (`on_action`, `on_gesture`) answer with a
+  `ui::Response`: not theirs (`Ignored`), taken (`Same`), changed and to
+  be drawn again (`Changed`), or done with a result (`Done`).
 - **`draw` only draws.** On small devices a frame is drawn in bands
   (the X4 draws five), so `draw` runs several times for one frame, and
   again for every frame after it: whatever it reads or works out, it
@@ -174,7 +190,10 @@ Some rules every screen should follow:
   `ui::draw_focus`, what is on a focused row in `style.focus_ink(focused)`
   (white on the dark bar, black on a frame or a light bar), small shapes
   with `style.radius(height)` (pills where corners are round), boxes and
-  cards with `style.corner`, lines between rows with `ui::draw_separator`.
+  cards with `style.corner()`, lines between rows with `ui::draw_separator`.
+  The style's sizes are read with its methods (`style.margin()`,
+  `style.gap()`, `style.row()` in pixels, `style.text()` and
+  `style.small()` for text).
 
 Screens say what they show, for reading the interface aloud,
 automation and tests: the `ui` helpers (list rows, buttons, switches,
@@ -209,9 +228,12 @@ shortened.
 | Parts one below the other, from the top and the bottom | `ui::Stack` (`take`, `take_bottom`, `rest`) |
 | Equal columns side by side, e.g. two buttons | `ui::columns(area, count, gap)` |
 | A list that pages and holds the focus | `ui::ListView`, `ui::list_step` |
-| Rows of a list or of settings | `ui::draw_value_row`, `ui::draw_noted_row`, `ui::draw_switch_row`, `ui::draw_setting_row`, `ui::draw_stepper`, `ui::Slider` |
-| Sections with headings | `ui::Sections`, `ui::draw_heading` |
-| A grid of cells (covers, tiles) | `ui::Grid` (`cell`, `hit`, `step`) |
+| What a screen draws with | `ui::Ui` (`Ui::new(canvas, env, &style)`; the parts below are its methods: `ui.button(..)`, `ui.message(..)` …) |
+| Text, on a line or wrapped | `ui::Label` (`Label::new(text).role(TextRole::Small).align(..).wrap()`) |
+| Rows of a list | `ui::Row` (`Row::value`, `Row::switch`, `Row::number`, with `.note(..)`; `height`, `draw`, `hit`) |
+| Rows of settings | `ui::draw_setting_row`, `ui::draw_stepper`, `ui::slider::Slider` |
+| Sections with headings | `ui::sections::Sections`, `ui::draw_heading` |
+| A grid of cells (covers, tiles) | `ui::CellGrid` (`cell`, `hit`, `step`) |
 | A group on a card or in a frame | `ui::draw_card(canvas, &style, area, Frame::Card)` returns where its parts go |
 | A button, on, focused, faint, with an icon | `ui::draw_button`, `ui::draw_faint_button`, `ui::draw_icon_button` |
 | A few options to pick at a glance, or tabs | `ui::Segments` |
@@ -225,7 +247,7 @@ shortened.
 | A message where content would be, an empty list | `ui::draw_message`, `ui::draw_empty` |
 | Progress | `ui::draw_progress` |
 | An address to open on a phone, with its QR code | `ui::draw_address`, `ui::draw_qr` |
-| Offering to go online where something needs the network | `ui::OfflineOffer` |
+| Offering to go online where something needs the network | `ui::offline::OfflineOffer` |
 | What the buttons do, at the bottom | the screen's `hint` (the kernel draws the row) |
 | First-time hints over a screen | `help::add` (see [Hints for a screen](#hints-for-a-screen)) |
 | A widget's frame | `widgets::draw_frame` |
@@ -236,19 +258,23 @@ Two buttons side by side, a margin from the screen's sides and bottom:
 use paperpaw_sdk::ui::{self, Stack, UiStyle};
 
 let style = UiStyle::new(env);
-let margin = style.margin as u16;
+let margin = style.margin();
 let screen = Rect::new(margin, 0, display.width - 2 * margin, display.height - margin);
 let row = Stack::new(screen, margin).take_bottom(ui::Segments::height(&style));
 let [ok, cancel] = ui::columns(row, 2, margin)[..] else { return };
-ui::draw_button(canvas, env, &style, ok, "OK", false, focus == 0);
-ui::draw_button(canvas, env, &style, cancel, "Cancel", false, focus == 1);
+let mut ui = ui::Ui::new(canvas, env, &style);
+let shown = ui.focus_shown();
+ui.button(ok, "OK", false, shown && focus == 0);
+ui.button(cancel, "Cancel", false, shown && focus == 1);
 ```
 
 Tabs over a page, the chosen one on, moved with left and right:
 
 ```rust
-let tabs = ui::Segments::new(&style, Rect::new(margin, top, width, ui::Segments::height(&style)), 3);
-tabs.draw(canvas, env, &style, &["Books", "Shelves", "Notes"], self.tab, self.focus_on_tabs.then_some(self.tab));
+// Made with the layout; it keeps its words.
+let area = Rect::new(margin, top, width, ui::Segments::height(&style));
+let tabs = ui::Segments::new(&style, area, ["hello.books", "hello.shelves", "hello.notes"]);
+tabs.draw(&mut ui, self.tab, self.focus_on_tabs.then_some(self.tab));
 // on_action: if let Some(tab) = tabs.step(self.tab, action) { self.tab = tab; }
 // on_gesture: if let Some(tab) = tabs.hit(gesture.start) { self.tab = tab; }
 ```
@@ -258,65 +284,56 @@ A dialog in the middle of the screen:
 ```rust
 let mut dialog = ui::Dialog::new(env, &style, "Delete the book?", &["It goes for good."], &["Delete", "Keep"]);
 dialog.place((display.height - dialog.height()) / 2);
-dialog.draw(canvas, env, &style, Some(self.focus));
+dialog.draw(&mut ui, Some(self.focus));
 ```
 
 ### Settings
 
 A setting is a constant with its id and the type of its value
 (`Setting<bool>`, `Setting<i64>` or `Setting<Text>` for choices,
-languages, lists and text):
+languages, lists and text). Its spec is declared in a `static` list,
+which the plugin registers once. On the X4 the list stays in flash and
+takes next to no memory:
 
 ```rust
 pub const NAME: Setting<Text> = Setting::new("hello.name");
+pub const DATE: Setting<bool> = Setting::new("hello.clock.date");
+const GROUP: Id = Id::new_static("hello.clock");
 
-r.add_setting(
-    SettingSpec::text(&NAME, "hello.setting.name", "")
-        .group(groups::OTHER)
+static SETTINGS: [SettingSpec; 3] = [
+    SettingSpec::text(NAME.static_str(), "hello.setting.name", "", GROUP)
         .description("hello.setting.name.help"),
-)?;
+    SettingSpec::switch(DATE.static_str(), "hello.setting.date", true, GROUP),
+    SettingSpec::choice("hello.clock.face", "hello.setting.face",
+        &["hello.face.plain", "hello.face.ticks"], "hello.face.ticks", GROUP)
+        .description("hello.setting.face.help"),
+];
 
-let name: &str = env.settings.read(&NAME);
+r.add_settings(&SETTINGS)?;
+
+let name: &str = env.settings().read(&NAME);
 out.push(Command::set(&NAME, "Ada".into()));
 ```
 
 `SettingSpec::switch`, `number`, `choice`, `language`, `list` and
-`text` make the others, their defaults of the setting's type. The
-settings screens list every setting by its group, with its description
-below it; the kernel saves changes to `paperpaw.ini`. Settings can be
-numbers with units and steps, switches, choices, languages or text;
-`advanced()` hides rarely needed ones, `scoped()` lets one be set per
-book, `editor(screen)` opens a screen of your own instead. Settings
-known only at run time (one per widget, say) are read by their ids,
-`env.settings.text("…")` and so on. Passwords and keys do not belong in
-settings: see [Passwords and keys](#passwords-and-keys).
+`text` make them, each with its id, title, default and group;
+`SettingSpec::new` takes any kind and an `Id`, for a spec whose id is
+known only at run time (registered with `add_setting`). Every builder is
+`const`. The settings screens list every setting by its group, with its
+description below it; the kernel saves changes to `paperpaw.ini`.
+`advanced()` hides rarely needed ones, and `scoped()` lets one be set per
+book. Settings known only at run time (one per widget, say) are read by
+their ids, `env.settings().text("…")` and so on. Passwords and keys do
+not belong in settings: see [Passwords and keys](#passwords-and-keys).
 
-Each setting built this way takes about 200 bytes while the device
-runs. A plugin with many settings keeps them in the program instead, in
-a `static` list (on the X4 it stays in flash, next to no memory):
-
-```rust
-const GROUP: Id = Id::new_static("hello.clock");
-static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch("hello.clock.date", "hello.setting.date", true, GROUP),
-    SettingSpec::fixed_choice("hello.clock.face", "hello.setting.face",
-        &["hello.face.plain", "hello.face.ticks"], "hello.face.ticks", GROUP)
-        .described("hello.setting.face.help"),
-];
-
-r.add_settings(&SETTINGS)?;
-```
-
-Such settings are read like any other. What few settings need goes
-into a `static SettingExtra`, which a setting takes with
-`with_extra(&EXTRA)`: a unit, a step, a section, a slider or an editor
-screen. `for_advanced()` shows a fixed setting only with the advanced
-settings.
+What few settings need goes into a `static SettingExtra`, which a
+setting takes with `with_extra(&EXTRA)`: a unit, a step, a section, a
+slider, an editor screen of your own, or being a secret.
 
 ```rust
-static WHILE_SYNCING: SettingExtra = SettingExtra::new().shown_if("hello.sync", "on");
+static WHILE_SYNCING: SettingExtra = SettingExtra::new().shown_if(Id::new_static("hello.sync"), "on");
 static SERVER: [SettingSpec; 1] = [
-    SettingSpec::fixed_text("hello.server", "hello.setting.server", "", GROUP).with_extra(&WHILE_SYNCING),
+    SettingSpec::text("hello.server", "hello.setting.server", "", GROUP).with_extra(&WHILE_SYNCING),
 ];
 ```
 
@@ -367,7 +384,7 @@ Event::new("news.fetched")`, and passes it with the request.
 
 To ask the reader, `ask::text("Server", &ENTERED).initial(url).command()`
 opens the keyboard and brings back a `Typed`. `ask::folder` brings back
-a `Chosen`, `ask::choice` a `Picked` and `ask::confirm` a `Confirmed`.
+a `FolderChosen`, `ask::choice` a `Picked` and `ask::confirm` a `Confirmed`.
 A value passed with `.with(key, value)` comes back in the answer's
 `context`, so a plugin tells its questions apart. On `ask::choice`,
 `.about(text)` comes back as the answer's `path`.
@@ -651,9 +668,9 @@ as the run's artifact, also when a check failed.
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
 | Status items, lines and places | `add_status_item`, `add_status_line`, `add_status_place` | What status lines show, what a tap on an item does, how much it matters where a line is full; places where items show (`status::Place`) |
 | A look | `set_ui_look` | Another look for switches, the focus, separators, buttons, headers, button hints, progress bars, sliders and widgets' frames on every screen (`ui::look`) |
-| Widgets and their places | `add_widget`, `add_widget_place`, `add_widget_category` | Blocks for the home screen and the sleep screen; places that show widgets (`widgets::WidgetPlace`), in a grid or above each other (`widgets::Stack`), which plugins ask whether they show theirs (`Widgets::shown`); kinds of widgets of one's own, with their icon |
+| Widgets and their places | `add_widget`, `add_widget_place`, `add_widget_category` | Blocks for the home screen and the sleep screen; places that show widgets (`widgets::WidgetPlace`), in a grid or above each other (`widgets::WidgetStack`), which plugins ask whether they show theirs (`Widgets::shown`); kinds of widgets of one's own, with their icon |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
-| Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
+| Services | `publish` | Anything one plugin offers others, found with `env.services().get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
 | Book data | `add_book_data`, `add_book_cache` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book. What `add_book_cache` names (made again from the book when needed) is cleaned up by itself when the book is gone; what `add_book_data` names (the reader's own: notes, places) only when the reader agrees, in *Clean up storage* |
@@ -694,7 +711,7 @@ it with and answers as they expect, so that every plugin works with it:
 | `core.home` | nothing; at the start and by `actions::HOME` | is the bottom of the stack: opened again, the screens above it close. It leads to the menu and the library by touch and by buttons alone. |
 | `core.library` | nothing; by `actions::LIBRARY` | opens a book with `readers::open` (the reading app chosen for it). For a book it offers the menu `menus::BOOK`, as `Menus::shown_items` has it: when an entry is chosen it emits `events::BOOK_CHOSEN` with the book, then runs the entry's action. |
 | `core.settings` | nothing: the groups; `params::ID`: the settings of that group; `params::FOCUS`: the page of that setting, focused on it | changes settings with `Command::SetSetting`, and a setting with an editor (`SettingExtra::editor`, a screen or a slot) by opening that (`Editor::open`). |
-| `core.menu` | `params::MENU`, the menu; `params::HIDE`, entries to leave out this time | shows `env.menus.items(menu)`; for an entry chosen it closes (`Command::Back`) and runs its action (`Command::RunAction`); a setting listed there it changes, or opens its editor. |
+| `core.menu` | `params::MENU`, the menu; `params::HIDE`, entries to leave out this time | shows `env.menus().items(menu)`; for an entry chosen it closes (`Command::Back`) and runs its action (`Command::RunAction`); a setting listed there it changes, or opens its editor. |
 | `core.choose-folder`, `core.choose-value` | `params::ID`, the setting | writes the folder, or the value, chosen to the setting. Name the slot as the editor (`SettingExtra::editor_slot`) to have it edited there by whichever plugin fills it. |
 | `core.choice` | `params::TITLE`, `PATH` (what it is about), the options, `REPLY`; asked with `ask::choice` | shows the options; for one chosen it closes and emits the reply as a `Picked` with the option and `path`; *Back* or a tap outside closes without one. |
 | `core.confirm` | `params::TITLE` (the question), `TEXT`, `ui::confirm::YES_LABEL`, `NO_LABEL`, `FOCUS_YES`, `REPLY`; asked with `ask::confirm` | asks yes or no, the focus on no unless `FOCUS_YES`; for an answer it closes and emits the reply as a `Confirmed` with all of its parameters; *Back* or a tap outside closes without one. |
@@ -763,7 +780,7 @@ A request and its answer: the reply event brings the `HttpReply`.
 ```rust
 const FETCHED: Event<HttpReply> = Event::new("news.fetched");
 // In an action or a screen:
-out.push(Command::Http(HttpRequest::get("https://example.org/feed", &FETCHED)));
+out.push(Command::http(HttpRequest::get("https://example.org/feed", &FETCHED)));
 // When registering:
 r.on(FETCHED, |_env, reply, out| {
     if reply.status == 200 {
@@ -776,10 +793,10 @@ A timer: the work's event comes at that time, here each hour.
 
 ```rust
 const TICK: Event<()> = Event::new("weather.tick");
-out.push(Command::Work(
-    Work::at(&TICK, env.now.add_millis(60 * 60 * 1000)).every(Duration::from_secs(3600)),
+out.push(Command::work(
+    Work::at(&TICK, env.now().add_millis(60 * 60 * 1000)).every(Duration::from_secs(3600)),
 ));
-r.on(TICK, |_env, _, out| out.push(Command::Http(HttpRequest::get(FORECAST, &FETCHED))))?;
+r.on(TICK, |_env, _, out| out.push(Command::http(HttpRequest::get(FORECAST, &FETCHED))))?;
 ```
 
 ### What every reader offers
@@ -815,7 +832,7 @@ that their choices go along; a shell opens a book with
 | A book opened as the reader opens it | `reading::open_options`, `reading::conversion` | its places fit the reader's (a search, contents, an XPointer) |
 | Pages that go right to left | `Metadata::direction` (`PageProgression`), `Screen::mirrored` | readers mirror taps and swipes (an EPUB's `page-progression-direction`) |
 | Status lines' settings | `groups::STATUS_LINES` | the group readers put them in |
-| Reading aloud's settings | `setting_sections::ALOUD` | the section readers and shells put them in |
+| Reading aloud's settings | `group_sections::ALOUD` | the section readers and shells put them in |
 | Key bindings while reading | the layer `[keymap.core.reader]` | the slot's layer, whichever screen fills it |
 
 A reader in turn sends the reading events (`BOOK_OPENED`, `PAGE_TURNED`,
@@ -873,7 +890,7 @@ every view of it.
 
 | What | Standard | |
 |---|---|---|
-| The library to ask | `library::service(env)`, a `trait Library` | A book's details, the catalog's state, queries, the index of all books, finished and favourite. Deleting books: `delete`, `can_delete`. A library of one's own publishes one as `library::service::SERVICE`, with at least `each`, `records` and `version`. |
+| The library to ask | `library::service(env)`, a `trait Library` | A book's details, the catalog's state, queries, the index of all books, finished and favourite. Deleting books: `delete`, `can_delete`. A library of one's own provides a `LibraryService` as `library::service::SERVICE` in `library::service::VERSION`, with at least `each`, `records` and `version`. |
 | Every book, without reading each | `library::catalog` | One line a book: author, title, series, number, tags, how far read, favourite, opened, added, fields. Read in pieces with `each`, `each_at` and `read_at`. |
 | Books found, a page at a time | `catalog::Query`, `query`, `found` | by how far read, words, author, series, tag, folder, added since; sorted by title, author, series or added |
 | All books to sort and filter in memory | `library::index::Index` | 24 bytes a book, at most 2000 on the X4 (48 KB). Kept in a file while a book is open with `save` and `load`. Status changes are taken with `refresh`. |
@@ -900,35 +917,35 @@ library's version (`Library::version`: keys hold only for it,
 ### Services and points of your own
 
 A plugin can offer others more than the kernel knows of. A service is
-any value published under an id in its namespace, usually a trait
-object whose trait the plugin's crate exports; others use it when it is
-there and do without it when not:
+a value provided under an id in its namespace, in a version, usually a
+struct holding a trait object whose trait the plugin's crate exports.
+Its type names its contract in a key, such as `"weather.forecast/1"`,
+written with `service_type!`; the key changes (`/2`) when the type's
+fields do. Others use the service when it is there and do without it
+when not:
 
 ```rust
-// The publishing plugin.
-r.publish(WEATHER, Box::new(Forecast::new()) as Box<dyn Weather>)?;
+// In the providing plugin's crate.
+pub struct Weather(pub Box<dyn Forecast>);
+paperpaw_sdk::service_type!(Weather, "weather.forecast/1");
 
-// Any other plugin, wherever it has an `Env`.
-if let Some(weather) = env.services.get::<Box<dyn Weather>>(WEATHER.as_str()) {
-    let today = weather.today();
+// The providing plugin's `register`.
+r.provide(WEATHER, Weather(Box::new(Today::new())), Version::new(1, 0, 0))?;
+
+// Any other plugin, wherever it has an `Env`: version 1.0 or later.
+if let Some(weather) = env.services().get::<Weather>(WEATHER.as_str(), Version::new(1, 0, 0)) {
+    let today = weather.0.today();
 }
 ```
 
-A service is found by its type's name too, so native code plugins built
-apart from the firmware find it (see *Plugins as files* below), but only
-where the type is made of the SDK's crates, `core` and `alloc` alone
-(`native::CROSSING_CRATES`), whose types the plugin interface keeps as
-they are. A type of a plugin's own crate may be another type of the
-same name in another build, so a service of one implements
-`services::ServiceType`, a key like `"weather.forecast/1"`, raised when
-the type changes. Publish it with `r.provide(id, service, version)`, and
-find it with `env.services.get_typed` or `get_versioned`; its size and
-alignment are then checked.
+A service is found by its key, so native code plugins built apart from
+the firmware find it too (see *Plugins as files* below); its size and
+alignment are checked.
 
 A point is an id a plugin names, with what a contribution there is in
 its documentation (for example one line per entry); others add to it
 with `r.contribute(point, text)`, and the plugin reads
-`env.services.contributions(point)`, each with the plugin it came from.
+`env.services().contributions(point)`, each with the plugin it came from.
 
 ### Marks in the text
 
@@ -1028,7 +1045,7 @@ r.add_page_layer(
             canvas.fill_rect(room.x.into(), line.area.y.into(), 4, line.area.height.into(), Color::BLACK);
         }
     })
-    .reserve(|env| Some((Side::Right, env.metrics.mm(8) as u16)))
+    .reserve(|env| Some((Side::Right, env.metrics().mm(8) as u16)))
     .taps(),
 )?;
 ```
@@ -1066,8 +1083,8 @@ of its size. Pictures made larger than they are decoded are
 interpolated, not blocky.
 
 ```rust
-match image::picture_with_alpha(env.storage, "plugins/owls/owl.png", &cache, Fit::side(200)) {
-    Ok(image) => ui::draw_image_over(canvas, env.storage, &image, area, 192), // a quarter see-through
+match image::picture_with_alpha(env.storage(), "plugins/owls/owl.png", &cache, Fit::side(200)) {
+    Ok(image) => ui::draw_image_over(canvas, env.storage(), &image, area, 192), // a quarter see-through
     Err(why) => { /* e.g. "unsupported image: interlaced PNG" */ }
 }
 ```
@@ -1077,7 +1094,7 @@ what shows through it (`Screen::shows_through`): every screen below it,
 menus too (`ShowsThrough::All`), or the topmost full screen alone, a
 menu left open over it not drawn (`ShowsThrough::FullScreen`); what
 shows is drawn first under all of it. A screen guarding the device is
-marked in `env.stack` (`StackEntry::guards`), so that nothing shows what
+marked in `env.stack()` (`StackEntry::guards`), so that nothing shows what
 is below it. The sleep screen's *The page with a picture* shows the
 full screen through: a picture or a widget over the page being read;
 pictures for it are offered as presets (below).
@@ -1096,7 +1113,7 @@ r.add_choice(Id::new_static("sleep.show"), "aquarium.sleep")?;
 ### Widgets
 
 A widget is a [`Widget`] a screen makes and keeps
-(`env.widgets.make`): it reads what it shows in `update`, which the
+(`env.widgets().make`): it reads what it shows in `update`, which the
 screen calls when it shows the widget, about each minute and after
 events, and only draws in `draw` (which runs for every band of a
 frame). The screen tells it where it goes (`place`) before drawing it
@@ -1160,16 +1177,16 @@ values of the widget's settings: the home screen places a clock as
 `widgets.clock@1` and `widgets.clock@2`, whose frames are the settings
 `widgets.clock@1.frame` and `widgets.clock@2.frame` (saved like any
 other, the widget's own `widgets.clock.frame` where one sets none).
-`env.widgets.make` gives a placement's widget, which reads its settings
+`env.widgets().make` gives a placement's widget, which reads its settings
 by their usual ids and gets that placement's values
 (`Settings::with_placement`); a widget need do nothing for it. Screens
 of their own that place widgets use `Id::placement` and forget a
 placement's values when it goes (`Settings::placement_values`).
 
 `widgets::shows(env, id, "author")` reads a part's switch,
-`widgets::choice` makes other choices of the widget's own, and
+`widgets::choice_setting` makes other choices of the widget's own, and
 `widgets::draw_message` says kindly what is not there yet. A widget's
-`height` counts its frame (`widgets::look::look` gives the area inside
+`height` counts its frame (`widgets::widget_look` gives the area inside
 it without drawing). For round things there are `Canvas::fill_circle`,
 `stroke_circle`, `fill_ring` (arcs, e.g. a progress ring) and
 `draw_hand`, with angles as on a clock face (`paperpaw_sdk::round`);
@@ -1187,7 +1204,7 @@ be in a list more than once (`widgets::repeatable`).
 A preset is a ready-made set of setting values chosen as a whole
 (`paperpaw_sdk::presets`). It has a kind, named by the plugin that
 offers such presets. That plugin lists those of its kind with
-`env.settings.presets().of_kind(kind)`. It works out what one changes
+`env.settings().presets().of_kind(kind)`. It works out what one changes
 with `Preset::changes` and the settings it covers. It shows it with
 `Command::PreviewSettings`: the values show on every screen without
 being kept, until the screen that asked closes. It keeps it with
@@ -1242,12 +1259,12 @@ any button closes the note, and it does not come again for that screen;
 *No more hints* and the settings switch them all off.
 
 ```rust
-use paperpaw_sdk::help::{self, Hint, Zone};
+use paperpaw_sdk::help::{self, HelpHint, Zone};
 
 help::add(r, SCREEN.as_str(), &[
-    Hint::touch("hello.help.tap").zone(Zone::new(0, 0, 1000, 120)),
-    Hint::buttons("hello.help.confirm"),
-    Hint::any("hello.help.back"),
+    HelpHint::touch("hello.help.tap").zone(Zone::new(0, 0, 1000, 120)),
+    HelpHint::buttons("hello.help.confirm"),
+    HelpHint::any("hello.help.back"),
 ])?;
 ```
 
@@ -1263,23 +1280,23 @@ so it would not get ready under them. The note is the
 ### Passwords and keys
 
 Plugins keep passwords, API keys and tokens with
-`Command::SetSecret(SecretChange::keep(id, label, value))` and read them
-with `env.secrets.get(id)`. They are all listed in *Settings, Passwords
+`Command::set_secret(SecretChange::keep(id, label, value))` and read them
+with `env.secrets().get(id)`. They are all listed in *Settings, Passwords
 and keys*, where the user changes or removes them. Ask for one on the
 keyboard in password mode (`ask::text(…).password()`); the keyboard
 offers to type it on a phone. They are kept apart from the settings and
 not readable at a glance, but not encrypted: the devices have no safe
 place for a key. A plugin sees its own alone: name them in its
-namespace (`myplugin.token`); `env.secrets.get` gives another plugin's
-none, and `env.secrets.listed()` names every secret without its value.
+namespace (`myplugin.token`); `env.secrets().get` gives another plugin's
+none, and `env.secrets().listed()` names every secret without its value.
 A setting marked `secret()` is kept the same way. Native code is not
 sandboxed and could go past this; the SDK hands no plugin another's
 secret.
 
 ### The network
 
-`Command::Http(HttpRequest::get(url, &FETCHED))` makes a request where
-the device has a network (`env.caps.network`); the answer comes as the
+`Command::http(HttpRequest::get(url, &FETCHED))` makes a request where
+the device has a network (`env.caps().network`); the answer comes as the
 request's reply event, an `HttpReply` with the status and the body, or
 saved to a file (`.save_to(path)`) for large ones. A request may set a
 `timeout`, the answer's headers it wants back (`want_headers`) and the
@@ -1287,7 +1304,7 @@ longest body kept in memory (`max_body`, by default 64 KiB on small
 devices). Every request is answered once, also when it is refused
 (`HttpReply::refused` says why and when to try again). The manifest says
 that the plugin uses the network (`.uses(Uses::NETWORK)` in its manifest); without it,
-requests are refused. In Offline (`env.power`), only what the reader went
+requests are refused. In Offline (`env.power()`), only what the reader went
 online for goes out: a screen that needs the network says so on itself
 and offers *Go online*, which sends `Command::GoOnline` (the network for
 that screen until it closes); anything else is refused with
@@ -1303,7 +1320,7 @@ What a plugin does on its own, not because the reader just asked for
 it, it declares as work (`paperpaw_sdk::work`, ADR 0025), and the
 kernel runs it at the moment that costs least: waking, a book opened or
 closed, going to sleep, the radio on anyway, charging, idle.
-`Command::Work(Work::network(PUSH).within(Duration::from_secs(1800))
+`Command::work(Work::network(PUSH).within(Duration::from_secs(1800))
 .at_moments(Moments::BOOK_CLOSED | Moments::SLEEP))` sends the reading
 position when the book is closed or the device sleeps, at the latest
 after half an hour; the kernel then emits the work's event and the
@@ -1311,15 +1328,15 @@ plugin makes its request. `optional()` work (weather, headlines) runs
 only while that is cheap, and never brings the radio on by itself.
 `Work::at(event, time)` is a timer, `every` repeats, `key` tells
 several works of one event apart, `Command::CancelWork` takes one back.
-`env.reader` says whether what is handled is the reader's own doing: an
+`env.reader()` says whether what is handled is the reader's own doing: an
 action the reader ran acts at once, the same action run by a rule
 declares `Work::when_cheap(id, within)` instead and waits for a good
 moment.
 Long work in steps (an install, a catalog walked) registers its step
 function (`r.add_work(WorkSpec::new(id, title, step))`) and is stepped
-between frames. `env.work` says where a work stands, for the plugin's
+between frames. `env.work()` says where a work stands, for the plugin's
 own page; background work never shows a notice over reading. The power
-mode (`env.power`) makes deadlines longer or holds network work back;
+mode (`env.power()`) makes deadlines longer or holds network work back;
 most plugins need not read it.
 Read large JSON answers as they stream with
 `paperpaw_sdk::json::stream`, so they need little memory.
@@ -1342,12 +1359,12 @@ and `Command::SocketRead` asks for what comes next, as text
 it comes (`SocketRead::File`), so files of any size never need to fit in
 memory. `Command::Broadcast` finds services in the local network by a
 UDP datagram and their answers. Everything comes back as events
-(`SocketNotice`s, `socket_params`); a socket closes when the screen
+(`SocketNotice`s); a socket closes when the screen
 that was open as it opened closes.
 
 ### Firmware updates
 
-Where PaperPaw is the device's firmware (the X4s), `env.firmware` says
+Where PaperPaw is the device's firmware (the X4s), `env.firmware()` says
 which version runs and how an install goes; elsewhere it is `None`.
 `Command::Firmware(FirmwareCommand::Install { path, key, older })`
 installs a signed update file: `key` is the key of one not signed by
@@ -1375,7 +1392,7 @@ there:
 - reads files a piece at a time (`Storage::read_at`), never whole books;
 - writes downloads straight to storage (`HttpRequest::save_to`);
 - reserves large buffers with `try_reserve` and copes when that fails;
-- checks `env.device.memory` (`MemoryClass::Small`) to do less there.
+- checks `env.device().memory` (`MemoryClass::Small`) to do less there.
 
 The emulator's X4 profile enforces the budget. After a run with
 `--headless`, `--heap-report` shows where memory goes.
@@ -1617,36 +1634,46 @@ brings a home screen of its own.
 core.font-ui-strong = my.semibold
 ```
 
-An action of `actions.ini` runs its steps in order, at most 16:
+An action of `actions.ini` runs its steps in order, a step a `run`
+line (commas and all), at most 16:
 `<setting>=<value>` sets a setting (a value not of its kind is passed
 over, and a setting that keeps the device safe, such as the lock's, is
-never set), `open:<slot>` opens a slot, `notify:<text>` says something,
+never set), `open:<slot>` opens a slot, `notify:<key>` says the text of
+a key of the plugin's translations in the reader's language,
 `emit:<event>` emits an event of the plugin's own (`<plugin>.<name>`),
 and an action's id runs that action (not one of the same file). A
 section names the action. Without the plugin's id in front, it gets
 it: `[night]` in the plugin `my` is `my.night`.
 
-`menus.ini` adds to any menu, places an entry after another and takes
-entries out; `title` and `entries` make a menu
-of one's own, which other menus list by its id:
+`menus.ini` adds to another plugin's menu, a section `[menu <id>]`,
+places an entry after another and takes entries out; any other
+section is a menu of one's own, with `title` and `entries`, which
+other menus list by its id. A list is a key a line
+([data-files.md](data-files.md#lists)):
 
 ```ini
 # actions.ini
 [night]
 title = Night reading
 icon = moon
-run = core.night-mode=on, core.font-size=14, notify:Good night
+run = core.night-mode=on
+run = core.font-size=14
+run = notify:my.good-night
+
+# i18n/en.ini, [messages]
+my.good-night = Good night, sleep well
 
 # menus.ini
-[core.reader-menu]
+[menu core.reader-menu]
 add = my.night after core.toc
 
-[core.reader-more]
+[menu core.reader-more]
 hide = stats.open
 
-[my.tools]
+[tools]
 title = My tools
-entries = my.night, core.library
+entries = my.night
+entries = core.library
 
 # setup.ini
 [size]

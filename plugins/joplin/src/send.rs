@@ -31,7 +31,8 @@ use alloc::vec::Vec;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::json::stream::{self, Event as Json};
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, StorageError};
+use paperpaw_sdk::time::UnixTime;
+use paperpaw_sdk::{Arg, Command, Commands, Env, HttpRequest, Params, StorageError};
 
 use crate::item::{self, NOTE, NOTEBOOK};
 use crate::kept::{self, Sent};
@@ -172,7 +173,7 @@ impl Run {
     }
 
     /// Sends the notes that wait, or says why it cannot.
-    pub fn start(&mut self, env: &Env<'_>, start: Start, out: &mut Vec<Command>) {
+    pub fn start(&mut self, env: &Env<'_>, start: Start, out: &mut Commands) {
         let waiting = kept::waiting(env.storage);
         if self.running {
             // Those exported meanwhile come along.
@@ -213,18 +214,18 @@ impl Run {
         self.sign_in_or_check(env, out);
     }
 
-    fn sign_in_or_check(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn sign_in_or_check(&mut self, env: &Env<'_>, out: &mut Commands) {
         let Some(account) = Account::of(env) else {
             return self.end(env, "joplin.setup-needed", &[], End::Stop, out);
         };
         if account.service.signs_in() && self.session.is_none() {
             let request =
                 service::sign_in(&account.base, account.user, account.password, &SIGNED_IN);
-            return out.push(Command::Http(request));
+            return out.push(Command::http(request));
         }
         let mut request = self.request(env, INFO, "GET", &CHECKED);
-        request.save_to = Some(kept::file(INFO));
-        out.push(Command::Http(request));
+        request = request.save_to(kept::file(INFO));
+        out.push(Command::http(request));
     }
 
     /// How requests prove who sends them: the session where there is one.
@@ -253,16 +254,14 @@ impl Run {
 
     /// A request putting the file `name`; its body is the caller's.
     fn put(&self, env: &Env<'_>, name: &str, reply: &Event<HttpReply>) -> HttpRequest {
-        let mut request = self.request(env, name, "PUT", reply);
-        request.headers.push((
+        self.request(env, name, "PUT", reply).header(
             String::from("Content-Type"),
             String::from("application/octet-stream"),
-        ));
-        request
+        )
     }
 
     /// Answers that are no success, the same for every step.
-    fn trouble(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn trouble(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         match reply.status {
             401 | 403 => self.unauthorised(env, out),
             0 => self.end(env, "joplin.unreachable", &[], End::Again, out),
@@ -275,7 +274,7 @@ impl Run {
 
     /// Not let in: the session ended (signed in anew, once), or the user
     /// name or password is wrong.
-    fn unauthorised(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn unauthorised(&mut self, env: &Env<'_>, out: &mut Commands) {
         let had_session = self.session.take().is_some();
         if had_session && !self.renewed {
             self.renewed = true;
@@ -287,13 +286,14 @@ impl Run {
         self.end(env, "joplin.bad-login", &[], End::Stop, out);
     }
 
-    pub fn signed_in(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub fn signed_in(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
         match reply.status {
             200..=299 => {
-                let body = paperpaw_sdk::json::object(&reply.body);
+                let text = reply.text();
+                let body = paperpaw_sdk::json::object(&text);
                 match paperpaw_sdk::json::text(&body, "id") {
                     Some(id) if !id.is_empty() => {
                         self.session = Some(id.to_string());
@@ -308,7 +308,7 @@ impl Run {
         }
     }
 
-    pub fn checked(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub fn checked(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
@@ -326,7 +326,7 @@ impl Run {
                         let file = kept::file(LOCKS_FILE);
                         let auth = self.auth(env);
                         let request = locks::request(service, &base, auth, file, &LOCKS);
-                        return out.push(Command::Http(request));
+                        return out.push(Command::http(request));
                     }
                 };
                 self.end(env, key, &[], End::Stop, out);
@@ -338,7 +338,7 @@ impl Run {
 
     /// The sync target's locks are listed: nothing is written while a
     /// client upgrades it (see [`locks`]).
-    pub fn locks_listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub fn locks_listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
@@ -361,19 +361,19 @@ impl Run {
     }
 
     /// The notebook made before, or a new one.
-    fn find_notebook(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn find_notebook(&mut self, env: &Env<'_>, out: &mut Commands) {
         match kept::notebook(env.storage) {
             Some((name, id)) if name == notebook_name(env) && item::is_id(&id) => {
                 let mut request = self.request(env, &item::file_name(&id), "GET", &NOTEBOOK_FOUND);
-                request.save_to = Some(kept::file(FOUND));
-                request.params = Params::new().with(ID, id);
-                out.push(Command::Http(request));
+                request = request.save_to(kept::file(FOUND));
+                request = request.with(Params::new().with(ID, id));
+                out.push(Command::http(request));
             }
             _ => self.make_notebook(env, out),
         }
     }
 
-    pub fn notebook_found(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub fn notebook_found(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
@@ -394,18 +394,22 @@ impl Run {
         }
     }
 
-    fn make_notebook(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn make_notebook(&mut self, env: &Env<'_>, out: &mut Commands) {
         let now = now_ms(env).unwrap_or_default();
         let name = notebook_name(env);
         let old = kept::notebook(env.storage).map(|(_, id)| id);
         let id = item::new_id(&format!("paperpaw notebook {name} {now}"), old.as_deref());
         let mut request = self.put(env, &item::file_name(&id), &NOTEBOOK_MADE);
-        request.body = Some(item::notebook(&id, name, &paperpaw_sdk::time::iso8601(now)));
-        request.params = Params::new().with(ID, id);
-        out.push(Command::Http(request));
+        request = request.body(item::notebook(
+            &id,
+            name,
+            &UnixTime::from_millis(now).iso8601(),
+        ));
+        request = request.with(Params::new().with(ID, id));
+        out.push(Command::http(request));
     }
 
-    pub fn notebook_made(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub fn notebook_made(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
@@ -418,7 +422,7 @@ impl Run {
     }
 
     /// The next book: its note fetched if it was sent before, else made.
-    fn next_book(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn next_book(&mut self, env: &Env<'_>, out: &mut Commands) {
         while !self.queue.is_empty() {
             let path = self.queue.remove(0);
             if let Err(StorageError::NotFound) = env.storage.size(&path) {
@@ -438,13 +442,13 @@ impl Run {
                 return self.write_note(env, None, out);
             };
             let mut request = self.request(env, &found, "GET", &NOTE_FOUND);
-            request.save_to = Some(kept::file(FOUND));
-            return out.push(Command::Http(request));
+            request = request.save_to(kept::file(FOUND));
+            return out.push(Command::http(request));
         }
         self.finish(env, out);
     }
 
-    pub fn note_found(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub fn note_found(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let Some(book) = self.book.as_mut().filter(|_| self.running) else {
             return;
         };
@@ -484,7 +488,7 @@ impl Run {
 
     /// Writes the book's note and sends it: over `found` (its note as
     /// Joplin has it), or as a new note.
-    fn write_note(&mut self, env: &Env<'_>, found: Option<item::Props>, out: &mut Vec<Command>) {
+    fn write_note(&mut self, env: &Env<'_>, found: Option<item::Props>, out: &mut Commands) {
         let Some(mut book) = self.book.take() else {
             return;
         };
@@ -492,7 +496,7 @@ impl Run {
         // Later than the note found, or Joplin keeps that one (also if
         // this device's clock is behind).
         let updated =
-            paperpaw_sdk::time::iso8601(found.as_ref().map_or(now, |p| now.max(p.updated + 1)));
+            UnixTime::from_millis(found.as_ref().map_or(now, |p| now.max(p.updated + 1))).iso8601();
         let old = book.last().map(|n| n.id.as_str());
         let id = match (&found, old) {
             (Some(_), Some(old)) => old.to_string(),
@@ -533,13 +537,13 @@ impl Run {
             return self.book_failed(env, out);
         }
         let mut request = self.put(env, &item::file_name(&sending.id), &NOTE_SENT);
-        request.body_from = Some(file);
-        out.push(Command::Http(request));
+        request = request.body_from(file);
+        out.push(Command::http(request));
         book.sending = Some(sending);
         self.book = Some(book);
     }
 
-    pub fn note_sent(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub fn note_sent(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let Some(book) = self.book.take().filter(|_| self.running) else {
             return;
         };
@@ -562,14 +566,14 @@ impl Run {
     }
 
     /// This book could not be sent: it waits, the others go on.
-    fn book_failed(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn book_failed(&mut self, env: &Env<'_>, out: &mut Commands) {
         self.book = None;
         self.failed += 1;
         self.next_book(env, out);
     }
 
     /// All books were tried: says how it went.
-    fn finish(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn finish(&mut self, env: &Env<'_>, out: &mut Commands) {
         let (sent, failed) = (self.sent as i64, self.failed as i64);
         if self.apart > 0 && !self.quiet {
             let count = self.apart as i64;
@@ -600,12 +604,12 @@ impl Run {
         key: &str,
         args: &[(&str, Arg<'_>)],
         end: End,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
     ) {
         self.end_with(env, env.i18n.format(key, args), end, out);
     }
 
-    fn end_with(&mut self, env: &Env<'_>, text: String, end: End, out: &mut Vec<Command>) {
+    fn end_with(&mut self, env: &Env<'_>, text: String, end: End, out: &mut Commands) {
         self.running = false;
         self.blocked = end == End::Stop;
         self.queue.clear();

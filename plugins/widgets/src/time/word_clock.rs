@@ -17,7 +17,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, TextSize};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, Translator,
 };
@@ -55,31 +55,31 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.word-clock.align", ID, Align::Left),
     widgets::frame_spec("widgets.word-clock.frame", ID, Frame::None),
     widgets::padding_spec("widgets.word-clock.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.word-clock.style",
         "widgets.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.word-clock.style.help"),
-    widgets::size_spec("widgets.word-clock.size", ID, Size::Fit, true),
-    SettingSpec::fixed_choice(
+    .description("widgets.word-clock.style.help"),
+    widgets::size_spec("widgets.word-clock.size", ID, TextSize::Fit, true),
+    SettingSpec::choice(
         "widgets.word-clock.lead",
         "widgets.setting.word-clock-lead",
         &LEADS,
         LEADS[1],
         ID,
     )
-    .described("widgets.word-clock.lead.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.word-clock.lead.help"),
+    SettingSpec::choice(
         "widgets.word-clock.quarters",
         "widgets.setting.quarters",
         &QUARTERS,
         QUARTERS[0],
         ID,
     )
-    .described("widgets.word-clock.quarters.help"),
+    .description("widgets.word-clock.quarters.help"),
     widgets::part_spec(
         "widgets.word-clock.capitals",
         ID,
@@ -97,8 +97,11 @@ static SETTINGS: [SettingSpec; 9] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.word-clock",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.word-clock");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(shows),
     )?;
     r.add_settings(&SETTINGS)
@@ -200,7 +203,7 @@ fn shows(env: &Env<'_>) -> String {
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let (style, _) = ui(env);
     let lines = if chosen_name(env, ID.as_str(), "style") == "grid" {
-        return width.min((style.row * 5) as u16) + frame_height(env, ID.as_str());
+        return width.min((u32::from(style.row()) * 5) as u16) + frame_height(env, ID.as_str());
     } else {
         3
     };
@@ -253,7 +256,7 @@ fn draw_text(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     hour: u8,
     minute: u8,
     past: Option<u8>,
@@ -263,10 +266,10 @@ fn draw_text(
     let align = widgets::align(env, ID.as_str());
     let (lead, rest) = text(env, hour, minute);
     // Room for the dots below.
-    let dot = (style.small * 0.22).max(2.0) as u32;
+    let dot = (style.small() * 0.22).max(2.0) as u32;
     let dots_band = if past.is_some() { (dot * 6) as u16 } else { 0 };
     // The caption above, where it leaves a line of the small size.
-    let least = line(font, style.small) as u16;
+    let least = line(font, style.small()) as u16;
     let caption = widgets::caption_height(env);
     if let Some(lead) = lead
         && area.height >= caption + least + dots_band
@@ -282,8 +285,8 @@ fn draw_text(
     // Where the sentence has no room whole even at the small size, the
     // time alone: "It is" says the least.
     let whole = |text: &str| {
-        words_in_lines(font, style.small, text, f32::from(room.width)).is_some_and(|lines| {
-            line(font, style.small) * lines.len() as f32 <= f32::from(room.height)
+        words_in_lines(font, style.small(), text, f32::from(room.width)).is_some_and(|lines| {
+            line(font, style.small()) * lines.len() as f32 <= f32::from(room.height)
         })
     };
     let rest = if whole(&rest) {
@@ -292,8 +295,8 @@ fn draw_text(
         time_alone(env, hour, minute)
     };
     let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => largest(font, &rest, room, style.small, f32::from(room.height)),
-        size => largest(font, &rest, room, style.small, size.text(&style) * 1.2),
+        TextSize::Fit => largest(font, &rest, room, style.small(), f32::from(room.height)),
+        size => largest(font, &rest, room, style.small(), size.text(&style) * 1.2),
     };
     let height = line(font, size);
     let mut lines = balanced(font, size, &rest, f32::from(room.width));
@@ -454,7 +457,7 @@ fn draw_grid(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     hour: u8,
     minute: u8,
     past: Option<u8>,

@@ -382,12 +382,13 @@ impl Radio {
                     let networks = found.and_then(Result::ok).map(|found| {
                         found
                             .into_iter()
-                            .map(|ap| WifiNetwork {
-                                ssid: String::from(ap.ssid.as_str()),
-                                signal: ap.signal_strength,
-                                secured: ap
-                                    .auth_method
-                                    .is_some_and(|m| m != AuthenticationMethod::None),
+                            .map(|ap| {
+                                WifiNetwork::new(
+                                    String::from(ap.ssid.as_str()),
+                                    ap.signal_strength,
+                                    ap.auth_method
+                                        .is_some_and(|m| m != AuthenticationMethod::None),
+                                )
                             })
                             .collect()
                     });
@@ -469,9 +470,8 @@ impl Radio {
                     (Outcome::Hosted { ssid, opened }, controller)
                 })
             }
-            WifiCommand::On | WifiCommand::Off => {
-                Box::pin(async move { (Outcome::Left, controller) })
-            }
+            // On and Off, and a command to come: nothing to do here.
+            _ => Box::pin(async move { (Outcome::Left, controller) }),
         });
     }
 

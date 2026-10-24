@@ -83,7 +83,7 @@ impl Chooser {
             .checked_sub(self.options.len())
             .and_then(|i| self.more.get(i))
         {
-            cx.command(Command::RunAction(action.clone()));
+            cx.command(Command::run(action.clone()));
             return;
         }
         let (Some(spec), Some((value, _))) = (&self.spec, self.options.get(index)) else {
@@ -100,29 +100,29 @@ impl Chooser {
 impl Screen for Chooser {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.len();
         let title = self
             .spec
             .as_ref()
             .map_or("", |spec| env.i18n.tr(&spec.title));
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         let (options, more) = (&self.options, &self.more);
         let current = self
             .spec
             .as_ref()
             .map_or("", |spec| env.settings.text(spec.id.as_str()));
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                // Lined up with the options, leading on.
-                if let Some((_, name)) = index.checked_sub(options.len()).map(|i| &more[i]) {
-                    ui::draw_value_row(canvas, env, &style, rect, focused, name, "›");
-                    return;
-                }
-                let (value, name) = &options[index];
-                let mark = if value == current { "•" } else { "" };
-                ui::draw_value_row(canvas, env, &style, rect, focused, name, mark);
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            // Lined up with the options, leading on.
+            if let Some((_, name)) = index.checked_sub(options.len()).map(|i| &more[i]) {
+                ui::Row::value(name, "›").focused(focused).draw(ui, rect);
+                return;
+            }
+            let (value, name) = &options[index];
+            let mark = if value == current { "•" } else { "" };
+            ui::Row::value(name, mark).focused(focused).draw(ui, rect);
+        });
     }
 
     fn on_event(&mut self, event: &Id, _params: &Params, cx: &mut Cx<'_, '_>) {
@@ -158,7 +158,7 @@ impl Screen for Chooser {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.len()) {

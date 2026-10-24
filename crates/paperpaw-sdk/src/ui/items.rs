@@ -17,7 +17,8 @@ use alloc::vec::Vec;
 
 use crate::builtin::{actions, params};
 use crate::status::item_ids;
-use crate::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
+use crate::ui::reorder::{Reorder, ReorderStep};
+use crate::ui::{self, ListChange, ListView, UiStyle};
 use crate::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, PointerEvent, Rect,
     RefreshMode, Screen, SettingValue,
@@ -187,40 +188,34 @@ impl Screen for ItemsScreen {
                 .map_or(String::new(), |spec| env.i18n.tr(&spec.title).to_string())
         });
         let len = self.items.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, &title, None, self.list.paging(len));
+            .draw(&mut ui, &title, None, self.list.paging(len));
         let chosen = self.chosen(env);
         let order = self.order(env);
         let items = &self.items;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                let (id, name) = &items[order[row]];
-                let on = chosen.iter().position(|c| *c == id.as_str());
-                let rect = if on.is_some() {
-                    Reorder::draw_grip(canvas, env, &style, rect, focused);
-                    Reorder::content(rect)
-                } else {
-                    rect
-                };
-                // Shown items carry their place: "On (2)".
-                let value = match on {
-                    Some(at) if chosen.len() > 1 => {
-                        format!("{} ({})", env.i18n.tr("core.state.on"), at + 1)
-                    }
-                    Some(_) => env.i18n.tr("core.state.on").to_string(),
-                    None => env.i18n.tr("core.state.off").to_string(),
-                };
-                ui::draw_value_row(
-                    canvas,
-                    env,
-                    &style,
-                    rect,
-                    focused,
-                    env.i18n.tr(name),
-                    &value,
-                );
-            });
-        self.reorder.draw(canvas, &style, &self.list);
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            let (id, name) = &items[order[row]];
+            let on = chosen.iter().position(|c| *c == id.as_str());
+            let rect = if on.is_some() {
+                Reorder::draw_grip(ui.canvas(), env, &style, rect, focused);
+                Reorder::content(rect)
+            } else {
+                rect
+            };
+            // Shown items carry their place: "On (2)".
+            let value = match on {
+                Some(at) if chosen.len() > 1 => {
+                    format!("{} ({})", env.i18n.tr("core.state.on"), at + 1)
+                }
+                Some(_) => env.i18n.tr("core.state.on").to_string(),
+                None => env.i18n.tr("core.state.off").to_string(),
+            };
+            ui::Row::value(env.i18n.tr(name), &value)
+                .focused(focused)
+                .draw(ui, rect);
+        });
+        self.reorder.draw(&mut ui, &self.list);
         if self.moving {
             // The item the buttons move: a frame inside its focus, in the
             // focus's own ink (white on a dark bar, dark in a ring or on a
@@ -235,7 +230,8 @@ impl Screen for ItemsScreen {
                 row.height.saturating_sub(2 * inset),
             );
             let r = style.radius(u32::from(frame.height));
-            canvas.stroke_round(frame, style.line * 2, r, style.focus_ink(true));
+            ui.canvas()
+                .stroke_round(frame, style.line * 2, r, style.focus_ink(true));
         }
     }
 
@@ -320,7 +316,7 @@ impl Screen for ItemsScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.items.len()) {

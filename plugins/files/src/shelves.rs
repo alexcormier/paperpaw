@@ -108,7 +108,7 @@ impl ShelfScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let shelf = Shelf::of(params.get(params::MODE));
         Self {
@@ -147,15 +147,16 @@ impl Screen for ShelfScreen {
         let style = self.style;
         let len = self.names.len();
         let title = env.i18n.tr(self.title());
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
             let area = self.list.area();
             // An empty view says what would be in it.
             let (icon, text) = match self.shelf {
                 _ if self.collecting => {
                     let message = env.i18n.tr("files.list.collecting");
-                    ui::draw_message(canvas, env, &style, area, message);
+                    ui.message(area, message);
                     return;
                 }
                 Shelf::Series => ("books", "files.no-series"),
@@ -163,21 +164,23 @@ impl Screen for ShelfScreen {
                 Shelf::Authors => ("books", "files.no-books"),
             };
             let text = ui::tr_input(env, text);
-            ui::draw_empty(canvas, env, &style, area, icon, "", text);
+            ui.empty(area, icon, "", text);
             return;
         }
         let names = &self.names;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let (name, count) = &names[index];
-                let name = if name.is_empty() {
-                    env.i18n.tr("files.unknown-author")
-                } else {
-                    name.as_str()
-                };
-                let note = env.i18n.plural("files.books", *count as i64, &[]);
-                ui::draw_noted_row(canvas, env, &style, rect, focused, name, "›", &note);
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (name, count) = &names[index];
+            let name = if name.is_empty() {
+                env.i18n.tr("files.unknown-author")
+            } else {
+                name.as_str()
+            };
+            let note = env.i18n.plural("files.books", *count as i64, &[]);
+            ui::Row::value(name, "›")
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -234,7 +237,7 @@ impl Screen for ShelfScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, len) {
@@ -283,7 +286,7 @@ mod tests {
                 Record::of(path, &book)
             })
             .collect();
-        catalog::write(&storage, &records);
+        catalog::write(&storage, &records).unwrap();
         let authors = names(&mut |f| catalog::each_at(&storage, f), Shelf::Authors);
         assert_eq!(
             authors,

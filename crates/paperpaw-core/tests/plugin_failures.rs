@@ -19,7 +19,7 @@ use common::{BASE, DEVICE, Harness, press};
 use paperpaw_core::sdk::builtin::{actions, slots};
 use paperpaw_core::sdk::{
     ActionSpec, Command, Id, Manifest, MemoryStorage, MenuEntry, Params, Plugin, PluginState,
-    Priority, RegisterError, Registrar, Screen, ScreenSpec, Setting, SettingSpec, Version,
+    Priority, RegisterError, Registrar, Screen, ScreenSpec, Setting, SettingSpec,
 };
 use paperpaw_core::{Kernel, Warning, WarningSource};
 use paperpaw_platform::Instant;
@@ -66,7 +66,7 @@ impl Plugin for Faulty {
         r.bind_slot(slots::HOME, id("screen"), Priority(i16::MAX))?;
         r.add_action(ActionSpec::new(id("act"), "x"))?;
         r.add_setting(SettingSpec::number(
-            &LEVEL,
+            LEVEL.static_str(),
             "x",
             1,
             5,
@@ -75,6 +75,7 @@ impl Plugin for Faulty {
             } else {
                 2
             },
+            paperpaw_sdk::builtin::groups::OTHER,
         ))?;
         let log = self.harness.log.clone();
         r.subscribe(
@@ -197,12 +198,11 @@ fn a_failing_plugin_switched_off_is_listed_without_a_warning() {
 /// one loaded before.
 struct Named {
     id: &'static str,
-    sdk: Version,
 }
 
 impl Plugin for Named {
     fn manifest(&self) -> Manifest {
-        common::manifest(self.id).sdk(self.sdk)
+        common::manifest(self.id)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -215,22 +215,9 @@ fn plugins_with_taken_dotted_or_reserved_ids_are_refused() {
     let harness = Harness::new();
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(harness.plugin())
-        .plugin(Named {
-            id: "drv",
-            sdk: paperpaw_core::sdk::SDK_VERSION,
-        })
-        .plugin(Named {
-            id: "core",
-            sdk: paperpaw_core::sdk::SDK_VERSION,
-        })
-        .plugin(Named {
-            id: "drv.sub",
-            sdk: paperpaw_core::sdk::SDK_VERSION,
-        })
-        .plugin(Named {
-            id: "later",
-            sdk: Version::new(u16::MAX, 0, 0),
-        })
+        .plugin(Named { id: "drv" })
+        .plugin(Named { id: "core" })
+        .plugin(Named { id: "drv.sub" })
         .build()
         .unwrap();
     let warnings = kernel.take_warnings();
@@ -241,7 +228,7 @@ fn plugins_with_taken_dotted_or_reserved_ids_are_refused() {
             _ => None,
         })
         .collect();
-    assert_eq!(refused, ["drv", "core", "drv.sub", "later"], "{warnings:?}");
+    assert_eq!(refused, ["drv", "core", "drv.sub"], "{warnings:?}");
     // The first `drv` and the kernel are the ones that stay.
     kernel.start(Instant(0));
     assert_eq!(kernel.active_screen(), Some(&BASE));
@@ -254,10 +241,6 @@ fn plugins_with_taken_dotted_or_reserved_ids_are_refused() {
         1
     );
     assert!(kernel.plugins().get("drv.sub").is_none());
-    assert_eq!(
-        kernel.plugins().get("later").map(|p| p.state),
-        Some(PluginState::Failed)
-    );
 }
 
 /// A storage with these data plugin folders: `(folder, file, content)`.
@@ -491,7 +474,7 @@ impl Plugin for Keeper {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::fixed_text(
+            SettingSpec::text(
                 "keeper.key",
                 "keeper.key",
                 "",

@@ -39,7 +39,6 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::{events, groups, menus};
@@ -47,8 +46,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingExtra, SettingSpec,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Registrar, ScreenSpec, SettingExtra, SettingSpec,
 };
 
 pub use send::DEFAULT_NOTEBOOK;
@@ -83,7 +82,7 @@ paperpaw_sdk::event_data! {
 /// The account's settings, all set on the set-up.
 static ON_SETUP: SettingExtra = SettingExtra::new().editor(SCREEN);
 static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         SERVICE.static_str(),
         "joplin.service",
         &Service::KEYS,
@@ -92,18 +91,18 @@ static SETTINGS: [SettingSpec; 4] = [
     )
     .with_extra(&ON_SETUP)
     .kept_on_reset()
-    .described("joplin.service.help"),
-    SettingSpec::fixed_text(ADDRESS.static_str(), "joplin.address", "", groups::LIBRARY)
+    .description("joplin.service.help"),
+    SettingSpec::text(ADDRESS.static_str(), "joplin.address", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
         .kept_on_reset()
         .advanced()
-        .described("joplin.address.help"),
-    SettingSpec::fixed_text(USER.static_str(), "joplin.user", "", groups::LIBRARY)
+        .description("joplin.address.help"),
+    SettingSpec::text(USER.static_str(), "joplin.user", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
         .kept_on_reset()
         .advanced()
-        .described("joplin.user.help"),
-    SettingSpec::fixed_text(
+        .description("joplin.user.help"),
+    SettingSpec::text(
         NOTEBOOK.static_str(),
         "joplin.notebook",
         DEFAULT_NOTEBOOK,
@@ -112,7 +111,7 @@ static SETTINGS: [SettingSpec; 4] = [
     .with_extra(&ON_SETUP)
     .kept_on_reset()
     .advanced()
-    .described("joplin.notebook.help"),
+    .description("joplin.notebook.help"),
 ];
 
 /// The Joplin plugin.
@@ -142,18 +141,18 @@ impl Plugin for Joplin {
             Box::new(|env, _| Box::new(setup::SetupScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "joplin.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         let state = run.clone();
         r.add_action(ActionSpec::new(SEND, "joplin.send").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     state.borrow_mut().start(env, Start::Action, out);
                 } else {
                     let due = SEND_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));
@@ -196,7 +195,7 @@ impl Plugin for Joplin {
                 state.borrow_mut().account_changed();
             }
         })?;
-        type Step = fn(&mut Run, &Env<'_>, &HttpReply, &mut Vec<Command>);
+        type Step = fn(&mut Run, &Env<'_>, &HttpReply, &mut Commands);
         let steps: [(Event<HttpReply>, Step); 7] = [
             (send::SIGNED_IN, Run::signed_in),
             (send::CHECKED, Run::checked),
@@ -224,12 +223,12 @@ const RETRY_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("j
 const SEND_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("joplin.send-due");
 
 /// Declares the next try while notes wait.
-fn retry_later(env: &Env<'_>, out: &mut Vec<Command>) {
+fn retry_later(env: &Env<'_>, out: &mut Commands) {
     if !kept::waiting(env.storage).is_empty() {
         let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
             .within(core::time::Duration::from_secs(30 * 60))
             .at_moments(paperpaw_sdk::work::Moments::ONLINE);
-        out.push(Command::Work(work));
+        out.push(Command::work(work));
     }
 }
 

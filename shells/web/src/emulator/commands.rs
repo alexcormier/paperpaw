@@ -29,9 +29,10 @@ impl Emulator {
     ///   `rm <path>`, `mkdir <path>`, `mv <hex> <hex>`: `{}`;
     /// - `screen`: `{"screen": id}`; `screens`: `{"screens": [ids]}`;
     /// - `describe`: `{"screen": id, "parts": [{"role", "x", "y",
-    ///   "width", "height", "state", "focused", "on", "label"}]}` (state as
-    ///   the remote's: `focused`, `on`, `off`, joined by `+`, or `-`; the
-    ///   same as `focused` true or false and `on` true, false or null);
+    ///   "width", "height", "state", "focused", "on", "disabled", "label"}]}`
+    ///   (state as the remote's: `focused`, `on`, `off`, `disabled`, joined
+    ///   by `+`, or `-`; the same as `focused` and `disabled` true or false
+    ///   and `on` true, false or null);
     /// - `setting <id>`: `{"value": text}`; `settings [<prefix>]`:
     ///   `{"values": {id: text}}`; `actions [<prefix>]`: `{"actions":
     ///   [ids]}`; `plugins`: `{"plugins": [{"id", "on", "version",
@@ -221,7 +222,8 @@ impl Emulator {
             }
             Command::Usage => {
                 let u = device.kernel.usage();
-                let [fast, partial, full] = u.refreshes;
+                let (fast, partial, full) =
+                    (u.refreshes.fast, u.refreshes.partial, u.refreshes.full);
                 format!(
                     "{{\"refreshes\":[{fast},{partial},{full}],\"pixels\":{},\"inputs\":{}}}",
                     u.pixels, u.inputs
@@ -331,12 +333,12 @@ fn describe(kernel: &mut paperpaw_core::Kernel) -> String {
         .describe()
         .into_iter()
         .map(|part| {
-            let state = remote::part_state(part.focused, part.on);
+            let state = remote::part_state(part.focused, part.on, part.disabled);
             let label = if secret { String::from("•") } else { part.label.replace('\n', " ") };
             let a = part.area;
             let on = part.on.map_or(String::from("null"), |on| on.to_string());
             format!(
-                "{{\"role\":\"{:?}\",\"x\":{},\"y\":{},\"width\":{},\"height\":{},\"state\":{},\"focused\":{},\"on\":{on},\"label\":{}}}",
+                "{{\"role\":\"{:?}\",\"x\":{},\"y\":{},\"width\":{},\"height\":{},\"state\":{},\"focused\":{},\"on\":{on},\"disabled\":{},\"label\":{}}}",
                 part.role,
                 a.x,
                 a.y,
@@ -344,6 +346,7 @@ fn describe(kernel: &mut paperpaw_core::Kernel) -> String {
                 a.height,
                 json_string(&state),
                 part.focused,
+                part.disabled,
                 json_string(&label)
             )
         })

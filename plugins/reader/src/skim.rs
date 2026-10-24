@@ -54,11 +54,7 @@ impl SkimScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         // Its bar and buttons are controls: as large at every size.
-        let (margin, gap, row) = (
-            style.margin as u16,
-            style.gap as u16,
-            style.control_row as u16,
-        );
+        let (margin, gap, row) = (style.margin(), style.gap(), style.control_row());
         // The buttons' row grows with them on touch screens.
         let button_row = style.touch_row(u32::from(row)) as u16;
         // Four in a row where their names fit whole, else two rows of two,
@@ -68,7 +64,7 @@ impl SkimScreen {
             let room = width.saturating_sub((columns - 1) * gap) / columns;
             style.font(env).is_none_or(|font| {
                 BUTTONS.iter().all(|key| {
-                    font.measure(style.text, env.i18n.tr(key)) + 2.0 * style.gap as f32
+                    font.measure(style.text(), env.i18n.tr(key)) + 2.0 * style.gap() as f32
                         <= f32::from(room)
                 })
             })
@@ -113,7 +109,7 @@ impl SkimScreen {
         });
         let mut screen = Self {
             focus: None,
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             style,
             region,
             path: params.get(params::PATH).unwrap_or_default().to_string(),
@@ -150,7 +146,7 @@ impl SkimScreen {
         match MOVES[index] {
             "number" => {
                 cx.command(Command::Back);
-                cx.command(Command::RunAction(crate::actions::GO_TO_PAGE));
+                cx.command(Command::run(crate::actions::GO_TO_PAGE));
             }
             "back" => {
                 self.go("back", cx);
@@ -170,8 +166,8 @@ impl SkimScreen {
     /// inside its frame) at either end.
     fn track(&self) -> Rect {
         let style = self.style;
-        let h = (style.line * 3).max(3) as u16;
-        let inset = (self.knob() / 2 + style.gap as u16 / 2).min(self.bar.width / 4);
+        let h = (u32::from(style.line()) * 3).max(3) as u16;
+        let inset = (self.knob() / 2 + style.gap() / 2).min(self.bar.width / 4);
         Rect::new(
             self.bar.x + inset,
             self.bar.y + (self.bar.height - h) / 2,
@@ -189,65 +185,57 @@ impl Screen for SkimScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill(
-            Rect::new(r.x, r.y, r.width, (style.line * 2) as u16),
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill(
+            Rect::new(r.x, r.y, r.width, (u32::from(style.line()) * 2) as u16),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        if ui.font().is_none() {
             return;
-        };
+        }
         // Where one is: the page, then the chapter.
-        let x = f32::from(style.margin as u16);
+        let x = f32::from(style.margin());
         let info = Rect::new(
-            style.margin as u16,
-            r.y + style.gap as u16,
-            r.width.saturating_sub(2 * style.margin as u16),
-            style.row as u16,
+            style.margin(),
+            r.y + style.gap(),
+            r.width.saturating_sub(2 * style.margin()),
+            style.row(),
         );
-        let label_width = ui::draw_label(
-            canvas,
-            &font,
-            style.text,
-            x,
-            info,
-            &self.label,
-            Color::BLACK,
-        );
+        let label_end = ui::Label::new(&self.label)
+            .px(style.text())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, x, info);
         if !self.chapter.is_empty() {
-            let at = x + label_width + style.gap as f32 * 2.0;
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                at,
-                info,
-                &self.chapter,
-                style.faint(80),
-            );
+            let at = label_end + style.gap() as f32 * 2.0;
+            ui::Label::new(&self.chapter)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Detail))
+                .draw_from(&mut ui, at, info);
         }
         // The bar has the focus while no button has it, shown as the
         // style shows a focus (its own row widened by what the focus takes
         // in, so that it ends where the buttons do).
         let on_bar = self.keys && self.focus.is_none();
         if on_bar {
-            let side = style.margin as u16 / 2;
+            let side = style.margin() / 2;
             let around = Rect::new(
                 self.bar.x.saturating_sub(side),
                 self.bar.y,
                 self.bar.width + 2 * side,
                 self.bar.height,
             );
-            ui::draw_focus(canvas, &style, around);
+            ui.focus(around);
         }
         let ink = style.focus_ink(on_bar);
         // The bar: read up to here, chapters as ticks, a knob where one is.
         let track = self.track();
         let width = u32::from(track.width);
         let done = (width * self.at / 1000) as u16;
+        let canvas = ui.canvas();
         if on_bar && style.dark_focus() {
             // Gray does not show on the dark focus: a thin line of its ink.
-            let thin = (style.line as u16).max(1);
+            let thin = (style.line()).max(1);
             let y = track.y + (track.height - thin) / 2;
             canvas.fill(Rect::new(track.x, y, track.width, thin), ink);
         } else {
@@ -261,7 +249,7 @@ impl Screen for SkimScreen {
                 Rect::new(
                     tx,
                     track.y + track.height / 2 - tick / 2,
-                    (style.line as u16).max(1),
+                    (style.line()).max(1),
                     tick,
                 ),
                 ink,
@@ -276,10 +264,7 @@ impl Screen for SkimScreen {
             .focused(on_bar);
         // The buttons.
         for (i, (slot, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
-            ui::draw_button(
-                canvas,
-                env,
-                &style,
+            ui.button(
                 ui::button_in_slot(&style, *slot),
                 env.i18n.tr(key),
                 false,

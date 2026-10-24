@@ -30,7 +30,6 @@ mod shelves;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions as core_actions, events, groups, params, slots};
@@ -40,7 +39,7 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect,
+    Color, Command, Commands, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect,
     RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
 };
 
@@ -92,7 +91,7 @@ static FOLDER: paperpaw_sdk::SettingExtra =
 /// Where the archive is, and how the library shows the books (the
 /// library folder is the kernel's, [`ROOT`]).
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         ARCHIVE.static_str(),
         "files.setting.archive",
         "books/Archive",
@@ -101,23 +100,23 @@ static SETTINGS: [SettingSpec; 3] = [
     .with_extra(&FOLDER)
     .kept_on_reset()
     .advanced()
-    .described("files.setting.archive.help"),
-    SettingSpec::fixed_choice(
+    .description("files.setting.archive.help"),
+    SettingSpec::choice(
         VIEW.static_str(),
         "files.setting.view",
         &[VIEW_LIST, VIEW_COVERS],
         VIEW_LIST,
         groups::LIBRARY,
     )
-    .described("files.setting.view.help"),
-    SettingSpec::fixed_choice(
+    .description("files.setting.view.help"),
+    SettingSpec::choice(
         SORT.static_str(),
         "files.setting.sort",
         &[SORT_RECENT, SORT_NAME],
         SORT_RECENT,
         groups::LIBRARY,
     )
-    .described("files.setting.sort.help"),
+    .description("files.setting.sort.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -172,7 +171,7 @@ impl Plugin for Files {
         ] {
             r.add_action(
                 paperpaw_sdk::ActionSpec::new(action.clone(), title).handler(
-                    move |_: &Env<'_>, out: &mut Vec<Command>| {
+                    move |_: &Env<'_>, _, out: &mut Commands| {
                         out.push(Command::OpenScreen(
                             SHELF_SCREEN,
                             Params::new().with(params::MODE, mode),
@@ -184,7 +183,7 @@ impl Plugin for Files {
         }
         r.add_action(
             paperpaw_sdk::ActionSpec::new(FAVOURITES, "files.favourites").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(list::shelf::open(list::shelf::Kind::Favourites, ""));
                 },
             ),
@@ -198,17 +197,17 @@ impl Plugin for Files {
             r,
             SCREEN.as_str(),
             &[
-                paperpaw_sdk::help::Hint::touch("files.help.open"),
-                paperpaw_sdk::help::Hint::touch("files.help.hold"),
-                paperpaw_sdk::help::Hint::touch("files.help.pages"),
-                paperpaw_sdk::help::Hint::buttons("files.help.choose"),
-                paperpaw_sdk::help::Hint::buttons("files.help.more"),
+                paperpaw_sdk::help::HelpHint::touch("files.help.open"),
+                paperpaw_sdk::help::HelpHint::touch("files.help.hold"),
+                paperpaw_sdk::help::HelpHint::touch("files.help.pages"),
+                paperpaw_sdk::help::HelpHint::buttons("files.help.choose"),
+                paperpaw_sdk::help::HelpHint::buttons("files.help.more"),
             ],
         )?;
         r.add_settings(&SETTINGS)?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(SEARCH, "files.search").handler(
-                |env: &Env<'_>, out: &mut Vec<Command>| {
+                |env: &Env<'_>, _, out: &mut Commands| {
                     out.push(
                         ask::text(env.i18n.tr("files.search.prompt"), &SEARCH_ENTERED).command(),
                     );
@@ -233,7 +232,7 @@ impl Plugin for Files {
         // The shelves as a submenu: an action named like its menu.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(SHELVES_MENU, "files.shelves").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(Command::OpenSlot(
                         slots::MENU,
                         Params::new().with(params::MENU, String::from(SHELVES_MENU.as_str())),
@@ -276,13 +275,13 @@ impl Plugin for Files {
 /// The corners of covers, `area` the place of one: the style's, but as
 /// small as a book's, so a narrow cover stays a box.
 pub(crate) fn cover_radius(style: &UiStyle, area: Rect) -> u32 {
-    style.corner.min(u32::from(area.width.min(area.height)) / 8)
+    u32::from(style.corner()).min(u32::from(area.width.min(area.height)) / 8)
 }
 
 /// The corners of covers' pictures: as [`cover_radius`] where corners
 /// are round (at least the gap), square for smaller ones, as before.
 pub(crate) fn picture_radius(style: &UiStyle, area: Rect) -> u32 {
-    if style.corner >= style.gap {
+    if u32::from(style.corner()) >= u32::from(style.gap()) {
         cover_radius(style, area)
     } else {
         0
@@ -307,17 +306,17 @@ pub(crate) fn stem_and_format(name: &str) -> (&str, String) {
 /// A book without a cover: an outline with the title's first letter,
 /// large, and the format below it.
 pub(crate) fn draw_placeholder(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
+    ui: &mut ui::Ui<'_>,
     area: Rect,
     title: &str,
     format: &str,
     color: Color,
 ) {
+    let style = ui.style();
     let radius = cover_radius(style, area);
-    canvas.stroke_round(area, ui::button_border(style), radius, color);
-    let Some(font) = style.font(env) else {
+    ui.canvas()
+        .stroke_round(area, ui::button_border(style), radius, color);
+    let Some(font) = ui.font() else {
         return;
     };
     let center = |text: &str, size: f32| {
@@ -337,37 +336,30 @@ pub(crate) fn draw_placeholder(
     });
     let (upper, lower) = (area.height * 3 / 5, area.height * 2 / 5);
     // As large as titles and a bit, or as fits in the upper part.
-    let mut size = style.title * 1.3;
+    let mut size = style.title() * 1.3;
     let height = font.line_metrics(size).line_height;
     if height > f32::from(upper) {
         size *= f32::from(upper) / height;
     }
     match initial {
-        Some(initial) if size >= style.text => {
+        Some(initial) if size >= style.text() => {
             let top = Rect::new(area.x, area.y, area.width, upper);
-            ui::draw_label(
-                canvas,
-                &font,
-                size,
-                center(initial, size),
-                top,
-                initial,
-                color,
-            );
+            ui::Label::new(initial)
+                .px(size)
+                .color(color)
+                .draw_from(ui, center(initial, size), top);
             let bottom = Rect::new(area.x, area.y + upper, area.width, lower);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                center(format, style.small),
-                bottom,
-                format,
-                color,
-            );
+            ui::Label::new(format)
+                .px(style.small())
+                .color(color)
+                .draw_from(ui, center(format, style.small()), bottom);
         }
         _ => {
-            let x = center(format, style.small);
-            ui::draw_label(canvas, &font, style.small, x, area, format, color);
+            let x = center(format, style.small());
+            ui::Label::new(format)
+                .px(style.small())
+                .color(color)
+                .draw_from(ui, x, area);
         }
     }
 }

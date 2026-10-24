@@ -124,8 +124,8 @@ impl PageScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
+        let top = header.area().height + style.gap();
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         // The rows go below the text, where it ends (see `draw`).
         let area = Rect::new(0, top, display.width, status.y.saturating_sub(top));
@@ -139,7 +139,7 @@ impl PageScreen {
             .and_then(|(n, index)| index.entry(env.storage, n))
             .filter(|plugin| plugin.id == id);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             top,
             status,
             id,
@@ -256,9 +256,9 @@ impl PageScreen {
         let language = env.i18n.language();
         let url = catalog::plugin_url(list.trim(), device.name, language, &self.id);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
-        request.save_to = Some(catalog::plugin_part(&self.id));
-        request.params = Params::new().with(params::ID, self.id.clone());
-        cx.command(Command::Http(request));
+        request = request.save_to(catalog::plugin_part(&self.id));
+        request = request.with(Params::new().with(params::ID, self.id.clone()));
+        cx.command(Command::http(request));
         self.details = Details::Asked(url);
     }
 
@@ -327,7 +327,7 @@ impl PageScreen {
         }
         match &self.details {
             Details::Here(plugin) => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 trust::expect(env.storage, &plugin.entry.id, plugin.author_key.as_ref());
                 if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
@@ -372,7 +372,7 @@ impl PageScreen {
                     INSTALLER.cancel(env.storage);
                     self.job = None;
                     // The next update waiting has its turn.
-                    let mut out = Vec::new();
+                    let mut out = paperpaw_sdk::Commands::new();
                     queue::next(&env, &mut out);
                     for command in out {
                         cx.command(command);
@@ -384,7 +384,7 @@ impl PageScreen {
                 self.redraw(cx);
             }
             Some(Row::Anyway) => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 if trust::install_anyway(&env, &mut out).is_none() {
                     INSTALLER.cancel(env.storage);
                     out.push(failed(&env, &plugin.name));
@@ -400,7 +400,7 @@ impl PageScreen {
             Some(Row::Stop) => {
                 INSTALLER.cancel(env.storage);
                 // Only this one stops: the next update waiting goes on.
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 queue::next(&env, &mut out);
                 for command in out {
                     cx.command(command);
@@ -607,14 +607,9 @@ impl Screen for PageScreen {
         let style = self.style;
         let rows = self.rows(env);
         let title = self.plugin.as_ref().map_or("", |p| p.name.as_str());
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            title,
-            None,
-            self.list.paging(rows.len()),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(rows.len()));
         let Some(plugin) = &self.plugin else {
             let (icon, title, text) = match self.details {
                 Details::Failed => ("cloud", "store.gone", "store.gone.help"),
@@ -631,7 +626,7 @@ impl Screen for PageScreen {
             } else {
                 env.i18n.tr(text)
             };
-            ui::draw_empty(canvas, env, &style, area, icon, env.i18n.tr(title), text);
+            ui.empty(area, icon, env.i18n.tr(title), text);
             return;
         };
         let Some(font) = style.font(env) else {
@@ -639,7 +634,7 @@ impl Screen for PageScreen {
         };
         // What it does (or the notice, the warning), then the facts in
         // small print, then what can be done, each right below the other.
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let width = f32::from(self.list.area().width) - 2.0 * margin;
         let mut y = f32::from(self.top);
         let paragraph = |canvas: &mut Canvas<'_>,
@@ -674,43 +669,39 @@ impl Screen for PageScreen {
         };
         let (text, facts) = self.texts(env, plugin);
         paragraph(
-            canvas,
+            ui.canvas(),
             &mut y,
             &text,
-            style.text,
+            style.text(),
             Color::BLACK,
             SUMMARY_LINES,
             0.0,
         );
-        y += style.gap as f32;
+        y += style.gap() as f32;
         // The facts each after its icon, their texts lined up.
-        let room = f32::from(ui::icon_room(env, &style, true));
-        let icon_size = style.small * ui::ICON_SCALE;
-        let line = font.line_metrics(style.small).line_height;
+        let room = f32::from(ui.icon_room(true));
+        let icon_size = style.small() * ui::ICON_SCALE;
+        let line = font.line_metrics(style.small()).line_height;
         for (icon, fact) in facts {
             let first = Rect::new(0, y as u16, self.list.area().width, line as u16);
-            let ink = style.faint(80);
-            ui::draw_icon(canvas, env, icon, icon_size, margin, first, ink);
-            paragraph(canvas, &mut y, &fact, style.small, ink, 3, room);
-            y += style.gap as f32 / 3.0;
+            let ink = style.faint(ui::Ink::Detail);
+            ui.icon(icon, icon_size, margin, first, ink);
+            paragraph(ui.canvas(), &mut y, &fact, style.small(), ink, 3, room);
+            y += style.gap() as f32 / 3.0;
         }
-        let gap = style.gap as u16;
+        let gap = style.gap();
         self.list.area().y = y as u16 + gap;
         self.list.area().height = self.status.y.saturating_sub(self.list.area().y);
         let texts: Vec<(String, String)> = rows
             .iter()
             .map(|&row| self.row_text(env, plugin, row))
             .collect();
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (name, value) = &texts[index];
-                ui::draw_value_row(canvas, env, &style, rect, focused, name, value);
-            },
-        );
-        canvas.fill(self.status, Color::WHITE);
+                ui::Row::value(name, value).focused(focused).draw(ui, rect);
+            });
+        ui.canvas().fill(self.status, Color::WHITE);
         let note = match (&self.job, rows.first()) {
             (Some(job), Some(Row::Stop)) if job.plugin == plugin.id => {
                 env.i18n.tr("store.downloading").to_string()
@@ -722,7 +713,7 @@ impl Screen for PageScreen {
             _ => String::new(),
         };
         if !note.is_empty() {
-            ui::draw_note_line(canvas, env, &style, self.status, &note);
+            ui.note_line(self.status, &note);
         }
     }
 
@@ -761,7 +752,7 @@ impl Screen for PageScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {
@@ -782,7 +773,7 @@ impl Screen for PageScreen {
                 && let Ok(plugin) = Id::parse(&picked.path)
             {
                 let env = *cx.env();
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 INSTALLER.remove(&env, &plugin, &mut out);
                 let name = self.plugin.as_ref().map_or("", |p| p.name.as_str());
                 out.push(Command::Notify(

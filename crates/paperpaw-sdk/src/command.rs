@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -17,21 +18,38 @@ use paperpaw_platform::RefreshMode;
 #[non_exhaustive]
 pub struct HttpRequest {
     /// `GET`, `PUT`, `POST`, …
+    method: String,
+    url: String,
+    headers: Vec<(String, String)>,
+    body: Option<String>,
+    /// A file in storage to send as the body instead, e.g. a database to
+    /// upload.
+    body_from: Option<String>,
+    /// A file in storage to write the response's body to (also large
+    /// ones, e.g. a download); the reply then has no `body`.
+    save_to: Option<String>,
+    reply: Id,
+    params: Params,
+    /// What few requests set, kept apart so that commands stay small
+    /// ([`options`](Self::options)).
+    options: Option<alloc::boxed::Box<HttpOptions>>,
+}
+
+/// An [`HttpRequest`]'s parts, for the kernel to take over.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct HttpParts {
     pub method: String,
     pub url: String,
     pub headers: Vec<(String, String)>,
     pub body: Option<String>,
-    /// A file in storage to send as the body instead, e.g. a database to
-    /// upload.
     pub body_from: Option<String>,
-    /// A file in storage to write the response's body to (also large
-    /// ones, e.g. a download); the reply then has no `body`.
     pub save_to: Option<String>,
     pub reply: Id,
     pub params: Params,
-    /// What few requests set, kept apart so that commands stay small
-    /// ([`options`](Self::options)).
-    options: Option<alloc::boxed::Box<HttpOptions>>,
+    pub options: HttpOptions,
 }
 
 /// What few requests set ([`HttpRequest::options`]).
@@ -82,6 +100,61 @@ impl HttpRequest {
         self.options.as_deref().unwrap_or(&NO_OPTIONS)
     }
 
+    /// Its method, e.g. `GET`.
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    pub fn headers(&self) -> &[(String, String)] {
+        &self.headers
+    }
+
+    /// The body it sends, as text ([`body`](Self::body)).
+    pub fn body_text(&self) -> Option<&str> {
+        self.body.as_deref()
+    }
+
+    /// The file it sends as its body ([`body_from`](Self::body_from)).
+    pub fn body_file(&self) -> Option<&str> {
+        self.body_from.as_deref()
+    }
+
+    /// Where its answer's body is saved ([`save_to`](Self::save_to)).
+    pub fn save_path(&self) -> Option<&str> {
+        self.save_to.as_deref()
+    }
+
+    /// The event its answer comes as.
+    pub fn reply(&self) -> &Id {
+        &self.reply
+    }
+
+    /// The parameters passed back with its answer.
+    pub fn params(&self) -> &Params {
+        &self.params
+    }
+
+    /// Its parts, taken over by the kernel.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn into_parts(self) -> HttpParts {
+        HttpParts {
+            method: self.method,
+            url: self.url,
+            headers: self.headers,
+            body: self.body,
+            body_from: self.body_from,
+            save_to: self.save_to,
+            reply: self.reply,
+            params: self.params,
+            options: self.options.map(|o| *o).unwrap_or_default(),
+        }
+    }
+
     fn options_mut(&mut self) -> &mut HttpOptions {
         self.options.get_or_insert_with(Default::default)
     }
@@ -121,6 +194,12 @@ impl HttpRequest {
         self
     }
 
+    /// With this parameter too, passed back with the reply.
+    pub fn param(mut self, key: impl Into<Cow<'static, str>>, value: impl Into<String>) -> Self {
+        self.params.set(key, value);
+        self
+    }
+
     /// Taking at most this long in all.
     pub fn timeout(mut self, timeout: core::time::Duration) -> Self {
         self.options_mut().timeout = Some(timeout);
@@ -145,13 +224,27 @@ impl HttpRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ServerResponse {
-    /// The request's number ([`server_params::REQUEST`]).
+    /// The request's number ([`ServerNotice::Request`](crate::ServerNotice::Request)).
+    request: u32,
+    status: u16,
+    content_type: String,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+    /// A file in storage to send as the body instead.
+    body_from: Option<String>,
+}
+
+/// A [`ServerResponse`]'s parts, for the kernel to take over.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct ResponseParts {
     pub request: u32,
     pub status: u16,
     pub content_type: String,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
-    /// A file in storage to send as the body instead.
     pub body_from: Option<String>,
 }
 
@@ -166,6 +259,112 @@ impl ServerResponse {
             body,
             body_from: None,
         }
+    }
+
+    /// With this header.
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.push((name.into(), value.into()));
+        self
+    }
+
+    /// With the file at this storage path as its body.
+    pub fn body_from(mut self, path: impl Into<String>) -> Self {
+        self.body_from = Some(path.into());
+        self
+    }
+
+    /// The number of the request it answers.
+    pub fn request(&self) -> u32 {
+        self.request
+    }
+
+    pub fn status(&self) -> u16 {
+        self.status
+    }
+
+    pub fn content_type(&self) -> &str {
+        &self.content_type
+    }
+
+    pub fn headers(&self) -> &[(String, String)] {
+        &self.headers
+    }
+
+    pub fn body(&self) -> &[u8] {
+        &self.body
+    }
+
+    /// The file it sends as its body ([`body_from`](Self::body_from)).
+    pub fn body_file(&self) -> Option<&str> {
+        self.body_from.as_deref()
+    }
+
+    /// Its parts, taken over by the kernel.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn into_parts(self) -> ResponseParts {
+        ResponseParts {
+            request: self.request,
+            status: self.status,
+            content_type: self.content_type,
+            headers: self.headers,
+            body: self.body,
+            body_from: self.body_from,
+        }
+    }
+}
+
+/// UDP datagrams to the local network (see [`Command::Broadcast`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Broadcast {
+    id: Id,
+    ports: Vec<u16>,
+    data: Vec<u8>,
+    wait_ms: u32,
+    events: Id,
+}
+
+impl Broadcast {
+    /// `data` to `ports`, answers within `wait_ms` heard as `events` with
+    /// `id`.
+    pub fn new(id: Id, ports: Vec<u16>, data: Vec<u8>, wait_ms: u32, events: Id) -> Self {
+        Self {
+            id,
+            ports,
+            data,
+            wait_ms,
+            events,
+        }
+    }
+
+    pub fn id(&self) -> &Id {
+        &self.id
+    }
+
+    pub fn ports(&self) -> &[u16] {
+        &self.ports
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// How long answers are waited for, in milliseconds.
+    pub fn wait_ms(&self) -> u32 {
+        self.wait_ms
+    }
+
+    /// The event the answers come as.
+    pub fn events(&self) -> &Id {
+        &self.events
+    }
+
+    /// Its data, taken over by the kernel.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn into_data(self) -> Vec<u8> {
+        self.data
     }
 }
 
@@ -194,10 +393,10 @@ pub mod server_params {
 #[non_exhaustive]
 pub enum SocketRead {
     /// What has come, up to `max` bytes, as text (UTF-8; invalid bytes
-    /// replaced): the event [`socket_params::RECEIVED`] with it.
+    /// replaced): the notice [`SocketNotice::Received`](crate::SocketNotice::Received) with it.
     Text { max: u32 },
     /// Exactly `len` bytes, written to `path` in storage as they come (a
-    /// file there is replaced): the event [`socket_params::SAVED`] once
+    /// file there is replaced): the notice [`SocketNotice::Saved`](crate::SocketNotice::Saved) once
     /// they all came, so files of any size never need to fit in memory.
     File { path: String, len: u64 },
 }
@@ -242,73 +441,113 @@ pub mod http_params {
     /// Before a header's name in lower case, for the headers asked for
     /// ([`HttpOptions::want_headers`](crate::HttpOptions::want_headers)), e.g. `header:last-modified`.
     pub const HEADER: &str = "header:";
+    /// Why there was no answer, as [`HttpError::as_str`](crate::HttpError::as_str)
+    /// writes it.
+    pub const ERROR: &str = "error";
+    /// `true` where the body was cut to the most the request takes.
+    pub const TRUNCATED: &str = "truncated";
 }
 
 /// Text to speak aloud (see [`Command::Speak`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Speech {
-    pub text: String,
+    text: String,
     /// The language of the text, e.g. `de` or `en-GB`, for the voice;
     /// empty for the system's.
-    pub language: String,
+    language: String,
     /// How fast, in percent of the voice's normal speed.
-    pub rate: u16,
-    /// Emitted with `params` once the text has been spoken, with
-    /// [`speech_params::FAILED`] if it could not be.
-    pub reply: Id,
-    pub params: Params,
+    rate: u16,
+    /// Emitted once the text has been spoken, or could not be: a
+    /// [`Spoken`](crate::replies::Spoken) with `params`.
+    reply: Id,
+    params: Params,
     /// Spoken after the texts given before instead of replacing them: the
     /// next sentence handed over while one is spoken follows without a
     /// pause.
-    pub queue: bool,
+    queue: bool,
 }
 
 impl Speech {
     /// `text` in the system's language at normal speed.
-    pub fn new(text: impl Into<String>, reply: Id) -> Self {
+    pub fn new(text: impl Into<String>, reply: impl Into<Id>) -> Self {
         Self {
             text: text.into(),
             language: String::new(),
             rate: 100,
-            reply,
+            reply: reply.into(),
             params: Params::new(),
             queue: false,
         }
     }
 
     /// In the language with this tag (empty: the system's).
-    pub fn language(mut self, language: impl Into<String>) -> Self {
+    pub fn in_language(mut self, language: impl Into<String>) -> Self {
         self.language = language.into();
         self
     }
 
     /// At `rate` percent of the normal speed.
-    pub fn rate(mut self, rate: u16) -> Self {
+    pub fn at_rate(mut self, rate: u16) -> Self {
         self.rate = rate;
         self
     }
 
     /// With `params` passed back in the reply.
-    pub fn params(mut self, params: Params) -> Self {
+    pub fn with(mut self, params: Params) -> Self {
         self.params = params;
         self
     }
 
     /// After what is being spoken, instead of in its place.
-    pub fn queue(mut self, queue: bool) -> Self {
+    pub fn queued(mut self, queue: bool) -> Self {
         self.queue = queue;
         self
+    }
+
+    /// The text to speak.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// The language's tag, e.g. `de`; empty for the system's.
+    pub fn language(&self) -> &str {
+        &self.language
+    }
+
+    /// How fast, in percent of the voice's normal speed.
+    pub fn rate(&self) -> u16 {
+        self.rate
+    }
+
+    /// The event its reply comes as.
+    pub fn reply(&self) -> &Id {
+        &self.reply
+    }
+
+    /// The parameters passed back with its reply.
+    pub fn params(&self) -> &Params {
+        &self.params
+    }
+
+    /// Whether it is spoken after what is being spoken.
+    pub fn is_queued(&self) -> bool {
+        self.queue
+    }
+
+    /// Its text, taken over by the kernel.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn into_text(self) -> String {
+        self.text
     }
 
     /// Its reply: it was `spoken`, or could not be (a plugin's voice
     /// answers so, see [`voices`](crate::voices)).
     pub fn answer(&self, spoken: bool) -> Command {
-        let params = match spoken {
-            true => self.params.clone(),
-            false => self.params.clone().with(speech_params::FAILED, "1"),
-        };
-        Command::Emit(self.reply.clone(), params)
+        use crate::event::EventData;
+        let reply = crate::replies::Spoken::new(spoken, self.params.clone());
+        Command::Emit(self.reply.clone(), reply.into_params())
     }
 }
 
@@ -358,11 +597,6 @@ pub enum Command {
     /// and these params, else in place of what the slot shows (one
     /// launcher of several, chosen once).
     OpenInSlot(Id, Id, Params),
-    /// Runs action `.0` with params `.1`, as [`Command::RunAction`]: a
-    /// handler made with [`ActionSpec::handler_with`](crate::ActionSpec::handler_with)
-    /// gets them (a screen that takes the action does not), e.g. a
-    /// rule applying the profile it names.
-    RunActionWith(Id, Params),
     /// Runs action `.0`'s own handler with params `.1`, past the handlers
     /// put in its place and the screens: for a handler put in its place
     /// that does more around it. Only from such a handler of action `.0`
@@ -395,7 +629,7 @@ pub enum Command {
     /// (`[slots]`), e.g. "use this as the home screen?".
     BindSlot(Id, Option<Id>),
     /// Shows the row of hints for a few seconds on a screen that has it
-    /// only on a press ([`Hints::OnPress`](crate::Hints)).
+    /// only on a press ([`HintVisibility::OnPress`](crate::HintVisibility)).
     ShowHints,
     /// Changes a setting; invalid values are rejected with a warning.
     SetSetting(Id, SettingValue),
@@ -418,8 +652,12 @@ pub enum Command {
     Redraw(RefreshMode),
     /// Notifies all subscribers of an event, then every open screen.
     Emit(Id, Params),
-    /// Runs an action as if the user had triggered it (e.g. from a menu).
-    RunAction(Id),
+    /// Runs action `.0` as if the user had triggered it (e.g. from a
+    /// menu), with params `.1`: its handler gets them, and so does a
+    /// screen that takes it ([`Cx::params`](crate::Cx::params)), e.g. a
+    /// rule applying the profile it names. [`Command::run`] runs it
+    /// without.
+    RunAction(Id, Params),
     /// Switches a plugin on or off in `paperpaw.ini`; applies after a
     /// restart. The kernel refuses plugins that cannot be switched off
     /// (see [`PluginInfo::can_switch_off`](crate::PluginInfo)).
@@ -452,7 +690,8 @@ pub enum Command {
     InstallPlugin(Id, String),
     /// Makes an HTTP request (see [`HttpRequest`]); the answer comes as
     /// the request's reply event. Check [`Capabilities::network`](crate::Capabilities) first.
-    Http(HttpRequest),
+    /// Made with [`Command::http`].
+    Http(alloc::boxed::Box<HttpRequest>),
     /// Uses the settings stored in the file at this storage path for
     /// [scoped](crate::SettingSpec::scoped) settings, e.g. those of the
     /// book being read, while the screen that sent it stays open; `None`
@@ -497,7 +736,7 @@ pub enum Command {
     Screenshot(String),
     /// Keeps or removes a password or key (see
     /// [`secrets`](crate::secrets)), saved at once.
-    SetSecret(crate::secrets::SecretChange),
+    SetSecret(alloc::boxed::Box<crate::secrets::SecretChange>),
     /// Tells the radio what to do, where PaperPaw manages Wi-Fi
     /// ([`Env::wifi`](crate::Env)); see [`wifi`](crate::wifi). Ignored
     /// elsewhere.
@@ -510,7 +749,7 @@ pub enum Command {
     NoNetwork,
     /// Declares work for the kernel to run at the cheapest moment (see
     /// [`work`](crate::work)): the same id replaces what was declared.
-    Work(crate::work::Work),
+    Work(alloc::boxed::Box<crate::work::Work>),
     /// Takes back the work declared with this id and key (none: every
     /// key of the id), if it has not run; requests made already are taken
     /// back with [`CancelHttp`](Self::CancelHttp).
@@ -539,8 +778,8 @@ pub enum Command {
     /// Serves HTTP to the local network on `port` (shells that cannot say
     /// so with a failure). Everything about the server comes as the event
     /// `events`: that it started (with its address), each request (answer
-    /// with [`Command::Respond`]), that it failed or stopped; see
-    /// [`server_params`]. Serve only while the user wants it: a server
+    /// with [`Command::Respond`]), that it failed or stopped: a
+    /// [`ServerNotice`](crate::ServerNotice). Serve only while the user wants it: a server
     /// also stops when the screen showing as it started is closed.
     #[non_exhaustive]
     Serve { server: Id, port: u16, events: Id },
@@ -550,8 +789,8 @@ pub enum Command {
     /// [ADR 0014](https://github.com/hthoene/paperpaw/blob/main/docs/adr/0014-sockets-for-plugins.md)).
     /// Everything about it comes as the event `events`, with `id` the
     /// socket ([`params::ID`](crate::builtin::params::ID)) and what
-    /// happened ([`socket_params`]): connected, received, saved, closed,
-    /// failed. Nothing is read unasked ([`Command::SocketRead`]). A socket
+    /// happened, a [`SocketNotice`](crate::SocketNotice): connected,
+    /// received, saved, closed, failed. Nothing is read unasked ([`Command::SocketRead`]). A socket
     /// also closes when the screen showing as it was opened is closed.
     #[non_exhaustive]
     Connect {
@@ -570,18 +809,11 @@ pub enum Command {
     Disconnect(Id),
     /// Sends `data` as a UDP datagram to the local network on each of
     /// `ports`, e.g. to find a service. Each answer within `wait_ms` comes
-    /// as the event `events` ([`socket_params::ANSWER`], with `id`), then
-    /// [`socket_params::DONE`].
-    #[non_exhaustive]
-    Broadcast {
-        id: Id,
-        ports: Vec<u16>,
-        data: Vec<u8>,
-        wait_ms: u32,
-        events: Id,
-    },
-    /// Answers a request of a server.
-    Respond(ServerResponse),
+    /// as the event `events` ([`SocketNotice::Answer`](crate::SocketNotice::Answer), with `id`), then
+    /// [`SocketNotice::Done`](crate::SocketNotice::Done). Made with [`Command::broadcast`].
+    Broadcast(alloc::boxed::Box<Broadcast>),
+    /// Answers a request of a server. Made with [`Command::respond`].
+    Respond(alloc::boxed::Box<ServerResponse>),
     /// Asks for the text on the clipboard (see
     /// [`Env::clipboard`](crate::Env)). It comes as the event `.0` with
     /// the parameters `.1` plus `text` ([`params::TEXT`](crate::builtin::params::TEXT)),
@@ -590,10 +822,10 @@ pub enum Command {
     ReadClipboard(Id, Params),
     /// Speaks text aloud where the device can
     /// ([`Capabilities::speech`](crate::Capabilities)), instead of what is being spoken or
-    /// after it ([`Speech::queue`]). Without speech the reply comes at
+    /// after it (`Speech::queue`). Without speech the reply comes at
     /// once, failed. Speech stops when the screen that started it is
-    /// closed.
-    Speak(Speech),
+    /// closed. Made with [`Command::speak`].
+    Speak(alloc::boxed::Box<Speech>),
     /// Stops speaking; no reply comes for the texts cut off.
     StopSpeaking,
 }
@@ -642,13 +874,33 @@ impl Command {
     /// [`Command::Broadcast`]: `data` to `ports` on the local network,
     /// answers within `wait_ms` heard as `events` with `id`.
     pub fn broadcast(id: Id, ports: Vec<u16>, data: Vec<u8>, wait_ms: u32, events: Id) -> Self {
-        Command::Broadcast {
-            id,
-            ports,
-            data,
-            wait_ms,
-            events,
-        }
+        let broadcast = Broadcast::new(id, ports, data, wait_ms, events);
+        Command::Broadcast(alloc::boxed::Box::new(broadcast))
+    }
+
+    /// [`Command::Http`]: makes `request`.
+    pub fn http(request: HttpRequest) -> Self {
+        Command::Http(alloc::boxed::Box::new(request))
+    }
+
+    /// [`Command::Respond`]: answers a server's request with `response`.
+    pub fn respond(response: ServerResponse) -> Self {
+        Command::Respond(alloc::boxed::Box::new(response))
+    }
+
+    /// [`Command::Speak`]: speaks `speech`.
+    pub fn speak(speech: Speech) -> Self {
+        Command::Speak(alloc::boxed::Box::new(speech))
+    }
+
+    /// [`Command::Work`]: declares `work`.
+    pub fn work(work: crate::work::Work) -> Self {
+        Command::Work(alloc::boxed::Box::new(work))
+    }
+
+    /// [`Command::SetSecret`]: makes `change`.
+    pub fn set_secret(change: crate::secrets::SecretChange) -> Self {
+        Command::SetSecret(alloc::boxed::Box::new(change))
     }
 }
 
@@ -664,8 +916,24 @@ impl Command {
         Command::SetSetting(setting.id().clone(), T::write(value))
     }
 
+    /// [`Command::RunAction`]: runs `action` without params.
+    pub fn run(action: impl Into<Id>) -> Command {
+        Command::RunAction(action.into(), Params::new())
+    }
+
     /// Opens a slot without parameters.
     pub fn open_slot(slot: Id) -> Command {
         Command::OpenSlot(slot, Params::new())
+    }
+}
+
+#[cfg(test)]
+mod size {
+    /// Commands are queued by the hundred: the large ones are boxed, so
+    /// that every command takes no more than a few words.
+    #[test]
+    fn commands_stay_small() {
+        let size = core::mem::size_of::<super::Command>();
+        assert!(size <= 88, "Command takes {size} bytes");
     }
 }

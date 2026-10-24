@@ -92,7 +92,7 @@ impl WifiPage {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height - top);
         Self {
             policy,
@@ -219,7 +219,7 @@ impl WifiPage {
         {
             return false;
         }
-        cx.command(Command::SetSecret(wifi::forget(&network.ssid)));
+        cx.command(Command::set_secret(wifi::forget(&network.ssid)));
         if env.wifi.and_then(|w| w.state.ssid()) == Some(&network.ssid) {
             cx.command(Command::Wifi(WifiCommand::Leave));
         }
@@ -238,99 +238,64 @@ impl Screen for WifiPage {
         let rows = Self::rows(env);
         let len = rows.len();
         let title = env.i18n.tr("wifi.title");
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         let Some(wifi) = env.wifi else {
             return;
         };
         let known = wifi::known(env.secrets.iter());
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                let tr = |key| env.i18n.tr(key);
-                match &rows[row] {
-                    Row::Radio => ui::draw_switch_row(
-                        canvas,
-                        env,
-                        &style,
-                        rect,
-                        focused,
-                        title,
-                        &state_text(env, &wifi.state, wifi.scanning),
-                        wifi.state.is_on(),
-                    ),
-                    Row::Network(network) => {
-                        let saved = known.iter().any(|(ssid, _)| *ssid == network.ssid);
-                        let note = network_note(env, network, &wifi.state, saved);
-                        ui::draw_noted_row(
-                            canvas,
-                            env,
-                            &style,
-                            rect,
-                            focused,
-                            &network.ssid,
-                            "",
-                            &note,
-                        );
-                    }
-                    Row::Search => {
-                        let note = if wifi.scanning {
-                            tr("wifi.state.searching")
-                        } else if wifi.networks.is_empty() {
-                            tr("wifi.no-networks")
-                        } else {
-                            ""
-                        };
-                        ui::draw_noted_row(
-                            canvas,
-                            env,
-                            &style,
-                            rect,
-                            focused,
-                            tr("wifi.search"),
-                            "",
-                            note,
-                        );
-                    }
-                    Row::OnDemand | Row::WhileCharging => {
-                        let (id, key) = if rows[row] == Row::OnDemand {
-                            (ON_DEMAND, "wifi.setting.on-demand")
-                        } else {
-                            (WHILE_CHARGING, "wifi.setting.while-charging")
-                        };
-                        let help = alloc::format!("{key}.help");
-                        ui::draw_switch_row(
-                            canvas,
-                            env,
-                            &style,
-                            rect,
-                            focused,
-                            tr(key),
-                            env.i18n.tr(&help),
-                            env.settings.bool(id.as_str()),
-                        );
-                    }
-                    Row::Phone => ui::draw_noted_row(
-                        canvas,
-                        env,
-                        &style,
-                        rect,
-                        focused,
-                        tr("wifi.phone.title"),
-                        "›",
-                        tr("wifi.phone.note"),
-                    ),
-                    Row::IdleOff => ui::draw_noted_row(
-                        canvas,
-                        env,
-                        &style,
-                        rect,
-                        focused,
-                        tr("wifi.setting.idle-off"),
-                        tr(env.settings.read(&IDLE_OFF)),
-                        tr("wifi.setting.idle-off.help"),
-                    ),
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            let tr = |key| env.i18n.tr(key);
+            let line = match &rows[row] {
+                Row::Radio => {
+                    let state = state_text(env, &wifi.state, wifi.scanning);
+                    return ui::Row::switch(title, wifi.state.is_on())
+                        .note(&state)
+                        .focused(focused)
+                        .draw(ui, rect);
                 }
-            });
+                Row::Network(network) => {
+                    let saved = known.iter().any(|(ssid, _)| *ssid == network.ssid);
+                    let note = network_note(env, network, &wifi.state, saved);
+                    return ui::Row::plain(&network.ssid)
+                        .note(&note)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+                Row::Search => {
+                    let note = if wifi.scanning {
+                        tr("wifi.state.searching")
+                    } else if wifi.networks.is_empty() {
+                        tr("wifi.no-networks")
+                    } else {
+                        ""
+                    };
+                    ui::Row::plain(tr("wifi.search")).note(note)
+                }
+                Row::OnDemand | Row::WhileCharging => {
+                    let (id, key) = if rows[row] == Row::OnDemand {
+                        (ON_DEMAND, "wifi.setting.on-demand")
+                    } else {
+                        (WHILE_CHARGING, "wifi.setting.while-charging")
+                    };
+                    let help = alloc::format!("{key}.help");
+                    return ui::Row::switch(tr(key), env.settings.bool(id.as_str()))
+                        .note(env.i18n.tr(&help))
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+                Row::Phone => {
+                    ui::Row::value(tr("wifi.phone.title"), "›").note(tr("wifi.phone.note"))
+                }
+                Row::IdleOff => ui::Row::value(
+                    tr("wifi.setting.idle-off"),
+                    tr(env.settings.read(&IDLE_OFF)),
+                )
+                .note(tr("wifi.setting.idle-off.help")),
+            };
+            line.focused(focused).draw(ui, rect);
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -403,7 +368,7 @@ impl Screen for WifiPage {
                 .header
                 .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::{Chosen, Typed};
+use paperpaw_sdk::replies::{FolderChosen, Typed};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
@@ -20,7 +20,7 @@ use crate::catalogs::{self, Catalog};
 /// The keyboard's reply with a field's new text.
 const ENTERED: Event<Typed> = Event::new("opds.entered");
 /// The folder chooser's reply.
-const FOLDER_CHOSEN: Event<Chosen> = Event::new("opds.folder-chosen");
+const FOLDER_CHOSEN: Event<FolderChosen> = Event::new("opds.folder-chosen");
 /// Parameter of the reply: which field.
 const FIELD: &str = "field";
 
@@ -97,7 +97,7 @@ impl EditScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let index = params
             .get(ID)
@@ -126,7 +126,7 @@ impl EditScreen {
         };
         if let Some(slot) = all.get_mut(self.index) {
             *slot = self.catalog.clone();
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             catalogs::save(env, &all, &mut out);
             for command in out {
                 cx.command(command);
@@ -197,10 +197,9 @@ impl EditScreen {
 impl Screen for EditScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             &self.catalog.name,
             None,
             self.list.paging(FIELDS.len()),
@@ -208,23 +207,25 @@ impl Screen for EditScreen {
         let values: Vec<String> = FIELDS.iter().map(|&f| self.value(env, f)).collect();
         let (on, webdav) = (self.catalog.sync, self.catalog.webdav);
         let catalog = &self.catalog;
-        self.list.draw(
-            canvas,
-            &style,
-            FIELDS.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, FIELDS.len(), |ui, index, rect, focused| {
                 let field = FIELDS[index];
                 let title = env.i18n.tr(field.key());
                 let note = env.i18n.tr(field.help(catalog));
                 if field == Field::Sync || field == Field::WebDav {
                     let on = if field == Field::Sync { on } else { webdav };
-                    ui::draw_switch_row(canvas, env, &style, rect, focused, title, note, on);
+                    ui::Row::switch(title, on)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
                 } else {
                     let value = &values[index];
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, value, note);
+                    ui::Row::value(title, value)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
                 }
-            },
-        );
+            });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -252,7 +253,7 @@ impl Screen for EditScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, FIELDS.len()) else {

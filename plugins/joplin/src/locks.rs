@@ -51,23 +51,17 @@ pub fn request(
     reply: &Event<HttpReply>,
 ) -> HttpRequest {
     let url = service.locks_url(base);
-    let mut request = match service {
-        Service::WebDav => {
-            let mut request = service::request(&url, "PROPFIND", auth, reply);
-            request
-                .headers
-                .push((String::from("Depth"), String::from("1")));
-            request.headers.push((
+    let request = match service {
+        Service::WebDav => service::request(&url, "PROPFIND", auth, reply)
+            .header(String::from("Depth"), String::from("1"))
+            .header(
                 String::from("Content-Type"),
                 String::from("application/xml"),
-            ));
-            request.body = Some(String::from(PROPFIND));
-            request
-        }
+            )
+            .body(String::from(PROPFIND)),
         _ => service::request(&url, "GET", auth, reply),
     };
-    request.save_to = Some(save_to);
-    request
+    request.save_to(save_to)
 }
 
 /// Whether the list of locks in the file `path` (the answer to
@@ -133,7 +127,8 @@ fn webdav_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>
                 let file = file.rsplit('/').next().unwrap_or_default();
                 let exclusive = file.starts_with(&alloc::format!("{EXCLUSIVE}_"))
                     && files::has_extension(file, "json");
-                let renewed = paperpaw_sdk::web::http_date(&modified).map(|s| s * 1000);
+                let renewed =
+                    paperpaw_sdk::time::UnixTime::parse_http_date(&modified).map(|t| t.millis());
                 found |= exclusive && held(renewed);
             }
             _ => {}

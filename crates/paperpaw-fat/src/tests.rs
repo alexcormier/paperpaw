@@ -1410,3 +1410,25 @@ fn short_names_alone_are_names() {
 }
 
 mod after_cuts;
+
+/// The time a file was changed is the same listed and asked for, and
+/// read from FAT's date and time as seconds since 1970.
+#[test]
+fn files_tell_when_they_were_changed() {
+    let storage = storage();
+    storage.write("books/a.txt", b"x").unwrap();
+    let mut listed = None;
+    storage.list("books", &mut |e| listed = e.modified).unwrap();
+    assert!(listed.is_some());
+    assert_eq!(storage.modified("books/a.txt"), listed);
+    assert_eq!(storage.modified("/books/a.txt"), listed);
+    assert_eq!(storage.modified("books/none.txt"), None);
+    let at = |y, mo, d, h, mi, s| {
+        seconds(fatfs::DateTime::new(
+            fatfs::Date::new(y, mo, d),
+            fatfs::Time::new(h, mi, s, 0),
+        ))
+    };
+    assert_eq!(at(1980, 1, 1, 0, 0, 0), 315_532_800);
+    assert_eq!(at(2026, 10, 24, 12, 30, 5), 1_792_845_005);
+}

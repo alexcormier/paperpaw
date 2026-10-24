@@ -197,12 +197,12 @@ impl ReaderScreen {
     /// the one after it is handed over, turning the page where needed.
     /// Ends at the end of the book, of the page if pages are not turned,
     /// or with the timer.
-    pub(super) fn spoken(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    pub(super) fn spoken(&mut self, spoken: &paperpaw_sdk::replies::Spoken, cx: &mut Cx<'_, '_>) {
         let Some(aloud) = self.aloud else {
             return;
         };
         let env = *cx.env();
-        if params.get(paperpaw_sdk::speech_params::FAILED).is_some() {
+        if !spoken.spoken {
             self.pause_aloud(cx);
             self.resume = None;
             cx.command(Command::Notify(
@@ -334,14 +334,15 @@ impl Book {
 
     /// Hands `text` over to be spoken, after what is spoken with `queue`.
     pub(super) fn speak(&self, env: &Env<'_>, text: String, queue: bool, cx: &mut Cx<'_, '_>) {
-        let mut speech = paperpaw_sdk::Speech::new(text, crate::SPOKEN);
-        speech.language = self.language.clone();
-        speech.rate = env
+        let rate = env
             .settings
             .int(crate::settings::ALOUD_SPEED.as_str())
             .clamp(50, 300) as u16;
-        speech.params = Params::new().with(params::PATH, self.path.clone());
-        speech.queue = queue;
-        cx.command(Command::Speak(speech));
+        let speech = paperpaw_sdk::Speech::new(text, crate::SPOKEN)
+            .in_language(self.language.clone())
+            .at_rate(rate)
+            .with(Params::new().with(params::PATH, self.path.clone()))
+            .queued(queue);
+        cx.command(Command::speak(speech));
     }
 }

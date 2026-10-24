@@ -437,7 +437,7 @@ impl Kernel {
         if let Some((notice, _)) = &mut self.notice
             && let Some(area) = screens::notice_area(notice.as_ref(), &env).intersection(&region)
         {
-            let corner = (i32::from(env.content.x), i32::from(env.content.y));
+            let corner = (i32::from(env.content().x), i32::from(env.content().y));
             notice.draw(&mut canvas.clipped(area).offset(corner.0, corner.1), &env);
         }
     }
@@ -514,7 +514,7 @@ impl Kernel {
             // A message over everything, last.
             if let Some((notice, _)) = &mut self.notice {
                 let area = screens::notice_area(notice.as_ref(), &env);
-                let corner = (i32::from(env.content.x), i32::from(env.content.y));
+                let corner = (i32::from(env.content().x), i32::from(env.content().y));
                 notice.draw(&mut canvas.clipped(area).offset(corner.0, corner.1), &env);
             }
         }

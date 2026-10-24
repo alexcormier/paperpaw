@@ -40,37 +40,23 @@ fn setting(id: &'static str) -> SettingSpec {
         "",
         SettingKind::Bool,
         SettingValue::Bool(false),
+        paperpaw_sdk::builtin::groups::OTHER,
     )
 }
 
 #[test]
 fn settings_kept_in_the_program_are_checked_like_others() {
     static OWN: [SettingSpec; 2] = [
-        SettingSpec::fixed_switch("demo.a", "", false, groups::OTHER),
-        SettingSpec::fixed_switch("demo.b", "", false, groups::OTHER),
+        SettingSpec::switch("demo.a", "", false, groups::OTHER),
+        SettingSpec::switch("demo.b", "", false, groups::OTHER),
     ];
-    static FOREIGN: [SettingSpec; 1] = [SettingSpec::fixed_switch(
-        "other.a",
-        "",
-        false,
-        groups::OTHER,
-    )];
+    static FOREIGN: [SettingSpec; 1] = [SettingSpec::switch("other.a", "", false, groups::OTHER)];
     static TWICE: [SettingSpec; 2] = [
-        SettingSpec::fixed_switch("demo.c", "", false, groups::OTHER),
-        SettingSpec::fixed_switch("demo.c", "", true, groups::OTHER),
+        SettingSpec::switch("demo.c", "", false, groups::OTHER),
+        SettingSpec::switch("demo.c", "", true, groups::OTHER),
     ];
-    static AGAIN: [SettingSpec; 1] = [SettingSpec::fixed_switch(
-        "demo.a",
-        "",
-        false,
-        groups::OTHER,
-    )];
-    static BUILT: [SettingSpec; 1] = [SettingSpec::fixed_switch(
-        "demo.built",
-        "",
-        false,
-        groups::OTHER,
-    )];
+    static AGAIN: [SettingSpec; 1] = [SettingSpec::switch("demo.a", "", false, groups::OTHER)];
+    static BUILT: [SettingSpec; 1] = [SettingSpec::switch("demo.built", "", false, groups::OTHER)];
     let mut r = registrar();
     r.add_settings(&OWN).unwrap();
     assert_eq!(
@@ -176,7 +162,8 @@ fn every_kind_of_contribution_says_what_it_is() {
     r.contribute(Id::new_static("other.point"), Cow::Borrowed("text"))
         .unwrap();
     r.add_translations(Cow::Borrowed("")).unwrap();
-    r.publish(Id::new_static("demo.count"), 1u8).unwrap();
+    r.provide(Id::new_static("demo.count"), Count(1), ONE)
+        .unwrap();
     r.subscribe(Id::new_static("core.book-opened"), Box::new(|_, _, _| {}))
         .unwrap();
     let kinds: Vec<&str> = r.contributions().iter().map(Contribution::kind).collect();
@@ -210,7 +197,7 @@ fn every_kind_of_contribution_says_what_it_is() {
     assert!(format!("{:?}", r.contributions()[0]).contains("demo.slot"));
     // A service of another namespace is refused.
     assert!(matches!(
-        r.publish(Id::new_static("other.count"), 1u8),
+        r.provide(Id::new_static("other.count"), Count(1), ONE),
         Err(RegisterError::Namespace { .. })
     ));
     assert_eq!(r.plugin(), &Id::new_static("demo"));
@@ -240,12 +227,12 @@ fn typed_handlers_hear_only_what_they_can_read() {
     assert_eq!(event.as_str(), "demo.counted");
     let h = common::Harness::new();
     let env = h.env();
-    let mut out = Vec::new();
+    let mut out = paperpaw_sdk::Commands::new();
     handler(&env, &Params::new().with("n", "5"), &mut out);
     handler(&env, &Params::new().with("n", "five"), &mut out);
     handler(&env, &Params::new(), &mut out);
     assert_eq!(heard.get(), 5);
-    assert_eq!(out, [Command::Restart]);
+    assert_eq!(out.as_slice(), [Command::Restart]);
 }
 
 #[test]
@@ -394,17 +381,26 @@ fn text_filter_signatures_name_those_that_do_something() {
     let mut filters = TextFilters::new();
     let h = common::Harness::new();
     let env = h.env();
-    assert_eq!(filters.signature(&env), "");
-    for (id, signature) in [("f.bold", "on"), ("f.idle", ""), ("f.size", "3")] {
+    assert_eq!(filters.signature(&env), 0);
+    for (id, signature) in [("f.bold", 1), ("f.idle", 0), ("f.size", 3)] {
         filters.add(TextFilterSpec::new(
             Id::new_static(id),
             "",
             Box::new(|_, _| {}),
-            Box::new(move |_| signature.to_string()),
+            Box::new(move |_| signature),
         ));
     }
     filters.shrink_to_fit();
-    assert_eq!(filters.signature(&env), "f.bold=on;f.size=3;");
+    let mut expected = paperpaw_sdk::digest::Fnv1a64::new();
+    for (id, part) in [("f.bold", 1u64), ("f.size", 3)] {
+        expected.feed(id.as_bytes());
+        expected.feed(&part.to_le_bytes());
+    }
+    assert_eq!(
+        filters.signature(&env),
+        expected.value(),
+        "the idle one left out"
+    );
     assert!(format!("{filters:?}").contains("f.bold"));
 }
 
@@ -492,15 +488,18 @@ fn later_hyphenation_of_a_language_wins() {
 #[test]
 fn services_are_found_by_id_and_type_and_the_first_wins() {
     let mut services = Services::new();
-    services.insert(Id::new_static("a.count"), Service::new(1u32));
-    services.insert(Id::new_static("a.count"), Service::new(2u32));
-    services.insert(Id::new_static("a.name"), Service::new(String::from("x")));
-    assert_eq!(services.get::<u32>("a.count"), Some(&1));
+    services.insert(Id::new_static("a.count"), Service::new(Count(1), ONE));
+    services.insert(Id::new_static("a.count"), Service::new(Count(2), ONE));
+    services.insert(
+        Id::new_static("a.name"),
+        Service::new(Name(String::from("x")), ONE),
+    );
+    assert_eq!(services.get::<Count>("a.count", ONE), Some(&Count(1)));
     assert_eq!(
-        services.get::<String>("a.name").map(String::as_str),
+        services.get::<Name>("a.name", ONE).map(|n| n.0.as_str()),
         Some("x")
     );
-    assert_eq!(services.get::<&str>("a.name"), None);
+    assert_eq!(services.get::<Count>("a.name", ONE), None);
     assert!(!services.has("a.none"));
     services.contribute(
         Id::new_static("a.point"),
@@ -613,3 +612,16 @@ fn actions_of_another_namespace_or_twice_are_refused() {
         Err(RegisterError::Duplicate { .. })
     ));
 }
+
+/// A service of a count, for the tests.
+#[derive(Debug, PartialEq)]
+struct Count(u32);
+paperpaw_sdk::service_type!(Count, "demo.count/1");
+
+/// A service of a name, for the tests.
+#[derive(Debug, PartialEq)]
+struct Name(String);
+paperpaw_sdk::service_type!(Name, "demo.name/1");
+
+/// The version the test services are in.
+const ONE: paperpaw_sdk::Version = paperpaw_sdk::Version::new(1, 0, 0);

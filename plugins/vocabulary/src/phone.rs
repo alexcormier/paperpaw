@@ -95,7 +95,7 @@ impl PhoneScreen {
 
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 
@@ -142,7 +142,7 @@ impl PhoneScreen {
                 };
                 let page = || page(&env);
                 let (response, done) = answer(number, guard, page, env.storage, &request);
-                cx.command(Command::Respond(response));
+                cx.command(Command::respond(response));
                 let Some(done) = done else {
                     return;
                 };
@@ -208,13 +208,14 @@ pub(crate) fn answer(
         |status, kind: &str, body: &[u8]| ServerResponse::new(number, status, kind, body.to_vec());
     match guard.check_target(request.target, request.at) {
         Access::Granted => {}
-        Access::Denied => {
-            let text = b"The key is missing or wrong: scan the code shown on the reader.";
-            return (respond(403, PLAIN, text), None);
-        }
         Access::Locked => {
             let text = b"Too many wrong keys: try again in a minute.";
             return (respond(429, PLAIN, text), None);
+        }
+        // Denied, and a state to come: refused as a wrong key is.
+        _ => {
+            let text = b"The key is missing or wrong: scan the code shown on the reader.";
+            return (respond(403, PLAIN, text), None);
         }
     }
     let (path, query) = request
@@ -438,23 +439,16 @@ impl Screen for PhoneScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("vocabulary.phone.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, None);
         let area = self.content(env);
         match &self.state {
-            State::Starting => {
-                ui::draw_message(
-                    canvas,
-                    env,
-                    &style,
-                    area,
-                    env.i18n.tr("vocabulary.phone.starting"),
-                );
-            }
-            State::Failed(message) => ui::draw_message(canvas, env, &style, area, message),
+            State::Starting => ui.message(area, env.i18n.tr("vocabulary.phone.starting")),
+            State::Failed(message) => ui.message(area, message),
             State::Serving { url, qr } => {
                 let hint = env.i18n.tr("vocabulary.phone.hint");
                 ui::draw_address(
-                    canvas,
+                    ui.canvas(),
                     env,
                     &style,
                     area,
@@ -493,7 +487,7 @@ impl Screen for PhoneScreen {
         if gesture.kind == GestureKind::Tap
             && let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         Handled::No
@@ -533,8 +527,8 @@ mod tests {
         };
         let page = || b"<page>".to_vec();
         let (response, done) = answer(1, &mut guard, page, storage, &request);
-        let body = String::from_utf8_lossy(&response.body).into_owned();
-        (response.status, body, done)
+        let body = String::from_utf8_lossy(response.body()).into_owned();
+        (response.status(), body, done)
     }
 
     /// The page's marks are filled in one pass, in the order they come.

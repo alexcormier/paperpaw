@@ -7,6 +7,18 @@
 )]
 use super::*;
 
+/// Runs a plugin's handler with a [`Commands`](paperpaw_sdk::Commands) of
+/// its own, then queues what it sent at the end of `out`.
+pub(crate) fn handing<R>(
+    out: &mut Vec<Command>,
+    handler: impl FnOnce(&mut paperpaw_sdk::Commands) -> R,
+) -> R {
+    let mut commands = paperpaw_sdk::Commands::new();
+    let result = handler(&mut commands);
+    out.append(&mut commands.take());
+    result
+}
+
 impl Kernel {
     #[expect(
         clippy::too_many_lines,
@@ -319,8 +331,7 @@ impl Kernel {
             Command::Back => self.close_top(paperpaw_sdk::CloseCause::Back),
             Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
-            Command::RunAction(action) => self.dispatch(action),
-            Command::RunActionWith(action, params) => self.dispatch_with(action, &params),
+            Command::RunAction(action, params) => self.dispatch_with(action, params),
             // Run in its place where a handler in place of the action's own
             // asked for it (see `run_handler`): here it came from elsewhere.
             Command::RunOriginal(action, _) => {
@@ -482,7 +493,7 @@ impl Kernel {
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
-            handler(&env, params, &mut self.output.commands);
+            handing(&mut self.output.commands, |out| handler(&env, params, out));
             let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             let out = &mut self.output.commands;
             refused_secret |= vet_reserved(out, from, plugin.as_str(), &reserved);
@@ -561,7 +572,7 @@ impl Kernel {
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
-            handler(&env, params, &mut self.output.commands);
+            handing(&mut self.output.commands, |out| handler(&env, params, out));
             let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             vet_reserved(&mut self.output.commands, from, plugin.as_str(), &reserved);
         }
@@ -631,7 +642,7 @@ impl Kernel {
             Command::PreviewSettings(values) => self.preview_settings(values),
             Command::SetScope(path) => self.set_scope(path),
             Command::SetPluginEnabled(id, enabled) => self.set_plugin_enabled(&id, enabled),
-            Command::SetSecret(change) => self.set_secret(change),
+            Command::SetSecret(change) => self.set_secret(*change),
             Command::SetMenu(menu, entries) => self.set_menu(menu, entries),
             Command::Bind {
                 layer,
@@ -674,10 +685,10 @@ impl Kernel {
         let screens = self.stack.len();
         let env = self.shared.env(self.now);
         let system = self.io.speech.system;
-        if let Some(voice) = self.shared.voices.chosen(&env, &speech.language, system) {
+        if let Some(voice) = self.shared.voices.chosen(&env, speech.language(), system) {
             // In place of what the system or another voice says now,
             // unless after it.
-            if !speech.queue {
+            if !speech.is_queued() {
                 self.io.speech.stop();
                 let other = self
                     .io
@@ -689,15 +700,17 @@ impl Kernel {
                     && let Some((id, _)) = self.io.speech.voice.take()
                     && let Some(old) = self.shared.voices.get(id.as_str())
                 {
-                    (old.stop)(&env, &mut self.output.commands);
+                    handing(&mut self.output.commands, |out| (old.stop)(&env, out));
                 }
             }
-            (voice.speak)(&env, &speech, &mut self.output.commands);
+            handing(&mut self.output.commands, |out| {
+                (voice.speak)(&env, &speech, out)
+            });
             self.io.speech.voice = Some((voice.id.clone(), screens));
             return;
         }
         // In place of what a plugin's voice says, unless after it.
-        if !speech.queue {
+        if !speech.is_queued() {
             self.stop_voice();
         }
         self.io
@@ -710,7 +723,7 @@ impl Kernel {
         if let Some((id, _)) = self.io.speech.voice.take() {
             let env = self.shared.env(self.now);
             if let Some(voice) = self.shared.voices.get(id.as_str()) {
-                (voice.stop)(&env, &mut self.output.commands);
+                handing(&mut self.output.commands, |out| (voice.stop)(&env, out));
             }
         }
     }
@@ -757,7 +770,7 @@ impl Kernel {
             }
             Command::ReadClipboard(reply, params) => self.reply_clipboard(reply, params),
             Command::Speak(speech) => {
-                self.speak(speech);
+                self.speak(*speech);
                 self.io.focus_spoken = false;
             }
             Command::StopSpeaking => {
@@ -774,12 +787,14 @@ impl Kernel {
                 .servers
                 .serve(server, port, events, network, screens, out),
             Command::StopServing(server) => self.io.servers.stop(&server, out),
-            Command::Respond(response) => self.io.servers.respond(response, &*self.shared.storage),
+            Command::Respond(response) => {
+                self.io.servers.respond(*response, &*self.shared.storage);
+            }
             command @ (Command::Connect { .. }
             | Command::SocketSend { .. }
             | Command::SocketRead { .. }
             | Command::Disconnect(_)
-            | Command::Broadcast { .. }) => {
+            | Command::Broadcast(_)) => {
                 self.io
                     .sockets
                     .command(command, network, screens, &*self.shared.storage, out);
@@ -788,7 +803,7 @@ impl Kernel {
                 let reader = self.shared.reader;
                 self.io
                     .http
-                    .request(request, network, reader, &*self.shared.storage, out)
+                    .request(*request, network, reader, &*self.shared.storage, out)
             }
             _ => {}
         }
@@ -882,21 +897,18 @@ fn typed_for(command: &Command) -> Option<Option<&Params>> {
         | Command::OpenScreen(_, params)
         | Command::Replace(_, params)
         | Command::OpenInSlot(_, _, params)
-        | Command::RunActionWith(_, params)
+        | Command::RunAction(_, params)
         | Command::RunOriginal(_, params)
             if reply(params) =>
         {
             Some(Some(params))
         }
-        Command::Http(request) if typed(&request.reply) => Some(Some(&request.params)),
-        Command::Speak(speech) if typed(&speech.reply) => Some(Some(&speech.params)),
-        Command::Serve { events, .. }
-        | Command::Connect { events, .. }
-        | Command::Broadcast { events, .. }
-            if typed(events) =>
-        {
+        Command::Http(request) if typed(request.reply()) => Some(Some(request.params())),
+        Command::Speak(speech) if typed(speech.reply()) => Some(Some(speech.params())),
+        Command::Serve { events, .. } | Command::Connect { events, .. } if typed(events) => {
             Some(None)
         }
+        Command::Broadcast(broadcast) if typed(broadcast.events()) => Some(None),
         _ => None,
     }
 }

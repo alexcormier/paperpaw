@@ -27,6 +27,10 @@ use crate::Kernel;
 
 /// The settings group of every plugin's network.
 pub(crate) const NETWORK_GROUP: Id = Id::new_static("core.group.network");
+/// The extra of every plugin's network settings: shown under the plugin's
+/// name.
+static NETWORK_EXTRA: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().section_of_plugin();
 
 /// Where the worn power mode is kept across starts (on the X4, every
 /// wake is a start): its id, whether Automatic chose it, the values the
@@ -359,17 +363,19 @@ impl Queue {
     /// looked at now.
     fn take_moments(&mut self, env: &Env<'_>, last_activity: Instant) -> Moments {
         let mut moments = mem::take(&mut self.moments);
-        let online = env.wifi.map_or(env.caps.network, |w| w.state.is_online());
+        let online = env
+            .wifi()
+            .map_or(env.caps().network, |w| w.state.is_online());
         if online && (!self.online || moments.contains(Moments::WAKE)) {
             moments = moments | Moments::ONLINE;
         }
         self.online = online;
-        let charging = env.status.battery.is_some_and(|b| b.charging);
+        let charging = env.status().battery.is_some_and(|b| b.charging);
         if charging && !self.charging {
             moments = moments | Moments::CHARGING;
         }
         self.charging = charging;
-        if env.now.since(last_activity) >= IDLE_MS && self.idle_since != Some(last_activity) {
+        if env.now().since(last_activity) >= IDLE_MS && self.idle_since != Some(last_activity) {
             self.idle_since = Some(last_activity);
             moments = moments | Moments::IDLE;
         }
@@ -383,9 +389,9 @@ impl Queue {
             return None;
         }
         if let Some(at) = entry.work.at {
-            return (self.ticking && at <= env.now).then_some(Why::Time);
+            return (self.ticking && at <= env.now()).then_some(Why::Time);
         }
-        if entry.after() > env.now || (entry.work.charging && !self.charging) {
+        if entry.after() > env.now() || (entry.work.charging && !self.charging) {
             return None;
         }
         // Work only nice to have never brings the radio on.
@@ -398,7 +404,7 @@ impl Queue {
             return Some(Why::Moment(hit));
         }
         let optional_now = entry.work.importance == Importance::Optional && cheap;
-        let due = self.ticking && entry.deadline(power).is_some_and(|due| due <= env.now);
+        let due = self.ticking && entry.deadline(power).is_some_and(|due| due <= env.now());
         (due && (entry.work.importance == Importance::Expected || optional_now))
             .then_some(Why::Deadline)
     }
@@ -427,7 +433,7 @@ impl Kernel {
         match command {
             Command::Work(work) => self
                 .works
-                .declare(work, self.now, &mut self.output.commands),
+                .declare(*work, self.now, &mut self.output.commands),
             Command::CancelWork(id, key) => self.works.cancel(&id, key.as_deref()),
             Command::CancelHttp(reply) => self.io.http.cancel(&reply, &mut self.output.commands),
             Command::Wear(wear) => self.wear(wear),
@@ -741,10 +747,10 @@ impl Kernel {
     /// server's, a socket's): their ids are in the plugin's namespace.
     pub(crate) fn declared_network(&mut self, command: Command) -> Option<Command> {
         let owner = match &command {
-            Command::Http(request) => request.reply.namespace(),
+            Command::Http(request) => request.reply().namespace(),
             Command::Serve { server, .. } => server.namespace(),
             Command::Connect { socket, .. } => socket.namespace(),
-            Command::Broadcast { id, .. } => id.namespace(),
+            Command::Broadcast(broadcast) => broadcast.id().namespace(),
             _ => return Some(command),
         };
         // The kernel's own, and what no plugin it knows asked for, go on.
@@ -777,8 +783,9 @@ impl Kernel {
         let reason = String::from(refusal.reason.as_str());
         let (event, params) = match command {
             Command::Http(request) => {
+                let request = request.into_parts();
                 let reply = HttpReply::refused(refusal, request.params);
-                (request.reply, reply.to_params())
+                (request.reply, reply.into_params())
             }
             Command::Serve { server, events, .. } => {
                 (events, ServerNotice::Failed { server, reason }.to_params())
@@ -786,9 +793,10 @@ impl Kernel {
             Command::Connect { socket, events, .. } => {
                 (events, SocketNotice::Failed { socket, reason }.to_params())
             }
-            Command::Broadcast { id, events, .. } => {
-                let failed = SocketNotice::Failed { socket: id, reason };
-                (events, failed.to_params())
+            Command::Broadcast(broadcast) => {
+                let socket = broadcast.id().clone();
+                let failed = SocketNotice::Failed { socket, reason };
+                (broadcast.events().clone(), failed.to_params())
             }
             _ => return None,
         };
@@ -815,7 +823,6 @@ impl Kernel {
             .map(|p| String::from(p.manifest.id.as_str()))
             .collect();
         for plugin in networked {
-            let section = alloc::format!("{plugin}.plugin.name");
             let (Ok(network), Ok(saving)) = (
                 Id::parse(&network_setting(&plugin)),
                 Id::parse(&saving_setting(&plugin)),
@@ -828,6 +835,7 @@ impl Kernel {
                     "core.network.allowed",
                     paperpaw_sdk::SettingKind::Bool,
                     paperpaw_sdk::SettingValue::Bool(true),
+                    NETWORK_GROUP,
                 )
                 .description("core.network.allowed.help"),
                 paperpaw_sdk::SettingSpec::new(
@@ -839,11 +847,12 @@ impl Kernel {
                     paperpaw_sdk::SettingValue::Text(alloc::borrow::Cow::Borrowed(
                         SAVING_CHOICES[0],
                     )),
+                    NETWORK_GROUP,
                 )
                 .description("core.saving.help"),
             ];
             for spec in specs {
-                let spec = spec.group(NETWORK_GROUP).section(section.clone());
+                let spec = spec.with_extra(&NETWORK_EXTRA);
                 if let Err(e) = self.shared.settings.define(spec) {
                     self.warn_runtime(alloc::format!("{plugin}: {e:?}"));
                 }
@@ -862,7 +871,7 @@ fn step_job(
     out: &mut Vec<Command>,
     notes: &mut Vec<(Id, paperpaw_sdk::work::Note)>,
 ) -> bool {
-    let now = env.now;
+    let now = env.now();
     for entry in &mut works.entries {
         if let Some(Job::Until(at)) = entry.job
             && at <= now
@@ -886,7 +895,7 @@ fn step_job(
     let from = out.len();
     let step = {
         let _running = meter.enter(&entry.owner);
-        (spec.step)(env, &entry.work.params, out)
+        crate::commands::handing(out, |out| (spec.step)(env, &entry.work.params, out))
     };
     // A job is background work: its notices become its plugin's note.
     let mut said = Queue::default();
@@ -925,7 +934,7 @@ fn step_job(
             entry.attempt = entry.attempt.saturating_add(1);
             entry.declared = now;
             let mut jitter = [0u8];
-            env.random.fill(&mut jitter);
+            env.random().fill(&mut jitter);
             let jitter = jitter[0];
             let wait = paperpaw_sdk::work::backoff(entry.attempt, jitter);
             // A timed job tries again at a new time, others after the wait.

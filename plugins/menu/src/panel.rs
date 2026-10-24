@@ -96,7 +96,7 @@ pub(crate) struct PanelScreen {
     editing: Option<i64>,
     /// A slider's knob taken along by a finger: its row and its value
     /// before.
-    drag: ui::SliderDrag,
+    drag: ui::slider::SliderDrag,
     dragged: Option<(usize, i64)>,
     page: usize,
     pager: Option<ui::Pager>,
@@ -155,7 +155,7 @@ struct Geometry {
 impl Geometry {
     /// The margin at the screen's sides, the style's.
     fn margin(&self) -> u16 {
-        self.style.margin as u16
+        self.style.margin()
     }
 }
 
@@ -289,7 +289,7 @@ impl PanelScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let width = display.width;
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let mut items = env.menus.shown_items(env, menu);
         // A setting shown only while another has a value.
         items.retain(|item| {
@@ -300,7 +300,7 @@ impl PanelScreen {
         // Labels as wide as the longest needs, at most half the row;
         // sliders have their titles above them.
         let font = style.font(env);
-        let measure = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.text, text));
+        let measure = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.text(), text));
         let longest = items
             .iter()
             .filter_map(|item| spec(env, item.id))
@@ -308,12 +308,12 @@ impl PanelScreen {
             .map(|s| measure(env.i18n.tr(&s.title)))
             .fold(0.0, f32::max);
         let label =
-            ((longest as u16).saturating_add(style.gap as u16 * 2)).min((width - 2 * margin) / 2);
-        let gap = style.gap as u16;
+            ((longest as u16).saturating_add(style.gap() * 2)).min((width - 2 * margin) / 2);
+        let gap = style.gap();
         // As high as a status line at the top of a screen (the home
         // screen's): it stays in sight above the panel.
         let head = if top {
-            paperpaw_sdk::widgets::line_height(env, style.small) + style.gap as u16 / 2
+            paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap() / 2
         } else {
             0
         };
@@ -324,11 +324,11 @@ impl PanelScreen {
             height: display.height,
             gap,
             spacing: if touch { gap } else { gap / 2 },
-            row: style.touch_row(style.row) as u16,
+            row: style.touch_row(u32::from(style.row())) as u16,
             // Without the room below that rows of lists keep: the band
             // has room around its buttons.
             slider: ui::slider::row_height(&style, false).saturating_sub(gap),
-            border: (style.line * 2).max(2) as u16,
+            border: (u32::from(style.line()) * 2).max(2) as u16,
             label,
             head,
             pager: style.touch_row(u32::from(ui::Pager::height(&style))) as u16,
@@ -350,7 +350,7 @@ impl PanelScreen {
             top,
             focus: (!touch).then_some(first),
             editing: None,
-            drag: ui::SliderDrag::default(),
+            drag: ui::slider::SliderDrag::default(),
             dragged: None,
             page: 0,
             pager: layout.pager.map(|area| ui::Pager::new(env, area)),
@@ -375,7 +375,10 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
             _ => String::new(),
         }
     };
-    let small = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.small, text));
+    let small = |text: &str| {
+        font.as_ref()
+            .map_or(0.0, |f| f.measure(style.small(), text))
+    };
     // As many buttons to a row as stay readable.
     let per_row = |group: &[Control]| -> usize {
         let inner = f32::from(g.width - 2 * g.margin());
@@ -482,11 +485,11 @@ impl PanelScreen {
     }
 
     /// The focused control if it is a slider: its setting and range.
-    fn focused_slider<'e>(&self, env: &Env<'e>) -> Option<(&'e SettingSpec, ui::Slider)> {
+    fn focused_slider<'e>(&self, env: &Env<'e>) -> Option<(&'e SettingSpec, ui::slider::Slider)> {
         match self.focus.and_then(|f| self.controls().nth(f)) {
             Some((Control::Slide(id), _)) => {
                 let spec = spec(env, id)?;
-                Some((spec, ui::Slider::of(spec)?))
+                Some((spec, ui::slider::Slider::of(spec)?))
             }
             _ => None,
         }
@@ -620,7 +623,7 @@ impl PanelScreen {
             }
             Control::Run(id) => {
                 cx.command(Command::Back);
-                cx.command(Command::RunAction(id.clone()));
+                cx.command(Command::run(id.clone()));
             }
         }
     }
@@ -630,15 +633,8 @@ impl PanelScreen {
         cx.request_refresh(RefreshMode::Fast);
     }
 
-    fn draw_control(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        control: &Control,
-        rect: Rect,
-        focused: bool,
-    ) {
-        let style = self.style;
+    fn draw_control(&self, ui: &mut ui::Ui<'_>, control: &Control, rect: Rect, focused: bool) {
+        let env = ui.env();
         let state = env.menus.state(env, control.id().as_str());
         let (on, label): (bool, String) = match control {
             Control::Toggle(id) => {
@@ -658,11 +654,11 @@ impl PanelScreen {
             Control::Step(_, step) => (false, String::from(if *step < 0 { "−" } else { "+" })),
             Control::Slide(id) => {
                 let focus = match (focused, self.editing) {
-                    (false, _) => ui::SliderFocus::None,
-                    (true, None) => ui::SliderFocus::Focused,
-                    (true, Some(_)) => ui::SliderFocus::Editing,
+                    (false, _) => ui::slider::SliderFocus::None,
+                    (true, None) => ui::slider::SliderFocus::Focused,
+                    (true, Some(_)) => ui::slider::SliderFocus::Editing,
                 };
-                return draw_slider(canvas, env, &style, id, rect, focus);
+                return draw_slider(ui, id, rect, focus);
             }
             Control::Option(id, option) => (
                 env.settings.text(id.as_str()) == option,
@@ -674,11 +670,13 @@ impl PanelScreen {
                     return;
                 };
                 if focused {
-                    ui::draw_focus(canvas, &style, rect);
+                    ui.focus(rect);
                 }
                 let value = alloc::format!("{} ›", ui::setting_value(env, spec));
                 let title = state.text(env.i18n.tr(&spec.title));
-                ui::draw_value_row(canvas, env, &style, rect, focused, &title, &value);
+                ui::Row::value(&title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
                 return;
             }
             Control::Run(id) => (
@@ -687,9 +685,9 @@ impl PanelScreen {
             ),
         };
         if state.enabled {
-            ui::draw_button(canvas, env, &style, rect, &label, on, focused);
+            ui.button(rect, &label, on, focused);
         } else {
-            ui::draw_faint_button(canvas, env, &style, rect, &label, focused);
+            ui.faint_button(rect, &label, focused);
         }
     }
 }
@@ -697,27 +695,22 @@ impl PanelScreen {
 /// A slider's row, as on the settings pages: its title and value (the
 /// one shown while it moves), and the slider across the screen below, on
 /// the focus bar when focused.
-fn draw_slider(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    id: &Id,
-    rect: Rect,
-    focus: ui::SliderFocus,
-) {
-    let Some((spec, slider)) = spec(env, id).and_then(|s| Some((s, ui::Slider::of(s)?))) else {
+fn draw_slider(ui: &mut ui::Ui<'_>, id: &Id, rect: Rect, focus: ui::slider::SliderFocus) {
+    let (env, style) = (ui.env(), ui.style());
+    let Some((spec, slider)) = spec(env, id).and_then(|s| Some((s, ui::slider::Slider::of(s)?)))
+    else {
         return;
     };
-    if focus != ui::SliderFocus::None {
-        ui::draw_focus(canvas, style, rect);
+    if focus != ui::slider::SliderFocus::None {
+        ui.focus(rect);
     }
     let shown = ui::setting_value(env, spec);
     let room = ui::number_room(env, style, [spec]);
-    let view = ui::SliderView::new(rect, env.settings.int(id.as_str()), &shown)
+    let view = ui::slider::SliderView::new(rect, env.settings.int(id.as_str()), &shown)
         .title(env.i18n.tr(&spec.title))
         .room(&room)
         .focus(focus);
-    slider.draw_row(canvas, env, style, &view);
+    slider.draw_row(ui.canvas(), env, style, &view);
 }
 
 /// How much higher than its line a slider's title is in a row `width`
@@ -784,10 +777,10 @@ fn fits_segments(
     if options.is_empty() || options.len() > MAX_SEGMENTS {
         return false;
     }
-    let cell = f32::from(area.width) / options.len() as f32 - 2.0 * style.gap as f32;
+    let cell = f32::from(area.width) / options.len() as f32 - 2.0 * style.gap() as f32;
     options
         .iter()
-        .all(|o| font.measure(style.small, env.i18n.tr(o)) <= cell)
+        .all(|o| font.measure(style.small(), env.i18n.tr(o)) <= cell)
 }
 
 /// `area` without `margin` left and right and a little above and below.
@@ -807,20 +800,22 @@ impl Screen for PanelScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        let border = (style.line * 2).max(2);
+        ui.canvas().fill(r, Color::WHITE);
+        let border = (u32::from(style.line()) * 2).max(2);
         let y = if self.top {
             i32::from(r.y + r.height) - border as i32
         } else {
             i32::from(r.y)
         };
-        canvas.fill_rect(i32::from(r.x), y, u32::from(r.width), border, Color::BLACK);
-        let Some(font) = style.font(env) else {
+        ui.canvas()
+            .fill_rect(i32::from(r.x), y, u32::from(r.width), border, Color::BLACK);
+        let Some(font) = ui.font() else {
             return;
         };
         if self.rows.is_empty() {
-            ui::draw_message(canvas, env, &style, r, env.i18n.tr("menu.empty"));
+            ui.message(r, env.i18n.tr("menu.empty"));
             return;
         }
         for (first, row) in self.visible_rows() {
@@ -839,7 +834,9 @@ impl Screen for PanelScreen {
                 };
                 let title = env.i18n.tr(&spec.title);
                 let value = ui::setting_value(env, spec);
-                ui::draw_number(canvas, env, &style, row.area, title, &value, &value, focus);
+                ui::Row::number(title, &value, &value)
+                    .step_focus(focus)
+                    .draw(&mut ui, row.area);
                 continue;
             }
             if let Some(spec) = label
@@ -848,18 +845,21 @@ impl Screen for PanelScreen {
                     Some((Control::Open(_) | Control::Slide(_), _))
                 )
             {
-                let x = style.margin as f32;
+                let x = style.margin() as f32;
                 let first = row.controls.first().map_or(r.width, |(_, c)| c.x);
-                let room = f32::from(first) - x - style.gap as f32;
-                let name = ui::fit(&font, style.text, env.i18n.tr(&spec.title), room);
-                ui::draw_label(canvas, &font, style.text, x, row.area, &name, Color::BLACK);
+                let room = f32::from(first) - x - style.gap() as f32;
+                let name = ui::fit(&font, style.text(), env.i18n.tr(&spec.title), room);
+                ui::Label::new(&name)
+                    .px(style.text())
+                    .color(Color::BLACK)
+                    .draw_from(&mut ui, x, row.area);
             }
             for (index, (control, rect)) in (first..).zip(row.controls.iter()) {
-                self.draw_control(canvas, env, control, *rect, self.focus == Some(index));
+                self.draw_control(&mut ui, control, *rect, self.focus == Some(index));
             }
         }
         if let Some(pager) = &self.pager {
-            pager.draw(canvas, env, &style, (self.page, self.pages()));
+            pager.draw(&mut ui, ui::Paging::new(self.page, self.pages()));
         }
     }
 
@@ -993,7 +993,7 @@ impl Screen for PanelScreen {
             let [(Control::Slide(id), area)] = row.controls.as_slice() else {
                 return None;
             };
-            let slider = spec(&env, id).and_then(ui::Slider::of)?;
+            let slider = spec(&env, id).and_then(ui::slider::Slider::of)?;
             // Shown faint by its plugin: not moved.
             Control::Slide(id.clone()).enabled(&env).then_some(())?;
             Some((index, id.clone(), slider, *area))
@@ -1023,14 +1023,14 @@ impl Screen for PanelScreen {
             }
         };
         match step {
-            ui::SliderStep::Moved(value) => show(cx, id, value),
-            ui::SliderStep::Same => {}
-            ui::SliderStep::Chosen(value) => {
+            ui::slider::SliderStep::Moved(value) => show(cx, id, value),
+            ui::slider::SliderStep::Same => {}
+            ui::slider::SliderStep::Chosen(value) => {
                 self.dragged = None;
                 let row = self.rows[row].area;
                 done(&env, cx, id, (value != before).then_some(value), row);
             }
-            ui::SliderStep::Cancelled => {
+            ui::slider::SliderStep::Cancelled => {
                 self.dragged = None;
                 let row = self.rows[row].area;
                 done(&env, cx, id, None, row);
@@ -1093,8 +1093,7 @@ mod layout_tests {
 
     fn geometry() -> Geometry {
         // Margins of 20: wider than the plain style's.
-        let mut style = UiStyle::PLAIN;
-        style.margin = 20;
+        let style = UiStyle::PLAIN.with_margin(20);
         Geometry {
             width: 480,
             height: 800,

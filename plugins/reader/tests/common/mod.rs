@@ -120,8 +120,8 @@ static PLACE_PARTS: [paperpaw_sdk::SettingSpec; 3] = [
 ];
 
 const fn part(id: &'static str, default: &'static str) -> paperpaw_sdk::SettingSpec {
-    paperpaw_sdk::SettingSpec::fixed(
-        id,
+    paperpaw_sdk::SettingSpec::new(
+        paperpaw_sdk::Id::new_static(id),
         "recorder",
         paperpaw_sdk::SettingKind::List,
         paperpaw_sdk::SettingValue::Text(std::borrow::Cow::Borrowed(default)),
@@ -245,7 +245,7 @@ impl Plugin for Recorder {
         )?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(Id::new_static("recorder.info"), "recorder").handler(
-                |_: &Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+                |_: &Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
                     let from = Params::new().with("from", "status");
                     out.push(paperpaw_sdk::Command::OpenSlot(slots::BOOK_INFO, from));
                 },

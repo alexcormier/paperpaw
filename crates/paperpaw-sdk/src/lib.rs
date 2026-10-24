@@ -47,6 +47,7 @@ pub mod builtin;
 pub mod chrome;
 pub mod collections;
 mod command;
+mod commands;
 pub mod contribution;
 pub mod data;
 pub mod decorations;
@@ -61,6 +62,8 @@ mod formats;
 mod gesture;
 pub mod help;
 pub mod host;
+#[cfg(test)]
+mod test_kit;
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use screen::ScreenMaker;
@@ -110,15 +113,30 @@ pub mod words;
 pub mod work;
 
 pub use action::{
-    ActionHandler, ActionHint, ActionOverride, ActionParamsHandler, ActionSpec, Actions, Observer,
-    ObserverSpec,
+    ActionHandler, ActionHint, ActionOverride, ActionSpec, Actions, Observer, ObserverSpec,
 };
 pub use command::{
-    Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
-    http_params, server_params, socket_params, speech_params,
+    Broadcast, Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
 };
-pub use contribution::{Contribution, Registrar};
-pub use env::{Capabilities, Env, EnvParts, Metrics};
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use command::{HttpParts, ResponseParts};
+/// The parameters of replies as they are written, for the kernel (plugins
+/// read replies typed: see [`replies`]).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use command::{http_params, server_params, socket_params, speech_params};
+pub use commands::Commands;
+pub use contribution::Registrar;
+/// What a plugin added, for the kernel to apply: opaque to plugins, which
+/// add through [`Registrar`]'s methods.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use contribution::item::Contribution;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use env::EnvParts;
+pub use env::{Capabilities, Env, Metrics};
 pub use event::{Event, EventData, EventHandler};
 pub use fonts::{FontFace, FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{
@@ -134,15 +152,15 @@ pub use menus::{
 pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
 pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};
-pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
+pub use replies::{FolderChosen, HttpError, HttpReply, ServerNotice, SocketNotice, Typed};
 pub use screen::{
-    CloseCause, Cx, Handled, Hint, Hints, Output, Outside, Screen, ScreenFactory, ScreenKey,
-    ScreenSpec, ShowsThrough, StackEntry,
+    CloseCause, Cx, Handled, Hint, HintVisibility, Output, Outside, Screen, ScreenFactory,
+    ScreenKey, ScreenSpec, ShowsThrough, StackEntry,
 };
 pub use setting::{Setting, Text};
 pub use settings::{
-    Choices, Editor, Level, SettingCheck, SettingError, SettingExtra, SettingGroupSpec,
-    SettingKind, SettingSpec, SettingValue, Settings,
+    Choices, Editor, Level, SettingCheck, SettingError, SettingExtra, SettingGroup,
+    SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Settings,
 };
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 
@@ -371,6 +389,6 @@ pub mod json {
 /// Hashes and hex (see `paperpaw-digest`): FNV-1a for names of files kept
 /// per book, MD5, SHA-1 and SHA-256 for what services and files ask.
 pub mod digest {
-    pub use paperpaw_digest::{fnv1a64, hex, md5, sha1, sha256};
+    pub use paperpaw_digest::{Fnv1a64, fnv1a64, hex, md5, sha1, sha256};
 }
 pub use paperpaw_text::{Font, FontError, LineMetrics};

@@ -4,21 +4,17 @@
 
 use super::*;
 use paperpaw_sdk::keys::{BindingOrigin, KeyBindings};
-use paperpaw_sdk::services::{EventSpec, PointSpec, ServiceType};
+use paperpaw_sdk::services::{EventSpec, PointSpec};
 
 /// A service with a contract.
 struct Forecast(&'static str);
 
-impl ServiceType for Forecast {
-    const KEY: &'static str = "weather.forecast/1";
-}
+paperpaw_sdk::service_type!(Forecast, "weather.forecast/1");
 
 /// Another type that claims the same contract, of another size.
 struct Pretender(u64, u64, u64);
 
-impl ServiceType for Pretender {
-    const KEY: &'static str = "weather.forecast/1";
-}
+paperpaw_sdk::service_type!(Pretender, "weather.forecast/1");
 
 struct Weather;
 
@@ -60,21 +56,25 @@ fn services_by_contract_and_version() {
         .unwrap();
     kernel.start(Instant(0));
     let services = &kernel.shared.services;
-    let today = services.get_typed::<Forecast>("weather.today");
+    let today = services.get::<Forecast>("weather.today", Version::new(1, 0, 0));
     assert_eq!(today.map(|f| f.0), Some("sunny"));
-    let fits = services.get_versioned::<Forecast>("weather.today", Version::new(1, 1, 0));
+    let fits = services.get::<Forecast>("weather.today", Version::new(1, 1, 0));
     assert!(fits.is_some());
     assert!(
         services
-            .get_versioned::<Forecast>("weather.today", Version::new(1, 3, 0))
+            .get::<Forecast>("weather.today", Version::new(1, 3, 0))
             .is_none()
     );
     assert!(
         services
-            .get_versioned::<Forecast>("weather.today", Version::new(2, 0, 0))
+            .get::<Forecast>("weather.today", Version::new(2, 0, 0))
             .is_none()
     );
-    assert!(services.get_typed::<Pretender>("weather.today").is_none());
+    assert!(
+        services
+            .get::<Pretender>("weather.today", Version::new(1, 0, 0))
+            .is_none()
+    );
     let pretender = Pretender(0, 0, 0);
     assert_eq!(pretender.0 + pretender.1 + pretender.2, 0);
     assert!(services.ids().any(|id| id.as_str() == "weather.today"));

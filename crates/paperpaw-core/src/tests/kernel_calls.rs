@@ -84,7 +84,7 @@ fn the_focus_is_said_in_place_of_what_was_said_of_it() {
     press(&mut kernel, 100, "down");
     assert_eq!(said(&mut kernel), ["Row 1", "Row 2"]);
     // A plugin reads aloud: the focus waits.
-    kernel.apply(Command::Speak(paperpaw_sdk::Speech::new(
+    kernel.apply(Command::speak(paperpaw_sdk::Speech::new(
         "A page",
         Id::new_static("rows.read"),
     )));

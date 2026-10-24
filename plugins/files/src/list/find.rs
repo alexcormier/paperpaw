@@ -46,9 +46,9 @@ impl FindScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
-        let row = style.touch_row(style.row) as u16;
+        let margin = style.margin();
+        let gap = style.gap();
+        let row = style.touch_row(u32::from(style.row())) as u16;
         let search = Rect::new(0, header.area().height + gap, display.width, row);
         // Which letters have books: by title (without "The") or surname.
         let mut has = [false; 27];
@@ -86,7 +86,7 @@ impl FindScreen {
         let note = Rect::new(0, bottom + gap, display.width, row * 2);
         Self {
             focus: usize::from(!letters.is_empty()),
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             columns: usize::from(columns),
             style,
             header,
@@ -112,7 +112,7 @@ impl FindScreen {
 
     fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
         if index == 0 {
-            cx.command(Command::RunAction(crate::SEARCH));
+            cx.command(Command::run(crate::SEARCH));
         } else if let Some(letter) = self.letters.get(index - 1) {
             let letter = String::from(*letter as char);
             cx.command(shelf::open(Kind::Letter, &letter));
@@ -124,34 +124,40 @@ impl Screen for FindScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("files.list.find.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, None);
         let Some(font) = style.font(env) else {
             return;
         };
         // The search, as a field.
         let focused = self.shown && self.focus == 0;
         if focused {
-            ui::draw_focus(canvas, &style, self.search);
+            ui.focus(self.search);
         } else {
             let field = ui::focus_rect(&style, self.search);
             let radius = style.radius(u32::from(field.height));
-            canvas.stroke_round(field, style.line.max(1), radius, Color::BLACK);
+            ui.canvas()
+                .stroke_round(field, u32::from(style.line()).max(1), radius, Color::BLACK);
         }
         let ink = style.focus_ink(focused);
-        let margin = style.margin as f32;
-        let size = style.text * ui::ICON_SCALE;
-        let w = ui::draw_icon(canvas, env, "search", size, margin, self.search, ink);
-        let x = margin + w + style.gap as f32;
+        let margin = style.margin() as f32;
+        let size = style.text() * ui::ICON_SCALE;
+        let w = ui.icon("search", size, margin, self.search, ink);
+        let x = margin + w + style.gap() as f32;
         let hint = env.i18n.tr("files.list.find.search");
-        let faint = style.focus_faint(focused, 80);
-        ui::draw_label(canvas, &font, style.text, x, self.search, hint, faint);
+        let faint = style.focus_faint(focused, ui::Ink::Detail);
+        ui::Label::new(hint)
+            .px(style.text())
+            .color(faint)
+            .draw_from(&mut ui, x, self.search);
         // The letters, the focused one on a dark circle.
-        let big = style.title * 1.2;
+        let big = style.title() * 1.2;
         for (n, (cell, letter)) in self.cells.iter().zip(&self.letters).enumerate() {
             let focused = self.shown && self.focus == n + 1;
             let ink = if focused {
-                let inner = cell.inset(style.gap as u16 / 3, style.gap as u16 / 3);
-                canvas.fill_round(inner, u32::from(inner.height / 2), Color::BLACK);
+                let inner = cell.inset(style.gap() / 3, style.gap() / 3);
+                ui.canvas()
+                    .fill_round(inner, u32::from(inner.height / 2), Color::BLACK);
                 Color::WHITE
             } else {
                 Color::BLACK
@@ -160,10 +166,13 @@ impl Screen for FindScreen {
             let text = core::str::from_utf8(&label).unwrap_or("#");
             let w = font.measure(big, text);
             let x = f32::from(cell.x) + (f32::from(cell.width) - w) / 2.0;
-            ui::draw_label(canvas, &font, big, x, *cell, text, ink);
+            ui::Label::new(text)
+                .px(big)
+                .color(ink)
+                .draw_from(&mut ui, x, *cell);
         }
         let note = ui::tr_input(env, "files.list.find.note");
-        ui::draw_message(canvas, env, &style, self.note, note);
+        ui.message(self.note, note);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -193,7 +202,7 @@ impl Screen for FindScreen {
         }
         let point = gesture.start;
         if let Some(action) = self.header.tap(cx.env(), &self.style, point, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.search.contains(point) {

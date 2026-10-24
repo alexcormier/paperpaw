@@ -231,7 +231,7 @@ impl BatteryView {
         if !shown.is_empty() {
             lines.push(Line::Heading(tr("battery.by-screen")));
             for p in shown.into_iter().take(PLUGINS_SHOWN) {
-                let refreshes = i64::from(p.refreshes.iter().sum::<u32>());
+                let refreshes = i64::from(p.refreshes.total());
                 lines.push(Line::Value(
                     plugin_name(env, p.plugin.as_str()),
                     env.i18n.plural(
@@ -334,18 +334,14 @@ impl BatteryView {
     fn height(&self, env: &Env<'_>, line: &Line) -> u16 {
         match line {
             Line::Heading(_) => ui::heading_height(env, &self.style),
-            Line::Value(..) | Line::Message(_) => self.style.row as u16,
+            Line::Value(..) | Line::Message(_) => self.style.row(),
         }
     }
 
     /// The room for lines: below the header, above the footer.
     fn room(&self, env: &Env<'_>) -> (u16, u16) {
         let top = self.header.area().y + self.header.area().height;
-        let bottom = env
-            .device
-            .display
-            .height
-            .saturating_sub(self.style.row as u16);
+        let bottom = env.device.display.height.saturating_sub(self.style.row());
         (top, bottom)
     }
 
@@ -373,8 +369,8 @@ impl BatteryView {
     }
 
     /// The page and the number of pages, where there are several.
-    fn paging(&self) -> Option<(usize, usize)> {
-        (self.pages.len() > 1).then_some((self.page, self.pages.len()))
+    fn paging(&self) -> Option<ui::Paging> {
+        (self.pages.len() > 1).then_some(ui::Paging::new(self.page, self.pages.len()))
     }
 }
 
@@ -391,16 +387,11 @@ impl Screen for BatteryView {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            env.i18n.tr("battery.title"),
-            None,
-            self.paging(),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, env.i18n.tr("battery.title"), None, self.paging());
         let display = env.device.display;
-        let footer_height = style.row as u16;
+        let footer_height = style.row();
         let (mut y, bottom) = self.room(env);
         let first = self.pages.get(self.page).copied().unwrap_or(0);
         let last = self
@@ -415,38 +406,22 @@ impl Screen for BatteryView {
             }
             let rect = Rect::new(0, y, display.width, height);
             match line {
-                Line::Heading(text) => ui::draw_heading(canvas, env, &style, rect, text),
-                Line::Value(title, value) => {
-                    ui::draw_value_row(canvas, env, &style, rect, false, title, value);
-                }
+                Line::Heading(text) => ui.heading(rect, text),
+                Line::Value(title, value) => ui::Row::value(title, value).draw(&mut ui, rect),
                 Line::Message(text) => {
-                    if let Some(font) = style.font(env) {
-                        ui::draw_label(
-                            canvas,
-                            &font,
-                            style.small,
-                            style.margin as f32,
-                            rect,
-                            text,
-                            style.faint(90),
-                        );
-                    }
+                    ui::Label::new(text)
+                        .px(style.small())
+                        .color(style.faint(ui::Ink::Muted))
+                        .draw_from(&mut ui, style.margin() as f32, rect);
                 }
             }
             y += height;
         }
-        if let Some(font) = style.font(env) {
-            let rect = Rect::new(0, bottom, display.width, footer_height);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                style.margin as f32,
-                rect,
-                &self.footer,
-                style.faint(60),
-            );
-        }
+        let rect = Rect::new(0, bottom, display.width, footer_height);
+        ui::Label::new(&self.footer)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Note))
+            .draw_from(&mut ui, style.margin() as f32, rect);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -475,7 +450,7 @@ impl Screen for BatteryView {
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
             Some(action) => {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 Handled::Yes
             }
             None => Handled::No,

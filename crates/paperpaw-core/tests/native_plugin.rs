@@ -26,7 +26,7 @@ use paperpaw_platform::{
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::native::support::{Api, ApiSlot, Entry};
 use paperpaw_sdk::native::{FINGERPRINT, take};
-use paperpaw_sdk::{Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, Version};
+use paperpaw_sdk::{Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, Version};
 
 const DEVICE: DeviceInfo = DeviceInfo {
     id: "test",
@@ -126,9 +126,9 @@ impl Plugin for Loaded {
     }
 }
 
-/// A plugin of this build that looks for the loaded one's services: by
-/// name, and by `TypeId` alone.
-struct Looks(Rc<Cell<(Option<Version>, Option<Version>)>>);
+/// A plugin of this build that looks for the loaded one's service by
+/// name.
+struct Looks(Rc<Cell<Option<Version>>>);
 
 impl Plugin for Looks {
     fn manifest(&self) -> Manifest {
@@ -141,12 +141,13 @@ impl Plugin for Looks {
         let found = self.0.clone();
         r.on(
             events::STARTED,
-            move |env: &Env<'_>, _, _: &mut Vec<Command>| {
-                let services = env.services;
-                found.set((
-                    services.get::<Version>("hello.version").copied(),
-                    services.get::<Version>("hello.by-type-id").copied(),
-                ));
+            move |env: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
+                let services = env.services();
+                found.set(
+                    services
+                        .get::<HelloVersion>("hello.version", Version::new(1, 0, 0))
+                        .map(|v| v.0),
+                );
             },
         )
     }
@@ -174,7 +175,7 @@ fn a_plugin_built_apart_runs_in_the_kernel() {
     let plugin = unsafe { take((entry.make)()) }.unwrap();
     assert_eq!(plugin.manifest().id.as_str(), "hello");
 
-    let found = Rc::new(Cell::new((None, None)));
+    let found = Rc::new(Cell::new(None));
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(Loaded(plugin))
         .plugin(Looks(found.clone()))
@@ -182,9 +183,11 @@ fn a_plugin_built_apart_runs_in_the_kernel() {
         .unwrap();
     assert!(kernel.take_warnings().is_empty());
     kernel.start(Instant(0));
-    let (by_name, by_type_id) = found.get();
-    assert_eq!(by_name, Some(Version::new(1, 2, 3)), "its service, by name");
-    assert_eq!(by_type_id, None, "another build: another TypeId");
+    assert_eq!(
+        found.get(),
+        Some(Version::new(1, 2, 3)),
+        "its service, by name"
+    );
 
     // Its action opens its screen, drawn by its code; its translations
     // are the kernel's.
@@ -204,3 +207,9 @@ fn a_plugin_built_apart_runs_in_the_kernel() {
     drop(kernel);
     drop(library);
 }
+
+/// The loaded plugin's version service, as it names it: the same key,
+/// another build.
+#[repr(C)]
+struct HelloVersion(Version);
+paperpaw_sdk::service_type!(HelloVersion, "hello.version/1");

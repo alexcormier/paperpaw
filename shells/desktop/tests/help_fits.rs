@@ -69,20 +69,21 @@ impl Screen for Look {
 fn look(env: &Env<'_>) {
     {
         let style = UiStyle::new(env);
-        let width = env.device.display.width;
-        let language = env.i18n.language().to_string();
-        for spec in env.settings.specs() {
+        let width = env.device().display.width;
+        let language = env.i18n().language().to_string();
+        for spec in env.settings().specs() {
             let Some(key) = &spec.description else {
                 continue;
             };
             if spec.id.as_str().starts_with("help-probe.") {
                 continue;
             }
-            let text = env.i18n.tr(key);
+            let text = env.i18n().tr(key);
             if !ui::note_fits(env, &style, width, text) {
                 CUT.lock().unwrap().push(format!(
                     "{} {language} {} [{key}]: {text}",
-                    env.device.id, spec.id
+                    env.device().id,
+                    spec.id
                 ));
             }
         }

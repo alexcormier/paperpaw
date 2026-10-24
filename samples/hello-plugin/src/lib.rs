@@ -56,7 +56,7 @@ impl Plugin for Hello {
         let opened = Rc::new(Cell::new(0u32));
 
         // The action: what a menu entry, a button or a gesture runs.
-        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, out| {
+        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, _, out| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         }))?;
         r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(90))?;
@@ -72,8 +72,7 @@ impl Plugin for Hello {
 
         // The setting: shown in the settings, saved by the kernel.
         r.add_setting(
-            SettingSpec::text(&NAME, "hello.setting.name", "")
-                .group(groups::OTHER)
+            SettingSpec::text(NAME.static_str(), "hello.setting.name", "", groups::OTHER)
                 .description("hello.setting.name.help"),
         )?;
 
@@ -106,12 +105,12 @@ impl HelloScreen {
     }
 
     fn greeting(&self, env: &Env<'_>) -> alloc::string::String {
-        let name = match env.settings.read(&NAME).trim() {
-            "" => env.i18n.tr("hello.someone"),
+        let name = match env.settings().read(&NAME).trim() {
+            "" => env.i18n().tr("hello.someone"),
             name => name,
         };
         let count = i64::from(self.opened);
-        env.i18n.plural(
+        env.i18n().plural(
             "hello.greeting",
             count,
             &[("name", Arg::Str(name)), ("count", Arg::Int(count))],
@@ -121,15 +120,16 @@ impl HelloScreen {
 
 impl Screen for HelloScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let title = env.i18n.tr("hello.title");
-        self.header
-            .draw(canvas, env, &self.style, title, None, None);
-        let display = env.device.display;
+        // What the screen draws with: canvas, environment and style.
+        let mut ui = ui::Ui::new(canvas, env, &self.style);
+        let title = env.i18n().tr("hello.title");
+        self.header.draw(&mut ui, title, None, None);
+        let display = env.device().display;
         let top = self.header.area().height;
         // A header taller than a tiny screen leaves no room, not an
         // overflow.
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        ui::draw_message(canvas, env, &self.style, area, &self.greeting(env));
+        ui.message(area, &self.greeting(env));
     }
 
     /// Buttons: *confirm* or *back* close it; other actions (e.g. the
@@ -148,7 +148,7 @@ impl Screen for HelloScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
         } else {
             cx.command(Command::Back);
         }

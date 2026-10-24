@@ -38,8 +38,8 @@ use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingSpec, Version,
+    ActionSpec, Command, Commands, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
 };
 
 use crate::catalogs::Catalog;
@@ -72,22 +72,36 @@ const COVERS: Setting<bool> = Setting::new("opds.covers");
 /// feeds may link to covers, books or further feeds anywhere, and those
 /// get no password.
 fn request(
+    agent: &(String, String),
     catalog: &Catalog,
     url: &str,
     save_to: String,
     reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
-    let mut request = HttpRequest::get(url, reply)
+    request_by("GET", agent, catalog, url, save_to, reply, params)
+}
+
+/// The same with `method`.
+fn request_by(
+    method: &str,
+    agent: &(String, String),
+    catalog: &Catalog,
+    url: &str,
+    save_to: String,
+    reply: &Event<HttpReply>,
+    params: Params,
+) -> HttpRequest {
+    let request = HttpRequest::new(method, url, reply)
         .with(params.with(temp::FILE, save_to.clone()))
-        .save_to(save_to);
-    request.headers.push(paperpaw_sdk::web::user_agent());
-    if let Some(auth) = catalog.authorization()
-        && same_origin(url, &catalog.url)
-    {
-        request.headers.push((String::from("Authorization"), auth));
+        .save_to(save_to)
+        .header(agent.0.clone(), agent.1.clone());
+    match catalog.authorization() {
+        Some(auth) if same_origin(url, &catalog.url) => {
+            request.header(String::from("Authorization"), auth)
+        }
+        _ => request,
     }
-    request
 }
 
 /// The scheme, host and port of `url` (the port filled in for `http` and
@@ -124,25 +138,23 @@ fn same_origin(a: &str, b: &str) -> bool {
 /// A request for a list of a catalog: for a WebDAV folder its listing
 /// (`PROPFIND`), else the feed.
 fn list_request(
+    agent: &(String, String),
     catalog: &Catalog,
     url: &str,
     save_to: String,
     reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
-    let mut request = request(catalog, url, save_to, reply, params);
-    if catalog.webdav {
-        request.method = String::from("PROPFIND");
-        request
-            .headers
-            .push((String::from("Depth"), String::from("1")));
-        request.headers.push((
+    if !catalog.webdav {
+        return request(agent, catalog, url, save_to, reply, params);
+    }
+    request_by("PROPFIND", agent, catalog, url, save_to, reply, params)
+        .header(String::from("Depth"), String::from("1"))
+        .header(
             String::from("Content-Type"),
             String::from("application/xml; charset=utf-8"),
-        ));
-        request.body = Some(String::from(feed::PROPFIND));
-    }
-    request
+        )
+        .body(String::from(feed::PROPFIND))
 }
 
 /// Reads a list of a catalog from `path`, which came from `base`.
@@ -180,15 +192,15 @@ static IN_CATALOGS_10: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::
 
 /// Covers in lists, and how many books a sync fetches at most.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         COVERS.static_str(),
         "opds.setting.covers",
         true,
         groups::LIBRARY,
     )
     .with_extra(&IN_CATALOGS)
-    .described("opds.setting.covers.help"),
-    SettingSpec::fixed_number(
+    .description("opds.setting.covers.help"),
+    SettingSpec::number(
         sync::LIMIT.static_str(),
         "opds.setting.limit",
         10,
@@ -197,7 +209,7 @@ static SETTINGS: [SettingSpec; 2] = [
         groups::LIBRARY,
     )
     .with_extra(&IN_CATALOGS_10)
-    .described("opds.setting.limit.help"),
+    .description("opds.setting.limit.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -238,18 +250,18 @@ impl Plugin for Opds {
             Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "opds.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
         let shared = state.clone();
         r.add_action(ActionSpec::new(SYNC, "opds.sync-all").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     shared.borrow_mut().start(env, marked(env), out);
                 } else {
                     let due = SYNC_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));
@@ -317,9 +329,17 @@ mod tests {
         };
         let reply = Event::<HttpReply>::new("opds.test");
         let auth = |url: &str| {
-            let request = request(&catalog, url, String::from("a.tmp"), &reply, Params::new());
+            let agent = (String::from("User-Agent"), String::from("PaperPaw"));
+            let request = request(
+                &agent,
+                &catalog,
+                url,
+                String::from("a.tmp"),
+                &reply,
+                Params::new(),
+            );
             request
-                .headers
+                .headers()
                 .iter()
                 .any(|(name, _)| name == "Authorization")
         };

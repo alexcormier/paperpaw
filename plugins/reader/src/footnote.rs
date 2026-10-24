@@ -35,17 +35,17 @@ impl FootnoteScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let display = env.device.display;
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         let text = params.get(params::TEXT).unwrap_or_default();
         let width = f32::from(display.width.saturating_sub(2 * margin));
-        let row = style.row as u16;
+        let row = style.row();
         let most = (f32::from(display.height) * SHARE) as u16;
         let (lines, line_height) = match style.font(env) {
             Some(font) => {
-                let line = font.line_metrics(style.text).line_height as u16;
+                let line = font.line_metrics(style.text()).line_height as u16;
                 let room = most.saturating_sub(row + 3 * gap) / line.max(1);
-                let ranges = font.wrap(style.text, text, width);
+                let ranges = font.wrap(style.text(), text, width);
                 let keep = ranges.len().min(room.max(1) as usize);
                 let mut lines: Vec<String> = ranges[..keep]
                     .iter()
@@ -55,14 +55,14 @@ impl FootnoteScreen {
                     && let Some(last) = lines.last_mut()
                 {
                     let start = ranges[keep - 1].start;
-                    *last = ui::fit(&font, style.text, text[start..].trim(), width);
+                    *last = ui::fit(&font, style.text(), text[start..].trim(), width);
                 }
                 (lines, line)
             }
             None => (Vec::new(), row),
         };
         // The buttons' row grows with them on touch screens.
-        let button_row = style.touch_row(style.control_row) as u16;
+        let button_row = style.touch_row(u32::from(style.control_row())) as u16;
         // Its buttons keep the side margin from the bottom edge too.
         let room = ui::edge_room(&style, button_row);
         // Side by side where their words fit, else one below the other.
@@ -103,7 +103,7 @@ impl FootnoteScreen {
             ]
         };
         Self {
-            focus: (!env.device.input.touch).then_some(0),
+            focus: ui::focus_shown(env).then_some(0),
             style,
             region,
             lines,
@@ -132,28 +132,29 @@ impl Screen for FootnoteScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill(
-            Rect::new(r.x, r.y, r.width, (style.line * 2) as u16),
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill(
+            Rect::new(r.x, r.y, r.width, (u32::from(style.line()) * 2) as u16),
             Color::BLACK,
         );
         let Some(font) = style.font(env) else {
             return;
         };
-        let line_height = font.line_metrics(style.text).line_height as u16;
-        let mut y = r.y + style.gap as u16;
+        let line_height = font.line_metrics(style.text()).line_height as u16;
+        let mut y = r.y + style.gap();
         for line in &self.lines {
             let area = Rect::new(r.x, y, r.width, line_height);
-            let x = f32::from(r.x) + style.margin as f32;
-            ui::draw_label(canvas, &font, style.text, x, area, line, Color::BLACK);
+            let x = f32::from(r.x) + style.margin() as f32;
+            ui::Label::new(line)
+                .px(style.text())
+                .color(Color::BLACK)
+                .draw_from(&mut ui, x, area);
             y += line_height;
         }
         for (i, (slot, label)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             let label = env.i18n.tr(label);
-            ui::draw_button(
-                canvas,
-                env,
-                &style,
+            ui.button(
                 ui::button_in_slot(&style, *slot),
                 label,
                 false,

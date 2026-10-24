@@ -11,15 +11,15 @@ use alloc::vec::Vec;
 use clean_up::{ask_clean_up, register_clean_up};
 
 use paperpaw_sdk::builtin::{
-    actions, events, fonts, groups, keymap_presets, menus, params, screens, setting_sections,
-    settings, settings_sections, slots, status_items,
+    actions, events, fonts, group_sections, groups, keymap_presets, menus, params, screens,
+    settings, settings_page, slots, status_items,
 };
 use paperpaw_sdk::library;
 use paperpaw_sdk::time::{self, AUTO, CLOCK_12H, CLOCK_24H, TIME_ZONES};
 use paperpaw_sdk::widgets::{self, Drawn, WidgetSpec};
 use paperpaw_sdk::{
-    ActionHandler, ActionHint, ActionSpec, Canvas, Color, Command, Cx, Env, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
+    ActionHandler, ActionHint, ActionSpec, Canvas, Color, Command, Commands, Cx, Env, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, Screen, ScreenSpec,
     SettingExtra, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, SlotSpec,
     StatusItemSpec, StatusValue,
 };
@@ -31,7 +31,7 @@ pub(crate) struct CorePlugin(pub(crate) String);
 
 impl Plugin for CorePlugin {
     fn manifest(&self) -> Manifest {
-        Manifest::new(CORE, "PaperPaw kernel", SDK_VERSION)
+        Manifest::new(CORE, "PaperPaw kernel", paperpaw_sdk::package_version!())
             .description("Runs screens, input, settings and plugins.")
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
@@ -70,7 +70,7 @@ impl Plugin for CorePlugin {
             let Some(id) = id else {
                 return;
             };
-            if env.settings.spec(id.as_str()).is_none() {
+            if env.settings().spec(id.as_str()).is_none() {
                 return;
             }
             // A secret setting's text is kept with the secrets, never in
@@ -82,9 +82,9 @@ impl Plugin for CorePlugin {
             ));
         })?;
         // Each plugin's network (its settings made by the kernel).
-        r.add_setting_group(
-            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87),
-        )?;
+        static NETWORK: SettingGroupSpec =
+            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87);
+        r.add_setting_group(&NETWORK)?;
         r.add_icon(crate::work::NETWORK_GROUP, Cow::Borrowed("world"))?;
         Ok(())
     }
@@ -138,15 +138,15 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
     // What it does is asked once the book is known (`BOOK_CHOSEN` below).
     r.add_action(
         ActionSpec::new(actions::OPEN_WITH, "core.action.open-with")
-            .handler(|_: &Env<'_>, _: &mut Vec<Command>| {}),
+            .handler(|_: &Env<'_>, _, _: &mut Commands| {}),
     )?;
     r.add_menu_entry(MenuEntry::new(menus::BOOK, actions::OPEN_WITH))?;
     r.add_icon(actions::OPEN_WITH, Cow::Borrowed("apps"))?;
     // Where there is something to choose: another reading app, or another
     // way to open books.
     r.set_item_state(actions::OPEN_WITH, |env| {
-        let more = env.readers.len() > 1 || !env.menus.items(menus::OPEN_WITH.as_str()).is_empty();
-        paperpaw_sdk::ItemState::new().shown(more)
+        let others = !env.menus().items(menus::OPEN_WITH.as_str()).is_empty();
+        paperpaw_sdk::ItemState::new().shown(others || env.readers().len() > 1)
     })?;
     r.on(events::BOOK_CHOSEN, |_, chosen, out| {
         if chosen.action == actions::OPEN_WITH {
@@ -158,7 +158,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         let name = paperpaw_sdk::files::name(path);
         let once = wanted.once == Some(true) && !wanted.folder;
         let readers_of_book = || {
-            env.readers
+            env.readers()
                 .for_book(env, path)
                 .into_iter()
                 .map(|r| r.id.as_str())
@@ -167,7 +167,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         let (options, key, kind) = if once {
             let mut options = readers_of_book();
             options.extend(
-                env.menus
+                env.menus()
                     .items(menus::OPEN_WITH.as_str())
                     .into_iter()
                     .filter(|item| !item.section)
@@ -176,7 +176,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
             options.push(ALWAYS);
             (options, "core.reading-app.open-with", "o")
         } else if wanted.folder {
-            let mut options: Vec<&str> = env.readers.iter().map(|r| r.id.as_str()).collect();
+            let mut options: Vec<&str> = env.readers().iter().map(|r| r.id.as_str()).collect();
             options.push(settings::READING_APP_DEFAULT);
             (options, "core.reading-app.for-folder", "f")
         } else {
@@ -202,25 +202,25 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         if kind == "o" {
             if option == ALWAYS {
                 out.push(readers::ask(Choice::Book(path)));
-            } else if let Some(reader) = env.readers.get(option) {
+            } else if let Some(reader) = env.readers().get(option) {
                 out.push(readers::open_with(path, reader));
             } else if let Ok(action) = Id::parse(option) {
                 // Another way to open it, as an action of the book menu.
                 let chosen = events::BookChosen::new(action.clone(), String::from(path));
                 out.push(events::BOOK_CHOSEN.emit(chosen));
-                out.push(Command::RunAction(action));
+                out.push(Command::run(action));
             }
             return;
         }
         let reader = Id::parse(option)
             .ok()
-            .filter(|id| env.readers.get(id.as_str()).is_some());
+            .filter(|id| env.readers().get(id.as_str()).is_some());
         let choice = match kind {
             "f" => Choice::Folder(path),
             _ => Choice::Book(path),
         };
-        if readers::remember(env.storage, choice, reader.as_ref()).is_err() {
-            let text = env.i18n.tr("core.reading-app.not-kept");
+        if readers::remember(env.storage(), choice, reader.as_ref()).is_err() {
+            let text = env.i18n().tr("core.reading-app.not-kept");
             out.push(Command::Notify(String::from(text)));
         }
         if kind == "b" {
@@ -288,27 +288,27 @@ fn register_screen_actions(r: &mut Registrar) -> Result<(), RegisterError> {
 /// kernel's slots and menus.
 fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
     let open = |slot: Id| -> ActionHandler {
-        Box::new(move |_: &Env<'_>, out: &mut Vec<Command>| {
+        Box::new(move |_: &Env<'_>, _: &Params, out: &mut Commands| {
             out.push(Command::open_slot(slot.clone()));
         })
     };
     let forward = |target: Id| -> ActionHandler {
-        Box::new(move |_: &Env<'_>, out: &mut Vec<Command>| {
-            out.push(Command::RunAction(target.clone()));
+        Box::new(move |_: &Env<'_>, _: &Params, out: &mut Commands| {
+            out.push(Command::run(target.clone()));
         })
     };
     let handled: [(Id, &'static str, ActionHandler); 11] = [
         (
             actions::REFRESH_SCREEN,
             "core.action.refresh-screen",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
                 out.push(Command::Redraw(paperpaw_sdk::RefreshMode::Full));
             }),
         ),
         (
             actions::QUICK_PANEL,
             "core.action.quick-panel",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
                 out.push(Command::OpenSlot(
                     slots::PANEL,
                     Params::new()
@@ -331,7 +331,7 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::MENU,
             "core.action.menu",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
                 out.push(Command::OpenSlot(
                     slots::MENU,
                     Params::new().with(params::MENU, menus::MAIN.as_str()),
@@ -343,8 +343,8 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::LONG_CONFIRM,
             "core.action.long-confirm",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::RunAction(actions::MENU));
+            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
+                out.push(Command::run(actions::MENU));
             }),
         ),
         (
@@ -360,17 +360,17 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::BACK,
             "core.action.back",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| out.push(Command::Back)),
+            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| out.push(Command::Back)),
         ),
         (
             actions::NOTHING,
             "core.action.nothing",
-            Box::new(|_: &Env<'_>, _: &mut Vec<Command>| {}),
+            Box::new(|_: &Env<'_>, _: &Params, _: &mut Commands| {}),
         ),
         (
             actions::HOME,
             "core.action.home",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
                 out.push(Command::open_slot(slots::HOME));
             }),
         ),
@@ -385,19 +385,19 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::CLEAN_UP,
             "core.action.clean-up",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| ask_clean_up(env, out)),
+            Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| ask_clean_up(env, out)),
         ),
         (
             actions::SCREENSHOT,
             "core.action.screenshot",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| {
                 out.push(Command::Screenshot(screenshot_path(env)));
             }),
         ),
         (
             actions::TOOLS,
             "core.action.tools",
-            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
                 out.push(Command::OpenSlot(
                     slots::MENU,
                     Params::new().with(params::MENU, menus::TOOLS.as_str()),
@@ -407,9 +407,9 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::SLEEP,
             "core.action.sleep",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| {
                 // The sleep screen first, if there is one, then sleep.
-                if env.caps.sleep && env.has_slot(&slots::SLEEP) {
+                if env.caps().sleep && env.has_slot(&slots::SLEEP) {
                     out.push(Command::open_slot(slots::SLEEP));
                 }
                 out.push(Command::Sleep);
@@ -418,8 +418,8 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
         (
             actions::TOGGLE_NIGHT_MODE,
             "core.action.toggle-night-mode",
-            Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                let night = env.settings.read(&settings::NIGHT_MODE);
+            Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| {
+                let night = env.settings().read(&settings::NIGHT_MODE);
                 out.push(Command::set(&settings::NIGHT_MODE, !night));
             }),
         ),
@@ -505,7 +505,7 @@ struct Catalog {
 /// whose index takes the memory. Catching up, which takes little, goes on
 /// beside the library; a library with no catalog yet holds no index.
 fn waits(env: &Env<'_>, walk: bool) -> bool {
-    let shown = env.stack.iter().rev().find(|entry| !entry.overlay);
+    let shown = env.stack().iter().rev().find(|entry| !entry.overlay);
     let reading = shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
     let library_open = env
         .stack
@@ -513,10 +513,10 @@ fn waits(env: &Env<'_>, walk: bool) -> bool {
         .any(|entry| entry.slot.as_ref() == Some(&slots::LIBRARY));
     reading
         || (walk
-            && env.device.memory == paperpaw_sdk::MemoryClass::Small
+            && env.device().memory == paperpaw_sdk::MemoryClass::Small
             && library_open
             && matches!(
-                library::catalog::state(env.storage),
+                library::catalog::state(env.storage()),
                 library::catalog::State::Ready { .. }
             ))
 }
@@ -526,7 +526,7 @@ impl Catalog {
     /// Wants the library walked: `now`, or at a calm moment; `anew`
     /// where what a walk under way met may have changed (it starts again),
     /// else one under way, paused or not, goes on.
-    fn want_walk(&self, now: bool, anew: bool, out: &mut Vec<Command>) {
+    fn want_walk(&self, now: bool, anew: bool, out: &mut Commands) {
         let walking = matches!(*self.job.borrow(), Some(CatalogJob::Walk(_)));
         if walking && !anew {
             self.declare(now, out);
@@ -540,7 +540,7 @@ impl Catalog {
     /// Wants the catalog caught up, with the book at `path` taken from its
     /// details: `now`, or at a calm moment (books coming one after the
     /// other, from Calibre say, caught up once).
-    fn want_catch_up(&self, path: Option<&str>, now: bool, out: &mut Vec<Command>) {
+    fn want_catch_up(&self, path: Option<&str>, now: bool, out: &mut Commands) {
         if let Some(path) = path {
             let mut fresh = self.fresh.borrow_mut();
             if !fresh.iter().any(|p| p == path) {
@@ -554,12 +554,12 @@ impl Catalog {
     /// while, a book closed, the device plugged in; within a minute at the
     /// latest), never while the device goes to sleep or opens a book. A
     /// calm request does not put off one at once.
-    fn declare(&self, now: bool, out: &mut Vec<Command>) {
+    fn declare(&self, now: bool, out: &mut Commands) {
         use paperpaw_sdk::work::{Moments, Work};
         self.urgent.set(self.urgent.get() || now);
         let calm = Moments::IDLE | Moments::BOOK_CLOSED | Moments::CHARGING;
         let within = if self.urgent.get() { 0 } else { 60 };
-        out.push(Command::Work(
+        out.push(Command::work(
             Work::new(CATALOG_WORK)
                 .at_moments(calm)
                 .within(core::time::Duration::from_secs(within)),
@@ -579,9 +579,9 @@ impl Catalog {
     }
 
     /// One step of the job.
-    fn step(&self, env: &Env<'_>, out: &mut Vec<Command>) -> paperpaw_sdk::work::Step {
+    fn step(&self, env: &Env<'_>, out: &mut Commands) -> paperpaw_sdk::work::Step {
         use paperpaw_sdk::work::Step;
-        let storage = env.storage;
+        let storage = env.storage();
         let mut job = self.job.borrow_mut();
         let walk_next = match &*job {
             Some(running) => matches!(running, CatalogJob::Walk(_)),
@@ -674,8 +674,9 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::CATALOG_WANTED, move |env, wanted, out| {
-            let missing = library::catalog::state(env.storage) == library::catalog::State::Missing;
-            if !env.formats.is_empty() && (wanted.anew || missing || !catalog.walked.get()) {
+            let missing =
+                library::catalog::state(env.storage()) == library::catalog::State::Missing;
+            if !env.formats().is_empty() && (wanted.anew || missing || !catalog.walked.get()) {
                 catalog.want_walk(true, wanted.anew, out);
             }
         })?;
@@ -705,7 +706,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::BOOK_CHANGED, move |env, changed, out| {
-            let kept = env.book_fields.iter().any(|f| f.in_catalog);
+            let kept = env.book_fields().iter().any(|f| f.in_catalog);
             if changed.what & library::what::FIELDS != 0 && kept {
                 catalog.want_catch_up(Some(&changed.path), false, out);
             }
@@ -729,12 +730,12 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
         let catalog = Rc::clone(&catalog);
         r.on(event, move |env, reading, out| {
             library::record(env, reading, false);
-            library::note_status(env.storage, &reading.path);
+            library::note_status(env.storage(), &reading.path);
             out.push(library::changed_book(
                 &reading.path,
                 library::what::PROGRESS,
             ));
-            if library::catalog::log_is_long(env.storage) {
+            if library::catalog::log_is_long(env.storage()) {
                 catalog.want_catch_up(None, false, out);
             }
         })?;
@@ -745,9 +746,9 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::BOOK_MOVED, move |env, moved, out| {
-            library::moved(env.storage, &moved.from, &moved.path);
-            library::move_data(env.storage, env.book_data, &moved.from, &moved.path);
-            let _ = library::catalog::forget(env.storage, &moved.from);
+            library::moved(env.storage(), &moved.from, &moved.path);
+            library::move_data(env.storage(), env.book_data(), &moved.from, &moved.path);
+            let _ = library::catalog::forget(env.storage(), &moved.from);
             catalog.fresh.borrow_mut().retain(|p| *p != moved.from);
             catalog.want_catch_up(Some(&moved.path), true, out);
         })?;
@@ -755,11 +756,11 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::BOOK_REMOVED, move |env, removed, out| {
-            library::removed(env.storage, &removed.path);
-            library::remove_data(env.storage, env.book_data, &removed.path);
-            let _ = library::catalog::forget(env.storage, &removed.path);
+            library::removed(env.storage(), &removed.path);
+            library::remove_data(env.storage(), env.book_data(), &removed.path);
+            let _ = library::catalog::forget(env.storage(), &removed.path);
             catalog.fresh.borrow_mut().retain(|p| *p != removed.path);
-            if library::catalog::log_is_long(env.storage) {
+            if library::catalog::log_is_long(env.storage()) {
                 catalog.want_catch_up(None, false, out);
             }
         })?;
@@ -783,12 +784,12 @@ const CLEAN_UP_ANSWERED: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Confi
 /// Declares cleaning up by itself: while charging, a week after it was
 /// last done (a day after the first start). Not without a clock, which
 /// tells the time across starts (on the X4 every wake is one).
-fn declare_clean_up(env: &Env<'_>, out: &mut Vec<Command>) {
+fn declare_clean_up(env: &Env<'_>, out: &mut Commands) {
     use paperpaw_sdk::work::{Moments, Work};
     let Some(now) = paperpaw_sdk::time::unix_seconds(env) else {
         return;
     };
-    let last = paperpaw_sdk::read_file(env.storage, CLEANED_UP, 32)
+    let last = paperpaw_sdk::read_file(env.storage(), CLEANED_UP, 32)
         .ok()
         .and_then(|bytes| {
             core::str::from_utf8(&bytes)
@@ -806,7 +807,7 @@ fn declare_clean_up(env: &Env<'_>, out: &mut Vec<Command>) {
         seen
     });
     let wait = (last + CLEAN_UP_EVERY - now).clamp(0, CLEAN_UP_EVERY);
-    out.push(Command::Work(
+    out.push(Command::work(
         Work::new(CLEAN_UP_WORK)
             .charging()
             .after(core::time::Duration::from_secs(wait as u64))
@@ -924,7 +925,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     // and which opens the menu when bound to a key.
     r.add_action(
         ActionSpec::new(menus::READER_MORE, "core.action.reader-more").handler(Box::new(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _: &Params, out: &mut Commands| {
                 out.push(Command::OpenSlot(
                     slots::MENU,
                     Params::new().with(params::MENU, menus::READER_MORE.as_str()),
@@ -941,7 +942,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     // its menu) where plugins put something there: reached with the
     // buttons too, however full the home screen is.
     r.add_action(ActionSpec::new(menus::APPS, "core.action.apps").handler(
-        |_: &Env<'_>, out: &mut Vec<Command>| {
+        |_: &Env<'_>, _, out: &mut Commands| {
             out.push(Command::OpenSlot(
                 slots::MENU,
                 Params::new().with(params::MENU, menus::APPS.as_str()),
@@ -951,7 +952,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_menu_entry(MenuEntry::new(menus::TOOLS, menus::APPS).order(90))?;
     r.add_icon(menus::APPS, Cow::Borrowed("apps"))?;
     r.set_item_state(menus::APPS, |env| {
-        paperpaw_sdk::ItemState::new().shown(!env.menus.items(menus::APPS.as_str()).is_empty())
+        paperpaw_sdk::ItemState::new().shown(!env.menus().items(menus::APPS.as_str()).is_empty())
     })?;
     for (action, order, icon) in [
         // The quick panel at the top: found without its gesture or key.
@@ -982,18 +983,10 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
 
     // The settings' main page: reading, the device, customising.
     for (id, title, order) in [
+        (settings_page::READING, "core.settings-section.reading", 0),
+        (settings_page::DEVICE, "core.settings-section.device", 50),
         (
-            settings_sections::READING,
-            "core.settings-section.reading",
-            0,
-        ),
-        (
-            settings_sections::DEVICE,
-            "core.settings-section.device",
-            50,
-        ),
-        (
-            settings_sections::CUSTOMISE,
+            settings_page::CUSTOMISE,
             "core.settings-section.customise",
             200,
         ),
@@ -1045,101 +1038,101 @@ static PERCENT_5_SLIDER: SettingExtra = SettingExtra::new()
 static PERCENT_5: SettingExtra = SettingExtra::new().unit("core.unit.percent").step(5);
 static MINUTES_5: SettingExtra = SettingExtra::new().unit("core.unit.minutes").step(5);
 static COLORS: SettingExtra = SettingExtra::new().section("core.section.colors");
-static FONT: SettingExtra = SettingExtra::new().section(setting_sections::FONT);
+static FONT: SettingExtra = SettingExtra::new().section(group_sections::FONT);
 static FONT_PT: SettingExtra = SettingExtra::new()
-    .section(setting_sections::FONT)
+    .section(group_sections::FONT)
     .unit("core.unit.pt")
     .slider();
 static LINES_KEPT: SettingExtra = SettingExtra::new()
     .unit("core.unit.lines")
-    .section(setting_sections::PAGE);
+    .section(group_sections::PAGE);
 static WEIGHT: SettingExtra = SettingExtra::new()
     .unit("core.unit.weight")
-    .section(setting_sections::FONT);
+    .section(group_sections::FONT);
 static WORDS: SettingExtra = SettingExtra::new()
     .unit("core.unit.percent")
     .step(10)
-    .section(setting_sections::FONT)
+    .section(group_sections::FONT)
     .slider();
 static LINES: SettingExtra = SettingExtra::new()
     .unit("core.unit.percent")
     .step(5)
-    .section(setting_sections::PAGE)
+    .section(group_sections::PAGE)
     .slider();
 static MARGINS: SettingExtra = SettingExtra::new()
     .unit("core.unit.mm")
-    .section(setting_sections::PAGE)
+    .section(group_sections::PAGE)
     .slider();
 static MARGINS_ENDS: SettingExtra = SettingExtra::new()
     .unit("core.unit.mm")
-    .section(setting_sections::PAGE)
+    .section(group_sections::PAGE)
     .slider()
-    .follows(settings::MARGIN.static_str());
-static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAGE);
+    .follows(Id::new_static(settings::MARGIN.static_str()));
+static IN_PAGE: SettingExtra = SettingExtra::new().section(group_sections::PAGE);
 /// The reading apps' part of the reading settings: the default one and
 /// one for each format (registered once the formats are known).
 /// A reading app chosen whose plugin is gone is kept, and passed over.
 static IN_APPS: SettingExtra = SettingExtra::new()
     .section("core.section.reading-apps")
     .keeps_unknown();
-static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections::BEHAVIOUR);
+static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(group_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
 static GENERAL: [SettingSpec; 9] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         settings::DEVELOPER.static_str(),
         "core.setting.developer",
         false,
         groups::SYSTEM,
     )
     .advanced()
-    .described("core.setting.developer.help"),
-    SettingSpec::fixed(
-        settings::LANGUAGE.static_str(),
+    .description("core.setting.developer.help"),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(settings::LANGUAGE.static_str()),
         "core.setting.language",
         SettingKind::Language,
         SettingValue::Text(Cow::Borrowed(paperpaw_i18n::FALLBACK_LANGUAGE)),
         groups::SYSTEM,
     )
-    .described("core.setting.language.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.language.help"),
+    SettingSpec::switch(
         settings::NIGHT_MODE.static_str(),
         "core.setting.night-mode",
         false,
         groups::DISPLAY,
     )
-    .described("core.setting.night-mode.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.night-mode.help"),
+    SettingSpec::switch(
         settings::NIGHT_PICTURES.static_str(),
         "core.setting.night-pictures",
         false,
         groups::DISPLAY,
     )
-    .described("core.setting.night-pictures.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.night-pictures.help"),
+    SettingSpec::choice(
         settings::MONO_TEXT.static_str(),
         "core.setting.mono-text",
         settings::MONO_TEXT_LEVELS,
         settings::MONO_TEXT_LEVELS[1],
         groups::DISPLAY,
     )
-    .described("core.setting.mono-text.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.mono-text.help"),
+    SettingSpec::switch(
         settings::SPEAK_FOCUS.static_str(),
         "core.setting.speak-focus",
         false,
         groups::SYSTEM,
     )
-    .described("core.setting.speak-focus.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.speak-focus.help"),
+    SettingSpec::choice(
         settings::VOICE.static_str(),
         "core.setting.voice",
         &[settings::VOICE_SYSTEM],
         settings::VOICE_SYSTEM,
         groups::SYSTEM,
     )
-    .described("core.setting.voice.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.voice.help"),
+    SettingSpec::number(
         settings::EDGE_ENDS.static_str(),
         "core.setting.edge-ends",
         0,
@@ -1149,8 +1142,8 @@ static GENERAL: [SettingSpec; 9] = [
     )
     .with_extra(&MM)
     .advanced()
-    .described("core.setting.edge.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.edge.help"),
+    SettingSpec::number(
         settings::EDGE_SIDES.static_str(),
         "core.setting.edge-sides",
         0,
@@ -1160,13 +1153,13 @@ static GENERAL: [SettingSpec; 9] = [
     )
     .with_extra(&MM)
     .advanced()
-    .described("core.setting.edge.help"),
+    .description("core.setting.edge.help"),
 ];
 
 /// The library folder, chosen with the folder chooser: the reader's own,
 /// kept when the settings are reset.
 static FOLDER_EDITOR: SettingExtra = SettingExtra::new().editor(screens::FOLDER_EDITOR);
-static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static LIBRARY: [SettingSpec; 1] = [SettingSpec::text(
     settings::LIBRARY_FOLDER.static_str(),
     "core.setting.library-folder",
     "books",
@@ -1174,7 +1167,7 @@ static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
 )
 .with_extra(&FOLDER_EDITOR)
 .kept_on_reset()
-.described("core.setting.library-folder.help")];
+.description("core.setting.library-folder.help")];
 
 fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&GENERAL)?;
@@ -1190,7 +1183,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 /// titles and room. The defaults are PaperPaw's look (soft corners,
 /// pills, plain headers, faint lines); themes (data plugins) set others.
 static LOOK: [SettingSpec; 14] = [
-    SettingSpec::fixed_number(
+    SettingSpec::number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
         7,
@@ -1199,16 +1192,16 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&PT_SLIDER)
-    .described("core.setting.ui-size.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.ui-size.help"),
+    SettingSpec::choice(
         settings::UI_CONTRAST.static_str(),
         "core.setting.ui-contrast",
         &[settings::CONTRAST_NORMAL, settings::CONTRAST_STRONG],
         settings::CONTRAST_NORMAL,
         groups::LOOK,
     )
-    .described("core.setting.ui-contrast.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.ui-contrast.help"),
+    SettingSpec::choice(
         settings::UI_HEADER.static_str(),
         "core.setting.ui-header",
         &[
@@ -1219,27 +1212,27 @@ static LOOK: [SettingSpec; 14] = [
         settings::HEADER_PLAIN,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-header.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.ui-header.help"),
+    SettingSpec::choice(
         settings::WIDGET_FRAME.static_str(),
         "core.setting.widget-frame",
-        paperpaw_sdk::widgets::look::ALL_FRAMES,
-        paperpaw_sdk::widgets::look::OWN_FRAME,
+        paperpaw_sdk::widgets::ALL_FRAMES,
+        paperpaw_sdk::widgets::OWN_FRAME,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.widget-frame.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.widget-frame.help"),
+    SettingSpec::choice(
         settings::UI_CORNERS.static_str(),
         "core.setting.ui-corners",
         settings::CORNERS,
         settings::CORNERS[3],
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-corners.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.ui-corners.help"),
+    SettingSpec::choice(
         settings::UI_FOCUS.static_str(),
         "core.setting.ui-focus",
         &[
@@ -1250,9 +1243,9 @@ static LOOK: [SettingSpec; 14] = [
         settings::FOCUS_FILL,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-focus.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.ui-focus.help"),
+    SettingSpec::choice(
         settings::UI_SEPARATORS.static_str(),
         "core.setting.ui-separators",
         &[
@@ -1263,18 +1256,18 @@ static LOOK: [SettingSpec; 14] = [
         settings::SEPARATORS_INSET,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-separators.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.ui-separators.help"),
+    SettingSpec::choice(
         settings::UI_GROUPS.static_str(),
         "core.setting.ui-groups",
         &[settings::GROUPS_PLAIN, settings::GROUPS_CARDS],
         settings::GROUPS_PLAIN,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-groups.help"),
-    SettingSpec::fixed_number(
+    .advanced()
+    .description("core.setting.ui-groups.help"),
+    SettingSpec::number(
         settings::UI_TITLE.static_str(),
         "core.setting.ui-title",
         100,
@@ -1283,9 +1276,9 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&PERCENT_5_SLIDER)
-    .for_advanced()
-    .described("core.setting.ui-title.help"),
-    SettingSpec::fixed_number(
+    .advanced()
+    .description("core.setting.ui-title.help"),
+    SettingSpec::number(
         settings::UI_MARGIN.static_str(),
         "core.setting.ui-margin",
         0,
@@ -1294,9 +1287,9 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&MM_SLIDER)
-    .for_advanced()
-    .described("core.setting.ui-margin.help"),
-    SettingSpec::fixed_number(
+    .advanced()
+    .description("core.setting.ui-margin.help"),
+    SettingSpec::number(
         settings::UI_ROW.static_str(),
         "core.setting.ui-row",
         120,
@@ -1305,9 +1298,9 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&PERCENT_10_SLIDER)
-    .for_advanced()
-    .described("core.setting.ui-row.help"),
-    SettingSpec::fixed_number(
+    .advanced()
+    .description("core.setting.ui-row.help"),
+    SettingSpec::number(
         settings::UI_LINES.static_str(),
         "core.setting.ui-lines",
         1,
@@ -1316,28 +1309,28 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&TENTH_MM)
-    .for_advanced()
-    .described("core.setting.ui-lines.help"),
+    .advanced()
+    .description("core.setting.ui-lines.help"),
     // A picture in place of PaperPaw's logo: for data plugins, which set
     // it in their settings.ini, and those who type a path.
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         paperpaw_sdk::logo::LOGO.static_str(),
         "core.setting.logo",
         "",
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.logo.help"),
+    .advanced()
+    .description("core.setting.logo.help"),
     // The interface's grays by what they are for: for themes, which set
     // it in their settings.ini.
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         settings::UI_PALETTE.static_str(),
         "core.setting.ui-palette",
         "",
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-palette.help"),
+    .advanced()
+    .description("core.setting.ui-palette.help"),
 ];
 
 fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1347,15 +1340,15 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
 static DEVICE: [SettingSpec; 15] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
         &[keymap_presets::STANDARD_NAME],
         keymap_presets::STANDARD_NAME,
         groups::CONTROLS,
     )
-    .described("core.setting.keymap-preset.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.keymap-preset.help"),
+    SettingSpec::number(
         settings::FULL_REFRESH_INTERVAL.static_str(),
         "core.setting.full-refresh-interval",
         0,
@@ -1365,23 +1358,23 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .with_extra(&PAGES)
     .scoped()
-    .described("core.setting.full-refresh-interval.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.full-refresh-interval.help"),
+    SettingSpec::switch(
         settings::FLASH_SCREENS.static_str(),
         "core.setting.flash-screens",
         true,
         groups::DISPLAY,
     )
     .advanced()
-    .described("core.setting.flash-screens.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.flash-screens.help"),
+    SettingSpec::switch(
         settings::PICTURES_IN_GRAYS.static_str(),
         "core.setting.pictures-in-grays",
         true,
         groups::DISPLAY,
     )
-    .described("core.setting.pictures-in-grays.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.pictures-in-grays.help"),
+    SettingSpec::number(
         settings::SLEEP_AFTER.static_str(),
         "core.setting.sleep-after",
         0,
@@ -1390,8 +1383,8 @@ static DEVICE: [SettingSpec; 15] = [
         groups::SYSTEM,
     )
     .with_extra(&MINUTES_5)
-    .described("core.setting.sleep-after.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.sleep-after.help"),
+    SettingSpec::choice(
         settings::ROTATION.static_str(),
         "core.setting.rotation",
         settings::ROTATIONS,
@@ -1399,22 +1392,22 @@ static DEVICE: [SettingSpec; 15] = [
         groups::DISPLAY,
     )
     .scoped()
-    .described("core.setting.rotation.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.rotation.help"),
+    SettingSpec::switch(
         settings::BUTTON_HINTS.static_str(),
         "core.setting.button-hints",
         true,
         groups::CONTROLS,
     )
-    .described("core.setting.button-hints.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.button-hints.help"),
+    SettingSpec::switch(
         settings::SWAP_PAGE_BUTTONS.static_str(),
         "core.setting.swap-page-buttons",
         false,
         groups::CONTROLS,
     )
-    .described("core.setting.swap-page-buttons.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.swap-page-buttons.help"),
+    SettingSpec::number(
         settings::NOTICE_SECONDS.static_str(),
         "core.setting.notice-seconds",
         1,
@@ -1424,8 +1417,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&SECONDS)
-    .described("core.setting.notice-seconds.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.notice-seconds.help"),
+    SettingSpec::number(
         settings::LONG_PRESS_MS.static_str(),
         "core.setting.long-press-ms",
         200,
@@ -1435,8 +1428,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&MS)
-    .described("core.setting.long-press-ms.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.long-press-ms.help"),
+    SettingSpec::number(
         settings::DOUBLE_TAP_MS.static_str(),
         "core.setting.double-tap-ms",
         150,
@@ -1446,8 +1439,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&MS)
-    .described("core.setting.double-tap-ms.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.double-tap-ms.help"),
+    SettingSpec::number(
         settings::TAP_SLOP.static_str(),
         "core.setting.tap-slop",
         1,
@@ -1457,8 +1450,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&MM)
-    .described("core.setting.tap-slop.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.tap-slop.help"),
+    SettingSpec::number(
         settings::SWIPE_DISTANCE.static_str(),
         "core.setting.swipe-distance",
         2,
@@ -1468,8 +1461,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&MM)
-    .described("core.setting.swipe-distance.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.swipe-distance.help"),
+    SettingSpec::number(
         settings::FRONTLIGHT.static_str(),
         "core.setting.frontlight",
         0,
@@ -1478,8 +1471,8 @@ static DEVICE: [SettingSpec; 15] = [
         groups::DISPLAY,
     )
     .with_extra(&PERCENT_5)
-    .described("core.setting.frontlight.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.frontlight.help"),
+    SettingSpec::number(
         settings::FRONTLIGHT_WARMTH.static_str(),
         "core.setting.frontlight-warmth",
         0,
@@ -1488,7 +1481,7 @@ static DEVICE: [SettingSpec; 15] = [
         groups::DISPLAY,
     )
     .with_extra(&PERCENT_5)
-    .described("core.setting.frontlight-warmth.help"),
+    .description("core.setting.frontlight-warmth.help"),
 ];
 
 fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1517,7 +1510,7 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// The colours of text and paper, each with its own colour code.
 static COLOR_SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         settings::TEXT_COLOR.static_str(),
         "core.setting.text-color",
         settings::TEXT_COLORS,
@@ -1525,16 +1518,16 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         groups::LOOK,
     )
     .with_extra(&COLORS)
-    .described("core.setting.colors.help"),
-    SettingSpec::fixed_text(
+    .description("core.setting.colors.help"),
+    SettingSpec::text(
         settings::TEXT_COLOR_OWN.static_str(),
         "core.setting.text-color-own",
         "#5b4636",
         groups::LOOK,
     )
     .with_extra(&COLORS)
-    .described("core.setting.color-own.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.color-own.help"),
+    SettingSpec::choice(
         settings::PAPER_COLOR.static_str(),
         "core.setting.paper-color",
         settings::PAPER_COLORS,
@@ -1542,15 +1535,15 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         groups::LOOK,
     )
     .with_extra(&COLORS)
-    .described("core.setting.colors.help"),
-    SettingSpec::fixed_text(
+    .description("core.setting.colors.help"),
+    SettingSpec::text(
         settings::PAPER_COLOR_OWN.static_str(),
         "core.setting.paper-color-own",
         "#f4ecd8",
         groups::LOOK,
     )
     .with_extra(&COLORS)
-    .described("core.setting.color-own.help"),
+    .description("core.setting.color-own.help"),
 ];
 
 fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1570,15 +1563,15 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
 static READING: [SettingSpec; 19] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
         &[settings::STATUS_FONT_UI, settings::STATUS_FONT_BOOK],
         settings::STATUS_FONT_UI,
         groups::STATUS_LINES,
     )
-    .described("core.setting.status-font.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.status-font.help"),
+    SettingSpec::choice(
         settings::READING_FONT.static_str(),
         "core.setting.reading-font",
         &[settings::DEFAULT_FONT],
@@ -1587,19 +1580,19 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&FONT)
     .scoped()
-    .described("core.setting.reading-font.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.reading-font.help"),
+    SettingSpec::number(
         settings::FONT_SIZE.static_str(),
         "core.setting.font-size",
-        6,
-        40,
+        crate::plugins::FONT_SIZES.0,
+        crate::plugins::FONT_SIZES.1,
         11,
         groups::READING,
     )
     .with_extra(&FONT_PT)
     .scoped()
-    .described("core.setting.font-size.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.font-size.help"),
+    SettingSpec::number(
         settings::LINE_SPACING.static_str(),
         "core.setting.line-spacing",
         80,
@@ -1609,8 +1602,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&LINES)
     .scoped()
-    .described("core.setting.line-spacing.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.line-spacing.help"),
+    SettingSpec::number(
         settings::FONT_WEIGHT.static_str(),
         "core.setting.font-weight",
         0,
@@ -1620,8 +1613,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&WEIGHT)
     .scoped()
-    .described("core.setting.font-weight.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.font-weight.help"),
+    SettingSpec::number(
         settings::WORD_SPACING.static_str(),
         "core.setting.word-spacing",
         50,
@@ -1631,8 +1624,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&WORDS)
     .scoped()
-    .described("core.setting.word-spacing.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.word-spacing.help"),
+    SettingSpec::number(
         settings::MARGIN.static_str(),
         "core.setting.margin",
         0,
@@ -1642,8 +1635,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&MARGINS)
     .scoped()
-    .described("core.setting.margin.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.margin.help"),
+    SettingSpec::number(
         settings::MARGIN_ENDS.static_str(),
         "core.setting.margin-ends",
         0,
@@ -1654,8 +1647,8 @@ static READING: [SettingSpec; 19] = [
     .with_extra(&MARGINS_ENDS)
     .advanced()
     .scoped()
-    .described("core.setting.margin-ends.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.margin-ends.help"),
+    SettingSpec::switch(
         settings::JUSTIFY.static_str(),
         "core.setting.justify",
         true,
@@ -1663,8 +1656,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.justify.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.justify.help"),
+    SettingSpec::switch(
         settings::HYPHENATE.static_str(),
         "core.setting.hyphenate",
         true,
@@ -1672,8 +1665,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.hyphenate.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.hyphenate.help"),
+    SettingSpec::switch(
         settings::PUBLISHER_STYLES.static_str(),
         "core.setting.publisher-styles",
         true,
@@ -1681,8 +1674,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.publisher-styles.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.publisher-styles.help"),
+    SettingSpec::switch(
         settings::INDENT.static_str(),
         "core.setting.indent",
         true,
@@ -1690,8 +1683,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.indent.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.indent.help"),
+    SettingSpec::switch(
         settings::PARAGRAPH_SPACING.static_str(),
         "core.setting.paragraph-spacing",
         false,
@@ -1699,8 +1692,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.paragraph-spacing.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.paragraph-spacing.help"),
+    SettingSpec::number(
         settings::WIDOWS.static_str(),
         "core.setting.widows",
         1,
@@ -1711,8 +1704,8 @@ static READING: [SettingSpec; 19] = [
     .advanced()
     .scoped()
     .with_extra(&LINES_KEPT)
-    .described("core.setting.widows.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.widows.help"),
+    SettingSpec::number(
         settings::ORPHANS.static_str(),
         "core.setting.orphans",
         1,
@@ -1723,8 +1716,8 @@ static READING: [SettingSpec; 19] = [
     .advanced()
     .scoped()
     .with_extra(&LINES_KEPT)
-    .described("core.setting.orphans.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.orphans.help"),
+    SettingSpec::choice(
         settings::READING_APP.static_str(),
         "core.setting.reading-app",
         &[settings::READING_APP_DEFAULT],
@@ -1732,8 +1725,8 @@ static READING: [SettingSpec; 19] = [
         groups::READING,
     )
     .with_extra(&IN_APPS)
-    .described("core.setting.reading-app.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.reading-app.help"),
+    SettingSpec::choice(
         settings::FOOTNOTES.static_str(),
         "core.setting.footnotes",
         &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
@@ -1742,8 +1735,8 @@ static READING: [SettingSpec; 19] = [
     )
     .advanced()
     .with_extra(&IN_BEHAVIOUR)
-    .described("core.setting.footnotes.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.footnotes.help"),
+    SettingSpec::choice(
         settings::PAGE_FRAME.static_str(),
         "core.setting.page-frame",
         &[settings::PAGE_FRAME_SINGLE],
@@ -1752,15 +1745,15 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.page-frame.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.page-frame.help"),
+    SettingSpec::switch(
         settings::SCOPE_ONLY.static_str(),
         "core.setting.scope-only",
         false,
         groups::READING,
     )
     .scoped()
-    .described("core.setting.scope-only.help"),
+    .description("core.setting.scope-only.help"),
 ];
 
 fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1824,42 +1817,42 @@ const ZONES: [&str; TIME_ZONES.len() + 1] = {
 
 /// How the time is shown, and where it is.
 static TIME: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         settings::CLOCK_FORMAT.static_str(),
         "core.setting.clock-format",
         &[CLOCK_24H, CLOCK_12H],
         CLOCK_24H,
         groups::SYSTEM,
     )
-    .described("core.setting.clock-format.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.clock-format.help"),
+    SettingSpec::choice(
         settings::WEEK_START.static_str(),
         "core.setting.week-start",
         time::WEEK_STARTS,
         time::WEEK_STARTS[0],
         groups::SYSTEM,
     )
-    .described("core.setting.week-start.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.week-start.help"),
+    SettingSpec::choice(
         settings::TIME_ZONE.static_str(),
         "core.setting.time-zone",
         &ZONES,
         AUTO,
         groups::SYSTEM,
     )
-    .described("core.setting.time-zone.help"),
-    SettingSpec::fixed_text(
+    .description("core.setting.time-zone.help"),
+    SettingSpec::text(
         settings::TIME_ZONE_RULE.static_str(),
         "core.setting.time-zone-rule",
         "",
         groups::SYSTEM,
     )
     .advanced()
-    .described("core.setting.time-zone-rule.help"),
+    .description("core.setting.time-zone-rule.help"),
 ];
 
 /// Below which charge the battery shows when it shows only when low.
-static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
+static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::number(
     settings::BATTERY_LOW.static_str(),
     "core.setting.battery-low",
     5,
@@ -1869,14 +1862,14 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
 )
 .with_extra(&PERCENT_5)
 .advanced()
-.described("core.setting.battery-low.help")];
+.description("core.setting.battery-low.help")];
 
 /// The line of the items of the place it is drawn in.
 fn items_line<'e>(
     env: &Env<'e>,
     frame: &paperpaw_sdk::StatusFrame<'_>,
 ) -> Option<paperpaw_sdk::status::StatusLine<'e>> {
-    let place = env.status_items.place(frame.place?)?;
+    let place = env.status_items().place(frame.place?)?;
     let line = place.line(env, frame.area, frame.size, frame.color);
     Some(line.percent(frame.percent))
 }
@@ -1890,7 +1883,8 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
             paperpaw_sdk::builtin::status_lines::ITEMS,
             "core.status.line.items",
             Box::new(|canvas, env, frame| {
-                let (Some(line), Some(font)) = (items_line(env, frame), env.fonts.role(frame.font))
+                let (Some(line), Some(font)) =
+                    (items_line(env, frame), env.fonts().role(frame.font))
                 else {
                     return;
                 };
@@ -1908,7 +1902,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         // The reader's line of items before it was the kernel's.
         .also(Id::new_static("reader.status-line.items"))
         .targets(Box::new(|env, frame| {
-            match (items_line(env, frame), env.fonts.role(frame.font)) {
+            match (items_line(env, frame), env.fonts().role(frame.font)) {
                 (Some(line), Some(font)) => line.targets(env, &font, frame.context),
                 _ => Vec::new(),
             }
@@ -1938,7 +1932,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
             status_items::BATTERY,
             "core.status.battery",
             Box::new(|env, _| {
-                env.status.battery.map(|b| StatusValue::Level {
+                env.status().battery.map(|b| StatusValue::Level {
                     percent: b.percent,
                     charging: b.charging,
                 })
@@ -1950,8 +1944,8 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         status_items::BATTERY_LOW,
         "core.status.battery-low",
         Box::new(|env, _| {
-            let low = env.settings.read(&settings::BATTERY_LOW);
-            env.status
+            let low = env.settings().read(&settings::BATTERY_LOW);
+            env.status()
                 .battery
                 .filter(|b| i64::from(b.percent) <= low)
                 .map(|b| StatusValue::Level {
@@ -1993,7 +1987,7 @@ fn register_keymaps_and_setup(r: &mut Registrar) -> Result<(), RegisterError> {
         )
         .order(20)
         .applies(Box::new(|env: &paperpaw_sdk::Env<'_>| {
-            env.device.input.buttons && !env.device.input.touch
+            env.device().input.buttons && !env.device().input.touch
         })),
     )?;
     r.add_setup_step(
@@ -2005,7 +1999,7 @@ fn register_keymaps_and_setup(r: &mut Registrar) -> Result<(), RegisterError> {
         .help("core.setup.time-zone.help")
         .order(40)
         .applies(Box::new(|env: &paperpaw_sdk::Env<'_>| {
-            env.status
+            env.status()
                 .clock
                 .is_none_or(|c| c.utc_offset_minutes.is_none())
         })),
@@ -2022,8 +2016,8 @@ struct PlaceholderScreen;
 impl Screen for PlaceholderScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let area = canvas.clip();
-        let margin = env.metrics.mm(4);
-        let line = env.metrics.tenth_mm(5);
+        let margin = env.metrics().mm(4);
+        let line = env.metrics().tenth_mm(5);
         let (w, h) = (u32::from(area.width), u32::from(area.height));
         let inner_w = w.saturating_sub(2 * margin);
         let inner_h = h.saturating_sub(2 * margin);
@@ -2035,9 +2029,9 @@ impl Screen for PlaceholderScreen {
             line,
             Color::BLACK,
         );
-        if let Some(font) = env.fonts.role(fonts::UI.as_str()) {
-            let size = env.metrics.pt(14.0);
-            let text = env.i18n.tr("core.screen.placeholder");
+        if let Some(font) = env.fonts().role(fonts::UI.as_str()) {
+            let size = env.metrics().pt(14.0);
+            let text = env.i18n().tr("core.screen.placeholder");
             let width = font.measure(size, text);
             let x = (w as f32 - width) / 2.0;
             let baseline = (h / 2) as i32 + (size / 3.0) as i32;
@@ -2060,7 +2054,7 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
     } else {
         alloc::format!("{parent}/Screenshots")
     };
-    let _ = env.storage.create_dir(&dir);
+    let _ = env.storage().create_dir(&dir);
     let name = match paperpaw_sdk::time::local_time(env) {
         Some(t) => alloc::format!(
             "PaperPaw {}-{:02}-{:02} {:02}-{:02}-{:02}",
@@ -2071,11 +2065,11 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
             t.minute,
             t.second
         ),
-        None => alloc::format!("PaperPaw {}", env.now.0),
+        None => alloc::format!("PaperPaw {}", env.now().0),
     };
     let mut path = alloc::format!("{dir}/{name}.png");
     let mut n = 2;
-    while env.storage.exists(&path) {
+    while env.storage().exists(&path) {
         path = alloc::format!("{dir}/{name} ({n}).png");
         n += 1;
     }
@@ -2083,14 +2077,14 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
 }
 
 /// The size of the gap widget.
-static SPACE: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+static SPACE: [SettingSpec; 1] = [SettingSpec::choice(
     widgets::SPACE_SIZE.static_str(),
     "core.setting.space-size",
     widgets::SPACE_SIZES,
     widgets::SPACE_SIZES[1],
     Id::new_static(widgets::SPACE),
 )
-.described("core.setting.space-size.help")];
+.description("core.setting.space-size.help")];
 
 /// The widgets for room between the others: a gap of a set height, and
 /// the room left (see `paperpaw_sdk::widgets`).
@@ -2099,13 +2093,13 @@ fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&space, "core.widget.space"))?;
     r.add_settings(&SPACE)?;
     let space_height = |env: &Env<'_>, _| {
-        let size = env.settings.read(&widgets::SPACE_SIZE);
+        let size = env.settings().read(&widgets::SPACE_SIZE);
         let mm = match widgets::SPACE_SIZES.iter().position(|s| *s == size) {
             Some(0) => 4,
             Some(2) => 20,
             _ => 10,
         };
-        env.metrics.mm(mm).min(u32::from(u16::MAX)) as u16
+        env.metrics().mm(mm).min(u32::from(u16::MAX)) as u16
     };
     r.add_widget(
         WidgetSpec::drawn(

@@ -20,6 +20,11 @@
 //! the start). The conversion is empty for one added since, and `?` for
 //! one kept before conversions were, whose conversion is not known. A
 //! file with only those of before stays in version 1.
+//!
+//! Which book they are of, by its content ([`Fingerprint`]), is said in
+//! a line `# book <size> <md5>` after the version's (see [`stamp`]): a
+//! line PaperPaw of before reads as none of its own and keeps as it
+//! is, so the version stays.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -27,7 +32,9 @@ use alloc::vec::Vec;
 use core::ops::ControlFlow;
 
 use crate::builtin::events;
+use crate::data::Error;
 use crate::document::{Document, Locator};
+use crate::library::Fingerprint;
 use crate::{Command, Storage, StorageError, files};
 
 /// Longest snippet kept with an annotation, in bytes, with the `…` that
@@ -40,6 +47,8 @@ const MAX_NOTE: usize = 3 * 1024;
 const MAX_FILE: u64 = 1 << 20;
 /// The version of the file with conversions and XPointers.
 const VERSION: u32 = 2;
+/// How the line saying which book the file is of begins.
+const BOOK: &str = "# book ";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -260,22 +269,20 @@ enum Kept {
 }
 
 /// Keeps `annotations` as those of the book at `book`, sorted by
-/// position (a note cut at 3 KB); `false` where they could not be
+/// position (a note cut at 3 KB); an error where they could not be
 /// written. Lines of the file this version does not read (a kind a newer
 /// PaperPaw added, or damaged) stay as they are; where the file cannot be
 /// read for them, nothing is written.
 ///
 /// Where each was made stays known (see [`relocate`]) for those at the
 /// same place as before.
-pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) -> bool {
+pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) -> Result<(), Error> {
     let kept = |line: &str, version| match parse_anchored(line, version) {
         Some((a, Some(anchor))) => Some(Kept::Anchor(key(&a.mark), anchor)),
         Some((_, None)) => None,
         None => (!line.trim().is_empty()).then(|| Kept::Unread(line.to_string())),
     };
-    let Ok(kept) = each(storage, book, kept) else {
-        return false;
-    };
+    let kept = each(storage, book, kept)?;
     let (mut anchors, mut unread) = (Vec::new(), Vec::new());
     for line in kept {
         match line {
@@ -290,19 +297,28 @@ pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) -> bo
             (a, found.map(|i| anchors.swap_remove(i).1))
         })
         .collect();
-    write(storage, book, all, &unread)
+    write(storage, book, all, &unread, None)
 }
 
 /// Writes `all` (each with where it was made, if known) and the lines
-/// `unread` as the annotations of the book at `book`; `false` where they
-/// could not be written.
+/// `unread` as the annotations of the book at `book`, which the file
+/// says is `fingerprint` (else as the line of it among `unread` says);
+/// an error where they could not be written.
 fn write(
     storage: &dyn Storage,
     book: &str,
     mut all: Vec<(&Annotation, Option<Anchor>)>,
     unread: &[String],
-) -> bool {
+    fingerprint: Option<&Fingerprint>,
+) -> Result<(), Error> {
     all.sort_by_key(|(a, _)| (a.mark.start, a.mark.end));
+    // After the version, wherever it was (PaperPaw of before put it
+    // last).
+    let (books, unread): (Vec<&String>, Vec<&String>) =
+        unread.iter().partition(|line| line.starts_with(BOOK));
+    let fingerprint = fingerprint
+        .map(|f| format!("{BOOK}{}", f.text()))
+        .or_else(|| books.first().map(|line| line.to_string()));
     // Only those of before: version 1, as they were.
     let anchored = all
         .iter()
@@ -310,6 +326,11 @@ fn write(
     let mut out = String::new();
     if anchored {
         out.push_str(&format!("{}{VERSION}\n", crate::data::MARK));
+    }
+    let none = all.is_empty() && unread.is_empty();
+    if let Some(line) = fingerprint.filter(|_| !none) {
+        out.push_str(&line);
+        out.push('\n');
     }
     for (a, anchor) in all {
         let kind = match a.mark.kind {
@@ -347,11 +368,12 @@ fn write(
         out.push('\n');
     }
     let path = file(book);
-    if out.is_empty() {
-        storage.remove(&path).is_ok()
+    if none {
+        storage.remove(&path)?;
     } else {
-        storage.write(&path, out.as_bytes()).is_ok()
+        storage.write(&path, out.as_bytes())?;
     }
+    Ok(())
 }
 
 /// `text` on one line, at most 240 bytes (with the `…` that ends a cut
@@ -401,22 +423,26 @@ pub fn one_line(text: &str) -> String {
 
 /// Puts `note` on the highlight that starts at `start` (an empty one
 /// removes it), changed at `now` (seconds since 1970, 0 if not known);
-/// `false` if there is no such highlight, or the annotations could not be
-/// read or written.
-pub fn set_note(storage: &dyn Storage, book: &str, start: Locator, note: &str, now: i64) -> bool {
-    let Ok(mut all) = load_for_update(storage, book) else {
-        return false;
-    };
+/// `Ok(false)` if there is no such highlight, an error where the
+/// annotations could not be read or written.
+pub fn set_note(
+    storage: &dyn Storage,
+    book: &str,
+    start: Locator,
+    note: &str,
+    now: i64,
+) -> Result<bool, Error> {
+    let mut all = load_for_update(storage, book)?;
     let Some(a) = all
         .iter_mut()
         .find(|a| a.mark.kind == Kind::Highlight && a.mark.start == start)
     else {
-        return false;
+        return Ok(false);
     };
     a.note = one_line(note);
     a.mark.noted = !a.note.is_empty();
     a.updated = now;
-    save(storage, book, &all)
+    save(storage, book, &all).map(|()| true)
 }
 
 /// The note on the highlight that starts at `start`.
@@ -428,25 +454,29 @@ pub fn note_of(storage: &dyn Storage, book: &str, start: Locator) -> String {
         .unwrap_or_default()
 }
 
-/// Adds an annotation; `false` where the annotations could not be read
+/// Adds an annotation; an error where the annotations could not be read
 /// or written (those there are kept as they were).
-pub fn add(storage: &dyn Storage, book: &str, annotation: Annotation) -> bool {
-    let Ok(mut all) = load_for_update(storage, book) else {
-        return false;
-    };
+pub fn add(storage: &dyn Storage, book: &str, annotation: Annotation) -> Result<(), Error> {
+    let mut all = load_for_update(storage, book)?;
     all.push(annotation);
     save(storage, book, &all)
 }
 
-/// Removes the annotations `remove` picks; `true` if there were any and
-/// they are gone.
-pub fn remove(storage: &dyn Storage, book: &str, remove: impl Fn(&Mark) -> bool) -> bool {
-    let Ok(mut all) = load_for_update(storage, book) else {
-        return false;
-    };
+/// Removes the annotations `remove` picks: `Ok(true)` if there were any
+/// and they are gone, `Ok(false)` if there were none, an error where the
+/// annotations could not be read or written.
+pub fn remove(
+    storage: &dyn Storage,
+    book: &str,
+    remove: impl Fn(&Mark) -> bool,
+) -> Result<bool, Error> {
+    let mut all = load_for_update(storage, book)?;
     let before = all.len();
     all.retain(|a| !remove(&a.mark));
-    all.len() != before && save(storage, book, &all)
+    if all.len() == before {
+        return Ok(false);
+    }
+    save(storage, book, &all).map(|()| true)
 }
 
 /// Finds the annotations of the book at `book` in conversion
@@ -521,7 +551,7 @@ pub fn relocate(
         return Ok(false);
     }
     let all = all.iter_mut().map(|(a, x)| (&*a, x.take())).collect();
-    if write(storage, book, all, &unread) {
+    if write(storage, book, all, &unread, None).is_ok() {
         Ok(true)
     } else {
         Err(StorageError::Io)
@@ -559,6 +589,64 @@ fn anchor_of(storage: &dyn Storage, doc: &dyn Document, conversion: u64, mark: &
     }
 }
 
+/// Which book the annotations of the book at `book` are of, as their
+/// file says: `None` where it does not say (or there are none).
+pub fn book(storage: &dyn Storage, book: &str) -> Option<Fingerprint> {
+    let mut found = None;
+    // The line is among the first; PaperPaw of before put it last.
+    let read = files::for_each_line(storage, &file(book), &mut |line| {
+        found = line.strip_prefix(BOOK).and_then(Fingerprint::parse);
+        if found.is_some() {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    read.ok().and(found)
+}
+
+/// Says in the annotations of the book at `book` which book they are
+/// of, `fingerprint`, where they say another or none: `Ok(true)` where
+/// it was written. A book without annotations gets no file. A reader
+/// calls it when it opens a book and after annotations were added, with
+/// the fingerprint it took when it opened the book; where it is said
+/// already, the file is only read up to it.
+pub fn stamp(
+    storage: &dyn Storage,
+    book: &str,
+    fingerprint: &Fingerprint,
+) -> Result<bool, StorageError> {
+    match storage.size(&file(book)) {
+        Err(StorageError::NotFound) => return Ok(false),
+        Err(e) => return Err(e),
+        Ok(size) if size > MAX_FILE => return Err(StorageError::TooLarge),
+        Ok(_) => {}
+    }
+    if self::book(storage, book).as_ref() == Some(fingerprint) {
+        return Ok(false);
+    }
+    let read = |line: &str, version| match parse_anchored(line, version) {
+        Some(read) => Some(Ok(read)),
+        None => (!line.trim().is_empty()).then(|| Err(line.to_string())),
+    };
+    let (mut all, mut unread) = (Vec::new(), Vec::new());
+    for line in each(storage, book, read)? {
+        match line {
+            Ok(read) => all.push(read),
+            Err(line) => unread.push(line),
+        }
+    }
+    if all.is_empty() && unread.iter().all(|line| line.starts_with(BOOK)) {
+        return Ok(false);
+    }
+    let all = all.iter_mut().map(|(a, x)| (&*a, x.take())).collect();
+    if write(storage, book, all, &unread, Some(fingerprint)).is_ok() {
+        Ok(true)
+    } else {
+        Err(StorageError::Io)
+    }
+}
+
 /// The event telling that the annotations of the book at `book` changed.
 pub fn changed(book: &str) -> Command {
     events::ANNOTATIONS_CHANGED.emit(events::AnnotationsChanged {
@@ -592,15 +680,18 @@ mod tests {
     fn kept_by_position_with_notes_and_times() {
         let storage = MemoryStorage::new();
         let book = "books/a.epub";
-        add(&storage, book, highlight(50, 60, "later"));
-        add(&storage, book, highlight(10, 20, "first\tline"));
-        assert!(set_note(
-            &storage,
-            book,
-            Locator::new(1, 50),
-            "a\nnote",
-            1_700_000_100
-        ));
+        add(&storage, book, highlight(50, 60, "later")).unwrap();
+        add(&storage, book, highlight(10, 20, "first\tline")).unwrap();
+        assert!(
+            set_note(
+                &storage,
+                book,
+                Locator::new(1, 50),
+                "a\nnote",
+                1_700_000_100
+            )
+            .unwrap()
+        );
         let all = load(&storage, book);
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].text, "first line");
@@ -614,7 +705,7 @@ mod tests {
         let marks = marks(&storage, book);
         assert_eq!(marks, [all[0].mark, all[1].mark]);
         // Gone when the last is removed.
-        assert!(remove(&storage, book, |_| true));
+        assert!(remove(&storage, book, |_| true).unwrap());
         assert!(!storage.exists(&file(book)));
     }
 
@@ -622,17 +713,17 @@ mod tests {
     fn unreadable_annotations_are_not_written_over() {
         let book = "books/a.epub";
         let kept = MemoryStorage::new();
-        assert!(add(&kept, book, highlight(10, 20, "kept")));
+        assert!(add(&kept, book, highlight(10, 20, "kept")).is_ok());
         let before = kept.get(&file(book)).unwrap();
         let storage = Unreadable(kept);
         assert_eq!(load_for_update(&storage, book), Err(StorageError::Io));
-        assert!(!add(&storage, book, highlight(30, 40, "new")));
-        assert!(!remove(&storage, book, |_| true));
-        assert!(!set_note(&storage, book, Locator::new(1, 10), "x", 0));
+        assert!(add(&storage, book, highlight(30, 40, "new")).is_err());
+        assert!(remove(&storage, book, |_| true).is_err());
+        assert!(set_note(&storage, book, Locator::new(1, 10), "x", 0).is_err());
         assert_eq!(storage.0.get(&file(book)), Some(before));
         // Written by a newer PaperPaw: left as it is.
         let newer = MemoryStorage::new().with(&file(book), "# format 3\nh\t1\t2\t1\t3\t0\tx\t");
-        assert!(!add(&newer, book, highlight(1, 2, "x")));
+        assert!(add(&newer, book, highlight(1, 2, "x")).is_err());
         assert!(load(&newer, book).is_empty());
         assert_eq!(
             load_for_update(&newer, book),
@@ -640,8 +731,57 @@ mod tests {
         );
         // Too large to be changed whole.
         let big = MemoryStorage::new().with(&file(book), alloc::vec![b'\n'; (1 << 20) + 1]);
-        assert!(!add(&big, book, highlight(1, 2, "x")));
+        assert!(add(&big, book, highlight(1, 2, "x")).is_err());
         assert_eq!(big.size(&file(book)), Ok((1 << 20) + 1));
+    }
+
+    /// Which book the annotations are of is said after the version, kept
+    /// as they change, said anew where it is another, and gone with the
+    /// last of them; a book without annotations gets no file for it.
+    #[test]
+    fn the_annotations_say_which_book_they_are_of() {
+        let storage = MemoryStorage::new();
+        let book = "books/a.epub";
+        let one = Fingerprint::parse("482133 0b6e8f2a6c1d4e5f8a9b0c1d2e3f4a5b").unwrap();
+        let other = Fingerprint::parse("482140 1b6e8f2a6c1d4e5f8a9b0c1d2e3f4a5b").unwrap();
+        assert_eq!(stamp(&storage, book, &one), Ok(false));
+        assert!(!storage.exists(&file(book)));
+        add(&storage, book, highlight(10, 20, "first")).unwrap();
+        assert_eq!(stamp(&storage, book, &one), Ok(true));
+        assert_eq!(stamp(&storage, book, &one), Ok(false));
+        assert_eq!(self::book(&storage, book), Some(one.clone()));
+        add(&storage, book, highlight(30, 40, "second")).unwrap();
+        let text = String::from_utf8(storage.get(&file(book)).unwrap()).unwrap();
+        assert!(
+            text.starts_with("# format 2\n# book 482133 0b6e8f2a6c1d4e5f8a9b0c1d2e3f4a5b\n"),
+            "{text}"
+        );
+        assert_eq!(load(&storage, book).len(), 2);
+        assert_eq!(stamp(&storage, book, &other), Ok(true));
+        assert_eq!(self::book(&storage, book), Some(other));
+        assert!(remove(&storage, book, |_| true).unwrap());
+        assert!(!storage.exists(&file(book)));
+    }
+
+    /// PaperPaw of before reads the line as none of its own and keeps it
+    /// last: it is read there, and put back after the version.
+    #[test]
+    fn the_book_s_line_moved_last_is_read_and_put_back() {
+        let book = "books/a.epub";
+        let moved = "# format 2\n\
+                     h\t1\t10\t1\t20\t3\t0\t0\t\t\t\tsome text\t\n\
+                     # book 482133 0b6e8f2a6c1d4e5f8a9b0c1d2e3f4a5b\n";
+        let storage = MemoryStorage::new().with(&file(book), moved);
+        let one = Fingerprint::parse("482133 0b6e8f2a6c1d4e5f8a9b0c1d2e3f4a5b");
+        assert_eq!(self::book(&storage, book), one);
+        assert_eq!(load(&storage, book).len(), 1);
+        add(&storage, book, highlight(30, 40, "second")).unwrap();
+        let text = String::from_utf8(storage.get(&file(book)).unwrap()).unwrap();
+        assert_eq!(text.matches("# book ").count(), 1, "{text}");
+        assert!(
+            text.lines().nth(1).unwrap().starts_with("# book "),
+            "{text}"
+        );
     }
 
     #[test]
@@ -656,7 +796,7 @@ mod tests {
         let storage = MemoryStorage::new();
         let mut a = highlight(1, 2, &text);
         a.note = "n".repeat(10_000);
-        assert!(add(&storage, "a.epub", a));
+        assert!(add(&storage, "a.epub", a).is_ok());
         let read = load(&storage, "a.epub");
         assert_eq!(read[0].text, text);
         assert!(read[0].note.len() <= MAX_NOTE && read[0].note.ends_with('…'));

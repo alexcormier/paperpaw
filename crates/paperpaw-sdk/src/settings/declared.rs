@@ -1,0 +1,50 @@
+//! The kernel's changes to settings as they were declared: their
+//! defaults, bounds and help.
+
+#[cfg(any(test, feature = "kernel"))]
+use alloc::borrow::Cow;
+
+#[cfg(any(test, feature = "kernel"))]
+use super::{SettingError, SettingKind, Settings};
+
+#[cfg(any(test, feature = "kernel"))]
+impl Settings {
+    /// Changes a setting's default (e.g. device-specific defaults chosen by
+    /// a shell). The user's own values still take precedence.
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn set_default_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
+        let spec = self.specs.get_mut(id)?;
+        spec.default = spec.parse(text).ok_or(SettingError::InvalidValue)?;
+        Ok(())
+    }
+
+    /// Changes the bounds of a [`SettingKind::Int`] setting, e.g. once the
+    /// font it sizes is known: what may be set from then on (a value set
+    /// before stays as it is). Whether it did: not for an unknown setting
+    /// or one of another kind.
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn set_range(&mut self, id: &str, min: i64, max: i64) -> bool {
+        let max = max.max(min);
+        match self.specs.get_mut(id) {
+            Ok(spec) if matches!(spec.kind, SettingKind::Int { .. }) => {
+                spec.kind = SettingKind::Int { min, max };
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Changes a setting's help text (its translation key), e.g. to say
+    /// why its bounds are what they are. Whether it did: not for an
+    /// unknown setting.
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn set_description(&mut self, id: &str, key: &'static str) -> bool {
+        match self.specs.get_mut(id) {
+            Ok(spec) => {
+                spec.description = Some(Cow::Borrowed(key));
+                true
+            }
+            Err(_) => false,
+        }
+    }
+}

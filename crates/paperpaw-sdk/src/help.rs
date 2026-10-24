@@ -9,11 +9,11 @@
 //! are listed in a box in the middle.
 //!
 //! ```
-//! use paperpaw_sdk::help::{self, Hint, Zone};
+//! use paperpaw_sdk::help::{self, HelpHint, Zone};
 //! # fn register(r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
 //! help::add(r, "my.screen", &[
-//!     Hint::touch("my.help.next").zone(Zone::new(667, 0, 333, 1000)),
-//!     Hint::buttons("my.help.select"),
+//!     HelpHint::touch("my.help.next").zone(Zone::new(667, 0, 333, 1000)),
+//!     HelpHint::buttons("my.help.select"),
 //! ])?;
 //! # Ok(())
 //! # }
@@ -73,8 +73,8 @@ impl Input {
     pub fn fits(self, env: &Env<'_>) -> bool {
         match self {
             Input::Any => true,
-            Input::Touch => env.device.input.touch,
-            Input::Buttons => !env.device.input.touch,
+            Input::Touch => env.device().input.touch,
+            Input::Buttons => !env.device().input.touch,
         }
     }
 }
@@ -112,13 +112,13 @@ impl Zone {
 /// A hint: its text (a translation key), for which devices, where.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Hint {
+pub struct HelpHint {
     pub text: String,
     pub input: Input,
     pub zone: Option<Zone>,
 }
 
-impl Hint {
+impl HelpHint {
     pub fn any(text: &str) -> Self {
         Self::of(text, Input::Any)
     }
@@ -155,7 +155,7 @@ impl Hint {
     }
 
     /// The hint of a line, and its screen.
-    pub fn parse(line: &str) -> Option<(&str, Hint)> {
+    pub fn parse(line: &str) -> Option<(&str, HelpHint)> {
         let mut words = line.split_whitespace();
         let screen = words.next()?;
         let input = Input::of(words.next()?)?;
@@ -167,18 +167,18 @@ impl Hint {
             }
         };
         let text = words.next()?.to_string();
-        Some((screen, Hint { text, input, zone }))
+        Some((screen, HelpHint { text, input, zone }))
     }
 }
 
 /// Adds `hints` for `screen`.
-pub fn add(r: &mut Registrar, screen: &str, hints: &[Hint]) -> Result<(), RegisterError> {
+pub fn add(r: &mut Registrar, screen: &str, hints: &[HelpHint]) -> Result<(), RegisterError> {
     let mut text = String::new();
     for hint in hints {
         text.push_str(&hint.line(screen));
         text.push('\n');
     }
-    r.contribute(Id::new_static(POINT), text.into())
+    r.contribute(Id::new_static(POINT), text)
 }
 
 /// Sent by a screen whose hints wait ([`wait`]) once it shows what it is
@@ -193,14 +193,13 @@ pub fn wait(r: &mut Registrar, screen: &str) -> Result<(), RegisterError> {
         format!(
             "{screen} wait
 "
-        )
-        .into(),
+        ),
     )
 }
 
 /// Whether the hints of `screen` wait until it is ready ([`wait`]).
 pub fn waits(env: &Env<'_>, screen: &str) -> bool {
-    env.services
+    env.services()
         .contributions(POINT)
         .flat_map(|(_, text)| text.lines())
         .any(|line| line.split_once(' ') == Some((screen, "wait")))
@@ -213,11 +212,11 @@ pub fn ready(screen: &Id) -> Command {
 }
 
 /// The hints of `screen` for `env`'s device, in the order they came.
-pub fn hints(env: &Env<'_>, screen: &str) -> Vec<Hint> {
-    env.services
+pub fn hints(env: &Env<'_>, screen: &str) -> Vec<HelpHint> {
+    env.services()
         .contributions(POINT)
         .flat_map(|(_, text)| text.lines())
-        .filter_map(Hint::parse)
+        .filter_map(HelpHint::parse)
         .filter(|(s, hint)| *s == screen && hint.input.fits(env))
         .map(|(_, hint)| hint)
         .collect()
@@ -229,14 +228,14 @@ mod tests {
 
     #[test]
     fn hints_go_as_lines_and_come_back() {
-        let hint = Hint::touch("reader.help.next").zone(Zone::new(667, 0, 333, 1000));
+        let hint = HelpHint::touch("reader.help.next").zone(Zone::new(667, 0, 333, 1000));
         let line = hint.line("reader.screen");
         assert_eq!(line, "reader.screen touch 667,0,333,1000 reader.help.next");
-        assert_eq!(Hint::parse(&line), Some(("reader.screen", hint)));
-        let plain = Hint::buttons("a.b");
-        assert_eq!(Hint::parse(&plain.line("x.y")), Some(("x.y", plain)));
-        assert_eq!(Hint::parse("x.y touch 1,2 a.b"), None);
-        assert_eq!(Hint::parse("x.y sometimes - a.b"), None);
+        assert_eq!(HelpHint::parse(&line), Some(("reader.screen", hint)));
+        let plain = HelpHint::buttons("a.b");
+        assert_eq!(HelpHint::parse(&plain.line("x.y")), Some(("x.y", plain)));
+        assert_eq!(HelpHint::parse("x.y touch 1,2 a.b"), None);
+        assert_eq!(HelpHint::parse("x.y sometimes - a.b"), None);
     }
 
     #[test]

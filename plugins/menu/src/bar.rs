@@ -122,13 +122,13 @@ impl BarScreen {
         let title = params.get(params::TITLE).unwrap_or_default().to_string();
         let text = params.get(params::TEXT).unwrap_or_default().to_string();
         let page = params.get(params::PAGE).unwrap_or_default().to_string();
-        let (line, small) = bar_font(env).map_or((style.text, style.small), |font| {
+        let (line, small) = bar_font(env).map_or((style.text(), style.small()), |font| {
             (
-                font.line_metrics(style.text).line_height,
-                font.line_metrics(style.small).line_height,
+                font.line_metrics(style.text()).line_height,
+                font.line_metrics(style.small()).line_height,
             )
         });
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let info_height = if title.is_empty() && text.is_empty() && page.is_empty() {
             0
         } else {
@@ -138,13 +138,13 @@ impl BarScreen {
         // Columns as wide as their entries, justified between the margins:
         // the first starts under the title, the last ends with the page.
         // As many to a row as fit with a gap between them.
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let room = f32::from(display.width.saturating_sub(2 * margin));
-        let size = style.text * ICON_SCALE;
+        let size = style.text() * ICON_SCALE;
         let widths: Vec<f32> = entries
             .iter()
             .map(|e| {
-                let label = bar_font(env).map_or(0.0, |f| f.measure(style.small, &e.label(env)));
+                let label = bar_font(env).map_or(0.0, |f| f.measure(style.small(), &e.label(env)));
                 let icon = e
                     .icon
                     .as_deref()
@@ -206,7 +206,7 @@ impl BarScreen {
             .iter()
             .map(|c| Rect::new(c.x.saturating_sub(half), c.y, c.width + 2 * half, c.height))
             .collect();
-        let border = (style.line * 2) as u16;
+        let border = (u32::from(style.line()) * 2) as u16;
         let height = top + rows as u16 * cell_height + gap + border;
         // The first entry that can be chosen.
         let focus = entries.iter().position(|e| e.enabled(env)).unwrap_or(0);
@@ -221,7 +221,7 @@ impl BarScreen {
             cells,
             targets,
             focus,
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             style,
             params: params.clone(),
         }
@@ -257,7 +257,7 @@ impl BarScreen {
         }
         let Some(spec) = env.settings.specs().find(|spec| spec.id == id) else {
             cx.command(Command::Back);
-            cx.command(Command::RunAction(id));
+            cx.command(Command::run(id));
             return;
         };
         // Its own page (e.g. the lock's, which asks for the code), the
@@ -322,46 +322,51 @@ impl Screen for BarScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        let border = (style.line * 2) as u16;
-        canvas.fill(
+        ui.canvas().fill(r, Color::WHITE);
+        let border = (u32::from(style.line()) * 2) as u16;
+        ui.canvas().fill(
             Rect::new(r.x, r.y + r.height - border, r.width, border),
             Color::BLACK,
         );
         let Some(font) = bar_font(env) else {
             return;
         };
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         if self.info.height > 0 {
-            let line = font.line_metrics(style.text).line_height as u16;
+            let line = font.line_metrics(style.text()).line_height as u16;
             let title = Rect::new(0, self.info.y, r.width, line);
             let text = Rect::new(0, self.info.y + line, r.width, self.info.height - line);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.text,
-                margin,
-                title,
-                &self.title,
-                Color::BLACK,
-            );
+            ui::Label::new(&self.title)
+                .px(style.text())
+                .font(font)
+                .color(Color::BLACK)
+                .draw_from(&mut ui, margin, title);
             let width = f32::from(r.width) - 2.0 * margin;
             let (chapter, page, page_width) =
-                ui::fit_pair(&font, style.small, &self.text, &self.page, width, margin);
-            let gray = style.faint(70);
-            ui::draw_label(canvas, &font, style.small, margin, text, &chapter, gray);
+                ui::fit_pair(&font, style.small(), &self.text, &self.page, width, margin);
+            let gray = style.faint(ui::Ink::Detail);
+            ui::Label::new(&chapter)
+                .px(style.small())
+                .font(font)
+                .color(gray)
+                .draw_from(&mut ui, margin, text);
             let x = f32::from(r.width) - margin - page_width;
-            ui::draw_label(canvas, &font, style.small, x, text, &page, gray);
+            ui::Label::new(&page)
+                .px(style.small())
+                .font(font)
+                .color(gray)
+                .draw_from(&mut ui, x, text);
         }
-        let size = style.text * ICON_SCALE;
-        let small_line = font.line_metrics(style.small).line_height as u16;
+        let size = style.text() * ICON_SCALE;
+        let small_line = font.line_metrics(style.small()).line_height as u16;
         for (i, (entry, cell)) in self.entries.iter().zip(&self.cells).enumerate() {
             let on = Self::on(env, &entry.id);
             let enabled = entry.enabled(env);
             let inner = *cell;
             // Switched on or focused: a frame a little around the entry.
-            let pad = style.gap as u16 / 2;
+            let pad = style.gap() / 2;
             let frame = Rect::new(
                 inner.x.saturating_sub(pad),
                 inner.y,
@@ -370,7 +375,7 @@ impl Screen for BarScreen {
             );
             // Told as a button: what it is, which has the focus, which is on.
             let focused = self.keys && i == self.focus;
-            canvas
+            ui.canvas()
                 .describe(Role::Button, &entry.label(env), frame)
                 .focused(focused)
                 .on(on.then_some(true));
@@ -378,13 +383,13 @@ impl Screen for BarScreen {
                 let back = if enabled {
                     Color::BLACK
                 } else {
-                    style.faint(60)
+                    style.faint(ui::Ink::Note)
                 };
-                ui::fill_round(canvas, &style, frame, back);
+                ui::fill_round(ui.canvas(), &style, frame, back);
             }
             if focused {
                 ui::stroke_round(
-                    canvas,
+                    ui.canvas(),
                     &style,
                     frame,
                     ui::button_border(&style),
@@ -394,18 +399,13 @@ impl Screen for BarScreen {
             let ink = match (on, enabled) {
                 (true, _) => Color::WHITE,
                 (false, true) => Color::BLACK,
-                (false, false) => style.faint(60),
+                (false, false) => style.faint(ui::Ink::Note),
             };
-            let icon_area = Rect::new(
-                inner.x,
-                inner.y + style.gap as u16,
-                inner.width,
-                size as u16,
-            );
+            let icon_area = Rect::new(inner.x, inner.y + style.gap(), inner.width, size as u16);
             if let Some(icon) = &entry.icon {
                 let width = ui::icon_width(env, icon, size);
                 let x = f32::from(inner.x) + (f32::from(inner.width) - width) / 2.0;
-                ui::draw_icon(canvas, env, icon, size, x, icon_area, ink);
+                ui.icon(icon, size, x, icon_area, ink);
             }
             let label_area = Rect::new(
                 inner.x,
@@ -414,10 +414,14 @@ impl Screen for BarScreen {
                 small_line,
             );
             let room = f32::from(inner.width) + 1.0;
-            let label = ui::fit(&font, style.small, &entry.label(env), room);
+            let label = ui::fit(&font, style.small(), &entry.label(env), room);
             let x = f32::from(inner.x)
-                + (f32::from(inner.width) - font.measure(style.small, &label)) / 2.0;
-            ui::draw_label(canvas, &font, style.small, x, label_area, &label, ink);
+                + (f32::from(inner.width) - font.measure(style.small(), &label)) / 2.0;
+            ui::Label::new(&label)
+                .px(style.small())
+                .font(font)
+                .color(ink)
+                .draw_from(&mut ui, x, label_area);
         }
     }
 
@@ -467,7 +471,7 @@ impl Screen for BarScreen {
             && self.info.contains(gesture.start)
         {
             cx.command(Command::Back);
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
         }
         Handled::Yes
     }

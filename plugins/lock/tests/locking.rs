@@ -868,14 +868,9 @@ fn with_kept_code(value: &str) -> Device {
     const PIN: &str = "[lock]\nkind = lock.kind.pin\n";
     let storage = Shared::default();
     let mut device = Device::start_with(TOUCH, storage.clone(), PIN);
-    device
-        .kernel
-        .set_secret(paperpaw_sdk::secrets::SecretChange {
-            id: SECRET.into(),
-            label: "lock.secret".into(),
-            value: Some(value.into()),
-            changeable: false,
-        });
+    device.kernel.set_secret(
+        paperpaw_sdk::secrets::SecretChange::keep(SECRET, "lock.secret", value).changeable(false),
+    );
     Device::start_with(TOUCH, storage, PIN)
 }
 
@@ -946,7 +941,7 @@ mod setup_under_the_lock {
                     SettingValue::Text("lock.kind.off".into()),
                 ));
                 out.push(Command::ResetSetting(Id::new_static("lock.kind")));
-                out.push(Command::SetSecret(SecretChange::remove("lock.code")));
+                out.push(Command::set_secret(SecretChange::remove("lock.code")));
                 out.push(Command::SetPluginEnabled(Id::new_static("lock"), false));
                 out.push(Command::RemovePlugin(Id::new_static("lock")));
                 out.push(Command::LoadPlugin(String::from("plugins/intruder")));

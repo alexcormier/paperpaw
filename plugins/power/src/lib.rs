@@ -18,14 +18,13 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, menus};
 use paperpaw_sdk::power::{self, PowerLevel, Wear};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SettingGroupSpec,
-    SettingSpec, StatusItemSpec, StatusValue, Version,
+    Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SettingSpec,
+    StatusItemSpec, StatusValue, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("power");
@@ -55,15 +54,15 @@ const MODES: [&str; 4] = [
 const MARGIN: i64 = 5;
 
 static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         MODE.static_str(),
         "power.setting.mode",
         &MODES,
         AUTOMATIC,
         GROUP,
     )
-    .described("power.setting.mode.help"),
-    SettingSpec::fixed_number(
+    .description("power.setting.mode.help"),
+    SettingSpec::number(
         SAVING_BELOW.static_str(),
         "power.setting.saving-below",
         5,
@@ -71,8 +70,8 @@ static SETTINGS: [SettingSpec; 4] = [
         20,
         GROUP,
     )
-    .described("power.setting.saving-below.help"),
-    SettingSpec::fixed_number(
+    .description("power.setting.saving-below.help"),
+    SettingSpec::number(
         OFFLINE_BELOW.static_str(),
         "power.setting.offline-below",
         0,
@@ -80,14 +79,14 @@ static SETTINGS: [SettingSpec; 4] = [
         10,
         GROUP,
     )
-    .described("power.setting.offline-below.help"),
-    SettingSpec::fixed_switch(
+    .description("power.setting.offline-below.help"),
+    SettingSpec::switch(
         NORMAL_WHILE_CHARGING.static_str(),
         "power.setting.normal-while-charging",
         true,
         GROUP,
     )
-    .described("power.setting.normal-while-charging.help"),
+    .description("power.setting.normal-while-charging.help"),
 ];
 
 /// The mode to wear now, and whether the battery chose it.
@@ -96,6 +95,8 @@ pub fn choose(env: &Env<'_>) -> (Id, bool) {
         PowerLevel::Normal => power::NORMAL,
         PowerLevel::Saving => power::SAVING,
         PowerLevel::Offline => power::OFFLINE,
+        // A level to come: everything as configured.
+        _ => power::NORMAL,
     };
     let chosen = env.settings.read(&MODE);
     let level = match chosen {
@@ -135,7 +136,7 @@ fn automatic(env: &Env<'_>) -> PowerLevel {
 }
 
 /// Wears the mode chosen now, if another is worn.
-fn wear(env: &Env<'_>, out: &mut Vec<Command>) {
+fn wear(env: &Env<'_>, out: &mut paperpaw_sdk::Commands) {
     let (mode, automatic) = choose(env);
     if env.power.mode == mode && env.power.automatic == automatic {
         return;
@@ -168,7 +169,11 @@ impl Plugin for Power {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting_group(SettingGroupSpec::new(GROUP, "power.title").order(86))?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "power.title").order(86);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("leaf"))?;
         r.add_settings(&SETTINGS)?;
         // The mode in the quick panel, as segments.
@@ -183,6 +188,7 @@ impl Plugin for Power {
                         PowerLevel::Normal => return None,
                         PowerLevel::Saving => "leaf",
                         PowerLevel::Offline => "wifi-off",
+                        _ => return None,
                     };
                     Some(StatusValue::Icon(Cow::Borrowed(icon)))
                 }),
@@ -190,7 +196,7 @@ impl Plugin for Power {
             .tap(OPEN),
         )?;
         r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "power.title").handler(
-            |_: &paperpaw_sdk::Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+            |_: &paperpaw_sdk::Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
                 let page = paperpaw_sdk::Params::new()
                     .with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
                 out.push(paperpaw_sdk::Command::OpenSlot(

@@ -7,7 +7,7 @@ use alloc::string::String;
 
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size, WidgetSpec};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, TextSize, WidgetSpec};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, time};
 
 use super::frame_height;
@@ -27,43 +27,47 @@ const FACE: Setting<Text> = Setting::new("widgets.greeting.face");
 
 /// The greeting's settings, kept in the program.
 static SETTINGS: [SettingSpec; 8] = [
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         "widgets.greeting.name",
         "widgets.greeting.setting.name",
         "",
         ID,
     )
-    .described("widgets.greeting.setting.name.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.greeting.setting.name.help"),
+    SettingSpec::choice(
         "widgets.greeting.line",
         "widgets.greeting.setting.line",
         &LINES,
         LINES[1],
         ID,
     )
-    .described("widgets.greeting.line.help"),
+    .description("widgets.greeting.line.help"),
     widgets::part_spec(
         "widgets.greeting.icon",
         ID,
         "widgets.greeting.setting.icon",
         false,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.greeting.face",
         "widgets.setting.font",
         &FACES,
         FACES[0],
         ID,
     )
-    .described("widgets.setting.face-font.help"),
-    widgets::size_spec("widgets.greeting.size", ID, Size::Fit, true),
+    .description("widgets.setting.face-font.help"),
+    widgets::size_spec("widgets.greeting.size", ID, TextSize::Fit, true),
     widgets::align_spec("widgets.greeting.align", ID, Align::Center),
     widgets::frame_spec("widgets.greeting.frame", ID, Frame::None),
     widgets::padding_spec("widgets.greeting.padding", ID, Padding::Auto),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.greeting"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.greeting");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::drawn(
@@ -161,10 +165,10 @@ fn shows(env: &Env<'_>) -> String {
 fn height(env: &Env<'_>, _: u16) -> u16 {
     let style = UiStyle::new(env);
     let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => style.title * 1.6,
+        TextSize::Fit => style.title() * 1.6,
         size => size.text(&style),
     };
-    let line = below(env).map_or(0, |_| widgets::line_height(env, style.small));
+    let line = below(env).map_or(0, |_| widgets::line_height(env, style.small()));
     widgets::line_height(env, size) + line + frame_height(env, ID.as_str())
 }
 
@@ -178,18 +182,19 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     else {
         return;
     };
-    let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let look = widgets::draw_frame(ui.canvas(), env, ID.as_str(), area);
     let area = look.area;
     let part = part(env);
     let width = f32::from(area.width);
     // The date below, where it fits whole (without its weekday if need
     // be) and leaves a line for the greeting.
-    let small_line = widgets::line_height(env, style.small);
+    let small_line = widgets::line_height(env, style.small());
     let below = below(env).and_then(|date| {
-        let fits = |text: &str| ui_font.measure(style.small, text) <= width;
+        let fits = |text: &str| ui_font.measure(style.small(), text) <= width;
         let short = String::from(short_date(&date, fits));
         let room = area.height.saturating_sub(small_line);
-        (fits(&short) && room >= text::line_height(&font, style.small) as u16).then_some(short)
+        (fits(&short) && room >= text::line_height(&font, style.small()) as u16).then_some(short)
     });
     let small = below.as_ref().map_or(0, |_| small_line);
     let room = f32::from(area.height.saturating_sub(small));
@@ -207,7 +212,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let mut icon = widgets::shows(env, ID.as_str(), ICON) && ui::has_icons(env);
     let mut text = greeting(env, part);
     let fits = |text: &str, icon: bool| {
-        font.measure(style.small, text) + icon_width(icon, style.small) <= width
+        font.measure(style.small(), text) + icon_width(icon, style.small()) <= width
     };
     if !fits(&text, icon) {
         text = String::from(env.i18n.tr(part.key()));
@@ -220,8 +225,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // and the height left by the date allow.
     let (max, min) = match widgets::size(env, ID.as_str()) {
         // As large as the room holds, a line of it checked below.
-        Size::Fit => (room.max(style.small), style.small),
-        size => (size.text(&style), size.text(&style).min(style.small)),
+        TextSize::Fit => (room.max(style.small()), style.small()),
+        size => (size.text(&style), size.text(&style).min(style.small())),
     };
     let one_line = widgets::largest_size(max, min, |size| {
         font.measure(size, &text) + icon_width(size) <= width
@@ -268,13 +273,13 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         if let Some(below) = &below {
             parts.push(crate::time::Part {
                 lines: alloc::vec![below.as_str()],
-                size: style.small,
+                size: style.small(),
                 color: look.faint,
                 font: Some(&ui_font),
             });
         }
-        let gap = style.gap as f32 / 2.0;
-        crate::time::draw_stack(canvas, &font, area, align, &parts, gap);
+        let gap = style.gap() as f32 / 2.0;
+        crate::time::draw_stack(ui.canvas(), &font, area, align, &parts, gap);
         return;
     }
     let icon_width = |size: f32| if icon { icon_width(size) } else { 0.0 };
@@ -287,22 +292,21 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let row = Rect::new(area.x, top + big * n as u16, area.width, big);
         if icon {
             let icon_size = font.size_for(size, shown) * 0.9;
-            ui::draw_icon(canvas, env, part.icon(), icon_size, x, row, look.ink);
+            ui.icon(part.icon(), icon_size, x, row, look.ink);
         }
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            x + icon_width(size),
-            row,
-            shown,
-            look.ink,
-        );
+        ui::Label::new(shown)
+            .font(font)
+            .px(size)
+            .color(look.ink)
+            .draw_from(&mut ui, x + icon_width(size), row);
     }
     if let Some(below) = below {
-        let x = align.x(area, ui_font.measure(style.small, &below));
+        let x = align.x(area, ui_font.measure(style.small(), &below));
         let row = Rect::new(area.x, top + big * count, area.width, small);
-        ui::draw_label(canvas, &ui_font, style.small, x, row, &below, look.faint);
+        ui::Label::new(&below)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(&mut ui, x, row);
     }
 }
 

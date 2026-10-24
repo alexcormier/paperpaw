@@ -21,6 +21,9 @@ pub struct Canvas<'a> {
     /// Where what is drawn is described, if anyone asks (see
     /// [`Canvas::describing`]).
     described: Option<&'a mut Vec<Described>>,
+    /// What is described is told as doing nothing now (see
+    /// [`Canvas::disabling`]).
+    disabled: bool,
 }
 
 /// What a part of a screen is, as its drawing tells: for reading the
@@ -189,6 +192,7 @@ impl<'a> Canvas<'a> {
             clip,
             origin: (0, 0),
             described: None,
+            disabled: false,
         }
     }
 
@@ -284,7 +288,7 @@ impl<'a> Canvas<'a> {
             clip,
             focused: false,
             on: None,
-            disabled: false,
+            disabled: self.disabled,
         }
     }
 
@@ -346,6 +350,20 @@ impl<'a> Canvas<'a> {
             clip,
             origin: self.origin,
             described: self.described.as_deref_mut(),
+            disabled: self.disabled,
+        }
+    }
+
+    /// This canvas, telling every part drawn into it as doing nothing now
+    /// where `disabled` (e.g. a menu entry that cannot be chosen yet,
+    /// whatever helper draws it); as it is otherwise.
+    pub fn disabling(&mut self, disabled: bool) -> Canvas<'_> {
+        Canvas {
+            framebuffer: self.framebuffer,
+            clip: self.clip,
+            origin: self.origin,
+            described: self.described.as_deref_mut(),
+            disabled: self.disabled || disabled,
         }
     }
 

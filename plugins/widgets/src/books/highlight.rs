@@ -18,7 +18,7 @@ use paperpaw_sdk::library;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Storage};
 
@@ -50,23 +50,23 @@ static SETTINGS: [SettingSpec; 11] = [
     widgets::align_spec("widgets.highlight.align", ID, Align::Center),
     widgets::frame_spec("widgets.highlight.frame", ID, Frame::None),
     widgets::padding_spec("widgets.highlight.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.highlight.size", ID, Size::Fit, true),
-    SettingSpec::fixed_choice(
+    widgets::size_spec("widgets.highlight.size", ID, TextSize::Fit, true),
+    SettingSpec::choice(
         "widgets.highlight.source",
         "widgets.books.setting.highlight-source",
         &SOURCES,
         SOURCES[0],
         ID,
     )
-    .described("widgets.highlight.source.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.highlight.source.help"),
+    SettingSpec::choice(
         "widgets.highlight.change",
         "widgets.books.setting.highlight-change",
         &CHANGES,
         CHANGES[0],
         ID,
     )
-    .described("widgets.books.setting.highlight-change.help"),
+    .description("widgets.books.setting.highlight-change.help"),
     widgets::part_spec(
         "widgets.highlight.caption",
         ID,
@@ -104,7 +104,15 @@ pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(),
         out.push(open(&goto.path));
         out.push(events::GOTO.emit(goto.clone()));
     })?;
-    add_settings(r, &ID, "widgets.highlight", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.highlight");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     let kept: Kept = Rc::default();
     let shown = Rc::new(Showings::default());
     let generation = generation.clone();
@@ -304,11 +312,11 @@ impl Widget for HighlightWidget {
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 3) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 3) as u16 + frame_height(env, WIDGET)
     }
 
     fn min_height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 2) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 2) as u16 + frame_height(env, WIDGET)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -363,8 +371,8 @@ struct Laid {
 fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let style = UiStyle::new(env);
     let id = WIDGET;
-    let gap = style.gap as u16;
-    let look = widgets::look::look(env, id, area);
+    let gap = style.gap();
+    let look = widgets::widget_look(env, id, area);
     let area = below_caption(env, id, &look);
     // Below: the book (and the note), small.
     let source = {
@@ -377,13 +385,13 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
             (false, false) => String::new(),
         }
     };
-    let small = widgets::line_height(env, style.small);
+    let small = widgets::line_height(env, style.small());
     let mut note = widgets::shows(env, id, "note") && !quote.note.is_empty();
     let mut with_source = !source.is_empty();
     let mut marks = widgets::shows(env, id, "marks");
-    let mark_size = style.title * 2.0;
+    let mark_size = style.title() * 2.0;
     let (max, min) = match widgets::size(env, id) {
-        Size::Fit => (style.title * 1.6, style.small),
+        TextSize::Fit => (style.title() * 1.6, style.small()),
         other => (other.text(&style), other.text(&style)),
     };
     let (text, lines, size, mark_h, below) = loop {
@@ -443,14 +451,14 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     })
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid: &Laid) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, quote: &Quote, laid: &Laid) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
     let id = WIDGET;
     let align = widgets::align(env, id);
-    let gap = style.gap as u16;
+    let gap = style.gap();
     super::caption(
         canvas,
         env,
@@ -459,10 +467,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
         env.i18n.tr("widgets.highlight.caption"),
     );
     let area = laid.block;
-    let small = widgets::line_height(env, style.small);
+    let small = widgets::line_height(env, style.small());
     if laid.marks {
         let mark = "\u{201c}";
-        let mark_size = style.title * 2.0;
+        let mark_size = style.title() * 2.0;
         let w = font.measure(mark_size, mark);
         let x = align.x(area, w);
         let metrics = font.line_metrics(mark_size);
@@ -490,7 +498,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
             canvas,
             env,
             &font,
-            style.small,
+            style.small(),
             row,
             align,
             &quote.note,
@@ -503,7 +511,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
             canvas,
             env,
             &font,
-            style.small,
+            style.small(),
             row,
             align,
             source,

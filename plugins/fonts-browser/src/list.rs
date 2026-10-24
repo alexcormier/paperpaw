@@ -61,8 +61,8 @@ impl ListScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
+        let top = header.area().height + style.gap();
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -97,8 +97,8 @@ impl ListScreen {
         }
         let url = env.settings.read(&CATALOG);
         let mut request = HttpRequest::new("GET", url.trim(), LOADED);
-        request.save_to = Some(fetched_path());
-        cx.command(Command::Http(request));
+        request = request.save_to(fetched_path());
+        cx.command(Command::http(request));
         self.asked = true;
         if self.fonts.is_empty() {
             self.trouble = Trouble::Loading;
@@ -149,7 +149,7 @@ impl ListScreen {
 
     fn want_samples(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         let shown = Self::shown(&self.list, &self.fonts);
         if self.samples.want(&env, shown, &mut out) {
             self.redraw(cx);
@@ -217,8 +217,9 @@ impl Screen for ListScreen {
         let style = self.style;
         let len = self.fonts.len();
         let title = env.i18n.tr("fonts-browser.title");
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
             let (icon, title, text) = match self.trouble {
                 Trouble::Offline => (
@@ -238,46 +239,47 @@ impl Screen for ListScreen {
             } else {
                 ui::tr_input(env, text)
             };
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
-                self.list.area(),
-                icon,
-                env.i18n.tr(title),
-                text,
-            );
+            ui.empty(self.list.area(), icon, env.i18n.tr(title), text);
             return;
         }
         let (fonts, samples, job) = (&self.fonts, &self.samples, self.job.as_ref());
         let size = samples.size as f32;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let font = &fonts[index];
-                let state = ListScreen::state(env, job, font);
-                // The name in its own font, once its sample is here, in the
-                // room the state leaves.
-                let band = ui::title_area(&style, rect);
-                ui::draw_value_row(canvas, env, &style, band, focused, "", &state);
-                let Some(ui_font) = style.font(env) else {
-                    return;
-                };
-                let ink = style.focus_ink(focused);
-                let margin = style.margin as f32;
-                let x = f32::from(rect.x) + margin;
-                let room =
-                    f32::from(rect.width) - 3.0 * margin - ui_font.measure(style.text, &state);
-                let (face, size) = match samples.get(&font.id) {
-                    Some(sample) => (sample, size),
-                    None => (ui_font, style.text),
-                };
-                let name = ui::fit(&face, size, &font.name, room);
-                ui::draw_label(canvas, &face, size, x, band, &name, ink);
-                ui::draw_note(canvas, env, &style, rect, focused, &describe(env, font));
-            });
-        canvas.fill(self.status, Color::WHITE);
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let font = &fonts[index];
+            let state = ListScreen::state(env, job, font);
+            // The name in its own font, once its sample is here, in the
+            // room the state leaves.
+            let band = ui::title_area(&style, rect);
+            ui::Row::value("", &state).focused(focused).draw(ui, band);
+            let Some(ui_font) = style.font(env) else {
+                return;
+            };
+            let ink = style.focus_ink(focused);
+            let margin = style.margin() as f32;
+            let x = f32::from(rect.x) + margin;
+            let room = f32::from(rect.width) - 3.0 * margin - ui_font.measure(style.text(), &state);
+            let (face, size) = match samples.get(&font.id) {
+                Some(sample) => (sample, size),
+                None => (ui_font, style.text()),
+            };
+            let name = ui::fit(&face, size, &font.name, room);
+            ui::Label::new(&name)
+                .font(face)
+                .px(size)
+                .color(ink)
+                .draw_from(ui, x, band);
+            ui::draw_note(
+                ui.canvas(),
+                env,
+                &style,
+                rect,
+                focused,
+                &describe(env, font),
+            );
+        });
+        ui.canvas().fill(self.status, Color::WHITE);
         let note = ui::tr_input(env, "fonts-browser.hint");
-        ui::draw_note_line(canvas, env, &style, self.status, note);
+        ui.note_line(self.status, note);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -316,7 +318,7 @@ impl Screen for ListScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if len == 0 && self.list.area().contains(gesture.start) {

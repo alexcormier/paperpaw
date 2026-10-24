@@ -22,11 +22,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, menus};
-use paperpaw_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
+use paperpaw_sdk::ui::reorder::Reorder;
+use paperpaw_sdk::ui::reorder::ReorderStep;
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec,
+    ActionSpec, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar,
+    Screen, ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("menu-editor");
@@ -80,7 +82,7 @@ impl Plugin for MenuEditor {
             r.add_screen(ScreenSpec::new(id, "menu-editor.title", Box::new(open)))?;
         }
         r.add_action(ActionSpec::new(OPEN, "menu-editor.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(MENUS_SCREEN, Params::new()));
             },
         ))?;
@@ -201,10 +203,10 @@ impl Frame {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height - top);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
             reorder: Reorder::default(),
@@ -223,20 +225,20 @@ impl Frame {
         movable: usize,
     ) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let (label, value) = row(index);
-                let rect = if index < movable {
-                    Reorder::draw_grip(canvas, env, &style, rect, focused);
-                    Reorder::content(rect)
-                } else {
-                    rect
-                };
-                ui::draw_value_row(canvas, env, &style, rect, focused, label, value);
-            });
-        self.reorder.draw(canvas, &style, &self.list);
+            .draw(&mut ui, title, None, self.list.paging(len));
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (label, value) = row(index);
+            let rect = if index < movable {
+                Reorder::draw_grip(ui.canvas(), env, &style, rect, focused);
+                Reorder::content(rect)
+            } else {
+                rect
+            };
+            ui::Row::value(label, value).focused(focused).draw(ui, rect);
+        });
+        self.reorder.draw(&mut ui, &self.list);
     }
 
     /// Follows a finger dragging one of the first `movable` rows: where
@@ -283,7 +285,7 @@ impl Frame {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return None;
         }
         let index = self.list.hit(gesture.start, len)?;
@@ -589,20 +591,21 @@ impl EntryScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         // No higher than the screen: the list pages where its rows are tall.
-        let height = (style.row * (OPTIONS.len() as u32 + 1) + style.gap * 2)
+        let height = (u32::from(style.row()) * (OPTIONS.len() as u32 + 1)
+            + u32::from(style.gap()) * 2)
             .min(u32::from(display.height)) as u16;
         let region = Rect::new(0, display.height - height, display.width, height);
         let list_area = Rect::new(
             0,
-            region.y + style.row as u16 + style.gap as u16,
+            region.y + style.row() + style.gap(),
             display.width,
-            height.saturating_sub(style.row as u16 + style.gap as u16),
+            height.saturating_sub(style.row() + style.gap()),
         );
         Self {
             menu: params.get(MENU).unwrap_or_default().to_string(),
             index: params.get(INDEX).and_then(|i| i.parse().ok()).unwrap_or(0),
             refused: false,
-            list: ListView::new(list_area, style.row).focus_on_keys(env),
+            list: ListView::new(list_area, u32::from(style.row())).focus_on_keys(env),
             style,
             region,
         }
@@ -663,47 +666,42 @@ impl Screen for EntryScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
-            (style.line * 2).max(2),
+            (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let id = entries(env, &self.menu).get(self.index).cloned();
         let title = id.map_or(String::new(), |id| name(env, id.as_str()));
-        let title_area = Rect::new(r.x, r.y + style.gap as u16, r.width, style.row as u16);
-        let x = style.margin as f32;
-        let title = ui::fit(&font, style.title, &title, f32::from(r.width) - 2.0 * x);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title,
-            x,
-            title_area,
-            &title,
-            Color::BLACK,
-        );
+        let title_area = Rect::new(r.x, r.y + style.gap(), r.width, style.row());
+        let x = style.margin() as f32;
+        let title = ui::fit(&font, style.title(), &title, f32::from(r.width) - 2.0 * x);
+        ui::Label::new(&title)
+            .px(style.title())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, x, title_area);
         if self.refused {
             let message = env.i18n.tr("menu-editor.locked");
-            ui::draw_message(canvas, env, &style, self.list.area(), message);
+            ui.message(self.list.area(), message);
             return;
         }
-        self.list.draw(
-            canvas,
-            &style,
-            OPTIONS.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, OPTIONS.len(), |ui, index, rect, focused| {
                 let label = env.i18n.tr(OPTIONS[index]);
                 let color = style.focus_ink(focused);
-                ui::draw_label(canvas, &font, style.text, x, rect, label, color);
-            },
-        );
+                ui::Label::new(label)
+                    .px(style.text())
+                    .color(color)
+                    .draw_from(ui, x, rect);
+            });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

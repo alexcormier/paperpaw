@@ -16,7 +16,7 @@ mod common;
 use common::{DEVICE, Harness, REPLY};
 use paperpaw_core::sdk::wifi::{NETWORK_WAIT_MS, WifiState};
 use paperpaw_core::sdk::{
-    Command, HttpRequest, Id, MemoryStorage, Params, ServerResponse, SocketRead, Speech,
+    Command, HttpError, HttpRequest, Id, MemoryStorage, Params, ServerResponse, SocketRead, Speech,
 };
 use paperpaw_core::{
     HttpResponse, Io, Kernel, KernelBuilder, ServerCall, ServerEvent, SocketCall, SocketEvent,
@@ -43,7 +43,7 @@ fn replies(harness: &Harness) -> Vec<String> {
 }
 
 fn get(id: &str) -> Command {
-    Command::Http(
+    Command::http(
         HttpRequest::get("http://example.org/", REPLY)
             .with(Params::new().with("n", String::from(id))),
     )
@@ -85,7 +85,10 @@ fn an_http_answer_given_twice_or_for_no_request_is_heard_once() {
         (23, ok(calls[0].id, "A again")),
         (24, ok(0, "nobody")),
         (25, ok(u32::MAX, "nobody")),
-        (26, HttpResponse::failed(calls[0].id, "late failure")),
+        (
+            26,
+            HttpResponse::failed(calls[0].id, HttpError::Timeout, "late failure"),
+        ),
     ] {
         kernel.http_response(Instant(at), response);
     }
@@ -96,7 +99,7 @@ fn an_http_answer_given_twice_or_for_no_request_is_heard_once() {
 }
 
 #[test]
-fn an_answer_that_is_not_utf8_reaches_the_plugin_as_text() {
+fn an_answer_that_is_not_utf8_reaches_the_plugin_whole() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, |b| b.network(true));
     harness.run(&mut kernel, 10, [get("a")]);
@@ -112,7 +115,10 @@ fn an_answer_that_is_not_utf8_reaches_the_plugin_as_text() {
     );
     let replies = replies(&harness);
     assert_eq!(replies.len(), 1);
-    assert!(replies[0].contains("ok"), "{replies:?}");
+    assert!(
+        replies[0].contains("ok") && replies[0].contains("bytes=5"),
+        "{replies:?}"
+    );
 }
 
 #[test]
@@ -123,7 +129,7 @@ fn shells_with_memory_to_spare_load_a_file_to_send_whole() {
     kernel.storage().write("up.bin", &data).unwrap();
     kernel.storage().write("empty.bin", b"").unwrap();
     let put = |path: &str| {
-        Command::Http(HttpRequest::new("PUT", "http://example.org/up", REPLY).body_from(path))
+        Command::http(HttpRequest::new("PUT", "http://example.org/up", REPLY).body_from(path))
     };
     harness.run(&mut kernel, 10, [put("up.bin"), put("empty.bin")]);
     let mut calls = http_calls(&mut kernel);
@@ -151,12 +157,15 @@ fn a_failed_download_writes_nothing_where_the_file_was_to_go() {
     harness.run(
         &mut kernel,
         10,
-        [Command::Http(
+        [Command::http(
             HttpRequest::get("http://example.org/book", REPLY).save_to("books/kept.epub"),
         )],
     );
     let call = http_calls(&mut kernel).remove(0);
-    kernel.http_response(Instant(20), HttpResponse::failed(call.id, "timed out"));
+    kernel.http_response(
+        Instant(20),
+        HttpResponse::failed(call.id, HttpError::Timeout, "timed out"),
+    );
     let kept = paperpaw_core::sdk::read_file(kernel.storage(), "books/kept.epub", 1024).unwrap();
     assert_eq!(kept, b"the old book");
     assert!(replies(&harness)[0].contains("status=0"));
@@ -351,7 +360,7 @@ fn a_request_answered_twice_is_passed_on_twice_but_its_body_goes_once() {
         told[0].contains("body-file=.paperpaw/tmp/request-7"),
         "{told:?}"
     );
-    let respond = || Command::Respond(ServerResponse::new(7, 200, "text/plain", b"ok".to_vec()));
+    let respond = || Command::respond(ServerResponse::new(7, 200, "text/plain", b"ok".to_vec()));
     harness.run(&mut kernel, 22, [respond(), respond()]);
     assert!(bodies(&kernel).is_empty());
     let responds = kernel
@@ -370,8 +379,8 @@ fn an_answer_from_a_file_that_is_not_there_is_not_found() {
     let number = listening(&mut kernel);
     kernel.server_event(Instant(20), request(number, 3, "/missing", false));
     let mut response = ServerResponse::new(3, 200, "application/epub+zip", Vec::new());
-    response.body_from = Some(String::from("books/gone.epub"));
-    harness.run(&mut kernel, 21, [Command::Respond(response)]);
+    response = response.body_from(String::from("books/gone.epub"));
+    harness.run(&mut kernel, 21, [Command::respond(response)]);
     let answers: Vec<(u16, Vec<u8>, bool)> = kernel
         .take_io()
         .into_iter()
@@ -399,7 +408,7 @@ fn a_request_reported_twice_does_not_confuse_a_later_one() {
     harness.run(
         &mut kernel,
         23,
-        [Command::Respond(ServerResponse::new(
+        [Command::respond(ServerResponse::new(
             7,
             200,
             "text/plain",
@@ -613,10 +622,8 @@ fn speech_reported_done_twice_or_for_texts_replaced_is_heard_once() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, |b| b.speech(true));
     let say = |text: &str, queue: bool| {
-        let mut speech = Speech::new(text, REPLY);
-        speech.params = Params::new().with("n", String::from(text));
-        speech.queue = queue;
-        Command::Speak(speech)
+        let params = Params::new().with("n", String::from(text));
+        Command::speak(Speech::new(text, REPLY).with(params).queued(queue))
     };
     harness.run(&mut kernel, 10, [say("one", false), say("two", false)]);
     let ids: Vec<u32> = kernel
@@ -652,7 +659,7 @@ fn without_the_shells_help_everything_fails_at_once() {
             get("a"),
             serve(),
             connect(),
-            Command::Speak(Speech::new("hello", REPLY)),
+            Command::speak(Speech::new("hello", REPLY)),
         ],
     );
     let told = replies(&harness);

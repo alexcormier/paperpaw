@@ -71,38 +71,38 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.world-clock.align", ID, Align::Left),
     widgets::frame_spec("widgets.world-clock.frame", ID, Frame::None),
     widgets::padding_spec("widgets.world-clock.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.world-clock.place-1",
         "widgets.setting.place-1",
         &ZONES,
         "core.tz.new-york",
         ID,
     )
-    .described("widgets.world-clock.place.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.world-clock.place.help"),
+    SettingSpec::choice(
         "widgets.world-clock.place-2",
         "widgets.setting.place-2",
         &ZONES_OR_NONE,
         "core.tz.tokyo",
         ID,
     )
-    .described("widgets.world-clock.place.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.world-clock.place.help"),
+    SettingSpec::choice(
         "widgets.world-clock.place-3",
         "widgets.setting.place-3",
         &ZONES_OR_NONE,
         NONE,
         ID,
     )
-    .described("widgets.world-clock.place.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.world-clock.place.help"),
+    SettingSpec::choice(
         "widgets.world-clock.layout",
         "widgets.setting.layout",
         &LAYOUTS,
         LAYOUTS[0],
         ID,
     )
-    .described("widgets.world-clock.layout.help"),
+    .description("widgets.world-clock.layout.help"),
     widgets::part_spec(
         "widgets.world-clock.here",
         ID,
@@ -126,8 +126,11 @@ static SETTINGS: [SettingSpec; 10] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add_settable(
         r,
-        &ID,
-        "widgets.world-clock",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.world-clock");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(super::minute_shows),
     )?;
     r.add_settings(&SETTINGS)
@@ -231,8 +234,9 @@ pub(super) fn offset_text(env: &Env<'_>, minutes: i64) -> String {
 fn height(env: &Env<'_>, _: u16) -> u16 {
     let (style, _) = ui(env);
     let count = places(env).len().max(1) as u16;
-    let row = widgets::line_height(env, style.title * 1.3) + widgets::line_height(env, style.small);
-    row * count + style.gap as u16 * (count - 1) + frame_height(env, ID.as_str())
+    let row =
+        widgets::line_height(env, style.title() * 1.3) + widgets::line_height(env, style.small());
+    row * count + style.gap() * (count - 1) + frame_height(env, ID.as_str())
 }
 
 #[expect(
@@ -255,7 +259,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         return;
     }
     let area = look.area;
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let columns = match chosen_name(env, ID.as_str(), "layout") {
         "rows" => false,
         "columns" => true,
@@ -268,15 +272,15 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             && places.iter().any(|place| {
                 let clock = super::clock_text(env, &place.time);
                 let size = time_size(&font, &clock, f32::from(row_h), f32::from(area.width))
-                    .max(style.small);
+                    .max(style.small());
                 let name = name_size(&style, row_h);
-                font.measure(size, &clock) + style.gap as f32 + font.measure(name, &place.name)
+                font.measure(size, &clock) + style.gap() as f32 + font.measure(name, &place.name)
                     > f32::from(area.width)
             })
     };
     // Where not all have room, those first chosen: each needs a line of
     // the small size, two where its name goes above its time.
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let room = if columns { area.width } else { area.height };
     let mut n = places.len();
     while n > 1 {
@@ -320,8 +324,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                 .iter()
                 .all(|clock| font.measure(size, clock) <= f32::from(w) * 0.96)
         };
-        let size = widgets::largest_size((room * 0.8).max(style.small), style.small, fits)
-            .unwrap_or(style.small);
+        let size = widgets::largest_size((room * 0.8).max(style.small()), style.small(), fits)
+            .unwrap_or(style.small());
         (size, notes)
     };
     // Too flat for the name above the time: beside it, where it has room
@@ -331,9 +335,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         && places.iter().all(|place| {
             let clock = super::clock_text(env, &place.time);
             let w = f32::from(super::share(area.width, gap, n));
-            let time = time_size(&font, &clock, f32::from(area.height), w).max(style.small);
+            let time = time_size(&font, &clock, f32::from(area.height), w).max(style.small());
             let name = name_size(&style, area.height);
-            font.measure(time, &clock) + style.gap as f32 + font.measure(name, &place.name) <= w
+            font.measure(time, &clock) + style.gap() as f32 + font.measure(name, &place.name) <= w
         });
     for (i, place) in places.iter().enumerate() {
         let i = i as u16;
@@ -352,7 +356,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         }
         // A fine line between places.
         if i > 0 && look.frame != Frame::Dark {
-            let thick = style.line as u16;
+            let thick = style.line();
             let back = (gap / 2 + thick / 2).min(gap);
             let between = if columns {
                 Rect::new(cell.x - back, cell.y, thick.min(gap), cell.height)
@@ -369,7 +373,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 /// looks alike wherever it falls (a shaded gray there would be dotted in
 /// one place and solid in another).
 fn draw_between(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, ink: Color) {
-    if style.grays > 2 {
+    if !style.black_and_white() {
         canvas.fill_shaded(area, Color::gray(200));
         return;
     }
@@ -389,7 +393,7 @@ fn draw_between(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, ink: Color
 
 /// The size of a place's name beside its time in a row `height` high.
 fn name_size(style: &UiStyle, height: u16) -> f32 {
-    style.text.min(f32::from(height) * 0.4).max(style.small)
+    style.text().min(f32::from(height) * 0.4).max(style.small())
 }
 
 /// A place as a row: its name and note on the left, the time large on
@@ -398,7 +402,7 @@ fn draw_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     cell: Rect,
     place: &Place,
 ) {
@@ -406,7 +410,7 @@ fn draw_row(
     let clock = super::clock_text(env, &place.time);
     let note = note(env, place);
     let width = f32::from(cell.width);
-    let size = time_size(font, &clock, f32::from(cell.height), width).max(style.small);
+    let size = time_size(font, &clock, f32::from(cell.height), width).max(style.small());
     let time_width = font.measure(size, &clock);
     let big = line(font, size).min(f32::from(cell.height));
     let time_row = Rect::new(
@@ -417,7 +421,10 @@ fn draw_row(
     );
     let flipped = widgets::align(env, ID.as_str()) == Align::Right;
     let (time_align, name_x) = if flipped {
-        (Align::Left, cell.x + (time_width + style.gap as f32) as u16)
+        (
+            Align::Left,
+            cell.x + (time_width + style.gap() as f32) as u16,
+        )
     } else {
         (Align::Right, cell.x)
     };
@@ -426,7 +433,7 @@ fn draw_row(
     let name_room = Rect::new(
         name_x,
         cell.y,
-        (width - time_width - style.gap as f32).max(0.0) as u16,
+        (width - time_width - style.gap() as f32).max(0.0) as u16,
         cell.height,
     );
     let name_size = name_size(&style, cell.height);
@@ -434,7 +441,7 @@ fn draw_row(
     let note_line = if note.is_empty() {
         0.0
     } else {
-        line(font, style.small)
+        line(font, style.small())
     };
     let two = name_line + note_line <= f32::from(cell.height);
     let name_align = if flipped { Align::Right } else { Align::Left };
@@ -460,7 +467,7 @@ fn draw_row(
             super::label(
                 canvas,
                 font,
-                style.small,
+                style.small(),
                 name_align,
                 row,
                 &note,
@@ -476,7 +483,7 @@ fn draw_row(
         super::label(
             canvas,
             font,
-            style.small,
+            style.small(),
             name_align,
             name_room,
             &text,
@@ -504,7 +511,7 @@ fn draw_column(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     cell: Rect,
     place: &Place,
     compact: bool,
@@ -520,7 +527,7 @@ fn draw_column(
         name = format!("{name}, {note}");
         note = String::new();
     }
-    let small = line(font, style.small);
+    let small = line(font, style.small());
     let room = (f32::from(cell.height) - small * notes).max(small);
     let big = line(font, size).min(room);
     let total = small * notes + big;
@@ -531,7 +538,7 @@ fn draw_column(
         super::label(
             canvas,
             font,
-            style.small,
+            style.small(),
             align,
             row(y, small),
             &name,
@@ -545,7 +552,7 @@ fn draw_column(
         super::label(
             canvas,
             font,
-            style.small,
+            style.small(),
             align,
             row(y, small),
             &note,

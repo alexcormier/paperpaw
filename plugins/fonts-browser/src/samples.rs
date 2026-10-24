@@ -13,7 +13,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::{
-    Command, Env, FontHandle, FontSet, HttpRequest, Id, MemoryClass, Params, Storage,
+    Command, Commands, Env, FontHandle, FontSet, HttpRequest, Id, MemoryClass, Params, Storage,
 };
 
 use crate::PLUGIN;
@@ -80,7 +80,7 @@ pub(crate) struct Samples {
 impl Samples {
     pub(crate) fn new(style: &UiStyle) -> Self {
         // A little larger than menu text, for the letters to show.
-        Self::of_size((style.text * 1.3 + 0.5) as u32)
+        Self::of_size((style.text() * 1.3 + 0.5) as u32)
     }
 
     fn of_size(size: u32) -> Self {
@@ -131,7 +131,7 @@ impl Samples {
     /// Holds the samples of `fonts` kept on the storage, those of other
     /// fonts let go, and asks for the first one missing while there is
     /// room for it; `true` if one more is held.
-    pub(crate) fn want(&mut self, env: &Env<'_>, fonts: &[Font], out: &mut Vec<Command>) -> bool {
+    pub(crate) fn want(&mut self, env: &Env<'_>, fonts: &[Font], out: &mut Commands) -> bool {
         if self
             .held
             .iter()
@@ -165,9 +165,9 @@ impl Samples {
             );
             let mut request = HttpRequest::new("GET", &url, SAMPLE);
             let _ = env.storage.create_dir(&dir());
-            request.save_to = Some(self.path(env, font));
-            request.params = Params::new().with(FONT, font.id.clone());
-            out.push(Command::Http(request));
+            request = request.save_to(self.path(env, font));
+            request = request.with(Params::new().with(FONT, font.id.clone()));
+            out.push(Command::http(request));
             self.fetching = Some(font.id.clone());
         }
         more

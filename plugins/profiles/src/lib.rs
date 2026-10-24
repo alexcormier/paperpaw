@@ -32,8 +32,9 @@ use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec,
 };
 
 use crate::profile::Profile;
@@ -56,7 +57,7 @@ const OPTION: &str = "option";
 const NAME: &str = "name";
 
 /// Applies `profile` and says so.
-fn apply(env: &Env<'_>, profile: &Profile, out: &mut Vec<Command>) {
+fn apply(env: &Env<'_>, profile: &Profile, out: &mut Commands) {
     out.extend(profile::apply(env, profile));
     profile::set_last(env.storage, &profile.name);
     out.push(Command::Notify(env.i18n.format(
@@ -90,12 +91,12 @@ impl Plugin for Profiles {
             Box::new(|env, _| Box::new(ListScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "profiles.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
         r.add_action(ActionSpec::new(NEXT, "profiles.next").handler(
-            |env: &Env<'_>, out: &mut Vec<Command>| {
+            |env: &Env<'_>, _, out: &mut Commands| {
                 let profiles = profile::load(env.storage).unwrap_or_default();
                 let last = profile::last(env.storage);
                 let at = profiles.iter().position(|p| p.name == last);
@@ -141,8 +142,8 @@ impl ListScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
+        let top = header.area().height + style.gap();
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -197,7 +198,7 @@ impl ListScreen {
         let env = *cx.env();
         match self.rows().get(index).copied() {
             Some(Row::Profile(i)) => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 apply(&env, &self.profiles[i], &mut out);
                 for command in out {
                     cx.command(command);
@@ -324,40 +325,43 @@ fn clean(name: &str) -> Option<String> {
 impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let rows = self.rows();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("profiles.title"),
             None,
             self.list.paging(rows.len()),
         );
         let (profiles, in_use) = (&self.profiles, &self.in_use);
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| match rows[index] {
-                Row::Profile(i) => {
-                    let p = &profiles[i];
-                    let value = if in_use.get(i).copied().unwrap_or(false) {
-                        env.i18n.tr("profiles.in-use").to_string()
-                    } else {
-                        String::new()
-                    };
-                    let note = env
-                        .i18n
-                        .plural("profiles.settings", p.values.len() as i64, &[]);
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, &p.name, &value, &note);
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
+                match rows[index] {
+                    Row::Profile(i) => {
+                        let p = &profiles[i];
+                        let value = if in_use.get(i).copied().unwrap_or(false) {
+                            env.i18n.tr("profiles.in-use").to_string()
+                        } else {
+                            String::new()
+                        };
+                        let note = env
+                            .i18n
+                            .plural("profiles.settings", p.values.len() as i64, &[]);
+                        ui::Row::value(&p.name, &value)
+                            .note(&note)
+                            .focused(focused)
+                            .draw(ui, rect);
+                    }
+                    Row::Add => {
+                        let title = env.i18n.tr("profiles.add");
+                        let note = env.i18n.tr("profiles.add.help");
+                        ui::Row::value(title, "+")
+                            .note(note)
+                            .focused(focused)
+                            .draw(ui, rect);
+                    }
                 }
-                Row::Add => {
-                    let title = env.i18n.tr("profiles.add");
-                    let note = env.i18n.tr("profiles.add.help");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "+", note);
-                }
-            },
-        );
+            });
         if self.profiles.is_empty() {
             // Below the row that saves one: what profiles are for.
             let top = self.list.area().y + self.list.row() as u16;
@@ -367,10 +371,7 @@ impl Screen for ListScreen {
                 self.list.area().width,
                 self.status.y.saturating_sub(top),
             );
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 area,
                 "stack-2",
                 env.i18n.tr("profiles.empty.title"),
@@ -378,14 +379,8 @@ impl Screen for ListScreen {
             );
             return;
         }
-        canvas.fill(self.status, Color::WHITE);
-        ui::draw_note_line(
-            canvas,
-            env,
-            &style,
-            self.status,
-            ui::tr_input(env, "profiles.hint"),
-        );
+        ui.canvas().fill(self.status, Color::WHITE);
+        ui.note_line(self.status, ui::tr_input(env, "profiles.hint"));
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -412,7 +407,7 @@ impl Screen for ListScreen {
                 .header
                 .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

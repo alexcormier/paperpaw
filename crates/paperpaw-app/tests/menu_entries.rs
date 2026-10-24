@@ -63,10 +63,10 @@ impl Plugin for Early {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for (id, order) in [("early.a", 10), ("early.b", 20)] {
-            r.add_action(action(id).handler(|_, _| {}))?;
+            r.add_action(action(id).handler(|_, _, _| {}))?;
             r.add_menu_entry(MenuEntry::new(MENU, Id::new_static(id)).order(order))?;
         }
-        r.add_action(action("early.customize").handler(|_, out| {
+        r.add_action(action("early.customize").handler(|_, _, out| {
             let ids = vec![Id::new_static("early.b"), Id::new_static("early.a")];
             out.push(Command::SetMenu(MENU, Some(ids)));
         }))?;
@@ -87,13 +87,13 @@ impl Plugin for Late {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // Something to open besides.
-        r.add_action(action("late.app").handler(|_, _| {}))?;
+        r.add_action(action("late.app").handler(|_, _, _| {}))?;
         r.add_menu_entry(MenuEntry::new(
             paperpaw_sdk::builtin::menus::APPS,
             Id::new_static("late.app"),
         ))?;
         for id in ["late.c", "late.on", "late.faint", "late.gone"] {
-            r.add_action(action(id).handler(|_, _| {}))?;
+            r.add_action(action(id).handler(|_, _, _| {}))?;
         }
         r.place_menu_entry(
             MENU,
@@ -130,7 +130,7 @@ impl Plugin for Renamed {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for id in ["late.see", "late.on"] {
-            r.add_action(action(id).handler(|_, _| {}))?;
+            r.add_action(action(id).handler(|_, _, _| {}))?;
         }
         r.place_menu_entry(
             MENU,

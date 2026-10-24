@@ -91,7 +91,7 @@ static FOLDER: SettingExtra = SettingExtra::new()
     .editor_slot(slots::CHOOSE_FOLDER);
 
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_number(
+    SettingSpec::number(
         CONTENT.static_str(),
         "reading-goal.setting.content",
         5,
@@ -101,8 +101,8 @@ static SETTINGS: [SettingSpec; 3] = [
     )
     .advanced()
     .with_extra(&PERCENT)
-    .described("reading-goal.setting.content.help"),
-    SettingSpec::fixed_number(
+    .description("reading-goal.setting.content.help"),
+    SettingSpec::number(
         HAPPY.static_str(),
         "reading-goal.setting.happy",
         50,
@@ -112,8 +112,8 @@ static SETTINGS: [SettingSpec; 3] = [
     )
     .advanced()
     .with_extra(&PERCENT)
-    .described("reading-goal.setting.happy.help"),
-    SettingSpec::fixed_text(
+    .description("reading-goal.setting.happy.help"),
+    SettingSpec::text(
         PICTURES.static_str(),
         "reading-goal.setting.pictures",
         "",
@@ -121,7 +121,7 @@ static SETTINGS: [SettingSpec; 3] = [
     )
     .advanced()
     .with_extra(&FOLDER)
-    .described("reading-goal.setting.pictures.help"),
+    .description("reading-goal.setting.pictures.help"),
 ];
 
 pub(crate) fn data(name: &str) -> String {
@@ -225,7 +225,7 @@ impl Plugin for ReadingGoal {
                 out.push(Command::SetPluginEnabled(STATS, true));
                 out.push(Command::Restart);
             }
-            "store" => out.push(Command::RunAction(STORE)),
+            "store" => out.push(Command::run(STORE)),
             _ => {}
         })?;
         r.on(events::READ_TODAY, |env, read, _| {

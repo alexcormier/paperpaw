@@ -23,7 +23,8 @@ use crate::builtin::{actions, events, params, screens, slots};
 use crate::event::Event;
 use crate::status::item_ids;
 use crate::ui::choice;
-use crate::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
+use crate::ui::reorder::{Reorder, ReorderStep};
+use crate::ui::{self, ListChange, ListView, UiStyle};
 use crate::widgets;
 use crate::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, PointerEvent, Rect,
@@ -213,21 +214,13 @@ impl Screen for ListScreen {
         let style = self.style;
         let rows = self.rows(env);
         let title = self.target.title(env);
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            &title,
-            None,
-            self.list.paging(rows.len()),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, &title, None, self.list.paging(rows.len()));
         let list = self.target.widgets(env);
-        let room = ui::icon_room(env, &style, true);
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| {
+        let room = ui.icon_room(true);
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let ink = style.focus_ink(focused);
                 let (icon, title, value) = match rows[index] {
                     Row::Widget(at) => {
@@ -242,16 +235,17 @@ impl Screen for ListScreen {
                     ),
                 };
                 let rect = if matches!(rows[index], Row::Widget(_)) {
-                    Reorder::draw_grip(canvas, env, &style, rect, focused);
+                    Reorder::draw_grip(ui.canvas(), env, &style, rect, focused);
                     Reorder::content(rect)
                 } else {
                     rect
                 };
-                let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
-                ui::draw_value_row(canvas, env, &style, rect, focused, &title, value);
-            },
-        );
-        self.reorder.draw(canvas, &style, &self.list);
+                let rect = ui.row_icon(rect, room, icon, ink);
+                ui::Row::value(&title, value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        self.reorder.draw(&mut ui, &self.list);
     }
 
     /// Widgets are moved by dragging their grip.
@@ -304,7 +298,7 @@ impl Screen for ListScreen {
             self.header
                 .tap(&env, &self.style, gesture.start, self.list.paging(len))
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, len) {
@@ -397,34 +391,25 @@ impl Screen for AddScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.widgets.len();
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            env.i18n.tr("core.widgets.edit.add"),
-            None,
-            self.list.paging(len),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        let title = env.i18n.tr("core.widgets.edit.add");
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
-            ui::draw_message(
-                canvas,
-                env,
-                &style,
-                self.list.area(),
-                env.i18n.tr("core.widgets.edit.all-shown"),
-            );
-            return;
+            let all = env.i18n.tr("core.widgets.edit.all-shown");
+            return ui.message(self.list.area(), all);
         }
         let widgets = &self.widgets;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                // Its kind beside it, so that widgets of a kind are seen
-                // together.
-                let (id, title) = &widgets[index];
-                let kind = env.widgets.category(id.as_str()).unwrap_or_default();
-                let title = env.i18n.tr(title);
-                ui::draw_value_row(canvas, env, &style, rect, focused, title, env.i18n.tr(kind));
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            // Its kind beside it, so that widgets of a kind are seen
+            // together.
+            let (id, title) = &widgets[index];
+            let kind = env.widgets.category(id.as_str()).unwrap_or_default();
+            let title = env.i18n.tr(title);
+            ui::Row::value(title, env.i18n.tr(kind))
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -453,7 +438,7 @@ impl Screen for AddScreen {
             self.header
                 .tap(&env, &self.style, gesture.start, self.list.paging(len))
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, len) {

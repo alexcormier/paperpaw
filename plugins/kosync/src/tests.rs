@@ -205,8 +205,8 @@ impl Harness {
         for contribution in r.into_contributions() {
             match contribution {
                 Contribution::FixedSettings(list) => {
-                    for spec in list {
-                        h.settings.define_fixed(spec).unwrap();
+                    for at in 0..list.len() {
+                        h.settings.define_fixed(list, at).unwrap();
                     }
                 }
                 Contribution::SettingGroup(group) => h.settings.add_group(group).unwrap(),
@@ -280,7 +280,7 @@ impl Harness {
             work: paperpaw_sdk::work::WorkStates::none(),
             reader: true,
             clipboard: false,
-            last_input: Default::default(),
+            last_input: paperpaw_sdk::keys::InputMode::at_start(&DEVICE.input),
             inputs: &[],
             content: paperpaw_platform::Rect::default(),
             stack: &[],
@@ -301,13 +301,13 @@ impl Harness {
     /// Hands event `id` to the plugin's handlers; what they asked for.
     fn dispatch(&self, id: &Id, params: &Params) -> Vec<Command> {
         let env = self.env();
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         for (event, handler) in &self.handlers {
             if event == id {
                 handler(&env, params, &mut out);
             }
         }
-        out
+        out.into_iter().collect()
     }
 
     fn emit<P: EventData>(&self, event: &Event<P>, data: P) -> Vec<Command> {
@@ -316,17 +316,17 @@ impl Harness {
 
     /// Chooses *Sync progress*.
     fn sync_now(&self) -> Vec<Command> {
-        let mut out = Vec::new();
-        (self.sync_now.as_ref().unwrap())(&self.env(), &mut out);
-        out
+        let mut out = paperpaw_sdk::Commands::new();
+        (self.sync_now.as_ref().unwrap())(&self.env(), &Params::new(), &mut out);
+        out.into_iter().collect()
     }
 
     /// The server answers `request` with `status` and `body`.
     fn answer(&self, request: &HttpRequest, status: u16, body: &str) -> Vec<Command> {
         let mut reply = HttpReply::new(status, body);
         reply.content_type = Some("application/json".to_string());
-        reply.context = request.params.clone();
-        self.dispatch(&request.reply, &reply.to_params())
+        reply.context = request.params().clone();
+        self.dispatch(request.reply(), &reply.to_params())
     }
 
     /// Does what the kernel does with the settings and secrets in `out`.
@@ -334,7 +334,7 @@ impl Harness {
         for command in out {
             match command {
                 Command::SetSetting(id, value) => self.settings.set(id.as_str(), value).unwrap(),
-                Command::SetSecret(change) => self.secrets.apply(change),
+                Command::SetSecret(change) => self.secrets.apply(*change),
                 _ => {}
             }
         }
@@ -355,7 +355,7 @@ fn reading(percent: f32) -> Reading {
 fn requests(out: &[Command]) -> Vec<&HttpRequest> {
     out.iter()
         .filter_map(|c| match c {
-            Command::Http(request) => Some(request),
+            Command::Http(request) => Some(&**request),
             _ => None,
         })
         .collect()
@@ -365,7 +365,7 @@ fn requests(out: &[Command]) -> Vec<&HttpRequest> {
 fn fetch(out: &[Command]) -> &HttpRequest {
     let found = requests(out);
     assert_eq!(found.len(), 1, "{out:?}");
-    assert_eq!(found[0].method, "GET");
+    assert_eq!(found[0].method(), "GET");
     found[0]
 }
 
@@ -373,10 +373,10 @@ fn fetch(out: &[Command]) -> &HttpRequest {
 fn sent(out: &[Command]) -> Option<f64> {
     let puts: Vec<_> = requests(out)
         .into_iter()
-        .filter(|r| r.method == "PUT")
+        .filter(|r| r.method() == "PUT")
         .collect();
     assert!(puts.len() <= 1, "{out:?}");
-    let body = json::object(puts.first()?.body.as_deref().unwrap_or_default());
+    let body = json::object(puts.first()?.body_text().unwrap_or_default());
     json::number(&body, "percentage")
 }
 

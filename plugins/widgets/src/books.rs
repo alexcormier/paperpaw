@@ -36,9 +36,9 @@ use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library::{self, catalog};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Look, line_height};
+use paperpaw_sdk::widgets::{self, Align, WidgetLook, line_height};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
+    Arg, Canvas, Color, Command, Env, FontHandle, Point, Rect, RegisterError, Registrar,
     SettingSpec, Storage,
 };
 
@@ -217,16 +217,15 @@ pub(crate) fn path_hash(path: &str) -> u64 {
 
 // ---- Settings ------------------------------------------------------------------
 
-/// Registers widget `id`'s settings group, named `title`, with its
-/// settings, kept in the program (where its text sits, its frame, how
-/// large its text is, the parts it shows and the rest).
+/// Registers a widget's settings `group` with its settings, both kept in
+/// the program (where its text sits, its frame, how large its text is,
+/// the parts it shows and the rest).
 pub(crate) fn add_settings(
     r: &mut Registrar,
-    id: &Id,
-    title: &'static str,
+    group: &'static paperpaw_sdk::SettingGroupSpec,
     settings: &'static [SettingSpec],
 ) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(id, title))?;
+    r.add_setting_group(group)?;
     r.add_settings(settings)
 }
 
@@ -256,7 +255,7 @@ pub(crate) fn thickness(env: &Env<'_>, id: &str, size: u16) -> u32 {
         _ => 10,
     };
     (u32::from(size) / share)
-        .max(UiStyle::new(env).line * 2)
+        .max(u32::from(UiStyle::new(env).line()) * 2)
         .max(2)
 }
 
@@ -395,7 +394,7 @@ impl<'t> Lines<'t> {
     }
 
     fn gap(env: &Env<'_>) -> u16 {
-        UiStyle::new(env).gap as u16 / 4
+        UiStyle::new(env).gap() / 4
     }
 
     /// The lines of a title at `s` that `free` pixels hold, a heading's
@@ -427,7 +426,7 @@ impl<'t> Lines<'t> {
                 continue;
             }
             // Smaller, down to the small size, before it is shortened.
-            let least = line.size.min(style.small);
+            let least = line.size.min(style.small());
             let text = &line.text;
             if let Some(size) = widgets::largest_size(line.size, least, |s| fits(s, text)) {
                 line.size = size;
@@ -443,7 +442,7 @@ impl<'t> Lines<'t> {
                 let line = &self.lines[i];
                 (line.size, line.text.clone(), line.color)
             };
-            let least = size.min(style.small);
+            let least = size.min(style.small());
             // In lines broken between words, where they fit with the main
             // lines and the notes (the caption gives way to them).
             let others: u16 = self
@@ -499,7 +498,7 @@ impl<'t> Lines<'t> {
                 // The title back in one line, shortened.
                 if let Some(i) = self.lines.iter().position(|l| l.role == Role::Title) {
                     self.lines.drain(i + 1..(i + count).min(self.lines.len()));
-                    let least = size.min(style.text);
+                    let least = size.min(style.text());
                     let line = &mut self.lines[i];
                     line.text = Cow::Owned(ui::fit(&font, least, &text, room));
                     line.size = least;
@@ -704,7 +703,7 @@ impl Covers {
 pub(crate) fn draw_cover(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     at: Rect,
     book: &Book,
     covers: &Covers,
@@ -720,10 +719,18 @@ pub(crate) fn draw_cover(
 }
 
 /// A book without a cover: a frame with its title inside.
-fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rect, title: &str) {
+fn draw_placeholder(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &WidgetLook,
+    at: Rect,
+    title: &str,
+) {
     let style = UiStyle::new(env);
-    canvas.stroke(at, style.line.max(2), look.ink);
-    let pad = (style.gap as u16 / 2).min(at.width / 6);
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    ui.canvas()
+        .stroke(at, u32::from(style.line()).max(2), look.ink);
+    let pad = (style.gap() / 2).min(at.width / 6);
     let inner = Rect::new(
         at.x + pad,
         at.y + pad,
@@ -733,7 +740,7 @@ fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rec
     if inner.width < 8 || inner.height < 8 {
         return;
     }
-    let size = style.small.min(f32::from(inner.width) / 3.0);
+    let size = style.small().min(f32::from(inner.width) / 3.0);
     let Some(font) = style.font(env) else {
         return;
     };
@@ -742,7 +749,10 @@ fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rec
     let lines = cover_lines(&font, size, title, f32::from(inner.width), fits);
     for (n, text) in lines.iter().enumerate() {
         let row = Rect::new(inner.x, inner.y + n as u16 * line, inner.width, line);
-        ui::draw_label(canvas, &font, size, f32::from(inner.x), row, text, look.ink);
+        ui::Label::new(text)
+            .px(size)
+            .color(look.ink)
+            .draw_from(&mut ui, f32::from(inner.x), row);
     }
 }
 
@@ -836,7 +846,7 @@ pub(crate) fn percent_text(env: &Env<'_>, percent: u8) -> String {
 pub(crate) fn draw_ring(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     center: Point,
     radius: u32,
     thickness: u32,
@@ -848,7 +858,7 @@ pub(crate) fn draw_ring(
         // No room for a ring.
         return;
     }
-    let fine = style.line.clamp(1, thickness);
+    let fine = u32::from(style.line()).clamp(1, thickness);
     // The fine line in the middle of the ring's width.
     let track = radius - (thickness - fine) / 2;
     canvas.stroke_circle(center, track, fine, look.ink);
@@ -874,7 +884,7 @@ pub(crate) fn draw_ring(
 pub(crate) fn draw_ring_percent(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     center: Point,
     inner: u32,
     percent: u8,
@@ -885,7 +895,7 @@ pub(crate) fn draw_ring_percent(
     };
     let number = percent.to_string();
     let room = inner as f32 * 1.5;
-    let least = style.small * 0.6;
+    let least = style.small() * 0.6;
     let sign = |size: f32| (size * 0.45).max(least * 0.8);
     let width = |size: f32| font.measure(size, &number) + font.measure(sign(size), "%");
     // As large as fits inside, measured as drawn (a font of a few sizes
@@ -917,18 +927,27 @@ pub(crate) fn draw_ring_percent(
 pub(crate) fn draw_percent_alone(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     area: Rect,
     align: Align,
     percent: u8,
 ) {
     let style = UiStyle::new(env);
     let text = percent_text(env, percent);
-    let max = widgets::largest_size(style.title * 2.0, style.small, |s| {
+    let max = widgets::largest_size(style.title() * 2.0, style.small(), |s| {
         line_height(env, s) <= area.height
     })
-    .unwrap_or(style.small);
-    widgets::draw_line(canvas, env, area, align, max, style.small, &text, look.ink);
+    .unwrap_or(style.small());
+    widgets::draw_line(
+        canvas,
+        env,
+        area,
+        align,
+        max,
+        style.small(),
+        &text,
+        look.ink,
+    );
 }
 
 /// Draws a bar `percent` full in `area`: a fine line along it, the part
@@ -936,13 +955,13 @@ pub(crate) fn draw_percent_alone(
 pub(crate) fn draw_bar(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     area: Rect,
     percent: u8,
 ) {
     let style = UiStyle::new(env);
     let h = area.height.max(2);
-    let fine = (style.line as u16).clamp(1, h);
+    let fine = (style.line()).clamp(1, h);
     let middle = area.y + (h - fine) / 2;
     canvas.fill(Rect::new(area.x, middle, area.width, fine), look.ink);
     let done = (u32::from(area.width) * u32::from(percent.min(100)) / 100) as u16;
@@ -958,7 +977,7 @@ pub(crate) fn draw_bar(
 
 /// Draws the message `key` in the middle of `look`'s area (e.g. "Nothing
 /// read yet").
-pub(crate) fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, key: &str) {
+pub(crate) fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, key: &str) {
     widgets::draw_message(canvas, env, look, env.i18n.tr(key));
 }
 
@@ -968,7 +987,7 @@ pub(crate) fn caption(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     id: &str,
-    look: &Look,
+    look: &WidgetLook,
     text: &str,
 ) -> Rect {
     let rest = below_caption(env, id, look);
@@ -979,7 +998,7 @@ pub(crate) fn caption(
 }
 
 /// The area [`caption`] leaves below it, without drawing it.
-pub(crate) fn below_caption(env: &Env<'_>, id: &str, look: &Look) -> Rect {
+pub(crate) fn below_caption(env: &Env<'_>, id: &str, look: &WidgetLook) -> Rect {
     if !widgets::shows(env, id, "caption") || look.area.height < 3 * caption_room(env) {
         return look.area;
     }

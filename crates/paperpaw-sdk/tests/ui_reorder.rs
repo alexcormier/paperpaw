@@ -11,8 +11,10 @@
 
 mod support;
 
+use paperpaw_sdk::ui::reorder::Reorder;
+use paperpaw_sdk::ui::reorder::ReorderStep;
 use paperpaw_sdk::ui::reorder::moved;
-use paperpaw_sdk::ui::{ListView, Reorder, ReorderStep, UiStyle};
+use paperpaw_sdk::ui::{ListView, UiStyle};
 use paperpaw_sdk::{PointerPhase, Rect};
 use proptest::prelude::*;
 
@@ -216,7 +218,7 @@ fn the_grip_is_a_square_at_the_rows_end_and_the_content_the_rest() {
 /// the first and last rows, half of it past the list.
 #[test]
 fn the_bar_where_a_row_lands_is_drawn_in_the_list() {
-    let half = (style().line * 2) as u16;
+    let half = (u32::from(style().line()) * 2) as u16;
     for (from, to) in [(0, 7), (7, 0), (3, 4), (2, 2)] {
         let list = list();
         let mut reorder = Reorder::default();
@@ -228,7 +230,12 @@ fn the_bar_where_a_row_lands_is_drawn_in_the_list() {
         reorder.on_pointer(&pointer(PointerPhase::Move, x, target.y), &list, 8);
         assert_eq!(reorder.dragging(), Some((from, to)));
         let mut frame = frame(400, 600);
-        reorder.draw(&mut frame.canvas(), &style(), &list);
+        let harness = support::Harness::new(support::Device::BUTTONS);
+        let env = harness.env();
+        reorder.draw(
+            &mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style()),
+            &list,
+        );
         let a = list.area();
         let bound = Rect::new(a.x, a.y - half, a.width, a.height + 2 * half);
         assert_eq!(

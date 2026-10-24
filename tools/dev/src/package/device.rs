@@ -514,13 +514,12 @@ pub fn code_plugins(
             );
             continue;
         };
-        let sdk = info.manifest.sdk;
         report.add(
             Finding::info(
                 "package.release",
                 "manifest",
                 format!(
-                    "Built for SDK {sdk}, version {}; this PaperPaw is SDK {SDK_VERSION}.",
+                    "Version {}; this PaperPaw is SDK {SDK_VERSION}.",
                     info.manifest.version
                 ),
             )
@@ -528,28 +527,18 @@ pub fn code_plugins(
         );
         if let Some(release) = release {
             let line = format!("{}.{}", release.version.major, release.version.minor);
-            if release.loads_code(&sdk) {
-                report.add(
-                    Finding::info(
-                        "package.release",
-                        "manifest",
-                        format!("PaperPaw {line} loads it (SDK {sdk})."),
-                    )
-                    .plugin(id.as_str()),
-                );
-            } else {
-                report.add(
-                    Finding::error(
-                        "package.release",
-                        "manifest",
-                        format!(
-                            "Built for SDK {sdk}, which PaperPaw {line} does not load (it loads plugins for SDK {line}.x up to {}); build it against paperpaw-sdk {line}.",
-                            release.version
-                        ),
-                    )
-                    .plugin(id.as_str()),
-                );
-            }
+            // A plugin with code is loaded by its file's fingerprint
+            // (`paperpaw-sign plugin`), not by a version it names.
+            report.add(
+                Finding::info(
+                    "package.release",
+                    "manifest",
+                    format!(
+                        "PaperPaw {line} loads a plugin with code by its file's fingerprint: build it against paperpaw-sdk {line} with that release's compiler."
+                    ),
+                )
+                .plugin(id.as_str()),
+            );
         }
     }
     Ok(())

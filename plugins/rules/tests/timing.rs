@@ -18,7 +18,7 @@ use paperpaw_sdk::builtin::groups;
 use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
-    ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
+    ActionSpec, Commands, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SettingSpec,
     Storage, StorageError, Version,
 };
@@ -50,8 +50,8 @@ const COUNT: Id = Id::new_static("counter.count");
 struct Counter(Rc<Cell<u32>>);
 
 static SWITCHES: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch("counter.a", "counter.a", false, groups::SYSTEM),
-    SettingSpec::fixed_switch("counter.b", "counter.b", false, groups::SYSTEM),
+    SettingSpec::switch("counter.a", "counter.a", false, groups::SYSTEM),
+    SettingSpec::switch("counter.b", "counter.b", false, groups::SYSTEM),
 ];
 
 impl Plugin for Counter {
@@ -64,7 +64,7 @@ impl Plugin for Counter {
         let count = self.0.clone();
         r.add_settings(&SWITCHES)?;
         r.add_action(ActionSpec::new(COUNT, "counter.count").handler(
-            move |_: &Env<'_>, _: &mut Vec<Command>| {
+            move |_: &Env<'_>, _, _: &mut Commands| {
                 count.set(count.get() + 1);
             },
         ))

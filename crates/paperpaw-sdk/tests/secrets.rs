@@ -219,14 +219,7 @@ fn only_wifi_secrets_are_networks() {
 
 #[test]
 fn signal_bars_cover_every_strength() {
-    let bars = |signal| {
-        wifi::WifiNetwork {
-            ssid: String::new(),
-            signal,
-            secured: true,
-        }
-        .bars()
-    };
+    let bars = |signal| wifi::WifiNetwork::new(String::new(), signal, true).bars();
     assert_eq!(bars(i8::MAX), 4);
     assert_eq!(bars(-55), 4);
     assert_eq!(bars(-56), 3);

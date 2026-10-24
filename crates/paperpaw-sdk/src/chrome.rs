@@ -57,7 +57,7 @@ impl ChromeSpec {
             id,
             edge,
             factory,
-            size: |env| env.metrics.mm(10) as u16,
+            size: |env| env.metrics().mm(10) as u16,
             shown: |_, _| true,
             need: None,
             priority: Priority::DEFAULT,

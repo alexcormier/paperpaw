@@ -51,8 +51,8 @@ use paperpaw_sdk::builtin::{events, menus, params};
 use paperpaw_sdk::digest::md5;
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Instant, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, StorageError, time,
+    ActionSpec, Command, Commands, Env, Id, Instant, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, StorageError, time,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -166,7 +166,7 @@ impl State {
 
     /// Says that the statistics could not be saved, once until writing
     /// works again.
-    fn tell(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn tell(&mut self, env: &Env<'_>, out: &mut Commands) {
         if self.write_failed == Some(false) {
             out.push(Command::Notify(env.i18n.tr("stats.not-saved").to_string()));
             self.write_failed = Some(true);
@@ -444,9 +444,9 @@ fn mark_finished(env: &Env<'_>, path: &str, now: i64) {
 
 /// The settings kept in the program (see [`SettingSpec::fixed`]).
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_switch("stats.enabled", "stats.setting.enabled", true, GROUP)
-        .described("stats.setting.enabled.help"),
-    SettingSpec::fixed_number(
+    SettingSpec::switch("stats.enabled", "stats.setting.enabled", true, GROUP)
+        .description("stats.setting.enabled.help"),
+    SettingSpec::number(
         MIN_SECONDS.static_str(),
         "stats.setting.min",
         1,
@@ -456,8 +456,8 @@ static SETTINGS: [SettingSpec; 3] = [
     )
     .with_extra(&SECONDS)
     .advanced()
-    .described("stats.setting.min.help"),
-    SettingSpec::fixed_number(
+    .description("stats.setting.min.help"),
+    SettingSpec::number(
         MAX_SECONDS.static_str(),
         "stats.setting.max",
         30,
@@ -467,7 +467,7 @@ static SETTINGS: [SettingSpec; 3] = [
     )
     .with_extra(&SECONDS_10)
     .advanced()
-    .described("stats.setting.max.help"),
+    .description("stats.setting.max.help"),
 ];
 
 /// Seconds, in steps of one and of ten.
@@ -509,7 +509,11 @@ impl Plugin for Stats {
         let state: Shared = Rc::new(RefCell::new(State::default()));
         widget::register(r)?;
         left::register(r)?;
-        r.add_setting_group(SettingGroupSpec::new(GROUP, "stats.group").order(25))?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "stats.group").order(25);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("chart-bar"))?;
         r.add_settings(&SETTINGS)?;
 
@@ -615,7 +619,7 @@ impl Plugin for Stats {
         ))?;
         let s = state;
         r.add_action(ActionSpec::new(OPEN, "stats.title").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 // Recorded so far, so the views include the current page.
                 let mut state = s.borrow_mut();
                 let reading = state.session.as_ref().is_some_and(|s| s.since.is_some());

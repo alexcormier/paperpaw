@@ -420,6 +420,9 @@ impl Kernel {
         if *id == core_settings::READING_FONT {
             self.apply_reading_font();
         }
+        if *id == core_settings::FONT_SIZE {
+            self.font_size_changed();
+        }
         // Its size follows the interface's. A shell that turns the screen
         // resizes the kernel for it (see `Kernel::rotation`), which makes
         // the screens anew once, for the row too.

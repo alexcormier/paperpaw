@@ -32,7 +32,6 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::{events, params};
@@ -41,8 +40,8 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, time,
+    ActionSpec, Command, Commands, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, time,
 };
 
 use data::{Temperature, Wind};
@@ -79,44 +78,44 @@ static ON_PLACE_SCREEN: paperpaw_sdk::SettingExtra =
     paperpaw_sdk::SettingExtra::new().editor(PLACE_SCREEN);
 static PLACE_SETTING: [SettingSpec; 1] =
     [
-        SettingSpec::fixed_text(PLACE.static_str(), "weather.setting.place", "", GROUP)
+        SettingSpec::text(PLACE.static_str(), "weather.setting.place", "", GROUP)
             .with_extra(&ON_PLACE_SCREEN)
-            .described("weather.setting.place.help"),
+            .description("weather.setting.place.help"),
     ];
 
 static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.temperature",
         "weather.setting.temperature",
         &TEMPERATURES,
         TEMPERATURES[0],
         GROUP,
     )
-    .described("weather.setting.temperature.help"),
-    SettingSpec::fixed_choice(
+    .description("weather.setting.temperature.help"),
+    SettingSpec::choice(
         "weather.wind",
         "weather.setting.wind",
         &WINDS,
         WINDS[0],
         GROUP,
     )
-    .described("weather.setting.wind.help"),
-    SettingSpec::fixed_choice(
+    .description("weather.setting.wind.help"),
+    SettingSpec::choice(
         "weather.every",
         "weather.setting.every",
         &EVERY_HOURS,
         EVERY_HOURS[0],
         GROUP,
     )
-    .described("weather.setting.every.help"),
-    SettingSpec::fixed_text(
+    .description("weather.setting.every.help"),
+    SettingSpec::text(
         "weather.coordinates",
         "weather.setting.coordinates",
         "",
         GROUP,
     )
-    .described("weather.setting.coordinates.help")
-    .for_advanced(),
+    .description("weather.setting.coordinates.help")
+    .advanced(),
 ];
 /// Fetches the weather now.
 pub const REFRESH: Id = Id::new_static("weather.refresh");
@@ -347,7 +346,7 @@ enum Why {
 
 /// Fetches the weather if `why` calls for it, and sets the timer for the
 /// next look.
-fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Vec<Command>) {
+fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
     let coordinates = env.settings.read(&COORDINATES).trim().to_string();
     let Some(url) = data::forecast_url(&coordinates) else {
         return;
@@ -369,7 +368,7 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Vec<Command>) {
         .optional()
         .after(core::time::Duration::from_secs(next as u64))
         .at_moments(paperpaw_sdk::work::Moments::WAKE | paperpaw_sdk::work::Moments::ONLINE);
-    out.push(Command::Work(look));
+    out.push(Command::work(look));
     if state.asked.is_some_and(|at| env.now.since(at) < PATIENCE) {
         return;
     }
@@ -386,23 +385,23 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Vec<Command>) {
             return;
         }
     }
-    let mut request = HttpRequest::new("GET", &url, FETCHED);
-    request.headers.push((
-        String::from("User-Agent"),
-        String::from("PaperPaw/0.1 (e-reader)"),
-    ));
-    request.params = Params::new().with(params::ID, coordinates);
+    let mut request = HttpRequest::new("GET", &url, FETCHED)
+        .header(
+            String::from("User-Agent"),
+            String::from("PaperPaw/0.1 (e-reader)"),
+        )
+        .with(Params::new().with(params::ID, coordinates));
     if why == Why::Asked {
-        request.params.set(TOLD, "1");
+        request = request.param(TOLD, "1");
         out.push(Command::Notify(env.i18n.tr("weather.fetching").to_string()));
     }
     state.asked = Some(env.now);
     state.generation = state.generation.wrapping_add(1);
-    out.push(Command::Http(request));
+    out.push(Command::http(request));
 }
 
 /// The forecast answered: kept, and shown by the widgets.
-fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Vec<Command>) {
+fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Commands) {
     let mut state = state.borrow_mut();
     state.asked = None;
     state.generation = state.generation.wrapping_add(1);
@@ -410,7 +409,7 @@ fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Vec<Comma
     let fetched = time::unix_seconds(env).unwrap_or(0);
     let weather = reply
         .ok()
-        .then(|| data::parse_forecast(reply.body.as_bytes(), &coordinates, fetched))
+        .then(|| data::parse_forecast(&reply.body, &coordinates, fetched))
         .flatten();
     let told = reply.context.get(TOLD).is_some();
     // Shown at once, the new weather or that it failed.
@@ -437,7 +436,7 @@ fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Vec<Comma
 }
 
 /// The place changed: the weather of another place goes.
-fn place_changed(env: &Env<'_>, state: &Shared, out: &mut Vec<Command>) {
+fn place_changed(env: &Env<'_>, state: &Shared, out: &mut Commands) {
     {
         let mut s = state.borrow_mut();
         s.generation = s.generation.wrapping_add(1);
@@ -473,7 +472,11 @@ impl Plugin for Weather {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
-        r.add_setting_group(SettingGroupSpec::new(GROUP, "weather.title").order(88))?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "weather.title").order(88);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("sun"))?;
         r.add_settings(&PLACE_SETTING)?;
         r.add_settings(&SETTINGS)?;
@@ -484,14 +487,14 @@ impl Plugin for Weather {
         ))?;
         r.add_action(
             ActionSpec::new(CHOOSE_PLACE, "weather.setting.place").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(Command::OpenScreen(PLACE_SCREEN, Params::new()));
                 },
             ),
         )?;
         let s = state.clone();
         r.add_action(ActionSpec::new(REFRESH, "weather.refresh").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 if data::split_coordinates(env.settings.read(&COORDINATES)).is_none() {
                     out.push(Command::OpenScreen(PLACE_SCREEN, Params::new()));
                 } else {
@@ -533,7 +536,7 @@ pub(crate) fn tap(shown: &Shown) -> Command {
     if shown.waiting == Waiting::NoPlace {
         Command::OpenScreen(PLACE_SCREEN, Params::new())
     } else {
-        Command::RunAction(REFRESH)
+        Command::run(REFRESH)
     }
 }
 

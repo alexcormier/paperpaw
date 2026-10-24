@@ -62,7 +62,7 @@ impl Remote {
                     "PP:HEAP {} {} {left} {size} {} {}",
                     esp_alloc::HEAP.used(),
                     esp_alloc::HEAP.free(),
-                    largest_block(),
+                    crate::largest_block(),
                     esp_alloc::HEAP.stats().max_usage
                 );
             }
@@ -244,13 +244,15 @@ impl Remote {
             }
             Command::Usage => {
                 let u = kernel.usage();
-                let [fast, partial, full] = u.refreshes;
+                let r = u.refreshes;
+                let (fast, partial, full) = (r.fast, r.partial, r.full);
                 println!(
                     "PP:USAGE {fast} {partial} {full} {} {} {} {}",
                     u.pixels, u.inputs, u.sleeps, u.panel_ms
                 );
                 for p in &kernel.plugin_usage() {
-                    let [fast, partial, full] = p.refreshes;
+                    let r = p.refreshes;
+                    let (fast, partial, full) = (r.fast, r.partial, r.full);
                     println!(
                         "PP:USE {} {} {} {} {fast} {partial} {full} {} {}",
                         p.plugin, p.busy_us, p.calls, p.shown_ms, p.read, p.written
@@ -409,21 +411,6 @@ pub fn note_panic(message: Option<String>) {
     critical_section::with(|cs| PANIC.replace(cs, message));
 }
 
-/// The largest block of memory that could be had now (found by asking for
-/// blocks, given back at once).
-fn largest_block() -> usize {
-    let (mut can, mut cannot) = (0, esp_alloc::HEAP.free() + 1);
-    while cannot - can > 64 {
-        let size = (can + cannot) / 2;
-        if Vec::<u8>::new().try_reserve_exact(size).is_ok() {
-            can = size;
-        } else {
-            cannot = size;
-        }
-    }
-    can
-}
-
 /// Done.
 pub fn ok() {
     println!("PP:OK");
@@ -480,10 +467,10 @@ pub fn wifi_state(state: &WifiState) {
 
 /// The answer of a request asked over USB.
 pub fn http_answer(answer: &HttpResponse, ms: u64) {
-    let why = if answer.status == 0 {
-        String::from_utf8_lossy(&answer.body).into_owned()
-    } else {
-        String::new()
+    let why = match answer.error {
+        Some(error) => alloc::format!("{error}: {}", String::from_utf8_lossy(&answer.body)),
+        None if answer.status == 0 => String::from_utf8_lossy(&answer.body).into_owned(),
+        None => String::new(),
     };
     println!(
         "PP:HTTP {} {} saved {} {ms} ms heap {} {} {why}",
@@ -540,7 +527,7 @@ fn describe(kernel: &mut Kernel) {
     // they say.
     let secret = kernel.is_secret();
     for part in kernel.describe() {
-        let state = part_state(part.focused, part.on);
+        let state = part_state(part.focused, part.on, part.disabled);
         let a = part.area;
         let label = if secret {
             String::from("•")

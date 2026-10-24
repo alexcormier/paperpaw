@@ -30,8 +30,8 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
-    Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
+    Arg, Command, Commands, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
+    ScreenSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -100,32 +100,32 @@ fn idle_seconds(env: &Env<'_>) -> u64 {
         .map_or(60, |(_, seconds)| *seconds)
 }
 
-fn wifi_commands(out: &mut Vec<Command>, commands: Vec<WifiCommand>) {
+fn wifi_commands(out: &mut Commands, commands: Vec<WifiCommand>) {
     out.extend(commands.into_iter().map(Command::Wifi));
 }
 
 /// Sets the timer to switch the radio off, if nothing keeps it on.
-fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
+fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
     let Some(wifi) = env.wifi else {
         return;
     };
     if wifi.state.is_on() && policy.may_go_off(charging_keeps_it(env)) {
         let at = env.now.add_millis(idle_seconds(env) * 1000);
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
-        out.push(Command::Work(Work::at(IDLE_CHECK, at).with(params)));
+        out.push(Command::work(Work::at(IDLE_CHECK, at).with(params)));
     }
 }
 
 /// After a round that joined nothing: sets the timer to try again, if
 /// the network is still wanted (or charging keeps the radio on), or else
 /// the one to switch the radio off.
-fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
+fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
     let Some(wifi) = env.wifi else {
         return;
     };
     if policy.still_wanted(wifi, env.now) || charging_keeps_it(env) {
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
-        out.push(Command::Work(
+        out.push(Command::work(
             Work::at(RETRY, env.now.add_millis(RETRY_MS)).with(params),
         ));
     } else if !wifi.busy {
@@ -135,7 +135,7 @@ fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
 
 /// No network is coming for what waits: it fails now, and the network
 /// counts as no longer wanted.
-fn no_network(policy: &mut Policy, out: &mut Vec<Command>) {
+fn no_network(policy: &mut Policy, out: &mut Commands) {
     policy.asked_at = None;
     out.push(Command::NoNetwork);
 }
@@ -171,7 +171,7 @@ fn read_wifi_file(env: &Env<'_>) -> Vec<Command> {
         .iter()
         // A network without a password does not take the password kept.
         .filter(|(ssid, password)| !password.is_empty() || !known.iter().any(|(k, _)| k == ssid))
-        .map(|(ssid, password)| Command::SetSecret(wifi::keep(ssid, password)))
+        .map(|(ssid, password)| Command::set_secret(wifi::keep(ssid, password)))
         .collect();
     // Removed once kept (the commands before it carried out).
     out.push(Command::Emit(WIFI_FILE_KEPT, Params::new()));
@@ -218,28 +218,28 @@ const IDLE_OFF_IDS: [&str; IDLE_OFF_CHOICES.len()] = {
 
 /// When the radio is on.
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         ON_DEMAND.static_str(),
         "wifi.setting.on-demand",
         true,
         GROUP,
     )
-    .described("wifi.setting.on-demand.help"),
-    SettingSpec::fixed_choice(
+    .description("wifi.setting.on-demand.help"),
+    SettingSpec::choice(
         IDLE_OFF.static_str(),
         "wifi.setting.idle-off",
         &IDLE_OFF_IDS,
         "wifi.idle-off.1m",
         GROUP,
     )
-    .described("wifi.setting.idle-off.help"),
-    SettingSpec::fixed_switch(
+    .description("wifi.setting.idle-off.help"),
+    SettingSpec::switch(
         WHILE_CHARGING.static_str(),
         "wifi.setting.while-charging",
         false,
         GROUP,
     )
-    .described("wifi.setting.while-charging.help"),
+    .description("wifi.setting.while-charging.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -265,11 +265,13 @@ impl Plugin for Wifi {
 
         // The settings, on the group's own page; only where PaperPaw
         // manages Wi-Fi.
-        r.add_setting_group(
-            SettingGroupSpec::new(GROUP, "wifi.title")
-                .order(85)
-                .page(PAGE),
-        )?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "wifi.title")
+                    .order(85)
+                    .page(PAGE);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("wifi"))?;
         // Tapped, the Wi-Fi page.
         r.add_status_item(
@@ -285,7 +287,7 @@ impl Plugin for Wifi {
             .tap(OPEN),
         )?;
         r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "wifi.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
             },
         ))?;
@@ -364,7 +366,7 @@ impl Plugin for Wifi {
                 && let Some((pending, password)) = policy.pending.take()
             {
                 if pending == *ssid {
-                    out.push(Command::SetSecret(wifi::keep(&pending, &password)));
+                    out.push(Command::set_secret(wifi::keep(&pending, &password)));
                 } else {
                     policy.pending = Some((pending, password));
                 }

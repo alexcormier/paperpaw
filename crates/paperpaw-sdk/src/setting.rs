@@ -13,11 +13,11 @@
 //! pub const THEME: Setting<Text> = Setting::new("demo.theme");
 //!
 //! // In a handler, with an `env`:
-//! // let size: i64 = env.settings.read(&SIZE);
+//! // let size: i64 = env.settings().read(&SIZE);
 //! // out.push(Command::set(&PICTURES, false));
 //! ```
 //!
-//! Settings by text (`env.settings.bool("demo.pictures")`) stay for what
+//! Settings by text (`env.settings().bool("demo.pictures")`) stay for what
 //! is only known at run time, e.g. a settings page for any plugin.
 
 use alloc::borrow::Cow;
@@ -117,15 +117,12 @@ impl<T: SettingType> Setting<T> {
     }
 
     /// The id as text kept in the program, for a spec kept there too
-    /// (e.g. `SettingSpec::fixed_switch(SHOW.static_str(), …)`, see
-    /// [`SettingSpec::fixed`](crate::SettingSpec::fixed)). Takes the
+    /// (e.g. `SettingSpec::switch(SHOW.static_str(), …)`, see
+    /// a `static` list). Takes the
     /// setting, so it can be used in `const` and `static` items.
     pub const fn static_str(self) -> &'static str {
-        let text = match &self.id.0 {
-            Cow::Borrowed(id) => id,
-            // Settings are only made by `new`, from text in the program.
-            Cow::Owned(_) => "",
-        };
+        // Settings are only made by `new`, from text in the program.
+        let text = self.id.static_text();
         core::mem::forget(self);
         text
     }
@@ -154,6 +151,12 @@ impl<T: SettingType> fmt::Debug for Setting<T> {
 impl<T: SettingType> fmt::Display for Setting<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.id, f)
+    }
+}
+
+impl<T: SettingType> AsRef<str> for Setting<T> {
+    fn as_ref(&self) -> &str {
+        self.id.as_str()
     }
 }
 
@@ -203,26 +206,29 @@ mod tests {
         let mut settings = Settings::new();
         settings
             .define(SettingSpec::new(
-                ON,
+                Id::from(ON),
                 "on",
                 SettingKind::Bool,
                 ON.value(true),
+                crate::builtin::groups::OTHER,
             ))
             .unwrap();
         settings
             .define(SettingSpec::new(
-                SIZE,
+                Id::from(SIZE),
                 "size",
                 SettingKind::Int { min: 1, max: 20 },
                 SIZE.value(9),
+                crate::builtin::groups::OTHER,
             ))
             .unwrap();
         settings
             .define(SettingSpec::new(
-                THEME,
+                Id::from(THEME),
                 "theme",
                 SettingKind::Text,
                 THEME.value(Cow::Borrowed("light")),
+                crate::builtin::groups::OTHER,
             ))
             .unwrap();
         assert!(settings.read(&ON));

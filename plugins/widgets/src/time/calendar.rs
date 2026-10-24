@@ -40,30 +40,30 @@ static SETTINGS: [SettingSpec; 13] = [
     widgets::align_spec("widgets.calendar.align", ID, Align::Center),
     widgets::frame_spec("widgets.calendar.frame", ID, Frame::None),
     widgets::padding_spec("widgets.calendar.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.calendar.week-start",
         "widgets.setting.week-start",
         &WEEK_STARTS,
         WEEK_STARTS[0],
         ID,
     )
-    .described("widgets.calendar.week-start.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.calendar.week-start.help"),
+    SettingSpec::choice(
         "widgets.calendar.mark",
         "widgets.setting.today-mark",
         &MARKS,
         MARKS[0],
         ID,
     )
-    .described("widgets.calendar.mark.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.calendar.mark.help"),
+    SettingSpec::choice(
         "widgets.calendar.initials",
         "widgets.setting.initials",
         &INITIALS,
         INITIALS[0],
         ID,
     )
-    .described("widgets.calendar.initials.help"),
+    .description("widgets.calendar.initials.help"),
     widgets::part_spec(
         "widgets.calendar.heading",
         ID,
@@ -106,8 +106,11 @@ static SETTINGS: [SettingSpec; 13] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.calendar",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.calendar");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(super::today_shows),
     )?;
     r.add_settings(&SETTINGS)
@@ -130,7 +133,8 @@ fn height(env: &Env<'_>, width: u16) -> u16 {
     } else {
         1
     };
-    (width * 6 / 7).min((style.row * 6) as u16) * months + frame_height(env, ID.as_str())
+    (width * 6 / 7).min((u32::from(style.row()) * 6) as u16) * months
+        + frame_height(env, ID.as_str())
 }
 
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -148,7 +152,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // Two months: side by side where the place is wide, else one below
     // the other; this one alone where two have no room for a whole
     // month each.
-    let gap = style.gap as u16 * 2;
+    let gap = style.gap() * 2;
     let wide = area.width > area.height * 5 / 4;
     let two = widgets::shows(env, ID.as_str(), "next").then(|| {
         if wide {
@@ -242,12 +246,12 @@ fn grid(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, rows: u8, all: bool) -
         // easier to read than a month).
         let (w, h) = (grid.cell_w, grid.cell_h);
         let most = (h * 0.5).min(w * 0.42);
-        let size = widgets::largest_size(most, style.small * 0.8, |size| {
+        let size = widgets::largest_size(most, style.small() * 0.8, |size| {
             font.measure(size, "00") <= w * 0.8 && super::cap_height(font, size) <= h * 0.72
         });
         // The heading's line in its row.
         let heading_fits = size.is_some_and(|size| {
-            let heading = (size * 1.15).min(style.title * 1.6);
+            let heading = (size * 1.15).min(style.title() * 1.6);
             super::line(font, heading) * 0.8 <= h * 1.3
         });
         match size {
@@ -275,7 +279,7 @@ fn draw_month(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     area: Rect,
     month: &MonthGrid,
     today: Option<u8>,
@@ -323,7 +327,7 @@ fn draw_month(
         } else {
             String::from(name)
         };
-        let heading_size = (size * 1.15).min(style.title * 1.6);
+        let heading_size = (size * 1.15).min(style.title() * 1.6);
         // In line with the numbers' ink below, not the cells' edges.
         let inset = ((cell_w - font.measure(size, "00")) / 2.0).max(0.0);
         let row = Rect::new(
@@ -393,7 +397,7 @@ fn draw_today(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     area: Rect,
     month: &MonthGrid,
     day: u8,
@@ -404,19 +408,19 @@ fn draw_today(
     let short = super::month_short(env, month.month);
     let name = [long, short]
         .into_iter()
-        .find(|name| font.measure(style.small, name) <= width);
-    let name_h = super::line(font, style.small);
+        .find(|name| font.measure(style.small(), name) <= width);
+    let name_h = super::line(font, style.small());
     let number = format!("{day}");
     let room = |name: bool| f32::from(area.height) - if name { name_h } else { 0.0 };
     let fits = |size: f32, name: bool| {
         font.measure(size, &number) <= width && super::line(font, size) <= room(name)
     };
-    let most = f32::from(area.height).min(style.title * 3.0);
+    let most = f32::from(area.height).min(style.title() * 3.0);
     // With the name where the number keeps the body size at least.
-    let with_name = name.and_then(|_| widgets::largest_size(most, style.text, |s| fits(s, true)));
+    let with_name = name.and_then(|_| widgets::largest_size(most, style.text(), |s| fits(s, true)));
     let (size, name) = match with_name {
         Some(size) => (size, name),
-        None => match widgets::largest_size(most, style.small, |s| fits(s, false)) {
+        None => match widgets::largest_size(most, style.small(), |s| fits(s, false)) {
             Some(size) => (size, None),
             // Not even the number has room: nothing rather than a part.
             None => return,
@@ -427,7 +431,7 @@ fn draw_today(
     if let Some(name) = name {
         parts.push(super::Part {
             lines: alloc::vec![name],
-            size: style.small,
+            size: style.small(),
             color: look.faint,
             font: None,
         });
@@ -439,7 +443,7 @@ fn draw_today(
         font: None,
     });
     let align = widgets::align(env, ID.as_str());
-    let gap = style.gap as f32 / 2.0;
+    let gap = style.gap() as f32 / 2.0;
     super::draw_stack(canvas, font, area, align, &parts, gap);
 }
 
@@ -451,7 +455,7 @@ fn draw_today(
 )]
 fn draw_mark(
     canvas: &mut Canvas<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     mark: &str,
     x: f32,
     y: f32,

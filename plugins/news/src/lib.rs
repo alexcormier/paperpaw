@@ -31,9 +31,9 @@ use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, host};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec, SettingSpec, Storage, StorageError,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    HttpRequest, Id, Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode,
+    RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("news");
@@ -213,10 +213,17 @@ fn save(storage: &dyn Storage, feeds: &[Feed]) {
 
 /// Asks for `feed`, at `index` in the list, and with `all` for the feeds
 /// after it too.
-fn request(feed: &Feed, index: usize, all: bool, (done, failed): (usize, usize)) -> Command {
-    let mut request = HttpRequest::new("GET", &feed.url, FETCHED);
-    request.headers.push(paperpaw_sdk::web::user_agent());
-    request.save_to = Some(download(&feed.url));
+fn request(
+    env: &Env<'_>,
+    feed: &Feed,
+    index: usize,
+    all: bool,
+    (done, failed): (usize, usize),
+) -> Command {
+    let (agent, name) = paperpaw_sdk::web::user_agent_of(env);
+    let mut request = HttpRequest::new("GET", &feed.url, FETCHED)
+        .header(agent, name)
+        .save_to(download(&feed.url));
     let mut params = Params::new()
         .with(URL, feed.url.clone())
         .with(INDEX, format!("{index}"))
@@ -225,12 +232,12 @@ fn request(feed: &Feed, index: usize, all: bool, (done, failed): (usize, usize))
     if all {
         params = params.with(ALL, "1");
     }
-    request.params = params;
-    Command::Http(request)
+    request = request.with(params);
+    Command::http(request)
 }
 
 /// Starts fetching the feed at `from`, and with `all` those after it.
-fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Vec<Command>) {
+fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Commands) {
     if !env.caps.network {
         out.push(Command::Notify(env.i18n.tr("news.no-network").to_string()));
         return;
@@ -242,7 +249,7 @@ fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Vec<Command>) {
     match feeds.get(from) {
         Some(feed) => {
             out.push(Command::Notify(env.i18n.tr("news.fetching").to_string()));
-            out.push(request(feed, from, all, (0, 0)));
+            out.push(request(env, feed, from, all, (0, 0)));
         }
         None => out.push(Command::Notify(env.i18n.tr("news.none").to_string())),
     }
@@ -250,7 +257,7 @@ fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Vec<Command>) {
 
 /// A feed answered: made into its book, then the next one. Feeds are
 /// found by their address, as the list may change during a fetch.
-fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let number = |key| reply.context.get(key).and_then(|n| n.parse::<usize>().ok());
     let (Some(url), Some(index)) = (reply.context.get(URL), number(INDEX)) else {
         return;
@@ -282,7 +289,7 @@ fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
     if reply.context.get(ALL).is_some()
         && let Some(feed) = feeds.get(next)
     {
-        out.push(request(feed, next, true, (done, failed)));
+        out.push(request(env, feed, next, true, (done, failed)));
         return;
     }
     let message = if failed == 0 {
@@ -379,7 +386,7 @@ pub struct News;
 
 /// How many articles a feed keeps, in steps of five.
 static STEP_5: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().step(5);
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::number(
     ARTICLES.static_str(),
     "news.setting.articles",
     5,
@@ -389,7 +396,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
 )
 .with_extra(&STEP_5)
 .advanced()
-.described("news.setting.articles.help")];
+.description("news.setting.articles.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -413,17 +420,17 @@ impl Plugin for News {
             Box::new(|env, _| Box::new(FeedsScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "news.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         r.add_action(ActionSpec::new(FETCH, "news.fetch").handler(
-            |env: &Env<'_>, out: &mut Vec<Command>| {
+            |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     fetch(env, 0, true, out);
                 } else {
                     let due = FETCH_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));
@@ -459,7 +466,7 @@ impl FeedsScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let feeds = load(env.storage);
         Self {
@@ -529,7 +536,7 @@ impl FeedsScreen {
 
 /// The commands of a fetch, given to `cx`.
 fn fetch_into(env: &Env<'_>, from: usize, all: bool, cx: &mut Cx<'_, '_>) {
-    let mut out = Vec::new();
+    let mut out = paperpaw_sdk::Commands::new();
     fetch(env, from, all, &mut out);
     for command in out {
         cx.command(command);
@@ -540,31 +547,32 @@ impl Screen for FeedsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("news.title"),
             None,
             self.list.paging(len),
         );
         let feeds = &self.feeds;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                let (title, value, note) = if row + 1 == len {
-                    let note = env.i18n.tr("news.add.help").to_string();
-                    (env.i18n.tr("news.add").to_string(), "›", note)
-                } else if row == 0 {
-                    let note = env
-                        .i18n
-                        .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))]);
-                    (env.i18n.tr("news.fetch").to_string(), "", note)
-                } else {
-                    let feed = &feeds[row - 1];
-                    (feed.shown(), "", feed.url.clone())
-                };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, value, &note);
-            });
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            let (title, value, note) = if row + 1 == len {
+                let note = env.i18n.tr("news.add.help").to_string();
+                (env.i18n.tr("news.add").to_string(), "›", note)
+            } else if row == 0 {
+                let note = env
+                    .i18n
+                    .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))]);
+                (env.i18n.tr("news.fetch").to_string(), "", note)
+            } else {
+                let feed = &feeds[row - 1];
+                (feed.shown(), "", feed.url.clone())
+            };
+            ui::Row::value(&title, value)
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
         if feeds.is_empty() {
             let area = self.list.area();
             let top = area.y + self.list.row() as u16;
@@ -574,10 +582,7 @@ impl Screen for FeedsScreen {
                 area.width,
                 area.bottom().saturating_sub(u32::from(top)) as u16,
             );
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 below,
                 "rss",
                 env.i18n.tr("news.empty.title"),
@@ -614,7 +619,7 @@ impl Screen for FeedsScreen {
                 self.header
                     .tap(&env, &self.style, gesture.start, self.list.paging(len))
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(row) = self.list.hit(gesture.start, len) else {

@@ -6,7 +6,6 @@
 
 use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::event::Event;
@@ -15,8 +14,8 @@ use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen,
+    Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
+    RefreshMode, Screen,
 };
 
 use crate::send::notebook_name;
@@ -113,7 +112,7 @@ impl Row {
 
 /// Keeps what was typed for a row of the set-up; whether the password
 /// changed (the settings say themselves when they change).
-pub(crate) fn entered(typed: &Typed, out: &mut Vec<Command>) -> bool {
+pub(crate) fn entered(typed: &Typed, out: &mut Commands) -> bool {
     let Some(row) = typed.context.get(FIELD).and_then(Row::of_field) else {
         return false;
     };
@@ -127,7 +126,7 @@ pub(crate) fn entered(typed: &Typed, out: &mut Vec<Command>) -> bool {
     if text.is_empty() {
         return false;
     }
-    out.push(Command::SetSecret(SecretChange::keep(
+    out.push(Command::set_secret(SecretChange::keep(
         PASSWORD,
         "joplin.secret",
         text,
@@ -162,15 +161,18 @@ impl SetupScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let top = header.area().height + gap;
-        let height = style.row as u16 * ALL.len() as u16;
-        let line = style.row as u16 * 3 / 2;
+        let height = style.row() * ALL.len() as u16;
+        let line = style.row() * 3 / 2;
         let status = Rect::new(0, display.height.saturating_sub(line), display.width, line);
         let help_top = top + height + gap;
         Self {
-            list: ListView::new(Rect::new(0, top, display.width, height), style.row)
-                .focus_on_keys(env),
+            list: ListView::new(
+                Rect::new(0, top, display.width, height),
+                u32::from(style.row()),
+            )
+            .focus_on_keys(env),
             help: Rect::new(
                 0,
                 help_top,
@@ -203,7 +205,7 @@ impl SetupScreen {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            Row::Send => cx.command(Command::RunAction(SEND)),
+            Row::Send => cx.command(Command::run(SEND)),
             _ => {
                 let initial = row.setting().map_or("", |s| env.settings.read(&s));
                 let question =
@@ -240,26 +242,24 @@ impl SetupScreen {
 impl Screen for SetupScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("joplin.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(&mut ui, title, None, None);
         let rows = self.rows();
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let row = rows[index];
                 let title = env.i18n.tr(row.title(self.service));
                 let value = self.value(row, env);
-                ui::draw_value_row(canvas, env, &style, rect, focused, title, &value);
-            },
-        );
+                ui::Row::value(title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
         // The help in small letters, to fit on small screens.
         let help = env.i18n.tr(self.focused().help());
-        let mut small = style;
-        small.text = style.small;
-        ui::draw_message(canvas, env, &small, self.help, help);
-        ui::draw_note_line(canvas, env, &style, self.status, &self.message);
+        let small = style.with_text(style.small());
+        ui::draw_message(ui.canvas(), env, &small, self.help, help);
+        ui.note_line(self.status, &self.message);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -283,7 +283,7 @@ impl Screen for SetupScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.rows().len()) else {

@@ -80,21 +80,21 @@ impl Plugin for WorkPlugin {
         )?;
         // Says whose doing it is handling, run as an action.
         let log = self.log.clone();
-        r.add_action(
-            ActionSpec::new(Id::new_static("wk.who"), "who").handler(move |env, _| {
+        r.add_action(ActionSpec::new(Id::new_static("wk.who"), "who").handler(
+            move |env, _, _| {
                 log.borrow_mut()
-                    .push(alloc::format!("reader {}", env.reader));
-            }),
-        )?;
+                    .push(alloc::format!("reader {}", env.reader()));
+            },
+        ))?;
         r.subscribe(
             Id::new_static("wk.fire"),
-            Box::new(|_, _, out| out.push(Command::RunAction(Id::new_static("wk.who")))),
+            Box::new(|_, _, out| out.push(Command::run(Id::new_static("wk.who")))),
         )?;
         // Work that fetches: its request goes out as it runs.
         r.subscribe(
             Id::new_static("wk.fetch"),
             Box::new(|_, _, out| {
-                out.push(Command::Http(paperpaw_sdk::HttpRequest::get(
+                out.push(Command::http(paperpaw_sdk::HttpRequest::get(
                     "https://example.org/",
                     Id::new_static("wk.answered"),
                 )));
@@ -137,7 +137,7 @@ fn kernel(log: &Log, network: bool) -> Kernel {
 
 fn declare(kernel: &mut Kernel, at: u64, work: Work) -> Effects {
     kernel.now = Instant(at);
-    kernel.apply(Command::Work(work));
+    kernel.apply(Command::work(work));
     kernel.finish()
 }
 
@@ -330,7 +330,7 @@ impl Plugin for Sayer {
             Id::new_static("sy.foreign"),
             Box::new(|_, _, out| {
                 let work = Work::new(Id::new_static("wk.push")).at_moments(Moments::NONE);
-                out.push(Command::Work(work));
+                out.push(Command::work(work));
             }),
         )?;
         r.subscribe(
@@ -339,7 +339,7 @@ impl Plugin for Sayer {
         )?;
         r.add_action(
             ActionSpec::new(Id::new_static("sy.act"), "act")
-                .handler(|_, out| out.push(Command::Notify(String::from("done")))),
+                .handler(|_, _, out| out.push(Command::Notify(String::from("done")))),
         )
     }
 }
@@ -422,7 +422,7 @@ fn a_plugin_whose_network_is_off_gets_none() {
         kernel.shared.work_states.get(&Id::new_static("wk.push")),
         None
     );
-    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+    kernel.apply(Command::http(paperpaw_sdk::HttpRequest::get(
         "https://example.org/",
         Id::new_static("wk.closed"),
     )));
@@ -650,7 +650,7 @@ fn work_under_another_plugins_name_is_dropped() {
 fn a_plugin_that_does_not_declare_the_network_gets_none() {
     let mut kernel = sayer();
     kernel.take_warnings();
-    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+    kernel.apply(Command::http(paperpaw_sdk::HttpRequest::get(
         "https://example.org/",
         Id::new_static("sy.answer"),
     )));
@@ -668,7 +668,7 @@ fn a_plugin_that_does_not_declare_the_network_gets_none() {
 fn requests_are_taken_back_and_answered_so() {
     let log = log();
     let mut kernel = kernel(&log, true);
-    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+    kernel.apply(Command::http(paperpaw_sdk::HttpRequest::get(
         "https://example.org/",
         Id::new_static("wk.answered"),
     )));
@@ -691,7 +691,7 @@ fn offline_lets_out_only_what_the_reader_went_online_for() {
         4,
     );
     let request = || {
-        Command::Http(paperpaw_sdk::HttpRequest::get(
+        Command::http(paperpaw_sdk::HttpRequest::get(
             "https://example.org/",
             Id::new_static("wk.answered"),
         ))

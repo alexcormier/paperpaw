@@ -271,7 +271,7 @@ impl Decoration {
     /// The look of `role`, as its settings say (see [`add_role`]); no mark
     /// for a role nobody added.
     pub fn of_role(env: &Env<'_>, role: &Id) -> Decoration {
-        let settings = env.settings;
+        let settings = env.settings();
         let tone = |aspect: &str| Tone::from_id(settings.text(&format!("{role}.{aspect}")));
         Decoration {
             background: tone("background"),
@@ -391,6 +391,7 @@ pub fn add_role(
             title,
             SettingKind::Choice(Choices::Fixed(options)),
             value,
+            crate::builtin::groups::OTHER,
         ))
     };
     let specs = [
@@ -423,28 +424,33 @@ pub fn add_role(
             "core.mark.thickness",
             SettingKind::Int { min: 1, max: 20 },
             SettingValue::Int(default_thickness(default)),
-        )
-        .unit("core.unit.tenth-mm"),
+            crate::builtin::groups::OTHER,
+        ),
         SettingSpec::new(
             id(ASPECTS[5])?,
             "core.mark.frame",
             SettingKind::Bool,
             SettingValue::Bool(default.frame),
+            crate::builtin::groups::OTHER,
         ),
         SettingSpec::new(
             id(ASPECTS[6])?,
             "core.mark.struck",
             SettingKind::Bool,
             SettingValue::Bool(default.struck),
+            crate::builtin::groups::OTHER,
         ),
     ];
-    for (spec, aspect) in specs.into_iter().zip(ASPECTS) {
-        let help = format!("core.mark.{aspect}.help");
-        r.add_setting(
-            spec.group(groups::MARKS)
-                .section(title.clone())
-                .description(help),
-        )?;
+    for (mut spec, aspect) in specs.into_iter().zip(ASPECTS) {
+        // A role from data: its section, its name, is known only now.
+        let mut extra = SettingExtra::new();
+        extra.section = Some(title.clone());
+        if aspect == "thickness" {
+            extra.unit = Some(Cow::Borrowed("core.unit.tenth-mm"));
+        }
+        spec.group = groups::MARKS;
+        spec.description = Some(Cow::Owned(format!("core.mark.{aspect}.help")));
+        r.add_setting(spec.with_owned_extra(extra))?;
     }
     Ok(())
 }
@@ -458,7 +464,15 @@ pub const fn fixed_role(
     thickness: &'static SettingExtra,
     default: Decoration,
 ) -> [SettingSpec; 7] {
-    let choice = SettingSpec::fixed;
+    const fn choice(
+        id: &'static str,
+        title: &'static str,
+        kind: SettingKind,
+        default: SettingValue,
+        group: Id,
+    ) -> SettingSpec {
+        SettingSpec::new(Id::new_static(id), title, kind, default, group)
+    }
     let tones = SettingKind::Choice(Choices::Fixed(&TONES));
     let inks = SettingKind::Choice(Choices::Fixed(&INKS));
     let lines = SettingKind::Choice(Choices::Fixed(&LINES));
@@ -471,7 +485,7 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(section)
-        .described("core.mark.background.help"),
+        .description("core.mark.background.help"),
         choice(
             ids[1],
             "core.mark.ink",
@@ -480,7 +494,7 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(section)
-        .described("core.mark.ink.help"),
+        .description("core.mark.ink.help"),
         choice(
             ids[2],
             "core.mark.line",
@@ -489,7 +503,7 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(section)
-        .described("core.mark.line.help"),
+        .description("core.mark.line.help"),
         choice(
             ids[3],
             "core.mark.line-tone",
@@ -498,8 +512,8 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(section)
-        .described("core.mark.line-tone.help"),
-        SettingSpec::fixed_number(
+        .description("core.mark.line-tone.help"),
+        SettingSpec::number(
             ids[4],
             "core.mark.thickness",
             1,
@@ -508,13 +522,13 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(thickness)
-        .described("core.mark.thickness.help"),
-        SettingSpec::fixed_switch(ids[5], "core.mark.frame", default.frame, groups::MARKS)
+        .description("core.mark.thickness.help"),
+        SettingSpec::switch(ids[5], "core.mark.frame", default.frame, groups::MARKS)
             .with_extra(section)
-            .described("core.mark.frame.help"),
-        SettingSpec::fixed_switch(ids[6], "core.mark.struck", default.struck, groups::MARKS)
+            .description("core.mark.frame.help"),
+        SettingSpec::switch(ids[6], "core.mark.struck", default.struck, groups::MARKS)
             .with_extra(section)
-            .described("core.mark.struck.help"),
+            .description("core.mark.struck.help"),
     ]
 }
 
@@ -587,7 +601,7 @@ pub fn draw_behind(
     };
     // A little wider than the words, so a marked word does not touch the
     // edge of its mark.
-    let pad = env.metrics.tenth_mm(5).max(1) as i32;
+    let pad = env.metrics().tenth_mm(5).max(1) as i32;
     for b in boxes {
         canvas.fill_shaded(padded(*b, pad), tone.color());
     }
@@ -612,7 +626,7 @@ pub fn draw_over(canvas: &mut Canvas<'_>, env: &Env<'_>, boxes: &[Rect], decorat
     } else {
         decoration.thickness
     };
-    let t = env.metrics.tenth_mm(u32::from(tenths)).max(1);
+    let t = env.metrics().tenth_mm(u32::from(tenths)).max(1);
     let color = decoration.stroke_color();
     for b in boxes {
         let (x, w) = (i32::from(b.x), u32::from(b.width));
@@ -621,7 +635,7 @@ pub fn draw_over(canvas: &mut Canvas<'_>, env: &Env<'_>, boxes: &[Rect], decorat
             draw_line(canvas, kind, x, w, bottom, t, color);
         }
         if decoration.frame {
-            let pad = env.metrics.tenth_mm(5).max(1) as i32;
+            let pad = env.metrics().tenth_mm(5).max(1) as i32;
             canvas.stroke_rect(
                 x - pad,
                 i32::from(b.y),
@@ -1081,7 +1095,7 @@ impl Decorators {
         self.list.iter().filter(move |d| {
             d.switch
                 .as_ref()
-                .is_none_or(|s| env.settings.bool(s.as_str()))
+                .is_none_or(|s| env.settings().bool(s.as_str()))
         })
     }
 
@@ -1102,7 +1116,7 @@ impl Decorators {
             let on = decorator
                 .switch
                 .as_ref()
-                .is_none_or(|s| env.settings.bool(s.as_str()));
+                .is_none_or(|s| env.settings().bool(s.as_str()));
             let hash = feed(hash, decorator.id.as_str().as_bytes());
             let hash = feed(hash, &[u8::from(on)]);
             if on {

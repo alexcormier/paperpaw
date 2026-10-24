@@ -124,25 +124,21 @@ fn request(key: &str, text: &str, target: &str) -> HttpRequest {
         "api.deepl.com"
     };
     let text: String = text.chars().take(MAX_CHARS).collect();
-    let mut request = HttpRequest::new("POST", &format!("https://{host}/v2/translate"), ANSWERED);
-    request.headers.push((
-        String::from("Authorization"),
-        format!("DeepL-Auth-Key {key}"),
-    ));
-    request.headers.push((
-        String::from("Content-Type"),
-        String::from("application/x-www-form-urlencoded"),
-    ));
-    request.headers.push((
-        String::from("User-Agent"),
-        String::from("PaperPaw/0.1 (e-reader)"),
-    ));
-    request.body = Some(format!(
-        "text={}&target_lang={}",
-        encode(&text),
-        encode(target)
-    ));
-    request
+    let body = format!("text={}&target_lang={}", encode(&text), encode(target));
+    HttpRequest::new("POST", &format!("https://{host}/v2/translate"), ANSWERED)
+        .header(
+            String::from("Authorization"),
+            format!("DeepL-Auth-Key {key}"),
+        )
+        .header(
+            String::from("Content-Type"),
+            String::from("application/x-www-form-urlencoded"),
+        )
+        .header(
+            String::from("User-Agent"),
+            String::from("PaperPaw/0.1 (e-reader)"),
+        )
+        .body(body)
 }
 
 /// The translation in DeepL's answer
@@ -174,7 +170,7 @@ static IN_TRANSLATION: paperpaw_sdk::SettingExtra =
     paperpaw_sdk::SettingExtra::new().section(SECTION);
 
 /// The language to translate into.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
     TO.static_str(),
     "translate.setting.to",
     &TARGETS,
@@ -183,7 +179,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
 )
 .advanced()
 .with_extra(&IN_TRANSLATION)
-.described("translate.setting.to.help")];
+.description("translate.setting.to.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -259,8 +255,8 @@ impl Panel {
         let width = self
             .style
             .font(env)
-            .map_or(0.0, |f| f.measure(self.style.small, source));
-        f32::from(self.header().width) - self.style.margin as f32 - width
+            .map_or(0.0, |f| f.measure(self.style.small(), source));
+        f32::from(self.header().width) - self.style.margin() as f32 - width
     }
 
     /// The original in one line, as wide as the header leaves it.
@@ -273,18 +269,18 @@ impl Panel {
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
-        let room = self.source_x(env) - self.style.margin as f32 * 2.0;
-        ui::fit(&font, self.style.title, &original, room)
+        let room = self.source_x(env) - self.style.margin() as f32 * 2.0;
+        ui::fit(&font, self.style.title(), &original, room)
     }
 
     fn set_text(&mut self, env: &Env<'_>, text: String) {
         self.lines.clear();
         self.top = 0;
         if let Some(font) = self.style.font(env) {
-            let width = f32::from(self.region.width) - 2.0 * self.style.margin as f32;
+            let width = f32::from(self.region.width) - 2.0 * self.style.margin() as f32;
             let mut start = 0;
             for paragraph in text.split('\n') {
-                for range in font.wrap(self.style.text, paragraph, width) {
+                for range in font.wrap(self.style.text(), paragraph, width) {
                     self.lines.push((start + range.start, start + range.end));
                 }
                 start += paragraph.len() + 1;
@@ -310,7 +306,7 @@ impl Panel {
             return;
         }
         let to = target(env.settings.read(&TO), env.i18n.language());
-        cx.command(Command::Http(request(key, &self.original, &to)));
+        cx.command(Command::http(request(key, &self.original, &to)));
     }
 
     /// Asks for the key on the keyboard.
@@ -324,7 +320,8 @@ impl Panel {
 
     /// DeepL answered: the translation, or why not.
     fn answered(&mut self, env: &Env<'_>, reply: &HttpReply) {
-        let body = reply.body.as_str();
+        let text = reply.text();
+        let body = text.as_ref();
         let key = match reply.status {
             200..=299 => match translation(body) {
                 Some(text) => return self.set_text(env, text),
@@ -347,19 +344,20 @@ impl Panel {
             self.region.x,
             self.region.y,
             self.region.width,
-            self.style.row as u16,
+            self.style.row(),
         )
     }
 
     fn line_height(&self, env: &Env<'_>) -> f32 {
-        self.style.font(env).map_or(self.style.text * 1.3, |f| {
-            f.line_metrics(self.style.text).line_height
+        self.style.font(env).map_or(self.style.text() * 1.3, |f| {
+            f.line_metrics(self.style.text()).line_height
         })
     }
 
     fn rows(&self, env: &Env<'_>) -> usize {
-        let height =
-            f32::from(self.region.height) - f32::from(self.header().height) - self.style.gap as f32;
+        let height = f32::from(self.region.height)
+            - f32::from(self.header().height)
+            - self.style.gap() as f32;
         ((height / self.line_height(env)) as usize).max(1)
     }
 
@@ -401,50 +399,41 @@ impl Screen for Panel {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
-            (style.line * 2).max(2),
+            (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         // The original on the left, the service on the right.
         let header = self.header();
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let source = env.i18n.tr("translate.source");
         let right = self.source_x(env);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            right,
-            header,
-            source,
-            style.faint(80),
-        );
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title,
-            margin,
-            header,
-            &self.heading,
-            Color::BLACK,
-        );
+        ui::Label::new(source)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Detail))
+            .draw_from(&mut ui, right, header);
+        ui::Label::new(&self.heading)
+            .px(style.title())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, margin, header);
         let height = self.line_height(env);
-        let ascent = font.line_metrics(style.text).ascent;
-        let top = f32::from(header.y + header.height) + style.gap as f32 / 2.0;
+        let ascent = font.line_metrics(style.text()).ascent;
+        let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
         let rows = self.rows(env);
         for (n, &(start, end)) in self.lines.iter().skip(self.top).take(rows).enumerate() {
             let baseline = top + height * n as f32 + ascent;
             font.draw(
-                canvas,
-                style.text,
+                ui.canvas(),
+                style.text(),
                 margin,
                 baseline as i32,
                 &self.text[start..end],
@@ -476,7 +465,7 @@ impl Screen for Panel {
             if key.is_empty() {
                 return;
             }
-            cx.command(Command::SetSecret(SecretChange::keep(
+            cx.command(Command::set_secret(SecretChange::keep(
                 KEY.as_str(),
                 "translate.key",
                 &key,
@@ -557,17 +546,14 @@ mod tests {
     #[test]
     fn requests_and_answers() {
         let free = request("abc:fx", "Hello world", "DE");
-        assert_eq!(free.url, "https://api-free.deepl.com/v2/translate");
-        assert_eq!(
-            free.body.as_deref(),
-            Some("text=Hello+world&target_lang=DE")
-        );
-        assert!(free.headers.contains(&(
+        assert_eq!(free.url(), "https://api-free.deepl.com/v2/translate");
+        assert_eq!(free.body_text(), Some("text=Hello+world&target_lang=DE"));
+        assert!(free.headers().contains(&(
             String::from("Authorization"),
             String::from("DeepL-Auth-Key abc:fx")
         )));
         assert_eq!(
-            request("abc", "x", "DE").url,
+            request("abc", "x", "DE").url(),
             "https://api.deepl.com/v2/translate"
         );
         let body =

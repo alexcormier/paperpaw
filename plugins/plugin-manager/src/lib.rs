@@ -43,8 +43,8 @@ use paperpaw_sdk::install::{self, Origin};
 use paperpaw_sdk::native::{NotInstalled, NotInstalledReason, SafeMode, SafeModeReason};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
     RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, Version,
 };
 
@@ -82,7 +82,7 @@ impl Plugin for PluginManager {
             Box::new(|env, _| Box::new(PluginList::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "plugin-manager.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -138,7 +138,7 @@ impl PluginList {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // A bar along the bottom: its button keeps the side margin from
         // the edge too.
         let bar_height = ui::edge_bar_height(&style);
@@ -205,8 +205,8 @@ impl PluginList {
         }
         let font = self.style.font(env)?;
         let label = env.i18n.tr("plugin-manager.restart");
-        let pad = self.style.margin as u16;
-        let width = font.measure(self.style.text, label) as u16 + 2 * pad;
+        let pad = self.style.margin();
+        let width = font.measure(self.style.text(), label) as u16 + 2 * pad;
         let band = ui::edge_bar_band(&self.style, self.bar, false);
         Some(Rect::new(
             self.bar.width.saturating_sub(width + pad),
@@ -225,7 +225,7 @@ impl PluginList {
     /// does.
     fn activate(&mut self, env: &Env<'_>, index: usize, cx: &mut Cx<'_, '_>) {
         if let Some(action) = self.more.get(index) {
-            cx.command(Command::RunAction(action.clone()));
+            cx.command(Command::run(action.clone()));
         } else if let Some(id) = self.plugins.get(index - self.more.len()).cloned() {
             self.switch(env, &id, cx);
         }
@@ -456,70 +456,67 @@ impl Screen for PluginList {
             self.focus = Focus::List;
         }
         self.list.set_active(self.focus == Focus::List);
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("plugin-manager.title"),
             None,
             self.list.paging(len),
         );
         let (more, plugins, origins) = (&self.more, &self.plugins, &self.origins);
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                if let Some(action) = more.get(index) {
-                    // Named by its action, told by the plugin that added it.
-                    let name = env.actions.get(action.as_str()).map_or("", |a| &a.title);
-                    let note = env
-                        .plugins
-                        .owner(action)
-                        .map_or("", |p| p.description(env.i18n));
-                    let name = env.i18n.tr(name);
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, name, "›", note);
-                } else if let Some(info) = env.plugins.get(plugins[index - more.len()].as_str()) {
-                    let value = env.i18n.tr(state(info));
-                    let name = info.name(env.i18n);
-                    let origin = origins
-                        .iter()
-                        .find(|(id, _)| *id == info.manifest.id)
-                        .map(|(_, origin)| *origin);
-                    let note = details(env, info, origin);
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, name, value, &note);
-                }
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            if let Some(action) = more.get(index) {
+                // Named by its action, told by the plugin that added it.
+                let name = env.actions.get(action.as_str()).map_or("", |a| &a.title);
+                let note = env
+                    .plugins
+                    .owner(action)
+                    .map_or("", |p| p.description(env.i18n));
+                let name = env.i18n.tr(name);
+                ui::Row::value(name, "›")
+                    .note(note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            } else if let Some(info) = env.plugins.get(plugins[index - more.len()].as_str()) {
+                let value = env.i18n.tr(state(info));
+                let name = info.name(env.i18n);
+                let origin = origins
+                    .iter()
+                    .find(|(id, _)| *id == info.manifest.id)
+                    .map(|(_, origin)| *origin);
+                let note = details(env, info, origin);
+                ui::Row::value(name, value)
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            }
+        });
         // The bar: a line above it, the hint or what a restart does, and
         // the button.
-        let line = Rect::new(0, self.bar.y, self.bar.width, (style.line as u16).max(1));
-        canvas.fill(line, paperpaw_sdk::Color::gray(150));
+        let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
+        ui.canvas().fill(line, paperpaw_sdk::Color::gray(150));
         let button = self.restart_button(env);
         if let Some(button) = button {
             let label = env.i18n.tr("plugin-manager.restart");
             let focused = self.focus == Focus::Restart;
-            ui::draw_button(canvas, env, &style, button, label, true, focused);
+            ui.button(button, label, true, focused);
         }
-        if let Some(font) = style.font(env) {
-            let key = if button.is_some() {
-                "plugin-manager.restart.short"
-            } else {
-                "plugin-manager.hint"
-            };
-            let right = button.map_or(self.bar.width, |b| b.x);
-            let area = Rect::new(
-                0,
-                self.bar.y,
-                right.saturating_sub(style.gap as u16),
-                self.bar.height,
-            );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                style.margin as f32,
-                area,
-                ui::tr_input(env, key),
-                style.faint(60),
-            );
-        }
+        let key = if button.is_some() {
+            "plugin-manager.restart.short"
+        } else {
+            "plugin-manager.hint"
+        };
+        let right = button.map_or(self.bar.width, |b| b.x);
+        let area = Rect::new(
+            0,
+            self.bar.y,
+            right.saturating_sub(style.gap()),
+            self.bar.height,
+        );
+        ui::Label::new(ui::tr_input(env, key))
+            .px(style.small())
+            .color(style.faint(ui::Ink::Note))
+            .draw_from(&mut ui, style.margin() as f32, area);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -601,7 +598,7 @@ impl Screen for PluginList {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let env = *cx.env();

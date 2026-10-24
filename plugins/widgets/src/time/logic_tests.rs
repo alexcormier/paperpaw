@@ -27,15 +27,7 @@ fn unix(year: i32, month: u8, day: u8, hour: i64, minute: i64) -> i64 {
 }
 
 fn at(year: i32, month: u8, day: u8, hour: u8, minute: u8) -> LocalTime {
-    LocalTime {
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second: 0,
-        weekday: dates::weekday(year, month, day),
-    }
+    LocalTime::new(year, month, day, hour, minute, 0)
 }
 
 // ---- Calendar ------------------------------------------------------------

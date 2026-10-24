@@ -148,7 +148,7 @@ impl SearchScreen {
                     .with(ID, group.as_str().to_string())
                     .with(FOCUS, id.as_str().to_string()),
             )),
-            Some(Target::Page(action)) => cx.command(Command::RunAction(action.clone())),
+            Some(Target::Page(action)) => cx.command(Command::run(action.clone())),
             None => {}
         }
     }
@@ -157,28 +157,23 @@ impl SearchScreen {
 impl Screen for SearchScreen {
     fn draw(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.hits.len();
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            &self.title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, &self.title, None, self.list.paging(len));
         if len == 0 {
             let none = env.i18n.tr("settings.search.none");
-            ui::draw_message(canvas, env, &style, self.list.area(), none);
+            ui.message(self.list.area(), none);
             return;
         }
         let hits = &self.hits;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let hit = &hits[index];
-                ui::draw_noted_row(
-                    canvas, env, &style, rect, focused, &hit.title, "›", &hit.note,
-                );
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let hit = &hits[index];
+            ui::Row::value(&hit.title, "›")
+                .note(&hit.note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -202,7 +197,7 @@ impl Screen for SearchScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.hits.len()) {

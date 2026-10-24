@@ -109,7 +109,7 @@ fn harness(told: &Told) -> common::Harness {
                 false => Verdict::Keep,
             }
         }),
-        Box::new(|_| String::from("on")),
+        Box::new(|_| 1),
     ));
     harness
 }

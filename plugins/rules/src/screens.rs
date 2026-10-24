@@ -137,8 +137,8 @@ impl RulesScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
+        let top = header.area().height + style.gap();
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -199,7 +199,7 @@ impl RulesScreen {
                 self.message = Some(env.i18n.tr("rules.not-saved").to_string());
             }
         }
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         crate::schedule(&env, &self.state.store, &mut out);
         for command in out {
             cx.command(command);
@@ -288,33 +288,33 @@ impl RulesScreen {
 impl Screen for RulesScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let rows = self.rows();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("rules.title"),
             None,
             self.list.paging(rows.len()),
         );
         let rules = &self.rules;
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| match rows[index] {
-                Row::Rule(i) => {
-                    let rule = &rules[i];
-                    let title = when_text(env, rule);
-                    let note = effect_text(env, &rule.effect);
-                    ui::draw_switch_row(canvas, env, &style, rect, focused, &title, &note, rule.on);
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
+                match rows[index] {
+                    Row::Rule(i) => {
+                        let rule = &rules[i];
+                        let title = when_text(env, rule);
+                        let note = effect_text(env, &rule.effect);
+                        ui::Row::switch(&title, rule.on)
+                            .note(&note)
+                            .focused(focused)
+                            .draw(ui, rect);
+                    }
+                    Row::Add => {
+                        let title = env.i18n.tr("rules.add");
+                        ui::Row::value(title, "+").focused(focused).draw(ui, rect);
+                    }
                 }
-                Row::Add => {
-                    let title = env.i18n.tr("rules.add");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "+", "");
-                }
-            },
-        );
+            });
         if self.rules.is_empty() {
             // Below the row that adds one: what rules are for.
             let top = self.list.area().y + self.list.row() as u16;
@@ -324,10 +324,7 @@ impl Screen for RulesScreen {
                 self.list.area().width,
                 self.status.y.saturating_sub(top),
             );
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 area,
                 "automation",
                 env.i18n.tr("rules.empty.title"),
@@ -337,12 +334,12 @@ impl Screen for RulesScreen {
                 return;
             }
         }
-        canvas.fill(self.status, Color::WHITE);
+        ui.canvas().fill(self.status, Color::WHITE);
         let text = self
             .message
             .clone()
             .unwrap_or_else(|| ui::tr_input(env, "rules.hint").to_string());
-        ui::draw_note_line(canvas, env, &style, self.status, &text);
+        ui.note_line(self.status, &text);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -375,7 +372,7 @@ impl Screen for RulesScreen {
                 .header
                 .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {
@@ -759,7 +756,7 @@ impl PickScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mode = params.get(params::MODE).unwrap_or(ACTION);
         let mut entries: Vec<(Id, String)> = if mode == SWITCH || mode == NUMBER {
@@ -790,7 +787,7 @@ impl PickScreen {
             })
             .to_string();
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             title,
             entries,
             reply: params.get(params::REPLY).and_then(|r| Id::parse(r).ok()),
@@ -814,20 +811,16 @@ impl PickScreen {
 impl Screen for PickScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.entries.len();
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            &self.title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, &self.title, None, self.list.paging(len));
         let entries = &self.entries;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                ui::draw_value_row(canvas, env, &style, rect, focused, &entries[index].1, "");
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            ui::Row::value(&entries[index].1, "")
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -856,7 +849,7 @@ impl Screen for PickScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, len) {

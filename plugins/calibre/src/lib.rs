@@ -38,9 +38,9 @@ use paperpaw_sdk::replies::{SocketNotice, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id,
-    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, SocketRead, Storage,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    Hint, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
+    SDK_VERSION, Screen, ScreenSpec, SettingSpec, SocketRead, Storage,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -102,13 +102,13 @@ fn provided(metadata: &str) -> paperpaw_sdk::library::Provided {
 pub struct Calibre;
 
 /// Calibre's address, where it is not found by itself.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     ADDRESS.static_str(),
     "calibre.setting.address",
     "",
     groups::LIBRARY,
 )
-.described("calibre.setting.address.help")
+.description("calibre.setting.address.help")
 .advanced()];
 
 /// How it works, by language (see `Manifest::how`).
@@ -132,7 +132,7 @@ impl Plugin for Calibre {
             Box::new(|env, _| Box::new(CalibreScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "calibre.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -205,7 +205,7 @@ struct CalibreScreen {
     /// The *Type the password* row, where it shows.
     password_row: Option<Rect>,
     /// Offline mode: the offer to go online.
-    offer: ui::OfflineOffer,
+    offer: ui::offline::OfflineOffer,
 }
 
 impl CalibreScreen {
@@ -224,15 +224,15 @@ impl CalibreScreen {
             tries: 0,
             started: false,
             password_row: None,
-            offer: ui::OfflineOffer::new(),
+            offer: ui::offline::OfflineOffer::new(),
         }
     }
 
     /// What the reader chose on the offer to go online: Calibre found
     /// now, or said to need the network.
-    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
         match chosen {
-            Some(ui::Offer::Online) => self.start(cx),
+            Some(ui::offline::Offer::Online) => self.start(cx),
             // Not now, and any answer to come: on without the network.
             Some(_) => {
                 let env = *cx.env();
@@ -666,7 +666,7 @@ impl CalibreScreen {
     /// The area below the header.
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 }
@@ -688,33 +688,31 @@ impl Screen for CalibreScreen {
     )]
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            env.i18n.tr("calibre.title"),
-            None,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, env.i18n.tr("calibre.title"), None, None);
         if self.state == State::Offline {
             let area = self.content(env);
-            return self.offer.draw(canvas, env, &style, area);
+            return self.offer.draw(&mut ui, area);
         }
         let Some(font) = style.font(env) else {
             return;
         };
         let area = self.content(env);
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let width = f32::from(area.width) - 2.0 * margin;
-        let mut y = area.y + style.gap as u16;
-        let mut line = |canvas: &mut Canvas<'_>, size: f32, text: &str, color: Color| {
+        let mut y = area.y + style.gap();
+        let mut line = |ui: &mut ui::Ui<'_>, size: f32, text: &str, color: Color| {
             let height = font.line_metrics(size).line_height as u16;
             for range in font.wrap(size, text, width) {
                 let row = Rect::new(area.x, y, area.width, height);
-                ui::draw_label(canvas, &font, size, margin, row, &text[range], color);
+                ui::Label::new(&text[range])
+                    .px(size)
+                    .color(color)
+                    .draw_from(ui, margin, row);
                 y += height;
             }
-            y += style.gap as u16 / 2;
+            y += style.gap() / 2;
         };
         let name = self.name.clone().unwrap_or_else(|| String::from("Calibre"));
         let status = match &self.state {
@@ -746,18 +744,18 @@ impl Screen for CalibreScreen {
             State::Ended(text) => text.clone(),
             State::Offline => String::new(),
         };
-        line(canvas, style.title, &status, Color::BLACK);
+        line(&mut ui, style.title(), &status, Color::BLACK);
         if let Some(library) = &self.library {
             let text = env
                 .i18n
                 .format("calibre.library", &[("library", Arg::Str(library))]);
-            line(canvas, style.text, &text, style.faint(80));
+            line(&mut ui, style.text(), &text, style.faint(ui::Ink::Detail));
         }
         if self.received > 0 {
             let text = env
                 .i18n
                 .plural("calibre.received", i64::from(self.received), &[]);
-            line(canvas, style.text, &text, Color::BLACK);
+            line(&mut ui, style.text(), &text, Color::BLACK);
         }
         let hint = match self.state {
             State::Finding | State::Ended(_) => Some("calibre.hint"),
@@ -766,7 +764,12 @@ impl Screen for CalibreScreen {
             _ => None,
         };
         if let Some(hint) = hint {
-            line(canvas, style.small, env.i18n.tr(hint), style.faint(80));
+            line(
+                &mut ui,
+                style.small(),
+                env.i18n.tr(hint),
+                style.faint(ui::Ink::Detail),
+            );
         }
         // How to connect or try again: by touch, or the button (named in
         // the row of hints under the screen, where there is one).
@@ -784,21 +787,13 @@ impl Screen for CalibreScreen {
                 None
             };
             if let Some(again) = again {
-                line(canvas, style.small, env.i18n.tr(again), Color::BLACK);
+                line(&mut ui, style.small(), env.i18n.tr(again), Color::BLACK);
             }
         }
         self.password_row = None;
         if self.state == State::Password {
-            let row = Rect::new(area.x, y, area.width, style.row as u16);
-            ui::draw_value_row(
-                canvas,
-                env,
-                &style,
-                row,
-                false,
-                env.i18n.tr("calibre.type-password"),
-                "›",
-            );
+            let row = Rect::new(area.x, y, area.width, style.row());
+            ui::Row::value(env.i18n.tr("calibre.type-password"), "›").draw(&mut ui, row);
             self.password_row = Some(row);
         }
     }
@@ -844,7 +839,7 @@ impl Screen for CalibreScreen {
         } else if let Some(typed) = PASSWORD_TYPED.read(event, params)
             && !typed.text.is_empty()
         {
-            cx.command(Command::SetSecret(SecretChange::keep(
+            cx.command(Command::set_secret(SecretChange::keep(
                 PASSWORD,
                 "calibre.password",
                 &typed.text,
@@ -867,7 +862,7 @@ impl Screen for CalibreScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if self.state == State::Offline && *action != actions::BACK {
-            let chosen = self.offer.on_action(action, cx);
+            let chosen = self.offer.on_action(action, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }
@@ -889,11 +884,11 @@ impl Screen for CalibreScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.state == State::Offline {
-            let chosen = self.offer.on_tap(gesture.start, cx);
+            let chosen = self.offer.on_gesture(&gesture, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }

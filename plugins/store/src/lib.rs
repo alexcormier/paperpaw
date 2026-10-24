@@ -31,16 +31,15 @@ mod view;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{events, groups, menus};
+use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::{Installer, Progress, Received};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingSpec, Version,
+    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
 };
 use trust::Verdict;
 
@@ -54,6 +53,10 @@ const SOURCE_SCREEN: Id = Id::new_static("store.source");
 const SHOTS_SCREEN: Id = Id::new_static("store.shots");
 /// The fonts browser's list, offered as the entry *Fonts*.
 pub(crate) const FONTS: Id = Id::new_static("fonts-browser.open");
+/// Fonts with larger sizes, from the reading settings: the fonts browser,
+/// or its page here where it is not installed (a store plugin on lean
+/// firmware).
+pub const DISCOVER_FONTS: Id = Id::new_static("store.discover-fonts");
 /// The plugin manager's list of other places to get plugins.
 const MANAGER_MORE: Id = Id::new_static("plugin-manager.more");
 
@@ -62,13 +65,13 @@ pub const CATALOG: Setting<paperpaw_sdk::setting::Text> = Setting::new("store.ca
 
 /// The plugin library's address, for developers and libraries of one's
 /// own.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     CATALOG.static_str(),
     "store.setting.catalog",
     catalog::OFFICIAL_LIST,
     groups::DEVELOPER,
 )
-.described("store.setting.catalog.help")];
+.description("store.setting.catalog.help")];
 
 /// The answer to a file's download.
 const DOWNLOADED: Event<HttpReply> = Event::new("store.downloaded");
@@ -121,7 +124,7 @@ impl Plugin for Store {
             Box::new(|env, params| Box::new(shots::ShotsScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "store.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
@@ -130,6 +133,22 @@ impl Plugin for Store {
             r.add_menu_entry(MenuEntry::new(menu, OPEN).order(order))?;
         }
         r.add_icon(OPEN, Cow::Borrowed("cloud-download"))?;
+        r.add_action(
+            ActionSpec::new(DISCOVER_FONTS, "store.discover-fonts").handler(
+                |env: &Env<'_>, _: &Params, out: &mut Commands| {
+                    if env.actions.contains(FONTS.as_str()) {
+                        out.push(Command::run(FONTS));
+                    } else {
+                        let page = Params::new().with(params::ID, "fonts-browser");
+                        out.push(Command::OpenScreen(PAGE_SCREEN, page));
+                    }
+                },
+            ),
+        )?;
+        // On the reading settings, below the font size, whose largest
+        // sizes are the font's.
+        r.add_menu_entry(MenuEntry::new(groups::READING, DISCOVER_FONTS))?;
+        r.add_icon(DISCOVER_FONTS, Cow::Borrowed("typography"))?;
         // Downloads go on while no screen of the store is open; one cut
         // off by a restart is begun anew from the plugin's page.
         r.on(DOWNLOADED, received)?;
@@ -156,8 +175,8 @@ impl Plugin for Store {
 /// A file arrived (or did not): once all are here, the plugin installed
 /// if it may be (see [`trust`]), and said; then the next update waiting
 /// in the queue ([`queue`]) has its turn.
-fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-    let mut said = Vec::new();
+fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
+    let mut said = paperpaw_sdk::Commands::new();
     let installed = match INSTALLER.received(env, reply, out) {
         Received::Complete(done) => (finish(env, &done, &mut said), done.name),
         Received::Failed(job) => {
@@ -183,7 +202,7 @@ fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
 
 /// Installs the plugin all of whose files are here, if it may be, and
 /// says so; whether it was installed.
-fn finish(env: &Env<'_>, done: &Progress, out: &mut Vec<Command>) -> bool {
+fn finish(env: &Env<'_>, done: &Progress, out: &mut Commands) -> bool {
     let name = [("name", Arg::Str(&done.name))];
     let folder = INSTALLER.folder(env.storage).unwrap_or_default();
     let (key, installed) = match trust::verdict(env, &done.plugin, &folder) {

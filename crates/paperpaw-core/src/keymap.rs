@@ -589,12 +589,13 @@ mod tests {
         let mut keymap = Keymap::default();
         let problems = keymap.load(
             "[other]\na = b\n[keymap.global]\nbutton.X = core.menu\ntap.middle = core.menu\n\
-             button.ok = Not An Id\n[keymap.Bad Layer]\n",
+             button.ok = Not An Id\n[keymap.Bad Layer]\nbutton.ok = core.menu\n",
             Origin::Plugin,
             true,
         );
         let lines: Vec<u32> = problems.iter().map(|p| p.line).collect();
-        assert_eq!(lines, [2, 4, 5, 6, 7]);
+        // A layer of words is a section, but no layer: its entries are refused.
+        assert_eq!(lines, [2, 4, 5, 6, 8]);
     }
 
     /// Every input's name reads back as the same input.

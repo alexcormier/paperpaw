@@ -31,7 +31,8 @@ impl BrowseScreen {
                 .with(NAME, name.clone())
                 .with(params::TITLE, entry.title.clone())
                 .with(AUTHORS, entry.authors.clone());
-            cx.command(Command::Http(request(
+            cx.command(Command::http(request(
+                &paperpaw_sdk::web::user_agent_of(cx.env()),
                 &self.catalog,
                 &book.url,
                 self.temp.next("tmp"),

@@ -7,7 +7,7 @@ use alloc::string::{String, ToString};
 
 use paperpaw_sdk::install::{Origins, Progress};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::{Canvas, Color, Env, Rect, files};
+use paperpaw_sdk::{Color, Env, Rect, files};
 
 use crate::catalog::Entry;
 
@@ -63,14 +63,8 @@ pub(crate) fn state(
 }
 
 /// Draws the row of `plugin` in `rect`.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "its inputs are separate things; a struct of them would serve this call alone"
-)]
 pub(crate) fn draw(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
+    ui: &mut ui::Ui<'_>,
     rect: Rect,
     focused: bool,
     plugin: &Entry,
@@ -78,60 +72,54 @@ pub(crate) fn draw(
     queued: &[String],
     origins: &Origins,
 ) {
-    let Some(font) = style.font(env) else {
+    let (env, style) = (ui.env(), ui.style());
+    let Some(font) = ui.font() else {
         return;
     };
     let band = ui::title_area(style, rect);
-    let margin = style.margin as f32;
+    let margin = style.margin() as f32;
     let right = f32::from(rect.x) + f32::from(rect.width) - margin;
     let ink = style.focus_ink(focused);
     // The mark first, from the right margin; the name gets the rest.
     let mark_left = match state(env, job, queued, plugin, origins) {
         State::Offered(text) | State::Busy(text) => {
-            let width = font.measure(style.small, &text);
+            let width = font.measure(style.small(), &text);
             let x = right - width;
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                x,
-                band,
-                &text,
-                style.focus_faint(focused, 80),
-            );
+            ui::Label::new(&text)
+                .px(style.small())
+                .color(style.focus_faint(focused, ui::Ink::Detail))
+                .draw_from(ui, x, band);
             x
         }
         State::Installed => {
             let text = env.i18n.tr("store.state.installed");
-            let width = font.measure(style.small, text);
-            let icon = style.small * ui::ICON_SCALE;
+            let width = font.measure(style.small(), text);
+            let icon = style.small() * ui::ICON_SCALE;
             let icon_width = ui::icon_width(env, "check", icon);
             let x = right - width;
-            ui::draw_label(canvas, &font, style.small, x, band, text, ink);
-            let icon_x = x - icon_width - style.gap as f32 / 2.0;
-            ui::draw_icon(canvas, env, "check", icon, icon_x, band, ink);
+            ui::Label::new(text)
+                .px(style.small())
+                .color(ink)
+                .draw_from(ui, x, band);
+            let icon_x = x - icon_width - style.gap() as f32 / 2.0;
+            ui.icon("check", icon, icon_x, band, ink);
             icon_x
         }
         State::Update => {
             let text = env.i18n.tr("store.state.update");
-            draw_pill(canvas, env, style, band, right, text, focused)
+            draw_pill(ui, band, right, text, focused)
         }
     };
     let name_area = Rect::new(
         band.x,
         band.y,
-        (mark_left - style.gap as f32 - f32::from(band.x)).max(0.0) as u16,
+        (mark_left - style.gap() as f32 - f32::from(band.x)).max(0.0) as u16,
         band.height,
     );
-    ui::draw_label(
-        canvas,
-        &font,
-        style.text,
-        f32::from(rect.x) + margin,
-        name_area,
-        &plugin.name,
-        ink,
-    );
+    ui::Label::new(&plugin.name)
+        .px(style.text())
+        .color(ink)
+        .draw_from(ui, f32::from(rect.x) + margin, name_area);
     // What it does: one line, shortened where longer; PaperPaw's own
     // say so first.
     let summary = if plugin.official {
@@ -140,60 +128,47 @@ pub(crate) fn draw(
         plugin.summary.clone()
     };
     let below = band.y + band.height;
-    let line = (style.small * 1.3) as u16;
+    let line = (style.small() * 1.3) as u16;
     let note = Rect::new(rect.x, below, (right - f32::from(rect.x)) as u16, line);
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        f32::from(rect.x) + margin,
-        note,
-        &summary,
-        style.focus_faint(focused, 80),
-    );
+    ui::Label::new(&summary)
+        .px(style.small())
+        .color(style.focus_faint(focused, ui::Ink::Detail))
+        .draw_from(ui, f32::from(rect.x) + margin, note);
 }
 
 /// Draws `text` as a row's note: one line of small text below its title,
 /// from `left` (where its title begins, after any icon).
-pub(crate) fn draw_note(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    rect: Rect,
-    left: u16,
-    focused: bool,
-    text: &str,
-) {
-    let Some(font) = style.font(env) else {
-        return;
-    };
+pub(crate) fn draw_note(ui: &mut ui::Ui<'_>, rect: Rect, left: u16, focused: bool, text: &str) {
+    let style = ui.style();
     let band = ui::title_area(style, rect);
-    let margin = style.margin as u16;
-    let line = (style.small * 1.3) as u16;
+    let margin = style.margin();
+    let line = (style.small() * 1.3) as u16;
     let right = rect.x + rect.width - margin;
     let area = Rect::new(left, band.y + band.height, right.saturating_sub(left), line);
     let x = f32::from(left + margin);
-    let color = style.focus_faint(focused, 80);
-    ui::draw_label(canvas, &font, style.small, x, area, text, color);
+    let color = style.focus_faint(focused, ui::Ink::Detail);
+    ui::Label::new(text)
+        .px(style.small())
+        .color(color)
+        .draw_from(ui, x, area);
 }
 
 /// Draws `text` as a small filled label ending at `right`, centred on
 /// `band`: what wants doing stands out. Returns where it begins.
 pub(crate) fn draw_pill(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
+    ui: &mut ui::Ui<'_>,
     band: Rect,
     right: f32,
     text: &str,
     focused: bool,
 ) -> f32 {
-    let Some(font) = style.font(env) else {
+    let style = ui.style();
+    let Some(font) = ui.font() else {
         return right;
     };
-    let pad = style.gap as f32;
-    let width = font.measure(style.small, text) + 2.0 * pad;
-    let height = font.line_metrics(style.small).line_height + pad / 2.0;
+    let pad = style.gap() as f32;
+    let width = font.measure(style.small(), text) + 2.0 * pad;
+    let height = font.line_metrics(style.small()).line_height + pad / 2.0;
     let x = right - width;
     let y = f32::from(band.y) + (f32::from(band.height) - height) / 2.0;
     let pill = Rect::new(x as u16, y as u16, width as u16, height as u16);
@@ -202,7 +177,11 @@ pub(crate) fn draw_pill(
     } else {
         (Color::BLACK, Color::WHITE)
     };
-    canvas.fill_round(pill, u32::from(pill.height) / 2, paper);
-    ui::draw_label(canvas, &font, style.small, x + pad, pill, text, letters);
+    ui.canvas()
+        .fill_round(pill, u32::from(pill.height) / 2, paper);
+    ui::Label::new(text)
+        .px(style.small())
+        .color(letters)
+        .draw_from(ui, x + pad, pill);
     x
 }

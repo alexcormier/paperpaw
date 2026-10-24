@@ -46,19 +46,59 @@ t.tap = Tap a rule to pause it
 t.tap.buttons = Select a rule to pause it
 ";
 
+/// Five pixels a step.
+static PIXELS: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().step(5).unit("t.unit.px");
+/// A secret.
+static SECRET: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().secret();
+
 fn harness(device: Device) -> (Harness, [SettingSpec; 6]) {
     let mut h = Harness::new(device);
     h.i18n.add(Catalog::parse(EN).unwrap());
     h.i18n.set_language("en");
     let specs = [
-        SettingSpec::number(&SIZE, "t.size", -5, 40, 12)
-            .step(5)
-            .unit("t.unit.px"),
-        SettingSpec::switch(&ON, "t.on", true),
-        SettingSpec::choice(&LOOK, "t.look", Choices::Fixed(&LOOKS), "t.look.plain"),
-        SettingSpec::choice(&PAIR, "t.pair", Choices::Fixed(&PAIRS), "t.pair.a"),
-        SettingSpec::text(&KEY, "t.key", "").secret(),
-        SettingSpec::text(&NAME, "t.name", "Ann"),
+        SettingSpec::number(
+            SIZE.static_str(),
+            "t.size",
+            -5,
+            40,
+            12,
+            paperpaw_sdk::builtin::groups::OTHER,
+        )
+        .with_extra(&PIXELS),
+        SettingSpec::switch(
+            ON.static_str(),
+            "t.on",
+            true,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ),
+        SettingSpec::choice(
+            LOOK.static_str(),
+            "t.look",
+            &LOOKS,
+            "t.look.plain",
+            paperpaw_sdk::builtin::groups::OTHER,
+        ),
+        SettingSpec::choice(
+            PAIR.static_str(),
+            "t.pair",
+            &PAIRS,
+            "t.pair.a",
+            paperpaw_sdk::builtin::groups::OTHER,
+        ),
+        SettingSpec::text(
+            KEY.static_str(),
+            "t.key",
+            "",
+            paperpaw_sdk::builtin::groups::OTHER,
+        )
+        .with_extra(&SECRET),
+        SettingSpec::text(
+            NAME.static_str(),
+            "t.name",
+            "Ann",
+            paperpaw_sdk::builtin::groups::OTHER,
+        ),
     ];
     for spec in &specs {
         h.settings.define(spec.clone()).unwrap();
@@ -102,7 +142,12 @@ fn rows_show_values_with_units_and_secrets_as_dots() {
     assert!(shown.chars().all(|c| c == '•') && !shown.is_empty());
     assert_eq!(ui::setting_value(&env, &on), "Off");
     // A setting nobody defined shows nothing.
-    let unknown = SettingSpec::text(&Setting::new("t.unknown"), "t.unknown", "x");
+    let unknown = SettingSpec::text(
+        "t.unknown",
+        "t.unknown",
+        "x",
+        paperpaw_sdk::builtin::groups::OTHER,
+    );
     assert_eq!(ui::setting_value(&env, &unknown), "");
 }
 
@@ -158,7 +203,12 @@ fn switches_toggle_and_text_has_no_step() {
     );
     assert_eq!(ui::next_value(&env, &key, 1), None);
     assert_eq!(ui::next_value(&env, &name, 1), None);
-    let unknown = SettingSpec::switch(&Setting::new("t.unknown"), "t.unknown", true);
+    let unknown = SettingSpec::switch(
+        "t.unknown",
+        "t.unknown",
+        true,
+        paperpaw_sdk::builtin::groups::OTHER,
+    );
     assert_eq!(ui::next_value(&env, &unknown, 1), None);
 }
 
@@ -201,8 +251,16 @@ fn from_a_value_not_offered_the_steps_begin_at_the_ends() {
 #[test]
 fn numbers_at_the_ends_of_their_range_do_not_overflow() {
     let mut h = Harness::new(Device::TOUCH);
-    let wide = Setting::<i64>::new("t.wide");
-    let spec = SettingSpec::number(&wide, "t.wide", i64::MIN, i64::MAX, i64::MAX).step(i64::MAX);
+    static WIDE: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().step(i64::MAX);
+    let spec = SettingSpec::number(
+        "t.wide",
+        "t.wide",
+        i64::MIN,
+        i64::MAX,
+        i64::MAX,
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&WIDE);
     h.settings.define(spec.clone()).unwrap();
     assert_eq!(
         ui::next_value(&h.env(), &spec, 3),
@@ -230,9 +288,9 @@ fn two_options_switch_at_once_and_more_open_a_list() {
             assert!(!ui::two_options(&env, spec));
             assert!(!ui::opens_screen(&env, spec));
         }
-        let edited = name
-            .clone()
-            .editor(paperpaw_sdk::Id::new_static("t.editor"));
+        static EDITOR: paperpaw_sdk::SettingExtra =
+            paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::Id::new_static("t.editor"));
+        let edited = name.clone().with_extra(&EDITOR);
         assert!(ui::opens_screen(&env, &edited));
     }
     // More ways to choose listed with the options: a list after all.
@@ -254,15 +312,22 @@ fn numbers_above_each_other_get_the_room_of_the_widest() {
     let (h, [size, on, ..]) = harness(Device::TOUCH);
     let env = h.env();
     let style = UiStyle::new(&env);
-    let narrow = SettingSpec::number(&Setting::new("t.narrow"), "t.narrow", 1, 9, 3);
+    let narrow = SettingSpec::number(
+        "t.narrow",
+        "t.narrow",
+        1,
+        9,
+        3,
+        paperpaw_sdk::builtin::groups::OTHER,
+    );
     let room = ui::number_room(&env, &style, [&narrow, &size, &on]);
     // "-5 pixels" and "40 pixels": the wider of the two.
     let font = style.font(&env).unwrap();
     let widest = ["-5 pixels", "40 pixels"]
         .into_iter()
         .max_by(|a, b| {
-            font.measure(style.text, a)
-                .total_cmp(&font.measure(style.text, b))
+            font.measure(style.text(), a)
+                .total_cmp(&font.measure(style.text(), b))
         })
         .unwrap();
     assert_eq!(room, widest);

@@ -44,6 +44,7 @@ pub const NETWORK_WAIT_MS: u64 = 30_000;
 /// What the shell is told to do with the radio. Printed for debugging
 /// without the password.
 #[derive(Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WifiCommand {
     /// Switches the radio on (not joining anything yet).
     On,
@@ -158,6 +159,7 @@ impl WifiState {
 
 /// A network in reach.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct WifiNetwork {
     pub ssid: String,
     /// Its signal, in dBm (e.g. -50 strong, -85 weak).
@@ -167,6 +169,16 @@ pub struct WifiNetwork {
 }
 
 impl WifiNetwork {
+    /// The network `ssid` with its `signal` in dBm, asking for a password
+    /// if `secured`.
+    pub fn new(ssid: impl Into<String>, signal: i8, secured: bool) -> Self {
+        Self {
+            ssid: ssid.into(),
+            signal,
+            secured,
+        }
+    }
+
     /// The signal in bars from 1 to 4.
     pub fn bars(&self) -> u8 {
         match self.signal {
@@ -226,6 +238,7 @@ impl JoinFailure {
 
 /// Wi-Fi as the kernel knows it ([`Env::wifi`](crate::Env)).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Wifi {
     pub state: WifiState,
     /// The networks found last, strongest first (each name once).

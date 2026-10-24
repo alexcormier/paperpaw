@@ -21,9 +21,9 @@ use paperpaw_sdk::{
 struct Duck;
 
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_switch("duck.big", "Big duck", false, Id::new_static("duck.group")),
-    SettingSpec::fixed_switch("duck.ants", "Ants", false, Id::new_static("duck.ants")),
-    SettingSpec::fixed_switch("duck.pond", "Pond", false, Id::new_static("duck.pond")),
+    SettingSpec::switch("duck.big", "Big duck", false, Id::new_static("duck.group")),
+    SettingSpec::switch("duck.ants", "Ants", false, Id::new_static("duck.ants")),
+    SettingSpec::switch("duck.pond", "Pond", false, Id::new_static("duck.pond")),
 ];
 
 impl Plugin for Duck {

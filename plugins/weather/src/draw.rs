@@ -5,8 +5,8 @@
 use alloc::format;
 use alloc::string::String;
 
-use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Look, Wrapped};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, WidgetLook, Wrapped};
 use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Rect, SettingSpec, time};
 
 use crate::data::Symbol;
@@ -19,7 +19,7 @@ pub(crate) const STYLES: [&str; 2] = ["weather.style.line", "weather.style.solid
 /// The setting of how `widget` draws its symbols, kept in the program:
 /// `id` is `<widget>.style`.
 pub(crate) const fn style_spec(id: &'static str, widget: Id) -> SettingSpec {
-    SettingSpec::fixed_choice(id, "weather.setting.style", &STYLES, STYLES[0], widget)
+    SettingSpec::choice(id, "weather.setting.style", &STYLES, STYLES[0], widget)
 }
 
 /// How `widget` draws its symbols.
@@ -65,7 +65,7 @@ fn cap_ratio() -> f32 {
 /// Draws `text` `size` pixels large with its digits in the middle of `row`
 /// from top to bottom, from `x`.
 pub(crate) fn draw_digits(
-    canvas: &mut Canvas<'_>,
+    ui: &mut ui::Ui<'_>,
     font: &FontHandle<'_>,
     size: f32,
     x: f32,
@@ -75,7 +75,7 @@ pub(crate) fn draw_digits(
 ) {
     let metrics = font.line_metrics(size);
     let baseline = f32::from(row.y) + (f32::from(row.height) + cap(size)) / 2.0;
-    // `draw_label` centres the font's line in its area: an area whose
+    // A label centres the font's line in its area: an area whose
     // baseline falls where the digits' does.
     let top = baseline - metrics.ascent;
     let area = Rect::new(
@@ -84,7 +84,11 @@ pub(crate) fn draw_digits(
         row.width,
         (metrics.ascent + metrics.descent) as u16,
     );
-    paperpaw_sdk::ui::draw_label(canvas, font, size, x, area, text, color);
+    ui::Label::new(text)
+        .px(size)
+        .color(color)
+        .font(*font)
+        .draw_from(ui, x, area);
 }
 
 /// The size digits `size` pixels large are drawn in: smaller where the
@@ -182,7 +186,7 @@ pub(crate) fn draw_waiting(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     widget: &str,
-    (look, place): (&Look, Rect),
+    (look, place): (&WidgetLook, Rect),
     shown: &Shown,
 ) {
     let style = UiStyle::new(env);
@@ -201,13 +205,13 @@ pub(crate) fn draw_waiting(
         waiting => String::from(env.i18n.tr(waiting.key())),
     };
     let short = env.i18n.tr(short_key(shown.waiting));
-    let line = widgets::line_height(env, style.text);
-    let gap = style.gap as u16;
+    let line = widgets::line_height(env, style.text());
+    let gap = style.gap();
     // The symbol's ink at least this high, else none.
     let least = line * 3 / 2;
     let below = area.height.saturating_sub(least + gap);
     let lay = |text: &str, height: u16| {
-        Wrapped::fitting(env, text, style.text, style.small, area.width, height)
+        Wrapped::fitting(env, text, style.text(), style.small(), area.width, height)
     };
     let tries = [
         (&long[..], below, true),

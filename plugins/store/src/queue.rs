@@ -23,7 +23,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::params;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, install};
+use paperpaw_sdk::{Arg, Command, Commands, Env, HttpRequest, Params, install};
 
 use crate::catalog::{self, Device};
 use crate::{CATALOG, INSTALLER, PLUGIN, failed, trust};
@@ -116,7 +116,7 @@ fn name_of(env: &Env<'_>, id: &str) -> String {
 }
 
 /// Says, once no quiet plugin waits any more, what they became.
-fn said(env: &Env<'_>, out: &mut Vec<Command>) {
+fn said(env: &Env<'_>, out: &mut Commands) {
     if has_quiet(env) {
         return;
     }
@@ -150,17 +150,17 @@ fn said(env: &Env<'_>, out: &mut Vec<Command>) {
 
 /// Puts `ids` in the queue (behind those waiting) and starts the first
 /// if nothing is being downloaded.
-pub(crate) fn add(env: &Env<'_>, ids: &[String], out: &mut Vec<Command>) {
+pub(crate) fn add(env: &Env<'_>, ids: &[String], out: &mut Commands) {
     put(env, ids, "", out);
 }
 
 /// Puts `ids` in the queue quietly (the first-run setup's, see the
 /// [module](self)).
-pub(crate) fn add_quietly(env: &Env<'_>, ids: &[String], out: &mut Vec<Command>) {
+pub(crate) fn add_quietly(env: &Env<'_>, ids: &[String], out: &mut Commands) {
     put(env, ids, QUIET, out);
 }
 
-fn put(env: &Env<'_>, ids: &[String], mark: &str, out: &mut Vec<Command>) {
+fn put(env: &Env<'_>, ids: &[String], mark: &str, out: &mut Commands) {
     let mut all = lines(env);
     let known = waiting(env);
     for id in ids {
@@ -192,7 +192,7 @@ fn page_url(env: &Env<'_>, device: &Device<'_>, id: &str) -> String {
 
 /// Gives the next plugin its turn (asks for its page), if nothing is
 /// being downloaded: the one before is done, stopped or set aside.
-pub(crate) fn next(env: &Env<'_>, out: &mut Vec<Command>) {
+pub(crate) fn next(env: &Env<'_>, out: &mut Commands) {
     if INSTALLER.progress(env.storage).is_some() {
         return;
     }
@@ -215,14 +215,14 @@ pub(crate) fn next(env: &Env<'_>, out: &mut Vec<Command>) {
     said(env, out);
     let url = page_url(env, &device, &id);
     let mut request = HttpRequest::new("GET", &url, FETCHED);
-    request.save_to = Some(catalog::plugin_part(&id));
-    request.params = Params::new().with(params::ID, id);
-    out.push(Command::Http(request));
+    request = request.save_to(catalog::plugin_part(&id));
+    request = request.with(Params::new().with(params::ID, id));
+    out.push(Command::http(request));
 }
 
 /// The page of the plugin whose turn it is came: its download starts, or
 /// the next one's turn comes.
-pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let Some(id) = reply.context.get(params::ID).map(ToString::to_string) else {
         return;
     };

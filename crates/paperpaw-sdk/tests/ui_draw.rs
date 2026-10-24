@@ -15,7 +15,8 @@ mod support;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::{self, Role};
-use paperpaw_sdk::ui::{self, Header, Pager, UiStyle};
+use paperpaw_sdk::ui::{self, Header, Pager, Paging, UiStyle};
+use paperpaw_sdk::widgets;
 use paperpaw_sdk::{Color, Hint, Point, Rect};
 use proptest::prelude::*;
 
@@ -41,8 +42,8 @@ fn the_ui_font_and_icons_are_there() {
     let style = UiStyle::new(&env);
     assert!(style.font(&env).is_some());
     assert!(ui::has_icons(&env));
-    assert!(ui::icon_width(&env, "settings", style.text) > 0.0);
-    assert_eq!(ui::icon_width(&env, "no-such-icon", style.text), 0.0);
+    assert!(ui::icon_width(&env, "settings", style.text()) > 0.0);
+    assert_eq!(ui::icon_width(&env, "no-such-icon", style.text()), 0.0);
 }
 
 // ---- Shortening -------------------------------------------------------
@@ -58,8 +59,8 @@ proptest! {
         let env = h.env();
         let style = UiStyle::new(&env);
         let font = style.font(&env).unwrap();
-        let shown = ui::fit(&font, style.text, &text, width);
-        prop_assert!(font.measure(style.text, &shown) <= width.max(font.measure(style.text, "…")) + 1.0);
+        let shown = ui::fit(&font, style.text(), &text, width);
+        prop_assert!(font.measure(style.text(), &shown) <= width.max(font.measure(style.text(), "…")) + 1.0);
         if shown != text {
             let start = shown.strip_suffix('…').expect("ends with …");
             prop_assert!(text.starts_with(start));
@@ -79,11 +80,11 @@ proptest! {
         let style = UiStyle::new(&env);
         let font = style.font(&env).unwrap();
         let gap = 16.0;
-        let (t, v, value_width) = ui::fit_pair(&font, style.text, &title, &value, width, gap);
-        let tw = font.measure(style.text, &t);
-        prop_assert!((font.measure(style.text, &v) - value_width).abs() < 0.01);
+        let (t, v, value_width) = ui::fit_pair(&font, style.text(), &title, &value, width, gap);
+        let tw = font.measure(style.text(), &t);
+        prop_assert!((font.measure(style.text(), &v) - value_width).abs() < 0.01);
         // Two pixels of slack: each part has one for rounding.
-        let ellipses = 2.0 * font.measure(style.text, "…");
+        let ellipses = 2.0 * font.measure(style.text(), "…");
         prop_assert!(tw + value_width + gap <= width.max(ellipses + gap) + 2.0, "{tw} + {value_width}");
     }
 }
@@ -120,7 +121,7 @@ proptest! {
         let env = h.env();
         let style = UiStyle::new(&env);
         // At least as high as rows are, those with notes as noted rows.
-        let row = Rect { height: rect.height.max(style.row as u16), ..rect };
+        let row = Rect { height: rect.height.max(style.row()), ..rect };
         let noted = Rect { height: rect.height.max(style.noted_row() as u16), ..rect };
         let draws: [(Rect, Draw<'_>); 6] = [
             (row, &|c| ui::draw_value_row(c, &env, &style, row, focused, &title, &value)),
@@ -157,10 +158,10 @@ fn the_switch_sits_at_the_rows_end_and_the_title_ends_before_it() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
     let style = UiStyle::new(&env);
-    let row = Rect::new(0, 100, 480, style.row as u16);
+    let row = Rect::new(0, 100, 480, style.row());
     let switch = ui::switch_rect(&style, row);
     // Flush with the margin, where other rows end their values.
-    assert_eq!(switch.right() + style.margin, row.right());
+    assert_eq!(switch.right() + u32::from(style.margin()), row.right());
     assert_eq!(
         switch.y - row.y,
         (row.bottom() - switch.bottom()) as u16,
@@ -175,7 +176,7 @@ fn the_switch_sits_at_the_rows_end_and_the_title_ends_before_it() {
     // was shortened before it.
     let mut alone = support::frame(480, 800);
     ui::draw_switch(&mut alone.canvas(), &style, row, true, false);
-    let from = switch.x - style.gap as u16;
+    let from = switch.x - style.gap();
     let (view, alone) = (frame.view(), alone.view());
     for y in row.y..row.bottom() as u16 {
         for x in from..row.right() as u16 {
@@ -203,7 +204,7 @@ fn steppers_of_rows_above_each_other_line_up() {
         let row = Rect::new(0, 100 + n as u16 * 70, 480, 70);
         let (minus, plus) = ui::stepper(&env, &style, row, room).unwrap();
         columns.push((minus.x, plus.x));
-        assert_eq!(plus.right() + style.margin, row.right());
+        assert_eq!(plus.right() + u32::from(style.margin()), row.right());
         assert!(minus.right() < u32::from(plus.x));
         let mut frame = frame(480, 800);
         ui::draw_number(
@@ -259,6 +260,220 @@ fn buttons_draw_inside_their_frame_and_tell_what_they_are() {
     }
 }
 
+/// A screen drawing through a `ui::Ui` draws and tells the same as with
+/// the parts' functions, also in a part of the canvas.
+#[test]
+fn the_ui_context_draws_as_the_parts_do() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let (rect, area) = (Rect::new(40, 40, 120, 50), Rect::new(0, 120, 480, 120));
+    let parts = describe(480, 300, |c| {
+        ui::draw_button(c, &env, &style, rect, "OK", false, true);
+        ui::draw_message(c, &env, &style, area, "A message of a few words");
+    });
+    let with_ui = describe(480, 300, |c| {
+        let mut ui = ui::Ui::new(c, &env, &style);
+        ui.button(rect, "OK", false, true);
+        ui.message(area, "A message of a few words");
+    });
+    assert_eq!(parts.0, with_ui.0);
+    assert!(parts.1.view().data == with_ui.1.view().data);
+    // Clipped: nothing outside the part.
+    let (_, mut clipped) = describe(480, 300, |c| {
+        let mut ui = ui::Ui::new(c, &env, &style);
+        ui.clipped(Rect::new(0, 0, 100, 300))
+            .button(rect, "OK", true, false);
+    });
+    assert_eq!(drawn_outside(&mut clipped, Rect::new(0, 0, 100, 300)), None);
+}
+
+/// A label on one line draws as `draw_label` does, keeps to its area
+/// when too long, and sits where it is aligned.
+#[test]
+fn a_label_on_one_line_keeps_to_its_area_and_alignment() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let font = style.font(&env).unwrap();
+    let area = Rect::new(40, 40, 200, 40);
+    let size = style.text();
+    let text = "Words";
+    // As the parts' function draws it.
+    let (told, old) = describe(480, 200, |c| {
+        ui::draw_label(c, &font, size, f32::from(area.x), area, text, Color::BLACK);
+    });
+    let (said, new) = describe(480, 200, |c| {
+        ui::Label::new(text)
+            .px(size)
+            .color(Color::BLACK)
+            .draw(&mut ui::Ui::new(c, &env, &style), area);
+    });
+    assert_eq!(told, said);
+    assert!(old.view().data == new.view().data);
+    // From between pixels, in a font given, as `draw_label` too.
+    for x in [41.37, 100.5, 240.0, 300.0] {
+        let (told, old) = describe(480, 200, |c| {
+            ui::draw_label(c, &font, size, x, area, text, Color::BLACK);
+        });
+        let (said, new) = describe(480, 200, |c| {
+            ui::Label::new(text)
+                .font(font)
+                .px(size)
+                .color(Color::BLACK)
+                .draw_from(&mut ui::Ui::new(c, &env, &style), x, area);
+        });
+        assert_eq!(told, said);
+        assert!(old.view().data == new.view().data, "{x}");
+    }
+    // Too long: shortened within its area.
+    let long = "A label far too long for the room it is given here";
+    let (_, mut frame) = describe(480, 200, |c| {
+        let end = ui::Label::new(long).draw(&mut ui::Ui::new(c, &env, &style), area);
+        assert!(end <= f32::from(area.x + area.width) + 1.0, "{end}");
+    });
+    assert_eq!(drawn_outside(&mut frame, area), None);
+    // Centred and at the right.
+    let width = ui::Label::new(text).width(&env, &style);
+    for (align, start) in [
+        (
+            widgets::Align::Center,
+            f32::from(area.x) + (f32::from(area.width) - width) / 2.0,
+        ),
+        (
+            widgets::Align::Right,
+            f32::from(area.x + area.width) - width,
+        ),
+    ] {
+        let (_, frame) = describe(480, 200, |c| {
+            ui::Label::new(text)
+                .align(align)
+                .draw(&mut ui::Ui::new(c, &env, &style), area);
+        });
+        let left = Rect::new(
+            area.x,
+            area.y,
+            (start as u16).saturating_sub(area.x + 2),
+            area.height,
+        );
+        assert!(!drawn_in(&frame, left), "{align:?}");
+    }
+    // Smaller down to its least size rather than shortened.
+    let wide = ui::Label::new(long).width(&env, &style);
+    let (_, frame) = describe(480, 200, |c| {
+        let end = ui::Label::new(long)
+            .min(1.0)
+            .draw(&mut ui::Ui::new(c, &env, &style), area);
+        assert!(end <= f32::from(area.x + area.width) + 1.0);
+    });
+    assert!(wide > f32::from(area.width) && drawn_in(&frame, area));
+}
+
+/// A wrapped label takes the lines its height says, and where its area
+/// holds fewer its last line says there is more.
+#[test]
+fn a_wrapped_label_takes_its_lines_and_cuts_the_last() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let text = "Many words that need a few lines in a narrow area to be read whole";
+    let label = ui::Label::new(text).wrap();
+    let width = 160;
+    let height = label.height(&env, &style, width);
+    let one = ui::Label::new(text).height(&env, &style, width);
+    assert!(height > 2 * one - 2, "{height} {one}");
+    assert_eq!(
+        label.lines(2).height(&env, &style, width),
+        2 * (one - 1) + 1
+    );
+    // All of it in the height it says.
+    let area = Rect::new(10, 10, width, height);
+    let (said, mut frame) = describe(480, 400, |c| {
+        label.draw(&mut ui::Ui::new(c, &env, &style), area);
+    });
+    assert_eq!(said[0].label, text);
+    assert_eq!(drawn_outside(&mut frame, area), None);
+    // Two lines' room: the second ends in "…".
+    let short = Rect::new(10, 10, width, 2 * one);
+    let (said, mut frame) = describe(480, 400, |c| {
+        label.draw(&mut ui::Ui::new(c, &env, &style), short);
+    });
+    assert!(said[0].label.ends_with('…'), "{:?}", said[0].label);
+    assert_eq!(drawn_outside(&mut frame, short), None);
+}
+
+/// A row as a value draws and measures as the rows' functions do, and
+/// tells what a point of it is on.
+#[test]
+fn a_row_value_draws_measures_and_hits_as_its_parts() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let width = 440;
+    let note = "A note of a few words below the title";
+    let same = |row: ui::Row<'_>, old: &dyn Fn(&mut paperpaw_sdk::Canvas<'_>, Rect)| {
+        let rect = Rect::new(20, 20, width, row.height(&env, &style, width));
+        let (told, before) = describe(480, 400, |c| old(c, rect));
+        let (said, after) = describe(480, 400, |c| {
+            row.draw(&mut ui::Ui::new(c, &env, &style), rect)
+        });
+        assert_eq!(told, said, "{row:?}");
+        assert!(before.view().data == after.view().data, "{row:?}");
+    };
+    for focused in [false, true] {
+        for note in ["", note] {
+            let row = ui::Row::value("Title", "Value").note(note).focused(focused);
+            assert_eq!(
+                row.height(&env, &style, width),
+                ui::noted_row_height(&env, &style, width, "Title", "Value", note)
+            );
+            same(row, &|c, r| {
+                ui::draw_noted_row(c, &env, &style, r, focused, "Title", "Value", note)
+            });
+            let row = ui::Row::switch("Title", true).note(note).focused(focused);
+            assert_eq!(
+                row.height(&env, &style, width),
+                ui::switch_row_height(&env, &style, width, "Title", note)
+            );
+            same(row, &|c, r| {
+                ui::draw_switch_row(c, &env, &style, r, focused, "Title", note, true)
+            });
+        }
+    }
+    let row = ui::Row::number("Size", "12", "000").step_focus(Some(true));
+    same(row, &|c, r| {
+        ui::draw_number(c, &env, &style, r, "Size", "12", "000", Some(true))
+    });
+    // What a point is on.
+    let rect = Rect::new(
+        20,
+        20,
+        width,
+        ui::Row::switch("Wi-Fi", true).height(&env, &style, width),
+    );
+    let switch = ui::switch_rect(&style, rect);
+    let on = ui::Row::switch("Wi-Fi", true);
+    assert_eq!(
+        on.hit(&env, &style, rect, middle(switch)),
+        Some(ui::RowPart::Switch)
+    );
+    assert_eq!(
+        on.hit(&env, &style, rect, Point::new(30, 30)),
+        Some(ui::RowPart::Row)
+    );
+    assert_eq!(on.hit(&env, &style, rect, Point::new(5, 5)), None);
+    let (minus, plus) = ui::value_stepper(&env, &style, rect, "000", "12").unwrap();
+    let number = ui::Row::number("Size", "12", "000");
+    assert_eq!(
+        number.hit(&env, &style, rect, middle(minus)),
+        Some(ui::RowPart::Minus)
+    );
+    assert_eq!(
+        number.hit(&env, &style, rect, middle(plus)),
+        Some(ui::RowPart::Plus)
+    );
+}
+
 /// A section's heading too long for its row ends, shortened, at the
 /// right margin as the rows' values do: its last letter's ink stays in
 /// the row (it reached a pixel past it, 413 in a row 413 wide).
@@ -268,7 +483,7 @@ fn a_long_heading_ends_at_the_right_margin() {
         let h = Harness::new(device);
         let env = h.env();
         let style = UiStyle::new(&env);
-        let row = Rect::new(0, 0, 413, style.row as u16);
+        let row = Rect::new(0, 0, 413, style.row());
         let mut frame = frame(480, 800);
         ui::draw_heading(
             &mut frame.canvas(),
@@ -283,7 +498,7 @@ fn a_long_heading_ends_at_the_right_margin() {
             .rev()
             .find(|&x| (row.y..row.y + row.height).any(|y| view.pixel(x, y) != support::PAPER))
             .unwrap();
-        assert!(last < 413 - style.margin as u16 + 2, "ends at {last}");
+        assert!(last < 413 - style.margin() + 2, "ends at {last}");
     }
 }
 
@@ -299,9 +514,7 @@ fn a_progress_bar_fills_inside_its_track() {
         let env = h.env();
         let base = UiStyle::new(&env);
         for (corner, pill) in [(0, false), (env.metrics.tenth_mm(8), false), (0, true)] {
-            let mut style = base;
-            style.corner = corner;
-            style.pill = pill;
+            let style = base.with_corner(corner as u16).with_pill(pill);
             for (width, height) in [(300u16, 24u16), (120, 12), (400, 40), (60, 9)] {
                 let area = Rect::new(20, 30, width, height);
                 // The track's shape: what a filled track would cover.
@@ -347,8 +560,8 @@ fn row_icons_are_centred_by_their_ink() {
         let h = Harness::new(device);
         let env = h.env();
         let style = UiStyle::new(&env);
-        let size = style.text * ui::ICON_SCALE;
-        let column = f32::from(style.margin as u16) + size / 2.0;
+        let size = style.text() * ui::ICON_SCALE;
+        let column = f32::from(style.margin()) + size / 2.0;
         let room = ui::icon_room(&env, &style, true);
         let mut seen = 0;
         for icon in [
@@ -364,7 +577,7 @@ fn row_icons_are_centred_by_their_ink() {
                 continue;
             }
             seen += 1;
-            let row = Rect::new(0, 100, 480, style.row as u16);
+            let row = Rect::new(0, 100, 480, style.row());
             let mut frame = frame(480, 800);
             ui::draw_row_icon(
                 &mut frame.canvas(),
@@ -415,7 +628,7 @@ proptest! {
         let env = h.env();
         let style = UiStyle::new(&env);
         let header = Header::new(&env, &style, back);
-        let paging = (pages > 0).then_some((page % pages.max(1), pages));
+        let paging = (pages > 0).then_some(Paging::new(page % pages.max(1), pages));
         let a = header.area();
         let actions_across: Vec<Option<paperpaw_sdk::Id>> =
             across(a).map(|p| header.tap(&env, &style, p, paging)).collect();
@@ -438,7 +651,7 @@ proptest! {
         prop_assert_eq!(seen, expected);
         // The title is where no arrow is, from the back arrow or the
         // margin on.
-        let left = if back { a.height } else { style.margin as u16 };
+        let left = if back { a.height } else { style.margin() };
         for (p, action) in across(a).zip(&actions_across) {
             let title = action.is_none() && p.x >= i32::from(left);
             prop_assert_eq!(header.on_title(&env, &style, p, paging), title, "{:?}", p);
@@ -447,7 +660,7 @@ proptest! {
         prop_assert_eq!(header.tap(&env, &style, Point::new(5, a.bottom() as i32 + 1), paging), None);
         // Drawn inside the header, the title shortened before the arrows.
         let (described, mut frame) = describe(480, 800, |c| {
-            header.draw(c, &env, &style, &title, Some("by title"), paging);
+            header.draw(&mut paperpaw_sdk::ui::Ui::new(c, &env, &style), &title, Some("by title"), paging);
         });
         prop_assert_eq!(drawn_outside(&mut frame, a), None);
         prop_assert_eq!(described[0].role, Role::Heading);
@@ -466,12 +679,12 @@ proptest! {
         let env = h.env();
         let style = UiStyle::new(&env);
         let header = Header::new(&env, &style, back);
-        let paging = Some((page % pages, pages));
+        let paging = Some(Paging::new(page % pages, pages));
         for p in across(header.area()) {
             prop_assert_eq!(header.tap(&env, &style, p, paging), None);
         }
         let (described, mut frame) = describe(480, 800, |c| {
-            header.draw(c, &env, &style, "Library", None, paging);
+            header.draw(&mut paperpaw_sdk::ui::Ui::new(c, &env, &style), "Library", None, paging);
         });
         prop_assert_eq!(drawn_outside(&mut frame, header.area()), None);
         let label = format!("{} / {}", page % pages + 1, pages);
@@ -505,13 +718,18 @@ fn the_header_keeps_to_the_content_margins() {
         let area = header.area();
         let middle = area.y + area.height / 4..area.y + area.height * 3 / 4;
         let mut arrows = frame(480, 800);
-        header.draw(&mut arrows.canvas(), &env, &style, "", None, Some((1, 3)));
+        header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(&mut arrows.canvas(), &env, &style),
+            "",
+            None,
+            Some(Paging::new(1, 3)),
+        );
         let (first, last) = ink_columns(&arrows, middle.clone());
-        let margin = style.margin as u16;
+        let margin = style.margin();
         assert_eq!(first, margin, "back arrow at {dpi} dpi");
         assert_eq!(last, 480 - margin - 1, "next arrow at {dpi} dpi");
         // A list icon, as rows draw it.
-        let row = Rect::new(0, 100, 480, style.row as u16);
+        let row = Rect::new(0, 100, 480, style.row());
         let mut icon = frame(480, 800);
         let room = ui::icon_room(&env, &style, true);
         let label = ui::draw_row_icon(
@@ -526,14 +744,19 @@ fn the_header_keeps_to_the_content_margins() {
         let (icon_first, _) = ink_columns(&icon, row.y..row.y + row.height);
         // An icon's box begins at the margin, its drawing a little after
         // (the icon's own side bearing), never before.
-        let bearing = (style.text * ui::ICON_SCALE / 4.0) as u16;
+        let bearing = (style.text() * ui::ICON_SCALE / 4.0) as u16;
         assert!(
             (first..=first + bearing).contains(&icon_first),
             "icon {icon_first}, arrow {first} at {dpi} dpi"
         );
         // The title where the label after the icon begins.
         let (described, _) = describe(480, 800, |c| {
-            header.draw(c, &env, &style, "Library", None, None);
+            header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(c, &env, &style),
+                "Library",
+                None,
+                None,
+            );
         });
         let title = described
             .iter()
@@ -572,7 +795,12 @@ fn header_titles_are_centred_by_their_capitals() {
         let height = header.area().height;
         let title = |text: &str| {
             let mut shot = frame(480, 800);
-            header.draw(&mut shot.canvas(), &env, &style, text, None, None);
+            header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(&mut shot.canvas(), &env, &style),
+                text,
+                None,
+                None,
+            );
             ink_rows(&shot, 0..240)
         };
         let (caps, base) = title("HELL");
@@ -582,7 +810,7 @@ fn header_titles_are_centred_by_their_capitals() {
         // of the letters (gray) one more.
         let (above, below) = (caps, height - 1 - base);
         assert!(
-            above.abs_diff(below) <= style.line as u16 + 2,
+            above.abs_diff(below) <= style.line() + 2,
             "capitals {caps}..{base} in {height} at {dpi} dpi"
         );
     }
@@ -595,7 +823,12 @@ fn a_focused_header_note_is_told_as_a_focused_button() {
     let style = UiStyle::new(&env);
     let header = Header::new(&env, &style, true).note_focused(true);
     let (described, _) = describe(480, 800, |c| {
-        header.draw(c, &env, &style, "Library", Some("by author"), None);
+        header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(c, &env, &style),
+            "Library",
+            Some("by author"),
+            None,
+        );
     });
     let note = described.iter().find(|d| d.role == Role::Button).unwrap();
     assert_eq!(note.label, "by author");
@@ -612,7 +845,12 @@ fn a_header_note_is_a_button_only_where_it_does_something() {
     let mut header = Header::new(&env, &style, true);
     let note = |header: &Header| {
         let (described, _) = describe(480, 800, |c| {
-            header.draw(c, &env, &style, "Search", Some("3 hits"), None);
+            header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(c, &env, &style),
+                "Search",
+                Some("3 hits"),
+                None,
+            );
         });
         described
     };
@@ -632,7 +870,10 @@ fn a_header_note_is_a_button_only_where_it_does_something() {
         .into_iter()
         .find(|d| d.role == Role::Button && d.label == "3 hits")
         .unwrap();
-    assert!(u32::from(button.area.height) >= style.finger, "{button:?}");
+    assert!(
+        u32::from(button.area.height) >= u32::from(style.finger()),
+        "{button:?}"
+    );
 }
 
 #[test]
@@ -658,9 +899,13 @@ fn the_pager_turns_by_halves_on_touch_screens_only() {
             assert_eq!(pager.tap(right), None);
         }
         assert_eq!(pager.tap(outside), None);
-        for page in [(0, 1), (0, 3), (2, 3), (9, 3)] {
+        for (page, pages) in [(0, 1), (0, 3), (2, 3), (9, 3)] {
+            let page = Paging::new(page, pages);
             let mut frame = frame(480, 800);
-            pager.draw(&mut frame.canvas(), &env, &style, page);
+            pager.draw(
+                &mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style),
+                page,
+            );
             assert_eq!(drawn_outside(&mut frame, area), None, "{page:?}");
         }
     }
@@ -739,7 +984,7 @@ fn hint_ink(frame: &paperpaw_graphics::Framebuffer, area: Rect) -> Vec<u16> {
 fn long_hints_side_by_side_stay_apart() {
     let h = Harness::new(Device::BUTTONS);
     let env = h.env();
-    let gap = UiStyle::new(&env).gap as u16;
+    let gap = UiStyle::new(&env).gap();
     let height = ui::button_hints_height(&env);
     let area = Rect::new(0, 800 - height, 480, height);
     let long = |c: char| Hint::Text(std::iter::repeat_n(c, 30).collect());
@@ -822,9 +1067,14 @@ fn the_page_number_is_hit_where_it_is_drawn() {
     let env = h.env();
     let style = UiStyle::new(&env);
     let header = Header::new(&env, &style, true);
-    let page = Some((1, 30));
+    let page = Some(Paging::new(1, 30));
     let (described, _) = describe(480, 800, |c| {
-        header.draw(c, &env, &style, "Reading", None, page);
+        header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(c, &env, &style),
+            "Reading",
+            None,
+            page,
+        );
     });
     let number = described
         .iter()
@@ -845,7 +1095,7 @@ fn noted_rows_grow_with_their_lines() {
     let style = UiStyle::new(&h.env());
     assert_eq!(style.noted_row_of(ui::NOTE_LINES), style.noted_row());
     assert!(style.noted_row_of(1) < style.noted_row());
-    assert!(style.noted_row_of(1) > style.row * 3 / 4);
+    assert!(style.noted_row_of(1) > u32::from(style.row()) * 3 / 4);
 }
 
 /// A QR code takes whole pixels a module, square, inside its area, with
@@ -922,8 +1172,7 @@ fn a_look_paints_the_parts_and_keeps_what_they_say() {
         (shown, said)
     };
     let plain = UiStyle::new(&env);
-    let mut looked = plain;
-    looked.look = Look::of(&SQUARE);
+    let looked = plain.with_look(Look::of(&SQUARE));
     let (before, said_before) = at(&plain);
     let (after, said_after) = at(&looked);
     assert_eq!(after, (SWITCH, FOCUS, BUTTON));
@@ -942,32 +1191,32 @@ fn the_palette_sets_the_grays_the_parts_draw_in() {
     use paperpaw_sdk::Color;
     use paperpaw_sdk::ui::{Ink, Palette, TextRole};
     let palette = Palette::parse("muted=60 line=100 bad nope=3 faint=x note=300");
-    assert_eq!(palette.gray(Ink::Muted), 60);
-    assert_eq!(palette.gray(Ink::Line), 100);
+    assert_eq!(palette.color(Ink::Muted), Color::gray(60));
+    assert_eq!(palette.color(Ink::Line), Color::gray(100));
     // What it does not set, or sets wrongly, keeps its default.
     for ink in [Ink::Faint, Ink::Note, Ink::Rule, Ink::Text, Ink::Paper] {
-        assert_eq!(palette.gray(ink), Palette::DEFAULT.gray(ink), "{ink:?}");
+        assert_eq!(palette.color(ink), Palette::DEFAULT.color(ink), "{ink:?}");
     }
     assert_eq!(Palette::parse(""), Palette::DEFAULT);
 
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
-    let mut style = UiStyle::new(&env);
-    style.separators = ui::Separators::Line;
-    style.palette = palette;
+    let style = UiStyle::new(&env)
+        .with_separators(ui::Separators::Line)
+        .with_palette(palette);
     let row = Rect::new(0, 0, 480, 80);
     let mut lined = frame(480, 100);
     ui::draw_separator(&mut lined.canvas(), &style, row, 0);
-    let y = row.height - style.line as u16;
+    let y = row.height - style.line();
     assert_eq!(lined.view().pixel(240, y), Color::gray(100));
     assert_eq!(style.ink(Ink::Muted), Color::gray(60));
     // Strong contrast draws gray text black, not the lines.
-    style.strong = true;
+    let style = style.with_strong(true);
     assert_eq!(style.ink(Ink::Muted), Color::BLACK);
     assert_eq!(style.ink(Ink::Line), Color::gray(100));
     // Text of one kind is as large everywhere.
-    assert_eq!(style.size(TextRole::Body), style.text);
-    assert_eq!(style.size(TextRole::Headline), style.title * 1.6);
+    assert_eq!(style.size(TextRole::Body), style.text());
+    assert_eq!(style.size(TextRole::Headline), style.title() * 1.6);
 }
 
 /// Semantic icons: what they say has the drawing a theme names for it,
@@ -1024,16 +1273,20 @@ fn setting_titles_are_never_cut_for_their_control() {
     const NUMBER: &str = "Offline below (%)";
     const SWITCH: &str = "Pictures in night mode too";
     let specs = [
-        SettingSpec::fixed_number("t.long", NUMBER, 0, 100, 20, groups::OTHER),
-        SettingSpec::fixed_switch("t.switch", SWITCH, false, groups::OTHER),
+        SettingSpec::number("t.long", NUMBER, 0, 100, 20, groups::OTHER),
+        SettingSpec::switch("t.switch", SWITCH, false, groups::OTHER),
     ];
-    let short = SettingSpec::fixed_number("t.short", "Size", 0, 100, 20, groups::OTHER);
+    let short = SettingSpec::number("t.short", "Size", 0, 100, 20, groups::OTHER);
     for device in [Device::TOUCH, Device::BUTTONS] {
         let h = Harness::new(device);
         let env = h.env();
         let style = UiStyle::new(&env);
         for noted in [false, true] {
-            let row = if noted { style.noted_row() } else { style.row };
+            let row = if noted {
+                style.noted_row()
+            } else {
+                u32::from(style.row())
+            };
             for spec in &specs {
                 let side = ui::setting_row(&style, spec, row, noted);
                 let height = ui::setting_height(&env, &style, spec, 480, "", row, noted);
@@ -1078,7 +1331,7 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
     use paperpaw_sdk::{Choices, SettingSpec, SettingValue};
     const OPTIONS: [&str; 2] = ["Off", "Only while the device is charging"];
     let mut h = Harness::new(Device::TOUCH);
-    let spec = SettingSpec::fixed_choice("t.when", "Sync", &OPTIONS, "Off", groups::OTHER);
+    let spec = SettingSpec::choice("t.when", "Sync", &OPTIONS, "Off", groups::OTHER);
     assert!(matches!(
         spec.kind,
         paperpaw_sdk::SettingKind::Choice(Choices::Fixed(_))
@@ -1092,7 +1345,13 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
         let env = h.env();
         let style = UiStyle::new(&env);
         seen.push(ui::row_lines(
-            &env, &style, &spec, 480, "", style.row, false,
+            &env,
+            &style,
+            &spec,
+            480,
+            "",
+            u32::from(style.row()),
+            false,
         ));
     }
     assert_eq!(seen[0], seen[1]);
@@ -1103,7 +1362,7 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
     // On and off shown as a value (a switch with an editor of its own).
     static EDITED: paperpaw_sdk::SettingExtra =
         paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::Id::new_static("t.editor"));
-    let spec = SettingSpec::fixed_switch("t.on", "Sync", false, groups::OTHER).with_extra(&EDITED);
+    let spec = SettingSpec::switch("t.on", "Sync", false, groups::OTHER).with_extra(&EDITED);
     h.settings.define(spec.clone()).unwrap();
     // At every width, where one of them fits beside the title and the
     // other not as well.
@@ -1114,7 +1373,13 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
             let env = h.env();
             let style = UiStyle::new(&env);
             seen.push(ui::row_lines(
-                &env, &style, &spec, width, "", style.row, false,
+                &env,
+                &style,
+                &spec,
+                width,
+                "",
+                u32::from(style.row()),
+                false,
             ));
         }
         assert_eq!(seen[0], seen[1], "{width} px");
@@ -1129,7 +1394,7 @@ fn a_numbers_steps_are_hit_where_they_are_drawn() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
     let style = UiStyle::new(&env);
-    let rect = Rect::new(0, 100, 480, style.touch_row(style.row) as u16);
+    let rect = Rect::new(0, 100, 480, style.touch_row(u32::from(style.row())) as u16);
     for (room, value) in [("000 %", "• 20 %"), ("100 %", "• 9"), ("", "12345 px")] {
         let (described, _) = describe(480, 800, |c| {
             ui::draw_number(c, &env, &style, rect, "Size", value, room, None);
@@ -1162,7 +1427,7 @@ fn a_switch_without_a_note_is_measured_as_drawn() {
         "Pictures in night",
         "Pictures in night mode",
     ] {
-        let spec = SettingSpec::fixed_switch("t.switch", title, false, groups::OTHER);
+        let spec = SettingSpec::switch("t.switch", title, false, groups::OTHER);
         assert!(spec.description.is_none());
         let lines = ui::row_lines(&env, &style, &spec, 480, "", row, true);
         let rect = Rect::new(0, 100, 480, lines.height);

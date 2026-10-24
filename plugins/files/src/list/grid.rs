@@ -41,8 +41,8 @@ impl Grid {
     /// The grid of a page `height` pixels high.
     pub(crate) fn new(env: &Env<'_>, style: &UiStyle, sizes: &Sizes, height: u16) -> Grid {
         let width = env.device.display.width;
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         let columns = if sizes.compact {
             3
         } else {
@@ -90,7 +90,7 @@ impl Grid {
     /// at the top of the cell.
     fn focus_box(&self, cell: Rect, sizes: &Sizes, style: &UiStyle) -> Rect {
         let lines = if sizes.compact { 1 } else { 2 };
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let height = self.cover.1 + 2 * self.pad + gap / 3 + lines * sizes.small_line;
         Rect::new(
             cell.x,
@@ -104,12 +104,12 @@ impl Grid {
 /// Draws the focus as every list does ([`ui::draw_focus`]), as a box
 /// with the style's corners around a cover.
 fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect) {
-    let radius = style.corner;
-    let ring = (style.line * 2).max(3);
-    match style.focus {
+    let radius = u32::from(style.corner());
+    let ring = (u32::from(style.line()) * 2).max(3);
+    match style.focus() {
         Focus::Fill => canvas.fill_round(area, radius, Color::BLACK),
-        Focus::Soft if style.grays > 2 => {
-            let gray = if style.grays >= 16 { 215 } else { 170 };
+        Focus::Soft if !style.black_and_white() => {
+            let gray = if style.smooth_grays() { 215 } else { 170 };
             canvas.fill_round(area, radius, Color::gray(gray));
         }
         _ => canvas.stroke_round(area, ring, radius, Color::BLACK),
@@ -119,14 +119,8 @@ fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect) {
 /// Draws a book's cell: its cover (as a stack for `count` books of a
 /// series), how far it is read on it, and its title (the series' name
 /// for a stack) below.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "its inputs are separate things; a struct of them would serve this call alone"
-)]
 pub(crate) fn draw_cell(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
+    ui: &mut ui::Ui<'_>,
     sizes: &Sizes,
     grid: &Grid,
     cell: Rect,
@@ -134,18 +128,19 @@ pub(crate) fn draw_cell(
     book: &Loaded,
     count: u16,
 ) {
-    let Some(font) = style.font(env) else {
+    let style = ui.style();
+    if ui.font().is_none() {
         return;
-    };
-    canvas
+    }
+    ui.canvas()
         .describe(Role::Row, &book.spoken, cell)
         .focused(focused);
     let around = grid.focus_box(cell, sizes, style);
     if focused {
-        draw_focus(canvas, style, around);
+        draw_focus(ui.canvas(), style, around);
     }
     let ink = style.focus_ink(focused);
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let (w, h) = grid.cover;
     let mut cover = Rect::new(around.x + grid.pad, around.y + grid.pad, w, h);
     let stack = count > 1;
@@ -162,12 +157,13 @@ pub(crate) fn draw_cell(
                 cover.width,
                 cover.height,
             );
+            let canvas = ui.canvas();
             canvas.fill_round(behind, radius, style.focus_paper(focused));
             canvas.stroke_round(behind, line, radius, ink);
         }
     }
-    rows::draw_cover(canvas, env, style, cover, book, ink);
-    draw_marks(canvas, env, style, sizes, cover, book, count);
+    rows::draw_cover(ui, cover, book, ink);
+    draw_marks(ui, sizes, cover, book, count);
 
     // The title (or the series), on one or two lines below.
     let x = around.x + grid.pad;
@@ -175,7 +171,10 @@ pub(crate) fn draw_cell(
     let mut y = around.y + grid.pad + h + gap / 3;
     for line in &book.lines {
         let area = Rect::new(x, y, width, sizes.small_line);
-        ui::draw_label(canvas, &font, style.small, f32::from(x), area, line, ink);
+        ui::Label::new(line)
+            .px(style.small())
+            .color(ink)
+            .draw_from(ui, f32::from(x), area);
         y += sizes.small_line;
     }
 }
@@ -194,7 +193,7 @@ pub(crate) fn prepare_cell(
     let lines = if sizes.compact { 1 } else { 2 };
     let width = grid.column.saturating_sub(2 * grid.pad);
     let title = if count > 1 { &book.series } else { &book.title };
-    book.lines = rows::wrap_lines(env, style, style.small, title, f32::from(width), lines);
+    book.lines = rows::wrap_lines(env, style, style.small(), title, f32::from(width), lines);
     if count > 1 {
         book.stack = env.i18n.plural("files.books", i64::from(count), &[]);
         book.spoken = rows::spoken(&[&book.series, &book.stack]);
@@ -206,16 +205,9 @@ pub(crate) fn prepare_cell(
 
 /// Draws on `cover` how far `book` is read (a bar at its foot, a check
 /// when finished, "New"), or for a stack how many books it holds.
-fn draw_marks(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    sizes: &Sizes,
-    cover: Rect,
-    book: &Loaded,
-    count: u16,
-) {
-    let gap = style.gap as u16;
+fn draw_marks(ui: &mut ui::Ui<'_>, sizes: &Sizes, cover: Rect, book: &Loaded, count: u16) {
+    let (env, style) = (ui.env(), ui.style());
+    let gap = style.gap();
     let inset = (gap / 3).max(2);
     let line = sizes.small_line;
     let foot = Rect::new(
@@ -226,9 +218,7 @@ fn draw_marks(
     );
     if count > 1 {
         rows::draw_tag(
-            canvas,
-            env,
-            style,
+            ui,
             foot.x,
             foot,
             &book.stack,
@@ -243,11 +233,11 @@ fn draw_marks(
             // A check in a dark disc, at the foot's end.
             let d = line;
             let disc = Rect::new((foot.x + foot.width).saturating_sub(d), foot.y, d, d);
-            canvas.fill_round(disc, u32::from(d / 2), Color::BLACK);
-            let size = style.small * 0.9;
+            ui.canvas().fill_round(disc, u32::from(d / 2), Color::BLACK);
+            let size = style.small() * 0.9;
             let w = ui::icon_width(env, "check", size);
             let x = f32::from(disc.x) + (f32::from(d) - w) / 2.0;
-            ui::draw_icon(canvas, env, "check", size, x, disc, Color::WHITE);
+            ui.icon("check", size, x, disc, Color::WHITE);
         }
         p if p > 0 => {
             // A light band with the bar, so it reads on any cover.
@@ -258,7 +248,7 @@ fn draw_marks(
                 foot.height / 2,
             );
             let radius = u32::from(band.height / 2);
-            canvas.fill_round(band, radius, Color::WHITE);
+            ui.canvas().fill_round(band, radius, Color::WHITE);
             let pad = (band.height.saturating_sub(sizes.bar)) / 2;
             let bar = Rect::new(
                 band.x + pad,
@@ -266,21 +256,11 @@ fn draw_marks(
                 band.width.saturating_sub(2 * pad),
                 band.height,
             );
-            rows::draw_bar(canvas, style, sizes, bar.x, bar, bar.width, p, Color::BLACK);
+            rows::draw_bar(ui, sizes, bar.x, bar, bar.width, p, Color::BLACK);
         }
         _ if book.new => {
             let label = env.i18n.tr("files.list.new");
-            rows::draw_tag(
-                canvas,
-                env,
-                style,
-                foot.x,
-                foot,
-                label,
-                true,
-                Color::BLACK,
-                Color::WHITE,
-            );
+            rows::draw_tag(ui, foot.x, foot, label, true, Color::BLACK, Color::WHITE);
         }
         _ => {}
     }

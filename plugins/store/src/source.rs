@@ -52,52 +52,51 @@ impl Screen for SourceScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("store.source");
-        self.header.draw(canvas, env, &style, title, None, None);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, None);
         let Some(font) = style.font(env) else {
             return;
         };
         let display = env.device.display;
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let width = display.width.saturating_sub(2 * margin);
-        let mut y = self.header.area().height + style.gap as u16 * 2;
+        let mut y = self.header.area().height + style.gap() * 2;
         // Who it is from, then the code, then the address in full.
-        let line = font.line_metrics(style.text).line_height as u16;
+        let line = font.line_metrics(style.text()).line_height as u16;
         let name = Rect::new(margin, y, width, line);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.text,
-            f32::from(margin),
-            name,
-            &self.title,
-            Color::BLACK,
-        );
-        y += line + style.gap as u16;
+        ui::Label::new(&self.title)
+            .px(style.text())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, f32::from(margin), name);
+        y += line + style.gap();
         if let Some(qr) = &self.qr {
             // Three quarters of the width, at most half the height.
             let side = (width * 3 / 4).min(display.height / 2);
             let area = Rect::new((display.width - side) / 2, y, side, side);
-            if let Some(drawn) = ui::draw_qr(canvas, qr, area) {
-                y = drawn.y + drawn.height + style.gap as u16;
+            if let Some(drawn) = ui::draw_qr(ui.canvas(), qr, area) {
+                y = drawn.y + drawn.height + style.gap();
             }
         }
         let shown = self.url.strip_prefix("https://").unwrap_or(&self.url);
-        let small = font.line_metrics(style.small).line_height;
+        let small = font.line_metrics(style.small()).line_height;
         for text in [shown, env.i18n.tr("store.source.help")] {
-            for range in font.wrap(style.small, text, f32::from(width)) {
+            for range in font.wrap(style.small(), text, f32::from(width)) {
                 let part = text[range].trim_end();
-                let x =
-                    f32::from(margin) + (f32::from(width) - font.measure(style.small, part)) / 2.0;
+                let x = f32::from(margin)
+                    + (f32::from(width) - font.measure(style.small(), part)) / 2.0;
                 let at = Rect::new(margin, y, width, small as u16);
                 let color = if text == shown {
                     Color::BLACK
                 } else {
-                    style.faint(80)
+                    style.faint(ui::Ink::Detail)
                 };
-                ui::draw_label(canvas, &font, style.small, x, at, part, color);
+                ui::Label::new(part)
+                    .px(style.small())
+                    .color(color)
+                    .draw_from(&mut ui, x, at);
                 y += small as u16;
             }
-            y += style.gap as u16;
+            y += style.gap();
         }
     }
 
@@ -110,7 +109,7 @@ impl Screen for SourceScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         Handled::No

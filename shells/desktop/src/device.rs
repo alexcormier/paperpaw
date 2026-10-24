@@ -95,6 +95,9 @@ impl Storage for Card {
     fn size(&self, path: &str) -> Result<u64, StorageError> {
         self.on(|s| s.size(path))
     }
+    fn modified(&self, path: &str) -> Option<i64> {
+        self.on(|s| s.modified(path))
+    }
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         self.on(|s| s.write(path, data))
     }
@@ -668,7 +671,9 @@ impl Device {
                     }
                     if let Err(e) = call.load_body(self.kernel.storage()) {
                         let now = self.now();
-                        let failed = paperpaw_core::HttpResponse::failed(call.id, &e.to_string());
+                        let error = paperpaw_core::sdk::HttpError::Io;
+                        let failed =
+                            paperpaw_core::HttpResponse::failed(call.id, error, &e.to_string());
                         let effects = budget::track(|| self.kernel.http_response(now, failed));
                         self.execute(effects);
                         continue;

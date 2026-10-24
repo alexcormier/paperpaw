@@ -54,7 +54,7 @@ impl PlaceScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
@@ -155,7 +155,7 @@ fn outcome(reply: &HttpReply, name: String) -> (Vec<Place>, Search) {
     if !reply.ok() {
         return (Vec::new(), Search::Failed);
     }
-    let places = data::parse_places(reply.body.as_bytes());
+    let places = data::parse_places(&reply.body);
     let search = if places.is_empty() {
         Search::Nothing(name)
     } else {
@@ -167,31 +167,38 @@ fn outcome(reply: &HttpReply, name: String) -> (Vec<Place>, Search) {
 impl Screen for PlaceScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.len(env);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("weather.setting.place"),
             None,
             self.list.paging(len),
         );
         let places = &self.places;
         let note = self.note(env);
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                if row == 0 {
-                    let title = env.i18n.tr("weather.place.search");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", &note);
-                } else if let Some(place) = places.get(row - 1) {
-                    let note = place.whereabouts();
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, &place.name, "", &note);
-                } else {
-                    let title = env.i18n.tr("weather.place.none");
-                    let note = env.i18n.tr("weather.place.none.help");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "", note);
-                }
-            });
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            if row == 0 {
+                let title = env.i18n.tr("weather.place.search");
+                ui::Row::value(title, "›")
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            } else if let Some(place) = places.get(row - 1) {
+                let note = place.whereabouts();
+                ui::Row::value(&place.name, "")
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            } else {
+                let title = env.i18n.tr("weather.place.none");
+                let note = env.i18n.tr("weather.place.none.help");
+                ui::Row::value(title, "")
+                    .note(note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            }
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -228,7 +235,7 @@ impl Screen for PlaceScreen {
                 self.header
                     .tap(&env, &self.style, gesture.start, self.list.paging(len))
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(row) = self.list.hit(gesture.start, len) else {
@@ -255,12 +262,11 @@ impl Screen for PlaceScreen {
                 self.search = Search::NoNetwork;
             } else {
                 let url = data::search_url(&name, env.i18n.language());
-                let mut request = HttpRequest::new("GET", &url, SEARCHED);
-                request.headers.push((
+                let request = HttpRequest::new("GET", &url, SEARCHED).header(
                     String::from("User-Agent"),
                     String::from("PaperPaw/0.1 (e-reader)"),
-                ));
-                cx.command(Command::Http(request));
+                );
+                cx.command(Command::http(request));
                 self.search = Search::Searching(name);
             }
             Self::redraw(cx);
@@ -286,7 +292,12 @@ mod tests {
         let (places, search) = outcome(&reply(200, r#"{"generationtime_ms":0.3}"#), name());
         assert!(places.is_empty());
         assert_eq!(search, Search::Nothing(name()));
-        let (_, search) = outcome(&HttpReply::failed("no network", Params::new()), name());
+        let failed = HttpReply::failed(
+            paperpaw_sdk::HttpError::NoNetwork,
+            "no network",
+            Params::new(),
+        );
+        let (_, search) = outcome(&failed, name());
         assert_eq!(search, Search::Failed);
     }
 }

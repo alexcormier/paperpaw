@@ -180,22 +180,25 @@ impl Themes {
 impl Screen for Themes {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.themes.len();
         let title = env.i18n.tr(self.chooser.title());
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         let current = applied(env, self.chooser);
         let themes = &self.themes;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let (id, name, about) = &themes[index];
-                let mark = if Some(id) == current.as_ref() {
-                    "•"
-                } else {
-                    ""
-                };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, name, mark, about);
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (id, name, about) = &themes[index];
+            let mark = if Some(id) == current.as_ref() {
+                "•"
+            } else {
+                ""
+            };
+            ui::Row::value(name, mark)
+                .note(about)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -219,7 +222,7 @@ impl Screen for Themes {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.themes.len()) {

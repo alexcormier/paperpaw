@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar};
 
@@ -27,16 +27,16 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.favourites.align", ID, Align::Center),
     widgets::frame_spec("widgets.favourites.frame", ID, Frame::None),
     widgets::padding_spec("widgets.favourites.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.favourites.size", ID, Size::Medium, false),
-    SettingSpec::fixed_choice(
+    widgets::size_spec("widgets.favourites.size", ID, TextSize::Medium, false),
+    SettingSpec::choice(
         "widgets.favourites.layout",
         "widgets.books.setting.layout",
         &LAYOUTS,
         LAYOUTS[0],
         ID,
     )
-    .described("widgets.favourites.layout.help"),
-    SettingSpec::fixed_number(
+    .description("widgets.favourites.layout.help"),
+    SettingSpec::number(
         "widgets.favourites.count",
         "widgets.books.setting.count",
         1,
@@ -44,7 +44,7 @@ static SETTINGS: [SettingSpec; 10] = [
         8,
         ID,
     )
-    .described("widgets.setting.count.help"),
+    .description("widgets.setting.count.help"),
     widgets::part_spec(
         "widgets.favourites.caption",
         ID,
@@ -72,7 +72,15 @@ static SETTINGS: [SettingSpec; 10] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    add_settings(r, &ID, "widgets.favourites", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.favourites");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     r.add_widget(
         WidgetSpec::new(
             ID,
@@ -112,7 +120,7 @@ impl Favourites {
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match self.area {
             Some(area) => {
-                let look = widgets::look::look(env, WIDGET, area);
+                let look = widgets::widget_look(env, WIDGET, area);
                 let places = self.places(env, Self::content(env, &look));
                 shelf::covers(env, &places, &self.books)
             }
@@ -120,7 +128,7 @@ impl Favourites {
         };
     }
 
-    fn content(env: &Env<'_>, look: &Look) -> Rect {
+    fn content(env: &Env<'_>, look: &WidgetLook) -> Rect {
         if widgets::shows(env, WIDGET, "caption")
             && look.area.height >= 3 * widgets::caption_height(env)
         {
@@ -181,7 +189,7 @@ impl Widget for Favourites {
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
         let style = UiStyle::new(env);
         let columns = self.books.len().clamp(3, 6) as u16;
-        let cover = (width / columns).saturating_sub(style.gap as u16) * 3 / 2;
+        let cover = (width / columns).saturating_sub(style.gap()) * 3 / 2;
         let rows = if Self::grid(env) {
             (self.books.len() as u16).div_ceil(columns).max(1)
         } else {
@@ -210,7 +218,7 @@ impl Widget for Favourites {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let look = widgets::look::look(env, WIDGET, area);
+        let look = widgets::widget_look(env, WIDGET, area);
         let rest = Self::content(env, &look);
         self.places(env, rest)
             .into_iter()

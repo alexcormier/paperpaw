@@ -85,17 +85,27 @@ impl Plugin for Probe {
             MADE.fetch_add(1, Ordering::SeqCst);
             Box::new(ProbeWidget)
         }))?;
-        r.add_setting(SettingSpec::switch(&OTHER, "probe.other", false))?;
-        r.add_setting(SettingSpec::switch(&OWN, "probe.own", false))?;
+        r.add_setting(SettingSpec::switch(
+            OTHER.static_str(),
+            "probe.other",
+            false,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))?;
+        r.add_setting(SettingSpec::switch(
+            OWN.static_str(),
+            "probe.own",
+            false,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))?;
         // Something to open, listed with the tools.
-        r.add_action(ActionSpec::new(APP, "probe.app").handler(|_, _| {}))?;
+        r.add_action(ActionSpec::new(APP, "probe.app").handler(|_, _, _| {}))?;
         r.add_menu_entry(MenuEntry::new(menus::APPS, APP))?;
         // Below the page, beside the pencil.
         r.add_menu_entry(MenuEntry::new(
             paperpaw_plugin_home::FOOTER,
             Id::new_static("probe.switch"),
         ))?;
-        r.add_icon(APP, "puzzle".into())?;
+        r.add_icon(APP, "puzzle")?;
         // A whole status line of its own, that counts its drawings.
         r.add_status_line(paperpaw_sdk::StatusLineSpec::new(
             Id::new_static("probe.line"),
@@ -116,7 +126,7 @@ impl Plugin for Probe {
             .tap(Id::new_static("probe.switch")),
         )?;
         r.add_action(
-            ActionSpec::new(Id::new_static("probe.switch"), "probe.switch").handler(|_, out| {
+            ActionSpec::new(Id::new_static("probe.switch"), "probe.switch").handler(|_, _, out| {
                 out.push(paperpaw_sdk::Command::SetSetting(
                     Id::new_static("probe.other"),
                     paperpaw_sdk::SettingValue::Bool(true),
@@ -124,8 +134,7 @@ impl Plugin for Probe {
             }),
         )?;
         r.add_translations(
-            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nprobe.app = Probe app\n"
-                .into(),
+            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nprobe.app = Probe app\n",
         )
     }
 }

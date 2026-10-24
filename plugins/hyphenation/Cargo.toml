@@ -20,6 +20,8 @@ paperpaw-sdk.workspace = true
 paperpaw-hyphen.workspace = true
 
 [dev-dependencies]
+# The tests look at what the plugin adds, as the kernel does.
+paperpaw-sdk = { workspace = true, features = ["kernel"] }
 paperpaw-i18n.workspace = true
 proptest.workspace = true
 

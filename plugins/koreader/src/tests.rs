@@ -213,7 +213,7 @@ fn exchanged() -> MemoryStorage {
         "/body/DocFragment[1]/body/p[1]/text().37",
         "",
     );
-    annotations::add(&storage, BOOK, tired);
+    annotations::add(&storage, BOOK, tired).unwrap();
     assert!(run(&storage, NOW));
     koreader_takes_over(&storage);
     assert!(!run(&storage, NOW + 10));
@@ -283,7 +283,7 @@ fn annotations_go_back_and_forth() {
         "/body/DocFragment[1]/body/p[1]/text().37",
         "",
     );
-    annotations::add(&storage, BOOK, tired.clone());
+    annotations::add(&storage, BOOK, tired.clone()).unwrap();
 
     // KOReader's come over; ours go to the exchange file with all of
     // KOReader's, also the one not placed here.
@@ -338,7 +338,7 @@ fn annotations_go_back_and_forth() {
     assert!(!storage.exists(EXCHANGE), "nothing new for KOReader");
 
     // Removed here: KOReader is told by leaving it out.
-    assert!(annotations::remove(&storage, BOOK, |m| m.kind == Kind::Bookmark));
+    assert!(annotations::remove(&storage, BOOK, |m| m.kind == Kind::Bookmark).unwrap());
     assert!(!run(&storage, NOW + 30));
     let passed = items(&storage, EXCHANGE);
     assert_eq!(passed.len(), 2);
@@ -356,7 +356,7 @@ fn later_notes_win() {
         "Later note",
     );
     alice.updated = unix_of_utc("2026-10-05 12:00:00");
-    annotations::add(&storage, BOOK, alice);
+    annotations::add(&storage, BOOK, alice).unwrap();
     run(&storage, NOW);
     let ours = annotations::load(&storage, BOOK);
     assert!(ours.iter().any(|a| a.note == "Later note"));
@@ -470,7 +470,7 @@ fn unreadable_files_here_change_nothing() {
     for broken in [annotations::file(BOOK), known_file(BOOK)] {
         // Removed here: without what is known, it would come back.
         let storage = exchanged();
-        assert!(annotations::remove(&storage, BOOK, |m| m.kind == Kind::Bookmark));
+        assert!(annotations::remove(&storage, BOOK, |m| m.kind == Kind::Bookmark).unwrap());
         let before = state(&storage);
         let card = Broken {
             storage: &storage,
@@ -514,7 +514,7 @@ fn without_a_clock_nothing_is_dated_1970() {
         "",
     );
     tired.created = 0;
-    annotations::add(&storage, BOOK, tired);
+    annotations::add(&storage, BOOK, tired).unwrap();
 
     // KOReader's come over; ours waits for a time, and stays.
     for _ in 0..2 {
@@ -549,14 +549,14 @@ fn notes_changed_on_one_side_go_over_without_a_clock() {
     );
     alice.created = 0;
     let at = alice.mark.start;
-    annotations::add(&storage, BOOK, alice);
+    annotations::add(&storage, BOOK, alice).unwrap();
     run(&storage, 0);
     assert!(!storage.exists(EXCHANGE));
     let note = |storage: &MemoryStorage| annotations::note_of(storage, BOOK, at);
 
     // Changed here only: it goes to KOReader, though KOReader's is dated
     // and ours is not.
-    annotations::set_note(&storage, BOOK, at, "Mine", 0);
+    annotations::set_note(&storage, BOOK, at, "Mine", 0).unwrap();
     assert!(!run(&storage, 0));
     assert_eq!(note(&storage), "Mine");
     assert_eq!(items(&storage, EXCHANGE)[0].str("note"), Some("Mine"));
@@ -578,7 +578,7 @@ fn notes_changed_on_one_side_go_over_without_a_clock() {
     assert!(!storage.exists(EXCHANGE));
 
     // Changed on both, with no time here: both stay as they are.
-    annotations::set_note(&storage, BOOK, at, "Again", 0);
+    annotations::set_note(&storage, BOOK, at, "Again", 0).unwrap();
     theirs[0].set("note", lua::string("Other"));
     let file = lua::table([(
         "annotations",
@@ -639,7 +639,7 @@ fn what_cannot_be_passed_on_is_not_known() {
         "/body/DocFragment[1]/body/p[1]/text().37",
         "my own note",
     );
-    assert!(annotations::add(&storage, BOOK, tired));
+    assert!(annotations::add(&storage, BOOK, tired).is_ok());
     let card = Unwritable {
         storage: &storage,
         path: String::from(EXCHANGE),
@@ -707,7 +707,7 @@ fn all_gone_on_one_side_changes_nothing() {
     assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Err(Unreadable));
     // None here, and KOReader's file cannot be read.
     let storage = exchanged();
-    assert!(annotations::remove(&storage, BOOK, |_| true));
+    assert!(annotations::remove(&storage, BOOK, |_| true).unwrap());
     note_emptied(&storage, BOOK);
     storage.write(SIDECAR, b"return { garbage").unwrap();
     let before = state(&storage);
@@ -768,7 +768,7 @@ fn a_fresh_koreader_file_removes_nothing() {
         "/body/DocFragment[1]/body/p[1]/text().37",
         "mine",
     );
-    annotations::add(&storage, BOOK, tired);
+    annotations::add(&storage, BOOK, tired).unwrap();
     assert!(!run(&storage, NOW));
     assert_eq!(items(&storage, EXCHANGE).len(), 1);
     // The sync: KOReader's fresh file stays, the file for it is gone.
@@ -813,7 +813,7 @@ fn a_fresh_koreader_file_removes_nothing() {
 #[test]
 fn everything_removed_here_goes_to_koreader() {
     let storage = exchanged();
-    assert!(annotations::remove(&storage, BOOK, |_| true));
+    assert!(annotations::remove(&storage, BOOK, |_| true).unwrap());
     note_emptied(&storage, BOOK);
     assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Ok(Some(false)));
     let passed = items(&storage, EXCHANGE);

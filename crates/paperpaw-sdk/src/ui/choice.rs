@@ -23,7 +23,7 @@ crate::event_data! {
     /// What was chosen: the option, for the context the choice was
     /// opened for.
     pub struct Picked {
-        /// The context ([`open`]'s `context`).
+        /// The context ([`ask::choice`](crate::ask::choice)'s `context`).
         pub path: alloc::string::String,
         pub option: alloc::string::String,
     }
@@ -34,32 +34,6 @@ pub(crate) const OPTIONS: &str = "options";
 pub(crate) const LABELS: &str = "labels";
 /// Lines of the title, at most.
 const TITLE_LINES: usize = 3;
-
-/// Opens the choice overlay `screen`, a [`Choice`] the plugin registered
-/// itself, with `title` and `options`, each shown as the translation of
-/// `labels` followed by the option. The choice comes back as `reply`.
-#[deprecated(
-    since = "0.4.0",
-    note = "use `ask::choice`, which asks on the screen of slot `core.choice`"
-)]
-pub fn open(
-    screen: Id,
-    reply: &crate::event::Event<Picked>,
-    title: &str,
-    context: &str,
-    labels: &str,
-    options: &[&str],
-) -> Command {
-    Command::OpenScreen(
-        screen,
-        Params::new()
-            .with(params::TITLE, title.to_string())
-            .with(params::PATH, context.to_string())
-            .with(params::REPLY, reply.as_str())
-            .with(LABELS, labels.to_string())
-            .with(OPTIONS, options.join(",")),
-    )
-}
 
 /// What option `option` says: the translation of `labels` followed by
 /// it, or, without labels, an action's title where it names one (options
@@ -198,29 +172,25 @@ impl Screen for Choice {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
             (style.line * 2).max(2),
             Color::BLACK,
         );
-        if let Some(font) = style.font(env) {
+        if let Some(font) = ui.font() {
             let margin = style.margin as f32;
             let width = f32::from(self.title.width) - 2.0 * margin;
+            let title = ui::Label::new(&self.title_text)
+                .px(style.title)
+                .color(Color::BLACK);
             let mut lines = font.wrap(style.title, &self.title_text, width);
             if lines.len() <= 1 {
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.title,
-                    margin,
-                    self.title,
-                    &self.title_text,
-                    Color::BLACK,
-                );
+                title.draw_from(&mut ui, margin, self.title);
             } else {
                 let more = lines.len() > TITLE_LINES;
                 lines.truncate(TITLE_LINES);
@@ -241,31 +211,22 @@ impl Screen for Choice {
                     };
                     let y = self.title.y + (n as f32 * apart) as u16;
                     let area = Rect::new(0, y, self.title.width, line as u16);
-                    ui::draw_label(
-                        canvas,
-                        &font,
-                        style.title,
-                        margin,
-                        area,
-                        &text,
-                        Color::BLACK,
-                    );
+                    ui::Label::new(&text)
+                        .px(style.title)
+                        .color(Color::BLACK)
+                        .draw_from(&mut ui, margin, area);
                 }
             }
         }
         let (options, labels) = (&self.options, &self.labels);
-        self.list.draw(
-            canvas,
-            &style,
-            options.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, options.len(), |ui, index, rect, focused| {
                 let label = label(env, labels, &options[index]);
-                ui::draw_value_row(canvas, env, &style, rect, focused, &label, "");
-            },
-        );
+                ui::Row::plain(&label).focused(focused).draw(ui, rect);
+            });
         if let Some(pager) = &self.pager {
-            let page = (self.list.page(), self.list.pages(options.len()));
-            pager.draw(canvas, env, &style, page);
+            let page = ui::Paging::new(self.list.page(), self.list.pages(options.len()));
+            pager.draw(&mut ui, page);
         }
     }
 

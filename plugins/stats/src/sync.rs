@@ -31,8 +31,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, HttpReply, Typed};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Params, Rect,
-    RefreshMode, Screen,
+    Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
+    Params, Rect, RefreshMode, Screen,
 };
 
 use paperpaw_sdk::secrets::SecretChange;
@@ -68,15 +68,15 @@ const ETAG: &str = "etag";
 /// The WebDAV folder and its user, both set on the sync page.
 static ON_PAGE: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(SCREEN);
 static SETTINGS: [paperpaw_sdk::SettingSpec; 2] = [
-    paperpaw_sdk::SettingSpec::fixed_text(URL.static_str(), "stats.setting.sync", "", crate::GROUP)
+    paperpaw_sdk::SettingSpec::text(URL.static_str(), "stats.setting.sync", "", crate::GROUP)
         .with_extra(&ON_PAGE)
         .kept_on_reset()
-        .described("stats.setting.sync.help"),
-    paperpaw_sdk::SettingSpec::fixed_text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
+        .description("stats.setting.sync.help"),
+    paperpaw_sdk::SettingSpec::text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
         .with_extra(&ON_PAGE)
         .kept_on_reset()
         .advanced()
-        .described("stats.sync.user.help"),
+        .description("stats.sync.user.help"),
 ];
 const USER_ENTERED: Event<Typed> = Event::new("stats.user-entered");
 const PASSWORD_ENTERED: Event<Typed> = Event::new("stats.password-entered");
@@ -136,7 +136,7 @@ fn password<'a>(env: &Env<'a>) -> &'a str {
 
 /// Keeps the password as typed (spaces too), or removes it if empty.
 fn save_password(password: &str) -> Command {
-    Command::SetSecret(if password.is_empty() {
+    Command::set_secret(if password.is_empty() {
         SecretChange::remove(SECRET)
     } else {
         SecretChange::keep(SECRET, "stats.secret", password)
@@ -147,7 +147,7 @@ fn save_password(password: &str) -> Command {
 /// the other passwords and keys. The old file goes only once the
 /// secrets have a password (at a later start): until then it is the only
 /// copy, e.g. where the secrets could not be saved.
-pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
+pub(crate) fn move_password(env: &Env<'_>, out: &mut Commands) {
     let path = file("webdav.ini");
     let Ok(data) = paperpaw_sdk::read_file(env.storage, &path, 4096) else {
         return;
@@ -176,18 +176,16 @@ fn old_password(text: &str) -> String {
 impl Sync {
     /// A request for the file of this sync.
     fn request(&self, env: &Env<'_>, method: &str, reply: &Event<HttpReply>) -> HttpRequest {
-        let mut request = HttpRequest::new(method, &self.url, reply);
-        if !self.user.is_empty() {
-            request.headers.push((
-                String::from("Authorization"),
-                paperpaw_sdk::web::basic_auth(&self.user, password(env)),
-            ));
+        let request = HttpRequest::new(method, &self.url, reply);
+        if self.user.is_empty() {
+            return request;
         }
-        request
+        let auth = paperpaw_sdk::web::basic_auth(&self.user, password(env));
+        request.header(String::from("Authorization"), auth)
     }
 }
 
-fn done(out: &mut Vec<Command>, message: String) {
+fn done(out: &mut Commands, message: String) {
     out.push(DONE.emit(Finished { text: message }));
 }
 
@@ -230,7 +228,7 @@ fn forget_other_uploads(env: &Env<'_>, keep: &str) {
 
 impl Sync {
     /// Starts a sync, or says why it cannot.
-    pub(crate) fn start(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    pub(crate) fn start(&mut self, env: &Env<'_>, out: &mut Commands) {
         if !env.caps.network {
             return done(out, env.i18n.tr("stats.sync.no-network").to_string());
         }
@@ -243,12 +241,12 @@ impl Sync {
         self.url = format!("{}/{FILE}", folder(env.settings.read(&URL)));
         self.user = env.settings.read(&USER).to_string();
         let mut get = self.request(env, "GET", &DOWNLOADED);
-        get.save_to = Some(file("incoming.sqlite3"));
-        out.push(Command::Http(get));
+        get = get.save_to(file("incoming.sqlite3"));
+        out.push(Command::http(get));
     }
 
     /// The other side's file is here (or not): merge, then upload.
-    pub(crate) fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub(crate) fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
@@ -314,26 +312,22 @@ impl Sync {
         }
         self.books = outcome.books;
         self.kept = outcome.kept;
-        let mut put = self.request(env, "PUT", &UPLOADED);
-        put.body_from = Some(upload);
+        let mut put = self.request(env, "PUT", &UPLOADED).body_from(upload);
         match (income, &reply.etag) {
             // There was none: only if there still is none.
-            (None, _) => put
-                .headers
-                .push((String::from("If-None-Match"), String::from("*"))),
+            (None, _) => put = put.header(String::from("If-None-Match"), String::from("*")),
             (Some(_), Some(etag)) => {
                 // A weak validator does not match strongly (as KOReader does).
                 let etag = etag.trim_start_matches("W/").trim_start_matches("w/");
-                put.headers
-                    .push((String::from("If-Match"), etag.to_string()));
+                put = put.header(String::from("If-Match"), etag.to_string());
             }
             (Some(_), None) => {}
         }
-        put.headers.push((
+        let put = put.header(
             String::from("Content-Type"),
             String::from("application/octet-stream"),
-        ));
-        out.push(Command::Http(put));
+        );
+        out.push(Command::http(put));
     }
 
     /// What the user decided for the file there with `etag`, if anything.
@@ -346,7 +340,7 @@ impl Sync {
     /// whether that was deleted there: nothing is uploaded, and the user
     /// is asked whether to remove it here too. Going back asks again with
     /// the next sync.
-    fn ask(&mut self, env: &Env<'_>, etag: &str, out: &mut Vec<Command>) {
+    fn ask(&mut self, env: &Env<'_>, etag: &str, out: &mut Commands) {
         #[expect(
             clippy::let_underscore_must_use,
             reason = "an upload left behind is written over by the next sync"
@@ -367,7 +361,7 @@ impl Sync {
 
     /// The user decided: the sync starts again, with the decision for the
     /// file asked about.
-    pub(crate) fn decide(&mut self, env: &Env<'_>, answer: &Confirmed, out: &mut Vec<Command>) {
+    pub(crate) fn decide(&mut self, env: &Env<'_>, answer: &Confirmed, out: &mut Commands) {
         if self.running {
             return;
         }
@@ -377,7 +371,7 @@ impl Sync {
     }
 
     /// The merged file is up (or someone was faster).
-    pub(crate) fn uploaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub(crate) fn uploaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.running {
             return;
         }
@@ -435,7 +429,7 @@ impl Sync {
         }
     }
 
-    fn fail(&mut self, env: &Env<'_>, status: &str, out: &mut Vec<Command>) {
+    fn fail(&mut self, env: &Env<'_>, status: &str, out: &mut Commands) {
         self.running = false;
         self.attempt = 0;
         let key = match status {
@@ -547,13 +541,16 @@ impl SyncScreen {
         if koreader_file(env).is_some() {
             rows.push(Row::Import);
         }
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // No longer than the screen: the list pages where its rows are tall.
-        let height = (style.row as u16 * rows.len() as u16).min(display.height.saturating_sub(top));
-        let note_top = top + height + style.gap as u16;
+        let height = (style.row() * rows.len() as u16).min(display.height.saturating_sub(top));
+        let note_top = top + height + style.gap();
         Self {
-            list: ListView::new(Rect::new(0, top, display.width, height), style.row)
-                .focus_on_keys(env),
+            list: ListView::new(
+                Rect::new(0, top, display.width, height),
+                u32::from(style.row()),
+            )
+            .focus_on_keys(env),
             note: Rect::new(
                 0,
                 note_top,
@@ -607,7 +604,7 @@ impl SyncScreen {
                 if self.sync.borrow().running {
                     return;
                 }
-                let mut commands = Vec::new();
+                let mut commands = paperpaw_sdk::Commands::new();
                 self.sync.borrow_mut().start(&env, &mut commands);
                 for command in commands {
                     cx.command(command);
@@ -628,14 +625,12 @@ impl Screen for SyncScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("stats.sync.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, None);
         let rows = &self.rows;
         let has_password = !password(env).is_empty();
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value) = match rows[index] {
                     Row::Folder => {
                         let url = folder(env.settings.read(&URL));
@@ -654,18 +649,11 @@ impl Screen for SyncScreen {
                     Row::SyncNow => ("stats.sync.now", String::from("›")),
                     Row::Import => ("stats.import", String::from("›")),
                 };
-                ui::draw_value_row(
-                    canvas,
-                    env,
-                    &style,
-                    rect,
-                    focused,
-                    env.i18n.tr(title),
-                    &value,
-                );
-            },
-        );
-        ui::draw_message(canvas, env, &style, self.note, &self.message);
+                ui::Row::value(env.i18n.tr(title), &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        ui.message(self.note, &self.message);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -692,7 +680,7 @@ impl Screen for SyncScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {

@@ -140,11 +140,6 @@ impl Release {
     pub fn has_store(&self) -> bool {
         !self.before_0_4()
     }
-
-    /// Whether a plugin with code built against `sdk` is loaded by it.
-    pub fn loads_code(&self, sdk: &Version) -> bool {
-        self.sdk().satisfies(sdk)
-    }
 }
 
 /// A data plugin against `release`: its `formats`, and the SDK its
@@ -249,12 +244,10 @@ mod tests {
         assert!(Release::parse("").is_none());
         let old = Release::parse("0.3.0").unwrap();
         assert_eq!(old.data_formats(), Some(1));
-        assert!(!old.loads_code(&SDK_VERSION));
         let this = Release {
             version: SDK_VERSION,
         };
         assert_eq!(this.data_formats(), Some(DATA_FORMATS));
-        assert!(this.loads_code(&SDK_VERSION));
         let later = Release {
             version: Version::new(SDK_VERSION.major, SDK_VERSION.minor + 1, 0),
         };

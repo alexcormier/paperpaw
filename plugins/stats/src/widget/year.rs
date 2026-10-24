@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Point, Rect, RegisterError, Registrar, SettingSpec,
@@ -51,24 +51,24 @@ const MOST_DOTS: u32 = 60;
 static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("stats.widget.year.frame", YEAR, Frame::None),
     widgets::padding_spec("stats.widget.year.padding", YEAR, Padding::Auto),
-    widgets::size_spec("stats.widget.year.size", YEAR, Size::Medium, true),
+    widgets::size_spec("stats.widget.year.size", YEAR, TextSize::Medium, true),
     widgets::align_spec("stats.widget.year.align", YEAR, Align::Left),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.year.goal",
         "stats.setting.books-goal",
         &GOALS,
         GOALS[2],
         YEAR,
     )
-    .described("stats.setting.books-goal.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.books-goal.help"),
+    SettingSpec::choice(
         "stats.widget.year.style",
         "stats.setting.year-style",
         &STYLES,
         STYLES[0],
         YEAR,
     )
-    .described("stats.setting.year-style.help"),
+    .description("stats.setting.year-style.help"),
     widgets::part_spec(
         "stats.widget.year.caption",
         YEAR,
@@ -76,12 +76,16 @@ static SETTINGS: [SettingSpec; 9] = [
         true,
     ),
     widgets::part_spec("stats.widget.year.plan", YEAR, "stats.part.plan", true)
-        .described("stats.part.plan.help"),
+        .description("stats.part.plan.help"),
     widgets::part_spec("stats.widget.year.last", YEAR, "stats.part.last-book", true),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&YEAR, "stats.widget.year"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(YEAR, "stats.widget.year");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(YEAR, "stats.widget.year", |_| Box::new(Year::default()))
@@ -224,8 +228,8 @@ impl Widget for Year {
             .map_or(0, |s| notes(env, s).len() as u16);
         let band = if books_goal(env).is_some() {
             match chosen(env, id, "style") {
-                s if s == STYLES[1] => line(&font, style.title) * 2,
-                s if s == STYLES[2] => line(&font, style.small) * 2,
+                s if s == STYLES[1] => line(&font, style.title()) * 2,
+                s if s == STYLES[2] => line(&font, style.small()) * 2,
                 _ => env.metrics.mm(3) as u16,
             }
         } else {
@@ -235,7 +239,7 @@ impl Widget for Year {
             + caption_room(env, id)
             + line(&font, size)
             + band
-            + notes * line(&font, style.small)
+            + notes * line(&font, style.small())
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -306,9 +310,10 @@ fn notes(env: &Env<'_>, shown: &Shown) -> Vec<(String, bool)> {
     clippy::too_many_lines,
     reason = "longer than the limit from before it was set; split it when it is next changed"
 )]
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -323,7 +328,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     let goal = books_goal(env);
     let progress = goal.map(|g| shown.done.min(g) * 1000 / g.max(1));
     let style_set = chosen(env, id, "style");
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let align = widgets::align(env, id);
     if style_set == STYLES[1] && goal.is_some() {
         // Beside or below the ring, the notes that fit a line whole (the
@@ -331,10 +336,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         let width = f32::from(area.width);
         let notes: Vec<String> = notes(env, shown)
             .into_iter()
-            .filter(|(note, cut)| *cut || font.measure(style.small, note) <= width)
+            .filter(|(note, cut)| *cut || font.measure(style.small(), note) <= width)
             .map(|(note, _)| note)
             .collect();
-        draw_ring(canvas, env, (look, caption), area, shown, progress, &notes);
+        draw_ring(&mut ui, (look, caption), area, shown, progress, &notes);
         return;
     }
     // The notes on two lines where they need them (shortened where even
@@ -343,7 +348,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         .into_iter()
         .filter_map(|(note, cut)| {
             if cut {
-                Some(Wrapped::new(env, &note, style.small, area.width, small))
+                Some(Wrapped::new(env, &note, style.small(), area.width, small))
             } else {
                 super::note_lines(env, &note, area.width, small * 2, 2)
             }
@@ -358,7 +363,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         Some(_) => env.metrics.mm(3) as u16,
         None => 0,
     };
-    let least = line(&font, style.text);
+    let least = line(&font, style.text());
     // As many notes as fit `height` with the rest.
     let kept = |height: u16| {
         let mut kept = 0;
@@ -388,7 +393,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     } else {
         band
     };
-    let block = super::captioned(canvas, env, id, look, caption, big + band + notes_h);
+    let block = super::captioned(ui.canvas(), env, id, look, caption, big + band + notes_h);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     // Too wide: "3 / 12", or the number alone.
     let short = goal.map(|g| alloc::format!("{} / {g}", shown.done));
@@ -399,35 +404,30 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     let headline = super::number_if_narrow(&font, size, &headline, area.width);
     let headline = ui::fit(&font, size, headline, f32::from(area.width));
     let x = align.x(area, font.measure(size, &headline));
-    ui::draw_label(
-        canvas,
-        &font,
-        size,
-        x,
-        row(block.y, big),
-        &headline,
-        look.ink,
-    );
+    ui::Label::new(&headline)
+        .px(size)
+        .color(look.ink)
+        .draw_from(&mut ui, x, row(block.y, big));
     let mut y = block.y + big;
     if let Some(goal) = goal {
         if dots {
-            draw_dots(canvas, env, look, row(y, band), shown.done, goal);
+            draw_dots(&mut ui, look, row(y, band), shown.done, goal);
         } else {
             let height = env.metrics.mm(1).max(4) as u16;
             let track = Rect::new(area.x, y + (band - height) / 2, area.width, height);
             let radius = u32::from(height / 2);
-            canvas.fill_round_shaded(track, radius, shade(look, 1));
+            ui.canvas().fill_round_shaded(track, radius, shade(look, 1));
             let filled = (u32::from(area.width) * progress.unwrap_or(0) / 1000) as u16;
             if filled > 0 {
                 let bar = Rect::new(track.x, track.y, filled.max(height), height);
-                canvas.fill_round(bar, radius, look.ink);
+                ui.canvas().fill_round(bar, radius, look.ink);
             }
         }
         y += band;
     }
     for note in &notes {
         let h = note.height(env);
-        note.draw(canvas, env, row(y, h), align, look.faint);
+        note.draw(ui.canvas(), env, row(y, h), align, look.faint);
         y += h;
     }
 }
@@ -435,19 +435,19 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
 /// The goal as a ring with the books read inside, the notes beside it
 /// (or below, where it is not wide).
 fn draw_ring(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    (look, caption): (&Look, Option<&str>),
+    ui: &mut ui::Ui<'_>,
+    (look, caption): (&WidgetLook, Option<&str>),
     area: Rect,
     shown: &Shown,
     progress: Option<u32>,
     notes: &[String],
 ) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let env = ui.env();
+    let style = *ui.style();
+    let Some(font) = ui.font() else {
         return;
     };
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let align = widgets::align(env, NAME);
     let wide = area.width >= area.height * 2;
     let notes_h = if wide { 0 } else { notes.len() as u16 * small };
@@ -456,15 +456,15 @@ fn draw_ring(
     } else {
         area.width.min(area.height.saturating_sub(notes_h))
     };
-    let block = super::captioned(canvas, env, NAME, look, caption, d + notes_h);
-    let gap = style.gap as u16;
+    let block = super::captioned(ui.canvas(), env, NAME, look, caption, d + notes_h);
+    let gap = style.gap();
     // Wide: the ring and the notes beside it placed together, as the
     // alignment says.
     let beside = if wide {
         let room = f32::from(area.width.saturating_sub(d + gap));
         let widest = notes
             .iter()
-            .map(|n| font.measure(style.small, n).min(room))
+            .map(|n| font.measure(style.small(), n).min(room))
             .fold(0.0, f32::max);
         widest as u16
     } else {
@@ -477,11 +477,11 @@ fn draw_ring(
     };
     let at = Rect::new(x, block.y, d, d);
     let thick = (u32::from(d) / 12).max(3);
-    super::draw_arc(canvas, env, look, at, progress, thick, false);
+    super::draw_arc(ui.canvas(), env, look, at, progress, thick, false);
     // The count inside, "of 12" below it.
     let inner = d.saturating_sub(2 * thick as u16 + 4);
     let count = alloc::format!("{}", shown.done);
-    let size = fit_size(&font, &style, "00", inner / 2, inner * 2 / 5).max(style.text);
+    let size = fit_size(&font, &style, "00", inner / 2, inner * 2 / 5).max(style.text());
     let big = line(&font, size);
     let of = books_goal(env).map(|g| {
         env.i18n.format(
@@ -498,11 +498,17 @@ fn draw_ring(
     let cx = f32::from(at.x) + f32::from(d) / 2.0;
     let w = font.measure(size, &count);
     let r = Rect::new(at.x, inside.y, d, big);
-    ui::draw_label(canvas, &font, size, cx - w / 2.0, r, &count, look.ink);
+    ui::Label::new(&count)
+        .px(size)
+        .color(look.ink)
+        .draw_from(ui, cx - w / 2.0, r);
     if let Some(of) = of.filter(|_| of_h > 0) {
-        let w = font.measure(style.small, &of);
+        let w = font.measure(style.small(), &of);
         let r = Rect::new(at.x, inside.y + big, d, small);
-        ui::draw_label(canvas, &font, style.small, cx - w / 2.0, r, &of, look.faint);
+        ui::Label::new(&of)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(ui, cx - w / 2.0, r);
     }
     // The notes.
     let (text, top) = if wide {
@@ -518,28 +524,25 @@ fn draw_ring(
         (area, block.y + d)
     };
     for (n, note) in notes.iter().enumerate() {
-        let note = ui::fit(&font, style.small, note, f32::from(text.width));
+        let note = ui::fit(&font, style.small(), note, f32::from(text.width));
         let x = if wide {
             f32::from(text.x)
         } else {
-            align.x(text, font.measure(style.small, &note))
+            align.x(text, font.measure(style.small(), &note))
         };
         let r = Rect::new(text.x, top + n as u16 * small, text.width, small);
-        ui::draw_label(canvas, &font, style.small, x, r, &note, look.faint);
+        ui::Label::new(&note)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(ui, x, r);
     }
 }
 
 /// A dot for each book of the goal in `band`, filled for those read, in
 /// as few rows as let them be large.
-fn draw_dots(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    look: &Look,
-    band: Rect,
-    done: u32,
-    goal: u32,
-) {
-    let style = UiStyle::new(env);
+fn draw_dots(ui: &mut ui::Ui<'_>, look: &WidgetLook, band: Rect, done: u32, goal: u32) {
+    let env = ui.env();
+    let style = *ui.style();
     let n = goal.clamp(1, MOST_DOTS);
     let (w, h) = (u32::from(band.width), u32::from(band.height));
     // The rows that give the largest dots.
@@ -555,7 +558,7 @@ fn draw_dots(
     }
     let cols = n.div_ceil(rows);
     let radius = (size * 2 / 5).max(2);
-    let thin = style.line.max(1);
+    let thin = u32::from(style.line()).max(1);
     let align = widgets::align(env, NAME);
     let left = align.x(band, (cols * size) as f32) as i32;
     let top = i32::from(band.y) + ((h - rows * size) / 2) as i32;
@@ -566,9 +569,9 @@ fn draw_dots(
             top + (row * size + size / 2) as i32,
         );
         if i < done {
-            canvas.fill_circle(center, radius, look.ink);
+            ui.canvas().fill_circle(center, radius, look.ink);
         } else {
-            canvas.stroke_circle(center, radius, thin, look.faint);
+            ui.canvas().stroke_circle(center, radius, thin, look.faint);
         }
     }
 }

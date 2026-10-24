@@ -84,9 +84,9 @@ use paperpaw_sdk::native::{Native, SafeMode};
 use paperpaw_sdk::setting::{Setting, SettingType};
 use paperpaw_sdk::{
     Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
-    Fonts, Formats, Gesture, GestureKind, Handled, Hints, Hyphenation, Id, Manifest, Menus,
-    Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor,
-    SDK_VERSION, Screen, Settings, ShowsThrough, StatusItems,
+    Fonts, Formats, Gesture, GestureKind, Handled, HintVisibility, Hyphenation, Id, Manifest,
+    Menus, Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError,
+    RequiredFor, Screen, Settings, ShowsThrough, StatusItems,
 };
 
 pub use crate::builder::KernelBuilder;
@@ -311,7 +311,7 @@ struct ActiveScreen {
     /// The slot it was opened for, if any.
     slot: Option<Id>,
     /// Made for the part above the row of hints (when the row shows), as
-    /// it asked ([`Hints::Shown`]).
+    /// it asked ([`HintVisibility::Shown`]).
     hinted: bool,
     /// The part of the screen it is made for and drawn into: all of it
     /// but the bars shown over it and the row of hints (see
@@ -352,6 +352,9 @@ pub struct Kernel {
     subscriptions: Vec<(Id, Id, EventHandler)>,
     /// The lowest screen the last offer of input reached ([`Kernel::offer`]).
     offered_down_to: usize,
+    /// The params of the action offered to the screens now, for their
+    /// context ([`Cx::params`](paperpaw_sdk::Cx::params)); none else.
+    action_params: Params,
     /// What sees every action run and every event emitted.
     action_observers: Vec<paperpaw_sdk::ObserverSpec>,
     event_observers: Vec<paperpaw_sdk::ObserverSpec>,
@@ -707,9 +710,9 @@ impl Kernel {
                 let below = self.stack.len().checked_sub(2)?;
                 Some(format!("back:{}", self.stack[below].id))
             }
-            Command::RunAction(action)
-            | Command::RunActionWith(action, _)
-            | Command::RunOriginal(action, _) => Some(format!("run:{action}")),
+            Command::RunAction(action, _) | Command::RunOriginal(action, _) => {
+                Some(format!("run:{action}"))
+            }
             _ => None,
         }
     }
@@ -836,7 +839,7 @@ impl Kernel {
             let language = self.shared.translator.language().to_string();
             let speech =
                 paperpaw_sdk::Speech::new(text.clone(), Id::new_static("core.focus-spoken"))
-                    .language(language);
+                    .in_language(language);
             self.speak(speech);
             self.io.focus_spoken = true;
         }
@@ -898,7 +901,7 @@ impl Kernel {
             if !self.io.speech.speaking() && !self.io.http.busy() && !self.io.servers.busy() {
                 self.output
                     .commands
-                    .push(Command::RunAction(paperpaw_sdk::builtin::actions::SLEEP));
+                    .push(Command::run(paperpaw_sdk::builtin::actions::SLEEP));
             }
         }
         if self.network_deadline().is_some_and(|at| at <= now) {

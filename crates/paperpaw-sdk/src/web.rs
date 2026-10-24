@@ -8,14 +8,28 @@ use alloc::vec::Vec;
 
 use crate::document::is_external;
 
-/// What PaperPaw calls itself to servers, with its version: the
-/// `User-Agent` header's value, e.g. `PaperPaw/0.4.0 (e-reader)`.
+/// What PaperPaw calls itself to servers, with the version of the SDK
+/// this is built with: the `User-Agent` header's value, e.g.
+/// `PaperPaw/0.4.0 (e-reader)`. A plugin sends [`user_agent_of`], with
+/// the version of the PaperPaw it runs in.
 pub const USER_AGENT: &str = concat!("PaperPaw/", env!("CARGO_PKG_VERSION"), " (e-reader)");
 
-/// The `User-Agent` header ([`USER_AGENT`]), to push onto a request's
-/// headers.
+/// The `User-Agent` header of [`USER_AGENT`], the SDK this is built with;
+/// [`user_agent_of`] says the PaperPaw that runs.
 pub fn user_agent() -> (String, String) {
     (String::from("User-Agent"), String::from(USER_AGENT))
+}
+
+/// The `User-Agent` header, to push onto a request's headers: with the
+/// version of the PaperPaw that runs ([`Plugins::kernel`](crate::Plugins::kernel)),
+/// not that of the SDK the plugin was built with ([`USER_AGENT`] where
+/// the kernel is not listed).
+pub fn user_agent_of(env: &crate::Env<'_>) -> (String, String) {
+    let value = match env.plugins().kernel() {
+        Some(kernel) => format!("PaperPaw/{} (e-reader)", kernel.manifest.version),
+        None => String::from(USER_AGENT),
+    };
+    (String::from("User-Agent"), value)
 }
 
 /// A server's address as entered in a setting, as a base URL to put paths
@@ -199,11 +213,9 @@ pub fn basic_auth(user: &str, password: &str) -> String {
     format!("Basic {}", base64(format!("{user}:{password}").as_bytes()))
 }
 
-/// The seconds since 1970 (UTC) of an HTTP date as servers send them,
-/// e.g. in `Last-Modified` or WebDAV's `getlastmodified`:
-/// `Tue, 20 Oct 2026 08:00:00 GMT` (RFC 9110's preferred form; the
-/// obsolete ones are not read).
-pub fn http_date(text: &str) -> Option<i64> {
+/// The seconds since 1970 (UTC) of an HTTP date
+/// ([`UnixTime::parse_http_date`](crate::time::UnixTime)).
+pub(crate) fn http_date_seconds(text: &str) -> Option<i64> {
     const MONTHS: [&str; 12] = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
@@ -222,15 +234,7 @@ pub fn http_date(text: &str) -> Option<i64> {
     if parts.next()? != "GMT" || hour > 23 || minute > 59 || second > 60 || day > 31 {
         return None;
     }
-    let time = crate::time::LocalTime {
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
-        weekday: 0,
-    };
+    let time = crate::time::LocalTime::new(year, month, day, hour, minute, second);
     Some(time.to_seconds())
 }
 
@@ -268,16 +272,15 @@ mod tests {
         assert_eq!(base_url("nas/x?to=http://y"), "https://nas/x?to=http://y");
         assert_eq!(base_url("  "), "");
         assert!(USER_AGENT.starts_with(concat!("PaperPaw/", env!("CARGO_PKG_VERSION"))));
-        assert_eq!(user_agent().0, "User-Agent");
     }
 
     #[test]
     fn http_dates() {
         assert_eq!(
-            http_date("Tue, 20 Oct 2026 08:00:00 GMT"),
+            http_date_seconds("Tue, 20 Oct 2026 08:00:00 GMT"),
             Some(1_792_483_200)
         );
-        assert_eq!(http_date("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
+        assert_eq!(http_date_seconds("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
         for wrong in [
             "",
             "20 Oct 2026 08:00:00 GMT",
@@ -286,7 +289,7 @@ mod tests {
             "Tue, 20 Oct 2026 25:00:00 GMT",
             "Tuesday, 20-Oct-26 08:00:00 GMT",
         ] {
-            assert_eq!(http_date(wrong), None, "{wrong}");
+            assert_eq!(http_date_seconds(wrong), None, "{wrong}");
         }
     }
 

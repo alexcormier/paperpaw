@@ -109,7 +109,7 @@ impl Plugin for Probe {
             };
             r.add_action(
                 ActionSpec::new(id.clone(), name)
-                    .handler(move |_, _| RAN.with(|r| r.borrow_mut().push(name))),
+                    .handler(move |_, _, _| RAN.with(|r| r.borrow_mut().push(name))),
             )?;
             r.add_menu_entry(MenuEntry::new(MENU, id).order(order as i16))?;
         }
@@ -261,6 +261,9 @@ fn the_list_passes_faint_entries_and_shows_switches_and_badges() {
     assert_eq!(test.part("probe.on").on, Some(true));
     let counted = test.part("probe.counted").label;
     assert!(counted.contains('3'), "{counted}");
+    // The faint one is told as doing nothing now; the others are not.
+    assert!(test.part("Not now").disabled);
+    assert!(!test.part("probe.on").disabled);
     // From the switch, the focus goes round past the faint one.
     let focused = test.focused().unwrap();
     assert!(focused.starts_with("probe.on"), "{focused}");
@@ -280,7 +283,8 @@ fn the_panel_shows_switches_labels_badges_and_passes_faint_entries() {
     test.open(slots::PANEL, None);
     assert_eq!(test.part("probe.on").on, Some(true));
     assert_eq!(test.part("Not now").on, None);
-    test.part("probe.counted · 3");
+    assert!(test.part("Not now").disabled);
+    assert!(!test.part("probe.counted · 3").disabled);
     assert_eq!(test.focused().as_deref(), Some("probe.on"));
     test.press("down");
     assert_eq!(test.focused().as_deref(), Some("probe.counted · 3"));

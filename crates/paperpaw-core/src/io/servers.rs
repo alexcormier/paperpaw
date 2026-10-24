@@ -202,6 +202,7 @@ impl Servers {
     /// Passes a plugin's answer to the shell; a file to send goes in
     /// parts (`Kernel::read_served`).
     pub fn respond(&mut self, response: ServerResponse, storage: &dyn Storage) {
+        let response = response.into_parts();
         let mut status = response.status;
         let mut body = response.body;
         let mut file = None;

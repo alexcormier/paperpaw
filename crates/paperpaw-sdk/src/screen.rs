@@ -103,7 +103,7 @@ impl fmt::Debug for ScreenSpec {
 /// [`Registrar::set_screen_hints`](crate::Registrar::set_screen_hints)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
-pub enum Hints {
+pub enum HintVisibility {
     /// Always, below it: the screen has the part above the row. Also for
     /// menus over a screen without it.
     #[default]
@@ -151,6 +151,8 @@ pub struct ScreenKey(u32);
 
 impl ScreenKey {
     /// The key numbered `serial`; the kernel numbers the screens it opens.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub const fn new(serial: u32) -> Self {
         Self(serial)
     }
@@ -391,8 +393,8 @@ pub trait Screen {
     /// plugin said for all its openings
     /// ([`Registrar::set_screen_hints`](crate::Registrar::set_screen_hints)):
     /// read when it is opened, for the part of the screen it is made for,
-    /// and whenever the row would come for a while ([`Hints::OnPress`]).
-    fn hints(&self) -> Option<Hints> {
+    /// and whenever the row would come for a while ([`HintVisibility::OnPress`]).
+    fn hints(&self) -> Option<HintVisibility> {
         None
     }
 
@@ -410,7 +412,7 @@ pub trait Screen {
     /// swipes in from the edges. Returning [`Handled::Yes`] for a `Down`
     /// event captures that pointer: all its further samples go here and
     /// no gesture is recognized. Drawing and handwriting screens use this,
-    /// and grips that move rows ([`ui::Reorder`](crate::ui::Reorder)).
+    /// and grips that move rows ([`ui::reorder::Reorder`](crate::ui::reorder::Reorder)).
     /// Take only fingers meant for the screen: one taken at an edge does
     /// not swipe in from it.
     fn on_pointer(&mut self, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
@@ -523,7 +525,12 @@ pub struct Cx<'a, 'e> {
     output: &'a mut Output,
     /// The screen whose handler runs, if it is one of the stack's.
     key: Option<ScreenKey>,
+    /// The params of the action that runs ([`Cx::params`]).
+    params: &'a Params,
 }
+
+/// No params, for a context without an action's.
+const NO_PARAMS: &Params = &Params::new();
 
 impl<'a, 'e> Cx<'a, 'e> {
     /// Used by the kernel and by tests.
@@ -532,7 +539,22 @@ impl<'a, 'e> Cx<'a, 'e> {
             env,
             output,
             key: None,
+            params: NO_PARAMS,
         }
+    }
+
+    /// For an action run with `params` (the kernel's, or a test that
+    /// plays it).
+    pub fn with_params(mut self, params: &'a Params) -> Self {
+        self.params = params;
+        self
+    }
+
+    /// The params the action that [`Screen::on_action`] gets was run
+    /// with ([`Command::RunAction`]); none from an input, and none outside
+    /// `on_action`.
+    pub fn params(&self) -> &Params {
+        self.params
     }
 
     /// For the handler of the open screen `key` (the kernel's, or a test
@@ -551,7 +573,7 @@ impl<'a, 'e> Cx<'a, 'e> {
     /// This screen as the stack lists it ([`Env::stack`](crate::Env::stack)).
     pub fn entry(&self) -> Option<&StackEntry> {
         let key = self.key?;
-        self.env.stack.iter().find(|entry| entry.key == key)
+        self.env.stack().iter().find(|entry| entry.key == key)
     }
 
     /// Which screen this is.
@@ -623,7 +645,7 @@ impl<'a, 'e> Cx<'a, 'e> {
     }
 
     /// Requests a call to [`Screen::on_timer`] of this screen at `at` (the
-    /// earliest request wins). Use `cx.env().now` for "as soon as
+    /// earliest request wins). Use `cx.env().now()` for "as soon as
     /// possible". It comes while the screen is on top: covered by another
     /// (a menu, a keyboard), the time waits until it is on top again. It
     /// is kept when the screen is made anew for another size.

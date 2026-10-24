@@ -17,6 +17,7 @@ use std::rc::Rc;
 use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_browser::{Browser, OPEN};
+use paperpaw_sdk::HttpError;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::replies::Typed;
@@ -536,7 +537,11 @@ fn errors_are_told_and_error_pages_shown() {
     assert!(!h.storage.0.exists(&format!("{DIR}/download.tmp")));
     // No answer at all.
     let call = h.go("https://down.example/");
-    h.reply(HttpResponse::failed(call.id, "timed out"));
+    h.reply(HttpResponse::failed(
+        call.id,
+        HttpError::Timeout,
+        "timed out",
+    ));
     assert!(h.said().contains("down.example could not be reached"));
     // A server's own error page is a page to read.
     let call = h.go("https://e.example/gone");
@@ -560,7 +565,11 @@ fn script_file_and_data_addresses_are_searched_for_not_fetched() {
             call.url
         );
         assert!(!call.url[8..].contains(':'), "{}", call.url);
-        h.reply(HttpResponse::failed(call.id, "timed out"));
+        h.reply(HttpResponse::failed(
+            call.id,
+            HttpError::Timeout,
+            "timed out",
+        ));
         assert!(h.said().contains("could not be reached"), "{typed}");
     }
     assert!(h.storage.saved().is_empty());

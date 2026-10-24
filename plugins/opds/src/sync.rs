@@ -23,7 +23,7 @@ use paperpaw_sdk::digest::md5;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::web::{clean_name, file_name};
-use paperpaw_sdk::{Command, Env, HttpRequest, Id, Params, Storage, StorageError, files};
+use paperpaw_sdk::{Command, Commands, Env, HttpRequest, Id, Params, Storage, StorageError, files};
 
 use crate::catalogs::Catalog;
 use crate::temp::{self, TempFiles};
@@ -114,6 +114,8 @@ struct Item {
 struct Run {
     /// Its number: answers to an earlier run are ignored.
     number: u32,
+    /// The `User-Agent` header of its requests, taken at its start.
+    agent: (String, String),
     catalog: Catalog,
     /// The catalogs after this one.
     waiting: VecDeque<Catalog>,
@@ -153,7 +155,7 @@ impl Sync {
     }
 
     /// Syncs `catalogs`, one after the other, unless a sync is running.
-    pub(crate) fn start(&mut self, env: &Env<'_>, catalogs: Vec<Catalog>, out: &mut Vec<Command>) {
+    pub(crate) fn start(&mut self, env: &Env<'_>, catalogs: Vec<Catalog>, out: &mut Commands) {
         if self.run.is_some() {
             return;
         }
@@ -171,7 +173,7 @@ impl Sync {
 
     /// Stops the sync; the books loaded stay. What is still on its way
     /// is thrown away when it comes.
-    pub(crate) fn stop(&mut self, out: &mut Vec<Command>) {
+    pub(crate) fn stop(&mut self, out: &mut Commands) {
         if self.run.take().is_some() {
             if let Some(report) = &mut self.report {
                 report.running = false;
@@ -185,7 +187,7 @@ impl Sync {
         env: &Env<'_>,
         catalog: Catalog,
         waiting: VecDeque<Catalog>,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
     ) {
         if let Some(report) = &mut self.report {
             report.catalog = catalog.name.clone();
@@ -193,6 +195,7 @@ impl Sync {
         let limit = env.settings.read(&LIMIT).max(1) as usize;
         let run = Run {
             number: self.runs,
+            agent: paperpaw_sdk::web::user_agent_of(env),
             folder: catalog.sync_folder(env),
             waiting,
             queue: VecDeque::new(),
@@ -211,10 +214,17 @@ impl Sync {
     fn request(&self, url: &str, save_to: String, reply: &Event<HttpReply>) -> Option<HttpRequest> {
         let run = self.run.as_ref()?;
         let params = Params::new().with(RUN, run.number.to_string());
-        Some(crate::request(&run.catalog, url, save_to, reply, params))
+        Some(crate::request(
+            &run.agent,
+            &run.catalog,
+            url,
+            save_to,
+            reply,
+            params,
+        ))
     }
 
-    fn request_feed(&mut self, url: &str, out: &mut Vec<Command>) {
+    fn request_feed(&mut self, url: &str, out: &mut Commands) {
         if let Some(run) = &mut self.run {
             run.pages.push(url.to_string());
         }
@@ -222,7 +232,8 @@ impl Sync {
             let params = Params::new()
                 .with(RUN, run.number.to_string())
                 .with(crate::URL, url.to_string());
-            out.push(Command::Http(crate::list_request(
+            out.push(Command::http(crate::list_request(
+                &run.agent,
                 &run.catalog,
                 url,
                 self.temp.next("xml"),
@@ -241,12 +252,12 @@ impl Sync {
     }
 
     /// A page of the catalog's list arrived.
-    pub(crate) fn feed_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub(crate) fn feed_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         self.read_page(env, reply, out);
         temp::discard(env.storage, reply);
     }
 
-    fn read_page(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn read_page(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.current(reply) {
             return;
         }
@@ -323,7 +334,7 @@ impl Sync {
     }
 
     /// The next book, else the next page, else the next catalog.
-    fn go_on(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn go_on(&mut self, env: &Env<'_>, out: &mut Commands) {
         let Some(run) = &mut self.run else {
             return;
         };
@@ -333,9 +344,8 @@ impl Sync {
         if let Some(item) = run.queue.front() {
             let (url, id) = (item.url.clone(), item.id.clone());
             let file = self.temp.next("tmp");
-            if let Some(mut request) = self.request(&url, file, &BOOK_LOADED) {
-                request.params = request.params.with(crate::ID, id);
-                out.push(Command::Http(request));
+            if let Some(request) = self.request(&url, file, &BOOK_LOADED) {
+                out.push(Command::http(request.param(crate::ID, id)));
             }
             return;
         }
@@ -346,12 +356,12 @@ impl Sync {
     }
 
     /// A book arrived.
-    pub(crate) fn book_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub(crate) fn book_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         self.store_book(env, reply, out);
         temp::discard(env.storage, reply);
     }
 
-    fn store_book(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn store_book(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.current(reply) {
             return;
         }
@@ -385,7 +395,7 @@ impl Sync {
         self.go_on(env, out);
     }
 
-    fn next_catalog(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn next_catalog(&mut self, env: &Env<'_>, out: &mut Commands) {
         let Some(mut run) = self.run.take() else {
             return;
         };

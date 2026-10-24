@@ -118,9 +118,10 @@ impl<'a> StatusFrame<'a> {
 /// Draws a status line into its frame's area (cleared before).
 pub type StatusLineFn = Box<dyn Fn(&mut Canvas<'_>, &Env<'_>, &StatusFrame<'_>)>;
 
-/// What a status line shows now, as text: the screen redraws the line
-/// when it changes (e.g. each minute for a clock).
-pub type StatusSignatureFn = Box<dyn Fn(&Env<'_>, &Params) -> String>;
+/// What a status line shows now, as a number that changes with it (e.g.
+/// [`Fnv1a64`](crate::digest::Fnv1a64) of what it shows): the screen
+/// redraws the line when it changes (e.g. each minute for a clock).
+pub type StatusSignatureFn = Box<dyn Fn(&Env<'_>, &Params) -> u64>;
 
 /// The places in a status line drawn in a frame that do something when
 /// tapped (see [`StatusLineSpec::targets`]).
@@ -241,7 +242,7 @@ pub struct StatusItemSpec {
     pub value: StatusFn,
     /// The action a tap on it runs, one of its own plugin's, with the
     /// context its line was drawn with (see [`context`];
-    /// [`Command::RunActionWith`](crate::Command::RunActionWith)): it
+    /// [`Command::RunAction`](crate::Command::RunAction)): it
     /// runs as that plugin, whichever screen shows the line, and can be
     /// bound to buttons too. Without it a tap does what the screen does
     /// with the line.
@@ -332,8 +333,8 @@ impl Place {
         let Some(setting) = &self.line else {
             return items;
         };
-        item_ids(env.settings.text(setting.as_str()))
-            .find(|id| env.status_items.title(id).is_some())
+        item_ids(env.settings().text(setting.as_str()))
+            .find(|id| env.status_items().title(id).is_some())
             .unwrap_or(items)
     }
 
@@ -343,7 +344,7 @@ impl Place {
             place: Some(self.id.as_str()),
             ..*frame
         };
-        env.status_items
+        env.status_items()
             .draw_line(self.current_line(env), canvas, env, &framed);
     }
 
@@ -353,7 +354,7 @@ impl Place {
             place: Some(self.id.as_str()),
             ..*frame
         };
-        env.status_items
+        env.status_items()
             .line_targets(self.current_line(env), env, &framed)
     }
 
@@ -361,7 +362,7 @@ impl Place {
     pub fn lists<'e>(&self, env: &Env<'e>) -> [&'e str; 3] {
         self.parts
             .each_ref()
-            .map(|part| env.settings.text(part.as_str()))
+            .map(|part| env.settings().text(part.as_str()))
     }
 
     /// Its items as a line in `area`, with text of `size` in `color`.
@@ -371,31 +372,36 @@ impl Place {
 
     /// What its line shows now, with `context`: to draw it again when
     /// that changes.
-    pub fn signature(&self, env: &Env<'_>, context: &Params) -> String {
+    pub fn signature(&self, env: &Env<'_>, context: &Params) -> u64 {
         let line = self.current_line(env);
         if line == crate::builtin::status_lines::ITEMS.static_str() {
             return signature(env, &self.lists(env), context);
         }
-        let mut out = String::from(line);
-        out.push('|');
-        out.push_str(&env.status_items.line_signature(line, env, context));
-        out
+        let mut hash = crate::digest::Fnv1a64::new();
+        hash.feed(line.as_bytes());
+        hash.feed(
+            &env.status_items()
+                .line_signature(line, env, context)
+                .to_le_bytes(),
+        );
+        hash.value()
     }
 }
 
-/// What the items of `lists` show now, with `context`, as text.
-pub fn signature(env: &Env<'_>, lists: &[&str], context: &Params) -> String {
+/// What the items of `lists` show now, with `context`, as a number that
+/// changes with it.
+pub fn signature(env: &Env<'_>, lists: &[&str], context: &Params) -> u64 {
     use core::fmt::Write;
-    let mut out = String::new();
+    let mut hash = crate::digest::Fnv1a64::new();
     for list in lists {
         for id in item_ids(list) {
-            if let Some(value) = env.status_items.value(id, env, context) {
-                let _ = write!(out, "{value:?}|");
+            if let Some(value) = env.status_items().value(id, env, context) {
+                let _ = write!(hash, "{value:?}|");
             }
         }
-        out.push('/');
+        hash.feed(b"/");
     }
-    out
+    hash.value()
 }
 
 impl fmt::Debug for StatusItemSpec {
@@ -506,10 +512,15 @@ impl StatusItems {
     }
 
     /// What status line `id` shows now (see [`StatusSignatureFn`]).
-    pub fn line_signature(&self, id: &str, env: &Env<'_>, context: &Params) -> String {
+    pub fn line_signature(&self, id: &str, env: &Env<'_>, context: &Params) -> u64 {
+        use core::fmt::Write;
         match self.line(id).and_then(|l| l.signature.as_ref()) {
             Some(signature) => signature(env, context),
-            None => alloc::format!("{context:?}"),
+            None => {
+                let mut hash = crate::digest::Fnv1a64::new();
+                let _ = write!(hash, "{context:?}");
+                hash.value()
+            }
         }
     }
 
@@ -539,7 +550,7 @@ impl StatusItems {
         let item = self.item(id)?;
         let action = item.tap.as_ref()?;
         (action.namespace() == item.id.namespace())
-            .then(|| crate::Command::RunActionWith(action.clone(), context.clone()))
+            .then(|| crate::Command::RunAction(action.clone(), context.clone()))
     }
 
     /// How much item `id` matters ([`StatusItemSpec::priority`]).
@@ -669,7 +680,7 @@ impl<'a> StatusLine<'a> {
         laid.sort_by(|a, b| a.x.total_cmp(&b.x));
         laid.iter()
             .filter_map(|item| {
-                let command = env.status_items.tap(item.id, context)?;
+                let command = env.status_items().tap(item.id, context)?;
                 let x0 = (item.x - reach).max(f32::from(area.x));
                 let x1 =
                     (item.x + item.width + reach).min(f32::from(area.x) + f32::from(area.width));
@@ -748,7 +759,7 @@ fn listed<'a>(
     id: &'a str,
     context: &Params,
 ) -> Option<Listed<'a>> {
-    let item = env.status_items.item(id)?;
+    let item = env.status_items().item(id)?;
     let value = (item.value)(env, context)?;
     let least = item.min_width * size;
     let width = |percent| value_width(env, font, size, &value, percent).max(least);

@@ -36,14 +36,18 @@
 //! // })?;
 //! ```
 
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod local;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod marks;
 mod origin;
 
-pub use origin::{
-    Origin, Origins, adopt, folder_release, folder_version, forget_store_install, origin,
-    remember_store_install,
-};
+pub use origin::{Origin, Origins, folder_release, folder_version, origin};
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use origin::{adopt, forget_store_install, remember_store_install};
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -69,13 +73,30 @@ const JOB: &str = "install-job";
 const FILE: &str = "install-file";
 
 /// Whether a data plugin made for the SDK `sdk` (e.g. `0.4`) and the data
-/// formats `formats` is read by this PaperPaw: its SDK not later than this
-/// one, its formats not later than [`DATA_FORMATS`]. A missing SDK (an
-/// empty text) passes.
+/// formats `formats` is read by a PaperPaw of the SDK this is built with
+/// ([`SDK_VERSION`]); [`fits_in`] asks the PaperPaw that runs.
 pub fn fits(sdk: &str, formats: u32) -> bool {
+    fits_sdk(SDK_VERSION, sdk, formats)
+}
+
+/// Whether a data plugin made for the SDK `sdk` (e.g. `0.4`) and the data
+/// formats `formats` is read by the PaperPaw that runs: its SDK not later
+/// than the kernel's ([`Plugins::kernel`](crate::Plugins::kernel)), not
+/// the one the asking plugin was built with; its formats not later than
+/// [`DATA_FORMATS`]. A missing SDK (an empty text) passes.
+pub fn fits_in(env: &Env<'_>, sdk: &str, formats: u32) -> bool {
+    let kernel = env
+        .plugins
+        .kernel()
+        .map_or(SDK_VERSION, |k| k.manifest.version);
+    fits_sdk(kernel, sdk, formats)
+}
+
+/// [`fits_in`] for a kernel of the SDK `kernel`, where the `Env` is not at
+/// hand.
+pub fn fits_sdk(kernel: Version, sdk: &str, formats: u32) -> bool {
     let sdk_fits = sdk.trim().is_empty()
-        || Version::parse(sdk)
-            .is_some_and(|v| (v.major, v.minor) <= (SDK_VERSION.major, SDK_VERSION.minor));
+        || Version::parse(sdk).is_some_and(|v| (v.major, v.minor) <= (kernel.major, kernel.minor));
     sdk_fits && formats <= DATA_FORMATS
 }
 
@@ -106,10 +127,13 @@ pub fn is_safe_path(path: &str) -> bool {
 
 /// What a file is checked by: its digest, in lower-case hex digits.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Digest {
-    /// 40 digits, as plugin libraries give the files of a folder.
+    /// 40 digits, as plugin libraries gave the files of a folder before
+    /// they gave SHA-256 (and as jobs on the card may still have them).
     Sha1(String),
-    /// 64 digits, as they give a code plugin's code.
+    /// 64 digits, as they give a code plugin's code and the files of a
+    /// folder.
     Sha256(String),
 }
 
@@ -129,8 +153,24 @@ impl Digest {
         hex.len() == len && hex.bytes().all(|b| b.is_ascii_hexdigit())
     }
 
+    /// Takes the digest a plugin library gives for a file as `key`
+    /// (`sha256` or `sha1`), in whichever order: SHA-256 where it gives
+    /// both. `false` for another key.
+    pub fn take(&mut self, key: &str, hex: &str) -> bool {
+        let hex = hex.to_ascii_lowercase();
+        match key {
+            "sha256" => *self = Digest::Sha256(hex),
+            "sha1" if !matches!(self, Digest::Sha256(kept) if !kept.is_empty()) => {
+                *self = Digest::Sha1(hex);
+            }
+            "sha1" => {}
+            _ => return false,
+        }
+        true
+    }
+
     /// As kept in a job: `sha1:…` or `sha256:…`.
-    fn text(&self) -> String {
+    pub fn text(&self) -> String {
         match self {
             Digest::Sha1(hex) => format!("sha1:{}", hex.to_ascii_lowercase()),
             Digest::Sha256(hex) => format!("sha256:{}", hex.to_ascii_lowercase()),
@@ -256,6 +296,7 @@ impl Package {
 
 /// An installation going on: which plugin, and how far.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Progress {
     pub plugin: String,
     pub name: String,
@@ -403,8 +444,8 @@ impl Installer {
     /// Has the kernel install the complete job's plugin
     /// ([`Command::InstallPlugin`]) and forgets the job; `None` if there is
     /// no complete job.
-    pub fn install(&self, env: &Env<'_>, out: &mut Vec<Command>) -> Option<Progress> {
-        let storage = env.storage;
+    pub fn install(&self, env: &Env<'_>, out: &mut crate::Commands) -> Option<Progress> {
+        let storage = env.storage();
         let job = self.job(storage)?;
         let progress = self.progress(storage)?;
         if progress.done < progress.total {
@@ -430,11 +471,11 @@ impl Installer {
     /// passed over (each job has a number of its own, counted in the
     /// owner's folder). `false` (and nothing done) if the package is not
     /// valid ([`Package::is_valid`]) or the job could not be kept.
-    pub fn start(&self, env: &Env<'_>, package: &Package, out: &mut Vec<Command>) -> bool {
+    pub fn start(&self, env: &Env<'_>, package: &Package, out: &mut crate::Commands) -> bool {
         if !package.is_valid() {
             return false;
         }
-        let storage = env.storage;
+        let storage = env.storage();
         self.cancel(storage);
         let _ = storage.create_dir(crate::data::DIR);
         let _ = storage.create_dir(&format!("{}/plugins", crate::data::DIR));
@@ -471,7 +512,7 @@ impl Installer {
     }
 
     /// Asks for the job's file `n`, its folders made first.
-    fn ask(&self, storage: &dyn Storage, job: &Job, n: usize, out: &mut Vec<Command>) {
+    fn ask(&self, storage: &dyn Storage, job: &Job, n: usize, out: &mut crate::Commands) {
         let Some(file) = self.file(storage, n) else {
             return;
         };
@@ -483,12 +524,14 @@ impl Installer {
             dir.push_str(part);
             let _ = storage.create_dir(&dir);
         }
-        let mut request = HttpRequest::new("GET", &file.url, self.reply.clone());
-        request.save_to = Some(format!("{staging}/{}", file.path));
-        request.params = Params::new()
+        let save_to = format!("{staging}/{}", file.path);
+        let params = Params::new()
             .with(JOB, job.id.to_string())
             .with(FILE, file.path);
-        out.push(Command::Http(request));
+        let request = HttpRequest::new("GET", &file.url, self.reply.clone())
+            .save_to(save_to)
+            .with(params);
+        out.push(Command::http(request));
     }
 
     /// Stops the installation going on and forgets what it downloaded;
@@ -503,20 +546,25 @@ impl Installer {
 
     /// Removes the data plugin `plugin` ([`Command::RemovePlugin`]),
     /// stopping its installation if one is going on.
-    pub fn remove(&self, env: &Env<'_>, plugin: &Id, out: &mut Vec<Command>) {
+    pub fn remove(&self, env: &Env<'_>, plugin: &Id, out: &mut crate::Commands) {
         if self
-            .job(env.storage)
+            .job(env.storage())
             .is_some_and(|job| job.plugin == plugin.as_str())
         {
-            self.cancel(env.storage);
+            self.cancel(env.storage());
         }
         out.push(Command::RemovePlugin(plugin.clone()));
     }
 
     /// An answer to one of the downloads: the file checked, then the next
     /// one asked for, or the job complete once all are there.
-    pub fn received(&self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) -> Received {
-        let storage = env.storage;
+    pub fn received(
+        &self,
+        env: &Env<'_>,
+        reply: &HttpReply,
+        out: &mut crate::Commands,
+    ) -> Received {
+        let storage = env.storage();
         let Some(job) = self.job(storage) else {
             return Received::Other;
         };
@@ -657,6 +705,8 @@ mod tests {
         assert!(!fits("1.0", 1));
         assert!(!fits("0.3", DATA_FORMATS + 1));
         assert!(!fits("new", 1));
+        // A later kernel takes what its SDK reads.
+        assert!(fits_sdk(Version::new(1, 2, 0), "1.0", 1));
     }
 
     #[test]
@@ -699,5 +749,24 @@ mod tests {
         assert!(!Digest::Sha256("ab".into()).is_valid());
         assert!(!Digest::Sha1("0".repeat(40)).holds(&storage, "f"));
         assert!(Digest::parse("md5:00").is_none());
+    }
+
+    /// A file a library gives both digests of is checked by its SHA-256,
+    /// whichever comes first; one with only a SHA-1 by that.
+    #[test]
+    fn sha256_is_taken_before_sha1() {
+        let (sha1, sha256) = ("a".repeat(40), "B".repeat(64));
+        for keys in [["sha1", "sha256"], ["sha256", "sha1"]] {
+            let mut digest = Digest::default();
+            for key in keys {
+                let hex = if key == "sha1" { &sha1 } else { &sha256 };
+                assert!(digest.take(key, hex));
+            }
+            assert_eq!(digest, Digest::Sha256("b".repeat(64)));
+        }
+        let mut digest = Digest::default();
+        assert!(digest.take("sha1", &sha1));
+        assert!(!digest.take("md5", "00"));
+        assert_eq!(digest, Digest::Sha1(sha1));
     }
 }

@@ -85,6 +85,19 @@ pub enum InputMode {
     Pen,
 }
 
+impl InputMode {
+    /// What counts as used last before anything was: a touch screen is
+    /// touched first, so no focus shows before a button is pressed
+    /// ([`ui::focus_shown`](crate::ui::focus_shown)); buttons elsewhere.
+    pub fn at_start(input: &InputCaps) -> Self {
+        if input.touch {
+            Self::Touch
+        } else {
+            Self::Buttons
+        }
+    }
+}
+
 /// An input of one's own (`input.<id>` in key maps), e.g. a chord a
 /// plugin recognizes or a switch of a switch-access device: bound like
 /// any other, raised with [`Command::Input`](crate::Command::Input).

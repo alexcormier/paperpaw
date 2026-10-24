@@ -167,7 +167,7 @@ impl Check {
             results: read_report(env),
             step: None,
             focus: 0,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             unsaved: None,
             started: false,
             flipped: false,
@@ -205,10 +205,9 @@ impl Check {
     }
 
     fn save(&mut self, env: &Env<'_>) {
-        let when = env
-            .status
-            .clock
-            .map(|c| paperpaw_sdk::time::iso8601(c.unix_millis_at(env.now)));
+        let when = env.status.clock.map(|c| {
+            paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now)).iso8601()
+        });
         let about = About {
             device: env.device,
             version: env!("CARGO_PKG_VERSION"),
@@ -308,7 +307,7 @@ impl Check {
             Some(Step::Clock) => match env.status.clock {
                 Some(c) => (
                     Outcome::Pass,
-                    paperpaw_sdk::time::iso8601(c.unix_millis_at(env.now)),
+                    paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now)).iso8601(),
                 ),
                 None => (Outcome::Skip, String::from("time of day not known")),
             },
@@ -365,7 +364,7 @@ impl Check {
                 cx.request_refresh(RefreshMode::Full);
             }
             Control::LightAgain => self.start_light(cx),
-            Control::WifiPage => cx.command(Command::RunAction(Id::new_static(WIFI_PAGE))),
+            Control::WifiPage => cx.command(Command::run(Id::new_static(WIFI_PAGE))),
             Control::SleepNow => {
                 // Marked asleep when the device goes to sleep (SUSPEND).
                 self.sleep_asked = Some(env.now);
@@ -511,6 +510,7 @@ impl Screen for Check {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         if self.step != Some(Step::Touch) {
             // Which step, as a note: the header's page arrows would turn
             // nothing here.
@@ -518,33 +518,22 @@ impl Screen for Check {
                 .step
                 .map(|s| format!("{} / {}", s.index() + 1, Step::ALL.len()));
             let title = env.i18n.tr("diagnostics.check.title");
-            self.header
-                .draw(canvas, env, &style, title, step.as_deref(), None);
+            self.header.draw(&mut ui, title, step.as_deref(), None);
         }
         let l = &self.layout;
         let (title, help) = texts(env, self.step);
+        paragraph(&mut ui, l.title, style.title(), &title, Color::BLACK);
         paragraph(
-            canvas,
-            env,
-            &style,
-            l.title,
-            style.title,
-            &title,
-            Color::BLACK,
-        );
-        paragraph(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             l.help,
-            style.small,
+            style.small(),
             &help,
-            style.faint(60),
+            style.faint(ui::Ink::Note),
         );
         match self.step {
-            Some(Step::Screen) => draw_screen_test(canvas, env, l.body, self.flipped),
-            Some(Step::Touch) => self.draw_targets(canvas, env),
-            _ => draw_lines(canvas, env, &style, l.body, &self.lines(env)),
+            Some(Step::Screen) => draw_screen_test(ui.canvas(), env, l.body, self.flipped),
+            Some(Step::Touch) => self.draw_targets(ui.canvas(), env),
+            _ => draw_lines(&mut ui, l.body, &self.lines(env)),
         }
         // The answer suggested stands out; while buttons are asked for,
         // they choose nothing.
@@ -553,7 +542,7 @@ impl Screen for Check {
             let label = env.i18n.tr(control.label());
             let focused = self.shown && i == self.focus && !self.takes_buttons();
             let on = Some(*control) == suggested || *control == Control::Done;
-            ui::draw_button(canvas, env, &style, *rect, label, on, focused);
+            ui.button(*rect, label, on, focused);
         }
     }
 
@@ -655,7 +644,7 @@ impl Screen for Check {
         }
         match self.header.tap(cx.env(), &self.style, gesture.start, None) {
             Some(action) if !touch => {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 Handled::Yes
             }
             _ => Handled::No,
@@ -732,8 +721,8 @@ impl Check {
         let style = &self.style;
         let display = env.device.display;
         // The header's margin, so that everything lines up with its title.
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         let width = display.width.saturating_sub(2 * margin);
         let (title_text, help_text) = texts(env, self.step);
         let lines = |size: f32, text: &str| -> u16 {
@@ -746,16 +735,16 @@ impl Check {
         // and its text begins below them.
         let touch = self.step == Some(Step::Touch);
         let mut y = if touch {
-            (env.metrics.mm(TARGET_MM * 2 + 2) + style.gap) as u16
+            (env.metrics.mm(TARGET_MM * 2 + 2) + u32::from(style.gap())) as u16
         } else {
             self.header.area().y + self.header.area().height + gap * 2
         };
-        let title = Rect::new(margin, y, width, lines(style.title, &title_text));
+        let title = Rect::new(margin, y, width, lines(style.title(), &title_text));
         y += title.height + gap;
-        let help = Rect::new(margin, y, width, lines(style.small, &help_text));
+        let help = Rect::new(margin, y, width, lines(style.small(), &help_text));
         y += help.height + gap * 2;
 
-        let button = style.row as u16;
+        let button = style.row();
         let answers = self.answers();
         let tools = self.tools(env);
         // The touch page keeps its edges free for the targets: its
@@ -1097,19 +1086,11 @@ fn line_height(env: &Env<'_>, style: &UiStyle, size: f32) -> u16 {
 }
 
 /// Draws `text` wrapped into `area`, as many lines as fit.
-fn paragraph(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    size: f32,
-    text: &str,
-    color: Color,
-) {
-    let Some(font) = style.font(env) else {
+fn paragraph(ui: &mut ui::Ui<'_>, area: Rect, size: f32, text: &str, color: Color) {
+    let Some(font) = ui.font() else {
         return;
     };
-    canvas.describe(Role::Text, text, area);
+    ui.canvas().describe(Role::Text, text, area);
     let height = font.line_metrics(size).line_height as u16;
     let mut top = area.y;
     for range in font.wrap(size, text, f32::from(area.width)) {
@@ -1117,34 +1098,24 @@ fn paragraph(
             break;
         }
         let row = Rect::new(area.x, top, area.width, height);
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            f32::from(area.x),
-            row,
-            &text[range],
-            color,
-        );
+        ui::Label::new(&text[range])
+            .px(size)
+            .color(color)
+            .draw_from(ui, f32::from(area.x), row);
         top += height;
     }
 }
 
 /// Lines of a name and its value, one a row, as many as fit.
-fn draw_lines(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    lines: &[(String, String)],
-) {
+fn draw_lines(ui: &mut ui::Ui<'_>, area: Rect, lines: &[(String, String)]) {
+    let (env, style) = (ui.env(), ui.style());
     // A row each, closer where they do not fit so (the end's list).
-    let line = line_height(env, style, style.small);
+    let line = line_height(env, style, style.small());
     let count = u16::try_from(lines.len()).unwrap_or(u16::MAX).max(1);
-    let row = (style.row as u16).min(area.height / count).max(line);
+    let row = (style.row()).min(area.height / count).max(line);
     // A row keeps a margin inside: widened by it, its text lines up with
     // the text above.
-    let inside = style.margin as u16;
+    let inside = style.margin();
     let mut top = area.y;
     for (name, value) in lines {
         if top + row > area.y + area.height {
@@ -1156,7 +1127,7 @@ fn draw_lines(
             area.width + 2 * inside,
             row,
         );
-        ui::draw_value_row(canvas, env, style, rect, false, name, value);
+        ui::Row::value(name, value).draw(ui, rect);
         top += row;
     }
 }

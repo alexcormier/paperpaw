@@ -8,7 +8,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, frame_height, goal, line, shade};
@@ -24,7 +26,7 @@ const NAME: &str = "stats.widget.today";
 static SETTINGS: [SettingSpec; 8] = [
     widgets::frame_spec("stats.widget.today.frame", TODAY, Frame::None),
     widgets::padding_spec("stats.widget.today.padding", TODAY, Padding::Auto),
-    widgets::size_spec("stats.widget.today.size", TODAY, Size::Medium, true),
+    widgets::size_spec("stats.widget.today.size", TODAY, TextSize::Medium, true),
     widgets::align_spec("stats.widget.today.align", TODAY, Align::Left),
     widgets::part_spec(
         "stats.widget.today.caption",
@@ -38,7 +40,11 @@ static SETTINGS: [SettingSpec; 8] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&TODAY, "stats.widget.today"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(TODAY, "stats.widget.today");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(TODAY, "stats.widget.today", |_| Box::new(Today::default()))
@@ -160,7 +166,7 @@ impl Widget for Today {
         let id = NAME;
         let size = widgets::size(env, id).text(&style);
         let note = if widgets::shows(env, id, "note") {
-            line(&font, style.small)
+            line(&font, style.small())
         } else {
             0
         };
@@ -194,9 +200,10 @@ fn progress(env: &Env<'_>, numbers: &Numbers) -> u64 {
     goal(env).map_or(0, |goal| (numbers.today * 1000 / goal.max(1)).min(1000))
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &Numbers) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook, numbers: &Numbers) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -205,7 +212,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
     let mut area = super::below_caption(env, caption, look.area);
     let (first, second) = lines(env, numbers);
     // Where they do not all fit, the note goes, then the bar.
-    let least = line(&font, style.text);
+    let least = line(&font, style.text());
     // The caption goes before the note: where the note is whole only
     // without it.
     let whole = |area: Rect| {
@@ -236,7 +243,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
     // The note goes where it makes the numbers smaller than the body's
     // size.
     let alone = super::text_size(env, &font, id, &first, area.width, area.height - band);
-    if size < style.text && alone > size {
+    if size < style.text() && alone > size {
         note = None;
         note_h = 0;
         size = alone;
@@ -250,28 +257,31 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
         first
     };
     // The lines together in the middle, the caption above them.
-    let block = super::captioned(canvas, env, id, look, caption, big + band + note_h);
+    let block = super::captioned(ui.canvas(), env, id, look, caption, big + band + note_h);
     let align = widgets::align(env, id);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     let first = ui::fit(&font, size, &first, width);
     let x = align.x(area, font.measure(size, &first));
-    ui::draw_label(canvas, &font, size, x, row(block.y, big), &first, look.ink);
+    ui::Label::new(&first)
+        .px(size)
+        .color(look.ink)
+        .draw_from(&mut ui, x, row(block.y, big));
     let mut y = block.y + big;
     if band > 0 {
         // A bar filled up to today's share of the goal, its ends round.
         let height = env.metrics.mm(1).max(4) as u16;
         let track = Rect::new(area.x, y + (band - height) / 2, area.width, height);
         let radius = u32::from(height / 2);
-        canvas.fill_round_shaded(track, radius, shade(look, 1));
+        ui.canvas().fill_round_shaded(track, radius, shade(look, 1));
         let filled = (u64::from(area.width) * progress(env, numbers) / 1000) as u16;
         if filled > 0 {
             let filled = filled.max(height);
             let bar = Rect::new(track.x, track.y, filled, height);
-            canvas.fill_round(bar, radius, look.ink);
+            ui.canvas().fill_round(bar, radius, look.ink);
         }
         y += band;
     }
     if let Some(note) = note {
-        note.draw(canvas, env, row(y, note_h), align, look.faint);
+        note.draw(ui.canvas(), env, row(y, note_h), align, look.faint);
     }
 }

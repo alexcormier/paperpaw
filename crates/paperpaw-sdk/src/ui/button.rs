@@ -95,8 +95,11 @@ pub fn draw_faint_button(
     label: &str,
     focused: bool,
 ) {
-    canvas.describe(Role::Button, label, rect).focused(focused);
-    let faint = style.faint(60);
+    canvas
+        .describe(Role::Button, label, rect)
+        .focused(focused)
+        .disabled(true);
+    let faint = style.faint(Ink::Note);
     framed(canvas, style, rect, (Color::WHITE, faint), focused);
     let Some(font) = style.font(env) else {
         return;

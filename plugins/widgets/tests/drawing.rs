@@ -254,7 +254,13 @@ impl Harness {
 
     fn define(&mut self, id: &str, kind: SettingKind, value: SettingValue) {
         self.settings
-            .define(SettingSpec::new(Id::parse(id).unwrap(), "x", kind, value))
+            .define(SettingSpec::new(
+                Id::parse(id).unwrap(),
+                "x",
+                kind,
+                value,
+                paperpaw_sdk::builtin::groups::OTHER,
+            ))
             .unwrap();
     }
 
@@ -263,8 +269,8 @@ impl Harness {
             match contribution {
                 Contribution::Setting(spec) => self.settings.define(*spec).unwrap(),
                 Contribution::FixedSettings(list) => {
-                    for spec in list {
-                        self.settings.define_fixed(spec).unwrap();
+                    for at in 0..list.len() {
+                        self.settings.define_fixed(list, at).unwrap();
                     }
                 }
                 Contribution::SettingGroup(group) => self.settings.add_group(group).unwrap(),
@@ -353,7 +359,7 @@ impl Harness {
             work: paperpaw_sdk::work::WorkStates::none(),
             reader: true,
             clipboard: false,
-            last_input: Default::default(),
+            last_input: paperpaw_sdk::keys::InputMode::at_start(&self.device.input),
             inputs: &[],
             content: paperpaw_platform::Rect::default(),
             stack: &[],
@@ -665,14 +671,15 @@ fn filled() -> MemoryStorage {
             height: 90,
         })
         .progress(40);
-    paperpaw_sdk::library::save(&storage, "books/one.epub", &book);
+    paperpaw_sdk::library::save(&storage, "books/one.epub", &book).unwrap();
     paperpaw_sdk::library::catalog::write(
         &storage,
         &[paperpaw_sdk::library::catalog::Record::of(
             "books/one.epub",
             &book,
         )],
-    );
+    )
+    .unwrap();
     let _ = storage.write(".paperpaw/library/opened.txt", b"books/one.epub");
     storage
         .write(

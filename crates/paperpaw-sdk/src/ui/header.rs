@@ -204,9 +204,9 @@ impl Header {
         self
     }
 
-    /// Page `page.0` (0-based) of `page.1`, e.g. "2 / 5".
-    fn page_label(env: &Env<'_>, page: (usize, usize)) -> String {
-        let (shown, pages) = (page.0.saturating_add(1), page.1);
+    /// Page `page` (from 0) of its pages, e.g. "2 / 5".
+    fn page_label(env: &Env<'_>, page: Paging) -> String {
+        let (shown, pages) = (page.page.saturating_add(1), page.pages);
         env.i18n.format(
             "core.page-of",
             &[
@@ -216,7 +216,7 @@ impl Header {
         )
     }
 
-    fn layout(&self, env: &Env<'_>, style: &UiStyle, page: Option<(usize, usize)>) -> HeaderParts {
+    fn layout(&self, env: &Env<'_>, style: &UiStyle, page: Option<Paging>) -> HeaderParts {
         let a = self.area;
         let square = a.height;
         let margin = style.margin as u16;
@@ -238,7 +238,7 @@ impl Header {
         let mut right = a.x + a.width;
         let mut arrows = (back_x, 0, end - reach - 1);
         let pager = match (page, style.font(env)) {
-            (Some(page), Some(font)) if page.1 > 1 => {
+            (Some(page), Some(font)) if page.pages > 1 => {
                 let label = font.measure(style.small, &Self::page_label(env, page)) as u16;
                 let (next, prev_end) = if self.arrows {
                     // A finger's room round the arrow, out to the edge.
@@ -273,7 +273,7 @@ impl Header {
         env: &Env<'_>,
         style: &UiStyle,
         title: &str,
-        page: Option<(usize, usize)>,
+        page: Option<Paging>,
     ) -> bool {
         let Some(font) = style.font(env) else {
             return true;
@@ -286,16 +286,16 @@ impl Header {
 
     /// Draws the header: the title, an optional note right of it (e.g. a
     /// sort order) and the page number of a paged list (`page` is the
-    /// 0-based page and the number of pages).
+    /// page shown and the number of pages).
     pub fn draw(
         &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        style: &UiStyle,
+        ui: &mut super::Ui<'_>,
         title: &str,
         note: Option<&str>,
-        page: Option<(usize, usize)>,
+        page: Option<Paging>,
     ) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         // Without arrows to page with, the page number gives way where the
         // title is not whole beside it.
         let page = page.filter(|_| self.arrows || self.title_whole(env, style, title, page));
@@ -355,14 +355,9 @@ impl Header {
             if self.arrows {
                 // At the first or last page, the arrow is gray.
                 let color = |end: bool| if end { style.ink(Ink::Disabled) } else { ink };
-                arrow(canvas, prev_x, crate::icons::PREV, true, color(page.0 == 0));
-                arrow(
-                    canvas,
-                    next_x,
-                    crate::icons::NEXT,
-                    false,
-                    color(page.0 + 1 >= page.1),
-                );
+                let (first, last) = (color(page.is_first()), color(page.is_last()));
+                arrow(canvas, prev_x, crate::icons::PREV, true, first);
+                arrow(canvas, next_x, crate::icons::NEXT, false, last);
             }
             let x = f32::from(at.x);
             let y = baseline(style.small);
@@ -415,7 +410,7 @@ impl Header {
         env: &Env<'_>,
         style: &UiStyle,
         point: Point,
-        page: Option<(usize, usize)>,
+        page: Option<Paging>,
     ) -> Option<crate::Id> {
         if !self.area.contains(point) {
             return None;
@@ -442,7 +437,7 @@ impl Header {
         env: &Env<'_>,
         style: &UiStyle,
         point: Point,
-        page: Option<(usize, usize)>,
+        page: Option<Paging>,
     ) -> bool {
         self.area.contains(point)
             && self
@@ -457,7 +452,7 @@ impl Header {
         env: &Env<'_>,
         style: &UiStyle,
         point: Point,
-        page: Option<(usize, usize)>,
+        page: Option<Paging>,
     ) -> bool {
         self.layout(env, style, page).title.contains(point)
     }
@@ -489,14 +484,10 @@ impl Pager {
         (style.row * 3 / 4) as u16
     }
 
-    /// Draws page `page.0` (0-based) of `page.1`.
-    pub fn draw(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        style: &UiStyle,
-        page: (usize, usize),
-    ) {
+    /// Draws `page` of its pages.
+    pub fn draw(&self, ui: &mut super::Ui<'_>, page: Paging) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         let a = self.area;
         canvas.fill(a, Color::WHITE);
         if style.separators != Separators::None {
@@ -533,10 +524,10 @@ impl Pager {
                 prev,
                 crate::icons::PREV,
                 true,
-                dim(page.0 == 0),
+                dim(page.is_first()),
             );
             let next = (x + side * 3, y);
-            let last = dim(page.0 + 1 >= page.1);
+            let last = dim(page.is_last());
             draw_arrow(canvas, env, style, next, crate::icons::NEXT, false, last);
         }
     }

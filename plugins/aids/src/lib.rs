@@ -122,15 +122,15 @@ static IN_AIDS: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().s
 
 /// Bold word beginnings, and words replaced.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         BOLD_BEGINNINGS.static_str(),
         "aids.setting.bold-beginnings",
         false,
         groups::READING,
     )
     .with_extra(&IN_AIDS)
-    .described("aids.setting.bold-beginnings.help"),
-    SettingSpec::fixed_text(
+    .description("aids.setting.bold-beginnings.help"),
+    SettingSpec::text(
         REPLACE.static_str(),
         "aids.setting.replace",
         "",
@@ -139,7 +139,7 @@ static SETTINGS: [SettingSpec; 2] = [
     .advanced()
     .with_extra(&IN_AIDS)
     .kept_on_reset()
-    .described("aids.setting.replace.help"),
+    .description("aids.setting.replace.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -166,13 +166,7 @@ impl Plugin for Aids {
                     bold_beginnings(block);
                 }
             }),
-            Box::new(|env: &Env<'_>| {
-                if env.settings.read(&BOLD_BEGINNINGS) {
-                    String::from("on")
-                } else {
-                    String::new()
-                }
-            }),
+            Box::new(|env: &Env<'_>| u64::from(env.settings.read(&BOLD_BEGINNINGS))),
         ))?;
         r.add_text_filter(TextFilterSpec::new(
             Id::new_static("aids.replace"),
@@ -183,7 +177,15 @@ impl Plugin for Aids {
                     replace(block, &list);
                 }
             }),
-            Box::new(|env: &Env<'_>| env.settings.read(&REPLACE).trim().to_string()),
+            Box::new(|env: &Env<'_>| {
+                let list = env.settings.read(&REPLACE);
+                let list = list.trim();
+                if list.is_empty() {
+                    0
+                } else {
+                    paperpaw_sdk::digest::fnv1a64(list)
+                }
+            }),
         ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

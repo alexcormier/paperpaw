@@ -98,8 +98,8 @@ impl Rows {
     }
 
     /// The page with the focus, and the number of pages.
-    pub fn paging(&self) -> (usize, usize) {
-        (self.page_of(self.focus), self.pages.len())
+    pub fn paging(&self) -> super::Paging {
+        super::Paging::new(self.page_of(self.focus), self.pages.len())
     }
 
     /// The rows of the page with the focus and where they are.
@@ -152,16 +152,16 @@ impl Rows {
     /// rounded cards.
     pub fn draw(
         &self,
-        canvas: &mut Canvas<'_>,
-        style: &UiStyle,
+        ui: &mut super::Ui<'_>,
         focus: bool,
-        mut draw_row: impl FnMut(&mut Canvas<'_>, usize, Rect, bool),
+        mut draw_row: impl FnMut(&mut super::Ui<'_>, usize, Rect, bool),
     ) {
+        let style = ui.style();
         let visible = self.visible();
         if style.cards {
             let entry = |i: usize| i < self.len() && !self.is_heading(i);
             draw_cards(
-                canvas,
+                ui.canvas(),
                 style,
                 &visible,
                 entry,
@@ -173,20 +173,20 @@ impl Rows {
         for (n, &(index, rect)) in visible.iter().enumerate() {
             let focused = focus && index == self.focus && !self.is_heading(index);
             if !self.is_heading(index) {
-                canvas
+                ui.canvas()
                     .describe(crate::semantics::Role::Row, "", rect)
                     .focused(focused);
             }
             if focused {
-                draw_entry_focus(canvas, style, rect);
+                draw_entry_focus(ui.canvas(), style, rect);
             } else if !self.is_heading(index)
                 && visible
                     .get(n + 1)
                     .is_some_and(|&(next, _)| !self.is_heading(next))
             {
-                crate::ui::draw_separator(canvas, style, rect, 0);
+                crate::ui::draw_separator(ui.canvas(), style, rect, 0);
             }
-            draw_row(canvas, index, rect, focused);
+            draw_row(ui, index, rect, focused);
         }
     }
 
@@ -441,7 +441,7 @@ mod tests {
         assert_eq!(rows.len(), 2);
         // Rows adding up past what a u16 holds still go on pages.
         let rows = Rows::new(area, alloc::vec![u16::MAX; 3], alloc::vec![]);
-        assert_eq!(rows.paging().1, 3);
+        assert_eq!(rows.paging().pages, 3);
     }
 
     #[test]
@@ -455,7 +455,7 @@ mod tests {
         assert_eq!(rows.step(true), ListChange::Focus);
         assert_eq!(rows.step(true), ListChange::Page, "over the heading");
         assert_eq!(rows.focus, 4);
-        assert_eq!(rows.paging(), (1, 2));
+        assert_eq!(rows.paging(), super::super::Paging::new(1, 2));
         assert_eq!(rows.turn(false), ListChange::Page);
         assert_eq!(rows.focus, 1);
         let visible = rows.visible();
@@ -489,14 +489,23 @@ mod tests {
     #[test]
     fn cards_are_open_where_a_page_cuts_them() {
         let style = card_style();
+        let kit = crate::test_kit::Kit::new(false);
+        let env = kit.env();
         // Four entries, two a page, no headings.
         let mut rows = Rows::new(
             Rect::new(0, 0, 100, 40),
             alloc::vec![20; 4],
             alloc::vec![false; 4],
         );
-        let draw =
-            |rows: &Rows| card_frame(|canvas| rows.draw(canvas, &style, false, |_, _, _, _| {}));
+        let draw = |rows: &Rows| {
+            card_frame(|canvas| {
+                rows.draw(
+                    &mut crate::ui::Ui::new(canvas, &env, &style),
+                    false,
+                    |_, _, _, _| {},
+                )
+            })
+        };
         let first = draw(&rows);
         let (top, bottom) = (first.view().pixel(50, 0), first.view().pixel(50, 39));
         assert_eq!((top, bottom), (Color::BLACK, Color::WHITE), "open below");

@@ -65,13 +65,13 @@ impl ShotsScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let margin = style.margin as u16;
+        let top = header.area().height + style.gap();
+        let margin = style.margin();
         let area = Rect::new(
             margin,
             top,
             display.width.saturating_sub(2 * margin),
-            display.height.saturating_sub(top + style.gap as u16),
+            display.height.saturating_sub(top + style.gap()),
         );
         let urls = params
             .get(params::TEXT)
@@ -96,9 +96,9 @@ impl ShotsScreen {
         // Each in a file of its own, its answer known by its number: one
         // turned past while it came is not shown for another.
         let mut request = HttpRequest::new("GET", url, FETCHED);
-        request.save_to = Some(part(self.at));
-        request.params = Params::new().with(SHOT, self.at.to_string());
-        cx.command(Command::Http(request));
+        request = request.save_to(part(self.at));
+        request = request.with(Params::new().with(SHOT, self.at.to_string()));
+        cx.command(Command::http(request));
         self.picture = Picture::Loading;
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
@@ -118,34 +118,29 @@ impl Screen for ShotsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("store.shots");
-        let paging = Some((self.at, self.urls.len()));
-        self.header.draw(canvas, env, &style, title, None, paging);
+        let paging = Some(ui::Paging::new(self.at, self.urls.len()));
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, paging);
         match &self.picture {
             Picture::Here(image) => {
                 let (w, h) = ui::fit_image(image, self.area.width, self.area.height);
                 let at = Rect::new(self.area.x + (self.area.width - w) / 2, self.area.y, w, h);
-                ui::draw_image(canvas, env.storage, image, at);
+                ui::draw_image(ui.canvas(), env.storage, image, at);
                 // A thin frame: the screenshot's own paper apart from ours.
-                canvas.stroke_round(at, style.line.max(1), 0, style.faint(150));
+                ui.canvas().stroke_round(
+                    at,
+                    u32::from(style.line()).max(1),
+                    0,
+                    style.faint(ui::Ink::Rule),
+                );
             }
-            Picture::Loading => ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            Picture::Loading => ui.empty(
                 self.area,
                 "cloud-download",
                 env.i18n.tr("store.loading-plugin"),
                 "",
             ),
-            Picture::Failed => ui::draw_empty(
-                canvas,
-                env,
-                &style,
-                self.area,
-                "cloud",
-                env.i18n.tr("store.shot-failed"),
-                "",
-            ),
+            Picture::Failed => ui.empty(self.area, "cloud", env.i18n.tr("store.shot-failed"), ""),
         }
     }
 
@@ -185,12 +180,12 @@ impl Screen for ShotsScreen {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let paging = Some((self.at, self.urls.len()));
+        let paging = Some(ui::Paging::new(self.at, self.urls.len()));
         if let Some(action) = self
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         // Left half back, right half on, as in a book.

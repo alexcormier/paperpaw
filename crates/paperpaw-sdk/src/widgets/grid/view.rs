@@ -163,18 +163,6 @@ pub struct GridView {
 }
 
 impl GridView {
-    /// An empty grid, not edited, with the plugin's own choice screen
-    /// `choice`, which is no longer needed: the options are asked with
-    /// [`ask::choice`](crate::ask::choice).
-    #[deprecated(
-        since = "0.4.0",
-        note = "use `GridView::asking`, without a choice screen"
-    )]
-    pub fn new(env: &Env<'_>, choice: Id, chosen: Event<Picked>) -> Self {
-        let _ = choice;
-        Self::asking(env, chosen)
-    }
-
     /// An empty grid, not edited; `chosen` is the event the options of an
     /// item come back with (asked with [`ask::choice`](crate::ask::choice)).
     /// Lay it out with [`layout`](Self::layout).
@@ -193,7 +181,7 @@ impl GridView {
             drop_check: None,
             names: Vec::new(),
             focus: 0,
-            focus_shown: !env.device.input.touch,
+            focus_shown: crate::ui::focus_shown(env),
             edit: None,
             labels: true,
             chosen,
@@ -280,10 +268,9 @@ impl GridView {
                         }
                     }
                     (What::Widget(_), None) => {}
-                    (What::Tool(action), _) => self.targets.push((
-                        shown.area,
-                        Target::Run(Command::RunAction(action.clone()), None),
-                    )),
+                    (What::Tool(action), _) => self
+                        .targets
+                        .push((shown.area, Target::Run(Command::run(action.clone()), None))),
                 }
             }
             let name = shown.item.what.title(env);
@@ -572,7 +559,7 @@ impl GridView {
     }
 
     /// `cells` for item `index` as its widget's hint keeps them
-    /// ([`CellsHint::keep`](crate::widgets::CellsHint::keep)), the side
+    /// ([`CellSpan::keep`](crate::widgets::CellSpan::keep)), the side
     /// that changed `wide` or high.
     fn kept(&self, index: usize, cells: Cells, wide: bool, env: &Env<'_>) -> Cells {
         let hint = self
@@ -598,7 +585,7 @@ impl GridView {
         let Some(widget) = &mut shown.widget else {
             return false;
         };
-        let mut out = Vec::new();
+        let mut out = crate::Commands::new();
         let taken = widget.on_input(&env, input, shown.area, &mut out);
         if taken {
             cx.request_redraw_area(shown.area);
@@ -725,10 +712,14 @@ impl GridView {
             return GridResponse::Handled;
         };
         match target {
-            // A tool shown faint by its plugin: nothing to do now.
-            Target::Run(Command::RunAction(action), _)
-                if !cx.env().menus.state(cx.env(), action.as_str()).enabled => {}
-            Target::Run(command, _) => cx.command(command),
+            Target::Run(command, _) => {
+                // A tool shown faint by its plugin: nothing to do now.
+                let faint = matches!(&command, Command::RunAction(action, _)
+                    if !cx.env().menus.state(cx.env(), action.as_str()).enabled);
+                if !faint {
+                    cx.command(command);
+                }
+            }
             Target::Item(item) => self.options(item, cx),
             Target::Button(button) => return GridResponse::Button(button),
         }
@@ -1275,167 +1266,11 @@ fn handle(area: Rect, style: &UiStyle) -> Rect {
 
 #[cfg(test)]
 mod tests {
-    use core::cell::RefCell;
-
-    use paperpaw_platform::Rotation;
-
     use super::*;
-    use crate::decorations::Decorators;
-    use crate::filters::TextFilters;
-    use crate::secrets::Secrets;
-    use crate::services::Services;
-    use crate::setup::SetupSteps;
-    use crate::status::StatusItems;
-    use crate::usage::{PluginUsage, Usage};
-    use crate::widgets::Widgets;
-    use crate::{
-        Actions, DeviceInfo, DisplayInfo, EnvParts, Fonts, Formats, Hyphenation, InputCaps,
-        Instant, MemoryClass, MemoryStorage, Menus, Metrics, Output, PixelFormat, Plugins,
-        PointerTool, Setting, SettingSpec, SettingValue, Settings, SystemStatus, Translator,
-    };
+    use crate::test_kit::Kit;
+    use crate::{Output, PointerTool, SettingSpec, SettingValue};
 
     const CHOSEN: Event<Picked> = Event::new("test.chosen");
-
-    struct NoKeys;
-
-    impl crate::keys::KeyBindings for NoKeys {
-        fn bound(&self, _: &[&str], _: &str) -> Option<Id> {
-            None
-        }
-    }
-
-    /// What an [`Env`] is made of.
-    struct Kit {
-        device: DeviceInfo,
-        settings: Settings,
-        i18n: Translator,
-        fonts: Fonts,
-        formats: Formats,
-        hyphenation: Hyphenation,
-        menus: Menus,
-        actions: Actions,
-        plugins: Plugins,
-        status: SystemStatus,
-        usage: Usage,
-        plugin_usage: RefCell<Vec<PluginUsage>>,
-        status_items: StatusItems,
-        text_filters: TextFilters,
-        decorators: Decorators,
-        page_layers: crate::layers::PageLayers,
-        lookup: crate::lookup::LookupProviders,
-        readers: crate::readers::Readers,
-        widgets: Widgets,
-        setup: SetupSteps,
-        services: Services,
-        secrets: Secrets,
-        storage: MemoryStorage,
-    }
-
-    impl Kit {
-        /// A device with buttons alone (as the X4), or with touch too.
-        fn new(touch: bool) -> Self {
-            Self {
-                device: DeviceInfo {
-                    id: "test",
-                    name: "Test",
-                    display: DisplayInfo {
-                        width: 400,
-                        height: 400,
-                        dpi: 254,
-                        format: PixelFormat::Gray4,
-                        rotation: Rotation::Deg0,
-                        color: None,
-                    },
-                    input: InputCaps {
-                        buttons: true,
-                        touch,
-                        pen: false,
-                        keys: &[],
-                    },
-                    memory: MemoryClass::Small,
-                },
-                settings: Settings::new(),
-                i18n: Translator::new(),
-                fonts: Fonts::new(0),
-                formats: Formats::new(),
-                hyphenation: Hyphenation::new(),
-                menus: Menus::new(),
-                actions: Actions::new(),
-                plugins: Plugins::new(),
-                status: SystemStatus::default(),
-                usage: Usage::default(),
-                plugin_usage: RefCell::new(Vec::new()),
-                status_items: StatusItems::new(),
-                text_filters: TextFilters::new(),
-                decorators: Decorators::new(),
-                page_layers: Default::default(),
-                lookup: Default::default(),
-                readers: Default::default(),
-                widgets: Widgets::new(),
-                setup: SetupSteps::new(),
-                services: Services::new(),
-                secrets: Secrets::default(),
-                storage: MemoryStorage::new(),
-            }
-        }
-
-        fn env(&self) -> Env<'_> {
-            Env::from(EnvParts {
-                device: &self.device,
-                now: Instant::default(),
-                metrics: Metrics::new(self.device.display.dpi),
-                settings: &self.settings,
-                i18n: &self.i18n,
-                fonts: &self.fonts,
-                formats: &self.formats,
-                hyphenation: &self.hyphenation,
-                menus: &self.menus,
-                actions: &self.actions,
-                plugins: &self.plugins,
-                status: &self.status,
-                usage: &self.usage,
-                plugin_usage: &self.plugin_usage,
-                status_items: &self.status_items,
-                text_filters: &self.text_filters,
-                decorators: &self.decorators,
-                page_layers: &self.page_layers,
-                lookup: &self.lookup,
-                readers: &self.readers,
-                stylesheets: &[],
-                book_data: &[],
-                book_fields: &[],
-                book_badges: &[],
-                widgets: &self.widgets,
-                setup: &self.setup,
-                services: &self.services,
-                keys: &NoKeys,
-                look: crate::ui::look::Look::none(),
-                caps: crate::Capabilities::default(),
-                wifi: None,
-                firmware: None,
-                native: None,
-                power: crate::power::Power::normal(),
-                work: crate::work::WorkStates::none(),
-                reader: true,
-                clipboard: false,
-                last_input: Default::default(),
-                inputs: &[],
-                content: paperpaw_platform::Rect::default(),
-                stack: &[],
-                slots: &[],
-                screens: &[],
-                font_dirs: &[],
-                catalog_device: None,
-                secrets: &self.secrets,
-                running: &crate::secrets::Anyone,
-                random: crate::random::Random::default(),
-                memory: crate::memory::Memory::NONE,
-                clock: crate::time::Clock::NONE,
-                started: crate::power::Start::Unknown,
-                storage: &self.storage,
-            })
-        }
-    }
 
     /// Four columns and three rows of 100 pixels, a gap of 10: cell
     /// (c, r) is at (c * 100 + 5, r * 100 + 5), 90 pixels wide and high.
@@ -1649,7 +1484,7 @@ mod tests {
         assert_eq!(grid.focus, 0);
         let (response, out) = act(&mut grid, &env, &actions::CONFIRM);
         assert_eq!(response, GridResponse::Handled);
-        assert_eq!(out.commands, [Command::RunAction(Id::new_static("t.a"))]);
+        assert_eq!(out.commands, [Command::run(Id::new_static("t.a"))]);
         // Other buttons are the screen's.
         let (response, _) = act(&mut grid, &env, &actions::NEXT_PAGE);
         assert_eq!(response, GridResponse::Ignored);
@@ -1898,11 +1733,15 @@ mod tests {
 
     #[test]
     fn placements_are_tried_a_bounded_number_of_times() {
-        let face = Setting::<bool>::new("test.w.face");
         let kit = |values: u32| {
             let mut kit = Kit::new(false);
             kit.settings
-                .define(SettingSpec::switch(&face, "face", false))
+                .define(SettingSpec::switch(
+                    "test.w.face",
+                    "face",
+                    false,
+                    crate::builtin::groups::OTHER,
+                ))
                 .unwrap();
             for n in 1..=values {
                 let id = format!("test.w@{n}.face");

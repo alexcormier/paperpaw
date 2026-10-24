@@ -40,9 +40,9 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, encode};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, SettingSpec, Storage, StorageError,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError,
+    Registrar, Screen, ScreenSpec, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
@@ -277,17 +277,17 @@ impl Fetch {
         path: &str,
         reply: &Event<HttpReply>,
     ) -> HttpRequest {
-        let mut request = HttpRequest::new(method, &format!("{}{path}", server(env)), reply);
-        request.headers.push((
-            String::from("Authorization"),
-            format!("Bearer {}", self.token),
-        ));
-        request.headers.push(paperpaw_sdk::web::user_agent());
-        request
+        let (agent, name) = paperpaw_sdk::web::user_agent_of(env);
+        HttpRequest::new(method, &format!("{}{path}", server(env)), reply)
+            .header(
+                String::from("Authorization"),
+                format!("Bearer {}", self.token),
+            )
+            .header(agent, name)
     }
 
     /// Starts a fetch: first a token for the account.
-    fn start(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn start(&mut self, env: &Env<'_>, out: &mut Commands) {
         if self.running {
             return;
         }
@@ -306,32 +306,33 @@ impl Fetch {
             running: true,
             ..Self::default()
         };
-        let mut request =
-            HttpRequest::new("POST", &format!("{}/oauth/v2/token", server(env)), &TOKEN);
-        request.headers.push((
-            String::from("Content-Type"),
-            String::from("application/x-www-form-urlencoded"),
-        ));
-        request.body = Some(format!(
+        let body = format!(
             "grant_type=password&client_id={}&client_secret={}&username={}&password={}",
             encode(client),
             encode(secret),
             encode(user),
             encode(password)
-        ));
+        );
+        let request = HttpRequest::new("POST", &format!("{}/oauth/v2/token", server(env)), &TOKEN)
+            .header(
+                String::from("Content-Type"),
+                String::from("application/x-www-form-urlencoded"),
+            )
+            .body(body);
         out.push(Command::Notify(
             env.i18n.tr("wallabag.fetching").to_string(),
         ));
-        out.push(Command::Http(request));
+        out.push(Command::http(request));
     }
 
     fn ok(reply: &HttpReply) -> Option<u16> {
         reply.ok().then_some(reply.status)
     }
 
-    fn token(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn token(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
+        let text = reply.text();
         let token = Self::ok(reply)
-            .and_then(|_| json::text(&json::object(&reply.body), "access_token").map(String::from));
+            .and_then(|_| json::text(&json::object(&text), "access_token").map(String::from));
         let Some(token) = token else {
             self.running = false;
             let key = match reply.status {
@@ -354,17 +355,17 @@ impl Fetch {
 
     /// The next step: archive, list, ask about articles, download, or
     /// done.
-    fn next(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn next(&mut self, env: &Env<'_>, out: &mut Commands) {
         if let Some(id) = self.archive.pop() {
-            let mut request =
-                self.request(env, "PATCH", &format!("/api/entries/{id}.json"), &ARCHIVED);
-            request.headers.push((
-                String::from("Content-Type"),
-                String::from("application/x-www-form-urlencoded"),
-            ));
-            request.body = Some(String::from("archive=1"));
-            request.params = Params::new().with(ARTICLE, id);
-            out.push(Command::Http(request));
+            let request = self
+                .request(env, "PATCH", &format!("/api/entries/{id}.json"), &ARCHIVED)
+                .header(
+                    String::from("Content-Type"),
+                    String::from("application/x-www-form-urlencoded"),
+                )
+                .body(String::from("archive=1"))
+                .with(Params::new().with(ARTICLE, id));
+            out.push(Command::http(request));
             return;
         }
         if !self.listed {
@@ -372,16 +373,16 @@ impl Fetch {
                 "/api/entries.json?archive=0&detail=metadata&sort=created&order=desc&perPage={MAX_ARTICLES}"
             );
             let mut request = self.request(env, "GET", &path, &LISTED);
-            request.save_to = Some(data("entries.json"));
-            out.push(Command::Http(request));
+            request = request.save_to(data("entries.json"));
+            out.push(Command::http(request));
             return;
         }
         if let Some(id) = self.checks.pop() {
             let mut request =
                 self.request(env, "GET", &format!("/api/entries/{id}.json"), &CHECKED);
-            request.save_to = Some(data("entry.json"));
-            request.params = Params::new().with(ARTICLE, id);
-            out.push(Command::Http(request));
+            request = request.save_to(data("entry.json"));
+            request = request.with(Params::new().with(ARTICLE, id));
+            out.push(Command::http(request));
             return;
         }
         if let Some((id, title)) = self.downloads.pop() {
@@ -391,9 +392,9 @@ impl Fetch {
                 &format!("/api/entries/{id}/export.epub"),
                 &DOWNLOADED,
             );
-            request.save_to = Some(data("article.tmp"));
-            request.params = Params::new().with(ARTICLE, id).with(params::TITLE, title);
-            out.push(Command::Http(request));
+            request = request.save_to(data("article.tmp"));
+            request = request.with(Params::new().with(ARTICLE, id).with(params::TITLE, title));
+            out.push(Command::http(request));
             return;
         }
         self.running = false;
@@ -412,7 +413,7 @@ impl Fetch {
         done(env, key, &args, out);
     }
 
-    fn archived(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn archived(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         if Self::ok(reply).is_some() {
             self.archived += 1;
@@ -423,7 +424,7 @@ impl Fetch {
         self.next(env, out);
     }
 
-    fn listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         self.listed = true;
         // Only a whole list counts: an answer that is not one (a page of
         // the server's own, an error, a list cut short) changes nothing.
@@ -451,7 +452,7 @@ impl Fetch {
 
     /// An article fetched but not among the newest unread: its book goes
     /// only when Wallabag says it is archived or no longer there.
-    fn checked(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn checked(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         let gone = match reply.status {
             404 => Some(true),
@@ -467,7 +468,7 @@ impl Fetch {
         self.next(env, out);
     }
 
-    fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let tmp = data("article.tmp");
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         let title = reply.context.get(params::TITLE).unwrap_or_default();
@@ -559,7 +560,7 @@ fn is_id(id: &str) -> bool {
 /// reader's annotations stays, as does one another article in the list
 /// is at too (an older version gave two articles one name): the article
 /// is only let go of.
-fn remove_article(env: &Env<'_>, id: &str, out: &mut Vec<Command>) {
+fn remove_article(env: &Env<'_>, id: &str, out: &mut Commands) {
     if let Ok(mut list) = articles(env.storage)
         && let Some(at) = list.iter().position(|a| a.id == id)
     {
@@ -582,7 +583,7 @@ fn remove_article(env: &Env<'_>, id: &str, out: &mut Vec<Command>) {
 }
 
 /// Ends a fetch with message `key`.
-fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Vec<Command>) {
+fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Commands) {
     let text = env.i18n.format(key, args);
     out.push(Command::Notify(text.clone()));
     out.push(DONE.emit(Finished { text }));
@@ -595,16 +596,16 @@ pub struct Wallabag;
 /// The server and the account, set on the setup screen.
 static ON_SETUP: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(SCREEN);
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_text(SERVER.static_str(), "wallabag.server", "", groups::LIBRARY)
+    SettingSpec::text(SERVER.static_str(), "wallabag.server", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
         .kept_on_reset()
-        .described("wallabag.server.help"),
-    SettingSpec::fixed_text(USER.static_str(), "wallabag.user", "", groups::LIBRARY)
+        .description("wallabag.server.help"),
+    SettingSpec::text(USER.static_str(), "wallabag.user", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
         .kept_on_reset()
         .advanced()
-        .described("wallabag.user.help"),
-    SettingSpec::fixed_text(
+        .description("wallabag.user.help"),
+    SettingSpec::text(
         CLIENT.static_str(),
         "wallabag.client-id",
         "",
@@ -613,7 +614,7 @@ static SETTINGS: [SettingSpec; 3] = [
     .with_extra(&ON_SETUP)
     .kept_on_reset()
     .advanced()
-    .described("wallabag.client-id.help"),
+    .description("wallabag.client-id.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -639,18 +640,18 @@ impl Plugin for Wallabag {
             Box::new(|env, _| Box::new(SetupScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "wallabag.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         let s = state.clone();
         r.add_action(ActionSpec::new(FETCH, "wallabag.fetch").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     s.borrow_mut().start(env, out);
                 } else {
                     let due = FETCH_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));
@@ -664,7 +665,7 @@ impl Plugin for Wallabag {
         r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(48))?;
         r.add_icon(OPEN, Cow::Borrowed("article"))?;
         r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
-        type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Vec<Command>);
+        type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Commands);
         let steps: [(Event<HttpReply>, Step); 5] = [
             (TOKEN, Fetch::token),
             (ARCHIVED, Fetch::archived),
@@ -738,13 +739,13 @@ impl Row {
 }
 
 /// Keeps what was typed for a row of the set-up.
-fn entered(typed: &Typed, out: &mut Vec<Command>) {
+fn entered(typed: &Typed, out: &mut Commands) {
     let Some(row) = typed.context.get(FIELD).and_then(Row::of) else {
         return;
     };
     let text = typed.text.trim();
     let setting = |id: Setting<Text>| Command::set(&id, Cow::Owned(text.to_string()));
-    let secret = |id: &str, label: &str| Command::SetSecret(SecretChange::keep(id, label, text));
+    let secret = |id: &str, label: &str| Command::set_secret(SecretChange::keep(id, label, text));
     // An empty answer keeps what was kept: a confirm by mistake on the
     // empty field (a password is never shown in it) loses nothing.
     if text.is_empty() && matches!(row, Row::Password | Row::Secret) {
@@ -775,12 +776,15 @@ impl SetupScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let height = style.row as u16 * ROWS.len() as u16;
-        let note_top = top + height + style.gap as u16;
+        let top = header.area().height + style.gap();
+        let height = style.row() * ROWS.len() as u16;
+        let note_top = top + height + style.gap();
         Self {
-            list: ListView::new(Rect::new(0, top, display.width, height), style.row)
-                .focus_on_keys(env),
+            list: ListView::new(
+                Rect::new(0, top, display.width, height),
+                u32::from(style.row()),
+            )
+            .focus_on_keys(env),
             note: Rect::new(
                 0,
                 note_top,
@@ -796,7 +800,7 @@ impl SetupScreen {
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if row == Row::Fetch {
-            cx.command(Command::RunAction(FETCH));
+            cx.command(Command::run(FETCH));
             return;
         }
         let (text, password) = match row {
@@ -820,13 +824,11 @@ impl SetupScreen {
 impl Screen for SetupScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("wallabag.title");
-        self.header.draw(canvas, env, &style, title, None, None);
-        self.list.draw(
-            canvas,
-            &style,
-            ROWS.len(),
-            |canvas, index, rect, focused| {
+        self.header.draw(&mut ui, title, None, None);
+        self.list
+            .draw(&mut ui, ROWS.len(), |ui, index, rect, focused| {
                 let row = ROWS[index];
                 let kept = |id: &str| {
                     if env.secrets.get(id).is_some() {
@@ -847,10 +849,11 @@ impl Screen for SetupScreen {
                     Row::Fetch => String::from("›"),
                 };
                 let title = env.i18n.tr(row.title());
-                ui::draw_value_row(canvas, env, &style, rect, focused, title, &value);
-            },
-        );
-        ui::draw_message(canvas, env, &style, self.note, &self.message);
+                ui::Row::value(title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        ui.message(self.note, &self.message);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -877,7 +880,7 @@ impl Screen for SetupScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, ROWS.len()) else {

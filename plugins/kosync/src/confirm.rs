@@ -81,8 +81,9 @@ impl ConfirmScreen {
                 (text, Vec::from(["kosync.ok"]), None)
             }
         };
-        let buttons_row = style.touch_row(style.row) as u16;
-        let height = (style.row * 3) as u16 + buttons_row + ui::edge_room(&style, buttons_row);
+        let buttons_row = style.touch_row(u32::from(style.row())) as u16;
+        let height =
+            (u32::from(style.row()) * 3) as u16 + buttons_row + ui::edge_room(&style, buttons_row);
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
@@ -104,7 +105,7 @@ impl ConfirmScreen {
     /// The row with the buttons.
     fn button_row(&self) -> Rect {
         let r = self.region;
-        let row = self.style.touch_row(self.style.row) as u16;
+        let row = self.style.touch_row(u32::from(self.style.row())) as u16;
         // Its buttons keep the side margin from the bottom edge too.
         Rect::new(
             r.x,
@@ -116,7 +117,7 @@ impl ConfirmScreen {
 
     fn button(&self, index: usize) -> Rect {
         let row = self.button_row();
-        let (margin, gap) = (self.style.margin as u16, self.style.gap as u16 * 2);
+        let (margin, gap) = (self.style.margin(), self.style.gap() * 2);
         let count = self.buttons.len() as u16;
         let width = (row.width - 2 * margin - gap * (count - 1)) / count;
         let height = ui::button_height(&self.style, row);
@@ -182,32 +183,24 @@ impl Screen for ConfirmScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
-            (style.line * 2).max(2),
+            (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
         let row = self.button_row();
         let text = Rect::new(r.x, r.y, r.width, row.y - r.y);
-        ui::draw_message(canvas, env, &style, text, &self.text);
-        let touch = env.device.input.touch;
+        ui.message(text, &self.text);
         for (index, key) in self.buttons.iter().enumerate() {
             // With buttons, the frame shows which one confirm takes.
-            let focused = !touch && index == self.focus && self.buttons.len() > 1;
+            let focused = ui::focus_shown(env) && index == self.focus && self.buttons.len() > 1;
             let rect = self.button(index);
-            ui::draw_button(
-                canvas,
-                env,
-                &style,
-                rect,
-                env.i18n.tr(key),
-                index == 0,
-                focused,
-            );
+            ui.button(rect, env.i18n.tr(key), index == 0, focused);
         }
     }
 

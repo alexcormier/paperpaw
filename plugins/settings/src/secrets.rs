@@ -11,7 +11,9 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
-use paperpaw_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
+use paperpaw_sdk::{
+    Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen,
+};
 
 use crate::{ID, page};
 
@@ -31,13 +33,13 @@ const REMOVE: Event<Confirmed> = Event::new("settings.secret-remove");
 const HIDDEN: &str = "••••••";
 
 /// Keeps a secret typed anew.
-pub(crate) fn entered(env: &Env<'_>, typed: &Typed, out: &mut Vec<Command>) {
+pub(crate) fn entered(env: &Env<'_>, typed: &Typed, out: &mut Commands) {
     let Some(id) = typed.context.get(ID) else {
         return;
     };
     let text = typed.text.trim();
     if !text.is_empty() && env.secrets.has(id) {
-        out.push(Command::SetSecret(SecretChange::keep(id, "", text)));
+        out.push(Command::set_secret(SecretChange::keep(id, "", text)));
     }
 }
 
@@ -52,7 +54,7 @@ impl SecretList {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let (style, header, area) = page(env);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
         }
@@ -77,27 +79,23 @@ impl SecretList {
 impl Screen for SecretList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = env.secrets.listed().count();
         let title = env.i18n.tr("settings.secrets");
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
             let area = self.list.area();
-            ui::draw_message(
-                canvas,
-                env,
-                &style,
-                area,
-                env.i18n.tr("settings.secrets.none"),
-            );
+            ui.message(area, env.i18n.tr("settings.secrets.none"));
             return;
         }
         let secrets: Vec<_> = env.secrets.listed().collect();
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let label = env.i18n.tr(secrets[index].label);
-                ui::draw_value_row(canvas, env, &style, rect, focused, label, HIDDEN);
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let label = env.i18n.tr(secrets[index].label);
+            ui::Row::value(label, HIDDEN)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -123,7 +121,7 @@ impl Screen for SecretList {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, len) {
@@ -166,7 +164,7 @@ impl SecretPage {
         }
         choices.push(Choice::Remove);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
             id,
@@ -204,7 +202,7 @@ impl SecretPage {
     }
 
     fn remove(&self, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::SetSecret(SecretChange::remove(&self.id)));
+        cx.command(Command::set_secret(SecretChange::remove(&self.id)));
         cx.command(Command::Back);
     }
 }
@@ -212,24 +210,20 @@ impl SecretPage {
 impl Screen for SecretPage {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.choices.len();
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            &self.title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, &self.title, None, self.list.paging(len));
         let choices = &self.choices;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let key = match choices[index] {
-                    Choice::Change => "settings.secret.change",
-                    Choice::Remove => "settings.secret.remove",
-                };
-                ui::draw_value_row(canvas, env, &style, rect, focused, env.i18n.tr(key), "");
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let key = match choices[index] {
+                Choice::Change => "settings.secret.change",
+                Choice::Remove => "settings.secret.remove",
+            };
+            ui::Row::value(env.i18n.tr(key), "")
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -253,7 +247,7 @@ impl Screen for SecretPage {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.choices.len()) {

@@ -11,7 +11,8 @@
 
 use paperpaw_sdk::event::{Event, EventData, ParamValue};
 use paperpaw_sdk::{
-    Chosen, Command, HttpReply, Id, Instant, Params, ServerNotice, SocketNotice, Typed, http_params,
+    Command, FolderChosen, HttpReply, Id, Instant, Params, ServerNotice, SocketNotice, Typed,
+    http_params,
 };
 use proptest::prelude::*;
 
@@ -119,7 +120,7 @@ proptest! {
         let _ = ServerNotice::from_params(&params);
         let _ = SocketNotice::from_params(&params);
         let _ = Typed::from_params(&params);
-        let _ = Chosen::from_params(&params);
+        let _ = FolderChosen::from_params(&params);
     }
 
     /// An HTTP reply comes back with its headers and the request's own
@@ -133,7 +134,7 @@ proptest! {
         final_url in proptest::option::of("https://[a-z./]{0,12}"),
         context in context(HTTP_KEYS),
     ) {
-        let mut reply = HttpReply::failed(body, context);
+        let mut reply = HttpReply::failed(paperpaw_sdk::HttpError::Timeout, body, context);
         reply.status = status;
         reply.etag = etag;
         reply.content_type = content_type;
@@ -189,8 +190,8 @@ proptest! {
     fn answers_come_back(text in "\\PC{0,20}", typed_context in context(&["text"]), chosen_context in context(&["path"])) {
         let typed = Typed::new(text.clone(), typed_context);
         prop_assert_eq!(Typed::from_params(&typed.to_params()), Some(typed));
-        let chosen = Chosen::new(text, chosen_context);
-        prop_assert_eq!(Chosen::from_params(&chosen.to_params()), Some(chosen));
+        let chosen = FolderChosen::new(text, chosen_context);
+        prop_assert_eq!(FolderChosen::from_params(&chosen.to_params()), Some(chosen));
     }
 }
 
@@ -276,7 +277,11 @@ fn replies_without_their_own_parameters_are_refused() {
     // A status alone is a reply with an empty body.
     let reply = HttpReply::from_params(&Params::new().with("status", "204")).unwrap();
     assert!(reply.ok() && reply.body.is_empty());
-    let failed = HttpReply::failed("offline", Params::new().with("run", "1"));
+    let failed = HttpReply::failed(
+        paperpaw_sdk::HttpError::NoNetwork,
+        "offline",
+        Params::new().with("run", "1"),
+    );
     assert!(!failed.ok());
     assert_eq!(failed.context.get("run"), Some("1"));
     for params in [
@@ -297,7 +302,7 @@ fn replies_without_their_own_parameters_are_refused() {
         None
     );
     assert_eq!(Typed::from_params(&Params::new()), None);
-    assert_eq!(Chosen::from_params(&Params::new()), None);
+    assert_eq!(FolderChosen::from_params(&Params::new()), None);
     // A finished socket without a reason carries none.
     let done = SocketNotice::Done {
         socket: Id::new_static("a.b"),

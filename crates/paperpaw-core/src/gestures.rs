@@ -753,15 +753,19 @@ impl Kernel {
     }
 
     pub(crate) fn dispatch(&mut self, action: Id) {
-        self.dispatch_with(action, &Params::new());
+        self.dispatch_with(action, Params::new());
     }
 
     /// Runs `action` with `params`: seen by the observers of actions,
-    /// offered to the screens, else the handler put in its place with
-    /// the highest priority or its own.
-    pub(crate) fn dispatch_with(&mut self, action: Id, params: &Params) {
-        self.observe(&action, params, true);
-        if self.offer(|screen, cx| screen.on_action(&action, cx)) == Handled::Yes {
+    /// offered to the screens (which read the params from their
+    /// context), else the handler put in its place with the highest
+    /// priority or its own.
+    pub(crate) fn dispatch_with(&mut self, action: Id, params: Params) {
+        self.observe(&action, &params, true);
+        let before = mem::replace(&mut self.action_params, params);
+        let handled = self.offer(|screen, cx| screen.on_action(&action, cx));
+        let params = mem::replace(&mut self.action_params, before);
+        if handled == Handled::Yes {
             return;
         }
         // The guard let it pass only where it was asked (not where a screen
@@ -769,7 +773,7 @@ impl Kernel {
         let passed = self
             .guard()
             .is_some_and(|guard| self.offered_down_to <= guard);
-        self.run_handler(&action, params, passed);
+        self.run_handler(&action, &params, passed);
     }
 
     /// Runs action `action`'s own handler with `params` into `out`, as
@@ -780,10 +784,8 @@ impl Kernel {
         };
         let env = self.shared.env(self.now);
         let _running = self.shared.meter.enter(action.namespace());
-        match (spec.params_handler(), &spec.handler) {
-            (Some(handler), _) => handler(&env, params, out),
-            (None, Some(handler)) => handler(&env, out),
-            (None, None) => {}
+        if let Some(handler) = &spec.handler {
+            commands::handing(out, |out| handler(&env, params, out));
         }
     }
 
@@ -808,7 +810,7 @@ impl Kernel {
         let mut refused_secret = false;
         if let Some((plugin, handler)) = over {
             let _running = self.shared.meter.enter(plugin.as_str());
-            handler(&env, params, &mut self.output.commands);
+            commands::handing(&mut self.output.commands, |out| handler(&env, params, out));
             drop(_running);
             let out = &mut self.output.commands;
             work::quiet(
@@ -853,10 +855,8 @@ impl Kernel {
                 Some(spec) if spec.runs_itself() => {
                     let _running = self.shared.meter.enter(action.namespace());
                     let out = &mut self.output.commands;
-                    match (spec.params_handler(), &spec.handler) {
-                        (Some(handler), _) => handler(&env, params, out),
-                        (None, Some(handler)) => handler(&env, out),
-                        (None, None) => {}
+                    if let Some(handler) = &spec.handler {
+                        commands::handing(out, |out| handler(&env, params, out));
                     }
                     let owner = action.namespace();
                     work::quiet(reader, top, now, from, owner, out, &mut self.works);
@@ -891,8 +891,7 @@ impl Kernel {
         self.output.commands.retain(|command| {
             let again = index >= from
                 && match command {
-                    Command::RunAction(a) => a == action && params.is_empty(),
-                    Command::RunActionWith(a, p) | Command::RunOriginal(a, p) => {
+                    Command::RunAction(a, p) | Command::RunOriginal(a, p) => {
                         a == action && p == params
                     }
                     _ => false,
@@ -928,7 +927,9 @@ impl Kernel {
             }
             let _running = self.shared.meter.enter(spec.id.namespace());
             let from = self.output.commands.len();
-            (spec.observer)(&env, id, params, &mut self.output.commands);
+            commands::handing(&mut self.output.commands, |out| {
+                (spec.observer)(&env, id, params, out);
+            });
             let top = self.stack.last().map(|s| s.id.namespace());
             let (reader, now) = (self.shared.reader, self.now);
             let out = &mut self.output.commands;
@@ -949,7 +950,7 @@ impl Kernel {
             out.retain(|command| {
                 let again = index >= from
                     && match command {
-                        Command::RunAction(a) | Command::RunActionWith(a, _) => actions && a == id,
+                        Command::RunAction(a, _) => actions && a == id,
                         Command::Emit(event, _) => !actions && event == id,
                         _ => false,
                     };

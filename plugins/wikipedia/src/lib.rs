@@ -31,9 +31,9 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::web::encode;
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
-    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
-    Version,
+    Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
+    Manifest, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("wikipedia");
@@ -96,7 +96,8 @@ fn summary(env: &Env<'_>, reply: &HttpReply) -> Result<(Option<String>, String),
     let why = |key: &str| env.i18n.tr(key).to_string();
     match reply.status {
         200..=299 => {
-            let members = json::object(&reply.body);
+            let text = reply.text();
+            let members = json::object(&text);
             match json::text(&members, "extract").filter(|t| !t.trim().is_empty()) {
                 Some(extract) => Ok((
                     json::text(&members, "title").map(|t| t.to_string()),
@@ -124,12 +125,12 @@ fn provide(env: &Env<'_>, query: &LookupQuery) -> LookupAnswer {
     let request = summary_request(&language, &query.word, PROVIDED.id().clone())
         .with(context)
         .timeout(core::time::Duration::from_secs(PROVIDER_TIMEOUT_S));
-    LookupAnswer::Pending(alloc::vec![Command::Http(request)])
+    LookupAnswer::Pending(alloc::vec![Command::http(request)])
 }
 
 /// The summary arrived: the query answered with it, the whole screen
 /// for more; or with why there is none.
-fn provided(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+fn provided(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let context = &reply.context;
     let (Some(word), Some(to)) = (
         context.get(params::WORD),
@@ -231,10 +232,10 @@ impl Summary {
         self.lines.clear();
         self.top = 0;
         if let Some(font) = self.style.font(env) {
-            let width = f32::from(self.region.width) - 2.0 * self.style.margin as f32;
+            let width = f32::from(self.region.width) - 2.0 * self.style.margin() as f32;
             let mut start = 0;
             for paragraph in text.split('\n') {
-                for range in font.wrap(self.style.text, paragraph, width) {
+                for range in font.wrap(self.style.text(), paragraph, width) {
                     self.lines.push((start + range.start, start + range.end));
                 }
                 start += paragraph.len() + 1;
@@ -248,19 +249,20 @@ impl Summary {
             self.region.x,
             self.region.y,
             self.region.width,
-            self.style.row as u16,
+            self.style.row(),
         )
     }
 
     fn line_height(&self, env: &Env<'_>) -> f32 {
-        self.style.font(env).map_or(self.style.text * 1.3, |f| {
-            f.line_metrics(self.style.text).line_height
+        self.style.font(env).map_or(self.style.text() * 1.3, |f| {
+            f.line_metrics(self.style.text()).line_height
         })
     }
 
     fn rows(&self, env: &Env<'_>) -> usize {
-        let height =
-            f32::from(self.region.height) - f32::from(self.header().height) - self.style.gap as f32;
+        let height = f32::from(self.region.height)
+            - f32::from(self.header().height)
+            - self.style.gap() as f32;
         ((height / self.line_height(env)) as usize).max(1)
     }
 
@@ -315,51 +317,42 @@ impl Screen for Summary {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
-            (style.line * 2).max(2),
+            (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let header = self.header();
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let source = env.i18n.tr("wikipedia.title");
-        let source_width = font.measure(style.small, source);
+        let source_width = font.measure(style.small(), source);
         let right = f32::from(header.width) - margin - source_width;
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            right,
-            header,
-            source,
-            style.faint(80),
-        );
-        let word = ui::fit(&font, style.title, &self.word, right - margin * 2.0);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title,
-            margin,
-            header,
-            &word,
-            Color::BLACK,
-        );
+        ui::Label::new(source)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Detail))
+            .draw_from(&mut ui, right, header);
+        let word = ui::fit(&font, style.title(), &self.word, right - margin * 2.0);
+        ui::Label::new(&word)
+            .px(style.title())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, margin, header);
         let height = self.line_height(env);
-        let ascent = font.line_metrics(style.text).ascent;
-        let top = f32::from(header.y + header.height) + style.gap as f32 / 2.0;
+        let ascent = font.line_metrics(style.text()).ascent;
+        let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
         let rows = self.rows(env);
         for (n, &(start, end)) in self.lines.iter().skip(self.top).take(rows).enumerate() {
             let baseline = top + height * n as f32 + ascent;
             font.draw(
-                canvas,
-                style.text,
+                ui.canvas(),
+                style.text(),
                 margin,
                 baseline as i32,
                 &self.text[start..end],
@@ -381,7 +374,7 @@ impl Screen for Summary {
             return;
         }
         let request = summary_request(&self.language, &self.word, ANSWERED.id().clone());
-        cx.command(Command::Http(request));
+        cx.command(Command::http(request));
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {

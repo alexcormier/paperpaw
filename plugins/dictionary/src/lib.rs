@@ -71,7 +71,7 @@ pub struct DictionaryPlugin;
 static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section("dictionary.section")
     .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     FOLDER.static_str(),
     "dictionary.setting.folder",
     "dictionaries",
@@ -79,7 +79,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
 )
 .advanced()
 .with_extra(&FOLDER_EXTRA)
-.described("dictionary.setting.folder.help")];
+.description("dictionary.setting.folder.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -465,7 +465,7 @@ impl Popup {
         let row = index.checked_sub(self.top).filter(|&r| r < rows)?;
         let height = self.line_height(env);
         let header = self.header();
-        let top = f32::from(header.y + header.height) + self.style.gap as f32 / 2.0;
+        let top = f32::from(header.y + header.height) + self.style.gap() as f32 / 2.0;
         Some(Rect::new(
             self.region.x,
             (top + height * row as f32) as u16,
@@ -492,11 +492,11 @@ impl Popup {
         self.lines.clear();
         self.top = 0;
         if let Some(font) = self.style.font(env) {
-            let width = f32::from(self.region.width) - 2.0 * self.style.margin as f32;
+            let width = f32::from(self.region.width) - 2.0 * self.style.margin() as f32;
             let mut start = 0;
             for paragraph in text.split('\n') {
                 let before = self.lines.len();
-                for range in font.wrap(self.style.text, paragraph, width) {
+                for range in font.wrap(self.style.text(), paragraph, width) {
                     self.lines.push((start + range.start, start + range.end));
                 }
                 // An empty one: a blank line, once.
@@ -517,10 +517,10 @@ impl Popup {
         }
         let font = self.style.font(env)?;
         let header = self.header();
-        let margin = self.style.margin as f32;
-        let note_width = font.measure(self.style.small, note);
+        let margin = self.style.margin() as f32;
+        let note_width = font.measure(self.style.small(), note);
         let gap = if note.is_empty() { 0.0 } else { margin };
-        let label = font.measure(self.style.small, env.i18n.tr("dictionary.online"));
+        let label = font.measure(self.style.small(), env.i18n.tr("dictionary.online"));
         let right = f32::from(header.width) - margin - note_width - gap;
         let x = (right - label).max(0.0);
         Some(Rect::new(
@@ -608,13 +608,13 @@ impl Popup {
             self.region.x,
             self.region.y,
             self.region.width,
-            self.style.row as u16,
+            self.style.row(),
         )
     }
 
     fn line_height(&self, env: &Env<'_>) -> f32 {
-        self.style.font(env).map_or(self.style.text * 1.3, |f| {
-            f.line_metrics(self.style.text).line_height
+        self.style.font(env).map_or(self.style.text() * 1.3, |f| {
+            f.line_metrics(self.style.text()).line_height
         })
     }
 
@@ -622,7 +622,7 @@ impl Popup {
     fn rows(&self, env: &Env<'_>) -> usize {
         let header = self.header();
         let height =
-            f32::from(self.region.height) - f32::from(header.height) - self.style.gap as f32;
+            f32::from(self.region.height) - f32::from(header.height) - self.style.gap() as f32;
         ((height / self.line_height(env)) as usize).max(1)
     }
 
@@ -673,9 +673,10 @@ impl Screen for Popup {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        let line = (style.line * 2).max(2);
-        canvas.fill_rect(
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(r, Color::WHITE);
+        let line = (u32::from(style.line()) * 2).max(2);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
@@ -689,49 +690,34 @@ impl Screen for Popup {
         let header = self.header();
         let rows = self.rows(env);
         let note = self.note(env);
-        let margin = style.margin as f32;
-        let note_width = font.measure(style.small, &note);
+        let margin = style.margin() as f32;
+        let note_width = font.measure(style.small(), &note);
         // The page at the right edge, *Online* left of it, the word left
         // of both.
         let note_x = f32::from(header.width) - margin - note_width;
         let mut right = note_x;
         if let Some(online) = self.online_area(env, &note) {
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                f32::from(online.x),
-                header,
-                env.i18n.tr("dictionary.online"),
-                Color::BLACK,
-            );
+            ui::Label::new(env.i18n.tr("dictionary.online"))
+                .px(style.small())
+                .color(Color::BLACK)
+                .draw_from(&mut ui, f32::from(online.x), header);
             right = f32::from(online.x);
         }
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            note_x,
-            header,
-            &note,
-            style.faint(80),
-        );
-        let word = ui::fit(&font, style.title, &self.word, right - margin * 2.0);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title,
-            margin,
-            header,
-            &word,
-            Color::BLACK,
-        );
+        ui::Label::new(&note)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Detail))
+            .draw_from(&mut ui, note_x, header);
+        let word = ui::fit(&font, style.title(), &self.word, right - margin * 2.0);
+        ui::Label::new(&word)
+            .px(style.title())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, margin, header);
         if matches!(self.state, State::Preparing(..)) {
             return;
         }
         let height = self.line_height(env);
-        let ascent = font.line_metrics(style.text).ascent;
-        let top = f32::from(header.y + header.height) + style.gap as f32 / 2.0;
+        let ascent = font.line_metrics(style.text()).ascent;
+        let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
         for (n, &(start, end)) in self.lines.iter().skip(self.top).take(rows).enumerate() {
             let baseline = top + height * n as f32 + ascent;
             let text = &self.text[start..end];
@@ -740,21 +726,28 @@ impl Screen for Popup {
                 .iter()
                 .any(|&(from, to)| (from..to).contains(&start));
             let ink = if heading {
-                style.faint(80)
+                style.faint(ui::Ink::Detail)
             } else {
                 Color::BLACK
             };
-            font.draw(canvas, style.text, margin, baseline as i32, text, ink);
+            font.draw(
+                ui.canvas(),
+                style.text(),
+                margin,
+                baseline as i32,
+                text,
+                ink,
+            );
             // A line that opens more: a button, for screen readers too.
             if let Some(area) = self
                 .more_at(self.top + n)
                 .and(self.line_area(env, self.top + n))
             {
                 // With the buttons, the one confirm opens.
-                let focused = !env.device.input.touch
+                let focused = ui.focus_shown()
                     && self.more_shown(env).map(|m| m.begins)
                         == self.more_at(self.top + n).map(|m| m.begins);
-                canvas
+                ui.canvas()
                     .describe(paperpaw_sdk::semantics::Role::Button, text, area)
                     .focused(focused);
             }

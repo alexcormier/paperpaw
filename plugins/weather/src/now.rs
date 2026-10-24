@@ -13,7 +13,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use crate::data::{self, Current, Day};
@@ -39,16 +41,16 @@ const PLACINGS: [&str; 3] = [
 static SETTINGS: [SettingSpec; 17] = [
     widgets::frame_spec("weather.now.frame", ID, Frame::None),
     widgets::padding_spec("weather.now.padding", ID, Padding::Auto),
-    widgets::size_spec("weather.now.size", ID, Size::Fit, true),
+    widgets::size_spec("weather.now.size", ID, TextSize::Fit, true),
     widgets::align_spec("weather.now.align", ID, Align::Center),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.now.symbol",
         "weather.setting.symbol",
         &SYMBOLS,
         SYMBOLS[0],
         ID,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.now.placing",
         "weather.setting.placing",
         &PLACINGS,
@@ -69,7 +71,11 @@ static SETTINGS: [SettingSpec; 17] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "weather.widget.now"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "weather.widget.now");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     let state = state.clone();
     r.add_widget(
@@ -107,7 +113,7 @@ fn lay_out(env: &Env<'_>, area: Rect, shown: &Shown) -> Option<Laid> {
     let current = weather.current?;
     let today = weather.days_from(shown.today).first().copied();
     let font = UiStyle::new(env).font(env)?;
-    let area = widgets::look::look(env, ID.as_str(), area).area;
+    let area = widgets::widget_look(env, ID.as_str(), area).area;
     let unit = crate::temperature_unit(env);
     let temperature = data::degrees_text(
         unit,
@@ -139,9 +145,9 @@ impl Widget for Now {
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
         let probe = Rect::new(0, 0, 100, 100);
-        let frame = 100 - widgets::look::look(env, ID.as_str(), probe).area.height;
-        let size = temperature_size(env, &style).unwrap_or(style.title * 2.4);
-        digits_height(size) + widgets::line_height(env, style.small) * 3 + frame
+        let frame = 100 - widgets::widget_look(env, ID.as_str(), probe).area.height;
+        let size = temperature_size(env, &style).unwrap_or(style.title() * 2.4);
+        digits_height(size) + widgets::line_height(env, style.small()) * 3 + frame
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -173,10 +179,10 @@ impl Widget for Now {
 /// The temperature's size as set; `None` for "as large as it fits".
 fn temperature_size(env: &Env<'_>, style: &UiStyle) -> Option<f32> {
     match widgets::size(env, ID.as_str()) {
-        Size::Small => Some(style.title * 1.6),
-        Size::Medium => Some(style.title * 2.4),
-        Size::Large => Some(style.title * 3.4),
-        Size::Fit => None,
+        TextSize::Small => Some(style.title() * 1.6),
+        TextSize::Medium => Some(style.title() * 2.4),
+        TextSize::Large => Some(style.title() * 3.4),
+        TextSize::Fit => None,
         _ => None,
     }
 }
@@ -215,7 +221,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     if !caption.is_empty() {
         lines.push(Line {
             text: caption.join(" · "),
-            size: style.small,
+            size: style.small(),
             faint: true,
             rank: 3,
         });
@@ -223,7 +229,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     if part("condition") {
         lines.push(Line {
             text: env.i18n.tr(data::condition(current.code).0).to_string(),
-            size: style.text,
+            size: style.text(),
             faint: false,
             rank: 5,
         });
@@ -294,7 +300,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     for (text, rank) in details {
         lines.push(Line {
             text,
-            size: style.small,
+            size: style.small(),
             faint: rank < 4,
             rank,
         });
@@ -390,15 +396,15 @@ fn fitting(
     }
     let rest = lines.iter().map(|l| line_height(env, l)).sum::<u16>();
     let by_height = draw::digits_size(f32::from(height.saturating_sub(rest)));
-    let probe = style.title;
-    let gap = style.gap as u16;
+    let probe = style.title();
+    let gap = style.gap();
     let room = width - if inline { f32::from(gap / 2) } else { 0.0 };
     let wide = (temperature_width(font, probe, text, inline, 0)).max(1.0) / probe;
     let by_width = room / wide;
     by_height
         .min(by_width)
         .min(most)
-        .max(style.small.min(by_width))
+        .max(style.small().min(by_width))
 }
 
 /// The small symbol before a temperature `size` pixels large: its side
@@ -458,7 +464,7 @@ fn plan(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, temperature: &str, all
     // The least a temperature should be before lines (or the large
     // symbol) are left out; less where the font has no larger sizes.
     let largest = draw::effective(font, 400.0);
-    let least = (style.title * 1.3).min(largest) * 0.9;
+    let least = (style.title() * 1.3).min(largest) * 0.9;
     let mut last = None;
     for &placing in placings(env, area) {
         let plan = plan_for(env, font, area, temperature, all, placing, least);
@@ -472,7 +478,7 @@ fn plan(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, temperature: &str, all
         // A large symbol at least a line of text high, else not so.
         let seen = match placing {
             Placing::Beside | Placing::Above => {
-                plan.symbol.width >= widgets::line_height(env, style.text)
+                plan.symbol.width >= widgets::line_height(env, style.text())
             }
             _ => true,
         };
@@ -499,7 +505,7 @@ fn plan_for(
     least: f32,
 ) -> Plan {
     let style = UiStyle::new(env);
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let fixed = temperature_size(env, &style);
     // Whether lines are left to leave out from `rank` on.
     let more = |rank: u8| all.iter().any(|l| l.rank >= rank && l.rank > 0) && rank < 6;
@@ -558,7 +564,7 @@ fn plan_for(
             Placing::Beside => (f32::from(side) * 0.55).max(least),
             Placing::Above => (f32::from(side) * 0.6).max(least),
             // Large, not huge.
-            _ => (style.title * 3.5).min(f32::from(text_area.height)),
+            _ => (style.title() * 3.5).min(f32::from(text_area.height)),
         };
         let size = fitting(
             env,
@@ -607,16 +613,17 @@ fn plan_for(
 fn draw_now(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     current: Current,
     laid: &Laid,
 ) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let area = look.area;
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let (temperature, plan) = (&laid.temperature, &laid.plan);
     let align = widgets::align(env, ID.as_str());
     let symbol_style = draw::style(env, ID.as_str());
@@ -670,7 +677,7 @@ fn draw_now(
                 side,
                 side,
             );
-            symbol::draw(canvas, at, symbol, current.day, symbol_style, look.ink);
+            symbol::draw(ui.canvas(), at, symbol, current.day, symbol_style, look.ink);
             let text_x = x as u16 + ink_w + gap;
             (
                 Rect::new(text_x, plan.text.y, draw::ceil(widest), plan.text.height),
@@ -690,7 +697,7 @@ fn draw_now(
                 side,
                 side,
             );
-            symbol::draw(canvas, at, symbol, current.day, symbol_style, look.ink);
+            symbol::draw(ui.canvas(), at, symbol, current.day, symbol_style, look.ink);
             let below = top + ink_h + gap;
             (
                 Rect::new(
@@ -713,16 +720,19 @@ fn draw_now(
         let x = group_x.unwrap_or_else(|| align.x(text, width));
         match line {
             Some(line) => {
-                ui::draw_label(canvas, &font, line.size, x, row, &line.text, color(line));
+                ui::Label::new(&line.text)
+                    .px(line.size)
+                    .color(color(line))
+                    .draw_from(&mut ui, x, row);
             }
             None => {
                 if inline > 0 {
                     let top = row.y + row.height.saturating_sub(inline) / 2;
                     let at = Rect::new(x as u16, top, inline, inline);
-                    draw::draw_symbol(canvas, at, mark, symbol_style, look.ink);
+                    draw::draw_symbol(ui.canvas(), at, mark, symbol_style, look.ink);
                 }
                 let x = x + f32::from(inline + inline_gap);
-                draw_digits(canvas, &font, plan.size, x, row, temperature, look.ink);
+                draw_digits(&mut ui, &font, plan.size, x, row, temperature, look.ink);
             }
         }
         y += height;

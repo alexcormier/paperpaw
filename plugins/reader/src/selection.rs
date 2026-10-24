@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect};
+use paperpaw_sdk::{Color, Env, Id, Point, Rect};
 
 use crate::SELECTION_MENU;
 use crate::actions::{CANCEL, EXTEND, HIGHLIGHT, MORE, NOTE, TRANSLATE};
@@ -178,7 +178,7 @@ pub(crate) fn bar_area(env: &Env<'_>, style: &UiStyle) -> Rect {
 /// in their parts included, so that what fits here is drawn whole.
 fn items_area(env: &Env<'_>, style: &UiStyle) -> Rect {
     let full = bar_area(env, style);
-    let side = (style.margin as u16).saturating_sub(button_pad(style));
+    let side = (style.margin()).saturating_sub(button_pad(style));
     Rect::new(
         full.x + side,
         full.y,
@@ -189,7 +189,7 @@ fn items_area(env: &Env<'_>, style: &UiStyle) -> Rect {
 
 /// Space around a button in its part of the bar.
 fn button_pad(style: &UiStyle) -> u16 {
-    (style.gap / 4) as u16 + ui::button_border(style) as u16 * 3
+    (u32::from(style.gap()) / 4) as u16 + ui::button_border(style) as u16 * 3
 }
 
 /// How wide the items need to be: their labels with the room a button
@@ -204,7 +204,7 @@ fn natural_widths(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<f32> {
         .map(|item| {
             let label = font
                 .as_ref()
-                .map_or(0.0, |f| f.measure(style.small, env.i18n.tr(&item.title)));
+                .map_or(0.0, |f| f.measure(style.small(), env.i18n.tr(&item.title)));
             ui::button_width(style, label) + around
         })
         .collect()
@@ -232,17 +232,12 @@ fn item_areas(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<Rect> {
     areas
 }
 
-pub(crate) fn draw_bar(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    items: &[Item],
-    focus: Option<usize>,
-) {
-    let style = UiStyle::new(env);
+pub(crate) fn draw_bar(ui: &mut ui::Ui<'_>, items: &[Item], focus: Option<usize>) {
+    let (env, style) = (ui.env(), *ui.style());
     let bar = bar_area(env, &style);
-    canvas.fill(bar, Color::WHITE);
-    let line = style.line.max(2);
-    canvas.fill_rect(
+    ui.canvas().fill(bar, Color::WHITE);
+    let line = u32::from(style.line()).max(2);
+    ui.canvas().fill_rect(
         i32::from(bar.x),
         i32::from(bar.y),
         u32::from(bar.width),
@@ -261,15 +256,7 @@ pub(crate) fn draw_bar(
             band.height,
         );
         let label = env.i18n.tr(&item.title);
-        ui::draw_button(
-            canvas,
-            env,
-            &style,
-            button,
-            label,
-            false,
-            focus == Some(index),
-        );
+        ui.button(button, label, false, focus == Some(index));
     }
 }
 

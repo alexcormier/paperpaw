@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::widgets::{self, CellsHint, Frame, Padding, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{self, CellSpan, Frame, Padding, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
 };
@@ -34,12 +34,16 @@ static SETTINGS: [SettingSpec; 3] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&WIDGET, "reading-goal.widget"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(WIDGET, "reading-goal.widget");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(WIDGET, "reading-goal.widget", |_| Box::new(Cat::default()))
             .category(widgets::categories::READING)
-            .cells(CellsHint::new(2, 2)),
+            .cells(CellSpan::new(2, 2)),
     )
 }
 
@@ -94,7 +98,7 @@ impl Cat {
     /// The line below the picture, if it shows.
     fn line(env: &Env<'_>) -> u16 {
         if widgets::shows(env, NAME, "minutes") {
-            widgets::line_height(env, UiStyle::new(env).small)
+            widgets::line_height(env, UiStyle::new(env).small())
         } else {
             0
         }
@@ -106,7 +110,7 @@ impl Cat {
         let (Some(area), Some(today)) = (self.area, self.today) else {
             return;
         };
-        let inner = widgets::look::look(env, NAME, area).area;
+        let inner = widgets::widget_look(env, NAME, area).area;
         let room = Rect::new(
             inner.x,
             inner.y,
@@ -181,15 +185,19 @@ impl Widget for Cat {
             return;
         }
         let style = UiStyle::new(env);
-        let Some(font) = style.font(env) else {
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        let Some(font) = ui.font() else {
             return;
         };
         let text = progress(env, today);
         let width = f32::from(inner.width);
-        let text = ui::fit(&font, style.small, &text, width);
-        let x = f32::from(inner.x) + (width - font.measure(style.small, &text)).max(0.0) / 2.0;
+        let text = ui::fit(&font, style.small(), &text, width);
+        let x = f32::from(inner.x) + (width - font.measure(style.small(), &text)).max(0.0) / 2.0;
         let row = Rect::new(inner.x, inner.y + inner.height - line, inner.width, line);
-        ui::draw_label(canvas, &font, style.small, x, row, &text, look.ink);
+        ui::Label::new(&text)
+            .px(style.small())
+            .color(look.ink)
+            .draw_from(&mut ui, x, row);
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {

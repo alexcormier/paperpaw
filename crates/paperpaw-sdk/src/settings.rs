@@ -7,7 +7,7 @@ use core::fmt;
 use crate::collections::VecMap;
 use crate::id::Id;
 use crate::plugin::RegisterError;
-use crate::setting::{Setting, Text};
+use specs::Specs;
 
 /// A setting's value.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -185,7 +185,8 @@ pub struct SettingSpec {
     extra: Option<Extra>,
 }
 
-/// Where a spec's [`SettingExtra`] is: in the program, or on the heap.
+/// Where a spec's [`SettingExtra`] is: in the program, or on the heap
+/// for a setting made from data ([`SettingSpec::with_owned_extra`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Extra {
     Fixed(&'static SettingExtra),
@@ -235,17 +236,22 @@ pub struct SettingExtra {
     /// in its steps; with buttons alone it keeps `−` and `+`.
     pub slider: bool,
     /// Translation key of the part of its group it belongs to (e.g.
-    /// [`setting_sections::FONT`](crate::builtin::setting_sections::FONT)),
+    /// [`group_sections::FONT`](crate::builtin::group_sections::FONT)),
     /// shown as a heading above it in large groups.
     pub section: Option<Cow<'static, str>>,
+    /// Its part is the name of the plugin its id ends in
+    /// (`core.network.weather`: the weather plugin's), for settings made
+    /// for each plugin: one fixed extra serves them all
+    /// ([`SettingSpec::section_key`]).
+    pub section_of_plugin: bool,
     /// A secret such as an API key: shown as dots, entered afresh rather
     /// than edited, and kept with the secrets, not the settings: read it
-    /// with `env.secrets.get(id)` (see [`secrets`](crate::secrets)).
+    /// with `env.secrets().get(id)` (see [`secrets`](crate::secrets)).
     pub secret: bool,
     /// Another setting of the same kind whose value this one has until it
     /// is set itself, e.g. the margins at the top and bottom those at the
     /// sides (one step only: what that one follows is not followed).
-    pub follows: Option<&'static str>,
+    pub follows: Option<Id>,
     /// A choice that keeps values its options lack (one a plugin offered
     /// that is not installed now, such as a reading app): kept as they
     /// are, without a warning, for whoever reads it to pass over.
@@ -253,7 +259,7 @@ pub struct SettingExtra {
     /// Shown only while another setting has a value, e.g. the server's
     /// address while syncing is on (see [`Settings::shows`]): the
     /// setting's id and the value, as written in `paperpaw.ini`.
-    pub shown_if: Option<(&'static str, &'static str)>,
+    pub shown_if: Option<(Id, &'static str)>,
     /// What a value must be: a value it refuses is not set, and the
     /// reader is told why (see [`SettingCheck`]).
     pub check: Option<SettingCheck>,
@@ -291,7 +297,7 @@ impl SettingExtra {
     /// const GROUP: Id = Id::new_static("my.page");
     /// static PERCENT: SettingExtra = SettingExtra::new().unit("my.unit.percent").step(10);
     /// static SETTINGS: [SettingSpec; 1] = [
-    ///     SettingSpec::fixed_number("my.zoom", "my.zoom", 50, 200, 100, GROUP)
+    ///     SettingSpec::number("my.zoom", "my.zoom", 50, 200, 100, GROUP)
     ///         .with_extra(&PERCENT),
     /// ];
     /// ```
@@ -307,7 +313,15 @@ impl SettingExtra {
             keeps_unknown: false,
             shown_if: None,
             check: None,
+            section_of_plugin: false,
         }
+    }
+
+    /// Its part is the name of the plugin its id ends in
+    /// ([`SettingExtra::section_of_plugin`]).
+    pub const fn section_of_plugin(mut self) -> Self {
+        self.section_of_plugin = true;
+        self
     }
 
     /// A choice keeping values its options lack
@@ -363,14 +377,14 @@ impl SettingExtra {
 
     /// With the value of setting `id` until set itself
     /// ([`SettingExtra::follows`]).
-    pub const fn follows(mut self, id: &'static str) -> Self {
-        self.follows = Some(id);
+    pub const fn follows(mut self, id: Id) -> Self {
+        core::mem::forget(self.follows.replace(id));
         self
     }
 
     /// Shown only while setting `id` has `value` ([`SettingExtra::shown_if`]).
-    pub const fn shown_if(mut self, id: &'static str, value: &'static str) -> Self {
-        self.shown_if = Some((id, value));
+    pub const fn shown_if(mut self, id: Id, value: &'static str) -> Self {
+        core::mem::forget(self.shown_if.replace((id, value)));
         self
     }
 
@@ -392,60 +406,45 @@ impl Default for SettingExtra {
 }
 
 impl SettingSpec {
-    /// A basic setting in the [`OTHER`](crate::builtin::groups::OTHER)
-    /// group; see the builder methods for the rest.
-    pub fn new(
-        id: impl Into<Id>,
-        title: impl Into<Cow<'static, str>>,
-        kind: SettingKind,
-        default: SettingValue,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            title: title.into(),
-            kind,
-            default,
-            group: crate::builtin::groups::OTHER,
-            level: Level::Basic,
-            description: None,
-            scoped: false,
-            guarded: false,
-            kept_on_reset: false,
-            extra: None,
-        }
-    }
-
-    /// A setting kept in the program rather than built at start: in a
-    /// `static` list registered with
-    /// [`Registrar::add_settings`](crate::Registrar::add_settings), it
+    /// A setting of `kind` with its `default`, called `title` (a
+    /// translation key), in `group`. Every builder of a spec is `const`, so
+    /// a plugin declares its settings as a `static` list registered with
+    /// [`Registrar::add_settings`](crate::Registrar::add_settings): it
     /// takes next to no memory (on small devices the list stays in flash).
-    /// Plugins with many settings, such as widgets with their looks, use
-    /// these. Its unit, editor and the like ([`SettingSpec::extra`]) are
-    /// given with [`SettingSpec::with_extra`], also kept in the program.
+    /// Its unit, section, editor and the like are a [`SettingExtra`], kept
+    /// in the program too ([`SettingSpec::with_extra`]).
     ///
     /// ```
-    /// use paperpaw_sdk::{Id, SettingSpec};
+    /// use paperpaw_sdk::{Id, SettingExtra, SettingSpec};
     /// const GROUP: Id = Id::new_static("my.clock");
-    /// static SETTINGS: [SettingSpec; 2] = [
-    ///     SettingSpec::fixed_switch("my.clock.date", "my.clock.date", true, GROUP),
-    ///     SettingSpec::fixed_choice(
+    /// static PERCENT: SettingExtra = SettingExtra::new().unit("my.unit.percent").step(10);
+    /// static SETTINGS: [SettingSpec; 3] = [
+    ///     SettingSpec::switch("my.clock.date", "my.clock.date", true, GROUP),
+    ///     SettingSpec::choice(
     ///         "my.clock.face",
     ///         "my.clock.face",
     ///         &["my.plain", "my.ticks"],
     ///         "my.ticks",
     ///         GROUP,
-    ///     ),
+    ///     )
+    ///     .description("my.clock.face.help"),
+    ///     SettingSpec::number("my.clock.zoom", "my.clock.zoom", 50, 200, 100, GROUP)
+    ///         .with_extra(&PERCENT),
     /// ];
     /// ```
-    pub const fn fixed(
-        id: &'static str,
+    ///
+    /// A spec whose id is known only at run time (one for each plugin, say)
+    /// is made with this, and registered with
+    /// [`Registrar::add_setting`](crate::Registrar::add_setting).
+    pub const fn new(
+        id: Id,
         title: &'static str,
         kind: SettingKind,
         default: SettingValue,
         group: Id,
     ) -> Self {
         Self {
-            id: Id::new_static(id),
+            id,
             title: Cow::Borrowed(title),
             kind,
             default,
@@ -459,15 +458,10 @@ impl SettingSpec {
         }
     }
 
-    /// A fixed switch ([`SettingSpec::fixed`]).
-    pub const fn fixed_switch(
-        id: &'static str,
-        title: &'static str,
-        default: bool,
-        group: Id,
-    ) -> Self {
-        Self::fixed(
-            id,
+    /// A switch, on or off ([`SettingSpec::new`]).
+    pub const fn switch(id: &'static str, title: &'static str, default: bool, group: Id) -> Self {
+        Self::new(
+            Id::new_static(id),
             title,
             SettingKind::Bool,
             SettingValue::Bool(default),
@@ -475,8 +469,8 @@ impl SettingSpec {
         )
     }
 
-    /// A fixed whole number from `min` to `max` ([`SettingSpec::fixed`]).
-    pub const fn fixed_number(
+    /// A whole number from `min` to `max` ([`SettingSpec::new`]).
+    pub const fn number(
         id: &'static str,
         title: &'static str,
         min: i64,
@@ -484,8 +478,8 @@ impl SettingSpec {
         default: i64,
         group: Id,
     ) -> Self {
-        Self::fixed(
-            id,
+        Self::new(
+            Id::new_static(id),
             title,
             SettingKind::Int { min, max },
             SettingValue::Int(default),
@@ -493,16 +487,17 @@ impl SettingSpec {
         )
     }
 
-    /// A fixed choice of `options` ([`SettingSpec::fixed`]).
-    pub const fn fixed_choice(
+    /// One of `options`, each the translation key of its name
+    /// ([`SettingSpec::new`]).
+    pub const fn choice(
         id: &'static str,
         title: &'static str,
         options: &'static [&'static str],
         default: &'static str,
         group: Id,
     ) -> Self {
-        Self::fixed(
-            id,
+        Self::new(
+            Id::new_static(id),
             title,
             SettingKind::Choice(Choices::Fixed(options)),
             SettingValue::Text(Cow::Borrowed(default)),
@@ -510,15 +505,15 @@ impl SettingSpec {
         )
     }
 
-    /// A fixed text, typed in ([`SettingSpec::fixed`]).
-    pub const fn fixed_text(
+    /// Text, typed in ([`SettingSpec::new`]).
+    pub const fn text(
         id: &'static str,
         title: &'static str,
         default: &'static str,
         group: Id,
     ) -> Self {
-        Self::fixed(
-            id,
+        Self::new(
+            Id::new_static(id),
             title,
             SettingKind::Text,
             SettingValue::Text(Cow::Borrowed(default)),
@@ -526,189 +521,49 @@ impl SettingSpec {
         )
     }
 
-    /// The same with a help text (for [`SettingSpec::fixed`] ones, which
-    /// cannot use [`description`](Self::description)).
-    pub const fn described(self, key: &'static str) -> Self {
-        let mut spec = self;
-        let old = spec.description.replace(Cow::Borrowed(key));
-        core::mem::forget(old);
-        spec
-    }
-
-    /// The same, shown only with advanced settings (for
-    /// [`SettingSpec::fixed`] ones).
-    pub const fn for_advanced(self) -> Self {
-        let mut spec = self;
-        spec.level = Level::Advanced;
-        spec
-    }
-
-    /// The same with `extra` (its unit, section and the like), kept in the
-    /// program too: for [`SettingSpec::fixed`] ones.
-    pub const fn with_extra(mut self, extra: &'static SettingExtra) -> Self {
-        core::mem::forget(self.extra.replace(Extra::Fixed(extra)));
-        self
-    }
-
-    /// Its unit, editor, step, slider, section and whether it is a secret
-    /// (the defaults for a setting that sets none of them).
-    pub fn extra(&self) -> &SettingExtra {
-        match &self.extra {
-            Some(Extra::Fixed(extra)) => extra,
-            Some(Extra::Owned(extra)) => extra,
-            None => &NO_EXTRA,
-        }
-    }
-
-    fn extra_mut(&mut self) -> &mut SettingExtra {
-        if let Some(Extra::Fixed(extra)) = self.extra {
-            self.extra = Some(Extra::Owned(Box::new(extra.clone())));
-        }
-        match self
-            .extra
-            .get_or_insert_with(|| Extra::Owned(Box::default()))
-        {
-            Extra::Owned(extra) => extra,
-            Extra::Fixed(_) => unreachable!("made owned above"),
-        }
-    }
-
-    /// A switch, on or off (see [`setting`](crate::setting)).
-    pub fn switch(
-        setting: &Setting<bool>,
-        title: impl Into<Cow<'static, str>>,
-        default: bool,
+    /// A language: the tag of one of the installed translations
+    /// ([`SettingSpec::new`]).
+    pub const fn language(
+        id: &'static str,
+        title: &'static str,
+        default: &'static str,
+        group: Id,
     ) -> Self {
         Self::new(
-            setting,
-            title,
-            SettingKind::Bool,
-            SettingValue::Bool(default),
-        )
-    }
-
-    /// A whole number from `min` to `max`.
-    pub fn number(
-        setting: &Setting<i64>,
-        title: impl Into<Cow<'static, str>>,
-        min: i64,
-        max: i64,
-        default: i64,
-    ) -> Self {
-        Self::new(
-            setting,
-            title,
-            SettingKind::Int { min, max },
-            SettingValue::Int(default),
-        )
-    }
-
-    /// One of `options`, each the translation key of its name.
-    pub fn choice(
-        setting: &Setting<Text>,
-        title: impl Into<Cow<'static, str>>,
-        options: Choices,
-        default: impl Into<Cow<'static, str>>,
-    ) -> Self {
-        Self::new(
-            setting,
-            title,
-            SettingKind::Choice(options),
-            SettingValue::Text(default.into()),
-        )
-    }
-
-    /// Text, typed in.
-    pub fn text(
-        setting: &Setting<Text>,
-        title: impl Into<Cow<'static, str>>,
-        default: impl Into<Cow<'static, str>>,
-    ) -> Self {
-        Self::new(
-            setting,
-            title,
-            SettingKind::Text,
-            SettingValue::Text(default.into()),
-        )
-    }
-
-    /// A language: the tag of one of the installed translations.
-    pub fn language(
-        setting: &Setting<Text>,
-        title: impl Into<Cow<'static, str>>,
-        default: impl Into<Cow<'static, str>>,
-    ) -> Self {
-        Self::new(
-            setting,
+            Id::new_static(id),
             title,
             SettingKind::Language,
-            SettingValue::Text(default.into()),
+            SettingValue::Text(Cow::Borrowed(default)),
+            group,
         )
     }
 
     /// Ids separated by commas, chosen on the setting's editor screen
-    /// ([`SettingKind::List`]).
-    pub fn list(
-        setting: &Setting<Text>,
-        title: impl Into<Cow<'static, str>>,
-        default: impl Into<Cow<'static, str>>,
+    /// ([`SettingKind::List`], [`SettingSpec::new`]).
+    pub const fn list(
+        id: &'static str,
+        title: &'static str,
+        default: &'static str,
+        group: Id,
     ) -> Self {
         Self::new(
-            setting,
+            Id::new_static(id),
             title,
             SettingKind::List,
-            SettingValue::Text(default.into()),
+            SettingValue::Text(Cow::Borrowed(default)),
+            group,
         )
     }
 
-    /// Puts the setting into a part of its group (see
-    /// [`SettingSpec::section`]).
-    pub fn section(mut self, key: impl Into<Cow<'static, str>>) -> Self {
-        self.extra_mut().section = Some(key.into());
+    /// With a help text, the translation key `key`.
+    pub const fn description(mut self, key: &'static str) -> Self {
+        core::mem::forget(self.description.replace(Cow::Borrowed(key)));
         self
     }
 
-    /// A choice keeping values its options lack (see
-    /// [`SettingExtra::keeps_unknown`]).
-    pub fn keeps_unknown(mut self) -> Self {
-        self.extra_mut().keeps_unknown = true;
-        self
-    }
-
-    /// Whether it takes `value`: one of its kind, or for a choice keeping
-    /// unknown values ([`SettingExtra::keeps_unknown`]) any word.
-    pub fn accepts(&self, value: &SettingValue) -> bool {
-        self.kind.accepts(value)
-            || (self.extra().keeps_unknown
-                && matches!((&self.kind, value),
-                    (SettingKind::Choice(_), SettingValue::Text(v)) if !v.is_empty()))
-    }
-
-    /// Parses a value as written in a configuration file, as
-    /// [`SettingSpec::accepts`] takes it.
-    pub fn parse(&self, text: &str) -> Option<SettingValue> {
-        let value = match self.kind.parse(text) {
-            Some(value) => value,
-            None => SettingValue::Text(Cow::Owned(String::from(text))),
-        };
-        self.accepts(&value).then_some(value)
-    }
-
-    /// A number set with a slider (see [`SettingExtra::slider`]).
-    pub fn slider(mut self) -> Self {
-        self.extra_mut().slider = true;
-        self
-    }
-
-    /// A secret, such as an API key (see [`SettingSpec::secret`]).
-    pub fn secret(mut self) -> Self {
-        self.extra_mut().secret = true;
-        self
-    }
-
-    /// How much one step (a `+` or `−`) changes a number.
-    pub fn step(mut self, step: i64) -> Self {
-        self.extra_mut().step = step.max(1);
+    /// Shown only with advanced settings.
+    pub const fn advanced(mut self) -> Self {
+        self.level = Level::Advanced;
         self
     }
 
@@ -734,44 +589,66 @@ impl SettingSpec {
         self
     }
 
+    /// With `extra`: its unit, section, editor, step and the like, kept in
+    /// the program too.
+    pub const fn with_extra(mut self, extra: &'static SettingExtra) -> Self {
+        core::mem::forget(self.extra.replace(Extra::Fixed(extra)));
+        self
+    }
+
+    /// With `extra` made at run time, for a setting made from data (a
+    /// data plugin's), whose section or unit only the data names. Settings
+    /// a plugin's code declares use [`SettingSpec::with_extra`], which
+    /// takes no memory.
+    pub fn with_owned_extra(mut self, extra: SettingExtra) -> Self {
+        self.extra = Some(Extra::Owned(Box::new(extra)));
+        self
+    }
+
+    /// The translation key of the part of its group it is shown in
+    /// ([`SettingExtra::section`], [`SettingExtra::section_of_plugin`]).
+    pub fn section_key(&self) -> Option<Cow<'static, str>> {
+        let extra = self.extra();
+        if extra.section_of_plugin {
+            let plugin = self.id.as_str().rsplit('.').next().unwrap_or_default();
+            return Some(Cow::Owned(alloc::format!("{plugin}.plugin.name")));
+        }
+        extra.section.clone()
+    }
+
+    /// Its unit, editor, step, slider, section and whether it is a secret
+    /// (the defaults for a setting that sets none of them).
+    pub fn extra(&self) -> &SettingExtra {
+        match &self.extra {
+            Some(Extra::Fixed(extra)) => extra,
+            Some(Extra::Owned(extra)) => extra,
+            None => &NO_EXTRA,
+        }
+    }
+
+    /// Whether it takes `value`: one of its kind, or for a choice keeping
+    /// unknown values ([`SettingExtra::keeps_unknown`]) any word.
+    pub fn accepts(&self, value: &SettingValue) -> bool {
+        self.kind.accepts(value)
+            || (self.extra().keeps_unknown
+                && matches!((&self.kind, value),
+                    (SettingKind::Choice(_), SettingValue::Text(v)) if !v.is_empty()))
+    }
+
+    /// Parses a value as written in a configuration file, as
+    /// [`SettingSpec::accepts`] takes it.
+    pub fn parse(&self, text: &str) -> Option<SettingValue> {
+        let value = match self.kind.parse(text) {
+            Some(value) => value,
+            None => SettingValue::Text(Cow::Owned(String::from(text))),
+        };
+        self.accepts(&value).then_some(value)
+    }
+
     /// Whether the resets of the settings pages leave it as it is: marked
     /// so, or a secret (a reset never removes a password).
     pub fn is_kept_on_reset(&self) -> bool {
         self.kept_on_reset || self.extra().secret
-    }
-
-    pub fn group(mut self, group: Id) -> Self {
-        self.group = group;
-        self
-    }
-
-    /// Shown only with advanced settings.
-    pub const fn advanced(mut self) -> Self {
-        self.level = Level::Advanced;
-        self
-    }
-
-    pub fn description(mut self, key: impl Into<Cow<'static, str>>) -> Self {
-        self.description = Some(key.into());
-        self
-    }
-
-    pub fn unit(mut self, key: impl Into<Cow<'static, str>>) -> Self {
-        self.extra_mut().unit = Some(key.into());
-        self
-    }
-
-    /// Edited on its own screen (see [`SettingExtra::editor`]).
-    pub fn editor(mut self, screen: Id) -> Self {
-        self.extra_mut().editor = Some(Editor::Screen(screen));
-        self
-    }
-
-    /// Edited on whatever screen fills slot `slot` (see
-    /// [`SettingExtra::editor_slot`]).
-    pub fn editor_slot(mut self, slot: Id) -> Self {
-        self.extra_mut().editor = Some(Editor::Slot(slot));
-        self
     }
 }
 
@@ -793,7 +670,7 @@ pub struct SettingGroupSpec {
     pub id: Id,
     /// Translation key of the group's name.
     pub title: Cow<'static, str>,
-    /// By order, smallest first; 0 names none (`builtin::settings_sections`).
+    /// By order, smallest first; 0 names none (`builtin::settings_page`).
     pub order: i32,
     /// A screen of the group's plugin shown instead of the generated page
     /// (opened with [`params::ID`](crate::builtin::params::ID), the
@@ -803,24 +680,64 @@ pub struct SettingGroupSpec {
 }
 
 impl SettingGroupSpec {
-    /// Made of what it needs; the rest as set with its methods.
-    pub fn new(id: Id, title: impl Into<Cow<'static, str>>) -> Self {
+    /// Group `id`, called `title` (a translation key); the rest as set
+    /// with its methods. All are `const`: a plugin declares its groups as
+    /// statics and registers a reference
+    /// ([`Registrar::add_setting_group`](crate::Registrar::add_setting_group)),
+    /// which takes next to no memory.
+    pub const fn new(id: Id, title: &'static str) -> Self {
         Self {
             id,
-            title: title.into(),
+            title: Cow::Borrowed(title),
             order: 0,
             page: None,
         }
     }
 
-    pub fn order(mut self, order: i32) -> Self {
+    /// Its place among the groups, smallest first.
+    pub const fn order(mut self, order: i32) -> Self {
         self.order = order;
         self
     }
 
-    pub fn page(mut self, page: impl Into<Option<Id>>) -> Self {
-        self.page = page.into();
+    /// Screen `page` shows the group instead of the generated page.
+    pub const fn page(mut self, page: Id) -> Self {
+        core::mem::forget(self.page.replace(page));
         self
+    }
+}
+
+/// A group of settings as registered: one kept in the program (a
+/// `static` [`SettingGroupSpec`], a reference), or one made at run time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettingGroup(GroupAt);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GroupAt {
+    Fixed(&'static SettingGroupSpec),
+    Owned(Box<SettingGroupSpec>),
+}
+
+impl core::ops::Deref for SettingGroup {
+    type Target = SettingGroupSpec;
+
+    fn deref(&self) -> &SettingGroupSpec {
+        match &self.0 {
+            GroupAt::Fixed(group) => group,
+            GroupAt::Owned(group) => group,
+        }
+    }
+}
+
+impl From<&'static SettingGroupSpec> for SettingGroup {
+    fn from(group: &'static SettingGroupSpec) -> Self {
+        Self(GroupAt::Fixed(group))
+    }
+}
+
+impl From<SettingGroupSpec> for SettingGroup {
+    fn from(group: SettingGroupSpec) -> Self {
+        Self(GroupAt::Owned(Box::new(group)))
     }
 }
 
@@ -851,121 +768,6 @@ impl fmt::Display for SettingError {
 
 impl core::error::Error for SettingError {}
 
-/// The settings' specs in registration order, found by id through an
-/// index sorted by it: each id kept once. Specs registered as fixed
-/// ([`SettingSpec::fixed`], kept in the program, e.g. in flash) are held
-/// by reference, the others as they are.
-#[derive(Debug, Default)]
-struct Specs {
-    owned: Vec<SettingSpec>,
-    fixed: Vec<&'static SettingSpec>,
-    /// Every spec in registration order: a place in `owned`, or in
-    /// `fixed` with [`FIXED`] set.
-    order: Vec<u16>,
-    /// The same places, sorted by the specs' ids.
-    by_id: Vec<u16>,
-}
-
-/// Marks a place in [`Specs::fixed`].
-const FIXED: u16 = 1 << 15;
-/// Specs of each kind (made at run time, kept in the program) a place of
-/// 15 bits holds: plenty, and two bytes a place on small devices.
-const PLACES: usize = FIXED as usize;
-
-impl Specs {
-    fn at(&self, place: u16) -> &SettingSpec {
-        if place & FIXED == 0 {
-            &self.owned[usize::from(place)]
-        } else {
-            self.fixed[usize::from(place & !FIXED)]
-        }
-    }
-
-    /// Where `id` is in `by_id`, or would go.
-    fn find(&self, id: &str) -> Result<usize, usize> {
-        self.by_id
-            .binary_search_by(|&at| self.at(at).id.as_str().cmp(id))
-    }
-
-    fn get(&self, id: &str) -> Option<&SettingSpec> {
-        let at = self.find(id).ok()?;
-        Some(self.at(self.by_id[at]))
-    }
-
-    /// The spec `id` to change: a fixed one is copied first, which needs
-    /// a place of its own.
-    fn get_mut(&mut self, id: &str) -> Result<&mut SettingSpec, SettingError> {
-        let at = self.find(id).map_err(|_| SettingError::Unknown)?;
-        let place = self.by_id[at];
-        let place = if place & FIXED == 0 {
-            place
-        } else if self.owned.len() >= PLACES {
-            return Err(SettingError::Full);
-        } else {
-            let copy = self.fixed[usize::from(place & !FIXED)].clone();
-            let owned = self.owned.len() as u16;
-            self.owned.push(copy);
-            self.by_id[at] = owned;
-            if let Some(o) = self.order.iter_mut().find(|o| **o == place) {
-                *o = owned;
-            }
-            owned
-        };
-        Ok(&mut self.owned[usize::from(place)])
-    }
-
-    /// Adds `place`, whose spec's id is not there yet.
-    fn index(&mut self, id: &str, place: u16) {
-        let Err(at) = self.find(id) else {
-            return;
-        };
-        self.by_id.insert(at, place);
-        self.order.push(place);
-    }
-
-    /// Adds `spec`, whose id is not there yet; `false` when no place is
-    /// left.
-    fn insert(&mut self, spec: SettingSpec) -> bool {
-        if self.find(spec.id.as_str()).is_ok() {
-            return true;
-        }
-        if self.owned.len() >= PLACES {
-            return false;
-        }
-        let place = self.owned.len() as u16;
-        let id = spec.id.clone();
-        self.owned.push(spec);
-        self.index(id.as_str(), place);
-        true
-    }
-
-    /// Adds the fixed `spec`, whose id is not there yet; `false` when no
-    /// place is left.
-    fn insert_fixed(&mut self, spec: &'static SettingSpec) -> bool {
-        if self.find(spec.id.as_str()).is_ok() {
-            return true;
-        }
-        if self.fixed.len() >= PLACES {
-            return false;
-        }
-        let place = self.fixed.len() as u16 | FIXED;
-        self.fixed.push(spec);
-        self.index(spec.id.as_str(), place);
-        true
-    }
-
-    fn iter(&self) -> impl Iterator<Item = &SettingSpec> {
-        self.order.iter().map(|&place| self.at(place))
-    }
-
-    fn shrink_to_fit(&mut self) {
-        self.owned.shrink_to_fit();
-        self.fixed.shrink_to_fit();
-        self.order.shrink_to_fit();
-        self.by_id.shrink_to_fit();
-    }
-}
-
 /// All registered settings and their current values.
 ///
 /// Plugins receive it read-only through [`Env`](crate::Env) and change values
@@ -994,7 +796,7 @@ pub struct Settings {
     /// `widgets.clock@2` (see [`Settings::with_placement`]).
     placement: core::cell::RefCell<Option<String>>,
     /// Groups by order.
-    groups: Vec<SettingGroupSpec>,
+    groups: Vec<SettingGroup>,
     /// The values of the active scope (e.g. the open book), if any.
     scope: Option<VecMap<Id, SettingValue>>,
     /// Values shown without being kept; `None`: as if not set.
@@ -1148,9 +950,12 @@ impl Settings {
     /// Registers a group of settings.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn add_group(&mut self, group: SettingGroupSpec) -> Result<(), RegisterError> {
+    pub fn add_group(&mut self, group: impl Into<SettingGroup>) -> Result<(), RegisterError> {
+        let group = group.into();
         if self.groups.iter().any(|g| g.id == group.id) {
-            return Err(RegisterError::Duplicate { id: group.id });
+            return Err(RegisterError::Duplicate {
+                id: group.id.clone(),
+            });
         }
         let at = self
             .groups
@@ -1161,7 +966,7 @@ impl Settings {
 
     /// Groups by order.
     pub fn groups(&self) -> impl Iterator<Item = &SettingGroupSpec> {
-        self.groups.iter()
+        self.groups.iter().map(|g| &**g)
     }
 
     /// The group a setting is shown in: its own if registered, else
@@ -1194,11 +999,19 @@ impl Settings {
         Ok(())
     }
 
-    /// Registers a fixed setting ([`SettingSpec::fixed`]), kept by
-    /// reference. Its default must be valid.
+    /// Registers spec `at` of a list of fixed settings
+    /// (a `static` list), kept by a reference to the list. Its
+    /// default must be valid.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn define_fixed(&mut self, spec: &'static SettingSpec) -> Result<(), RegisterError> {
+    pub fn define_fixed(
+        &mut self,
+        list: &'static [SettingSpec],
+        at: usize,
+    ) -> Result<(), RegisterError> {
+        let Some(spec) = list.get(at) else {
+            return Ok(());
+        };
         if self.specs.get(spec.id.as_str()).is_some() {
             return Err(RegisterError::Duplicate {
                 id: spec.id.clone(),
@@ -1209,7 +1022,7 @@ impl Settings {
                 message: Cow::Borrowed("default value does not match the setting kind"),
             });
         }
-        if !self.specs.insert_fixed(spec) {
+        if !self.specs.insert_fixed(list, at) {
             return Err(RegisterError::Invalid {
                 message: Cow::Borrowed("no place left for another setting"),
             });
@@ -1232,16 +1045,6 @@ impl Settings {
             }
             Err(_) => false,
         }
-    }
-
-    /// Changes a setting's default (e.g. device-specific defaults chosen by
-    /// a shell). The user's own values still take precedence.
-    #[cfg(any(test, feature = "kernel"))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn set_default_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
-        let spec = self.specs.get_mut(id)?;
-        spec.default = spec.parse(text).ok_or(SettingError::InvalidValue)?;
-        Ok(())
     }
 
     /// The spec of setting `id`; for a placement's (`widgets.clock@2.face`)
@@ -1268,25 +1071,29 @@ impl Settings {
     /// ([`SettingExtra::shown_if`]): screens listing settings make
     /// themselves anew when it changes.
     pub fn governs(&self, id: &str) -> bool {
-        self.specs()
-            .any(|spec| spec.extra().shown_if.is_some_and(|(of, _)| of == id))
+        self.specs().any(|spec| {
+            spec.extra()
+                .shown_if
+                .as_ref()
+                .is_some_and(|(of, _)| of == id)
+        })
     }
 
     /// Whether `spec` shows now: not while the setting its
     /// [`SettingExtra::shown_if`] names has another value.
     pub fn shows(&self, spec: &SettingSpec) -> bool {
-        let Some((id, value)) = spec.extra().shown_if else {
+        let Some((id, value)) = &spec.extra().shown_if else {
             return true;
         };
         // The value read as that setting reads it (`on`, `true` …); a
         // setting not there does not hide this one.
-        let Some(condition) = self.spec(id) else {
+        let Some(condition) = self.spec(id.as_str()) else {
             return true;
         };
         condition
             .kind
             .parse(value)
-            .is_some_and(|value| self.get(id) == Some(&value))
+            .is_some_and(|value| self.get(id.as_str()) == Some(&value))
     }
 
     /// Sets a value after validating it.
@@ -1427,8 +1234,8 @@ impl Settings {
 
     /// The setting `id` follows until it is set
     /// ([`SettingExtra::follows`]), if any.
-    fn follows(&self, id: &str) -> Option<&'static str> {
-        self.specs.get(id)?.extra().follows
+    fn follows(&self, id: &str) -> Option<&str> {
+        self.specs.get(id)?.extra().follows.as_ref().map(Id::as_str)
     }
 
     /// The value outside any scope, or the default if none was set; for a
@@ -1562,5 +1369,7 @@ impl Settings {
     }
 }
 
+mod declared;
+mod specs;
 #[cfg(test)]
 mod tests;

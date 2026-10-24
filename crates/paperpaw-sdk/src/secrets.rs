@@ -32,6 +32,7 @@ const VEIL: &[u8] = b"QuireInk keeps this out of sight, not safe"; // not PaperP
 
 /// A password or key. Printed for debugging without its value.
 #[derive(Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Secret {
     /// Who keeps it and for what, e.g. `translate.deepl-key`.
     pub id: String,
@@ -86,6 +87,7 @@ impl core::fmt::Debug for Visible<'_> {
 
 /// A secret as everyone may see it: its name and label, not its value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Listed<'a> {
     pub id: &'a str,
     pub label: &'a str,
@@ -151,6 +153,7 @@ impl<'a> Visible<'a> {
 /// A change: `value` `None` removes the secret. Printed for debugging
 /// without the value.
 #[derive(Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SecretChange {
     pub id: String,
     pub label: String,
@@ -178,6 +181,13 @@ impl SecretChange {
             value: Some(value.to_string()),
             changeable: true,
         }
+    }
+
+    /// Whether the reader may type it anew in the list of passwords and
+    /// keys (`false` for a key or a hash).
+    pub fn changeable(mut self, changeable: bool) -> Self {
+        self.changeable = changeable;
+        self
     }
 
     /// Removes secret `id`.
@@ -299,6 +309,8 @@ impl Secrets {
     /// label written as `\t`, `\n`, `\r` and `\\` (a network's name may
     /// hold any of them).
     /// Lines this version does not read are written back as they are.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn encode(&self) -> String {
         let mut text: String = self
             .list
@@ -322,6 +334,8 @@ impl Secrets {
 
     /// Lines it cannot read (more fields or flags than it knows, or
     /// damaged) are kept for [`Secrets::encode`], not dropped.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn decode(text: &str) -> Self {
         let mut secrets = Self::default();
         for line in text.lines() {

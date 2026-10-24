@@ -235,12 +235,38 @@ fn memory() -> Option<paperpaw_sdk::memory::MemoryUse> {
     let (stack_free, stack_size) = stack::left();
     let bytes = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
     let free = esp_alloc::HEAP.free();
-    Some(paperpaw_sdk::memory::MemoryUse {
-        heap_free: bytes(free),
-        heap_size: bytes(free + esp_alloc::HEAP.used()),
-        stack_free: Some(bytes(stack_free)),
-        stack_size: Some(bytes(stack_size)),
-    })
+    let mut used =
+        paperpaw_sdk::memory::MemoryUse::new(bytes(free), bytes(free + esp_alloc::HEAP.used()))
+            .with_stack(bytes(stack_free), bytes(stack_size))
+            .with_largest_free(bytes(largest_block()));
+    // The X4 Pro's PSRAM beside its internal RAM.
+    let stats = esp_alloc::HEAP.stats();
+    if stats.region_stats.iter().flatten().count() > 1 {
+        for region in stats.region_stats.iter().flatten() {
+            let part =
+                paperpaw_sdk::memory::MemoryRegion::new(bytes(region.free), bytes(region.size));
+            let external = region
+                .capabilities
+                .contains(esp_alloc::MemoryCapability::External);
+            used = used.with_region(if external { part.external() } else { part });
+        }
+    }
+    Some(used)
+}
+
+/// The largest block of memory that could be had now (found by asking for
+/// blocks, given back at once).
+pub fn largest_block() -> usize {
+    let (mut can, mut cannot) = (0, esp_alloc::HEAP.free() + 1);
+    while cannot - can > 64 {
+        let size = (can + cannot) / 2;
+        if alloc::vec::Vec::<u8>::new().try_reserve_exact(size).is_ok() {
+            can = size;
+        } else {
+            cannot = size;
+        }
+    }
+    can
 }
 
 /// Microseconds since start, for measuring what plugins take.

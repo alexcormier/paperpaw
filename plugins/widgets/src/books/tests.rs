@@ -72,7 +72,7 @@ pub(crate) fn library() -> MemoryStorage {
                 height: COVER_SIZE.1,
             }))
             .progress(progress);
-        library::save(&storage, path, &book);
+        library::save(&storage, path, &book).unwrap();
         records.push(catalog::Record::of(path, &book));
         storage
     };
@@ -96,7 +96,7 @@ pub(crate) fn library() -> MemoryStorage {
     storage = add(storage, "books/s4.epub", "The Fourth", "Tales", "4", None);
     storage = add(storage, "books/a.epub", "Alone", "", "", None);
     storage = add(storage, "books/b.epub", "Begun", "", "", Some(10));
-    catalog::write(&storage, &records);
+    catalog::write(&storage, &records).unwrap();
     let _ = paperpaw_sdk::Storage::write(
         &storage,
         ".paperpaw/library/opened.txt",
@@ -120,7 +120,8 @@ pub(crate) fn library() -> MemoryStorage {
             text: "A sentence worth keeping, of some length.".to_string(),
             note: String::new(),
         },
-    );
+    )
+    .unwrap();
     Position {
         path: "books/s3.epub".to_string(),
         page: Some(40),
@@ -214,6 +215,7 @@ fn a_logo_picture_draws_from_memory() {
                 "x",
                 SettingKind::Text,
                 SettingValue::Text(Cow::Borrowed(logo)),
+                paperpaw_sdk::builtin::groups::OTHER,
             ))
             .unwrap();
         h.set(
@@ -295,7 +297,7 @@ fn every_widget_draws_in_every_frame_and_size() {
         assert!(h.widgets.has(id), "{id}");
         let kind = h.widgets.category(id).unwrap();
         assert!(categories::ALL.contains(&kind), "{id}: {kind}");
-        for frame in paperpaw_sdk::widgets::look::FRAMES {
+        for frame in paperpaw_sdk::widgets::FRAMES {
             h.set(
                 &alloc::format!("{id}.frame"),
                 SettingValue::Text(Cow::Borrowed(frame)),
@@ -441,7 +443,7 @@ fn a_long_series_is_kept_round_the_book_being_read() {
         })
         .collect();
     let storage = MemoryStorage::new();
-    catalog::write(&storage, &records);
+    catalog::write(&storage, &records).unwrap();
     let h = Harness::new(storage);
     let env = h.env();
     let read = |path: &str| path < "books/long/010.epub";
@@ -513,7 +515,7 @@ fn new_books_in_a_large_library() {
             .collect()
     };
     let storage = MemoryStorage::new();
-    catalog::write(&storage, &books(5000));
+    catalog::write(&storage, &books(5000)).unwrap();
     let mut h = Harness::new(storage);
     h.set(
         "widgets.next.pick",
@@ -537,7 +539,7 @@ fn new_books_in_a_large_library() {
     };
     // The first look: all seen.
     pick(&h);
-    catalog::write(&h.storage, &books(5001));
+    catalog::write(&h.storage, &books(5001)).unwrap();
     paperpaw_sdk::Storage::write(&h.storage, "books/05000.epub", b"a book").unwrap();
     let shown = pick(&h);
     assert!(shown.contains("05000"), "{shown}");
@@ -595,7 +597,8 @@ fn a_highlight_each_time_it_shows_stays_while_it_shows() {
                 text: alloc::format!("Highlight number {n}"),
                 note: String::new(),
             },
-        );
+        )
+        .unwrap();
     }
     let mut h = Harness::new(storage);
     h.set(
@@ -910,9 +913,9 @@ fn titles_break_between_words_only() {
     for width in [40u16, 60, 90, 120, 180, 260, 400] {
         for height in [30u16, 60, 120, 240] {
             let mut lines = Lines::new();
-            lines.add(Role::Caption, style.small, "Next up", Color::BLACK);
-            lines.add(Role::Title, style.title, title, Color::BLACK);
-            lines.add(Role::Note, style.small, "Ann Author", Color::BLACK);
+            lines.add(Role::Caption, style.small(), "Next up", Color::BLACK);
+            lines.add(Role::Title, style.title(), title, Color::BLACK);
+            lines.add(Role::Note, style.small(), "Ann Author", Color::BLACK);
             lines.fit(&env, width, height);
             let font = style.font(&env).unwrap();
             for line in &lines.lines {
@@ -958,7 +961,10 @@ fn a_library_of_ones_own_gives_the_widgets_its_books() {
     let remote: alloc::boxed::Box<dyn library::Library> = alloc::boxed::Box::new(Remote);
     h.services.insert(
         Id::new_static(library::service::SERVICE),
-        paperpaw_sdk::services::Service::new(remote),
+        paperpaw_sdk::services::Service::new(
+            library::service::LibraryService(remote),
+            library::service::VERSION,
+        ),
     );
     let env = h.env();
     let mut paths = Vec::new();

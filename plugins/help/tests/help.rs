@@ -14,7 +14,7 @@ use paperpaw_platform::{
     PointerEvent, PointerPhase, PointerTool, Rotation,
 };
 use paperpaw_sdk::builtin::{actions, slots};
-use paperpaw_sdk::help::{self, Hint, Zone};
+use paperpaw_sdk::help::{self, HelpHint, Zone};
 use paperpaw_sdk::{
     Canvas, Cx, Env, Handled, Id, Manifest, MemoryStorage, Params, Plugin, Priority, RegisterError,
     Registrar, Screen, ScreenSpec, Version,
@@ -94,15 +94,14 @@ impl Plugin for Probe {
             r,
             OTHER.as_str(),
             &[
-                Hint::touch("probe.next").zone(Zone::new(667, 0, 333, 1000)),
-                Hint::any("probe.both"),
-                Hint::buttons("probe.buttons"),
+                HelpHint::touch("probe.next").zone(Zone::new(667, 0, 333, 1000)),
+                HelpHint::any("probe.both"),
+                HelpHint::buttons("probe.buttons"),
             ],
         )?;
         r.add_translations(
             "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\n\
-             probe.next = Tap here: next\nprobe.both = For all\nprobe.buttons = For buttons\n"
-                .into(),
+             probe.next = Tap here: next\nprobe.both = For all\nprobe.buttons = For buttons\n",
         )
     }
 }

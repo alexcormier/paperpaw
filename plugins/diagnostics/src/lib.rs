@@ -55,7 +55,7 @@ pub const PAGES: Setting<i64> = Setting::new("diagnostics.pages");
 pub struct Diagnostics;
 
 /// How many pages the test turns.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::number(
     PAGES.static_str(),
     "diagnostics.setting.pages",
     1,
@@ -64,7 +64,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
     groups::SYSTEM,
 )
 .advanced()
-.described("diagnostics.setting.pages.help")];
+.description("diagnostics.setting.pages.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -94,7 +94,7 @@ impl Plugin for Diagnostics {
             Box::new(|env, _| check::make(env)),
         ))?;
         r.add_action(
-            ActionSpec::new(OPEN_CHECK, "diagnostics.check.title").handler(|_, out| {
+            ActionSpec::new(OPEN_CHECK, "diagnostics.check.title").handler(|_, _, out| {
                 out.push(Command::OpenScreen(CHECK, Params::new()));
             }),
         )?;

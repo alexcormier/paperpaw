@@ -59,32 +59,32 @@ fn stamp_file() -> String {
 /// The folder of the pictures, chosen on the folder chooser.
 static CHOSEN_FOLDER: paperpaw_sdk::SettingExtra =
     paperpaw_sdk::SettingExtra::new().editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
-static FOLDER_SETTING: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static FOLDER_SETTING: [SettingSpec; 1] = [SettingSpec::text(
     FOLDER.static_str(),
     "widgets.picture.setting.folder",
     "Pictures",
     ID,
 )
 .with_extra(&CHOSEN_FOLDER)
-.described("widgets.picture.setting.folder.help")];
+.description("widgets.picture.setting.folder.help")];
 
 static SETTINGS: [SettingSpec; 6] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.picture.change",
         "widgets.setting.change",
         &CHANGES,
         CHANGES[0],
         ID,
     )
-    .described("widgets.setting.change.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.setting.change.help"),
+    SettingSpec::choice(
         "widgets.picture.fit",
         "widgets.picture.setting.fit",
         &FITS,
         FITS[0],
         ID,
     )
-    .described("widgets.picture.fit.help"),
+    .description("widgets.picture.fit.help"),
     widgets::part_spec(
         "widgets.picture.caption",
         ID,
@@ -97,7 +97,11 @@ static SETTINGS: [SettingSpec; 6] = [
 ];
 
 pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.picture"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.picture");
+        &SPEC
+    })?;
     r.add_settings(&FOLDER_SETTING)?;
     r.add_settings(&SETTINGS)?;
     let changed = changes.clone();
@@ -253,7 +257,7 @@ impl Widget for PictureWidget {
 
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
         // As high as wide, with the frame and the caption.
-        let look = widgets::look::look(env, ID.as_str(), Rect::new(0, 0, width, width));
+        let look = widgets::widget_look(env, ID.as_str(), Rect::new(0, 0, width, width));
         width.min(env.device.display.height / 3) + caption_height(env) + (width - look.area.width)
     }
 
@@ -294,7 +298,8 @@ impl Widget for PictureWidget {
         let Some(font) = style.font(env) else {
             return;
         };
-        let small = widgets::line_height(env, style.small);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        let small = widgets::line_height(env, style.small());
         // Just below the picture, wherever its whole leaves it.
         let row = Rect::new(
             area.x,
@@ -302,9 +307,12 @@ impl Widget for PictureWidget {
             area.width,
             small,
         );
-        let name = ui::fit(&font, style.small, &shown.name, f32::from(area.width));
-        let x = widgets::align(env, ID.as_str()).x(area, font.measure(style.small, &name));
-        ui::draw_label(canvas, &font, style.small, x, row, &name, look.faint);
+        let name = ui::fit(&font, style.small(), &shown.name, f32::from(area.width));
+        let x = widgets::align(env, ID.as_str()).x(area, font.measure(style.small(), &name));
+        ui::Label::new(&name)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(&mut ui, x, row);
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
@@ -318,7 +326,7 @@ fn caption_height(env: &Env<'_>) -> u16 {
         return 0;
     }
     let style = UiStyle::new(env);
-    widgets::line_height(env, style.small) + style.gap as u16 / 2
+    widgets::line_height(env, style.small()) + style.gap() / 2
 }
 
 /// The part of a picture `width` × `height` that has the proportions of

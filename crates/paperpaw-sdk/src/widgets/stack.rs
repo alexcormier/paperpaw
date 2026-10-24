@@ -19,7 +19,7 @@ use crate::env::Env;
 /// out, as are those with nothing to show. The stack keeps the widgets
 /// it made: [`update`](Self::update) reads them anew, [`draw`](Self::draw)
 /// draws them.
-pub struct Stack {
+pub struct WidgetStack {
     widgets: Vec<Shown>,
 }
 
@@ -33,14 +33,16 @@ struct Shown {
     area: Rect,
 }
 
-impl fmt::Debug for Stack {
+impl fmt::Debug for WidgetStack {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ids: Vec<&str> = self.widgets.iter().map(|w| w.id.as_str()).collect();
-        f.debug_struct("Stack").field("widgets", &ids).finish()
+        f.debug_struct("WidgetStack")
+            .field("widgets", &ids)
+            .finish()
     }
 }
 
-impl Stack {
+impl WidgetStack {
     /// The widgets of `list` in `area`, what they show read.
     pub fn new(env: &Env<'_>, list: &str, area: Rect) -> Self {
         let style = crate::ui::UiStyle::new(env);

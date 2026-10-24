@@ -763,7 +763,7 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
     }
     // Not kept here, what came from KOReader must not count as known:
     // the next exchange would take it for removed here.
-    if ours_changed && !annotations::save(storage, book, &kept) {
+    if ours_changed && annotations::save(storage, book, &kept).is_err() {
         return Err(Unreadable);
     }
     let mut passed = true;
@@ -905,7 +905,7 @@ fn exchange_or_ask(
     removal: Removal,
     asked: &RefCell<Vec<String>>,
     announced: &Announced,
-    out: &mut Vec<paperpaw_sdk::Command>,
+    out: &mut paperpaw_sdk::Commands,
 ) {
     match exchange_book(env, book, removal) {
         Exchanged::Changed => {

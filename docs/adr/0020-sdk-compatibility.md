@@ -7,7 +7,10 @@
 
 Plugins are built against one version of `paperpaw-sdk` and declare it
 in their `Manifest` (`sdk`); the kernel loads a plugin only if its
-version satisfies that one, following SemVer. That promise is only as
+version satisfies that one, following SemVer. (Superseded in part: the
+`Manifest` names no SDK any more. A plugin with code is loaded by its
+file's fingerprint and the plugin interface, [ADR 0026](0026-plugin-interface-version.md);
+a data plugin by its `formats`; a built-in one is built with the kernel.) That promise is only as
 good as the versions: a change that breaks plugins in a release that
 says it does not would break them on readers' devices, where nobody can
 rebuild them.

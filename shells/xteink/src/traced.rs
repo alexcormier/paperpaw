@@ -165,6 +165,10 @@ impl Storage for Traced {
         note(|| format!("size {path}"), || self.0.size(path))
     }
 
+    fn modified(&self, path: &str) -> Option<i64> {
+        self.0.modified(path)
+    }
+
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         tally("write", path, data.len());
         note(

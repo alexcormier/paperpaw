@@ -92,44 +92,50 @@ fn sample_font<'a>(env: &Env<'a>, style: &UiStyle) -> Option<paperpaw_sdk::FontH
         .or_else(|| style.font(env))
 }
 
-/// The height of `lines` lines of the sample at `size`.
-fn sample_lines(env: &Env<'_>, style: &UiStyle, size: f32, lines: u16) -> u16 {
-    sample_font(env, style).map_or(size * 1.3, |f| f.line_metrics(size).line_height) as u16 * lines
+/// The height of the whole sample `text` at `size`, wrapped to `width`.
+fn sample_height(env: &Env<'_>, style: &UiStyle, size: f32, width: u16, text: &str) -> u16 {
+    let Some(font) = sample_font(env, style) else {
+        return (size * 1.3) as u16 * 2;
+    };
+    let lines = font.wrap(size, text, f32::from(width)).len().max(1);
+    font.line_metrics(size).line_height as u16 * lines as u16
 }
 
 /// Draws the sample `text` at `size` in the reading font in `area`,
-/// wrapped: the lines that fit (fewer words at large sizes), at least
-/// one.
-fn draw_sample(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    size: f32,
-    text: &str,
-) {
+/// wrapped: the lines that fit, at least one, the last ending in "…"
+/// where the rest does not fit (at large sizes).
+fn draw_sample(ui: &mut ui::Ui<'_>, area: Rect, size: f32, text: &str) {
+    let (env, style) = (ui.env(), ui.style());
     let Some(font) = sample_font(env, style) else {
         return;
     };
-    canvas.describe(Role::Text, text, area);
+    ui.canvas().describe(Role::Text, text, area);
     let height = font.line_metrics(size).line_height.max(1.0);
     let fit = ((f32::from(area.height) / height) as usize).max(1);
+    let width = f32::from(area.width);
+    let lines = font.wrap(size, text, width);
+    let cut = lines.len() > fit;
     let mut top = area.y;
-    for range in font
-        .wrap(size, text, f32::from(area.width))
-        .into_iter()
-        .take(fit)
-    {
+    for (i, range) in lines.into_iter().take(fit).enumerate() {
         let row = Rect::new(area.x, top, area.width, height as u16);
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            f32::from(area.x),
-            row,
-            &text[range],
-            Color::BLACK,
-        );
+        let mut line = String::from(text[range].trim_end());
+        // The last line shown, with more after it: words go until "…"
+        // fits after them.
+        if cut && i + 1 == fit {
+            while font.measure(size, &alloc::format!("{line}…")) > width {
+                match line.rfind(' ') {
+                    Some(end) => line.truncate(end),
+                    None => break,
+                }
+            }
+            line.push('…');
+        }
+        let x = f32::from(area.x);
+        ui::Label::new(&line)
+            .px(size)
+            .color(Color::BLACK)
+            .font(font)
+            .draw_from(ui, x, row);
         top += height as u16;
     }
 }
@@ -139,20 +145,11 @@ fn draw_sample(
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
-fn paragraph(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    size: f32,
-    text: &str,
-    max: usize,
-    color: Color,
-) {
-    let Some(font) = style.font(env) else {
+fn paragraph(ui: &mut ui::Ui<'_>, area: Rect, size: f32, text: &str, max: usize, color: Color) {
+    let Some(font) = ui.font() else {
         return;
     };
-    canvas.describe(Role::Text, text, area);
+    ui.canvas().describe(Role::Text, text, area);
     let height = font.line_metrics(size).line_height;
     let mut top = area.y;
     for range in font
@@ -161,15 +158,10 @@ fn paragraph(
         .take(max)
     {
         let row = Rect::new(area.x, top, area.width, height as u16);
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            f32::from(area.x),
-            row,
-            &text[range],
-            color,
-        );
+        ui::Label::new(&text[range])
+            .px(size)
+            .color(color)
+            .draw_from(ui, f32::from(area.x), row);
         top += height as u16;
     }
 }
@@ -197,7 +189,7 @@ impl Guide {
             steps: steps(env),
             page: 0,
             focus: Target::Next,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             edit: ui::NumberEdit::default(),
             style: UiStyle::new(env),
             layout: Layout::default(),
@@ -311,8 +303,8 @@ impl Guide {
         let (w, h) = (display.width, display.height);
         // A little more room than menus have, but not twice theirs, which
         // left wide margins too little width.
-        let margin = (style.margin + style.gap) as u16;
-        let gap = style.gap as u16;
+        let margin = (u32::from(style.margin()) + u32::from(style.gap())) as u16;
+        let gap = style.gap();
         let width = w.saturating_sub(2 * margin);
         // The text flows: the question, its explanation right below, the
         // card below that; the buttons at the bottom.
@@ -326,16 +318,16 @@ impl Guide {
         let mut y = margin;
         let dots = Rect::new(margin, y, width, gap);
         y += dots.height + gap * 4;
-        let title = Rect::new(margin, y, width, lines(style.title * 1.3, &title_text, 2));
+        let title = Rect::new(margin, y, width, lines(style.title() * 1.3, &title_text, 2));
         y += title.height + gap;
         let help = Rect::new(
             margin,
             y,
             width,
-            lines(style.small, &help_text, self.help_lines()),
+            lines(style.small(), &help_text, self.help_lines()),
         );
         y += help.height + gap * 3;
-        let button = style.row as u16;
+        let button = style.row();
         let other = Rect::new(margin, h.saturating_sub(margin + button), width, button);
         let next = Rect::new(
             margin,
@@ -347,12 +339,15 @@ impl Guide {
             None => (None, None, None),
             Some(_) => {
                 let number = self.is_number(env);
-                // A number: − value + on a row, a sample below it: two
-                // lines of the text at that size, in the reading font (the
-                // card as high as there is room for, then fewer words).
+                // A number: − value + on a row, a sample below it: the
+                // whole text at that size, in the reading font, as far as
+                // there is room (then it ends in "…").
                 let below = match self.sample_size(env) {
-                    Some(size) => sample_lines(env, style, size, 2),
-                    None => line(env, style, style.text) * 2,
+                    Some(size) => {
+                        let inner = width.saturating_sub(2 * style.margin());
+                        sample_height(env, style, size, inner, env.i18n.tr("setup.sample"))
+                    }
+                    None => line(env, style, style.text()) * 2,
                 };
                 let height = if number {
                     button + gap * 2 + below + gap * 2
@@ -363,14 +358,14 @@ impl Guide {
                 let stepper = number.then(|| {
                     let size = button;
                     let top = card.y + gap;
-                    let inset = style.margin as u16;
+                    let inset = style.margin();
                     (
                         Rect::new(card.x + inset, top, size, size),
                         Rect::new(card.x + card.width - inset - size, top, size, size),
                     )
                 });
                 let segments = self.two(env).map(|_| {
-                    let inset = style.margin as u16 / 2;
+                    let inset = style.margin() / 2;
                     // Wide margins and a short card leave the buttons
                     // their height.
                     let above = inset.min(gap).min(card.height / 6);
@@ -515,26 +510,27 @@ impl Guide {
         }
     }
 
-    fn draw_card(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, card: Rect) {
+    fn draw_card(&self, ui: &mut ui::Ui<'_>, card: Rect) {
+        let env = ui.env();
         let style = &self.style;
         let focused = self.shown && self.focus == Target::Card;
         let thickness = if focused {
-            style.line * 3
+            u32::from(style.line()) * 3
         } else {
-            style.line.max(1)
+            u32::from(style.line()).max(1)
         };
         // Two options side by side need no frame of their own, but for
         // the focus.
         if focused || self.layout.segments.is_none() {
-            ui::stroke_round(canvas, style, card, thickness, Color::BLACK);
+            ui::stroke_round(ui.canvas(), style, card, thickness, Color::BLACK);
         }
         let inner = Rect::new(
-            card.x + style.margin as u16,
+            card.x + style.margin(),
             card.y,
-            card.width.saturating_sub(2 * style.margin as u16),
-            style.row as u16,
+            card.width.saturating_sub(2 * style.margin()),
+            style.row(),
         );
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let (label, more) = match (self.step(env).map(|s| &s.page), self.setting(env)) {
@@ -542,13 +538,15 @@ impl Guide {
             (_, Some(spec)) => (ui::setting_value(env, spec), ui::opens_screen(env, spec)),
             _ => (String::new(), false),
         };
-        canvas.describe(Role::Button, &label, card).focused(focused);
+        ui.canvas()
+            .describe(Role::Button, &label, card)
+            .focused(focused);
         if let (Some(options), Some((left, right)), Some(spec)) =
             (self.two(env), self.layout.segments, self.setting(env))
         {
             let current = ui::setting_value(env, spec);
             for ((_, name), rect) in options.iter().zip([left, right]) {
-                ui::draw_button(canvas, env, style, rect, name, *name == current, false);
+                ui.button(rect, name, *name == current, false);
             }
             return;
         }
@@ -556,7 +554,7 @@ impl Guide {
             match spec.kind {
                 SettingKind::Bool => {
                     let on = env.settings.bool(spec.id.as_str());
-                    ui::draw_switch(canvas, style, inner, on, false);
+                    ui.switch(inner, on, false);
                     return;
                 }
                 SettingKind::Int { .. } => {
@@ -566,8 +564,8 @@ impl Guide {
                     // Filled while the buttons change it, as on the
                     // settings pages.
                     let editing = self.edit.active();
-                    ui::draw_button(canvas, env, style, minus, "−", editing, false);
-                    ui::draw_button(canvas, env, style, plus, "+", editing, false);
+                    ui.button(minus, "−", editing, false);
+                    ui.button(plus, "+", editing, false);
                     // The value large between them.
                     let between = Rect::new(
                         minus.x + minus.width,
@@ -576,26 +574,22 @@ impl Guide {
                         minus.height,
                     );
                     let x = f32::from(between.x)
-                        + (f32::from(between.width) - font.measure(style.title, &label)) / 2.0;
-                    ui::draw_label(canvas, &font, style.title, x, between, &label, Color::BLACK);
+                        + (f32::from(between.width) - font.measure(style.title(), &label)) / 2.0;
+                    ui::Label::new(&label)
+                        .px(style.title())
+                        .color(Color::BLACK)
+                        .draw_from(ui, x, between);
                     // A sample of the text at that size, where it is one.
                     if let Some(size) = self.sample_size(env) {
-                        let top = minus.y + minus.height + style.gap as u16;
+                        let top = minus.y + minus.height + style.gap();
                         let sample = Rect::new(
                             inner.x,
                             top,
                             inner.width,
-                            (card.y + card.height).saturating_sub(top + style.gap as u16),
+                            (card.y + card.height).saturating_sub(top + style.gap()),
                         );
-                        let mut clipped = canvas.clipped(sample);
-                        draw_sample(
-                            &mut clipped,
-                            env,
-                            style,
-                            sample,
-                            size,
-                            env.i18n.tr("setup.sample"),
-                        );
+                        let mut clipped = ui.clipped(sample);
+                        draw_sample(&mut clipped, sample, size, env.i18n.tr("setup.sample"));
                     }
                     return;
                 }
@@ -604,7 +598,7 @@ impl Guide {
         }
         let arrow = if more { " ›" } else { "" };
         let label = alloc::format!("{label}{arrow}");
-        draw_card_label(canvas, &font, style, (card, inner), &label);
+        draw_card_label(ui, (card, inner), &label);
     }
 
     /// The target at `point`, if any.
@@ -629,31 +623,28 @@ impl Screen for Guide {
         // is changed (and previewed).
         self.layout = self.layout(env);
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let l = self.layout;
-        self.draw_dots(canvas);
+        self.draw_dots(ui.canvas());
         let (title, help) = self.texts(env);
         paragraph(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             l.title,
-            style.title * 1.3,
+            style.title() * 1.3,
             &title,
             2,
             Color::BLACK,
         );
         paragraph(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             l.help,
-            style.small,
+            style.small(),
             &help,
             self.help_lines(),
-            style.faint(60),
+            style.faint(ui::Ink::Note),
         );
         if let Some(card) = l.card {
-            self.draw_card(canvas, env, card);
+            self.draw_card(&mut ui, card);
         }
         let end = self.page >= self.steps.len();
         let next = env.i18n.tr(if end { "setup.done" } else { "setup.next" });
@@ -663,16 +654,8 @@ impl Screen for Guide {
             "setup.back"
         });
         let focus = |t| self.shown && self.focus == t;
-        ui::draw_button(canvas, env, &style, l.next, next, true, focus(Target::Next));
-        ui::draw_button(
-            canvas,
-            env,
-            &style,
-            l.other,
-            other,
-            false,
-            focus(Target::Other),
-        );
+        ui.button(l.next, next, true, focus(Target::Next));
+        ui.button(l.other, other, false, focus(Target::Other));
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -701,7 +684,7 @@ impl Screen for Guide {
             if *a == actions::NEXT_PAGE || *a == actions::PREV_PAGE {
                 self.edit.finish(&env, spec.as_ref(), true, cx);
             } else {
-                let handled = self.edit.on_action(&env, spec.as_ref(), a, cx);
+                let handled = self.edit.on_action(&env, spec.as_ref(), a, cx).handled();
                 self.redraw(cx, RefreshMode::Fast);
                 return handled;
             }
@@ -802,29 +785,33 @@ impl Screen for Guide {
 
 /// A card's `label` in its `inner` room: smaller where it does not fit,
 /// down to the small size, then on two lines in it; only then shortened.
-fn draw_card_label(
-    canvas: &mut Canvas<'_>,
-    font: &paperpaw_sdk::FontHandle<'_>,
-    style: &UiStyle,
-    (card, inner): (Rect, Rect),
-    label: &str,
-) {
+fn draw_card_label(ui: &mut ui::Ui<'_>, (card, inner): (Rect, Rect), label: &str) {
+    let style = ui.style();
+    let Some(font) = ui.font() else {
+        return;
+    };
     let width = f32::from(inner.width);
     let row = Rect::new(inner.x, card.y, inner.width, card.height);
     let (size, text) =
-        paperpaw_sdk::widgets::fit_line(font, style.title, style.small, label, width);
-    let lines = font.wrap(style.small, label, width);
-    let line = font.line_metrics(style.small).line_height as u16;
+        paperpaw_sdk::widgets::fit_line(&font, style.title(), style.small(), label, width);
+    let lines = font.wrap(style.small(), label, width);
+    let line = font.line_metrics(style.small()).line_height as u16;
     if text != label && lines.len() == 2 && 2 * line <= card.height {
         let top = card.y + (card.height - 2 * line) / 2;
         for (i, range) in lines.into_iter().enumerate() {
             let at = Rect::new(inner.x, top + i as u16 * line, inner.width, line);
             let part = label[range].trim();
             let x = f32::from(inner.x);
-            ui::draw_label(canvas, font, style.small, x, at, part, Color::BLACK);
+            ui::Label::new(part)
+                .px(style.small())
+                .color(Color::BLACK)
+                .draw_from(ui, x, at);
         }
         return;
     }
     let x = f32::from(inner.x);
-    ui::draw_label(canvas, font, size, x, row, &text, Color::BLACK);
+    ui::Label::new(&text)
+        .px(size)
+        .color(Color::BLACK)
+        .draw_from(ui, x, row);
 }

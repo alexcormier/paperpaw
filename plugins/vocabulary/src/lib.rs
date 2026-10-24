@@ -58,9 +58,9 @@ use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
-    SettingExtra, SettingSpec, StorageError,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, SettingExtra, SettingSpec, StorageError,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -104,7 +104,7 @@ static IN_DICTIONARY: SettingExtra = SettingExtra::new().section(DICTIONARY_SECT
 
 /// Whether words are kept and marked.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         COLLECT.static_str(),
         "vocabulary.setting.collect",
         true,
@@ -112,15 +112,15 @@ static SETTINGS: [SettingSpec; 2] = [
     )
     .advanced()
     .with_extra(&IN_DICTIONARY)
-    .described("vocabulary.setting.collect.help"),
-    SettingSpec::fixed_switch(
+    .description("vocabulary.setting.collect.help"),
+    SettingSpec::switch(
         MARK.static_str(),
         "vocabulary.setting.mark",
         false,
         groups::READING,
     )
     .with_extra(&IN_DICTIONARY)
-    .described("vocabulary.setting.mark.help"),
+    .description("vocabulary.setting.mark.help"),
 ];
 
 /// The flash cards' part of the reading settings.
@@ -132,7 +132,7 @@ static IN_CARDS_PERCENT: SettingExtra = SettingExtra::new()
 /// How the flash cards are reviewed, and whether words looked up become
 /// cards.
 static CARD_SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_number(
+    SettingSpec::number(
         NEW_PER_DAY.static_str(),
         "vocabulary.setting.new-per-day",
         0,
@@ -141,8 +141,8 @@ static CARD_SETTINGS: [SettingSpec; 4] = [
         groups::READING,
     )
     .with_extra(&IN_CARDS)
-    .described("vocabulary.setting.new-per-day.help"),
-    SettingSpec::fixed_number(
+    .description("vocabulary.setting.new-per-day.help"),
+    SettingSpec::number(
         RETENTION.static_str(),
         "vocabulary.setting.retention",
         70,
@@ -152,23 +152,23 @@ static CARD_SETTINGS: [SettingSpec; 4] = [
     )
     .advanced()
     .with_extra(&IN_CARDS_PERCENT)
-    .described("vocabulary.setting.retention.help"),
-    SettingSpec::fixed_switch(
+    .description("vocabulary.setting.retention.help"),
+    SettingSpec::switch(
         FROM_LOOKUPS.static_str(),
         "vocabulary.setting.cards-from-lookups",
         false,
         groups::READING,
     )
     .with_extra(&IN_CARDS)
-    .described("vocabulary.setting.cards-from-lookups.help"),
-    SettingSpec::fixed_switch(
+    .description("vocabulary.setting.cards-from-lookups.help"),
+    SettingSpec::switch(
         REVIEW_ON_WAKE.static_str(),
         "vocabulary.setting.review-on-wake",
         false,
         groups::READING,
     )
     .with_extra(&IN_CARDS)
-    .described("vocabulary.setting.review-on-wake.help"),
+    .description("vocabulary.setting.review-on-wake.help"),
 ];
 
 /// How the words being learnt look in books.
@@ -232,7 +232,7 @@ impl Plugin for Vocabulary {
             Box::new(move |env, _| Box::new(WordsScreen::new(env, changes.clone()))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "vocabulary.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -253,10 +253,10 @@ impl Plugin for Vocabulary {
             r,
             review::SCREEN.as_str(),
             &[
-                paperpaw_sdk::help::Hint::any("vocabulary.help.answers"),
-                paperpaw_sdk::help::Hint::touch("vocabulary.help.tap"),
-                paperpaw_sdk::help::Hint::buttons("vocabulary.help.select"),
-                paperpaw_sdk::help::Hint::any("vocabulary.help.back"),
+                paperpaw_sdk::help::HelpHint::any("vocabulary.help.answers"),
+                paperpaw_sdk::help::HelpHint::touch("vocabulary.help.tap"),
+                paperpaw_sdk::help::HelpHint::buttons("vocabulary.help.select"),
+                paperpaw_sdk::help::HelpHint::any("vocabulary.help.back"),
             ],
         )?;
         r.add_screen(ScreenSpec::new(
@@ -272,7 +272,7 @@ impl Plugin for Vocabulary {
             Box::new(|env, _| Box::new(phone::PhoneScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(CARDS, "vocabulary.cards.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(decks::SCREEN, Params::new()));
             },
         ))?;
@@ -323,7 +323,7 @@ fn record(
 /// screen showed one (*A flash card due*), or where wanted
 /// ([`REVIEW_ON_WAKE`]) and cards are due. Below a lock, as it opens
 /// (the kernel keeps what others open below a screen that guards).
-fn wake(env: &Env<'_>, out: &mut Vec<Command>) {
+fn wake(env: &Env<'_>, out: &mut Commands) {
     let asleep = env.settings.text(SLEEP_SHOW) == SLEEP_CARD;
     let shown = asleep.then(|| sleep::shown(env)).flatten();
     if shown.is_none() && !(env.settings.read(&REVIEW_ON_WAKE) && decks::due_now(env) > 0) {
@@ -376,7 +376,7 @@ impl WordsScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
@@ -518,19 +518,15 @@ impl Screen for WordsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("vocabulary.title"),
             None,
             self.list.paging(len),
         );
         if len == 0 {
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 "vocabulary",
                 env.i18n.tr("vocabulary.empty.title"),
@@ -540,24 +536,29 @@ impl Screen for WordsScreen {
         }
         let count = self.count;
         let visible = &self.visible;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                if row == count {
-                    let title = env.i18n.tr("vocabulary.export");
-                    let note = env.i18n.tr("vocabulary.export.help");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", note);
-                    return;
-                }
-                let Some((_, _, word)) = visible.iter().find(|(r, _, _)| *r == row) else {
-                    return;
-                };
-                let note = if word.sentence.is_empty() {
-                    word.title.as_str()
-                } else {
-                    word.sentence.as_str()
-                };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &word.word, "", note);
-            });
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            if row == count {
+                let title = env.i18n.tr("vocabulary.export");
+                let note = env.i18n.tr("vocabulary.export.help");
+                ui::Row::value(title, "›")
+                    .note(note)
+                    .focused(focused)
+                    .draw(ui, rect);
+                return;
+            }
+            let Some((_, _, word)) = visible.iter().find(|(r, _, _)| *r == row) else {
+                return;
+            };
+            let note = if word.sentence.is_empty() {
+                word.title.as_str()
+            } else {
+                word.sentence.as_str()
+            };
+            ui::Row::plain(&word.word)
+                .note(note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     /// Back from a book or a lookup: with the words looked up meanwhile.
@@ -595,7 +596,7 @@ impl Screen for WordsScreen {
         if gesture.kind == GestureKind::Tap {
             let paging = self.list.paging(len);
             if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 return Handled::Yes;
             }
         }
@@ -677,7 +678,7 @@ mod tests {
     /// and is in the reader's menu.
     #[test]
     fn marking_is_off_at_first() {
-        use paperpaw_sdk::contribution::Contribution;
+        use paperpaw_sdk::Contribution;
         use paperpaw_sdk::{Plugin, Registrar, SettingValue};
 
         let plugin = super::Vocabulary;

@@ -14,7 +14,9 @@ use std::borrow::Cow;
 use paperpaw_core::KernelBuilder;
 use paperpaw_platform::{Color, Rect};
 use paperpaw_sdk::builtin::params;
-use paperpaw_sdk::ui::{self, SliderFocus, SliderView, TextRole, UiStyle};
+use paperpaw_sdk::ui::slider::SliderFocus;
+use paperpaw_sdk::ui::slider::SliderView;
+use paperpaw_sdk::ui::{self, TextRole, UiStyle};
 use paperpaw_sdk::widgets::Frame;
 use paperpaw_sdk::{
     Canvas, Cx, Env, Handled, Id, Manifest, Params, Plugin, RegisterError, Registrar, Screen,
@@ -291,13 +293,14 @@ impl Screen for Page {
         let style = self.style;
         let display = env.device.display;
         let screen = Rect::new(0, 0, display.width, display.height);
-        canvas.fill(screen, Color::WHITE);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(screen, Color::WHITE);
         let title = PAGES[self.index].1;
         let mut stack = ui::Stack::new(screen, 0);
-        let margin = style.margin as u16;
-        let header = stack.take(style.header as u16);
+        let margin = style.margin();
+        let header = stack.take(style.header());
         let page = format!("{} / {}", self.index + 1, PAGES.len());
-        ui::draw_header(canvas, env, &style, header, env.i18n.tr(title), Some(&page));
+        ui.header(header, env.i18n.tr(title), Some(&page));
         let rest = stack.rest();
         let body = Rect::new(
             margin,
@@ -307,35 +310,36 @@ impl Screen for Page {
         );
         let whole = Rect::new(0, rest.y, display.width, rest.height);
         match PAGES[self.index].0 {
-            "ui-kit.text" => text(canvas, env, &style, body),
-            "ui-kit.messages" => messages(canvas, env, &style, body),
-            "ui-kit.empties" => empty(canvas, env, &style, body),
-            "ui-kit.rows" => rows(canvas, env, &style, whole),
-            "ui-kit.values" => values(canvas, env, &style, whole),
-            "ui-kit.noted-rows" => noted(canvas, env, &style, whole),
-            "ui-kit.numbers" => numbers(canvas, env, &style, whole),
-            "ui-kit.sliders" => sliders(canvas, env, &style, whole),
-            "ui-kit.controls" => controls(canvas, env, &style, body),
-            "ui-kit.segments" => segments(canvas, env, &style, body),
-            "ui-kit.layout" => layout(canvas, env, &style, body),
-            "ui-kit.share" => share(canvas, env, &style, body),
-            "ui-kit.offer" => offer(canvas, env, &style, body),
-            "ui-kit.dialog" => dialog(canvas, env, &style),
-            "ui-kit.inputs" => inputs(canvas, env, &style, whole),
-            "ui-kit.ticks" => ticks(canvas, env, &style, whole),
-            "ui-kit.chips" => chips(canvas, env, &style, whole),
-            _ => pickers(canvas, env, &style, body),
+            "ui-kit.text" => text(&mut ui, body),
+            "ui-kit.messages" => messages(&mut ui, body),
+            "ui-kit.empties" => empty(&mut ui, body),
+            "ui-kit.rows" => rows(&mut ui, whole),
+            "ui-kit.values" => values(&mut ui, whole),
+            "ui-kit.noted-rows" => noted(&mut ui, whole),
+            "ui-kit.numbers" => numbers(&mut ui, whole),
+            "ui-kit.sliders" => sliders(&mut ui, whole),
+            "ui-kit.controls" => controls(&mut ui, body),
+            "ui-kit.segments" => segments(&mut ui, body),
+            "ui-kit.layout" => layout(&mut ui, body),
+            "ui-kit.share" => share(&mut ui, body),
+            "ui-kit.offer" => offer(&mut ui, body),
+            "ui-kit.dialog" => dialog(&mut ui),
+            "ui-kit.inputs" => inputs(&mut ui, whole),
+            "ui-kit.ticks" => ticks(&mut ui, whole),
+            "ui-kit.chips" => chips(&mut ui, whole),
+            _ => pickers(&mut ui, body),
         }
     }
 }
 
 /// Text in each role, a heading, a note line, a message and an empty
 /// state.
-fn text(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn text(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let Some(font) = style.font(env) else {
         return;
     };
-    let mut stack = ui::Stack::new(area, style.gap as u16);
+    let mut stack = ui::Stack::new(area, style.gap());
     for (role, name) in [
         (TextRole::Display, env.i18n.tr("ui-kit.role.display")),
         (TextRole::Headline, env.i18n.tr("ui-kit.role.headline")),
@@ -348,39 +352,33 @@ fn text(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         let size = style.size(role);
         let height = font.line_metrics(size).line_height as u16;
         let row = stack.take(height);
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            f32::from(row.x),
-            row,
-            name,
-            Color::BLACK,
-        );
+        ui::Label::new(name)
+            .px(size)
+            .color(Color::BLACK)
+            .draw_from(ui, f32::from(row.x), row);
     }
 }
 
 /// A heading, a note line, a message and an empty state.
-fn messages(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn messages(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let width = area.width;
-    let mut stack = ui::Stack::new(area, style.gap as u16);
-    let heading = stack.take(ui::heading_height(env, style));
-    ui::draw_heading(canvas, env, style, heading, env.i18n.tr("ui-kit.heading"));
+    let mut stack = ui::Stack::new(area, style.gap());
+    let heading = stack.take(ui.heading_height());
+    ui.heading(heading, env.i18n.tr("ui-kit.heading"));
     // Each as high as all its words need.
     let text = env.i18n.tr("ui-kit.note");
-    let note = stack.take(ui::note_line_height(env, style, width, text));
-    ui::draw_note_line(canvas, env, style, note, text);
+    let note = stack.take(ui.note_line_height(width, text));
+    ui.note_line(note, text);
     let text = env.i18n.tr("ui-kit.message");
-    let message = stack.take(ui::message_height(env, style, width, text));
-    ui::draw_message(canvas, env, style, message, text);
+    let message = stack.take(ui.message_height(width, text));
+    ui.message(message, text);
 }
 
 /// An empty state across the page.
-fn empty(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    ui::draw_empty(
-        canvas,
-        env,
-        style,
+fn empty(ui: &mut ui::Ui<'_>, area: Rect) {
+    let env = ui.env();
+    ui.empty(
         area,
         "books",
         env.i18n.tr("ui-kit.empty"),
@@ -389,34 +387,51 @@ fn empty(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
 }
 
 /// Switch rows, on (focused) and off.
-fn rows(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn rows(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let width = area.width;
     let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, 0);
     // Each row as tall as its title needs: titles are never shortened.
     let title = tr("ui-kit.switch.focused");
-    let focused = stack.take(ui::switch_row_height(env, style, width, title, ""));
-    ui::draw_focus(canvas, style, focused);
-    ui::draw_switch_row(canvas, env, style, focused, true, title, "", true);
+    let focused = stack.take(
+        ui::Row::switch(title, false)
+            .note("")
+            .height(env, style, width),
+    );
+    ui.focus(focused);
+    ui::Row::switch(title, true)
+        .note("")
+        .focused(true)
+        .draw(ui, focused);
     let title = tr("ui-kit.switch");
-    let plain = stack.take(ui::switch_row_height(env, style, width, title, ""));
-    ui::draw_switch_row(canvas, env, style, plain, false, title, "", false);
-    ui::draw_separator(canvas, style, plain, 0);
+    let plain = stack.take(
+        ui::Row::switch(title, false)
+            .note("")
+            .height(env, style, width),
+    );
+    ui::Row::switch(title, false)
+        .note("")
+        .focused(false)
+        .draw(ui, plain);
+    ui.separator(plain, 0);
 }
 
 /// A value row.
-fn values(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn values(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let width = area.width;
     let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, 0);
     let (title, value) = (tr("ui-kit.value"), tr("ui-kit.value.value"));
-    let row = stack.take(ui::value_row_height(env, style, width, title, value));
-    ui::draw_value_row(canvas, env, style, row, false, title, value);
-    ui::draw_separator(canvas, style, row, 0);
+    let row = stack.take(ui::Row::value(title, value).height(env, style, width));
+    ui::Row::value(title, value).focused(false).draw(ui, row);
+    ui.separator(row, 0);
 }
 
 /// A row with a note below its title and value.
-fn noted(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn noted(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let width = area.width;
     let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, 0);
@@ -425,20 +440,28 @@ fn noted(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         tr("ui-kit.noted.value"),
         tr("ui-kit.noted.note"),
     );
-    let noted = stack.take(ui::noted_row_height(env, style, width, title, value, note));
-    ui::draw_noted_row(canvas, env, style, noted, false, title, value, note);
+    let noted = stack.take(
+        ui::Row::value(title, value)
+            .note(note)
+            .height(env, style, width),
+    );
+    ui::Row::value(title, value)
+        .note(note)
+        .focused(false)
+        .draw(ui, noted);
 }
 
 /// A stepper and a progress bar.
-fn numbers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    let row = style.row as u16;
+fn numbers(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
+    let row = style.row();
     let mut stack = ui::Stack::new(area, 0);
     // Its title beside the − and +, or above them where it needs the room.
     let title = env.i18n.tr("ui-kit.stepper");
     let lines = ui::stepper_lines(env, style, area.width, row, title, "100");
     let stepper = stack.take(lines.height);
     ui::draw_stepper_lines(
-        canvas,
+        ui.canvas(),
         env,
         style,
         lines.at(stepper),
@@ -447,7 +470,7 @@ fn numbers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) 
         "100",
         false,
     );
-    let margin = style.margin as u16;
+    let margin = style.margin();
     let progress = stack.take(row);
     let bar = Rect::new(
         margin,
@@ -455,11 +478,12 @@ fn numbers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) 
         progress.width.saturating_sub(2 * margin),
         progress.height / 3,
     );
-    ui::draw_progress(canvas, style, bar, 620, Color::BLACK);
+    ui.progress(bar, 620, Color::BLACK);
 }
 
 /// A slider, focused.
-fn sliders(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn sliders(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let title = env.i18n.tr("ui-kit.slider");
     let height = ui::slider::row_height_for(env, style, area.width, title, "100 %", false);
     let slider = ui::Stack::new(area, 0).take(height);
@@ -467,15 +491,16 @@ fn sliders(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) 
         .title(title)
         .room("100 %")
         .focus(SliderFocus::Focused);
-    ui::draw_focus(canvas, style, slider);
-    ui::Slider::new(0, 100).draw_row(canvas, env, style, &view);
+    ui.focus(slider);
+    ui::slider::Slider::new(0, 100).draw_row(ui.canvas(), env, style, &view);
 }
 
 /// Buttons in each state, a faint one and icon buttons.
-fn controls(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    let (gap, width) = (style.gap as u16, area.width);
+fn controls(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
+    let (gap, width) = (style.gap(), area.width);
     let tr = |key: &'static str| env.i18n.tr(key);
-    let mut stack = ui::Stack::new(area, style.margin as u16);
+    let mut stack = ui::Stack::new(area, style.margin());
     // Side by side where every word fits, else in more rows: never cut.
     let labels = [
         tr("ui-kit.button.plain"),
@@ -488,50 +513,47 @@ fn controls(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect)
         .zip(labels)
         .enumerate()
     {
-        ui::draw_button(canvas, env, style, cell, label, i == 1, i == 2);
+        ui.button(cell, label, i == 1, i == 2);
     }
     // A faint button, then two icon buttons (no words of their own).
     let faint = [tr("ui-kit.button.faint")];
     let row = stack.take(ui::button_cells_height(env, style, width, &faint, gap));
-    ui::draw_faint_button(canvas, env, style, row, faint[0], false);
+    ui.faint_button(row, faint[0], false);
     let side = ui::Segments::height(style);
     let row = stack.take(side);
     for (i, (name, on)) in [("books", false), ("folder", true)].into_iter().enumerate() {
         let button = Rect::new(row.x + i as u16 * (side + gap), row.y, side, side);
-        let ink = ui::draw_icon_button(canvas, style, button, name, on, on);
+        let ink = ui.icon_button(button, name, on, on);
         let centre = (
             i32::from(button.x + side / 2),
             i32::from(button.y + side / 2),
         );
-        ui::draw_icon_at(canvas, env, name, style.text, centre, ink);
+        ui::draw_icon_at(ui.canvas(), env, name, style.text(), centre, ink);
     }
 }
 
 /// Segments as tabs and as a choice of sizes, one focused.
-fn segments(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn segments(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
-    let mut stack = ui::Stack::new(area, style.margin as u16);
+    let mut stack = ui::Stack::new(area, style.margin());
     // Side by side where every word fits, else in more rows: never cut.
-    let tabs = [
-        tr("ui-kit.tab.books"),
-        tr("ui-kit.tab.shelves"),
-        tr("ui-kit.tab.notes"),
-    ];
+    let tabs = ["ui-kit.tab.books", "ui-kit.tab.shelves", "ui-kit.tab.notes"];
     let row = stack.take(ui::Segments::height_for(env, style, width, &tabs));
-    ui::Segments::fitted(env, style, row, &tabs).draw(canvas, env, style, &tabs, 0, None);
+    ui::Segments::fitted(env, style, row, tabs).draw(ui, 0, None);
     let sizes = ["S", "M", "L", "XL"];
     let row = stack.take(ui::Segments::height_for(env, style, width, &sizes));
-    ui::Segments::fitted(env, style, row, &sizes).draw(canvas, env, style, &sizes, 1, Some(3));
+    ui::Segments::fitted(env, style, row, sizes).draw(ui, 1, Some(3));
 }
 
 /// Cards in each frame, and a grid with the focus on one cell.
-fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn layout(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let Some(font) = style.font(env) else {
         return;
     };
-    let gap = style.gap as u16;
-    let mut stack = ui::Stack::new(area, style.margin as u16);
+    let gap = style.gap();
+    let mut stack = ui::Stack::new(area, style.margin());
     let cards = stack.take(area.height / 3);
     let frames = [
         (Frame::Line, env.i18n.tr("ui-kit.frame.line")),
@@ -539,7 +561,7 @@ fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         (Frame::Dark, env.i18n.tr("ui-kit.frame.dark")),
     ];
     for (cell, (frame, name)) in ui::columns(cards, 3, gap).into_iter().zip(frames) {
-        let inside = ui::draw_card(canvas, style, cell, frame);
+        let inside = ui.card(cell, frame);
         let ink = if frame == Frame::Dark {
             Color::WHITE
         } else {
@@ -547,8 +569,8 @@ fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         };
         // The frame's name at the top of its card, a gap in from its edges.
         let _ = inside;
-        let gap = style.gap as u16;
-        let line = font.line_metrics(style.small).line_height as u16;
+        let gap = style.gap();
+        let line = font.line_metrics(style.small()).line_height as u16;
         let row = Rect::new(
             cell.x + gap,
             cell.y + gap,
@@ -556,18 +578,21 @@ fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
             line,
         );
         let x = f32::from(row.x)
-            + (f32::from(row.width) - font.measure(style.small, name)).max(0.0) / 2.0;
-        ui::draw_label(canvas, &font, style.small, x, row, name, ink);
+            + (f32::from(row.width) - font.measure(style.small(), name)).max(0.0) / 2.0;
+        ui::Label::new(name)
+            .px(style.small())
+            .color(ink)
+            .draw_from(ui, x, row);
     }
     let rest = stack.rest();
-    let grid = ui::Grid::new(rest, 3, (rest.height / 3).saturating_sub(gap), gap);
+    let grid = ui::CellGrid::new(rest, 3, (rest.height / 3).saturating_sub(gap), gap);
     let focus = 4;
     for index in 0..grid.per_page() {
         let cell = grid.cell(index);
         if index == focus {
-            ui::draw_focus(canvas, style, cell);
+            ui.focus(cell);
         } else {
-            ui::draw_card(canvas, style, cell, Frame::Line);
+            ui.card(cell, Frame::Line);
         }
         let ink = if index == focus {
             Color::WHITE
@@ -575,18 +600,22 @@ fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
             Color::BLACK
         };
         let label = format!("{}", index + 1);
-        let size = style.title;
+        let size = style.title();
         let x = f32::from(cell.x) + (f32::from(cell.width) - font.measure(size, &label)) / 2.0;
-        ui::draw_label(canvas, &font, size, x, cell, &label, ink);
+        ui::Label::new(&label)
+            .px(size)
+            .color(ink)
+            .draw_from(ui, x, cell);
     }
 }
 
 /// An address with its code, and the offer to go online.
-fn share(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn share(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let url = "http://192.168.4.1:8080/?key=3f9a";
     let qr = paperpaw_sdk::qr::QrCode::new(url.as_bytes());
     ui::draw_address(
-        canvas,
+        ui.canvas(),
         env,
         style,
         area,
@@ -598,12 +627,13 @@ fn share(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
 }
 
 /// The offer to go online, as a screen for the network shows it.
-fn offer(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    ui::OfflineOffer::new().draw(canvas, env, style, area);
+fn offer(ui: &mut ui::Ui<'_>, area: Rect) {
+    ui::offline::OfflineOffer::new().draw(ui, area);
 }
 
 /// A dialog in the middle of the screen, its first button focused.
-fn dialog(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
+fn dialog(ui: &mut ui::Ui<'_>) {
+    let (env, style) = (ui.env(), ui.style());
     let mut dialog = ui::Dialog::new(
         env,
         style,
@@ -619,27 +649,29 @@ fn dialog(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
     );
     let room = env.device.display.height.saturating_sub(dialog.height());
     dialog.place(room / 2);
-    dialog.draw(canvas, env, style, Some(0));
+    dialog.draw(ui, Some(0));
 }
 
 /// Text fields and ticked rows.
-fn inputs(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn inputs(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let width = area.width;
     let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, 0);
     // Each row as tall as its title needs: titles are never shortened.
     let title = tr("ui-kit.field.focused");
     let focused = stack.take(ui::text_field_height(env, style, width, title));
-    ui::draw_focus(canvas, style, focused);
-    ui::draw_text_field(canvas, env, style, focused, true, title, "Ada", "");
+    ui.focus(focused);
+    ui.text_field(focused, true, title, "Ada", "");
     let title = tr("ui-kit.field");
     let empty = stack.take(ui::text_field_height(env, style, width, title));
     let placeholder = tr("ui-kit.field.placeholder");
-    ui::draw_text_field(canvas, env, style, empty, false, title, "", placeholder);
+    ui.text_field(empty, false, title, "", placeholder);
 }
 
 /// Rows where several may be ticked, the first focused.
-fn ticks(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+fn ticks(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let width = area.width;
     let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, 0);
@@ -650,30 +682,30 @@ fn ticks(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         let title = tr(key);
         let at = stack.take(ui::check_row_height(env, style, width, title, ""));
         if focus {
-            ui::draw_focus(canvas, style, at);
+            ui.focus(at);
         }
-        ui::draw_check_row(canvas, env, style, at, focus, title, "", on);
+        ui::draw_check_row(ui.canvas(), env, style, at, focus, title, "", on);
     }
 }
 
 /// Chips, wrapping where their words need, and text longer than its room.
-fn chips(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    let margin = style.margin as u16;
+fn chips(ui: &mut ui::Ui<'_>, area: Rect) {
+    let (env, style) = (ui.env(), ui.style());
+    let margin = style.margin();
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, 0);
     let labels = [
-        tr("ui-kit.chip.all"),
-        tr("ui-kit.chip.reading"),
-        tr("ui-kit.chip.unread"),
-        tr("ui-kit.chip.finished"),
-        tr("ui-kit.chip.shelves"),
+        "ui-kit.chip.all",
+        "ui-kit.chip.reading",
+        "ui-kit.chip.unread",
+        "ui-kit.chip.finished",
+        "ui-kit.chip.shelves",
     ];
     let inner = width.saturating_sub(2 * margin);
     let chips_height = ui::Chips::height_for(env, style, inner, &labels);
     let chips_row = stack.take(chips_height + 2 * margin);
     let inside = Rect::new(margin, chips_row.y + margin, inner, chips_height);
-    ui::Chips::new(env, style, inside, &labels).draw(canvas, env, style, &labels, 1, Some(2));
+    ui::Chips::new(env, style, inside, labels).draw(ui, 1, Some(2));
     let rest = stack.rest();
     let text_area = Rect::new(
         margin,
@@ -681,21 +713,22 @@ fn chips(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         rest.width.saturating_sub(2 * margin),
         rest.height.saturating_sub(2 * margin),
     );
-    let text = tr("ui-kit.long-text");
+    let text = env.i18n.tr("ui-kit.long-text");
     let mut view = ui::TextView::new(env, style, text_area, text);
     view.scroll(1);
-    view.draw(canvas, env, style, text);
+    view.draw(ui, text);
 }
 
 /// A date and a time, the day and the minutes focused.
-fn pickers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    let mut stack = ui::Stack::new(area, style.margin as u16 * 2);
+fn pickers(ui: &mut ui::Ui<'_>, area: Rect) {
+    let style = ui.style();
+    let mut stack = ui::Stack::new(area, style.margin() * 2);
     let date = stack.take(ui::DatePicker::height(style));
-    let mut picker = ui::DatePicker::new(style, date, (2026, 10, 22));
+    let mut picker = ui::DatePicker::new(style, date, paperpaw_sdk::time::Date::new(2026, 10, 22));
     picker.set_focus(0);
-    picker.draw(canvas, env, style);
+    picker.draw(ui);
     let time = stack.take(ui::TimePicker::height(style));
-    let mut picker = ui::TimePicker::new(style, time, (22, 30));
+    let mut picker = ui::TimePicker::new(style, time, paperpaw_sdk::time::Time::new(22, 30));
     picker.set_focus(1);
-    picker.draw(canvas, env, style);
+    picker.draw(ui);
 }

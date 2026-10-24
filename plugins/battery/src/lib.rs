@@ -17,13 +17,12 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::rc::Rc;
-use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingSpec, time,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Registrar, ScreenSpec, SettingSpec, time,
 };
 
 use log::{Kind, Reading};
@@ -135,20 +134,20 @@ pub struct Battery;
 
 /// Whether the battery is recorded, and by plugin.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         ENABLED.static_str(),
         "battery.setting.enabled",
         true,
         groups::SYSTEM,
     )
-    .described("battery.setting.enabled.help"),
-    SettingSpec::fixed_switch(
+    .description("battery.setting.enabled.help"),
+    SettingSpec::switch(
         BY_PLUGIN.static_str(),
         "battery.setting.by-plugin",
         true,
         groups::DEVELOPER,
     )
-    .described("battery.setting.by-plugin.help"),
+    .description("battery.setting.by-plugin.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -213,7 +212,7 @@ impl Plugin for Battery {
             }),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "battery.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;

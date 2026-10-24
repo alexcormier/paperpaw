@@ -55,7 +55,7 @@ const INSET: Id = Id::new_static("margin.inset");
 /// Switches the layers that wipe out lines 3 (behind the text) and 4
 /// (over it).
 const ERASE: Setting<bool> = Setting::new("margin.erase");
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::switch(
     ERASE.static_str(),
     "margin.erase",
     false,

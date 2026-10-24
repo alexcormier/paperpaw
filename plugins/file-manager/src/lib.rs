@@ -30,9 +30,9 @@ use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
-    SettingSpec, SettingValue, Storage, StorageError, Version,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, SettingSpec, SettingValue, Storage, StorageError, Version,
 };
 
 use paperpaw_sdk::files::{self as ops, Entry};
@@ -81,14 +81,14 @@ enum Focus {
 pub struct FileManager;
 
 /// Whether hidden files show.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::switch(
     HIDDEN.static_str(),
     "file-manager.setting.hidden",
     false,
     groups::SYSTEM,
 )
 .advanced()
-.described("file-manager.setting.hidden.help")];
+.description("file-manager.setting.hidden.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -114,7 +114,7 @@ impl Plugin for FileManager {
             Box::new(|env, params| Box::new(Browser::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "file-manager.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -153,9 +153,9 @@ impl Browser {
         // The bar of buttons along the bottom: they keep the side margin
         // from the edge too.
         let bar_height = ui::edge_bar_height(&style);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // The bar, and a line for messages above it.
-        let bottom = bar_height + style.row as u16 + style.gap as u16;
+        let bottom = bar_height + style.row() + style.gap();
         let area = Rect::new(
             0,
             top,
@@ -163,7 +163,7 @@ impl Browser {
             display.height.saturating_sub(top + bottom),
         );
         let mut browser = Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             bar: Rect::new(0, display.height - bar_height, display.width, bar_height),
             dir: params.get(params::PATH).unwrap_or_default().to_string(),
             len: 0,
@@ -269,8 +269,8 @@ impl Browser {
 
     fn button_rect(&self, index: usize) -> Rect {
         let count = self.buttons().len() as u16;
-        let margin = self.style.margin as u16;
-        let gap = self.style.gap as u16 * 2;
+        let margin = self.style.margin();
+        let gap = self.style.gap() * 2;
         let width = (self.bar.width - 2 * margin - gap * (count - 1)) / count;
         let band = ui::edge_bar_band(&self.style, self.bar, false);
         Rect::new(
@@ -318,11 +318,7 @@ impl Browser {
     /// place), after something was done to it.
     fn reload_at(&mut self, env: &Env<'_>, name: &str) {
         let path = ops::join(&self.dir, name);
-        let entry = Entry {
-            name: name.to_string(),
-            is_dir: ops::is_dir(env.storage, &path),
-            size: 0,
-        };
+        let entry = Entry::new(name.to_string(), ops::is_dir(env.storage, &path), 0);
         self.load(env, Some(entry));
     }
 
@@ -493,11 +489,11 @@ impl Browser {
                 books.push(String::from(book));
             }
         });
-        let at = Entry {
-            name: ops::name(path).to_string(),
-            is_dir: ops::is_dir(env.storage, path),
-            size: 0,
-        };
+        let at = Entry::new(
+            ops::name(path).to_string(),
+            ops::is_dir(env.storage, path),
+            0,
+        );
         let deleted = ops::delete(env.storage, path);
         if deleted.is_ok() {
             for path in books {
@@ -575,11 +571,7 @@ fn valid_name(name: &str) -> Option<&str> {
 
 /// A folder named `name`, as an entry to find in a listing.
 fn folder_entry(name: &str) -> Entry {
-    Entry {
-        name: name.to_string(),
-        is_dir: true,
-        size: 0,
-    }
+    Entry::new(name.to_string(), true, 0)
 }
 
 /// Renames `path` to `name` in its folder: where another entry has that
@@ -620,13 +612,11 @@ impl Screen for Browser {
         } else {
             ops::name(&self.dir).to_string()
         };
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, &title, None, self.list.paging(len));
+            .draw(&mut ui, &title, None, self.list.paging(len));
         if len == 0 {
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 "folder-open",
                 "",
@@ -634,44 +624,35 @@ impl Screen for Browser {
             );
         }
         let decimal = env.i18n.tr("file-manager.decimal");
-        let room = ui::icon_room(env, &style, true);
+        let room = ui.icon_room(true);
         let (page, first) = (&self.page, self.first);
         let active = self.focus == Focus::List;
         self.list.set_active(active);
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let Some(entry) = index.checked_sub(first).and_then(|i| page.get(i)) else {
-                    return;
-                };
-                let value = if entry.is_dir {
-                    String::from("›")
-                } else {
-                    ops::size(entry.size, decimal)
-                };
-                // Folders with a folder before their name, files with a
-                // page: told apart at a glance.
-                let ink = style.focus_ink(focused);
-                let icon = if entry.is_dir { "folder" } else { "file" };
-                let rest = ui::draw_row_icon(canvas, env, &style, rect, room, Some(icon), ink);
-                ui::draw_value_row(canvas, env, &style, rest, focused, &entry.name, &value);
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let Some(entry) = index.checked_sub(first).and_then(|i| page.get(i)) else {
+                return;
+            };
+            let value = if entry.is_dir {
+                String::from("›")
+            } else {
+                ops::size(entry.size, decimal)
+            };
+            // Folders with a folder before their name, files with a
+            // page: told apart at a glance.
+            let ink = style.focus_ink(focused);
+            let icon = if entry.is_dir { "folder" } else { "file" };
+            let rest = ui.row_icon(rect, room, Some(icon), ink);
+            ui::Row::value(&entry.name, &value)
+                .focused(focused)
+                .draw(ui, rest);
+        });
         // The message line above the bar.
-        if let (Some(message), Some(font)) = (&self.message, style.font(env)) {
-            let line = Rect::new(
-                0,
-                self.bar.y - style.row as u16,
-                self.bar.width,
-                style.row as u16,
-            );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                style.margin as f32,
-                line,
-                message,
-                style.faint(60),
-            );
+        if let Some(message) = &self.message {
+            let line = Rect::new(0, self.bar.y - style.row(), self.bar.width, style.row());
+            ui::Label::new(message)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(&mut ui, style.margin() as f32, line);
         }
         for (i, button) in self.buttons().into_iter().enumerate() {
             let label = env.i18n.tr(match button {
@@ -681,7 +662,7 @@ impl Screen for Browser {
             });
             let focused = self.focus == Focus::Bar(i);
             let on = button == Button::Paste;
-            ui::draw_button(canvas, env, &style, self.button_rect(i), label, on, focused);
+            ui.button(self.button_rect(i), label, on, focused);
         }
     }
 
@@ -738,7 +719,7 @@ impl Screen for Browser {
                     cx.command(Command::Back);
                 }
             } else {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
             }
             return Handled::Yes;
         }
@@ -1060,11 +1041,7 @@ mod tests {
             for (key, (path, data)) in self.files.borrow().iter() {
                 if key.starts_with(&prefix) {
                     found = true;
-                    visit(DirEntry {
-                        name: ops::name(path),
-                        is_dir: false,
-                        size: data.len() as u64,
-                    });
+                    visit(DirEntry::new(ops::name(path), false, data.len() as u64));
                 }
             }
             if found {

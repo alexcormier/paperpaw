@@ -43,7 +43,7 @@ fn details_belong_to_one_file_version() {
         added: Some(20_000),
         fields: alloc::vec![("stars.rating".into(), "4".into())],
     };
-    save(&storage, "books/a.txt", &book);
+    save(&storage, "books/a.txt", &book).unwrap();
     let read = super::book(&storage, "books/a.txt");
     assert_eq!(read, Some(book));
     assert_eq!(read.unwrap().field("stars.rating"), Some("4"));
@@ -232,7 +232,8 @@ fn removed_books_are_forgotten() {
             size: 5,
             ..Book::default()
         },
-    );
+    )
+    .unwrap();
     set_favourite(&storage, "books/a.txt", true);
     let _ = storage.write(
         &opened_file(),
@@ -304,11 +305,7 @@ impl Storage for Folding {
 
 #[test]
 fn clean_up_keeps_what_any_spelling_or_format_needs() {
-    let data = [BookData {
-        folder: "cache".into(),
-        prefix: "".into(),
-        kind: BookDataKind::Cache,
-    }];
+    let data = [BookData::new("cache", "", BookDataKind::Cache)];
     let kept = |path: &str| format!("cache/{}.ini", key(path));
     // The card names the folder `Books`; the library's setting says
     // `books`, and the reader opened the book by it.
@@ -349,21 +346,9 @@ fn clean_up_keeps_what_any_spelling_or_format_needs() {
 #[test]
 fn caches_go_by_themselves_the_readers_data_only_when_asked() {
     let data = [
-        BookData {
-            folder: "notes".into(),
-            prefix: "".into(),
-            kind: BookDataKind::UserData,
-        },
-        BookData {
-            folder: "places".into(),
-            prefix: "".into(),
-            kind: BookDataKind::UserData,
-        },
-        BookData {
-            folder: "cache".into(),
-            prefix: "".into(),
-            kind: BookDataKind::Cache,
-        },
+        BookData::new("notes", "", BookDataKind::UserData),
+        BookData::new("places", "", BookDataKind::UserData),
+        BookData::new("cache", "", BookDataKind::Cache),
     ];
     let gone = key("books/renamed.epub");
     let storage = MemoryStorage::new()
@@ -386,11 +371,7 @@ fn caches_go_by_themselves_the_readers_data_only_when_asked() {
 /// Books in hidden folders are found: what is kept for them stays.
 #[test]
 fn clean_up_finds_books_in_hidden_folders() {
-    let data = [BookData {
-        folder: "cache".into(),
-        prefix: "".into(),
-        kind: BookDataKind::Cache,
-    }];
+    let data = [BookData::new("cache", "", BookDataKind::Cache)];
     let kept = |path: &str| format!("cache/{}.ini", key(path));
     let storage = MemoryStorage::new()
         .with(".hidden/a.epub", "book")
@@ -449,7 +430,7 @@ fn details_keep_what_cannot_be_read_again() {
         fields: alloc::vec![("stars.rating".into(), "4".into())],
         ..Book::default()
     };
-    save(&kept, "books/a.txt", &book);
+    save(&kept, "books/a.txt", &book).unwrap();
     let before = kept.get(&book_file("books/a.txt"));
     let storage = Sizeless(kept);
     set_finished(&storage, "books/a.txt", true);
@@ -529,7 +510,7 @@ fn details_of_many_tags_are_read_back() {
         fields: alloc::vec![("stars.rating".into(), "4".into())],
         ..Book::default()
     };
-    assert!(save(&storage, "books/a.txt", &book));
+    assert!(save(&storage, "books/a.txt", &book).is_ok());
     let read = super::book(&storage, "books/a.txt").expect("read back");
     assert_eq!(read.tags.len(), MAX_TAGS);
     assert_eq!(read.title.as_deref().map(str::len), Some(MAX_VALUE));

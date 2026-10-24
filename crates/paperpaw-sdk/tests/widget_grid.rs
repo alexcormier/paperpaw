@@ -21,7 +21,7 @@ use paperpaw_sdk::widgets::grid::{
 };
 use paperpaw_sdk::widgets::{Drawn, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{
-    Canvas, Command, Cx, Env, GestureKind, Id, Output, Params, Point, PointerPhase, Rect,
+    Canvas, Command, Commands, Cx, Env, GestureKind, Id, Output, Params, Point, PointerPhase, Rect,
 };
 use proptest::prelude::*;
 
@@ -54,7 +54,7 @@ impl Widget for Book {
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        vec![WidgetTarget::new(area, Command::RunAction(OPEN))]
+        vec![WidgetTarget::new(area, Command::run(OPEN))]
     }
 }
 
@@ -268,12 +268,12 @@ proptest! {
                 prop_assert!(r.y >= g.area.y && r.bottom() <= g.area.bottom());
                 if !r.is_empty() {
                     let m = middle(r);
-                    prop_assert_eq!(g.cell_at(m.x, m.y), Some((col, row)));
+                    prop_assert_eq!(g.cell_at(m), Some((col, row)));
                 }
             }
         }
-        prop_assert_eq!(g.cell_at(i32::from(x) - 1, i32::from(y)), None);
-        prop_assert_eq!(g.cell_at(i32::from(x), g.area.bottom() as i32 + 1), None);
+        prop_assert_eq!(g.cell_at(Point::new(i32::from(x) - 1, i32::from(y))), None);
+        prop_assert_eq!(g.cell_at(Point::new(i32::from(x), g.area.bottom() as i32 + 1)), None);
     }
 
     /// However the layout text says, the items shown never overlap or
@@ -636,9 +636,9 @@ fn targets_run_the_same_by_tap_and_by_confirm() {
     assert_eq!(
         by_tap,
         [
-            Command::RunAction(OPEN),
-            Command::RunAction(Id::new_static("t.a")),
-            Command::RunAction(Id::new_static("t.b")),
+            Command::run(OPEN),
+            Command::run(Id::new_static("t.a")),
+            Command::run(Id::new_static("t.b")),
         ]
     );
     // The screen's own button.
@@ -684,26 +684,14 @@ fn up_and_down_go_to_the_nearest_target_above_and_below() {
     };
     // b (top right), then down: d below it, not c.
     press(&mut view, &env, &actions::RIGHT);
-    assert_eq!(
-        run(&mut view),
-        Some(Command::RunAction(Id::new_static("t.b")))
-    );
+    assert_eq!(run(&mut view), Some(Command::run(Id::new_static("t.b"))));
     press(&mut view, &env, &actions::DOWN);
-    assert_eq!(
-        run(&mut view),
-        Some(Command::RunAction(Id::new_static("t.d")))
-    );
+    assert_eq!(run(&mut view), Some(Command::run(Id::new_static("t.d"))));
     // Nothing further down: it stays.
     press(&mut view, &env, &actions::DOWN);
-    assert_eq!(
-        run(&mut view),
-        Some(Command::RunAction(Id::new_static("t.d")))
-    );
+    assert_eq!(run(&mut view), Some(Command::run(Id::new_static("t.d"))));
     press(&mut view, &env, &actions::UP);
-    assert_eq!(
-        run(&mut view),
-        Some(Command::RunAction(Id::new_static("t.b")))
-    );
+    assert_eq!(run(&mut view), Some(Command::run(Id::new_static("t.b"))));
 }
 
 #[test]
@@ -773,7 +761,7 @@ fn the_grid_draws_inside_its_area_while_edited() {
     let mut frame = frame(480, 800);
     view.draw(&mut frame.canvas(), &env);
     // The focus frame may reach a little past the edge items' cells.
-    let reach = (paperpaw_sdk::ui::UiStyle::new(&env).line * 5) as u16;
+    let reach = (u32::from(paperpaw_sdk::ui::UiStyle::new(&env).line()) * 5) as u16;
     let bound = Rect::new(0, g.area.y - reach, g.area.width, g.area.height + 2 * reach);
     assert_eq!(drawn_outside(&mut frame, bound), None);
 }
@@ -804,8 +792,8 @@ impl Widget for Lively {
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         vec![
-            WidgetTarget::new(area, Command::RunAction(OPEN))
-                .hold(Command::RunAction(Id::new_static("t.hold"))),
+            WidgetTarget::new(area, Command::run(OPEN))
+                .hold(Command::run(Id::new_static("t.hold"))),
         ]
     }
 
@@ -822,7 +810,7 @@ impl Widget for Lively {
         _: &Env<'_>,
         input: paperpaw_sdk::widgets::WidgetInput,
         _: Rect,
-        _: &mut Vec<Command>,
+        _: &mut Commands,
     ) -> bool {
         use paperpaw_sdk::widgets::WidgetInput;
         match input {
@@ -888,10 +876,7 @@ fn widgets_take_swipes_holds_and_the_focus() {
         view.on_gesture(gesture(paperpaw_sdk::GestureKind::LongPress), cx)
     });
     assert_eq!(response, GridResponse::Handled);
-    assert_eq!(
-        output.commands,
-        [Command::RunAction(Id::new_static("t.hold"))]
-    );
+    assert_eq!(output.commands, [Command::run(Id::new_static("t.hold"))]);
     assert!(!view.editing());
     // By the buttons: the next page swipes it (it takes that), its long
     // press is Select held; Right moves the focus to the tool, Left back:
@@ -899,10 +884,7 @@ fn widgets_take_swipes_holds_and_the_focus() {
     press(&mut view, &env, &actions::NEXT_PAGE);
     assert_eq!(told(), ["swipe Left"]);
     let (_, output) = with_cx(&env, |cx| view.on_action(&actions::LONG_CONFIRM, cx));
-    assert_eq!(
-        output.commands,
-        [Command::RunAction(Id::new_static("t.hold"))]
-    );
+    assert_eq!(output.commands, [Command::run(Id::new_static("t.hold"))]);
     press(&mut view, &env, &actions::RIGHT);
     assert_eq!(told(), ["focus false"]);
     press(&mut view, &env, &actions::LEFT);
@@ -960,8 +942,8 @@ impl Widget for Touchy {
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         vec![
-            WidgetTarget::touch(area, Command::RunAction(OPEN))
-                .hold(Command::RunAction(Id::new_static("t.hold"))),
+            WidgetTarget::touch(area, Command::run(OPEN))
+                .hold(Command::run(Id::new_static("t.hold"))),
         ]
     }
 }
@@ -987,10 +969,7 @@ fn a_touch_target_keeps_its_long_press() {
     );
     let (response, output) = with_cx(&env, |cx| view.on_gesture(hold, cx));
     assert_eq!(response, GridResponse::Handled);
-    assert_eq!(
-        output.commands,
-        [Command::RunAction(Id::new_static("t.hold"))]
-    );
+    assert_eq!(output.commands, [Command::run(Id::new_static("t.hold"))]);
     assert!(!view.editing());
 }
 
@@ -1015,7 +994,7 @@ impl Widget for Paged {
             .map(|i| {
                 let at = Rect::new(area.x + i * half, area.y, half, area.height);
                 let action = Id::parse(&format!("t.p{}-{i}", self.page)).unwrap();
-                WidgetTarget::new(at, Command::RunAction(action))
+                WidgetTarget::new(at, Command::run(action))
             })
             .collect()
     }
@@ -1025,7 +1004,7 @@ impl Widget for Paged {
         _: &Env<'_>,
         input: paperpaw_sdk::widgets::WidgetInput,
         _: Rect,
-        _: &mut Vec<Command>,
+        _: &mut Commands,
     ) -> bool {
         use paperpaw_sdk::widgets::WidgetInput;
         match input {
@@ -1060,7 +1039,7 @@ fn confirmed(view: &mut GridView, env: &Env<'_>) -> Option<Command> {
 }
 
 fn ran(id: &'static str) -> Option<Command> {
-    Some(Command::RunAction(Id::new_static(id)))
+    Some(Command::run(Id::new_static(id)))
 }
 
 /// With the buttons Left and Right go through a widget's targets and on

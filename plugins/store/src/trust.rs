@@ -9,12 +9,11 @@
 
 use alloc::format;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::install::marks::{From, Marks};
 use paperpaw_sdk::install::{self, Progress};
 use paperpaw_sdk::native::{self, Author, check_file};
-use paperpaw_sdk::{Command, Env, Storage};
+use paperpaw_sdk::{Commands, Env, Storage};
 
 use crate::INSTALLER;
 
@@ -184,11 +183,7 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
 /// signed by another author, after the reader said to. `None` where that
 /// cannot be written (its code would not run): not installed, the job
 /// left for another try.
-pub(crate) fn install(
-    env: &Env<'_>,
-    code: Option<Code>,
-    out: &mut Vec<Command>,
-) -> Option<Progress> {
+pub(crate) fn install(env: &Env<'_>, code: Option<Code>, out: &mut Commands) -> Option<Progress> {
     let folder = INSTALLER.folder(env.storage)?;
     install::adopt(env);
     let from = match install::folder_version(env.storage, &folder) {
@@ -199,7 +194,7 @@ pub(crate) fn install(
     if let Some(code) = code {
         marks = marks.code(code.sha256).author(code.author);
     }
-    if !install::marks::write(env.storage, &folder, &marks) {
+    if install::marks::write(env.storage, &folder, &marks).is_err() {
         return None;
     }
     let _ = env.storage.remove(&expected_path());
@@ -208,7 +203,7 @@ pub(crate) fn install(
 
 /// Installs the plugin waiting for the reader's word, signed by another
 /// author than the one before: that author is remembered from now on.
-pub(crate) fn install_anyway(env: &Env<'_>, out: &mut Vec<Command>) -> Option<Progress> {
+pub(crate) fn install_anyway(env: &Env<'_>, out: &mut Commands) -> Option<Progress> {
     let progress = INSTALLER.progress(env.storage)?;
     let folder = INSTALLER.folder(env.storage)?;
     match verdict(env, &progress.plugin, &folder) {

@@ -7,6 +7,11 @@
 )]
 use super::*;
 
+/// The sizes of book text offered, in points, where the reading font has
+/// every size; with a font pack, those it has (see
+/// `Kernel::fit_font_size`).
+pub(crate) const FONT_SIZES: (i64, i64) = (6, 40);
+
 /// Sections of `paperpaw.ini` that are no plugin's settings: no plugin
 /// may take their name as its id (its settings would be read as these).
 pub(crate) const RESERVED_IDS: [&str; 5] = ["plugins", "fonts", "menus", KNOWN, "slots"];
@@ -66,12 +71,6 @@ impl Kernel {
             self.warn(source(), None, message);
             return self.add_plugin_info(manifest, PluginState::Failed, true);
         }
-        if !SDK_VERSION.satisfies(&manifest.sdk) {
-            let message = format!("requires SDK {}, this is {}", manifest.sdk, SDK_VERSION);
-            self.warn(source(), None, message);
-            return self.add_plugin_info(manifest, PluginState::Failed, true);
-        }
-
         let mut staging = Staging::default();
         let mut registrar = Registrar::new(id.clone());
         let result = plugin
@@ -103,7 +102,7 @@ impl Kernel {
             return self.register_plugin(plugin, manifest);
         }
         let mut registrar = Registrar::new(id);
-        if SDK_VERSION.satisfies(&manifest.sdk) && plugin.register(&mut registrar).is_ok() {
+        if plugin.register(&mut registrar).is_ok() {
             for contribution in registrar.into_contributions() {
                 if let Contribution::Translations(source) = contribution
                     && let Ok(catalog) = registry::catalog(source)
@@ -245,7 +244,7 @@ impl Kernel {
             // Cannot fail: checked above.
             let _ = match setting {
                 registry::Staged::Owned(spec) => self.shared.settings.define(*spec),
-                registry::Staged::Fixed(spec) => self.shared.settings.define_fixed(spec),
+                registry::Staged::Fixed(list, at) => self.shared.settings.define_fixed(list, at),
             };
         }
         for source in staging.keymaps.drain(..) {
@@ -597,6 +596,51 @@ impl Kernel {
         self.shared.fonts.set_family(family);
         for path in self.shared.fonts.load(&self.shared.storage) {
             self.warn_runtime(format!("{path}: font could not be loaded"));
+        }
+        self.fit_font_size();
+    }
+
+    /// The sizes of book text offered as far as the reading font has them:
+    /// a font pack's largest (built into the firmware, kept small) bounds
+    /// them, a scalable font has every size. A size chosen past it gives
+    /// way to the largest.
+    pub(crate) fn fit_font_size(&mut self) {
+        let (min, max) = FONT_SIZES;
+        let dpi = f32::from(self.shared.device.display.dpi.max(1));
+        let largest = self
+            .shared
+            .fonts
+            .role(paperpaw_sdk::builtin::fonts::READING.as_str())
+            .and_then(|font| font.largest_size());
+        // No `round` without std.
+        let most = largest.map_or(max, |px| ((px * 72.0 / dpi + 0.5) as i64).clamp(min, max));
+        let id = core_settings::FONT_SIZE;
+        self.shared.settings.set_range(id.as_str(), min, most);
+        self.font_size_changed();
+    }
+
+    /// A font size past the largest the reading font has (set before, or
+    /// a book's own) gives way to the largest; at the largest of a font
+    /// pack, the help says where larger ones are found.
+    pub(crate) fn font_size_changed(&mut self) {
+        let id = core_settings::FONT_SIZE.static_str();
+        let settings = &mut self.shared.settings;
+        let most = match settings.spec(id).map(|spec| &spec.kind) {
+            Some(paperpaw_sdk::SettingKind::Int { max, .. }) => *max,
+            _ => return,
+        };
+        let size = settings.int(id);
+        let largest = most < FONT_SIZES.1 && size >= most;
+        let key = if largest {
+            "core.setting.font-size.largest"
+        } else {
+            "core.setting.font-size.help"
+        };
+        settings.set_description(id, key);
+        if size > most {
+            let value = paperpaw_sdk::SettingValue::Int(most);
+            let id = core_settings::FONT_SIZE.id().clone();
+            self.output.commands.push(Command::SetSetting(id, value));
         }
     }
 

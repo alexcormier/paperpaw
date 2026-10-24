@@ -31,22 +31,22 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.tile-clock.align", ID, Align::Center),
     widgets::frame_spec("widgets.tile-clock.frame", ID, Frame::None),
     widgets::padding_spec("widgets.tile-clock.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.tile-clock.tiles",
         "widgets.setting.tiles",
         &LOOKS,
         LOOKS[0],
         ID,
     )
-    .described("widgets.tile-clock.tiles.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.tile-clock.tiles.help"),
+    SettingSpec::choice(
         "widgets.tile-clock.group",
         "widgets.setting.tile-group",
         &GROUPS,
         GROUPS[0],
         ID,
     )
-    .described("widgets.tile-clock.group.help"),
+    .description("widgets.tile-clock.group.help"),
     widgets::part_spec(
         "widgets.tile-clock.hinge",
         ID,
@@ -71,8 +71,11 @@ static SETTINGS: [SettingSpec; 9] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.tile-clock",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.tile-clock");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(super::minute_shows),
     )?;
     r.add_settings(&SETTINGS)
@@ -80,9 +83,9 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let (style, _) = ui(env);
-    let tiles = (u32::from(width) * 2 / 5).min(style.row * 3) as u16;
+    let tiles = (u32::from(width) * 2 / 5).min(u32::from(style.row()) * 3) as u16;
     let date = if widgets::shows(env, ID.as_str(), "date") {
-        widgets::line_height(env, style.small) + style.gap as u16
+        widgets::line_height(env, style.small()) + style.gap()
     } else {
         0
     };
@@ -127,7 +130,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let pairs = chosen_name(env, ID.as_str(), "group") == "pairs";
     let (hours, minutes) = tiles(&now, twelve, pairs);
     let colon = widgets::shows(env, ID.as_str(), "colon");
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let mut date = widgets::shows(env, ID.as_str(), "date")
         .then(|| super::date_text(env, ID.as_str(), now.year, now.month, now.day, false));
     let meridiem = twelve.then(|| {
@@ -160,14 +163,16 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // The line below (the date, "AM" or "PM") where it fits whole under
     // the tiles and leaves them two thirds of the height; the date is
     // left out first.
-    let line_below = small + style.gap as f32 / 2.0;
+    let line_below = small + style.gap() as f32 / 2.0;
     let meridiem_width = |m: &Option<String>| {
         m.as_ref()
-            .map_or(0.0, |m| font.measure(style.small, m) + style.gap as f32)
+            .map_or(0.0, |m| font.measure(style.small(), m) + style.gap() as f32)
     };
     let room_below = |date: &Option<String>, meridiem: &Option<String>| {
         let total = tile(line_below) * (units + gaps);
-        let date_width = date.as_ref().map_or(0.0, |d| font.measure(style.small, d));
+        let date_width = date
+            .as_ref()
+            .map_or(0.0, |d| font.measure(style.small(), d));
         line_below * 3.0 <= f32::from(area.height)
             && date_width + meridiem_width(meridiem) <= total + 0.5
     };
@@ -226,7 +231,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                     look.ink
                 }
                 "outline" => {
-                    let thick = ((w / 30.0) as u32).max(style.line * 2);
+                    let thick = ((w / 30.0) as u32).max(u32::from(style.line()) * 2);
                     canvas.stroke_round(tile, thick, radius, look.ink);
                     look.ink
                 }
@@ -270,13 +275,21 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // The date below, and "AM" or "PM" at the right end.
     let row = Rect::new(
         left as u16,
-        (top + h + style.gap as f32 / 2.0) as u16,
+        (top + h + style.gap() as f32 / 2.0) as u16,
         total as u16,
         small as u16,
     );
     let meridiem_width = meridiem_width(&meridiem);
     if let Some(m) = &meridiem {
-        super::label(canvas, &font, style.small, Align::Right, row, m, look.faint);
+        super::label(
+            canvas,
+            &font,
+            style.small(),
+            Align::Right,
+            row,
+            m,
+            look.faint,
+        );
     }
     if let Some(date) = &date {
         let room = Rect::new(
@@ -290,7 +303,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         } else {
             Align::Center
         };
-        super::label(canvas, &font, style.small, place, room, date, look.faint);
+        super::label(canvas, &font, style.small(), place, room, date, look.faint);
     }
 }
 
@@ -304,15 +317,7 @@ mod tests {
     }
 
     fn at(hour: u8, minute: u8) -> LocalTime {
-        LocalTime {
-            year: 2026,
-            month: 10,
-            day: 14,
-            hour,
-            minute,
-            second: 0,
-            weekday: 3,
-        }
+        LocalTime::new(2026, 10, 14, hour, minute, 0)
     }
 
     #[test]

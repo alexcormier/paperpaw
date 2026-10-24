@@ -14,7 +14,7 @@ mod support;
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::widgets::{
-    self, FILL, PlaceKind, Refresh, Stack, Widget, WidgetPlace, WidgetSpec, WidgetTarget,
+    self, FILL, PlaceKind, Refresh, Widget, WidgetPlace, WidgetSpec, WidgetStack, WidgetTarget,
 };
 use paperpaw_sdk::{Canvas, Command, Env, Id, Params, Rect, SettingSpec, SettingValue};
 
@@ -33,7 +33,7 @@ impl Widget for Block {
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         vec![WidgetTarget::new(
             area,
-            Command::RunAction(Id::new_static("t.open")),
+            Command::run(Id::new_static("t.open")),
         )]
     }
 }
@@ -60,7 +60,12 @@ fn harness() -> Harness {
         PlaceKind::Stack,
     ));
     h.settings
-        .define(SettingSpec::text(&LIST, "t.list", ""))
+        .define(SettingSpec::text(
+            LIST.static_str(),
+            "t.list",
+            "",
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))
         .unwrap();
     h
 }
@@ -68,7 +73,7 @@ fn harness() -> Harness {
 /// Where the widgets of a stack of `list` go in an 800 high screen.
 fn areas(h: &Harness, list: &str) -> Vec<Rect> {
     let env = h.env();
-    Stack::new(&env, list, Rect::new(0, 0, 480, 800))
+    WidgetStack::new(&env, list, Rect::new(0, 0, 480, 800))
         .targets(&env)
         .into_iter()
         .map(|t| t.area)
@@ -78,8 +83,8 @@ fn areas(h: &Harness, list: &str) -> Vec<Rect> {
 #[test]
 fn a_stack_is_in_the_middle_unless_free_space_pushes_it() {
     let h = harness();
-    let gap = paperpaw_sdk::ui::UiStyle::new(&h.env()).gap as u16;
-    let margin = paperpaw_sdk::ui::UiStyle::new(&h.env()).margin as u16;
+    let gap = paperpaw_sdk::ui::UiStyle::new(&h.env()).gap();
+    let margin = paperpaw_sdk::ui::UiStyle::new(&h.env()).margin();
     let two = areas(&h, "t.one, t.one");
     assert_eq!(two.len(), 2);
     let total = 200 + 2 * gap;
@@ -152,16 +157,16 @@ fn a_place_tells_whether_it_shows_a_widget() {
 /// and, square, as wide as high.
 #[test]
 fn a_widget_takes_the_cells_it_says() {
-    use paperpaw_sdk::widgets::CellsHint;
+    use paperpaw_sdk::widgets::CellSpan;
     use paperpaw_sdk::widgets::grid::{Cells, Geometry, What};
     let mut h = harness();
     h.widgets.add(
         WidgetSpec::new(Id::new_static("t.round"), "t.round", |_| Box::new(Block(1)))
-            .cells(CellsHint::new(2, 2).min(2, 2).square()),
+            .cells(CellSpan::new(2, 2).min(2, 2).square()),
     );
     h.widgets.add(
         WidgetSpec::new(Id::new_static("t.wide"), "t.wide", |_| Box::new(Block(1)))
-            .cells(CellsHint::new(9, 1)),
+            .cells(CellSpan::new(9, 1)),
     );
     let env = h.env();
     let geometry = Geometry::of(Rect::new(0, 100, 480, 600), 4, 6, 8);
@@ -228,10 +233,10 @@ fn plugins_add_kinds_of_widgets_with_their_icons() {
 fn one_frame_for_all_widgets_unless_one_has_its_own() {
     use paperpaw_sdk::builtin::settings::WIDGET_FRAME;
     use paperpaw_sdk::widgets::Frame;
-    use paperpaw_sdk::widgets::look::{ALL_FRAMES, FRAMES, OWN_FRAME};
+    use paperpaw_sdk::widgets::{ALL_FRAMES, FRAMES, OWN_FRAME};
     let mut h = harness();
     h.settings
-        .define(SettingSpec::fixed_choice(
+        .define(SettingSpec::choice(
             WIDGET_FRAME.static_str(),
             "t.all",
             ALL_FRAMES,
@@ -284,10 +289,15 @@ fn one_frame_for_all_widgets_unless_one_has_its_own() {
     assert_eq!(placed, Frame::Line, "a placement's own");
     // Not a setting that ends so but is no widget's (a status line's
     // size), nor the frame of all in a theme.
-    let size: paperpaw_sdk::setting::Setting<i64> =
-        paperpaw_sdk::setting::Setting::new("t.status.size");
     h.settings
-        .define(SettingSpec::number(&size, "t.size", 5, 16, 6))
+        .define(SettingSpec::number(
+            "t.status.size",
+            "t.size",
+            5,
+            16,
+            6,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))
         .unwrap();
     let covered = paperpaw_sdk::presets::widget_look_settings(&h.settings, &h.widgets);
     let covered: Vec<&str> = covered.iter().map(Id::as_str).collect();

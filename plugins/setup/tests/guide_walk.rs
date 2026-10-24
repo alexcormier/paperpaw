@@ -348,7 +348,7 @@ fn sample_ink(app: &mut App, size: i64) -> u16 {
     let drawn = app.kernel.described();
     let sample = drawn
         .iter()
-        .find(|d| d.label.starts_with("The quick brown fox"))
+        .find(|d| d.label.starts_with("Reading is a quiet joy"))
         .unwrap_or_else(|| {
             panic!(
                 "no sample at {size}:
@@ -371,18 +371,17 @@ fn sample_ink(app: &mut App, size: i64) -> u16 {
 }
 
 /// The sample of the text shows the size chosen, in the reading font: it
-/// grows with each size, also past 12, and is never smaller at a larger
-/// size (the tests' bitmap fonts stop at 48 pixels, about 16 points here).
+/// grows with each size, also past 12, as far as the font goes (the
+/// tests' bitmap fonts stop at 48 pixels, about 16 points here).
 #[test]
 fn the_sample_shows_the_size_chosen() {
     for device in DEVICES {
         let mut app = first_start(device);
         page_of(&mut app, "Font size");
-        let inks: Vec<u16> = [10, 12, 16, 20, 24]
+        let inks: Vec<u16> = [10, 12, 14, 16]
             .iter()
             .map(|s| sample_ink(&mut app, *s))
             .collect();
-        assert!(inks[..3].windows(2).all(|w| w[0] < w[1]), "{inks:?}");
-        assert!(inks.windows(2).all(|w| w[0] <= w[1]), "{inks:?}");
+        assert!(inks.windows(2).all(|w| w[0] < w[1]), "{inks:?}");
     }
 }

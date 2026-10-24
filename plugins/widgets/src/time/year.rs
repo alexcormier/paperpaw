@@ -30,14 +30,14 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.year-progress.align", ID, Align::Left),
     widgets::frame_spec("widgets.year-progress.frame", ID, Frame::None),
     widgets::padding_spec("widgets.year-progress.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.year-progress.style",
         "widgets.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.year-progress.style.help"),
+    .description("widgets.year-progress.style.help"),
     widgets::part_spec(
         "widgets.year-progress.year",
         ID,
@@ -73,8 +73,11 @@ static SETTINGS: [SettingSpec; 9] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.year-progress",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.year-progress");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(shows),
     )?;
     r.add_settings(&SETTINGS)
@@ -150,14 +153,14 @@ fn percent_text(p: &Progress) -> String {
 
 fn height(env: &Env<'_>, _: u16) -> u16 {
     let (style, _) = ui(env);
-    widgets::line_height(env, style.title * 1.6)
-        + widgets::line_height(env, style.small) * 2
-        + style.gap as u16 * 2
+    widgets::line_height(env, style.title() * 1.6)
+        + widgets::line_height(env, style.small()) * 2
+        + style.gap() * 2
         + frame_height(env, ID.as_str())
 }
 
 /// The track's colour: a light gray on light paper, a dark one on dark.
-fn track(look: &widgets::Look) -> Color {
+fn track(look: &widgets::WidgetLook) -> Color {
     if look.paper.luma() < 128 {
         Color::gray(80)
     } else {
@@ -229,14 +232,14 @@ fn draw_bar(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     caption: Option<&str>,
     p: &Progress,
     months: Option<&LocalTime>,
 ) {
     let (style, _) = ui(env);
     let align = widgets::align(env, ID.as_str());
-    let gap = style.gap as f32 / 2.0;
+    let gap = style.gap() as f32 / 2.0;
     let area = look.area;
     let width = f32::from(area.width);
     let height = f32::from(area.height);
@@ -253,7 +256,7 @@ fn draw_bar(
         };
         super::stack_height(font, &[part], 0.0)
     };
-    let caption_h = caption.map_or(0.0, |c| ink(alloc::vec![c], style.small));
+    let caption_h = caption.map_or(0.0, |c| ink(alloc::vec![c], style.small()));
     let bar_h = |height: f32| {
         if months.is_some() {
             (width / 12.0 * 0.7).min(height * 0.3)
@@ -261,8 +264,8 @@ fn draw_bar(
             // Four lines thick at least, but no thicker than one and a
             // half gaps (where thick lines want more, the gaps win).
             (height * 0.1)
-                .max(style.line as f32 * 4.0)
-                .min(style.gap as f32 * 1.5)
+                .max(style.line() as f32 * 4.0)
+                .min(style.gap() as f32 * 1.5)
                 .min(height)
         }
     };
@@ -289,9 +292,9 @@ fn draw_bar(
             return None;
         }
         let notes = match kind {
-            Notes::Two => super::pack(font, style.small, &items, width, 2),
-            Notes::One | Notes::Cut => super::pack(font, style.small, &items, width, 1),
-            Notes::Short => super::pack(font, style.small, &short, width, 1),
+            Notes::Two => super::pack(font, style.small(), &items, width, 2),
+            Notes::One | Notes::Cut => super::pack(font, style.small(), &items, width, 1),
+            Notes::Short => super::pack(font, style.small(), &short, width, 1),
             Notes::None => Vec::new(),
         };
         // Whole notes only, but where they may be shortened.
@@ -301,7 +304,7 @@ fn draw_bar(
         let note_h = if notes.is_empty() {
             0.0
         } else {
-            ink(notes.iter().map(String::as_str).collect(), style.small) + gap
+            ink(notes.iter().map(String::as_str).collect(), style.small()) + gap
         };
         let top_h = if with_caption { caption_h + gap } else { 0.0 };
         let bar = bar_h(height);
@@ -310,8 +313,8 @@ fn draw_bar(
             return None;
         }
         let size = if with_percent {
-            let most = (room - gap).min(style.title * 2.2);
-            let size = widgets::largest_size(most, style.text, |s| {
+            let most = (room - gap).min(style.title() * 2.2);
+            let size = widgets::largest_size(most, style.text(), |s| {
                 font.measure(s, &text) <= width && super::cap_height(font, s) + gap <= room
             })?;
             Some(size)
@@ -336,7 +339,7 @@ fn draw_bar(
     } else {
         ink(
             parts.notes.iter().map(String::as_str).collect(),
-            style.small,
+            style.small(),
         ) + gap
     };
     let top_h = if parts.caption { caption_h + gap } else { 0.0 };
@@ -352,7 +355,7 @@ fn draw_bar(
     if let (true, Some(caption)) = (parts.caption, caption) {
         let part = super::Part {
             lines: alloc::vec![caption],
-            size: style.small,
+            size: style.small(),
             color: look.faint,
             font: None,
         };
@@ -386,7 +389,7 @@ fn draw_bar(
     if !parts.notes.is_empty() {
         let part = super::Part {
             lines: parts.notes.iter().map(String::as_str).collect(),
-            size: style.small,
+            size: style.small(),
             color: look.faint,
             font: None,
         };
@@ -398,7 +401,7 @@ fn draw_bar(
 /// went, those to come as rings.
 fn draw_months(
     canvas: &mut Canvas<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     area: Rect,
     y: f32,
     height: f32,
@@ -430,27 +433,27 @@ fn draw_ring(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     area: Rect,
     p: &Progress,
 ) {
     let (style, _) = ui(env);
     let align = widgets::align(env, ID.as_str());
     let notes = notes(env, p, false);
-    let small = line(font, style.small);
+    let small = line(font, style.small());
     let side = area.height.min(area.width);
     // Beside it where the notes have room there, else below it.
     let widest = notes
         .iter()
-        .map(|n| font.measure(style.text, n))
+        .map(|n| font.measure(style.text(), n))
         .fold(0.0, f32::max);
-    let rest = f32::from(area.width) - f32::from(side) - style.gap as f32 * 2.0;
+    let rest = f32::from(area.width) - f32::from(side) - style.gap() as f32 * 2.0;
     let beside = !notes.is_empty() && widest <= rest;
     // Not beside: below it, the notes in a line.
     let below = if beside || notes.is_empty() {
         0
     } else {
-        (small + style.gap as f32 / 2.0) as u16
+        (small + style.gap() as f32 / 2.0) as u16
     };
     let side = side.min(area.height.saturating_sub(below));
     let ring_x = if beside {
@@ -493,23 +496,23 @@ fn draw_ring(
         if below > 0 {
             let row = Rect::new(
                 area.x,
-                top + side + style.gap as u16 / 2,
+                top + side + style.gap() / 2,
                 area.width,
                 small as u16,
             );
             let text = notes.join(" · ");
-            super::label(canvas, font, style.small, align, row, &text, look.faint);
+            super::label(canvas, font, style.small(), align, row, &text, look.faint);
         }
         return;
     }
-    let gap = style.gap as u16 * 2;
+    let gap = style.gap() * 2;
     let text_x = if align == Align::Right {
         area.x
     } else {
         area.x + side + gap
     };
     let room = Rect::new(text_x, area.y, area.width - side - gap, area.height);
-    let small = line(font, style.text);
+    let small = line(font, style.text());
     let total = small * notes.len() as f32;
     let mut y = f32::from(room.y) + (f32::from(room.height) - total).max(0.0) / 2.0;
     let text_align = if align == Align::Right {
@@ -522,7 +525,7 @@ fn draw_ring(
             break;
         }
         let row = Rect::new(room.x, y as u16, room.width, small as u16);
-        super::label(canvas, font, style.text, text_align, row, note, look.ink);
+        super::label(canvas, font, style.text(), text_align, row, note, look.ink);
         y += small;
     }
 }
@@ -532,15 +535,7 @@ mod tests {
     use super::*;
 
     fn at(year: i32, month: u8, day: u8, hour: u8) -> LocalTime {
-        LocalTime {
-            year,
-            month,
-            day,
-            hour,
-            minute: 0,
-            second: 0,
-            weekday: dates::weekday(year, month, day),
-        }
+        LocalTime::new(year, month, day, hour, 0, 0)
     }
 
     #[test]

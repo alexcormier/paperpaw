@@ -10,8 +10,15 @@
 //!   for its code.
 //! - A way out that needs no menu and that a resting hand does not make
 //!   (`Escape`): one finger taps twice and then stays down; or, where
-//!   PaperPaw is the firmware, the power button held. A small lock in the
-//!   status lines says it is on.
+//!   PaperPaw is the firmware, the power button held, or the home key (the
+//!   X4 Pro's, below the screen) held. A small lock in the status lines
+//!   says it is on. Its times allow for a slow screen: a refresh may hold
+//!   the touches back that came meanwhile.
+//! - Said whenever it turns on or off, however it was switched (the
+//!   setting's change); and while it is on, a touch that is no step of
+//!   the way out says again how to unlock, at most every [`HINT_MS`], as
+//!   a notice (no full refresh): never in the middle of the way out, whose
+//!   taps a refresh would hold back.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -19,13 +26,13 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use paperpaw_sdk::builtin::{groups, menus};
+use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::filters::{InputFilterSpec, InputVerdict};
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::status::{StatusItemSpec, StatusValue};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, InputEvent, Instant, MenuEntry, MenuNeed, Point, PointerPhase,
-    RegisterError, Registrar, SettingSpec,
+    ActionSpec, Command, Commands, Env, Id, InputEvent, Instant, MenuEntry, MenuNeed, Point,
+    PointerPhase, RegisterError, Registrar, SettingSpec,
 };
 
 use crate::Shared;
@@ -36,14 +43,20 @@ pub const LOCKED: Setting<bool> = Setting::new("lock.touch");
 pub const TOGGLE: Id = Id::new_static("lock.touch-toggle");
 /// The lock in the status lines while touch is locked.
 pub const STATUS: Id = Id::new_static("lock.touch-status");
+/// Says how to unlock touch.
+pub const HINT: Id = Id::new_static("lock.touch-hint");
+/// A touch while locked says how to unlock at most this often.
+pub const HINT_MS: u64 = 10_000;
 const FILTER: Id = Id::new_static("lock.touch-filter");
 
 /// The way out by touch, which a hand resting on the screen does not do:
 /// one finger taps twice, then stays down for [`HOLD_MS`] at the same
 /// spot, each tap shorter than [`TAP_MS`] and the next touch within
-/// [`GAP_MS`]. A second finger on the screen starts it over.
-pub const TAP_MS: u64 = 300;
-pub const GAP_MS: u64 = 600;
+/// [`GAP_MS`]. A second finger on the screen starts it over. It unlocks
+/// when the finger is lifted, or before, as it moves a little once held
+/// long enough.
+pub const TAP_MS: u64 = 500;
+pub const GAP_MS: u64 = 1_000;
 pub const HOLD_MS: u64 = 1_500;
 /// How far the finger may stray from the first tap, in pixels.
 const SLOP: i32 = 40;
@@ -94,8 +107,19 @@ impl Escape {
                 }
             }
             PointerPhase::Move => {
-                if self.finger.is_some_and(|(f, ..)| f == id) && !self.near(pointer.point) {
+                let Some((f, at, _)) = self.finger else {
+                    return false;
+                };
+                if f != id {
+                    return false;
+                }
+                if !self.near(pointer.point) {
                     self.over();
+                } else if self.taps == 2 && now.since(at) >= HOLD_MS {
+                    // Held long enough, still down: no need to lift.
+                    self.down.clear();
+                    self.over();
+                    return true;
                 }
             }
             PointerPhase::Up => {
@@ -134,23 +158,54 @@ impl Escape {
 /// The switch, with the controls.
 pub(crate) static SETTINGS: [SettingSpec; 1] =
     [
-        SettingSpec::fixed_switch(LOCKED.static_str(), "lock.touch", false, groups::CONTROLS)
-            .described("lock.touch.help"),
+        SettingSpec::switch(LOCKED.static_str(), "lock.touch", false, groups::CONTROLS)
+            .description("lock.touch.help"),
     ];
 
-/// While touch is locked, the power button held unlocks it.
-const ESCAPE: &str = "[keymap.global]\nlong.power = lock.touch-toggle\n";
+/// While touch is locked, the power button held unlocks it, and the home
+/// key held (the X4 Pro's touch key below the screen).
+const ESCAPE: &str =
+    "[keymap.global]\nlong.power = lock.touch-toggle\nlong.home = lock.touch-toggle\n";
 
-/// What the filter does with `event` while touch is locked: taken, or
-/// the toggle once the way out is done.
-fn locked(now: Instant, event: &InputEvent, escape: &mut Escape) -> InputVerdict {
+/// What the filter does with `event` while touch is locked: taken, the
+/// toggle once the way out is done, or how to unlock said where it was
+/// not said for [`HINT_MS`] and the touch is no step of the way out: one
+/// that ends without being one of its taps (a swipe, a hand resting, a
+/// hold too short), or one that comes long after a tap (the way out given
+/// up). Never between its steps: the refresh would hold the next back.
+fn locked(
+    now: Instant,
+    event: &InputEvent,
+    escape: &mut Escape,
+    hinted: &mut Option<Instant>,
+) -> InputVerdict {
     let InputEvent::Pointer(pointer) = event else {
         return InputVerdict::Pass;
     };
+    let taps = escape.taps;
+    let given_up = escape.last_up.is_some_and(|up| now.since(up) > GAP_MS);
     if escape.follow(now, pointer) {
         return InputVerdict::Run(TOGGLE);
     }
+    let no_step = match pointer.phase {
+        PointerPhase::Up => escape.taps <= taps && escape.finger.is_none(),
+        PointerPhase::Down => taps > 0 && given_up,
+        _ => false,
+    };
+    if no_step && hinted.is_none_or(|at| now.since(at) >= HINT_MS) {
+        *hinted = Some(now);
+        return InputVerdict::Run(HINT);
+    }
     InputVerdict::Take
+}
+
+/// How to unlock, where PaperPaw is the firmware (the power button) or not.
+fn how_to_unlock(env: &Env<'_>) -> &'static str {
+    if env.caps.firmware {
+        "lock.touch.locked.buttons"
+    } else {
+        "lock.touch.locked"
+    }
 }
 
 /// Adds the touch lock; `state` is the screen lock's, whose code entry
@@ -158,29 +213,42 @@ fn locked(now: Instant, event: &InputEvent, escape: &mut Escape) -> InputVerdict
 pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
     r.add_action(ActionSpec::new(TOGGLE, "lock.touch-toggle").handler(
-        |env: &Env<'_>, out: &mut Vec<Command>| {
-            let on = !env.settings.read(&LOCKED);
-            out.push(Command::set(&LOCKED, on));
-            let told = match (on, env.caps.firmware) {
-                (true, true) => "lock.touch.locked.buttons",
-                (true, false) => "lock.touch.locked",
-                (false, _) => "lock.touch.unlocked",
-            };
-            out.push(Command::Notify(env.i18n.tr(told).into()));
+        |env: &Env<'_>, _, out: &mut Commands| {
+            // Said as the setting changes (below), as for any switch.
+            out.push(Command::set(&LOCKED, !env.settings.read(&LOCKED)));
         },
     ))?;
     r.add_icon(TOGGLE, Cow::Borrowed("lock"))?;
-    let escape: Rc<RefCell<Escape>> = Rc::default();
+    r.add_action(ActionSpec::new(HINT, "lock.touch-hint").handler(
+        |env: &Env<'_>, _, out: &mut Commands| {
+            out.push(Command::Notify(env.i18n.tr(how_to_unlock(env)).into()));
+        },
+    ))?;
+    // However it was switched: the quick panel, the reader's menu,
+    // Settings, the toggle, a rule.
+    r.on(events::SETTING_CHANGED, |env, changed, out| {
+        if changed.id != *LOCKED.id() {
+            return;
+        }
+        let told = if env.settings.read(&LOCKED) {
+            how_to_unlock(env)
+        } else {
+            "lock.touch.unlocked"
+        };
+        out.push(Command::Notify(env.i18n.tr(told).into()));
+    })?;
+    let escape: Rc<RefCell<(Escape, Option<Instant>)>> = Rc::default();
     r.add_input_filter(InputFilterSpec::new(
         FILTER,
         "lock.touch",
         Box::new(move |env, event| {
-            let mut escape = escape.borrow_mut();
+            let (escape, hinted) = &mut *escape.borrow_mut();
             if !env.settings.read(&LOCKED) || state.locked.get() {
                 *escape = Escape::default();
+                *hinted = None;
                 return InputVerdict::Pass;
             }
-            locked(env.now, event, &mut escape)
+            locked(env.now, event, escape, hinted)
         }),
     ))?;
     r.add_keymap_when(&LOCKED, Cow::Borrowed(ESCAPE))?;
@@ -219,13 +287,30 @@ mod tests {
         })
     }
 
-    /// Runs `steps` (when, which finger, what, where): the verdicts.
+    /// Runs `steps` (when, which finger, what, where): the verdicts, the
+    /// hints left out (as taken: they change nothing else).
     fn run(steps: &[(u64, u8, PointerPhase, (i32, i32))]) -> Vec<InputVerdict> {
+        run_with_hints(steps)
+            .into_iter()
+            .map(|v| match v {
+                InputVerdict::Run(id) if id == HINT => InputVerdict::Take,
+                v => v,
+            })
+            .collect()
+    }
+
+    fn run_with_hints(steps: &[(u64, u8, PointerPhase, (i32, i32))]) -> Vec<InputVerdict> {
         let mut escape = Escape::default();
+        let mut hinted = None;
         steps
             .iter()
             .map(|&(at, id, phase, point)| {
-                locked(Instant(at), &finger(id, phase, point), &mut escape)
+                locked(
+                    Instant(at),
+                    &finger(id, phase, point),
+                    &mut escape,
+                    &mut hinted,
+                )
             })
             .collect()
     }
@@ -327,6 +412,86 @@ mod tests {
             name: "page-forward",
             state: paperpaw_sdk::ButtonState::Pressed,
         };
-        assert_eq!(locked(Instant(0), &press, &mut escape), InputVerdict::Pass);
+        let verdict = locked(Instant(0), &press, &mut escape, &mut None);
+        assert_eq!(verdict, InputVerdict::Pass);
+    }
+
+    fn hints(verdicts: &[InputVerdict]) -> usize {
+        verdicts
+            .iter()
+            .filter(|v| **v == InputVerdict::Run(HINT))
+            .count()
+    }
+
+    /// Touches that are no step of the way out say how to unlock, at most
+    /// every HINT_MS; the way out itself is never interrupted by it.
+    #[test]
+    fn touches_say_how_to_unlock_now_and_then() {
+        // Single taps two seconds apart, for forty seconds: said every
+        // ten seconds, the first time at the second tap.
+        let taps: Vec<_> = (0..20u64)
+            .flat_map(|n| [(n * 2_000, 0, Down, AT), (n * 2_000 + 50, 0, Up, AT)])
+            .collect();
+        let verdicts = run_with_hints(&taps);
+        assert_eq!(verdicts[2], InputVerdict::Run(HINT));
+        assert_eq!(hints(&verdicts), 4);
+        // A hand resting, then lifted: said once, when it is lifted.
+        let rest = run_with_hints(&[(0, 0, Down, AT), (10_000, 0, Up, AT)]);
+        assert_eq!(rest, [InputVerdict::Take, InputVerdict::Run(HINT)]);
+        // A swipe.
+        let swipe = run_with_hints(&[
+            (0, 0, Down, AT),
+            (50, 0, Move, (300, 300)),
+            (80, 0, Up, (400, 300)),
+        ]);
+        assert_eq!(hints(&swipe), 1);
+        // The way out: nothing said between its steps.
+        let verdicts = run_with_hints(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, AT),
+            (500, 0, Up, AT),
+            (800, 0, Down, AT),
+            (800 + HOLD_MS, 0, Up, AT),
+        ]);
+        assert_eq!(hints(&verdicts), 0);
+        assert_eq!(verdicts.last(), Some(&InputVerdict::Run(TOGGLE)));
+        // Held too short after the taps: then it is said.
+        let short = run_with_hints(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, AT),
+            (500, 0, Up, AT),
+            (800, 0, Down, AT),
+            (1_200, 0, Up, AT),
+        ]);
+        assert_eq!(short.last(), Some(&InputVerdict::Run(HINT)));
+    }
+
+    /// A slow screen holds touches back: taps up to TAP_MS long, GAP_MS
+    /// apart, still count; and once held long enough, a little movement
+    /// of the finger unlocks without lifting it.
+    #[test]
+    fn the_way_out_allows_for_a_slow_screen_and_needs_no_lift() {
+        let slow = run(&[
+            (0, 0, Down, AT),
+            (TAP_MS - 50, 0, Up, AT),
+            (TAP_MS + GAP_MS - 100, 0, Down, AT),
+            (2 * TAP_MS + GAP_MS - 150, 0, Up, AT),
+            (2 * TAP_MS + 2 * GAP_MS - 200, 0, Down, AT),
+            (2 * TAP_MS + 2 * GAP_MS - 200 + HOLD_MS, 0, Up, AT),
+        ]);
+        assert_eq!(slow.last(), Some(&InputVerdict::Run(TOGGLE)));
+        let held = run(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, AT),
+            (500, 0, Up, AT),
+            (800, 0, Down, AT),
+            (1_000, 0, Move, (201, 301)),
+            (800 + HOLD_MS + 10, 0, Move, (202, 300)),
+        ]);
+        assert_eq!(held.last(), Some(&InputVerdict::Run(TOGGLE)));
+        assert!(held[..6].iter().all(|v| *v == InputVerdict::Take));
     }
 }

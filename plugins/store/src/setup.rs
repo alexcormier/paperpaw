@@ -88,7 +88,7 @@ impl OfferScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // A bar along the bottom: its button keeps the side margin from
         // the edge too.
         let bar_height = ui::edge_bar_height(&style);
@@ -133,8 +133,8 @@ impl OfferScreen {
         }
         let font = self.style.font(env)?;
         let label = env.i18n.tr("store.offer.add");
-        let pad = self.style.margin as u16;
-        let width = font.measure(self.style.text, label) as u16 + 2 * pad;
+        let pad = self.style.margin();
+        let width = font.measure(self.style.text(), label) as u16 + 2 * pad;
         let band = ui::edge_bar_band(&self.style, self.bar, false);
         Some(Rect::new(
             self.bar.width.saturating_sub(width + pad),
@@ -171,7 +171,7 @@ impl OfferScreen {
             // This page said what they are: no need to tell it again on
             // a plugin's page.
             trust::tell(env.storage);
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             queue::add_quietly(&env, &fetch, &mut out);
             out.into_iter().for_each(|command| cx.command(command));
         }
@@ -193,49 +193,43 @@ impl Screen for OfferScreen {
         let button = self.button(env);
         self.on_button &= button.is_some();
         self.list.set_active(!self.on_button);
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("store.offer.title"),
             None,
             self.list.paging(len),
         );
         let rows = &self.rows;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let (id, on) = rows[index];
-                let (name, note) = (
-                    alloc::format!("store.offer.{id}"),
-                    alloc::format!("store.offer.{id}.help"),
-                );
-                let (name, note) = (env.i18n.tr(&name), env.i18n.tr(&note));
-                ui::draw_switch_row(canvas, env, &style, rect, focused, name, note, on);
-            });
-        let line = Rect::new(0, self.bar.y, self.bar.width, (style.line as u16).max(1));
-        canvas.fill(line, Color::gray(150));
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (id, on) = rows[index];
+            let (name, note) = (
+                alloc::format!("store.offer.{id}"),
+                alloc::format!("store.offer.{id}.help"),
+            );
+            let (name, note) = (env.i18n.tr(&name), env.i18n.tr(&note));
+            ui::Row::switch(name, on)
+                .note(note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
+        let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
+        ui.canvas().fill(line, Color::gray(150));
         if let Some(button) = button {
             let label = env.i18n.tr("store.offer.add");
-            ui::draw_button(canvas, env, &style, button, label, true, self.on_button);
+            ui.button(button, label, true, self.on_button);
         }
-        if let Some(font) = style.font(env) {
-            let right = button.map_or(self.bar.width, |b| b.x);
-            let area = Rect::new(
-                0,
-                self.bar.y,
-                right.saturating_sub(style.gap as u16),
-                self.bar.height,
-            );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                style.margin as f32,
-                area,
-                ui::tr_input(env, "store.offer.hint"),
-                style.faint(60),
-            );
-        }
+        let right = button.map_or(self.bar.width, |b| b.x);
+        let area = Rect::new(
+            0,
+            self.bar.y,
+            right.saturating_sub(style.gap()),
+            self.bar.height,
+        );
+        ui::Label::new(ui::tr_input(env, "store.offer.hint"))
+            .px(style.small())
+            .color(style.faint(ui::Ink::Note))
+            .draw_from(&mut ui, style.margin() as f32, area);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -281,7 +275,7 @@ impl Screen for OfferScreen {
         let env = *cx.env();
         let paging = self.list.paging(self.rows.len());
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.button(&env).is_some_and(|b| b.contains(gesture.start)) {

@@ -63,7 +63,7 @@ use paperpaw_sdk::firmware::{Firmware, Plugins, UPDATE_DIR, compare_versions};
 use paperpaw_sdk::native::Native;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, PluginKind, Storage, files};
+use paperpaw_sdk::{Arg, Command, Commands, Env, HttpRequest, Params, PluginKind, Storage, files};
 
 use crate::fetch::{self, Build};
 use crate::{OFFERED, PAGE, file, read_pair, waiting, write_pair};
@@ -367,16 +367,15 @@ fn question(
 
 /// Asks the server for an update; `quiet` from the action, which offers
 /// what it finds by opening the page and says nothing otherwise.
-pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
+pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
     let Some(firmware) = env.firmware else {
         return;
     };
     let url = format!("{}/api/v1/updates", server(env));
-    let mut request = HttpRequest::new("POST", &url, CHECKED);
-    request.headers.push((
+    let request = HttpRequest::new("POST", &url, CHECKED).header(
         String::from("content-type"),
         String::from("application/json"),
-    ));
+    );
     let code: Vec<(&str, String)> = env
         .plugins
         .iter()
@@ -384,18 +383,18 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
         .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))
         .collect();
     let betas = env.settings.read(&BETAS);
-    request.body = Some(question(firmware, env.native, &code, betas));
+    let mut request = request.body(question(firmware, env.native, &code, betas));
     // Asked: an update waiting is asked for again not before a day.
     waiting::tried(env.storage, paperpaw_sdk::time::unix_seconds(env));
     if quiet {
-        request.params.set(QUIET, "1");
+        request = request.param(QUIET, "1");
     }
-    out.push(Command::Http(request));
+    out.push(Command::http(request));
 }
 
 /// The answer: the update it names kept (or the one kept before let go),
 /// and offered if the question was asked in the background.
-pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let Some(firmware) = env.firmware else {
         return;
     };
@@ -408,7 +407,8 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
         }
         return;
     }
-    let Some(offer) = Offer::from_answer(&reply.body, firmware, env.settings.read(&BETAS)) else {
+    let text = reply.text();
+    let Some(offer) = Offer::from_answer(&text, firmware, env.settings.read(&BETAS)) else {
         let _ = storage.remove(&file(OFFER));
         waiting::clear(storage);
         return;
@@ -454,7 +454,7 @@ fn path_for(firmware: &Firmware, version: &str) -> String {
 }
 
 /// Downloads `offer` into `updates`.
-pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Vec<Command>) {
+pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Commands) {
     let _ = env.storage.create_dir(UPDATE_DIR);
     clear_download(env.storage);
     // A path on the server asked.
@@ -463,17 +463,17 @@ pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Vec<Command>) {
     } else {
         offer.url.clone()
     };
-    let mut request = HttpRequest::new("GET", &url, DOWNLOADED);
-    request.save_to = Some(String::from(PART));
-    request.params.set("version", offer.version.as_str());
-    request.params.set("size", offer.size.to_string());
-    out.push(Command::Http(request));
+    let request = HttpRequest::new("GET", &url, DOWNLOADED)
+        .save_to(String::from(PART))
+        .param("version", offer.version.as_str())
+        .param("size", offer.size.to_string());
+    out.push(Command::http(request));
 }
 
 /// The download done: whole, it takes its name in `updates` and the
 /// offer is let go; otherwise it is removed. Either is said, also while
 /// the page is closed (downloads go on meanwhile).
-pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let Some(firmware) = env.firmware else {
         return;
     };
@@ -528,13 +528,9 @@ mod tests {
     use super::{Offer, is_version, question};
 
     fn firmware() -> Firmware {
-        Firmware {
-            version: "0.4.0".into(),
-            project: "paperpaw-xteink".into(),
-            chip: 5,
-            plugins: Plugins::new("paperpaw-plugin-stats 0.4.0\npaperpaw-plugin-chess 1.0.0\n"),
-            ..Firmware::default()
-        }
+        Firmware::new("0.4.0", "paperpaw-xteink", 5).plugins(Plugins::new(
+            "paperpaw-plugin-stats 0.4.0\npaperpaw-plugin-chess 1.0.0\n",
+        ))
     }
 
     #[test]
@@ -575,9 +571,10 @@ mod tests {
     fn betas_are_asked_for_and_offered_only_newer() {
         assert!(question(&firmware(), None, &[], true).ends_with(",\"betas\":true}"));
         assert!(!question(&firmware(), None, &[], false).contains("betas"));
-        let on = |version: &str| Firmware {
-            version: version.into(),
-            ..firmware()
+        let on = |version: &str| {
+            let mut firmware = firmware();
+            firmware.version = version.into();
+            firmware
         };
         let offer = |answer: &str, running: &str| {
             let body = alloc::format!(r#"{{"version": "{answer}", "url": "u"}}"#);
@@ -610,9 +607,10 @@ mod tests {
     /// betas is not taken, unless the device runs a pre-release already.
     #[test]
     fn betas_are_left_where_the_reader_did_not_ask() {
-        let on = |version: &str| Firmware {
-            version: version.into(),
-            ..firmware()
+        let on = |version: &str| {
+            let mut firmware = firmware();
+            firmware.version = version.into();
+            firmware
         };
         let offer = |answer: &str, running: &str| {
             let body = alloc::format!(r#"{{"version": "{answer}", "url": "u"}}"#);

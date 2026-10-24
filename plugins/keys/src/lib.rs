@@ -38,8 +38,9 @@ use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("keys");
@@ -443,7 +444,7 @@ impl Plugin for Keys {
             Box::new(|env, params| Box::new(PlaceScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "keys.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
@@ -473,13 +474,14 @@ fn navigate(list: &mut ListView, len: usize, action: &Id, cx: &mut Cx<'_, '_>) -
 
 /// Draws a small 3×3 grid at the left of `rect` with `zone` filled: the
 /// part of the screen a tap zone is.
-fn draw_zone(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, zone: &str, ink: Color) {
+fn draw_zone(ui: &mut ui::Ui<'_>, rect: Rect, zone: &str, ink: Color) {
     let Some(index) = ZONES.iter().position(|z| *z == zone) else {
         return;
     };
+    let (style, canvas) = (ui.style(), ui.canvas());
     let cell = (rect.height / 6).max(4);
     let side = cell * 3;
-    let x = rect.x + style.margin as u16;
+    let x = rect.x + style.margin();
     let y = rect.y + (rect.height - side) / 2;
     for i in 0..9u16 {
         let (cx, cy) = (x + (i % 3) * cell, y + (i / 3) * cell);
@@ -532,7 +534,7 @@ impl ListScreen {
     /// The rows for the place chosen.
     fn build(&mut self, env: &Env<'_>) {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let focus = self.rows.focus();
         self.entries = rows(env, self.place().everywhere());
@@ -619,10 +621,9 @@ impl ListScreen {
 impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("keys.title"),
             None,
             Some(self.rows.paging()),
@@ -630,70 +631,70 @@ impl Screen for ListScreen {
         let place = self.place().clone();
         let layers = place.layer_refs();
         let entries = &self.entries;
-        let room = ui::icon_room(env, &style, true);
-        let shown = !env.device.input.touch;
-        self.rows
-            .draw(canvas, &style, shown, |canvas, index, rect, focused| {
-                let ink = style.focus_ink(focused);
-                match &entries[index] {
-                    Row::Heading(key) => {
-                        ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(key))
-                    }
-                    Row::Place => {
-                        let title = env.i18n.tr("keys.place");
-                        let note = ui::tr_input(env, "keys.place.help");
-                        ui::draw_noted_row(
-                            canvas,
-                            env,
-                            &style,
-                            rect,
-                            focused,
-                            title,
-                            &place.title,
-                            note,
-                        );
-                    }
-                    Row::Policy => {
-                        let now = env.keys.bound(&layers, POLICY);
-                        let value = now
-                            .as_ref()
-                            .filter(|id| POLICIES.contains(&id.as_str()))
-                            .map_or(POLICIES[0], Id::as_str);
-                        let title = env.i18n.tr("keys.policy");
-                        let (help, name) = (format!("keys.{value}.help"), format!("keys.{value}"));
-                        let (note, shown) = (env.i18n.tr(&help), env.i18n.tr(&name));
-                        ui::draw_noted_row(canvas, env, &style, rect, focused, title, shown, note);
-                    }
-                    Row::Input(input) => {
-                        let action = env.keys.bound(&layers, input);
-                        let does = match &action {
-                            Some(id) => action_name(env, id),
-                            None => env.i18n.tr("core.action.nothing").to_string(),
-                        };
-                        // Tap zones as a small picture of the screen.
-                        let zone = input
-                            .strip_prefix("tap.")
-                            .or_else(|| input.strip_prefix("long-tap."))
-                            .or_else(|| input.strip_prefix("double-tap."));
-                        let rect = match zone {
-                            Some(zone) => {
-                                let band = ui::title_area(&style, rect);
-                                draw_zone(canvas, &style, band, zone, ink);
-                                let shift = room.min(rect.width);
-                                Rect::new(rect.x + shift, rect.y, rect.width - shift, rect.height)
-                            }
-                            None => rect,
-                        };
-                        let name = input_name(env, input);
-                        ui::draw_noted_row(canvas, env, &style, rect, focused, &name, "›", &does);
-                    }
-                    Row::Reset => {
-                        let title = env.i18n.tr("keys.reset");
-                        let note = env.i18n.tr("keys.reset.help");
-                        ui::draw_noted_row(canvas, env, &style, rect, focused, title, "", note);
-                    }
+        let room = ui.icon_room(true);
+        let shown = ui.focus_shown();
+        self.rows.draw(&mut ui, shown, |ui, index, rect, focused| {
+            let ink = style.focus_ink(focused);
+            match &entries[index] {
+                Row::Heading(key) => ui.heading(rect, env.i18n.tr(key)),
+                Row::Place => {
+                    let title = env.i18n.tr("keys.place");
+                    let note = ui::tr_input(env, "keys.place.help");
+                    ui::Row::value(title, &place.title)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
                 }
-            });
+                Row::Policy => {
+                    let now = env.keys.bound(&layers, POLICY);
+                    let value = now
+                        .as_ref()
+                        .filter(|id| POLICIES.contains(&id.as_str()))
+                        .map_or(POLICIES[0], Id::as_str);
+                    let title = env.i18n.tr("keys.policy");
+                    let (help, name) = (format!("keys.{value}.help"), format!("keys.{value}"));
+                    let (note, shown) = (env.i18n.tr(&help), env.i18n.tr(&name));
+                    ui::Row::value(title, shown)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+                Row::Input(input) => {
+                    let action = env.keys.bound(&layers, input);
+                    let does = match &action {
+                        Some(id) => action_name(env, id),
+                        None => env.i18n.tr("core.action.nothing").to_string(),
+                    };
+                    // Tap zones as a small picture of the screen.
+                    let zone = input
+                        .strip_prefix("tap.")
+                        .or_else(|| input.strip_prefix("long-tap."))
+                        .or_else(|| input.strip_prefix("double-tap."));
+                    let rect = match zone {
+                        Some(zone) => {
+                            let band = ui::title_area(&style, rect);
+                            draw_zone(ui, band, zone, ink);
+                            let shift = room.min(rect.width);
+                            Rect::new(rect.x + shift, rect.y, rect.width - shift, rect.height)
+                        }
+                        None => rect,
+                    };
+                    let name = input_name(env, input);
+                    ui::Row::value(&name, "›")
+                        .note(&does)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+                Row::Reset => {
+                    let title = env.i18n.tr("keys.reset");
+                    let note = env.i18n.tr("keys.reset.help");
+                    ui::Row::plain(title)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+            }
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -731,7 +732,7 @@ impl Screen for ListScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.rows.hit(gesture.start) {
@@ -804,7 +805,7 @@ impl PlaceScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut places = places(env);
         for screen in all_screens(env) {
@@ -813,7 +814,7 @@ impl PlaceScreen {
             }
         }
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             places,
             style,
             header,
@@ -835,19 +836,19 @@ impl Screen for PlaceScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.places.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("keys.place"),
             None,
             self.list.paging(len),
         );
         let places = &self.places;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                ui::draw_value_row(canvas, env, &style, rect, focused, &places[index].title, "");
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            ui::Row::plain(&places[index].title)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -872,7 +873,7 @@ impl Screen for PlaceScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, len) {
@@ -1020,13 +1021,13 @@ impl PickScreen {
             entries.push(Pick::Action(id, name));
         }
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let heights = entries
             .iter()
             .map(|e| match e {
                 Pick::Heading(_) => ui::heading_height(env, &self.style),
-                _ => self.style.row as u16,
+                _ => self.style.row(),
             })
             .collect();
         let headings = entries
@@ -1064,47 +1065,38 @@ impl PickScreen {
 impl Screen for PickScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            &self.title,
-            None,
-            Some(self.rows.paging()),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, &self.title, None, Some(self.rows.paging()));
         let entries = &self.entries;
         let query = &self.query;
-        let room = ui::icon_room(env, &style, true);
-        let shown = !env.device.input.touch;
-        self.rows
-            .draw(canvas, &style, shown, |canvas, index, rect, focused| {
-                let ink = style.focus_ink(focused);
-                match &entries[index] {
-                    Pick::Heading(key) => {
-                        ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(key))
-                    }
-                    Pick::Search => {
-                        let rect =
-                            ui::draw_row_icon(canvas, env, &style, rect, room, Some("search"), ink);
-                        let title = if query.is_empty() {
-                            env.i18n.tr("keys.search")
-                        } else {
-                            query.as_str()
-                        };
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
-                    }
-                    Pick::Standard => {
-                        let rect = ui::draw_row_icon(canvas, env, &style, rect, room, None, ink);
-                        let title = env.i18n.tr("keys.standard");
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
-                    }
-                    Pick::Action(id, name) => {
-                        let icon = env.menus.icon(id.as_str());
-                        let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
-                        ui::draw_value_row(canvas, env, &style, rect, focused, name, "");
-                    }
+        let room = ui.icon_room(true);
+        let shown = ui.focus_shown();
+        self.rows.draw(&mut ui, shown, |ui, index, rect, focused| {
+            let ink = style.focus_ink(focused);
+            match &entries[index] {
+                Pick::Heading(key) => ui.heading(rect, env.i18n.tr(key)),
+                Pick::Search => {
+                    let rect = ui.row_icon(rect, room, Some("search"), ink);
+                    let title = if query.is_empty() {
+                        env.i18n.tr("keys.search")
+                    } else {
+                        query.as_str()
+                    };
+                    ui::Row::plain(title).focused(focused).draw(ui, rect);
                 }
-            });
+                Pick::Standard => {
+                    let rect = ui.row_icon(rect, room, None, ink);
+                    let title = env.i18n.tr("keys.standard");
+                    ui::Row::plain(title).focused(focused).draw(ui, rect);
+                }
+                Pick::Action(id, name) => {
+                    let icon = env.menus.icon(id.as_str());
+                    let rect = ui.row_icon(rect, room, icon, ink);
+                    ui::Row::plain(name).focused(focused).draw(ui, rect);
+                }
+            }
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -1141,7 +1133,7 @@ impl Screen for PickScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.rows.hit(gesture.start) {

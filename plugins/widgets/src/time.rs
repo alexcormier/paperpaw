@@ -61,19 +61,26 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 /// Adds widget `id`, drawn by `drawn`, to the kind "Time and date", with
 /// its settings group (its settings come from a list kept in the
 /// program, each module's `SETTINGS`).
-fn add(r: &mut Registrar, id: &Id, title: &'static str, drawn: Drawn) -> Result<(), RegisterError> {
-    r.add_widget(WidgetSpec::drawn(id.clone(), title, drawn).category(widgets::categories::TIME))?;
-    r.add_setting_group(widgets::settings_group(id, title))
+fn add(
+    r: &mut Registrar,
+    group: &'static paperpaw_sdk::SettingGroupSpec,
+    drawn: Drawn,
+) -> Result<(), RegisterError> {
+    let title: &'static str = &group.title;
+    r.add_widget(
+        WidgetSpec::drawn(group.id.clone(), title, drawn).category(widgets::categories::TIME),
+    )?;
+    r.add_setting_group(group)
 }
 
 /// Adds widget `id` like [`add`], with a tap on it opening its settings:
 /// for widgets that show what the reader chose (a date, places).
 fn add_settable(
     r: &mut Registrar,
-    id: &Id,
-    title: &'static str,
+    group: &'static paperpaw_sdk::SettingGroupSpec,
     drawn: Drawn,
 ) -> Result<(), RegisterError> {
+    let (id, title): (&Id, &'static str) = (&group.id, &group.title);
     let widget = id.clone();
     r.add_widget(
         WidgetSpec::new(id.clone(), title, move |_| {
@@ -85,7 +92,7 @@ fn add_settable(
         })
         .category(widgets::categories::TIME),
     )?;
-    r.add_setting_group(widgets::settings_group(id, title))
+    r.add_setting_group(group)
 }
 
 /// A widget that draws from the clock and its settings, which a tap
@@ -133,7 +140,7 @@ fn chosen_name<'a>(env: &'a Env<'_>, widget: &str, key: &str) -> &'a str {
 
 /// The colour lighter of the look's ink and paper, and the darker one:
 /// e.g. the lit and the dark part of the moon.
-fn light_and_dark(look: &widgets::Look) -> (Color, Color) {
+fn light_and_dark(look: &widgets::WidgetLook) -> (Color, Color) {
     if look.ink.luma() > look.paper.luma() {
         (look.ink, look.paper)
     } else {
@@ -219,14 +226,14 @@ const DATE_FORMATS: [&str; 4] = [
 /// "Wednesday, 14 October", "14/10/2026" or "2026-10-14"; `id` is
 /// `<widget>.date-format`.
 const fn date_format_spec(id: &'static str, widget: Id, default: &'static str) -> SettingSpec {
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         id,
         "widgets.setting.date-format",
         &DATE_FORMATS,
         default,
         widget,
     )
-    .described("widgets.setting.date-format.help")
+    .description("widgets.setting.date-format.help")
 }
 
 /// `year`-`month`-`day` written as `widget`'s date format says
@@ -281,7 +288,7 @@ fn twelve(hour: u8) -> u8 {
 /// Draws in `look`'s area that the time is not known yet, in place of
 /// what a widget would show of it: on a device without a clock of its
 /// own, until Wi-Fi sets it.
-fn draw_no_time(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look) {
+fn draw_no_time(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook) {
     widgets::draw_message(canvas, env, look, env.i18n.tr("widgets.time.unknown"));
 }
 

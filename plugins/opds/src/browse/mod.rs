@@ -87,7 +87,7 @@ pub(crate) struct BrowseScreen {
     /// The files the answers are written to.
     temp: TempFiles,
     /// Offline mode: the offer to go online, and the feed to load then.
-    offer: ui::OfflineOffer,
+    offer: ui::offline::OfflineOffer,
     offline: Option<(String, bool)>,
 }
 
@@ -96,8 +96,8 @@ impl BrowseScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
+        let top = header.area().height + style.gap();
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -123,7 +123,7 @@ impl BrowseScreen {
                 && env.settings.read(&crate::COVERS),
             fetching: None,
             failed: Vec::new(),
-            offer: ui::OfflineOffer::new(),
+            offer: ui::offline::OfflineOffer::new(),
             offline: None,
             temp,
             catalog,
@@ -161,7 +161,7 @@ impl BrowseScreen {
 
     /// What the reader chose on the offer: the feed loaded now, or said
     /// to need the network.
-    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
         let Some(chosen) = chosen else {
             return;
         };
@@ -169,7 +169,7 @@ impl BrowseScreen {
             return;
         };
         match chosen {
-            ui::Offer::Online => self.load(&url, back, cx),
+            ui::offline::Offer::Online => self.load(&url, back, cx),
             // Not now, and any answer to come: on without the network.
             _ => {
                 let message = cx.env().i18n.tr("opds.no-network").to_string();
@@ -196,7 +196,8 @@ impl BrowseScreen {
             .format("opds.loading", &[("host", Arg::Str(host(url)))]);
         self.say(message, cx);
         let params = Params::new().with(URL, url.to_string());
-        cx.command(Command::Http(crate::list_request(
+        cx.command(Command::http(crate::list_request(
+            &paperpaw_sdk::web::user_agent_of(&env),
             &self.catalog,
             url,
             self.temp.next("xml"),
@@ -266,7 +267,8 @@ impl BrowseScreen {
             (None, Some(Search::Template(template))) => template.clone(),
             (None, Some(Search::Description(url))) => {
                 let url = url.clone();
-                cx.command(Command::Http(request(
+                cx.command(Command::http(request(
+                    &paperpaw_sdk::web::user_agent_of(cx.env()),
                     &self.catalog,
                     &url,
                     self.temp.next("xml"),
@@ -345,8 +347,8 @@ impl BrowseScreen {
 
     /// The message below the list: without rows it takes the room it
     /// needs above its line.
-    fn draw_status(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, empty: bool) {
-        let style = self.style;
+    fn draw_status(&self, ui: &mut ui::Ui<'_>, empty: bool) {
+        let env = ui.env();
         let text = match &self.message {
             Some(message) => message.clone(),
             None if empty && self.loading.is_none() => env.i18n.tr("opds.empty").to_string(),
@@ -356,7 +358,8 @@ impl BrowseScreen {
         let status = if empty {
             let s = self.status;
             let top = self.list.area().y;
-            let needed = ui::note_line_height(env, &style, s.width, &text)
+            let needed = ui
+                .note_line_height(s.width, &text)
                 .clamp(s.height, s.bottom().saturating_sub(u32::from(top)) as u16);
             Rect::new(
                 s.x,
@@ -367,8 +370,8 @@ impl BrowseScreen {
         } else {
             self.status
         };
-        canvas.fill(status, Color::WHITE);
-        ui::draw_note_line(canvas, env, &style, status, &text);
+        ui.canvas().fill(status, Color::WHITE);
+        ui.note_line(status, &text);
     }
 }
 
@@ -381,32 +384,24 @@ impl Screen for BrowseScreen {
         } else {
             &self.feed.title
         };
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            title,
-            None,
-            self.list.paging(rows.len()),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(rows.len()));
         if self.offering(env) {
             let area = self.list.area();
-            return self.offer.draw(canvas, env, &style, area);
+            return self.offer.draw(&mut ui, area);
         }
         let entries = &self.feed.entries;
         let covers = &self.covers;
         // A column for covers, as wide as a book's picture of the row's height.
         let column = if self.with_covers && entries.iter().any(|e| e.thumbnail.is_some()) {
-            cover_width(&style) + style.gap as u16
+            cover_width(&style) + style.gap()
         } else {
             0
         };
         let readable = |ext: &str| env.formats.supports(&format!("book.{ext}"));
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value, note) = match rows[index] {
                     Row::Search => (
                         env.i18n.tr("opds.search").to_string(),
@@ -441,7 +436,7 @@ impl Screen for BrowseScreen {
                     Row::Entry(i) if column > 0 => {
                         if let Some(cover) = &covers[i] {
                             let y = rect.y + rect.height.saturating_sub(cover.height()) / 2;
-                            cover.draw(canvas, rect.x + style.margin as u16, y);
+                            cover.draw(ui.canvas(), rect.x + style.margin(), y);
                         }
                         Rect::new(
                             rect.x + column,
@@ -452,10 +447,12 @@ impl Screen for BrowseScreen {
                     }
                     _ => rect,
                 };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
-            },
-        );
-        self.draw_status(canvas, env, rows.is_empty());
+                ui::Row::value(&title, &value)
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        self.draw_status(&mut ui, rows.is_empty());
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -468,7 +465,7 @@ impl Screen for BrowseScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         if *a != actions::BACK && self.offering(cx.env()) {
-            let chosen = self.offer.on_action(a, cx);
+            let chosen = self.offer.on_action(a, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }
@@ -494,11 +491,11 @@ impl Screen for BrowseScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.offering(cx.env()) {
-            let chosen = self.offer.on_tap(gesture.start, cx);
+            let chosen = self.offer.on_gesture(&gesture, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }

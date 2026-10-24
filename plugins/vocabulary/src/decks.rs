@@ -48,7 +48,7 @@ impl DecksScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
@@ -116,38 +116,41 @@ impl Screen for DecksScreen {
         let style = self.style;
         let len = self.len();
         let title = env.i18n.tr("vocabulary.cards.title");
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         let due = env
             .i18n
             .plural("vocabulary.cards.due", self.due as i64, &[]);
         let empty = self.decks.is_empty();
         let decks = &self.decks;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                let (title, note): (&str, String) = match row {
-                    REVIEW_ROW => (env.i18n.tr("vocabulary.cards.review"), due.clone()),
-                    PHONE_ROW => {
-                        let key = if empty {
-                            "vocabulary.cards.phone.first"
-                        } else {
-                            "vocabulary.cards.phone.help"
-                        };
-                        (
-                            env.i18n.tr("vocabulary.cards.phone"),
-                            env.i18n.tr(key).into(),
-                        )
-                    }
-                    row => match decks.get(row - FIRST_DECK) {
-                        Some((deck, n)) => (
-                            deck.name.as_str(),
-                            env.i18n.plural("vocabulary.cards.count", *n as i64, &[]),
-                        ),
-                        None => return,
-                    },
-                };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", &note);
-            });
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            let (title, note): (&str, String) = match row {
+                REVIEW_ROW => (env.i18n.tr("vocabulary.cards.review"), due.clone()),
+                PHONE_ROW => {
+                    let key = if empty {
+                        "vocabulary.cards.phone.first"
+                    } else {
+                        "vocabulary.cards.phone.help"
+                    };
+                    (
+                        env.i18n.tr("vocabulary.cards.phone"),
+                        env.i18n.tr(key).into(),
+                    )
+                }
+                row => match decks.get(row - FIRST_DECK) {
+                    Some((deck, n)) => (
+                        deck.name.as_str(),
+                        env.i18n.plural("vocabulary.cards.count", *n as i64, &[]),
+                    ),
+                    None => return,
+                },
+            };
+            ui::Row::value(title, "›")
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     /// Back from a review or the phone: the counts as they are now.
@@ -179,7 +182,7 @@ impl Screen for DecksScreen {
         if gesture.kind == GestureKind::Tap {
             let paging = self.list.paging(len);
             if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 return Handled::Yes;
             }
         }

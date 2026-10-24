@@ -96,14 +96,15 @@ must leave its list.
    ask::confirm(question, &REPLY, true)      // bad: true for what?
    ```
 
-9. **Handlers get a context that can grow.** No new signature takes a
-   bare `&mut Vec<Command>`. A handler gets a context such as `Cx`,
-   which can gain methods later. Check:
-   `handlers_take_no_vector_of_commands`.
+9. **Handlers get a context that can grow.** No signature takes a bare
+   `&mut Vec<Command>`. A screen's handler gets `Cx`, and every other
+   handler gets `Commands`. Both keep their fields private, so they can
+   carry more later, such as which plugin runs, its limits or small
+   helpers, through methods. Check: `handlers_take_no_vector_of_commands`.
 
    ```rust
-   fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled          // good
-   fn on_action(&mut self, action: &Id, out: &mut Vec<Command>) -> Handled // bad
+   fn step(env: &Env<'_>, params: &Params, out: &mut Commands) -> Step     // good
+   fn step(env: &Env<'_>, params: &Params, out: &mut Vec<Command>) -> Step // bad
    ```
 
 10. **What runs often does not allocate.** A callback that runs on every

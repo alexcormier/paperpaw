@@ -22,6 +22,7 @@ impl paperpaw_text::Font
 pub fn paperpaw_text::Font::advance(&self, char, f32) -> f32
 pub fn paperpaw_text::Font::from_data(impl core::convert::Into<alloc::borrow::Cow<'static, [u8]>>, &[(&str, f32)]) -> core::result::Result<paperpaw_text::Font, paperpaw_text::FontError>
 pub fn paperpaw_text::Font::has_char(&self, char) -> bool
+pub fn paperpaw_text::Font::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::Font::line_metrics(&self, f32) -> paperpaw_text::LineMetrics
 pub fn paperpaw_text::Font::shown(&self, char) -> char
 pub fn paperpaw_text::Font::size_for(&self, f32, &str, bool) -> f32
@@ -39,6 +40,7 @@ pub fn paperpaw_text::BitmapFont::advance(&self, char, f32) -> f32
 pub fn paperpaw_text::BitmapFont::glyph(&self, char, f32) -> paperpaw_text::GlyphRef<'_>
 pub fn paperpaw_text::BitmapFont::has_char(&self, char) -> bool
 pub fn paperpaw_text::BitmapFont::is_pack(&[u8]) -> bool
+pub fn paperpaw_text::BitmapFont::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::BitmapFont::line_metrics(&self, f32) -> paperpaw_text::LineMetrics
 pub fn paperpaw_text::BitmapFont::new(impl core::convert::Into<alloc::borrow::Cow<'static, [u8]>>) -> core::result::Result<paperpaw_text::BitmapFont, paperpaw_text::FontError>
 pub fn paperpaw_text::BitmapFont::size_for(&self, f32, &str, bool) -> f32
@@ -91,6 +93,7 @@ pub struct paperpaw_text::StoredPack
 impl paperpaw_text::StoredPack
 pub fn paperpaw_text::StoredPack::advance(&self, char, f32) -> f32
 pub fn paperpaw_text::StoredPack::has_char(&self, char) -> bool
+pub fn paperpaw_text::StoredPack::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::StoredPack::line_metrics(&self, f32) -> paperpaw_text::LineMetrics
 pub fn paperpaw_text::StoredPack::open(alloc::rcs::rc::Rc<dyn paperpaw_text::PackSource>) -> core::result::Result<paperpaw_text::StoredPack, paperpaw_text::FontError>
 pub fn paperpaw_text::StoredPack::render(&self, char, f32) -> paperpaw_text::Glyph

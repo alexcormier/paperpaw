@@ -53,8 +53,8 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, What};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry, Params,
-    Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    Canvas, Color, Command, Commands, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry,
+    Params, Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
     ScreenSpec, Version,
 };
 
@@ -126,7 +126,7 @@ impl Plugin for Home {
         ))?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()));
                 },
             ),
@@ -136,7 +136,7 @@ impl Plugin for Home {
         // editing.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(EDIT_PAGES, "home.edit-pages").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     let params = Params::new().with(params::MODE, "edit");
                     out.push(Command::OpenSlot(slots::HOME, params));
                 },
@@ -153,15 +153,15 @@ impl Plugin for Home {
             r,
             SCREEN.as_str(),
             &[
-                help::Hint::touch("home.tips.quick").zone(Zone::new(0, 0, 1000, 120)),
-                help::Hint::touch("home.tips.back").zone(Zone::new(0, 400, 150, 300)),
-                help::Hint::touch("home.tips.home"),
-                help::Hint::touch("home.tips.tools"),
-                help::Hint::touch("home.tips.arrange"),
-                help::Hint::buttons("home.tips.move"),
-                help::Hint::buttons("home.tips.select"),
-                help::Hint::buttons("home.tips.menu"),
-                help::Hint::buttons("home.tips.panel"),
+                help::HelpHint::touch("home.tips.quick").zone(Zone::new(0, 0, 1000, 120)),
+                help::HelpHint::touch("home.tips.back").zone(Zone::new(0, 400, 150, 300)),
+                help::HelpHint::touch("home.tips.home"),
+                help::HelpHint::touch("home.tips.tools"),
+                help::HelpHint::touch("home.tips.arrange"),
+                help::HelpHint::buttons("home.tips.move"),
+                help::HelpHint::buttons("home.tips.select"),
+                help::HelpHint::buttons("home.tips.menu"),
+                help::HelpHint::buttons("home.tips.panel"),
             ],
         )?;
         r.add_menu_entry(MenuEntry::new(ACTIONS, actions::LIBRARY).order(10))?;
@@ -210,10 +210,10 @@ use widgets::next_minute;
 /// footer.
 fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
     let style = UiStyle::new(env);
-    let footer_height = style.row as u16;
+    let footer_height = style.row();
     let display = env.device.display;
-    let margin = style.margin as u16;
-    let gap = style.gap as u16;
+    let margin = style.margin();
+    let gap = style.gap();
     let footer = Rect::new(
         0,
         display.height.saturating_sub(footer_height),
@@ -305,7 +305,7 @@ impl Dashboard {
             .collect();
         // The pencil (done, when editing) at the right of the footer, if
         // it is wanted; add at the left when editing.
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let side = footer.height;
         self.pencil = Rect::new(display.width - margin - side, footer.y, side, side);
         self.plus = Rect::new(margin, footer.y, side, side);
@@ -377,7 +377,7 @@ impl Dashboard {
             )),
             GridResponse::Button(n) if n >= FOOTER_BASE => {
                 if let Some((_, action)) = self.actions.get(usize::from(n - FOOTER_BASE)) {
-                    cx.command(Command::RunAction(action.clone()));
+                    cx.command(Command::run(action.clone()));
                 }
             }
             _ => {}
@@ -412,60 +412,61 @@ impl Dashboard {
         }
     }
 
-    fn draw_footer(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = self.style;
+    fn draw_footer(&self, ui: &mut ui::Ui<'_>) {
+        let (env, style) = (ui.env(), self.style);
         let f = self.footer;
         let editing = self.grid.editing();
         // Status items at the left, where adding goes while editing.
         if !editing {
             let font = style.font(env);
             if let Some(font) = font {
-                let margin = style.margin as u16;
-                let width = (f.width / 2).saturating_sub(margin + style.gap as u16 * 3);
+                let margin = style.margin();
+                let width = (f.width / 2).saturating_sub(margin + style.gap() * 3);
                 let line = paperpaw_sdk::status::StatusLine::new(
                     Rect::new(margin, f.y, width, f.height),
                     [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
-                    style.small,
-                    style.faint(60),
+                    style.small(),
+                    style.faint(ui::Ink::Note),
                 );
-                line.draw(canvas, env, &font, &Params::new());
+                line.draw(ui.canvas(), env, &font, &Params::new());
             }
         }
         // A dot a page, the current one filled.
         if self.pages > 1 && (editing || env.settings.read(&pages::FOOTER_DOTS)) {
-            let dot = (style.gap * 2 / 3).max(6);
+            let dot = (u32::from(style.gap()) * 2 / 3).max(6);
             let spacing = dot * 2;
             let total = dot * self.pages as u32 + (spacing - dot) * (self.pages as u32 - 1);
             let mut x = i32::from(f.x) + (i32::from(f.width) - total as i32) / 2;
             let y = i32::from(f.y) + (i32::from(f.height) - dot as i32) / 2;
             for page in 0..self.pages {
-                pages::draw_dot(canvas, env, &style, (x, y), dot, page == self.page);
+                pages::draw_dot(ui, (x, y), dot, page == self.page);
                 x += spacing as i32;
             }
         }
-        let size = style.title;
+        let size = style.title();
         let mut icon = |name: &str, area: Rect, ink: Color| {
             let w = ui::icon_width(env, name, size);
             let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-            ui::draw_icon(canvas, env, name, size, x, area, ink);
+            ui.icon(name, size, x, area, ink);
         };
         if editing {
             icon("plus", self.plus, Color::BLACK);
             icon("check", self.pencil, Color::BLACK);
         } else if env.settings.read(&pages::FOOTER_PENCIL) {
-            icon("pencil", self.pencil, style.faint(60));
+            icon("pencil", self.pencil, style.faint(ui::Ink::Note));
         }
         if !editing {
             for (area, action) in &self.actions {
                 let name = env.menus.icon(action.as_str()).unwrap_or("puzzle");
                 let w = ui::icon_width(env, name, size);
                 let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-                ui::draw_icon(canvas, env, name, size, x, *area, style.faint(60));
+                ui.icon(name, size, x, *area, style.faint(ui::Ink::Note));
                 let title = env
                     .menus
                     .title(action.as_str())
                     .map_or(action.as_str(), |t| env.i18n.tr(t));
-                canvas.describe(paperpaw_sdk::semantics::Role::Button, title, *area);
+                ui.canvas()
+                    .describe(paperpaw_sdk::semantics::Role::Button, title, *area);
             }
         }
     }
@@ -476,11 +477,13 @@ impl Screen for Dashboard {
         if self.stale {
             self.layout(env);
         }
+        let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         if let Some(status) = self.status {
-            blocks::draw_status(canvas, env, status);
+            blocks::draw_status(ui.canvas(), env, status);
         }
-        self.draw_footer(canvas, env);
-        self.grid.draw(canvas, env);
+        self.draw_footer(&mut ui);
+        self.grid.draw(ui.canvas(), env);
     }
 
     /// Hidden by a book or another screen: the widgets go with what they
@@ -498,7 +501,7 @@ impl Screen for Dashboard {
         // hidden (its widgets went) or changed, else what they show read
         // again. The focus where wanted.
         self.grid
-            .set_focus_shown(!env.device.input.touch && env.settings.read(&blocks::FOCUS_AT_ONCE));
+            .set_focus_shown(ui::focus_shown(&env) && env.settings.read(&blocks::FOCUS_AT_ONCE));
         if self.stale {
             self.layout(&env);
         } else {

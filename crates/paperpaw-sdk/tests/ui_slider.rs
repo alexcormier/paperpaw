@@ -14,11 +14,14 @@ mod support;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::Role;
-use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::ui::slider::Slider;
+use paperpaw_sdk::ui::slider::SliderDrag;
+use paperpaw_sdk::ui::slider::SliderFocus;
+use paperpaw_sdk::ui::slider::SliderParts;
+use paperpaw_sdk::ui::slider::SliderStep;
+use paperpaw_sdk::ui::slider::SliderView;
 use paperpaw_sdk::ui::slider::{self, key_step, parts};
-use paperpaw_sdk::ui::{
-    Slider, SliderDrag, SliderFocus, SliderParts, SliderStep, SliderView, UiStyle,
-};
 use paperpaw_sdk::{Color, PointerPhase, Rect, SettingSpec};
 use proptest::prelude::*;
 
@@ -26,9 +29,7 @@ use support::{Device, Harness, describe, drawn_outside, frame, pointer};
 
 /// Sizes for tests: no fonts needed.
 fn style() -> UiStyle {
-    let mut style = UiStyle::PLAIN;
-    style.corner = 6;
-    style
+    UiStyle::PLAIN.with_corner(6)
 }
 
 fn slider_strategy() -> impl Strategy<Value = Slider> {
@@ -206,7 +207,7 @@ proptest! {
         let SliderParts {
             minus, track, plus, ..
         } = parts(&style(), band);
-        let margin = style().margin;
+        let margin = u32::from(style().margin());
         prop_assert_eq!(u32::from(minus.x), u32::from(band.x) + margin);
         prop_assert_eq!(plus.right() + margin, band.right());
         prop_assert!(minus.right() <= u32::from(track.x));
@@ -234,11 +235,7 @@ proptest! {
         round in any::<bool>(),
     ) {
         let track = Rect::new(40, 20, width, height);
-        let style = {
-            let mut style = style();
-            style.corner = if round { 6 } else { 0 };
-            style
-        };
+        let style = style().with_corner(if round { 6 } else { 0 });
         let ink = if white { Color::WHITE } else { Color::BLACK };
         let mut frame = frame(500, 120);
         slider.draw_track(&mut frame.canvas(), &style, track, value, ink);
@@ -379,16 +376,32 @@ fn every_way_of_moving_a_step_moves_one_step() {
     assert_eq!(key_step(&actions::BACK), None);
 }
 
+/// A slider in steps of 5.
+static SPACING: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().step(5).slider();
+
 #[test]
 fn sliders_show_on_touch_screens_and_numbers_elsewhere() {
-    let spec = SettingSpec::number(&Setting::new("t.spacing"), "t.spacing", 100, 250, 135)
-        .step(5)
-        .slider();
+    let spec = SettingSpec::number(
+        "t.spacing",
+        "t.spacing",
+        100,
+        250,
+        135,
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&SPACING);
     let touch = Harness::new(Device::TOUCH);
     let buttons = Harness::new(Device::BUTTONS);
     assert!(slider::shows(&touch.env(), &spec));
     assert!(!slider::shows(&buttons.env(), &spec), "buttons: − and +");
-    let plain = SettingSpec::number(&Setting::new("t.size"), "t.size", 1, 9, 3);
+    let plain = SettingSpec::number(
+        "t.size",
+        "t.size",
+        1,
+        9,
+        3,
+        paperpaw_sdk::builtin::groups::OTHER,
+    );
     assert!(!slider::shows(&touch.env(), &plain), "not marked");
 }
 

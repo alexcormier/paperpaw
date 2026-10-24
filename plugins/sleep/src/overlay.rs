@@ -186,8 +186,8 @@ fn box_side(env: &Env<'_>) -> u16 {
 fn placed(env: &Env<'_>, w: u16, h: u16) -> Rect {
     let display = env.device.display;
     let style = UiStyle::new(env);
-    let margin = style.margin as u16;
-    let status = paperpaw_sdk::widgets::line_height(env, style.small) + style.gap as u16;
+    let margin = style.margin();
+    let status = paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap();
     let (w, h) = (
         w.min(display.width.saturating_sub(2 * margin)),
         h.min(display.height.saturating_sub(2 * (margin + status))),
@@ -216,7 +216,7 @@ fn placed(env: &Env<'_>, w: u16, h: u16) -> Rect {
 
 /// The padding of a widget's panel.
 fn pad(env: &Env<'_>) -> u16 {
-    UiStyle::new(env).gap as u16 * 2
+    UiStyle::new(env).gap() * 2
 }
 
 /// `area` less `pad` all round.
@@ -330,7 +330,7 @@ impl Picker {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let note = style.noted_row() as u16;
         let failed = paperpaw_sdk::read_file(env.storage, &crate::data("overlay-failed.txt"), 1024)
             .ok()
@@ -348,7 +348,7 @@ impl Picker {
         Self {
             rows,
             failed,
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
         }
@@ -404,20 +404,22 @@ impl Picker {
 impl Screen for Picker {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.rows.len();
         let title = env.i18n.tr("sleep.setting.overlay-picture");
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         let on = env.i18n.tr("core.state.on");
         let chosen: Vec<bool> = (0..len).map(|row| self.chosen(env, row)).collect();
         let rows = &self.rows;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                let value = if chosen[row] { on } else { "" };
-                ui::draw_value_row(canvas, env, &style, rect, focused, &rows[row].1, value);
-            });
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            let value = if chosen[row] { on } else { "" };
+            ui::Row::value(&rows[row].1, value)
+                .focused(focused)
+                .draw(ui, rect);
+        });
         if let Some((text, area)) = &self.failed {
-            ui::draw_note_line(canvas, env, &style, *area, text);
+            ui.note_line(*area, text);
         }
     }
 
@@ -447,7 +449,7 @@ impl Screen for Picker {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.rows.len()) {

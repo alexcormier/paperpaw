@@ -44,38 +44,38 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.analogue-clock.align", ID, Align::Center),
     widgets::frame_spec("widgets.analogue-clock.frame", ID, Frame::None),
     widgets::padding_spec("widgets.analogue-clock.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.analogue-clock.face",
         "widgets.setting.face",
         &FACES,
         FACES[1],
         ID,
     )
-    .described("widgets.analogue-clock.face.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.analogue-clock.face.help"),
+    SettingSpec::choice(
         "widgets.analogue-clock.ring",
         "widgets.setting.ring",
         &RINGS,
         RINGS[1],
         ID,
     )
-    .described("widgets.analogue-clock.ring.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.analogue-clock.ring.help"),
+    SettingSpec::choice(
         "widgets.analogue-clock.hands",
         "widgets.setting.hands",
         &HANDS,
         HANDS[1],
         ID,
     )
-    .described("widgets.analogue-clock.hands.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.analogue-clock.hands.help"),
+    SettingSpec::choice(
         "widgets.analogue-clock.date",
         "widgets.setting.clock-date",
         &DATES,
         DATES[0],
         ID,
     )
-    .described("widgets.analogue-clock.date.help"),
+    .description("widgets.analogue-clock.date.help"),
     super::date_format_spec(
         "widgets.analogue-clock.date-format",
         ID,
@@ -92,8 +92,11 @@ static SETTINGS: [SettingSpec; 9] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.analogue-clock",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.analogue-clock");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(super::minute_shows),
     )?;
     r.add_settings(&SETTINGS)
@@ -101,7 +104,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let style = paperpaw_sdk::ui::UiStyle::new(env);
-    let face = width.min((style.row * 4) as u16);
+    let face = width.min((u32::from(style.row()) * 4) as u16);
     face + frame_height(env, ID.as_str())
 }
 
@@ -131,9 +134,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // face two thirds of the height at least; the face the rest, round.
     let below = match (&font, date, &date_text) {
         (Some(font), "below", Some(text))
-            if font.measure(style.small, text) <= f32::from(area.width) =>
+            if font.measure(style.small(), text) <= f32::from(area.width) =>
         {
-            let below = line(font, style.small) as u16 + style.gap as u16 / 2;
+            let below = line(font, style.small()) as u16 + style.gap() / 2;
             if below * 3 <= area.height { below } else { 0 }
         }
         _ => 0,
@@ -151,7 +154,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let ink = look.ink;
 
     // Rings round the face.
-    let ring = (radius / 40).max(1) + u32::from(style.line > 1);
+    let ring = (radius / 40).max(1) + u32::from(u32::from(style.line()) > 1);
     match chosen_name(env, ID.as_str(), "ring") {
         "one" => canvas.stroke_circle(center, radius, ring, ink),
         "two" => {
@@ -238,9 +241,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 
     // The date below, placed as the face is (it fits whole: see above).
     if let (true, Some(text)) = (below > 0, &date_text) {
-        let gap = style.gap as u16 / 2;
+        let gap = style.gap() / 2;
         let row = Rect::new(area.x, (top + 2 * r) as u16 + gap, area.width, below - gap);
-        let small = style.small;
+        let small = style.small();
         widgets::draw_line(canvas, env, row, align, small, small, text, look.faint);
     }
 }

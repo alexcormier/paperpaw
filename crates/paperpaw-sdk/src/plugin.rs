@@ -18,8 +18,6 @@ pub struct Manifest {
     /// Plugins translate it with the key `<id>.plugin.description`.
     pub description: Cow<'static, str>,
     pub version: Version,
-    /// The SDK version the plugin was built against.
-    pub sdk: Version,
     /// What it uses beyond its own files, e.g. the network: shown before
     /// it is installed, and the kernel refuses what is not declared
     /// (ADR 0024, ADR 0025).
@@ -37,7 +35,6 @@ impl Manifest {
             name: name.into(),
             version,
             description: Cow::Borrowed(""),
-            sdk: crate::SDK_VERSION,
             uses: Uses::default(),
             how: &[],
         }
@@ -61,11 +58,6 @@ impl Manifest {
     /// ```
     pub fn how(mut self, how: &'static [(&'static str, &'static str)]) -> Self {
         self.how = how;
-        self
-    }
-
-    pub fn sdk(mut self, sdk: Version) -> Self {
-        self.sdk = sdk;
         self
     }
 

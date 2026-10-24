@@ -4,6 +4,7 @@
 # shorter. A type that must stay exhaustive is listed with its reason.
 
 # Exhaustive on purpose
+paperpaw_sdk::library::service::LibraryService  # a service type: its one field is all it is; another takes a new key
 paperpaw_sdk::Handled  # an event is handled or not, and a plugin matches both
 
 # Not decided yet: each leaves as it gets #[non_exhaustive] and a
@@ -50,7 +51,6 @@ paperpaw_platform::ButtonState
 paperpaw_platform::Color
 paperpaw_platform::ColorPanel
 paperpaw_platform::DeviceInfo
-paperpaw_platform::DirEntry
 paperpaw_platform::DisplayInfo
 paperpaw_platform::FrameView
 paperpaw_platform::InputCaps
@@ -77,43 +77,21 @@ paperpaw_platform::pixel::Color
 paperpaw_platform::status::Battery
 paperpaw_platform::status::SystemStatus
 paperpaw_platform::status::WallClock
-paperpaw_platform::storage::DirEntry
 paperpaw_sdk::Direction
 paperpaw_sdk::Metrics
 paperpaw_sdk::PluginInfo
 paperpaw_sdk::Priority
 paperpaw_sdk::SettingCheck
 paperpaw_sdk::Text
-paperpaw_sdk::Version
 paperpaw_sdk::annotations::Annotation
 paperpaw_sdk::annotations::Mark
 paperpaw_sdk::data::Format
-paperpaw_sdk::files::Entry
-paperpaw_sdk::firmware::Firmware
-paperpaw_sdk::firmware::FirmwareCommand
-paperpaw_sdk::firmware::Update
-paperpaw_sdk::install::Digest
-paperpaw_sdk::install::Progress
-paperpaw_sdk::library::BookData
-paperpaw_sdk::library::BookDataKind
 paperpaw_sdk::library::listing::Entry
 paperpaw_sdk::library::listing::Listing
-paperpaw_sdk::memory::MemoryUse
 paperpaw_sdk::native::Fingerprint
-paperpaw_sdk::power::PowerLevel
-paperpaw_sdk::secrets::Listed
-paperpaw_sdk::secrets::Secret
-paperpaw_sdk::secrets::SecretChange
-paperpaw_sdk::served::Access
 paperpaw_sdk::setting::Text
-paperpaw_sdk::time::LocalTime
 paperpaw_sdk::ui::sections::Item
 paperpaw_sdk::ui::sections::Section
-paperpaw_sdk::usage::PluginUsage
-paperpaw_sdk::usage::Usage
-paperpaw_sdk::wifi::Wifi
-paperpaw_sdk::wifi::WifiCommand
-paperpaw_sdk::wifi::WifiNetwork
 paperpaw_sdk::work::Progress
 paperpaw_text::Glyph
 paperpaw_text::GlyphRef

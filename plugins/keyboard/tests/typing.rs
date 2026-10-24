@@ -25,7 +25,7 @@ use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MemoryStorage, Params, Plugin, RegisterError,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MemoryStorage, Params, Plugin, RegisterError,
     Registrar, Version,
 };
 use proptest::prelude::*;
@@ -91,7 +91,7 @@ impl Plugin for Listener {
         // A layout of its own, with variants of its own.
         r.contribute(
             Id::new_static("keyboard.layouts"),
-            "dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; i=ïí".into(),
+            "dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; i=ïí",
         )?;
         // Far too big, and ids that are there already.
         let rows = ["abcdefghijklmnopqrstuvwxyz"; 30].join(" ");
@@ -100,19 +100,18 @@ impl Plugin for Listener {
             Id::new_static("keyboard.layouts"),
             format!(
                 "huge.layout; HUGE; {rows}; a={variants}\nkeyboard.layout.de; XX; abc\ndutch.layout; NX; abc"
-            )
-            .into(),
+            ),
         )?;
         let heard = self.0.clone();
         r.on(TYPED, move |_, typed, _| {
             heard.borrow_mut().push(typed.clone())
         })?;
         // Copies text with a line break and a tab to the clipboard.
-        r.add_action(ActionSpec::new(COPY, "Copy").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(
+            ActionSpec::new(COPY, "Copy").handler(|_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::SetClipboard("  pasted\nline\tend ".into()));
-            },
-        ))
+            }),
+        )
     }
 }
 

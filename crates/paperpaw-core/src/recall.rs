@@ -160,6 +160,10 @@ impl Storage for Recalled {
         self.inner.read_at(path, offset, buf)
     }
 
+    fn modified(&self, path: &str) -> Option<i64> {
+        self.inner.modified(path)
+    }
+
     fn size(&self, path: &str) -> Result<u64, StorageError> {
         {
             let entries = self.recall.entries.borrow();

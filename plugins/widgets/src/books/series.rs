@@ -13,7 +13,7 @@ use core::cell::RefCell;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
@@ -40,15 +40,15 @@ static SETTINGS: [SettingSpec; 12] = [
     widgets::align_spec("widgets.series.align", ID, Align::Center),
     widgets::frame_spec("widgets.series.frame", ID, Frame::None),
     widgets::padding_spec("widgets.series.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.series.size", ID, Size::Medium, false),
-    SettingSpec::fixed_text(
+    widgets::size_spec("widgets.series.size", ID, TextSize::Medium, false),
+    SettingSpec::text(
         "widgets.series.name",
         "widgets.books.setting.series-name",
         "",
         ID,
     )
-    .described("widgets.books.setting.series-name.help"),
-    SettingSpec::fixed_number(
+    .description("widgets.books.setting.series-name.help"),
+    SettingSpec::number(
         "widgets.series.count",
         "widgets.books.setting.count",
         2,
@@ -56,15 +56,15 @@ static SETTINGS: [SettingSpec; 12] = [
         6,
         ID,
     )
-    .described("widgets.setting.count.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.setting.count.help"),
+    SettingSpec::choice(
         "widgets.series.start",
         "widgets.books.setting.series-start",
         &STARTS,
         STARTS[0],
         ID,
     )
-    .described("widgets.books.setting.series-start.help"),
+    .description("widgets.books.setting.series-start.help"),
     widgets::part_spec(
         "widgets.series.caption",
         ID,
@@ -93,7 +93,15 @@ static SETTINGS: [SettingSpec; 12] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
-    add_settings(r, &ID, "widgets.series", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.series");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     let kept: Kept = Rc::default();
     let generation = generation.clone();
     r.add_widget(
@@ -358,7 +366,7 @@ impl Series {
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match self.area {
             Some(area) if self.shown.empty.is_none() => {
-                let look = widgets::look::look(env, WIDGET, area);
+                let look = widgets::widget_look(env, WIDGET, area);
                 let (places, books) = self.places(env, self.content(env, &look));
                 shelf::covers(env, &places, books)
             }
@@ -389,7 +397,7 @@ impl Series {
     }
 
     /// The area below the caption.
-    fn content(&self, env: &Env<'_>, look: &Look) -> Rect {
+    fn content(&self, env: &Env<'_>, look: &WidgetLook) -> Rect {
         if widgets::shows(env, WIDGET, "caption")
             && look.area.height >= 3 * widgets::caption_height(env)
         {
@@ -425,7 +433,7 @@ impl Widget for Series {
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
         let count = count(env, WIDGET, "count").clamp(1, 12) as u16;
         let style = UiStyle::new(env);
-        let cover = (width / count).saturating_sub(style.gap as u16) * 3 / 2;
+        let cover = (width / count).saturating_sub(style.gap()) * 3 / 2;
         cover + shelf::label_height(env) + widgets::caption_height(env) + frame_height(env, WIDGET)
     }
 
@@ -448,7 +456,7 @@ impl Widget for Series {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let look = widgets::look::look(env, WIDGET, area);
+        let look = widgets::widget_look(env, WIDGET, area);
         let rest = self.content(env, &look);
         let (places, books) = self.places(env, rest);
         places

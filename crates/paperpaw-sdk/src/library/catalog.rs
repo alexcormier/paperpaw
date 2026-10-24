@@ -285,8 +285,7 @@ const MAX_CHANGES: usize = 1024;
 
 /// What was noted beside the catalog since it was made: each book's last
 /// status, or that it was removed, by its path hashed (FNV-1a, 64 bits,
-/// all of them, so that two books all but never share one: 12 bytes a
-/// book).
+/// all of them, so that two books all but never share one: 12 bytes a book).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Changes {
@@ -680,8 +679,7 @@ pub enum Sort {
     Added,
 }
 
-/// What books to find in the catalog ([`query`]): all of the conditions
-/// set.
+/// What books to find in the catalog ([`query`]): all of the conditions set.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Query {
@@ -908,17 +906,17 @@ pub fn search_after(
     page(storage, &|record| record.matches(&words), after, n)
 }
 
-/// Writes `records` as the catalog (emptying the log), e.g. for tests of
-/// views.
-#[expect(
-    clippy::let_underscore_must_use,
-    reason = "for tests of views; a catalog not written is made anew by the next walk"
-)]
-pub fn write(storage: &dyn Storage, records: &[Record]) {
+/// Writes `records` as the catalog (emptying the log), e.g. for tests of views.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub fn write(storage: &dyn Storage, records: &[Record]) -> Result<(), crate::data::Error> {
     let mut text = next_header(storage);
     text.extend(records.iter().map(Record::text));
-    let _ = storage.write(&catalog_path(), text.as_bytes());
-    let _ = storage.remove(&log_path());
+    storage.write(&catalog_path(), text.as_bytes())?;
+    match storage.remove(&log_path()) {
+        Ok(()) | Err(StorageError::NotFound) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 // ---- Making the catalog -----------------------------------------------
@@ -1008,7 +1006,7 @@ struct Making {
 #[cfg(any(test, feature = "kernel"))]
 impl Making {
     fn start(env: &Env<'_>) -> Result<Making, StorageError> {
-        let storage = env.storage;
+        let storage = env.storage();
         let log_from = match storage.size(&log_path()) {
             Ok(size) => size,
             Err(StorageError::NotFound) => 0,
@@ -1057,7 +1055,7 @@ impl Making {
     /// opened, where there are none of this file): favourite and opened
     /// as the lists say; `true` where the book was opened.
     fn of_details(&self, env: &Env<'_>, path: &str, size: u64) -> (Record, bool) {
-        let cached = super::book_sized(env.storage, path, size).filter(|b| b.indexed);
+        let cached = super::book_sized(env.storage(), path, size).filter(|b| b.indexed);
         let opened = cached.is_none();
         let book = cached.unwrap_or_else(|| super::index(env, path));
         let fields: Vec<&str> = self.fields.iter().map(String::as_str).collect();
@@ -1332,7 +1330,7 @@ impl Walk {
     /// `fresh` taken from their details; an error where what it needs
     /// cannot be read (nothing is changed then).
     pub fn start(env: &Env<'_>, fresh: Vec<String>) -> Result<Walk, StorageError> {
-        let old = OldCatalog::open(env.storage)?;
+        let old = OldCatalog::open(env.storage())?;
         let making = Making::start(env)?;
         Ok(Walk {
             making,
@@ -1359,7 +1357,7 @@ impl Walk {
     pub fn step(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
         let result = self.go_on(env);
         if result.is_err() {
-            Making::abort(env.storage);
+            Making::abort(env.storage());
         }
         result
     }
@@ -1377,7 +1375,7 @@ impl Walk {
     }
 
     fn go_on(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
-        let storage = env.storage;
+        let storage = env.storage();
         self.making.go_on(storage)?;
         let Some(dir) = self.dir.clone() else {
             let Some(dir) = self.dirs.pop() else {
@@ -1457,11 +1455,11 @@ impl Walk {
     /// out.
     fn list(env: &Env<'_>, dir: &str, listed: usize) -> Result<Option<usize>, StorageError> {
         use core::fmt::Write as _;
-        let storage = env.storage;
+        let storage = env.storage();
         let mut piece = String::with_capacity(LISTED_PIECE);
         let (mut at, mut more) = (0, false);
         let result = storage.list(dir, &mut |entry| {
-            if more || !super::listing::shown(env.formats, entry.name, entry.is_dir) {
+            if more || !super::listing::shown(env.formats(), entry.name, entry.is_dir) {
                 return;
             }
             if at < listed {
@@ -1564,7 +1562,7 @@ impl Rewrite {
     pub fn step(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
         let result = self.go_on(env);
         if result.is_err() {
-            Making::abort(env.storage);
+            Making::abort(env.storage());
         }
         result
     }
@@ -1580,7 +1578,7 @@ impl Rewrite {
     }
 
     fn go_on(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
-        let storage = env.storage;
+        let storage = env.storage();
         self.making.go_on(storage)?;
         if let Some(at) = self.at {
             let mut piece = String::with_capacity(WRITTEN_PIECE);
@@ -1661,7 +1659,8 @@ mod tests {
                 Record::of(&a, &Book::default()),
                 Record::of(&b, &Book::default()),
             ],
-        );
+        )
+        .unwrap();
         note(&storage, &b, Status::new(Some(40), false, true)).unwrap();
         forget(&storage, &a).unwrap();
         let changes = changes(&storage);
@@ -1701,7 +1700,8 @@ mod tests {
                 record.clone(),
                 Record::of("books/Untitled.txt", &Book::default()),
             ],
-        );
+        )
+        .unwrap();
         let mut all = Vec::new();
         each(&storage, &mut |r| all.push(r));
         assert_eq!(all.len(), 2);
@@ -1736,7 +1736,7 @@ mod tests {
         let books: Vec<Record> = (0..5)
             .map(|n| Record::of(&format!("books/{n}.txt"), &Book::default()))
             .collect();
-        write(&storage, &books);
+        write(&storage, &books).unwrap();
         note(&storage, "books/2.txt", Status::new(Some(30), false, true)).unwrap();
         note(&storage, "books/2.txt", Status::new(Some(55), true, true)).unwrap();
         note(&storage, "books/4.txt", Status::new(Some(100), false, true)).unwrap();
@@ -1789,7 +1789,7 @@ mod tests {
             let folder = if n % 3 == 0 { "books/Old" } else { "books" };
             records.push(Record::of(&format!("{folder}/{n}.epub"), &book));
         }
-        write(&storage, &records);
+        write(&storage, &records).unwrap();
         let all = |q: &Query| query(&storage, q, None, 100);
         assert_eq!(all(&Query::new().author("Bob")).len(), 6);
         assert_eq!(all(&Query::new().folder("books/Old")).len(), 4);
@@ -1833,7 +1833,7 @@ mod tests {
         assert_eq!(state(&storage), State::Missing);
         storage.write(&building_path(), b"").unwrap();
         assert_eq!(state(&storage), State::Building);
-        write(&storage, &[]);
+        write(&storage, &[]).unwrap();
         assert!(matches!(state(&storage), State::Ready { .. }));
     }
 
@@ -1851,7 +1851,7 @@ mod tests {
                 Record::of(&format!("books/{i}.epub"), &book)
             })
             .collect();
-        write(&storage, &records);
+        write(&storage, &records).unwrap();
         let by_title = Query::new();
         let mut sorted = records.clone();
         sorted.sort_by_key(|r| by_title.key(r));

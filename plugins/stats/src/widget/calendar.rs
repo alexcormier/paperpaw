@@ -11,7 +11,9 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Padding, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, Widget, WidgetLook, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{
     Arg, Canvas, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, SettingSpec,
 };
@@ -41,30 +43,30 @@ static SETTINGS: [SettingSpec; 11] = [
     widgets::frame_spec("stats.widget.calendar.frame", CALENDAR, Frame::None),
     widgets::padding_spec("stats.widget.calendar.padding", CALENDAR, Padding::Auto),
     widgets::align_spec("stats.widget.calendar.align", CALENDAR, Align::Center),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.calendar.style",
         "stats.setting.calendar",
         &STYLES,
         STYLES[0],
         CALENDAR,
     )
-    .described("stats.setting.calendar.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.calendar.help"),
+    SettingSpec::choice(
         "stats.widget.calendar.weeks",
         "stats.setting.weeks",
         &WEEKS,
         WEEKS[1],
         CALENDAR,
     )
-    .described("stats.setting.weeks.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.weeks.help"),
+    SettingSpec::choice(
         "stats.widget.calendar.cells",
         "stats.setting.cells",
         &CELLS,
         CELLS[0],
         CALENDAR,
     )
-    .described("stats.setting.cells.help"),
+    .description("stats.setting.cells.help"),
     widgets::part_spec(
         "stats.widget.calendar.caption",
         CALENDAR,
@@ -98,7 +100,11 @@ static SETTINGS: [SettingSpec; 11] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&CALENDAR, "stats.widget.calendar"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(CALENDAR, "stats.widget.calendar");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(CALENDAR, "stats.widget.calendar", |_| {
@@ -226,7 +232,7 @@ impl Widget for Calendar {
             0
         };
         // Square days across the width, at most twice a line high.
-        let cell = (inner / 7).min(line(&font, style.small) * 2);
+        let cell = (inner / 7).min(line(&font, style.small()) * 2);
         let cell = match &self.shown {
             Some(s) if s.weeks > 0 => (inner / u16::from(s.weeks + 1)).min(cell),
             _ => cell,
@@ -258,7 +264,7 @@ impl Widget for Calendar {
 
 fn weekdays_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16 {
     if widgets::shows(env, NAME, "weekdays") {
-        line(font, style.small)
+        line(font, style.small())
     } else {
         0
     }
@@ -267,7 +273,7 @@ fn weekdays_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16
 fn footer_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16 {
     let id = NAME;
     if widgets::shows(env, id, "streak") || widgets::shows(env, id, "total") {
-        line(font, style.small) + style.gap as u16 / 2
+        line(font, style.small()) + style.gap() / 2
     } else {
         0
     }
@@ -314,7 +320,7 @@ fn footer_fitting(
 ) -> Option<String> {
     let style = UiStyle::new(env);
     let parts = footer(env, shown);
-    let fits = |text: &str| font.measure(style.small, text) <= f32::from(width);
+    let fits = |text: &str| font.measure(style.small(), text) <= f32::from(width);
     let all = parts.join(" · ");
     if !all.is_empty() && fits(&all) {
         return Some(all);
@@ -323,15 +329,19 @@ fn footer_fitting(
 }
 
 /// Draws `text`, the footer, at the bottom of `block`.
-fn draw_footer(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, block: Rect, text: &str) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+fn draw_footer(ui: &mut ui::Ui<'_>, look: &WidgetLook, block: Rect, text: &str) {
+    let env = ui.env();
+    let style = *ui.style();
+    let Some(font) = ui.font() else {
         return;
     };
-    let small = line(&font, style.small);
-    let x = widgets::align(env, NAME).x(block, font.measure(style.small, text));
+    let small = line(&font, style.small());
+    let x = widgets::align(env, NAME).x(block, font.measure(style.small(), text));
     let row = Rect::new(block.x, block.y + block.height - small, block.width, small);
-    ui::draw_label(canvas, &font, style.small, x, row, text, look.faint);
+    ui::Label::new(text)
+        .px(style.small())
+        .color(look.faint)
+        .draw_from(ui, x, row);
 }
 
 /// The room a day's shade keeps from its cell's edges.
@@ -348,7 +358,7 @@ fn number_size(font: &FontHandle<'_>, style: &UiStyle, cell: u16) -> Option<f32>
     let inner = cell.saturating_sub(2 * cell_pad(cell));
     let width = f32::from(cell) * 0.7;
     let height = i32::from(inner) * 3 / 5;
-    widgets::largest_size(style.text, style.small * 0.7, |size| {
+    widgets::largest_size(style.text(), style.small() * 0.7, |size| {
         let tall = font
             .ink(size, "30")
             .map_or(i32::MAX, |(top, bottom)| bottom - top);
@@ -359,15 +369,15 @@ fn number_size(font: &FontHandle<'_>, style: &UiStyle, cell: u16) -> Option<f32>
 /// A day's cell: its shade, today's ring, its number (`size` large, or
 /// a dot where there is no number and nothing was read).
 fn draw_day(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    look: &Look,
+    ui: &mut ui::Ui<'_>,
+    look: &WidgetLook,
     cell: Rect,
     level: u8,
     number: Option<(u8, f32)>,
     today: bool,
 ) {
-    let style = UiStyle::new(env);
+    let env = ui.env();
+    let style = *ui.style();
     let round = chosen(env, NAME, "cells") == CELLS[1];
     let pad = cell_pad(cell.width);
     let inner = Rect::new(
@@ -395,9 +405,10 @@ fn draw_day(
     let barred = number.is_some() && few && (1..4).contains(&level);
     let thick = (u32::from(inner.height) / 8).max(2);
     if level >= 4 {
-        canvas.fill_round(inner, radius(inner), look.ink);
+        ui.canvas().fill_round(inner, radius(inner), look.ink);
     } else if barred {
-        canvas.fill_round_shaded(inner, radius(inner), shade(look, 1));
+        ui.canvas()
+            .fill_round_shaded(inner, radius(inner), shade(look, 1));
         let full = u32::from(inner.width) * 3 / 5;
         let len = (full * u32::from(level) / 3).max(thick);
         let bar = Rect::new(
@@ -406,17 +417,19 @@ fn draw_day(
             len as u16,
             thick as u16,
         );
-        canvas.fill_round(bar, thick / 2, look.ink);
+        ui.canvas().fill_round(bar, thick / 2, look.ink);
     } else if level > 0 {
-        canvas.fill_round_shaded(inner, radius(inner), shade(look, level));
+        ui.canvas()
+            .fill_round_shaded(inner, radius(inner), shade(look, level));
     }
     if today {
-        let thick = (style.line * 2).clamp(2, u32::from(pad.max(1)) * 2);
-        canvas.stroke_round(cell, thick, radius(cell), look.ink);
+        let thick = (u32::from(style.line()) * 2).clamp(2, u32::from(pad.max(1)) * 2);
+        ui.canvas()
+            .stroke_round(cell, thick, radius(cell), look.ink);
     }
     match number {
         Some((day, size)) => {
-            let Some(font) = style.font(env) else {
+            let Some(font) = ui.font() else {
                 return;
             };
             let mut digits = [0u8; 2];
@@ -439,8 +452,8 @@ fn draw_day(
                 inner.height.saturating_sub(lift),
             );
             let baseline = widgets::ink_baseline(&font, size, text, band);
-            canvas.describe(Role::Text, text, cell);
-            font.draw(canvas, size, x, baseline, text, color);
+            ui.canvas().describe(Role::Text, text, cell);
+            font.draw(ui.canvas(), size, x, baseline, text, color);
         }
         None if level == 0 && !today => {
             let center = Point::new(
@@ -448,7 +461,7 @@ fn draw_day(
                 i32::from(cell.y + cell.height / 2),
             );
             let r = u32::from(cell.width / 10).max(1);
-            canvas.fill_circle(center, r, look.faint);
+            ui.canvas().fill_circle(center, r, look.faint);
         }
         None => {}
     }
@@ -464,9 +477,10 @@ fn two_digits(day: u8, buf: &mut [u8; 2]) -> &str {
     core::str::from_utf8(digits).unwrap_or("")
 }
 
-fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
+fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -489,7 +503,7 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
         (area.width / 7).min(room / rows.max(1))
     };
     // Where the days would be small, the footer goes, then the weekdays.
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     if cell(header, footer) < small {
         footer = 0;
     }
@@ -501,7 +515,7 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
         return;
     }
     let block = super::captioned(
-        canvas,
+        ui.canvas(),
         env,
         id,
         look,
@@ -513,7 +527,7 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
     if header > 0 {
         let from = fmt::week_start(env);
         let two = (0..7).all(|w| {
-            font.measure(style.small, fmt::weekday_short(env, w)) * 1.3 <= f32::from(cell)
+            font.measure(style.small(), fmt::weekday_short(env, w)) * 1.3 <= f32::from(cell)
         });
         for col in 0..7u8 {
             let weekday = (from + col) % 7;
@@ -523,10 +537,13 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
                 super::initial(env, weekday)
             };
             let x = left + cell * u16::from(col);
-            let w = font.measure(style.small, name);
+            let w = font.measure(style.small(), name);
             let row = Rect::new(x, block.y, cell, header);
             let at = f32::from(x) + (f32::from(cell) - w) / 2.0;
-            ui::draw_label(canvas, &font, style.small, at, row, name, look.faint);
+            ui::Label::new(name)
+                .px(style.small())
+                .color(look.faint)
+                .draw_from(&mut ui, at, row);
         }
     }
     let month = date.month;
@@ -544,16 +561,17 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
         let (row, col) = (i as u16 / 7, i as u16 % 7);
         let at = Rect::new(left + col * cell, block.y + header + row * cell, cell, cell);
         let number = size.map(|size| (d.day, size));
-        draw_day(canvas, env, look, at, *level, number, day == shown.today);
+        draw_day(&mut ui, look, at, *level, number, day == shown.today);
     }
     if let Some(text) = footer_text.filter(|_| footer > 0) {
-        draw_footer(canvas, env, look, block, &text);
+        draw_footer(&mut ui, look, block, &text);
     }
 }
 
-fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
+fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -570,16 +588,16 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
         0
     };
     // Where the days would be small, the footer goes.
-    if area.height.saturating_sub(footer) / 7 < line(&font, style.small) / 2 {
+    if area.height.saturating_sub(footer) / 7 < line(&font, style.small()) / 2 {
         footer = 0;
     }
     let from = fmt::week_start(env);
     let labels = widgets::shows(env, id, "weekdays");
     let label_w = if labels {
         (0..7)
-            .map(|w| font.measure(style.small, super::initial(env, w)))
+            .map(|w| font.measure(style.small(), super::initial(env, w)))
             .fold(0.0, f32::max) as u16
-            + style.gap as u16 / 2
+            + style.gap() / 2
     } else {
         0
     };
@@ -593,12 +611,12 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
         return;
     }
     let width = label_w + cell * weeks;
-    let block = super::captioned(canvas, env, id, look, caption, cell * 7 + footer);
+    let block = super::captioned(ui.canvas(), env, id, look, caption, cell * 7 + footer);
     let left = widgets::align(env, id).x(area, f32::from(width)) as u16;
     let skipped = (u16::from(shown.weeks) - weeks) * 7;
     if labels {
         // Every other weekday where the rows are low.
-        let every = if cell >= line(&font, style.small) {
+        let every = if cell >= line(&font, style.small()) {
             1
         } else {
             2
@@ -606,15 +624,10 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
         for row in (0..7u8).step_by(every) {
             let name = super::initial(env, (from + row) % 7);
             let r = Rect::new(left, block.y + cell * u16::from(row), label_w, cell);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                f32::from(left),
-                r,
-                name,
-                look.faint,
-            );
+            ui::Label::new(name)
+                .px(style.small())
+                .color(look.faint)
+                .draw_from(&mut ui, f32::from(left), r);
         }
     }
     for (i, level) in shown.levels.iter().enumerate().skip(usize::from(skipped)) {
@@ -627,10 +640,10 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
             cell,
             cell,
         );
-        draw_day(canvas, env, look, at, *level, None, day == shown.today);
+        draw_day(&mut ui, look, at, *level, None, day == shown.today);
     }
     if let Some(text) = footer_text.filter(|_| footer > 0) {
-        draw_footer(canvas, env, look, block, &text);
+        draw_footer(&mut ui, look, block, &text);
     }
 }
 

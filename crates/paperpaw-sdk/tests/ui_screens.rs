@@ -17,9 +17,10 @@ use std::borrow::Cow;
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::ui::choice::{Choice, Picked};
 use paperpaw_sdk::ui::items::ItemsScreen;
-use paperpaw_sdk::ui::{Reorder, UiStyle};
+use paperpaw_sdk::ui::reorder::Reorder;
 use paperpaw_sdk::{
     Command, Cx, Handled, Id, Output, Params, PointerPhase, Rect, Screen, SettingSpec,
     SettingValue, StatusItemSpec, StatusValue,
@@ -271,10 +272,12 @@ fn status_harness(device: Device, value: &str) -> Harness {
         ));
     }
     h.settings
-        .define(SettingSpec::list(
-            &STATUS,
+        .define(SettingSpec::new(
+            paperpaw_sdk::Id::from(STATUS),
             "t.status",
-            Cow::Owned(value.to_string()),
+            paperpaw_sdk::SettingKind::List,
+            paperpaw_sdk::SettingValue::Text(Cow::Owned(value.to_string())),
+            paperpaw_sdk::builtin::groups::OTHER,
         ))
         .unwrap();
     h
@@ -446,7 +449,7 @@ fn an_item_is_taken_along_only_past_another_and_shows_it() {
         .map(|d| d.area)
         .expect("the focused row");
     // The frame's top, a little inside the row, in the focus's ink.
-    let y = row.y + (style.line * 3 + style.line) as u16;
+    let y = row.y + (u32::from(style.line()) * 3 + u32::from(style.line())) as u16;
     let x = row.x + row.width / 2;
     assert_eq!(frame.view().pixel(x, y), style.focus_ink(true));
 }
@@ -478,7 +481,7 @@ fn a_status_line_setting_without_an_id_writes_nothing() {
     assert_eq!(handled, Handled::Yes);
     assert_eq!(written(&commands), None);
     let style = UiStyle::new(&h.env());
-    assert!(style.row > 0);
+    assert!(u32::from(style.row()) > 0);
 }
 
 /// A line kept under an id it had before shows as chosen, by its own; a

@@ -101,19 +101,11 @@ impl Storage for MemoryStorage {
                 Some((sub, _)) => {
                     dirs.insert(String::from(sub));
                 }
-                None => visit(DirEntry {
-                    name: rest,
-                    is_dir: false,
-                    size: data.len() as u64,
-                }),
+                None => visit(DirEntry::new(rest, false, data.len() as u64)),
             }
         }
         for name in &dirs {
-            visit(DirEntry {
-                name,
-                is_dir: true,
-                size: 0,
-            });
+            visit(DirEntry::new(name, true, 0));
         }
         if found {
             Ok(())
@@ -170,8 +162,9 @@ impl Storage for MemoryStorage {
 }
 
 /// Reads a whole (small) file: [`StorageError::NotFound`] where there is
-/// none, [`StorageError::TooLarge`] for files larger than `limit` bytes,
-/// any other error where it could not be read. Before writing back a
+/// none, [`StorageError::TooLarge`] for files larger than `limit` bytes
+/// or than the heap can give now, any other error where it could not be
+/// read. Before writing back a
 /// changed file, read it with
 /// [`files::load_for_update`](crate::files::load_for_update), which tells
 /// a missing file from one that could not be read.
@@ -181,7 +174,12 @@ pub fn read_file(storage: &dyn Storage, path: &str, limit: usize) -> Result<Vec<
     if size > limit {
         return Err(StorageError::TooLarge);
     }
-    let mut data = alloc::vec![0; size];
+    // Had fallibly: a file the heap cannot take now is too large for it,
+    // not the end of the program.
+    let mut data = Vec::new();
+    data.try_reserve_exact(size)
+        .map_err(|_| StorageError::TooLarge)?;
+    data.resize(size, 0);
     let mut filled = 0;
     while filled < size {
         let n = storage.read_at(path, filled as u64, &mut data[filled..])?;

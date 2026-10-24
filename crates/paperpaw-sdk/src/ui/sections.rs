@@ -11,8 +11,8 @@
 use alloc::vec::Vec;
 use core::ops::Range;
 
-use crate::ui::{ListChange, UiStyle};
-use crate::{Canvas, Point, Rect};
+use crate::ui::ListChange;
+use crate::{Point, Rect};
 
 /// A section: whether it has a heading, and how many entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,10 +170,10 @@ impl Sections {
     }
 
     /// The page with the focus, and the number of pages.
-    pub fn paging(&self) -> (usize, usize) {
+    pub fn paging(&self) -> super::Paging {
         let (page, _) = self.page_of(self.focus);
         let (last, _) = self.page_of(self.len().saturating_sub(1));
-        (page, last + 1)
+        super::Paging::new(page, last + 1)
     }
 
     /// What the page with the focus shows, and where.
@@ -215,14 +215,14 @@ impl Sections {
     /// Draws the page with the focus with `draw_row(canvas, item, rect,
     /// focused)`: the focused entry (if `focus` shows) on black, thin lines
     /// between entries but not above a heading; with
-    /// [`UiStyle::cards`] the entries between headings on cards.
+    /// [`UiStyle::cards`](crate::ui::UiStyle::cards) the entries between headings on cards.
     pub fn draw(
         &self,
-        canvas: &mut Canvas<'_>,
-        style: &UiStyle,
+        ui: &mut super::Ui<'_>,
         focus: bool,
-        mut draw_row: impl FnMut(&mut Canvas<'_>, Item, Rect, bool),
+        mut draw_row: impl FnMut(&mut super::Ui<'_>, Item, Rect, bool),
     ) {
+        let style = ui.style();
         let visible = self.visible();
         if style.cards {
             // Entry `e`'s section, its place there, whether it has a heading.
@@ -231,7 +231,7 @@ impl Sections {
                     .map(|(s, w)| (s, w, self.sections[s].heading))
             };
             super::rows::draw_cards(
-                canvas,
+                ui.canvas(),
                 style,
                 &visible,
                 |item| matches!(item, Item::Entry(_)),
@@ -253,18 +253,18 @@ impl Sections {
         for (n, &(item, rect)) in visible.iter().enumerate() {
             let focused = focus && item == Item::Entry(self.focus);
             if let Item::Entry(_) = item {
-                canvas
+                ui.canvas()
                     .describe(crate::semantics::Role::Row, "", rect)
                     .focused(focused);
             }
             if focused {
-                super::rows::draw_entry_focus(canvas, style, rect);
+                super::rows::draw_entry_focus(ui.canvas(), style, rect);
             } else if matches!(item, Item::Entry(_))
                 && matches!(visible.get(n + 1), Some((Item::Entry(_), _)))
             {
-                crate::ui::draw_separator(canvas, style, rect, 0);
+                crate::ui::draw_separator(ui.canvas(), style, rect, 0);
             }
-            draw_row(canvas, item, rect, focused);
+            draw_row(ui, item, rect, focused);
         }
     }
 
@@ -375,7 +375,7 @@ mod tests {
         );
         list.turn(true);
         assert_eq!(page(&list), [Item::Heading(3), Item::Entry(4)]);
-        assert_eq!(list.paging(), (2, 3));
+        assert_eq!(list.paging(), crate::ui::Paging::new(2, 3));
         assert_eq!(list.turn(true), ListChange::None);
         assert_eq!(list.section_of(4), Some((3, 0)));
         list.turn(false);
@@ -399,9 +399,17 @@ mod tests {
     fn cards_are_open_where_a_page_cuts_them() {
         use crate::ui::rows::{card_frame, card_style};
         let style = card_style();
+        let kit = crate::test_kit::Kit::new(false);
+        let env = kit.env();
         // Black where a card's line is across the list at `y`.
         let line = |list: &Sections, y: u16| {
-            let frame = card_frame(|canvas| list.draw(canvas, &style, false, |_, _, _, _| {}));
+            let frame = card_frame(|canvas| {
+                list.draw(
+                    &mut crate::ui::Ui::new(canvas, &env, &style),
+                    false,
+                    |_, _, _, _| {},
+                )
+            });
             frame.view().pixel(50, y) == Color::BLACK
         };
         // A heading and two entries a page, its heading again on the next.
@@ -423,8 +431,7 @@ mod tests {
     fn many_entries_take_no_more_memory() {
         let mut list = list(&[(true, 100_000)]);
         list.focus_on(99_999);
-        let (page, pages) = list.paging();
-        assert_eq!(page + 1, pages);
+        assert!(list.paging().is_last());
         assert_eq!(list.page_entries().end, 100_000);
         let empty = Sections::new(Rect::new(0, 0, 100, 5), 10, 20, alloc::vec![]);
         assert!(empty.is_empty());

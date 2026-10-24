@@ -6,7 +6,9 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Padding, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, Widget, WidgetLook, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, chosen, frame_height, goal, line, shade};
@@ -31,22 +33,22 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("stats.widget.week.frame", WEEK, Frame::None),
     widgets::padding_spec("stats.widget.week.padding", WEEK, Padding::Auto),
     widgets::align_spec("stats.widget.week.align", WEEK, Align::Left),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.week.period",
         "stats.setting.period",
         &PERIODS,
         PERIODS[0],
         WEEK,
     )
-    .described("stats.setting.period.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.period.help"),
+    SettingSpec::choice(
         "stats.widget.week.shape",
         "stats.setting.bars",
         &SHAPES,
         SHAPES[0],
         WEEK,
     )
-    .described("stats.setting.bars.help"),
+    .description("stats.setting.bars.help"),
     widgets::part_spec(
         "stats.widget.week.caption",
         WEEK,
@@ -64,7 +66,11 @@ static SETTINGS: [SettingSpec; 9] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&WEEK, "stats.widget.week"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(WEEK, "stats.widget.week");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(WEEK, "stats.widget.week", |_| Box::new(Week::default()))
@@ -141,7 +147,7 @@ impl Widget for Week {
         frame_height(env, id)
             + caption_room(env, id)
             + labels_height(env, &font, &style)
-            + (style.row as f32 * 1.4) as u16
+            + (style.row() as f32 * 1.4) as u16
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -161,7 +167,7 @@ impl Widget for Week {
 /// The height of the row of weekdays below the bars, if it shows.
 fn labels_height(env: &Env<'_>, font: &paperpaw_sdk::FontHandle<'_>, style: &UiStyle) -> u16 {
     if widgets::shows(env, NAME, "labels") {
-        line(font, style.small) + style.gap as u16 / 2
+        line(font, style.small()) + style.gap() / 2
     } else {
         0
     }
@@ -197,9 +203,10 @@ fn label(env: &Env<'_>, days: &[Shown]) -> alloc::string::String {
     clippy::too_many_lines,
     reason = "longer than the limit from before it was set; split it when it is next changed"
 )]
-fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]) {
+fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[Shown]) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -207,8 +214,8 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
     let (full, time) = (label(env, days), total(env, days));
     let caption = super::caption(env, id, look.area, &[&full, &time]);
     let area = super::below_caption(env, caption, look.area);
-    let area = super::captioned(canvas, env, id, look, caption, area.height);
-    let small = line(&font, style.small);
+    let area = super::captioned(ui.canvas(), env, id, look, caption, area.height);
+    let small = line(&font, style.small());
     let labels = labels_height(env, &font, &style);
     // Where the bars would be low, the weekdays go.
     let labels = if area.height.saturating_sub(labels) < small * 2 {
@@ -216,7 +223,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
     } else {
         labels
     };
-    let thin = style.line.max(1);
+    let thin = u32::from(style.line()).max(1);
     // Room above the bars for the goal's line and rounded tops.
     let top = thin as u16 * 2;
     let chart = Rect::new(
@@ -241,11 +248,11 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
     let column_of = |i: u32| (width * i / n, width * (i + 1) / n - width * i / n);
     // Two letters where every column has room for them, else one.
     let (_, narrowest) = column_of(0);
-    let two = (0..7).all(|w| font.measure(style.small, short(w)) * 1.4 <= narrowest as f32);
+    let two = (0..7).all(|w| font.measure(style.small(), short(w)) * 1.4 <= narrowest as f32);
     // Where even one letter a day is crowded, only the weeks' first days
     // and today are named.
-    let every =
-        (0..7).all(|w| font.measure(style.small, super::initial(env, w)) * 1.6 <= narrowest as f32);
+    let every = (0..7)
+        .all(|w| font.measure(style.small(), super::initial(env, w)) * 1.6 <= narrowest as f32);
     let first_day = fmt::week_start(env);
     let base = i32::from(chart.y + chart.height);
     let few_grays = env
@@ -270,9 +277,9 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
                 look.ink
             };
             if color == look.ink {
-                canvas.fill_round(bar, radius.min(h / 4), color);
+                ui.canvas().fill_round(bar, radius.min(h / 4), color);
             } else {
-                canvas.fill_round_shaded(bar, radius.min(h / 4), color);
+                ui.canvas().fill_round_shaded(bar, radius.min(h / 4), color);
             }
         } else if !day.to_come {
             // A day without reading: a light stub on the base; where the
@@ -285,11 +292,12 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
                     bar_w as u16,
                     thin as u16,
                 );
-                canvas.fill(stub, look.faint);
+                ui.canvas().fill(stub, look.faint);
             } else {
                 let h = (thin * 2).max(3);
                 let stub = Rect::new(bx as u16, (base - h as i32) as u16, bar_w as u16, h as u16);
-                canvas.fill_round_shaded(stub, radius.min(h / 2), shade(look, 1));
+                ui.canvas()
+                    .fill_round_shaded(stub, radius.min(h / 2), shade(look, 1));
             }
         }
         if labels > 0 && (every || day.today || day.weekday == first_day) {
@@ -298,7 +306,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
             } else {
                 super::initial(env, day.weekday)
             };
-            let w = font.measure(style.small, name);
+            let w = font.measure(style.small(), name);
             // Under its bar, but inside the area (the first and last
             // columns' names may be wider than half a column).
             let right = f32::from(area.x + area.width) - w;
@@ -314,17 +322,21 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
             } else {
                 look.faint
             };
-            ui::draw_label(canvas, &font, style.small, at, row, name, color);
+            ui::Label::new(name)
+                .px(style.small())
+                .color(color)
+                .draw_from(&mut ui, at, row);
             if day.today && mark_today {
                 // Underlined: seen also where faint text is drawn black.
                 let y = i32::from(row.y + row.height) - thin as i32;
-                canvas.fill_rect(at as i32, y, w as u32, thin, look.ink);
+                ui.canvas()
+                    .fill_rect(at as i32, y, w as u32, thin, look.ink);
             }
         }
     }
     if let Some(goal) = goal {
         let y = base - (u64::from(chart.height) * goal / most) as i32;
         let end = i32::from(area.x + area.width);
-        super::dashed(canvas, i32::from(area.x), end, y, thin, look.faint);
+        super::dashed(ui.canvas(), i32::from(area.x), end, y, thin, look.faint);
     }
 }

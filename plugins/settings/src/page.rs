@@ -2,6 +2,7 @@
 //! in a chooser.
 
 use super::*;
+use paperpaw_sdk::ui::slider::{Slider, SliderDrag, SliderFocus, SliderView};
 
 /// The id of setting `id` of group `of` for its placement `placement`:
 /// `widgets.clock.face` of `widgets.clock@2` is `widgets.clock@2.face`.
@@ -63,7 +64,7 @@ impl Preview {
         let heading = Rect::new(area.x, area.y, area.width, heading);
         let shown = Rect::new(area.x, heading.y + heading.height, area.width, height);
         // A line below it, then the settings.
-        let used = heading.height + height + style.gap as u16;
+        let used = heading.height + height + style.gap();
         *area = Rect::new(
             area.x,
             area.y + used,
@@ -77,28 +78,23 @@ impl Preview {
         })
     }
 
-    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
+    fn draw(&self, ui: &mut ui::Ui<'_>) {
+        let (env, style) = (ui.env(), ui.style());
         let all = self.heading.union(&self.area);
-        if all.intersection(&canvas.clip()).is_none() {
+        if all.intersection(&ui.canvas().clip()).is_none() {
             return;
         }
-        ui::draw_heading(
-            canvas,
-            env,
-            style,
-            self.heading,
-            env.i18n.tr("settings.preview"),
-        );
-        self.widget.draw(canvas, env, self.area);
+        ui.heading(self.heading, env.i18n.tr("settings.preview"));
+        self.widget.draw(ui.canvas(), env, self.area);
         // As the lines between rows.
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let line = Rect::new(
             self.area.x + margin,
-            self.area.y + self.area.height + style.gap as u16 / 2,
+            self.area.y + self.area.height + style.gap() / 2,
             self.area.width.saturating_sub(2 * margin),
-            style.line as u16,
+            style.line(),
         );
-        canvas.fill_tint(line, Color::gray(170));
+        ui.canvas().fill_tint(line, Color::gray(170));
     }
 
     /// Lays it out anew for the values shown; `true` if it changed.
@@ -139,7 +135,7 @@ pub(super) struct GroupPage {
     pub(super) edit: ui::NumberEdit,
     /// A slider's knob taken along by a finger: its row and the value it
     /// had before (shown, not kept, until the finger is lifted).
-    pub(super) drag: ui::SliderDrag,
+    pub(super) drag: SliderDrag,
     pub(super) dragged: Option<(usize, i64)>,
     /// Rows have room for descriptions.
     pub(super) noted: bool,
@@ -161,7 +157,7 @@ impl GroupPage {
     pub(super) fn new(env: &Env<'_>, group: Id) -> Self {
         // A placement's group (`widgets.clock@2`): the widget's settings,
         // as that placement has them.
-        let own = group.placed().and_then(|plain| Id::parse(&plain).ok());
+        let own = group.unplaced();
         let of = own.as_ref().unwrap_or(&group);
         let title = env
             .settings
@@ -182,19 +178,19 @@ impl GroupPage {
             .collect::<Vec<SettingSpec>>();
         // Sections: settings without one first, then the standard ones,
         // then the others as they come.
-        let mut sections: Vec<Option<&str>> = Vec::new();
+        let mut sections: Vec<Option<Cow<'static, str>>> = Vec::new();
         for spec in &specs {
-            let section = spec.extra().section.as_deref();
+            let section = spec.section_key();
             if !sections.contains(&section) {
                 sections.push(section);
             }
         }
-        let rank = |section: &Option<&str>| match section {
+        let rank = |section: &Option<Cow<'static, str>>| match section {
             None => 0,
-            Some(key) => setting_sections::ORDER
+            Some(key) => group_sections::ORDER
                 .iter()
-                .position(|s| s == key)
-                .map_or(setting_sections::ORDER.len() + 1, |p| p + 1),
+                .position(|s| *s == key.as_ref())
+                .map_or(group_sections::ORDER.len() + 1, |p| p + 1),
         };
         sections.sort_by_key(rank);
         // Headings only where there is more than one part.
@@ -209,13 +205,13 @@ impl GroupPage {
             }
         }
         for section in &sections {
-            if let Some(key) = section.filter(|_| headed) {
+            if let Some(key) = section.as_deref().filter(|_| headed) {
                 entries.push(Row::Heading(env.i18n.tr(key).to_string()));
             }
             entries.extend(
                 specs
                     .iter()
-                    .filter(|spec| spec.extra().section.as_deref() == *section)
+                    .filter(|spec| spec.section_key() == *section)
                     .cloned()
                     .map(|spec| Row::Setting(Box::new(spec))),
             );
@@ -242,7 +238,11 @@ impl GroupPage {
             .then(|| Preview::of(env, &style, &group, &mut area))
             .flatten();
         let heading = ui::heading_height(env, &style);
-        let row = if noted { style.noted_row() } else { style.row } as u16;
+        let row = if noted {
+            style.noted_row()
+        } else {
+            u32::from(style.row())
+        } as u16;
         let slider_row = ui::slider::row_height(&style, noted);
         let number_room = ui::number_room(
             env,
@@ -284,7 +284,7 @@ impl GroupPage {
                     slider_row
                         + ui::slider::title_extra(env, &style, area.width, title, &number_room)
                 }
-                (Row::Reset | Row::Theme(_) | Row::Action(_), _) => style.row as u16,
+                (Row::Reset | Row::Theme(_) | Row::Action(_), _) => style.row(),
             })
             .collect();
         let headings = entries
@@ -298,9 +298,9 @@ impl GroupPage {
             style,
             header,
             rows: ui::Rows::new(area, heights, headings),
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             edit: ui::NumberEdit::default(),
-            drag: ui::SliderDrag::default(),
+            drag: SliderDrag::default(),
             dragged: None,
             noted,
             number_room,
@@ -416,7 +416,7 @@ impl GroupPage {
                 return;
             }
             Some(Row::Action(action)) => {
-                cx.command(Command::RunAction(action.clone()));
+                cx.command(Command::run(action.clone()));
                 return;
             }
             _ => {}
@@ -442,10 +442,11 @@ impl GroupPage {
 impl Screen for GroupPage {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, &self.title, None, paging(&self.rows));
+            .draw(&mut ui, &self.title, None, paging(&self.rows));
         if let Some(preview) = &self.preview {
-            preview.draw(canvas, env, &style);
+            preview.draw(&mut ui);
         }
         let entries = &self.entries;
         let editing = self.edit.active();
@@ -454,51 +455,43 @@ impl Screen for GroupPage {
         let all_lines = &self.lines;
         let touch = env.device.input.touch;
         self.rows
-            .draw(canvas, &style, self.keys, |canvas, index, rect, focused| {
+            .draw(&mut ui, self.keys, |ui, index, rect, focused| {
+                // The rows that are not settings: a row high.
+                let row = Rect::new(rect.x, rect.y, rect.width, style.row());
                 let spec = match &entries[index] {
-                    Row::Heading(title) => {
-                        ui::draw_heading(canvas, env, &style, rect, title);
-                        return;
-                    }
+                    Row::Heading(title) => return ui.heading(rect, title),
                     Row::Reset => {
                         let title = env.i18n.tr("settings.reset-page");
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
-                        return;
+                        return ui::Row::plain(title).focused(focused).draw(ui, row);
                     }
                     Row::Theme(chooser) => {
                         let title = env.i18n.tr(chooser.title());
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
                         let name = super::themes::applied_name(env, *chooser);
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, &name);
-                        return;
+                        return ui::Row::value(title, &name).focused(focused).draw(ui, row);
                     }
                     Row::Action(action) => {
                         let title = env.actions.get(action.as_str()).map_or("", |a| &a.title);
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
                         let title = env.i18n.tr(title);
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
-                        return;
+                        return ui::Row::plain(title).focused(focused).draw(ui, row);
                     }
                     Row::Setting(spec) => spec,
                 };
+                let canvas = ui.canvas();
                 let title = env.i18n.tr(&spec.title);
                 let note = spec.description.as_deref().map_or("", |d| env.i18n.tr(d));
                 let note = if noted { note } else { "" };
                 let mut value = ui::setting_value(env, spec);
-                if let Some(slider) = ui::Slider::of(spec).filter(|_| ui::slider::shows(env, spec))
-                {
+                if let Some(slider) = Slider::of(spec).filter(|_| ui::slider::shows(env, spec)) {
                     let focus = match (focused, editing) {
-                        (false, _) => ui::SliderFocus::None,
-                        (true, false) => ui::SliderFocus::Focused,
-                        (true, true) => ui::SliderFocus::Editing,
+                        (false, _) => SliderFocus::None,
+                        (true, false) => SliderFocus::Focused,
+                        (true, true) => SliderFocus::Editing,
                     };
-                    let view =
-                        ui::SliderView::new(rect, env.settings.int(spec.id.as_str()), &value)
-                            .title(title)
-                            .note(note)
-                            .focus(focus)
-                            .room(&self.number_room);
+                    let view = SliderView::new(rect, env.settings.int(spec.id.as_str()), &value)
+                        .title(title)
+                        .note(note)
+                        .focus(focus)
+                        .room(&self.number_room);
                     slider.draw_row(canvas, env, &style, &view);
                     return;
                 }
@@ -548,7 +541,10 @@ impl Screen for GroupPage {
         let env = *cx.env();
         if self.edit.active() {
             let spec = self.focused().cloned();
-            return self.edit.on_action(&env, spec.as_ref(), action, cx);
+            return self
+                .edit
+                .on_action(&env, spec.as_ref(), action, cx)
+                .handled();
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
             change.request(cx);
@@ -568,7 +564,7 @@ impl Screen for GroupPage {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging(&self.rows));
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.rows.hit(gesture.start) else {
@@ -591,7 +587,7 @@ impl Screen for GroupPage {
             if let Some((minus, plus)) = self.steps(&env, index, rect) {
                 let x = gesture.start.x;
                 // A little room around the buttons: easier to hit.
-                let slack = i32::from(self.style.gap as u16);
+                let slack = i32::from(self.style.gap());
                 let within = |r: Rect| x >= i32::from(r.x) - slack && x < r.right() as i32 + slack;
                 if within(minus) {
                     self.change(&env, -1, cx);
@@ -627,7 +623,7 @@ impl Screen for GroupPage {
             return Handled::Yes;
         }
         // Anything else acts at once; the focus hides again.
-        let keys = !env.device.input.touch;
+        let keys = ui::focus_shown(&env);
         if index != self.rows.focus() || keys != self.keys {
             self.rows.set_focus(index);
             self.keys = keys;
@@ -651,7 +647,7 @@ impl Screen for GroupPage {
         };
         let Some((index, slider, id, rect)) = index.and_then(|i| {
             let spec = self.spec(i).filter(|s| ui::slider::shows(&env, s))?;
-            let slider = ui::Slider::of(spec)?;
+            let slider = Slider::of(spec)?;
             Some((i, slider, spec.id.clone(), self.rows.rect_of(i)?))
         }) else {
             return Handled::No;
@@ -681,14 +677,14 @@ impl Screen for GroupPage {
             }
         };
         match step {
-            ui::SliderStep::Moved(value) => {
+            ui::slider::SliderStep::Moved(value) => {
                 cx.command(Command::PreviewSettings(alloc::vec![(
                     id,
                     Some(SettingValue::Int(value))
                 )]));
             }
-            ui::SliderStep::Same => {}
-            ui::SliderStep::Chosen(value) => {
+            ui::slider::SliderStep::Same => {}
+            ui::slider::SliderStep::Chosen(value) => {
                 self.dragged = None;
                 if value != before {
                     cx.command(Command::SetSetting(id, SettingValue::Int(value)));
@@ -697,7 +693,7 @@ impl Screen for GroupPage {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             }
-            ui::SliderStep::Cancelled => {
+            ui::slider::SliderStep::Cancelled => {
                 self.dragged = None;
                 end_preview(&env, cx);
                 cx.request_redraw();

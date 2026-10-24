@@ -21,8 +21,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MenuEntry,
-    Params, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    MenuEntry, Params, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use crate::{MORE, PLUGIN};
@@ -45,7 +45,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         Box::new(|env, params| Box::new(Screens::new(env, params))),
     ))?;
     r.add_action(ActionSpec::new(OPEN, "plugin-manager.screens").handler(
-        |_: &Env<'_>, out: &mut Vec<Command>| {
+        |_: &Env<'_>, _, out: &mut Commands| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         },
     ))?;
@@ -99,7 +99,7 @@ fn known_path() -> String {
 /// Asks once, for a screen newly offered for a slot that has several,
 /// whether to use it now (not where the user chose, nor where it is
 /// used already). The first start only notes what there is.
-fn offer(env: &Env<'_>, out: &mut Vec<Command>) {
+fn offer(env: &Env<'_>, out: &mut Commands) {
     let now: Vec<String> = choosable(env)
         .into_iter()
         .flat_map(|slot| {
@@ -174,7 +174,7 @@ impl Screens {
     fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let display = env.device.display;
         let area =
             paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -253,48 +253,51 @@ impl Screen for Screens {
         let len = self.rows.len();
         self.list.set_len(len);
         let title = self.title(env);
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, &title, None, self.list.paging(len));
+            .draw(&mut ui, &title, None, self.list.paging(len));
         let (rows, slot) = (&self.rows, &self.slot);
         let chosen = slot.as_ref().and_then(|s| env.slot_choice(s.as_str()));
         let mark = env.i18n.tr("plugin-manager.screens.chosen");
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let (title, value, note) = match &rows[index] {
-                    Row::Slot(slot) => {
-                        let place = env.i18n.tr(env.slot_title(slot.as_str()).unwrap_or(""));
-                        let value = match env.slot_choice(slot.as_str()) {
-                            Some(screen) => name(env, screen),
-                            None => env.i18n.tr("plugin-manager.screens.automatic").to_string(),
-                        };
-                        (
-                            place.to_string(),
-                            alloc::format!("{value} ›"),
-                            String::new(),
-                        )
-                    }
-                    Row::ReadingApp => {
-                        let Some(spec) = env.settings.spec(settings::READING_APP.as_str()) else {
-                            return;
-                        };
-                        let value = ui::setting_value(env, spec);
-                        let title = env.i18n.tr(&spec.title).to_string();
-                        (title, alloc::format!("{value} ›"), String::new())
-                    }
-                    Row::Automatic => {
-                        let value = if chosen.is_none() { mark } else { "" };
-                        let note = env.i18n.tr("plugin-manager.screens.automatic.help");
-                        let title = env.i18n.tr("plugin-manager.screens.automatic");
-                        (title.to_string(), value.to_string(), note.to_string())
-                    }
-                    Row::Candidate(screen) => {
-                        let value = if chosen == Some(screen) { mark } else { "" };
-                        let note = env.i18n.tr(env.screen_title(screen).unwrap_or(""));
-                        (name(env, screen), value.to_string(), note.to_string())
-                    }
-                };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
-            });
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (title, value, note) = match &rows[index] {
+                Row::Slot(slot) => {
+                    let place = env.i18n.tr(env.slot_title(slot.as_str()).unwrap_or(""));
+                    let value = match env.slot_choice(slot.as_str()) {
+                        Some(screen) => name(env, screen),
+                        None => env.i18n.tr("plugin-manager.screens.automatic").to_string(),
+                    };
+                    (
+                        place.to_string(),
+                        alloc::format!("{value} ›"),
+                        String::new(),
+                    )
+                }
+                Row::ReadingApp => {
+                    let Some(spec) = env.settings.spec(settings::READING_APP.as_str()) else {
+                        return;
+                    };
+                    let value = ui::setting_value(env, spec);
+                    let title = env.i18n.tr(&spec.title).to_string();
+                    (title, alloc::format!("{value} ›"), String::new())
+                }
+                Row::Automatic => {
+                    let value = if chosen.is_none() { mark } else { "" };
+                    let note = env.i18n.tr("plugin-manager.screens.automatic.help");
+                    let title = env.i18n.tr("plugin-manager.screens.automatic");
+                    (title.to_string(), value.to_string(), note.to_string())
+                }
+                Row::Candidate(screen) => {
+                    let value = if chosen == Some(screen) { mark } else { "" };
+                    let note = env.i18n.tr(env.screen_title(screen).unwrap_or(""));
+                    (name(env, screen), value.to_string(), note.to_string())
+                }
+            };
+            ui::Row::value(&title, &value)
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -335,7 +338,7 @@ impl Screen for Screens {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

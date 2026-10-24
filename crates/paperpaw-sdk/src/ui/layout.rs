@@ -1,6 +1,6 @@
 //! Placing parts without computing positions by hand: a column of parts
 //! one below the other ([`Stack`]), equal columns side by side
-//! ([`columns`]), a grid of cells the focus moves through ([`Grid`]), a
+//! ([`columns`]), a grid of cells the focus moves through ([`CellGrid`]), a
 //! group on a card or in a frame ([`draw_card`]) and a row of segments,
 //! one of them chosen, e.g. tabs over a page ([`Segments`]).
 //!
@@ -17,6 +17,7 @@
 //! assert_eq!((ok.width, cancel.x, cancel.right()), (234, 246, 480));
 //! ```
 
+use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
 use paperpaw_graphics::Canvas;
@@ -200,14 +201,14 @@ impl Stack {
 /// focus goes with the buttons (left and right along the cells, up and
 /// down a row).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Grid {
+pub struct CellGrid {
     area: Rect,
     columns: u16,
     cell_height: u16,
     gap: u16,
 }
 
-impl Grid {
+impl CellGrid {
     /// The grid in `area`; at least one column, cells at least a pixel
     /// tall.
     pub fn new(area: Rect, columns: u16, cell_height: u16, gap: u16) -> Self {
@@ -327,7 +328,10 @@ pub(crate) fn paint_frame(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, 
         Frame::Card if style.grays <= 2 => {
             // A light gray would be a heavy pattern on black and white:
             // the sparsest there is, in a thin line as cards in lists.
-            canvas.fill_round_shaded(area, style.corner, style.ink(Ink::CardPattern));
+            let card = style.ink(Ink::Card);
+            let sparser = |c: u8| c + (255 - c) / 2;
+            let pattern = Color::rgb(sparser(card.r), sparser(card.g), sparser(card.b));
+            canvas.fill_round_shaded(area, style.corner, pattern);
             let line = (style.line / 2).max(1);
             canvas.stroke_round(area, line, style.corner, Color::BLACK);
         }
@@ -339,33 +343,53 @@ pub(crate) fn paint_frame(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, 
 /// A row of segments side by side, one of them chosen: a few options to
 /// pick from at a glance, or tabs over a page. Each segment is a button
 /// ([`draw_button`](super::draw_button)), the chosen one on; with the
-/// buttons, left and right move the focus, *Select* chooses.
+/// buttons, left and right move the focus, *Select* chooses. They keep
+/// their labels, translation keys (or text that is none) translated where
+/// they are measured and drawn, as [`Chips`](super::Chips) do: drawing and
+/// hitting allocate nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segments {
     cells: Vec<Rect>,
+    labels: Vec<Cow<'static, str>>,
 }
 
 impl Segments {
-    /// `count` segments in `area`, the style's gap apart.
-    pub fn new(style: &UiStyle, area: Rect, count: usize) -> Self {
+    /// Segments with `labels` in `area`, of equal width, the style's gap
+    /// apart.
+    pub fn new<L: Into<Cow<'static, str>>>(
+        style: &UiStyle,
+        area: Rect,
+        labels: impl IntoIterator<Item = L>,
+    ) -> Self {
+        let labels = keep(labels);
         Self {
-            cells: columns(area, count, style.gap as u16),
+            cells: columns(area, labels.len(), style.gap as u16),
+            labels,
         }
     }
 
     /// Segments with `labels` in `area`, from its top, every word whole:
     /// side by side where each fits its share, else in more rows
     /// ([`button_cells`]); as high as [`Segments::height_for`] says.
-    pub fn fitted(env: &Env<'_>, style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
+    pub fn fitted<L: Into<Cow<'static, str>>>(
+        env: &Env<'_>,
+        style: &UiStyle,
+        area: Rect,
+        labels: impl IntoIterator<Item = L>,
+    ) -> Self {
+        let labels = keep(labels);
+        let shown: Vec<&str> = labels.iter().map(|l| env.i18n.tr(l)).collect();
         Self {
-            cells: button_cells(env, style, area, labels, style.gap as u16),
+            cells: button_cells(env, style, area, &shown, style.gap as u16),
+            labels,
         }
     }
 
     /// The height [`Segments::fitted`] takes for `labels` in an area
     /// `width` wide: [`Segments::height`] where they fit side by side.
     pub fn height_for(env: &Env<'_>, style: &UiStyle, width: u16, labels: &[&str]) -> u16 {
-        button_cells_height(env, style, width, labels, style.gap as u16)
+        let shown: Vec<&str> = labels.iter().map(|l| env.i18n.tr(l)).collect();
+        button_cells_height(env, style, width, &shown, style.gap as u16)
     }
 
     /// The height a row of segments takes: a button's in a row that can
@@ -399,29 +423,33 @@ impl Segments {
         }
     }
 
-    /// Draws the segments with `labels`, `chosen` on and `focus` (where
-    /// the focus is on them) focused.
-    pub fn draw(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        style: &UiStyle,
-        labels: &[&str],
-        chosen: usize,
-        focus: Option<usize>,
-    ) {
-        for (i, (cell, label)) in self.cells.iter().zip(labels).enumerate() {
+    /// The label of segment `index`, as given (a translation key).
+    pub fn label(&self, index: usize) -> Option<&str> {
+        self.labels.get(index).map(|label| &**label)
+    }
+
+    /// Draws the segments, `chosen` on and `focus` (where the focus is on
+    /// them) focused.
+    pub fn draw(&self, ui: &mut super::Ui<'_>, chosen: usize, focus: Option<usize>) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
+        for (i, (cell, label)) in self.cells.iter().zip(&self.labels).enumerate() {
             super::draw_button(
                 canvas,
                 env,
                 style,
                 *cell,
-                label,
+                env.i18n.tr(label),
                 i == chosen,
                 focus == Some(i),
             );
         }
     }
+}
+
+/// `labels` as the parts keep them: keys without a copy.
+fn keep<L: Into<Cow<'static, str>>>(labels: impl IntoIterator<Item = L>) -> Vec<Cow<'static, str>> {
+    labels.into_iter().map(Into::into).collect()
 }
 
 #[cfg(test)]
@@ -457,7 +485,7 @@ mod tests {
 
     #[test]
     fn a_grid_places_hits_and_steps() {
-        let grid = Grid::new(Rect::new(0, 0, 310, 220), 3, 100, 5);
+        let grid = CellGrid::new(Rect::new(0, 0, 310, 220), 3, 100, 5);
         assert_eq!((grid.rows(), grid.per_page()), (2, 6));
         assert_eq!(grid.cell(4), Rect::new(105, 105, 100, 100));
         // Page 1 begins anew at the top.
@@ -476,7 +504,7 @@ mod tests {
 
     #[test]
     fn segments_hit_and_step_within_their_row() {
-        let segments = Segments::new(&STYLE, Rect::new(0, 0, 300, 40), 3);
+        let segments = Segments::new(&STYLE, Rect::new(0, 0, 300, 40), ["a", "b", "c"]);
         let first = segments.cell(0).unwrap();
         assert_eq!(
             segments.hit(Point::new(i32::from(first.x) + 1, 10)),

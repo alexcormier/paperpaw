@@ -599,7 +599,7 @@ pub mod settings {
     pub const HEADER_LIGHT: &str = "core.header.light";
     pub const HEADER_PLAIN: &str = "core.header.plain";
     /// The frame of every widget whose own the reader did not choose: one
-    /// of [`widgets::look::ALL_FRAMES`](crate::widgets::look::ALL_FRAMES)
+    /// of [`widgets::ALL_FRAMES`](crate::widgets::ALL_FRAMES)
     /// (each widget its own at first).
     pub const WIDGET_FRAME: Setting<Text> = Setting::new("core.widgets.frame");
     /// Corners of highlights, buttons and boxes: one of [`CORNERS`].
@@ -801,7 +801,7 @@ pub mod groups {
 /// order is 0, the default, names none: it is listed at the end of the
 /// section for customising, by name. A group shows the icon its plugin
 /// gives it (`Registrar::add_icon` with its id), else a plugin's.
-pub mod settings_sections {
+pub mod settings_page {
     use crate::Id;
 
     /// Text, status bars, library, statistics, synchronisation.
@@ -814,9 +814,9 @@ pub mod settings_sections {
 
 /// Parts of setting groups shared by plugins, in the order shown: a
 /// setting names one with
-/// [`SettingSpec::section`](crate::SettingSpec::section). Other parts
+/// `SettingSpec::section_key`. Other parts
 /// (any translation key) follow these.
-pub mod setting_sections {
+pub mod group_sections {
     /// The reading font, its size and weight.
     pub const FONT: &str = "core.setting-section.font";
     /// How a page is set: spacing, margins, justification, hyphenation.
@@ -834,7 +834,7 @@ pub mod setting_sections {
 /// Sections of the main menu ([`menus::MAIN`]): plugins put their
 /// entries in one by their order (reading 1 to 29, tools 31 to 79,
 /// system 81 to 99).
-pub mod sections {
+pub mod menu_sections {
     use crate::Id;
 
     /// Home, library and the like.

@@ -81,10 +81,7 @@ impl Book {
                 i32::from(room.y) + i32::from(room.height) / 2,
             )
         });
-        let line = self
-            .page_view(self.lines())
-            .line_at(at.x, at.y)
-            .map(|l| l.start);
+        let line = self.page_view(self.lines()).line_at(at).map(|l| l.start);
         let mut tapped = events::PageLayerTapped::new(layer.clone(), self.path.clone(), at.x, at.y);
         if let Some(line) = line {
             tapped = tapped.section(line.section).offset(line.offset);
@@ -117,11 +114,11 @@ impl Book {
         let style = UiStyle::new(env);
         let font = style.font(env)?;
         let label = env.i18n.tr("reader.link-back");
-        let pad = style.gap as f32;
-        let width = ui::button_width(&style, font.measure(style.small, label));
+        let pad = style.gap() as f32;
+        let width = ui::button_width(&style, font.measure(style.small(), label));
         // Within the top margin where it is wide enough, so it covers no
         // text.
-        let line = font.line_metrics(style.small).line_height;
+        let line = font.line_metrics(style.small()).line_height;
         let top = self.content_top();
         let height = (line + pad).min(top - 4.0).max(line);
         let y = ((top - height) / 2.0).max(0.0);
@@ -133,14 +130,14 @@ impl Book {
         ))
     }
 
-    pub(super) fn draw_back(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    pub(super) fn draw_back(&self, ui: &mut ui::Ui<'_>) {
+        let env = ui.env();
         let Some(area) = self.back_area(env) else {
             return;
         };
         // A button as the interface's others.
-        let style = UiStyle::new(env);
         let label = env.i18n.tr("reader.link-back");
-        ui::draw_button(canvas, env, &style, area, label, false, false);
+        ui.button(area, label, false, false);
     }
 
     /// Where a tap sets or removes a bookmark: the top right corner.
@@ -186,12 +183,7 @@ impl Book {
 
     /// A note's sign in the right margin, beside the first line of its
     /// highlight (the highlights themselves are marks, see `marks`).
-    pub(super) fn draw_note_signs(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        words: &[WordBox],
-    ) {
+    pub(super) fn draw_note_signs(&self, ui: &mut ui::Ui<'_>, words: &[WordBox]) {
         let highlights: Vec<&Mark> = self
             .marks
             .iter()
@@ -200,8 +192,8 @@ impl Book {
         if highlights.is_empty() {
             return;
         }
-        let style = UiStyle::new(env);
-        let size = style.small;
+        let style = ui.style();
+        let size = style.small();
         let columns = &self.typography.columns;
         for mark in highlights.iter().filter(|m| m.noted) {
             if let Some(first) = words.iter().find(|w| mark.overlaps(w.start, w.end)) {
@@ -211,8 +203,8 @@ impl Book {
                     Some(i) if i + 1 < columns.len() => columns[i].right() as f32,
                     _ => self.right_edge(),
                 };
-                let x = right + (style.gap as f32) / 2.0;
-                ui::draw_icon(canvas, env, "note", size, x, first.area, Color::BLACK);
+                let x = right + (style.gap() as f32) / 2.0;
+                ui.icon("note", size, x, first.area, Color::BLACK);
             }
         }
     }

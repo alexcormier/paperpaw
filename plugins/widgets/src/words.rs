@@ -20,11 +20,10 @@ use alloc::borrow::Cow;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
-use alloc::vec::Vec;
 use core::cell::Cell;
 
 use paperpaw_sdk::widgets;
-use paperpaw_sdk::{Canvas, Command, Env, Id, RegisterError, Registrar, Storage};
+use paperpaw_sdk::{Canvas, Commands, Env, Id, RegisterError, Registrar, Storage};
 
 use crate::{frame_height, today};
 
@@ -64,7 +63,7 @@ impl Changes {
 
     /// What widget `id` keeps changed (a quote turned, an item ticked
     /// off): the screens showing it read it anew.
-    fn changed(&self, out: &mut Vec<Command>, id: &Id) {
+    fn changed(&self, out: &mut Commands, id: &Id) {
         self.0.set(self.0.get().wrapping_add(1));
         out.push(widgets::changed(id));
     }
@@ -140,8 +139,8 @@ impl Turns {
 /// down to the small size, broken between words only
 /// ([`widgets::draw_message`]).
 /// Nothing where not even a line has room.
-fn draw_empty(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, text: &str) {
-    let small = paperpaw_sdk::ui::UiStyle::new(env).small;
+fn draw_empty(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook, text: &str) {
+    let small = paperpaw_sdk::ui::UiStyle::new(env).small();
     if widgets::line_height(env, small) <= look.area.height {
         widgets::draw_message(canvas, env, look, text);
     }

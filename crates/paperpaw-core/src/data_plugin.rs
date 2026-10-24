@@ -21,14 +21,14 @@
 //!   marks.ini      words marked on book pages by patterns, a section each:
 //!                  [names] title, pattern (one or more), the look
 //!                  (background = yellow, line = wavy …); formats 2
-//!   menus.ini      entries of menus, a section a menu: [core.reader-menu]
-//!                  add = my.night after core.toc; [core.reader-more]
-//!                  hide = stats.open;
-//!                  a menu of one's own: [tools] title, entries = a.x, b.y
+//!   menus.ini      entries of menus: another plugin's as
+//!                  [menu core.reader-menu] add = my.night after core.toc,
+//!                  hide = stats.open; a menu of one's own: [tools] title,
+//!                  entries = a.x (a line each, see `formats`)
 //!   actions.ini    actions made of steps, a section each: [night] title,
-//!                  icon, run = core.night-mode=on, core.font-size=14,
-//!                  notify:Good night, open:core.library, emit:my.event,
-//!                  another.action (at most 16 steps)
+//!                  icon, run = core.night-mode=on, run = notify:my.key,
+//!                  run = open:core.library, run = emit:my.event,
+//!                  run = another.action (a step a line, at most 16)
 //!   icons.ini      icons of actions and settings: item = icon-name
 //!   points/*.txt   lines for a point (`<point>.txt`, see
 //!                  `Registrar::contribute`): keyboard layouts, About lines
@@ -58,12 +58,13 @@ use paperpaw_sdk::FontFace;
 use paperpaw_sdk::presets::Preset;
 use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, Version};
 
+mod formats;
+use formats::{actions, menus, setup_steps};
+
 /// Largest data file read (a translation catalog, a key map).
 const MAX_FILE: usize = 64 * 1024;
 /// Largest `plugin.ini`.
 const MAX_MANIFEST: usize = 4 * 1024;
-/// Most steps of an action of `actions.ini`.
-const MAX_STEPS: usize = 16;
 /// Most files in `points/`.
 const MAX_POINTS: usize = 16;
 /// Most lines a plugin contributes to points, all files together.
@@ -355,273 +356,6 @@ fn own_id(plugin: &Id, name: &str, line: u32) -> Result<Id, RegisterError> {
         Some(id) => Ok(id),
         None => parsed_id(&format!("{plugin}.{name}"), line),
     }
-}
-
-/// A step of an action of `actions.ini`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Step {
-    /// `<setting>=<value>`, the value as written in `paperpaw.ini`.
-    Set(Id, String),
-    /// `<action>`.
-    Run(Id),
-    /// `open:<slot>`.
-    Open(Id),
-    /// `notify:<text>`.
-    Notify(String),
-    /// `emit:<event>`.
-    Emit(Id),
-}
-
-impl Step {
-    fn parse(text: &str, line: u32) -> Result<Step, RegisterError> {
-        let text = text.trim();
-        if let Some(text) = text.strip_prefix("notify:") {
-            return Ok(Step::Notify(text.trim().to_string()));
-        }
-        if let Some(slot) = text.strip_prefix("open:") {
-            return Ok(Step::Open(parsed_id(slot, line)?));
-        }
-        if let Some(event) = text.strip_prefix("emit:") {
-            return Ok(Step::Emit(parsed_id(event, line)?));
-        }
-        match text.split_once('=') {
-            Some((setting, value)) => Ok(Step::Set(
-                parsed_id(setting, line)?,
-                value.trim().to_string(),
-            )),
-            None => Ok(Step::Run(parsed_id(text, line)?)),
-        }
-    }
-
-    /// The command of this step; a value not of the setting's kind (or a
-    /// setting not there) makes none.
-    fn command(&self, env: &paperpaw_sdk::Env<'_>) -> Option<paperpaw_sdk::Command> {
-        use paperpaw_sdk::{Command, Params};
-        Some(match self {
-            Step::Set(id, text) => {
-                let value = env.settings.spec(id.as_str())?.kind.parse(text)?;
-                Command::SetSetting(id.clone(), value)
-            }
-            Step::Run(action) => Command::RunAction(action.clone()),
-            Step::Open(slot) => Command::OpenSlot(slot.clone(), Params::new()),
-            Step::Notify(text) => Command::Notify(text.clone()),
-            Step::Emit(event) => Command::Emit(event.clone(), Params::new()),
-        })
-    }
-}
-
-/// An action of `actions.ini` as read: its id, title, icon, steps and
-/// the line it begins on.
-struct ReadAction {
-    id: Id,
-    title: String,
-    icon: Option<String>,
-    steps: Vec<Step>,
-    line: u32,
-}
-
-/// An action of `actions.ini`, with its icon.
-struct MadeAction {
-    id: Id,
-    spec: paperpaw_sdk::ActionSpec,
-    icon: Option<String>,
-}
-
-/// The actions of an `actions.ini`, a section each: `title`, `icon` and
-/// `run`, its steps separated by commas. None runs an action of the same
-/// file: they would run each other without end.
-fn actions(plugin: &Id, source: &str) -> Result<Vec<MadeAction>, RegisterError> {
-    let mut found: Vec<ReadAction> = Vec::new();
-    for entry in paperpaw_config::parse(source) {
-        let entry = entry.map_err(parse_error)?;
-        if entry.section.is_empty() {
-            continue;
-        }
-        let id = own_id(plugin, entry.section, entry.line)?;
-        if found.last().is_none_or(|last| last.id != id) {
-            let (title, icon, steps, line) = (String::new(), None, Vec::new(), entry.line);
-            found.push(ReadAction {
-                id,
-                title,
-                icon,
-                steps,
-                line,
-            });
-        }
-        let Some(ReadAction {
-            title, icon, steps, ..
-        }) = found.last_mut()
-        else {
-            continue;
-        };
-        let value = entry.value.as_str();
-        match entry.key {
-            "title" => *title = value.trim().to_string(),
-            "icon" => *icon = Some(value.trim().to_string()),
-            "run" => {
-                for text in value.split(',').filter(|t| !t.trim().is_empty()) {
-                    steps.push(Step::parse(text, entry.line)?);
-                }
-            }
-            _ => {}
-        }
-    }
-    let ids: Vec<Id> = found.iter().map(|action| action.id.clone()).collect();
-    for action in &found {
-        for step in &action.steps {
-            let problem = match step {
-                Step::Emit(event) if event.namespace() != plugin.as_str() => {
-                    Some(format!("`{}`: emits only events of its own", action.id))
-                }
-                _ => None,
-            };
-            if let Some(message) = problem {
-                return Err(RegisterError::Parse {
-                    line: action.line,
-                    message: Cow::Owned(message),
-                });
-            }
-        }
-    }
-    let mut made = Vec::new();
-    for ReadAction {
-        id,
-        title,
-        icon,
-        steps,
-        line,
-    } in found
-    {
-        let problem = if steps.len() > MAX_STEPS {
-            Some(format!("`{id}`: more than {MAX_STEPS} steps"))
-        } else if steps
-            .iter()
-            .any(|step| matches!(step, Step::Run(action) if ids.contains(action)))
-        {
-            Some(format!("`{id}`: runs an action of the same file"))
-        } else {
-            None
-        };
-        if let Some(message) = problem {
-            return Err(RegisterError::Parse {
-                line,
-                message: Cow::Owned(message),
-            });
-        }
-        let title = if title.is_empty() {
-            id.as_str().to_string()
-        } else {
-            title
-        };
-        let spec = paperpaw_sdk::ActionSpec::new(id.clone(), title).handler(move |env, out| {
-            out.extend(steps.iter().filter_map(|step| step.command(env)));
-        });
-        made.push(MadeAction { id, spec, icon });
-    }
-    Ok(made)
-}
-
-/// The entries of a `menus.ini`, a section a menu: `add = <item>` (also
-/// `<item> after <other>`) and `hide = <items>` for any menu; `title`
-/// and `entries` make a menu of one's own, an action of that name that
-/// shows it.
-fn menus(r: &mut Registrar, plugin: &Id, source: &str) -> Result<(), RegisterError> {
-    let mut order: i16 = 0;
-    for entry in paperpaw_config::parse(source) {
-        let entry = entry.map_err(parse_error)?;
-        if entry.section.is_empty() {
-            continue;
-        }
-        let value = entry.value.as_str();
-        let line = entry.line;
-        match entry.key {
-            "title" => {
-                let menu = own_id(plugin, entry.section, line)?;
-                r.add_action(paperpaw_sdk::ActionSpec::new(
-                    menu.clone(),
-                    value.trim().to_string(),
-                ))?;
-            }
-            "entries" => {
-                let menu = own_id(plugin, entry.section, line)?;
-                for item in value.split(',').filter(|i| !i.trim().is_empty()) {
-                    order = order.saturating_add(10);
-                    let entry = paperpaw_sdk::MenuEntry::new(menu.clone(), parsed_id(item, line)?);
-                    r.add_menu_entry(entry.order(order))?;
-                }
-            }
-            "add" => {
-                let menu = parsed_id(entry.section, line)?;
-                let (item, after) = match value.split_once(" after ") {
-                    Some((item, after)) => (item, Some(after)),
-                    None => (value.as_ref(), None),
-                };
-                let item = parsed_id(item, line)?;
-                match after {
-                    Some(after) => {
-                        let place = paperpaw_sdk::MenuPlace::After(parsed_id(after, line)?);
-                        r.place_menu_entry(menu, item, place)?;
-                    }
-                    None => r.add_menu_entry(paperpaw_sdk::MenuEntry::new(menu, item))?,
-                }
-            }
-            "hide" => {
-                let menu = parsed_id(entry.section, line)?;
-                for item in value.split(',').filter(|i| !i.trim().is_empty()) {
-                    r.hide_menu_entry(menu.clone(), parsed_id(item, line)?)?;
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-/// The steps of a `setup.ini`, a section each: `setting` (or `screen`),
-/// `order`, `title` and `help`.
-fn setup_steps(
-    plugin: &Id,
-    source: &str,
-) -> Result<Vec<paperpaw_sdk::setup::SetupStepSpec>, RegisterError> {
-    use paperpaw_sdk::setup::{SetupPage, SetupStepSpec};
-    let mut steps: Vec<(Id, Option<SetupPage>, i32, String, String, u32)> = Vec::new();
-    for entry in paperpaw_config::parse(source) {
-        let entry = entry.map_err(parse_error)?;
-        if entry.section.is_empty() {
-            continue;
-        }
-        let id = own_id(plugin, entry.section, entry.line)?;
-        if steps.last().is_none_or(|(last, ..)| *last != id) {
-            steps.push((id, None, 100, String::new(), String::new(), entry.line));
-        }
-        let Some((_, page, order, title, help, _)) = steps.last_mut() else {
-            continue;
-        };
-        let value = entry.value.as_str();
-        match entry.key {
-            "setting" => *page = Some(SetupPage::Setting(parsed_id(&value, entry.line)?)),
-            "screen" => *page = Some(SetupPage::Screen(parsed_id(&value, entry.line)?)),
-            "order" => {
-                *order = value.trim().parse().map_err(|_| RegisterError::Parse {
-                    line: entry.line,
-                    message: Cow::Owned(format!("invalid order `{value}`")),
-                })?;
-            }
-            "title" => *title = value.trim().to_string(),
-            "help" => *help = value.trim().to_string(),
-            _ => {}
-        }
-    }
-    steps
-        .into_iter()
-        .map(|(id, page, order, title, help, line)| {
-            let page = page.ok_or_else(|| RegisterError::Parse {
-                line,
-                message: Cow::Owned(format!("`{id}`: no setting or screen")),
-            })?;
-            Ok(SetupStepSpec::new(id, title, page).order(order).help(help))
-        })
-        .collect()
 }
 
 /// The fonts `[fonts]` in a `plugin.ini` binds to roles, where the plugin
@@ -1129,7 +863,9 @@ fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String>
         .filter(|id| id.as_str() == id.namespace())
         .ok_or_else(|| format!("invalid id `{id}`"))?;
     let version = match version {
-        Some(text) => Version::parse(&text).ok_or_else(|| format!("invalid version `{text}`"))?,
+        Some(text) => {
+            Version::try_parse(&text).map_err(|why| format!("invalid version `{text}`: {why}"))?
+        }
         None => Version::new(0, 1, 0),
     };
     let name = name.unwrap_or_else(|| id.as_str().to_string());
@@ -1204,6 +940,36 @@ mod tests {
             Some("p { line-height: 1.6 }")
         );
         assert_eq!(warnings.len(), 2, "{warnings:?}");
+    }
+
+    #[test]
+    fn a_pre_release_a_version_does_not_hold_is_refused_saying_so() {
+        let storage = MemoryStorage::new()
+            .with(
+                "plugins/a/plugin.ini",
+                "[plugin]
+name = A
+version = 1.0.0-beta.2
+",
+            )
+            .with(
+                "plugins/b/plugin.ini",
+                "[plugin]
+name = B
+version = 1.0.0-gamma
+",
+            );
+        let mut warnings = Vec::new();
+        let storage = shared(storage);
+        let plugins = discover(&storage, "plugins", &mut |w| warnings.push(w));
+        assert_eq!(plugins.len(), 1, "{warnings:?}");
+        assert_eq!(plugins[0].manifest.version.pre_name(), Some("beta"));
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].contains("invalid version `1.0.0-gamma`")
+                && warnings[0].contains("alpha, beta, dev, pre or rc"),
+            "{warnings:?}"
+        );
     }
 
     #[test]
@@ -1355,78 +1121,9 @@ kind = Not An Id
         assert!(parse_manifest(&ini("formats = new\n"), "large").is_err());
     }
 
-    /// Steps of an action as written; an action with too many steps or
-    /// one running an action of its own file is refused.
+    /// Fonts bound to roles in `[fonts]` of `plugin.ini`.
     #[test]
-    fn actions_are_made_of_steps() {
-        let step = |text| Step::parse(text, 1).unwrap();
-        assert_eq!(
-            step(" notify:Hello there "),
-            Step::Notify("Hello there".into())
-        );
-        assert_eq!(
-            step("open:core.library"),
-            Step::Open(Id::new_static("core.library"))
-        );
-        assert_eq!(
-            step("emit:my.event"),
-            Step::Emit(Id::new_static("my.event"))
-        );
-        assert_eq!(
-            step("core.font-size = 14"),
-            Step::Set(Id::new_static("core.font-size"), "14".into())
-        );
-        assert_eq!(step("core.home"), Step::Run(Id::new_static("core.home")));
-        assert!(Step::parse("Not An Id", 1).is_err());
-        let plugin = Id::new_static("cosy");
-        // Only its own events, no setting of the lock.
-        assert!(actions(&plugin, "[a]\nrun = emit:core.started\n").is_err());
-        assert!(actions(&plugin, "[a]\nrun = emit:cosy.done\n").is_ok());
-        assert!(
-            actions(&plugin, "[a]\nrun = lock.kind=lock.kind.off\n").is_ok(),
-            "refused as it runs, see vet_reserved"
-        );
-        let many = alloc::vec!["core.home"; MAX_STEPS + 1].join(", ");
-        assert!(
-            actions(
-                &plugin,
-                &format!(
-                    "[a]
-run = {many}
-"
-                )
-            )
-            .is_err()
-        );
-        assert!(
-            actions(
-                &plugin,
-                "[a]
-run = cosy.b
-[b]
-run = core.home
-"
-            )
-            .is_err()
-        );
-        let made = actions(
-            &plugin,
-            "[cosy.c]
-title = C
-run = core.home
-",
-        )
-        .unwrap();
-        assert_eq!(made[0].id.as_str(), "cosy.c");
-        assert!(
-            setup_steps(
-                &plugin,
-                "[s]
-order = 3
-"
-            )
-            .is_err()
-        );
+    fn fonts_are_bound_to_roles() {
         assert_eq!(
             roles(
                 "[plugin]

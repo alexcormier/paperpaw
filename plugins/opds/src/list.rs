@@ -53,11 +53,11 @@ impl ListScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // The note below as high as its words need, at least a row and a half.
         let hint = ui::tr_input(env, "opds.hint");
         let help = ui::note_line_height(env, &style, display.width, hint);
-        let line = ((style.control_row as u16) * 3 / 2).max(help);
+        let line = ((style.control_row()) * 3 / 2).max(help);
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -100,7 +100,7 @@ impl ListScreen {
             self.redraw(cx);
             return false;
         }
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         catalogs::save(env, &self.catalogs, &mut out);
         for command in out {
             cx.command(command);
@@ -113,7 +113,7 @@ impl ListScreen {
         match self.rows().get(index).copied() {
             Some(Row::Sync) => {
                 let mut sync = self.sync.borrow_mut();
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 if sync.running() {
                     sync.stop(&mut out);
                 } else if !env.caps.network {
@@ -173,7 +173,7 @@ impl ListScreen {
                     self.message = Some(env.i18n.tr("opds.no-network").to_string());
                     return self.redraw(cx);
                 }
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 let catalog = self.catalogs[i].clone();
                 self.sync
                     .borrow_mut()
@@ -268,21 +268,17 @@ impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let rows = self.rows();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("opds.title"),
             None,
             self.list.paging(rows.len()),
         );
         let catalogs = &self.catalogs;
         let running = self.sync.borrow().running();
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value, note) = match rows[index] {
                     Row::Sync if running => (
                         env.i18n.tr("opds.stop").to_string(),
@@ -312,12 +308,14 @@ impl Screen for ListScreen {
                         String::new(),
                     ),
                 };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
-            },
-        );
-        canvas.fill(self.status, Color::WHITE);
+                ui::Row::value(&title, &value)
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        ui.canvas().fill(self.status, Color::WHITE);
         let text = self.status_text(env);
-        ui::draw_note_line(canvas, env, &style, self.status, &text);
+        ui.note_line(self.status, &text);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -354,7 +352,7 @@ impl Screen for ListScreen {
                 .header
                 .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

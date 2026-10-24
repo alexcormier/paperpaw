@@ -26,7 +26,7 @@ impl BookList {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height - top);
         let books = store::books(env.storage);
         let seconds = totals::seconds_per_book(env.storage, &books);
@@ -57,46 +57,34 @@ impl Screen for BookList {
         let style = self.style;
         let len = self.books.len();
         let title = env.i18n.tr("stats.books");
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
-            ui::draw_message(
-                canvas,
-                env,
-                &style,
-                self.list.area(),
-                env.i18n.tr("stats.no-books"),
-            );
+            ui.message(self.list.area(), env.i18n.tr("stats.no-books"));
             return;
         }
         let books = &self.books;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let (book, seconds) = &books[index];
-                let mut note = authors(&book.authors);
-                if book.last_open > 0 {
-                    let day = fmt::day_of(env, book.last_open as u32);
-                    let last = env.i18n.format(
-                        "stats.last-read",
-                        &[("date", Arg::Str(&fmt::date(env, day)))],
-                    );
-                    if !note.is_empty() {
-                        note.push_str(" · ");
-                    }
-                    note.push_str(&last);
-                }
-                let value = fmt::duration(env, *seconds);
-                ui::draw_noted_row(
-                    canvas,
-                    env,
-                    &style,
-                    rect,
-                    focused,
-                    &book.title,
-                    &value,
-                    &note,
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (book, seconds) = &books[index];
+            let mut note = authors(&book.authors);
+            if book.last_open > 0 {
+                let day = fmt::day_of(env, book.last_open as u32);
+                let last = env.i18n.format(
+                    "stats.last-read",
+                    &[("date", Arg::Str(&fmt::date(env, day)))],
                 );
-            });
+                if !note.is_empty() {
+                    note.push_str(" · ");
+                }
+                note.push_str(&last);
+            }
+            let value = fmt::duration(env, *seconds);
+            ui::Row::value(&book.title, &value)
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -125,7 +113,7 @@ impl Screen for BookList {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.books.len()) else {

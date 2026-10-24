@@ -162,7 +162,7 @@ impl GroupList {
                 if e.link.is_none() {
                     heading
                 } else {
-                    style.row as u16
+                    style.row()
                 }
             })
             .collect();
@@ -177,7 +177,7 @@ impl GroupList {
             style,
             header,
             rows: ui::Rows::new(area, heights, headings),
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             icon_room,
             covered: Covered::default(),
         }
@@ -207,7 +207,7 @@ impl GroupList {
                     Params::new().with(ID, id.as_str().to_string()),
                 ));
             }
-            Some(Link::Page(action)) => cx.command(Command::RunAction(action.clone())),
+            Some(Link::Page(action)) => cx.command(Command::run(action.clone())),
             Some(Link::Advanced) => {
                 let advanced = cx.env().settings.read(&ADVANCED);
                 cx.command(Command::set(&ADVANCED, !advanced));
@@ -225,32 +225,37 @@ impl GroupList {
 impl Screen for GroupList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("settings.title"),
             None,
             paging(&self.rows),
         );
         let (entries, room) = (&self.entries, self.icon_room);
         self.rows
-            .draw(canvas, &style, self.keys, |canvas, index, rect, focused| {
+            .draw(&mut ui, self.keys, |ui, index, rect, focused| {
                 let entry = &entries[index];
                 let Some(link) = &entry.link else {
-                    ui::draw_heading(canvas, env, &style, rect, &entry.title);
+                    ui.heading(rect, &entry.title);
                     return;
                 };
                 let ink = style.focus_ink(focused);
                 let icon = entry.icon.as_deref();
-                let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
+                let rect = ui.row_icon(rect, room, icon, ink);
                 if *link == Link::Advanced {
                     let on = env.settings.read(&ADVANCED);
-                    ui::draw_switch_row(canvas, env, &style, rect, focused, &entry.title, "", on);
+                    ui::Row::switch(&entry.title, on)
+                        .focused(focused)
+                        .draw(ui, rect);
                 } else if *link == Link::Search || *link == Link::Reset {
-                    ui::draw_value_row(canvas, env, &style, rect, focused, &entry.title, "");
+                    ui::Row::value(&entry.title, "")
+                        .focused(focused)
+                        .draw(ui, rect);
                 } else {
-                    ui::draw_value_row(canvas, env, &style, rect, focused, &entry.title, "›");
+                    ui::Row::value(&entry.title, "›")
+                        .focused(focused)
+                        .draw(ui, rect);
                 }
             });
     }
@@ -274,13 +279,13 @@ impl Screen for GroupList {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging(&self.rows));
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.rows.hit(gesture.start) {
             Some(index) => {
                 self.rows.set_focus(index);
-                self.keys = !cx.env().device.input.touch;
+                self.keys = ui::focus_shown(cx.env());
                 self.choose(index, cx);
                 Handled::Yes
             }

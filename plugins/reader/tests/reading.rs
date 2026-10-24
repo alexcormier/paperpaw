@@ -978,7 +978,7 @@ fn page_indexes_of_layouts_left_do_not_pile_up() {
     let storage = Shared::default();
     let mut reading = Reading::new(storage.clone());
     reading.open();
-    for size in 10..20 {
+    for size in 7..=16 {
         set(
             &mut reading,
             settings::FONT_SIZE.static_str(),
@@ -1208,7 +1208,7 @@ impl Plugin for MenuLook {
         let entries = self.0.clone();
         r.add_action(
             paperpaw_sdk::ActionSpec::new(Id::new_static("looker.look"), "look").handler(
-                move |env: &paperpaw_sdk::Env<'_>, _: &mut Vec<paperpaw_sdk::Command>| {
+                move |env: &paperpaw_sdk::Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
                     *entries.borrow_mut() = env
                         .menus
                         .items(paperpaw_plugin_reader::MORE_MENU.as_str())
@@ -1429,7 +1429,7 @@ impl Plugin for Asker {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(
             paperpaw_sdk::ActionSpec::new(Id::new_static("asker.ask"), "ask").handler(
-                |_: &paperpaw_sdk::Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+                |_: &paperpaw_sdk::Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
                     out.push(paperpaw_sdk::reading::ask_page_words(&WORDS_HEARD));
                 },
             ),
@@ -1651,7 +1651,7 @@ impl Plugin for NoRabbit {
                     false => Verdict::Keep,
                 }
             }),
-            Box::new(|_| String::from("on")),
+            Box::new(|_| 1),
         ))
     }
 }
@@ -1719,7 +1719,7 @@ impl Plugin for Coming {
             }),
         ))?;
         r.add_action(
-            paperpaw_sdk::ActionSpec::new(ARRIVED, "coming.arrived").handler(|_, out| {
+            paperpaw_sdk::ActionSpec::new(ARRIVED, "coming.arrived").handler(|_, _, out| {
                 for path in ["books/other.part", COMING] {
                     let ready = events::DocumentReady::new(path.to_string());
                     out.push(events::DOCUMENT_READY.emit(ready));

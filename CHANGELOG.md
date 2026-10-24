@@ -6,6 +6,88 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: one name per item of the core API. The hints have each their
+  own: `help::HelpHint` (was `help::Hint`), `HintVisibility` (was
+  `Hints`, when a screen shows the row of button hints), `ui::look::
+  HintRowPart` (was `HintsPart`) and `widgets::CellSpan` (was
+  `CellsHint`); `Hint` is the label of one button and `ActionHint` an
+  action's. The three modules of sections have their own too:
+  `builtin::menu_sections` (was `sections`), `settings_page` (was
+  `settings_sections`) and `group_sections` (was `setting_sections`).
+  `replies::FolderChosen` is the answer to `ask::folder` (was
+  `Chosen`; `Picked` stays the answer to `ask::choice`).
+- SDK: `Contribution` is the kernel's: a plugin adds through the
+  `Registrar`'s methods, and `Registrar::add`, `contributions` and
+  `into_contributions` need the `kernel` feature (a plugin's tests that
+  look at what it adds name it as a dev-dependency).
+- SDK: replies are read typed only. The reply to `Command::Speak` is a
+  `Spoken` (whether it was spoken, and the speech's parameters); the
+  string keys of replies (`http_params`, `server_params`,
+  `socket_params`, `speech_params`) are the kernel's. `Speech::new`
+  takes an `Event<Spoken>` (or an id).
+- SDK: commands stay small, 88 bytes in place of 216 (a test keeps
+  them so): `Command::Http`, `Speak`, `Respond`, `Broadcast`, `Work`
+  and `SetSecret` hold their payload boxed, made with `Command::http`,
+  `speak`, `respond`, `broadcast`, `work` and `set_secret`. `HttpRequest`,
+  `Speech`, `ServerResponse` and the new `Broadcast` keep their fields
+  to themselves: they are made with their builders
+  (`HttpRequest::param` is new; `Speech::in_language`, `at_rate`,
+  `with` and `queued` take the place of `language`, `rate`, `params`
+  and `queue`) and read with methods.
+- The X4 keeps less in memory from the start: ids take two words
+  instead of three, translations index their messages in two bytes
+  where they fit, and actions are not kept twice. Reading an EPUB peaks
+  some 24 KiB lower.
+- SDK: an HTTP answer's body is bytes as they came (`HttpReply::body`
+  is a `Vec<u8>`, `text()` reads it as text), no longer decoded with
+  losses, and it reaches the plugin's handler without a copy: an event
+  may carry its data as it is (`Params::carrying`,
+  `EventData::into_params`), which observers do not see. A failed
+  request says why (`HttpReply::error`, an `HttpError`: no network,
+  DNS, TLS, timeout, refused, replaced, cancelled, I/O), and a body cut
+  to the most the request takes says so (`truncated`). `EventData`
+  types are `Clone`.
+- What a plugin tells of the PaperPaw it runs in comes from the kernel
+  that runs, not the SDK the plugin was built with:
+  `web::user_agent_of(env)` names its version, `install::fits_in(env, ..)`
+  takes its SDK (`install::fits_sdk` where no `Env` is at hand), from
+  `Plugins::kernel`. The kernel's manifest now has the version of its
+  crate. `web::user_agent()` and `install::fits()` stay, for the SDK a
+  plugin is built with; PaperPaw's own plugins use the new ones.
+- The files of a data plugin are checked by their SHA-256 where the
+  plugin library gives it (`sha256` beside `sha1` in `latest.files` and
+  in an update's `files`), else by their SHA-1 as before; downloads
+  kept on the card with `sha1:` go on (`install::Digest::take`).
+- Font size offers only the sizes the reading font has: on the X4 and
+  X4 Pro, whose built-in fonts stop at about 12 pt, no larger ones that
+  looked the same. A size set before past them gives way to the
+  largest. At the largest, the help says that a font with larger sizes
+  gives more, and *Discover fonts* on the reading settings opens the
+  font browser (or its page in the store, where it is not installed).
+  The setup's sample of the font size is a shorter sentence, shown
+  whole. Scalable fonts keep every size. For plugins:
+  `FontHandle::largest_size`; for the kernel, `Settings::set_range` and
+  `Settings::set_description`.
+- A book's position and annotations say which book they are of by its
+  content, its size and KOReader's partial MD5, beside the hash of its
+  path they are named by (`library::Fingerprint`, `positions::book`,
+  `annotations::book`). The reader takes it once when it opens a book
+  (12 reads of 1 KiB at most) and keeps it with the position
+  (`positions::save_with_book`) and the annotations
+  (`annotations::stamp`, a line `# book <size> <md5>`). Both files keep
+  their versions: PaperPaw of before reads them as before.
+- Data plugins of formats 3 (not yet released) are written alike in
+  every file. A list is a key a line: an action's steps are a `run`
+  line each, a line one step with its commas, so a value with a comma
+  needs no escape (`entries` and `hide` of `menus.ini` still read ids
+  separated by commas). `notify:` takes a key of the plugin's
+  translations and says its text in the reader's language. In
+  `menus.ini`, `[menu <id>]` is another plugin's menu (`add`, `hide`)
+  and any other section a menu of one's own (`title`, `entries`);
+  `add` and `hide` in a plain section are still read. `paperpaw-dev
+  check` says where a file is written the earlier way
+  (`package.actions`, `package.menus`). The ini files take a section
+  name of words with single spaces between them.
 - First-run setup: the sample of the font size is in the book's font,
   at the size chosen, as the reader shows it: no longer in the
   interface's font, its second line cut. The card grows with the size
@@ -22,6 +104,16 @@ change the plugin SDK.
   `paperpaw-emu --registry` and in the web emulator's device). The web
   emulator's frame draws the body with the keys there, for the mouse,
   touch and the keyboard, in the embedding page's colours (`look`).
+- Lock touch says how to unlock it whenever it turns on, however it was
+  switched (the quick panel, the reader's menu, Settings, a button), and
+  says when it is unlocked. While it is on, a tap or a swipe says again
+  how to unlock, at most every ten seconds, calmly (no full refresh),
+  never between the steps of the way out.
+- Unlocking touch works on slow screens: on the X4 Pro the two taps and
+  the hold failed when a refresh held the taps back. The taps may now
+  be up to half a second long and a second apart, and a hold unlocks
+  as soon as it is long enough if the finger moves a little. The X4
+  Pro's home key held unlocks too.
 ### 0.5.0-beta.1 (draft)
 
 This is a beta, for testers and developers. It is the first release of
@@ -382,6 +474,37 @@ file to your report.
 
 #### For developers
 
+- SDK: services have one path, by their contract: a service type names
+  its key with `service_type!` (`ServiceType` is an `unsafe` trait, the
+  key the promise that every type naming it is this one), is provided
+  with `r.provide(id, value, version)` and found with
+  `env.services().get::<T>(id, min_version)`. A trait object is wrapped
+  in a struct of the plugin's own (`struct Weather(Box<dyn Forecast>)`).
+  `publish`, the lookup by type name, `get_typed` and `get_versioned`
+  are gone; a library of one's own is a `library::service::LibraryService`.
+- SDK: settings groups can be kept in the program too:
+  `SettingGroupSpec`'s builders are `const`, and `add_setting_group`
+  takes `&'static SettingGroupSpec` (a reference, next to no memory) or
+  one made at run time. The kernel's and the plugins' groups are
+  statics; on the X4 the reading flow's heap peak is 2.3 KiB lower.
+- SDK: `SettingSpec` has one builder set, all `const`, so settings are
+  declared as `static` lists: `switch`, `number`, `choice`, `text`,
+  `language` and `list` take the id, title, default and group;
+  `SettingSpec::new` takes any kind and an `Id` made at run time.
+  `description`, `advanced`, `scoped`, `guarded` and `kept_on_reset` are
+  const. Units, steps, sections, sliders, editors and secrets come from a
+  `static SettingExtra` (`with_extra`); `with_owned_extra` is for
+  settings made from data. `fixed`, `fixed_switch` and the like,
+  `described`, `for_advanced` and `group` are gone.
+- SDK: settings kept in the program take less memory: the kernel holds
+  each list given to `add_settings` once, not each spec, and the network
+  settings it makes for every plugin share one fixed extra
+  (`SettingExtra::section_of_plugin`, shown under the plugin's name). On
+  the X4 the reading flow's heap peak is 9.5 KiB lower.
+- SDK: `Env`'s parts are read through methods (`env.settings()`,
+  `env.i18n()`, `env.now()`, one for each part), so what it carries can
+  change without a change to plugins. The docs and samples use them; the
+  fields stay public until every plugin reads through the methods.
 - The SDK's design rules ([Designing the plugin SDK](docs/sdk-design.md)):
   how it grows without breaking plugins. Tests check four of them over
   the crates whose types cross: growing types are `#[non_exhaustive]`,
@@ -397,6 +520,69 @@ file to your report.
   feature, and `Canvas`'s drawing internals are hidden. A cover drawn
   small is `ui::draw_small_image`; whether the device has a row of
   button hints is `env.caps.button_row`.
+- SDK, cleaned up before its first release (data): the writers of data
+  say why they did not write, `Result<(), data::Error>` in place of a
+  `bool`: `annotations::save` and `add`; `annotations::set_note` and
+  `remove` give `Ok(false)` where there was nothing to change;
+  `library::save`, `Index::save`, `install::marks::write` and
+  `catalog::write`. `data::Error` takes a `StorageError` (`?`).
+- SDK: a storage tells when a file was last changed: `DirEntry::modified`
+  (`with_modified`) and `Storage::modified`, `None` where it does not
+  tell; the memory card's FAT and the computer's file system say it.
+  `MemoryUse` tells the largest block the heap could give now
+  (`largest_free`) and the heap's regions (`MemoryRegion`: the X4 Pro's
+  internal RAM and PSRAM). `read_file` takes its buffer fallibly: a file
+  the heap cannot take now is `StorageError::TooLarge`, not the end.
+- SDK: `time::UnixTime` is a moment (milliseconds since 1970, UTC):
+  `from_secs`, `from_millis`, `secs`, `millis`, `now(env)`, `local(offset)`,
+  and the ISO 8601 and HTTP date helpers as its methods (`iso8601`,
+  `parse_iso8601`, `parse_http_date`) in place of the free functions
+  `time::iso8601`, `time::parse_iso8601` and `web::http_date`, which
+  counted in different units. `LocalTime` has an `offset` (seconds ahead
+  of UTC; 0 where made without a zone), `LocalTime::from_unix` and
+  `LocalTime::unix`, and `time::local_time` fills it from the chosen
+  zone. `time::unix_seconds` stays, as `UnixTime::now(env).secs()`.
+- SDK: `Version` keeps a pre-release (`0.5.0-beta.2`) and orders versions
+  as SemVer does (`Version::pre_name`, `pre_number`, `with_pre`,
+  `release`, `try_parse`), in 8 bytes: a pre-release is `alpha`, `beta`,
+  `dev`, `pre` or `rc` with an optional number up to 8190. Any other
+  is refused, saying so: by `Version::try_parse` (`VersionError`), by
+  the data plugin loader's warning, by `paperpaw-dev`'s package check
+  and, for a code plugin's `package_version!`, by the build. So a plugin
+  of a beta loads and a later beta is an update; `satisfies` goes by the
+  numbers. `SDK_VERSION` is the crate's version, a pre-release between
+  releases (`0.5.0-dev`); `firmware::compare_versions` orders by
+  `Version` where it can.
+- SDK: `Manifest` no longer names the SDK it was built against
+  (`Manifest::sdk` and the field are gone), and the kernel no longer
+  refuses a plugin for it: a plugin with code is loaded by its file's
+  fingerprint and the plugin interface, a data plugin by its `formats`.
+  `install::fits_in` asks the kernel's version.
+- SDK, cleaned up before its first release (installers): what only the
+  kernel and the plugins that install do comes with the `kernel`
+  feature, the reading parts staying for every plugin. `native`:
+  `remember_author`, `remember_code`, `remember_fetched`, `fetched_for`,
+  `keep_code_room`, `installed_code_need`, `check_file`,
+  `CROSSING_CRATES`, `LAYOUT` and `CodeRoom`'s constructors (`known_author`,
+  `installed_code`, `code_room` and `CodeRoom`'s reading stay);
+  `install::local` (`Staging`), `install::marks`, `remember_store_install`,
+  `forget_store_install` and `adopt` (`origin`, `Origins` stay);
+  `firmware::Update` and `FirmwareCommand::install`, the one way to ask
+  for an install (`FirmwareCommand::Install` is matched, not built);
+  `data::take_over_old_name`; `Secrets::encode` and `decode`;
+  `library::save`, `catalog::write` and `Index::save`.
+- SDK, cleaned up before its first release (platform): the types that
+  grow are `#[non_exhaustive]`, with constructors where plugins build
+  them: `DirEntry::new`, `files::Entry::new`, `LocalTime::new` (its
+  weekday from the date), `MemoryUse::new` and `with_stack`,
+  `PluginUsage::new`, `WifiNetwork::new`, `Firmware::new` with `keys`,
+  `room`, `undone`, `state` and `plugins`, `BookData::new` and
+  `SecretChange::changeable`; `install::Digest::text` writes a digest as
+  a job keeps it. A match on `WifiCommand`, `PowerLevel`,
+  `served::Access`, `install::Digest`, `FirmwareCommand` or
+  `BookDataKind` needs an arm for what is to come. `Usage::refreshes`
+  and `PluginUsage::refreshes` name their modes (`usage::Refreshes`:
+  `fast`, `partial`, `full`, `total`) in place of an array.
 - SDK: types that may grow are `#[non_exhaustive]`, with constructors
   where plugins build them: `decorations::{PageWord, PageText,
   Decorated}::new`, `semantics::Part::new` and `Described::new` (with
@@ -409,6 +595,109 @@ file to your report.
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
   tell whether they are disabled.
+- SDK: signatures are numbers, made without allocating: a text
+  filter's and a status line's signature returns a `u64` (0: does
+  nothing), like a decorator's. `digest::Fnv1a64` makes one, fed piece
+  by piece, as a `Hasher` or with `write!`. A menu item's label and badge
+  are a `Cow<'static, str>`, so a fixed text costs nothing.
+- SDK: the registrar's methods take ids as `impl Into<Id>` and text as
+  `impl Into<Cow<'static, str>>` or `impl Into<String>`, so `&ID`, a
+  setting or an event and a `&'static str` or `String` go in as they
+  are. `Id`, `Setting` and `Event` are `AsRef<str>`.
+  `SettingExtra::follows` and `shown_if` name the setting by its `Id`.
+- SDK: what was deprecated is gone: `Registrar::add_service` and
+  `Contribution::Service` (publish with `Registrar::publish`),
+  `Service::any` and `Id::placed` (`Id::unplaced`).
+- SDK: `EnvParts`, `WorkStates::set_works`, `WorkStates::set_note` and
+  `ScreenKey::new` come with the `kernel` feature: only the kernel and
+  tests make an `Env`, set work states or number screens.
+- SDK: actions have one shape, with params everywhere. A handler is
+  `.handler(|env, params, out| ..)`; `handler_with` and
+  `ActionParamsHandler` are gone. `Command::RunAction(id, params)` takes
+  the place of `RunActionWith`, and `Command::run(id)` runs one without
+  params. A screen reads them with `cx.params()` in `on_action`.
+- SDK: every handler queues its commands in `Commands` instead of a
+  `&mut Vec<Command>`: actions, events, observers, work steps, voices,
+  widgets' input and the installer. It has `push`, `extend` and `emit`
+  and reads as a slice. Its fields are private, so it can carry more
+  later without a new signature. A closure such as `|env, out|` stays as
+  it is; a parameter typed `&mut Vec<Command>` becomes `&mut Commands`.
+  tell whether they are disabled, and `canvas.disabling(true)` tells
+  everything drawn into it so. Faint menu and quick panel entries are
+  told as disabled, and the remote control's `describe` (and the web
+  emulator's) says `disabled` in a part's state.
+- SDK: which page of how many a list shows is a `ui::Paging` (`page`,
+  `pages`, `is_first()`, `is_last()`), in place of a pair of numbers:
+  `Rows::paging()`, `Sections::paging()`, `ListView::paging()`, and what
+  `Header` and `Pager` draw and hit.
+- SDK: dates and times as values: `time::Date` and `time::Time`, which
+  `ui::DatePicker` and `ui::TimePicker` take and give; `line_at` of a
+  page's layers and the widget grid's `cell_at` take a `Point`.
+- SDK: `UiStyle` keeps its fields and is read with methods: sizes in
+  pixels as `u16` (`row()`, `margin()`, `gap()`, `line()`, `corner()`,
+  `header()`, `finger()`, `control_row()`), text sizes as `f32`
+  (`text()`, `small()`, `title()`, `head()`), and its looks
+  (`focus()`, `separators()`, `cards()`, `pill()`, `strong()`,
+  `header_kind()` with `HeaderKind::{Light, Dark, Plain}`). How many
+  grays the panel shows is `black_and_white()` or `smooth_grays()`. A
+  style changed for a screen of its own is made with `with_row`,
+  `with_margin`, `with_corner`, `with_pill`, `with_text` and the like.
+- SDK: one path and one name per item of the UI. The types of the
+  modules `ui::slider`, `ui::sections`, `ui::reorder` and `ui::offline`
+  are reached through them (`ui::slider::Slider`,
+  `ui::offline::OfflineOffer` …). The widgets' look is in `widgets` itself:
+  `WidgetLook` (was `widgets::look::Look`, apart from `ui::look::Look`),
+  `widget_look()`, `TextSize` (was `Size`; `SizeClass` is a widget area's
+  class, `TextRole` the interface's text), `choice_setting()` (was
+  `choice`), `WidgetStack` (was `widgets::Stack`, apart from
+  `ui::Stack`). `ui::Grid` is `ui::CellGrid`, apart from the widgets'
+  `grid`.
+- SDK: `ui::choice::open` and `GridView::new` are gone (`ask::choice`,
+  `GridView::asking`).
+- SDK: `ui::Ui`, what a screen draws with: the canvas, the environment
+  and the style together (`Ui::new(canvas, env, &style)`, read with
+  `canvas()`, `env()`, `style()`), the interface's parts its methods
+  (`ui.button(..)`, `ui.message(..)`, `ui.focus(..)` …). It borrows what
+  it is given and allocates nothing.
+- SDK: `ui::Label`, one builder for the interface's text:
+  `Label::new(text).role(TextRole::Small)` (or `.px(size)`), `.ink(..)`
+  or `.color(..)`, `.align(widgets::Align::Center)`, `.min(size)` (smaller
+  before shortened), `.lines(n)` or `.wrap()`, `.font(..)` for a font of
+  its own; `width`, `height`, `draw(&mut ui, area)` and `draw_from(&mut
+  ui, x, area)` (on one line from an `x` between pixels). It borrows its text and allocates only the words
+  of a line it shortens.
+- SDK: the interface's parts draw with a `ui::Ui`: `Chips`, `Segments`,
+  `Dialog`, `Header`, `Pager`, `TextView`, `DatePicker`, `TimePicker`,
+  `offline::OfflineOffer` and `reorder::Reorder` take `&mut Ui` in place
+  of canvas, environment and style, and the rows `ListView`, `Rows` and
+  `sections::Sections` draw are given the `Ui` (`|ui, index, rect,
+  focused|`; its canvas is `ui.canvas()`).
+- SDK: `ui::Row`, a row of a list as a value: `Row::value(title, v)`,
+  `Row::plain(title)`, `Row::switch(title, on)`, `Row::number(title, v,
+  room)` (or `Row::of(title, RowKind::..)`), with `.note(..)`,
+  `.focused(..)` and for numbers `.step_focus(..)`. The one value gives
+  `height(env, style, width)`, `draw(&mut ui, rect)` and `hit(..)` (a
+  `RowPart`: the row, its switch, its `−` or `+`), so that they cannot
+  disagree. `RowKind` and `RowPart` may grow.
+- SDK: one input contract for the building blocks. Those that take the
+  buttons' actions and gestures (`on_action`, `on_gesture`) answer with
+  a `ui::Response`: `Ignored` (the screen's), `Same`, `Changed` (draw it
+  again; `request` asks for it) or `Done` with a result. `TextView`,
+  `Dialog` (`on_scroll_action` is `on_action`), `DatePicker` and
+  `TimePicker` (`on_tap` is `on_gesture`), `NumberEdit` (`Done` with
+  whether the value was kept) and `offline::OfflineOffer` (`on_tap` is
+  `on_gesture`, `Done` with the `Offer`).
+- SDK: `ui::focus_shown(env)` says whether a focus is shown: always
+  without a touch screen, with one once the buttons were used last. The
+  kernel starts with `Env::last_input` at `InputMode::at_start` (`Touch`
+  on touch screens). The SDK's parts and the plugins ask it rather than
+  the device.
+- SDK: `ui::Chips` and `ui::Segments` keep their labels: they are given
+  once when the part is made (`Segments::new` takes the labels, not
+  their count) and `draw` no longer takes them; `label(index)` reads one.
+  A label is a translation key (or text that is none), kept as a
+  `Cow<'static, str>` without a copy and translated where it is measured
+  and drawn.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,
@@ -419,6 +708,14 @@ file to your report.
 - SDK: a look's painters take a `ui::look::PaintCx` (the canvas and the
   style, more to come) and the part: `fn(&mut PaintCx, &SwitchPart) ->
   bool`.
+- SDK: the interface's colours come from the palette: `faint(Ink)` and
+  `focus_faint(focused, Ink)` take a role (`Ink::Note`, the new
+  `Ink::Detail` for what is told beside a row's title, `Ink::Muted` …)
+  in place of a gray; the focus and the header use the palette's text
+  and paper. `Palette` holds colours (`color(ink)`), `Ink::ALL` is a
+  slice, and `Ink::CardPattern` is gone (cards on black and white
+  panels are a sparser pattern of `Ink::Card`). The palette setting
+  names `detail` too.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).

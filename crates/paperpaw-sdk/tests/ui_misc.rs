@@ -17,10 +17,10 @@ use std::borrow::Cow;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::logo::{self, Logo};
-use paperpaw_sdk::replies::{Chosen, Typed};
+use paperpaw_sdk::replies::{FolderChosen, Typed};
 use paperpaw_sdk::semantics::{self, Role};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size, WidgetSpec, Wrapped};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, TextSize, WidgetSpec, Wrapped};
 use paperpaw_sdk::{
     Canvas, Capabilities, Color, Command, Env, Id, MenuEntry, MenuNeed, MenuSection, Menus, Params,
     Rect, Storage, ask, icons,
@@ -34,7 +34,7 @@ use support::{Device, Harness, describe, drawn_in, drawn_outside, frame};
 #[test]
 fn questions_ask_the_keyboard_and_the_folder_chooser_with_their_reply() {
     const NAMED: Event<Typed> = Event::new("t.named");
-    const PLACED: Event<Chosen> = Event::new("t.placed");
+    const PLACED: Event<FolderChosen> = Event::new("t.placed");
     let command = ask::text("Name of the shelf", &NAMED)
         .initial("Novels")
         .password()
@@ -112,12 +112,17 @@ fn a_drawn_list_tells_its_rows_and_their_texts() {
         ("Font size", "12 pt"),
         ("Language", "English"),
     ];
-    let mut list = ListView::new(Rect::new(0, 100, 480, 600), style.row);
+    let mut list = ListView::new(Rect::new(0, 100, 480, 600), u32::from(style.row()));
     list.set_focus(1);
     let (described, _) = describe(480, 800, |canvas| {
-        list.draw(canvas, &style, rows.len(), |canvas, i, rect, focused| {
-            ui::draw_value_row(canvas, &env, &style, rect, focused, rows[i].0, rows[i].1);
-        });
+        list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, &env, &style),
+            rows.len(),
+            |ui, i, rect, focused| {
+                let canvas = ui.canvas();
+                ui::draw_value_row(canvas, &env, &style, rect, focused, rows[i].0, rows[i].1);
+            },
+        );
     });
     let parts = semantics::parts(described);
     let told: Vec<(&str, Role, bool)> = parts
@@ -374,14 +379,14 @@ proptest! {
             &env,
             below,
             widgets::align(&env, "t.clock"),
-            style.text,
+            style.text(),
             &text,
             look.ink,
         );
-        prop_assert!(drawn <= below.height.max(widgets::line_height(&env, style.text)));
+        prop_assert!(drawn <= below.height.max(widgets::line_height(&env, style.text())));
         // Two pixels of slack for letters reaching past their box.
         let bound = Rect::new(inner.x.saturating_sub(2), inner.y, inner.width + 4, inner.height);
-        if below.height >= widgets::line_height(&env, style.text) {
+        if below.height >= widgets::line_height(&env, style.text()) {
             prop_assert_eq!(drawn_outside(&mut frame, bound), None);
         }
     }
@@ -399,8 +404,8 @@ proptest! {
         let h = Harness::new(Device::TOUCH);
         let env = h.env();
         let style = UiStyle::new(&env);
-        let wrapped = Wrapped::new(&env, &text, style.text, width, height);
-        let line = widgets::line_height(&env, style.text);
+        let wrapped = Wrapped::new(&env, &text, style.text(), width, height);
+        let line = widgets::line_height(&env, style.text());
         prop_assert!(wrapped.height(&env) <= height.max(line));
         let area = Rect::new(20, 10, width, height.max(line));
         let (described, mut frame) = describe(480, 800, |c| {
@@ -458,12 +463,12 @@ fn frames_and_sizes_read_from_settings_fall_back_when_unknown() {
     let env = h.env();
     assert_eq!(widgets::frame(&env, "t.clock"), Frame::None);
     assert_eq!(widgets::align(&env, "t.clock"), Align::Left);
-    assert_eq!(widgets::size(&env, "t.clock"), Size::Medium);
+    assert_eq!(widgets::size(&env, "t.clock"), TextSize::Medium);
     assert!(!widgets::shows(&env, "t.clock", "date"));
     let style = UiStyle::new(&env);
-    assert!(Size::Small.text(&style) < Size::Medium.text(&style));
-    assert!(Size::Medium.text(&style) < Size::Large.text(&style));
-    assert_eq!(Size::Fit.text(&style), Size::Large.text(&style));
+    assert!(TextSize::Small.text(&style) < TextSize::Medium.text(&style));
+    assert!(TextSize::Medium.text(&style) < TextSize::Large.text(&style));
+    assert_eq!(TextSize::Fit.text(&style), TextSize::Large.text(&style));
 }
 
 fn shows_the_placement(env: &Env<'_>) -> String {
@@ -563,7 +568,12 @@ fn a_text_setting_opens_the_keyboard_on_every_screen() {
     const ON: paperpaw_sdk::Setting<bool> = paperpaw_sdk::Setting::new("t.on");
     let h = support::Harness::new(support::Device::TOUCH);
     let env = h.env();
-    let name = SettingSpec::text(&NAME, "t.name", "Ann");
+    let name = SettingSpec::text(
+        NAME.static_str(),
+        "t.name",
+        "Ann",
+        paperpaw_sdk::builtin::groups::OTHER,
+    );
     let Some(Command::OpenSlot(slot, asked)) = ui::setting_opens(&env, &name) else {
         panic!("the keyboard");
     };
@@ -573,13 +583,29 @@ fn a_text_setting_opens_the_keyboard_on_every_screen() {
         Some(events::SETTING_TYPED.as_str())
     );
     assert_eq!(asked.get(params::ID), Some("t.name"));
-    let edited = SettingSpec::text(&NAME, "t.name", "").editor(Id::new_static("t.edit"));
+    static EDIT: paperpaw_sdk::SettingExtra =
+        paperpaw_sdk::SettingExtra::new().editor(Id::new_static("t.edit"));
+    let edited = SettingSpec::text(
+        NAME.static_str(),
+        "t.name",
+        "",
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&EDIT);
     assert!(matches!(
         ui::setting_opens(&env, &edited),
         Some(Command::OpenScreen(screen, _)) if screen == Id::new_static("t.edit")
     ));
     assert_eq!(
-        ui::setting_opens(&env, &SettingSpec::switch(&ON, "t.on", true)),
+        ui::setting_opens(
+            &env,
+            &SettingSpec::switch(
+                ON.static_str(),
+                "t.on",
+                true,
+                paperpaw_sdk::builtin::groups::OTHER
+            )
+        ),
         None
     );
 }

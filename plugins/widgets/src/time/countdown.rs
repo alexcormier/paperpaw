@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, TextSize};
 use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::word_clock::{balanced, largest};
@@ -32,29 +32,29 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.countdown.align", ID, Align::Left),
     widgets::frame_spec("widgets.countdown.frame", ID, Frame::None),
     widgets::padding_spec("widgets.countdown.padding", ID, Padding::Auto),
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         "widgets.countdown.title",
         "widgets.setting.countdown-title",
         "",
         ID,
     )
-    .described("widgets.setting.countdown-title.help"),
-    SettingSpec::fixed_text(
+    .description("widgets.setting.countdown-title.help"),
+    SettingSpec::text(
         "widgets.countdown.date",
         "widgets.setting.countdown-date",
         "12-24",
         ID,
     )
-    .described("widgets.setting.countdown-date.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.setting.countdown-date.help"),
+    SettingSpec::choice(
         "widgets.countdown.style",
         "widgets.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.countdown.style.help"),
-    widgets::size_spec("widgets.countdown.size", ID, Size::Fit, true),
+    .description("widgets.countdown.style.help"),
+    widgets::size_spec("widgets.countdown.size", ID, TextSize::Fit, true),
     widgets::part_spec(
         "widgets.countdown.show-date",
         ID,
@@ -73,8 +73,11 @@ static SETTINGS: [SettingSpec; 10] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add_settable(
         r,
-        &ID,
-        "widgets.countdown",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.countdown");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(shows),
     )?;
     r.add_settings(&SETTINGS)
@@ -161,8 +164,8 @@ fn shows(env: &Env<'_>) -> String {
 
 fn height(env: &Env<'_>, _: u16) -> u16 {
     let (style, _) = ui(env);
-    widgets::line_height(env, style.title * 1.6)
-        + widgets::line_height(env, style.small) * 2
+    widgets::line_height(env, style.title() * 1.6)
+        + widgets::line_height(env, style.small()) * 2
         + frame_height(env, ID.as_str())
 }
 
@@ -281,7 +284,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let notes = notes.join(" · ");
     let area = look.area;
     let align = widgets::align(env, ID.as_str());
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let notes_h = if notes.is_empty() { 0.0 } else { small };
     if chosen_name(env, ID.as_str(), "style") == "sentence" {
         let room = Rect::new(
@@ -314,7 +317,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         }
         if notes_h > 0.0 {
             let row = Rect::new(area.x, y as u16, area.width, small as u16);
-            super::label(canvas, &font, style.small, align, row, &notes, look.faint);
+            super::label(canvas, &font, style.small(), align, row, &notes, look.faint);
         }
         return;
     }
@@ -324,19 +327,19 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // whole; a gap between their ink.
     let width = f32::from(area.width);
     let height = f32::from(area.height);
-    let gap = style.gap as f32;
-    let note_max = style.text.min(height / 5.0).max(style.small);
+    let gap = style.gap() as f32;
+    let note_max = style.text().min(height / 5.0).max(style.small());
     let chosen = widgets::size(env, ID.as_str());
     // The notes below whole on their line, or not at all; the label
     // whole before the notes, shortened only where it has no room whole.
-    let with_notes = !notes.is_empty() && font.measure(style.small, &notes) <= width;
+    let with_notes = !notes.is_empty() && font.measure(style.small(), &notes) <= width;
     // The label whole at the largest size that has room (in fewer lines
     // where two counts give it the same), then shortened on one.
     let best_lines = (1..=3)
         .filter_map(|most| {
             super::wrap_whole(
                 &font,
-                (note_max, style.small),
+                (note_max, style.small()),
                 &shown.note,
                 (width, height),
                 most,
@@ -363,21 +366,23 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let (note_size, note_lines) = match lines {
             Some(most) => super::wrap_whole(
                 &font,
-                (note_max, style.small),
+                (note_max, style.small()),
                 &shown.note,
                 (width, height),
                 most,
             )?,
             // What the number counts, where that fits whole; else the
             // note shortened.
-            None if !shown.short.is_empty() && font.measure(style.small, &shown.short) <= width => {
-                (style.small, alloc::vec![shown.short.clone()])
+            None if !shown.short.is_empty()
+                && font.measure(style.small(), &shown.short) <= width =>
+            {
+                (style.small(), alloc::vec![shown.short.clone()])
             }
             None => (
-                style.small,
+                style.small(),
                 alloc::vec![paperpaw_sdk::ui::fit(
                     &font,
-                    style.small,
+                    style.small(),
                     &shown.note,
                     width
                 )],
@@ -393,7 +398,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         if extra {
             let part = super::Part {
                 lines: alloc::vec![notes.as_str()],
-                size: style.small,
+                size: style.small(),
                 color: look.faint,
                 font: None,
             };
@@ -404,10 +409,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             font.measure(s, &shown.big) <= width && super::cap_height(&font, s) + below <= height
         };
         let size = match chosen {
-            Size::Fit => widgets::largest_size(height, style.text, fits),
+            TextSize::Fit => widgets::largest_size(height, style.text(), fits),
             size => {
                 let size = size.text(&style) * 1.6;
-                widgets::largest_size(size, style.text.min(size), fits)
+                widgets::largest_size(size, style.text().min(size), fits)
             }
         }?;
         Some((size, note_size, note_lines, extra))
@@ -418,8 +423,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let (size, note_size, note_lines, extra) = laid.unwrap_or_else(|| {
         let alone =
             |s: f32| font.measure(s, &shown.big) <= width && super::cap_height(&font, s) <= height;
-        let size = widgets::largest_size(height, style.small, alone).unwrap_or(style.small);
-        (size, style.small, Vec::new(), false)
+        let size = widgets::largest_size(height, style.small(), alone).unwrap_or(style.small());
+        (size, style.small(), Vec::new(), false)
     });
     // The digits' ink measured where capitals were assumed: smaller
     // where it reaches further.
@@ -443,7 +448,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         }
         super::stack_height(&font, &parts, gap) + if extra { small + gap } else { 0.0 }
     };
-    while size > style.small && stack(size) > height {
+    while size > style.small() && stack(size) > height {
         size *= 0.92;
     }
     let number = paperpaw_sdk::ui::fit(&font, size, &shown.big, width);
@@ -468,7 +473,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     if extra {
         parts.push(super::Part {
             lines: alloc::vec![notes.as_str()],
-            size: style.small,
+            size: style.small(),
             color: look.faint,
             font: None,
         });
@@ -480,12 +485,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 fn text_size(env: &Env<'_>, font: &FontHandle<'_>, text: &str, room: Rect) -> f32 {
     let (style, _) = ui(env);
     match widgets::size(env, ID.as_str()) {
-        Size::Fit => largest(
+        TextSize::Fit => largest(
             font,
             text,
             room,
-            style.small,
-            f32::from(room.height).min(style.title * 2.4),
+            style.small(),
+            f32::from(room.height).min(style.title() * 2.4),
         ),
         size => size.text(&style),
     }

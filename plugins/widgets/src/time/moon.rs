@@ -47,30 +47,33 @@ static SETTINGS: [SettingSpec; 9] = [
         true,
     ),
     widgets::part_spec("widgets.moon.lit", ID, "widgets.setting.lit-percent", false),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.moon.shadow",
         "widgets.setting.shadow",
         &SHADOWS,
         SHADOWS[0],
         ID,
     )
-    .described("widgets.moon.shadow.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.moon.shadow.help"),
+    SettingSpec::choice(
         "widgets.moon.hemisphere",
         "widgets.setting.hemisphere",
         &HEMISPHERES,
         HEMISPHERES[0],
         ID,
     )
-    .described("widgets.moon.hemisphere.help"),
+    .description("widgets.moon.hemisphere.help"),
     super::date_format_spec("widgets.moon.date-format", ID, super::DATE_FORMATS[0]),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.moon",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.moon");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(super::today_shows),
     )?;
     r.add_settings(&SETTINGS)
@@ -174,7 +177,7 @@ pub(super) fn lit(degrees: i32) -> u8 {
 
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let (style, _) = ui(env);
-    (width / 2).min((style.row * 3) as u16) + frame_height(env, ID.as_str())
+    (width / 2).min((u32::from(style.row()) * 3) as u16) + frame_height(env, ID.as_str())
 }
 
 /// The lines of text beside the moon.
@@ -224,9 +227,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let lines = lines(env, &moon, &today);
     let area = look.area;
     let align = widgets::align(env, ID.as_str());
-    let first = style.text;
-    let small = style.small;
-    let gap = style.gap as u16;
+    let first = style.text();
+    let small = style.small();
+    let gap = style.gap();
     // Beside the text where the place is wide, else above it.
     let wide = area.width >= area.height * 3 / 2;
     // The text's rows beside the moon, or below it in `share` of the
@@ -393,7 +396,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 /// a fine ring round it.
 fn draw_moon(
     canvas: &mut Canvas<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     center: Point,
     radius: u32,
     degrees: i32,

@@ -31,7 +31,6 @@
 
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
 
@@ -46,14 +45,22 @@ use crate::params::Params;
 /// [`Command::Emit`], and every subscriber is called in registration order.
 /// Any plugin can define its own events (namespaced ids such as
 /// `reader.page-turned`), which other plugins may subscribe to.
-pub type EventHandler = Box<dyn Fn(&Env<'_>, &Params, &mut Vec<Command>)>;
+pub type EventHandler = Box<dyn Fn(&Env<'_>, &Params, &mut crate::Commands)>;
 
 /// What an event carries, written as and read from [`Params`]; made with
 /// [`event_data!`](crate::event_data) for structs of named values.
-pub trait EventData: Sized + 'static {
+pub trait EventData: Clone + Sized + 'static {
     fn to_params(&self) -> Params;
     /// `None` if a value it needs is missing or unreadable.
     fn from_params(params: &Params) -> Option<Self>;
+    /// What an event carries when it is emitted: as written by
+    /// [`to_params`](Self::to_params), unless the data is too large to
+    /// copy (an HTTP answer's body); then it may go along as it is
+    /// ([`Params::carrying`]), and a hearer of its type reads it without
+    /// a copy.
+    fn into_params(self) -> Params {
+        self.to_params()
+    }
 }
 
 /// Nothing: for events that only say that something happened.
@@ -376,21 +383,25 @@ impl<P: EventData> Event<P> {
 
     /// The command that emits the event with `data`.
     pub fn emit(&self, data: P) -> Command {
-        Command::Emit(self.id.clone(), data.to_params())
+        Command::Emit(self.id.clone(), data.into_params())
     }
 
     /// The command that emits it with `data` at `at`: work at a time
     /// ([`Work::at`](crate::work::Work::at)), in place of the one before.
     pub fn schedule(&self, data: P, at: paperpaw_platform::Instant) -> Command {
-        Command::Work(crate::work::Work::at(self.id.clone(), at).with(data.to_params()))
+        Command::work(crate::work::Work::at(self.id.clone(), at).with(data.to_params()))
     }
 
     /// What it carries, if `event` is this event (for screens'
     /// [`on_event`](crate::Screen::on_event)).
     pub fn read(&self, event: &Id, params: &Params) -> Option<P> {
-        (*event == self.id)
-            .then(|| P::from_params(params))
-            .flatten()
+        if *event != self.id {
+            return None;
+        }
+        match params.carried::<P>() {
+            Some(data) => Some(data.clone()),
+            None => P::from_params(params),
+        }
     }
 }
 
@@ -406,6 +417,12 @@ impl<P: EventData> Clone for Event<P> {
 impl<P: EventData> fmt::Debug for Event<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Event({})", self.id)
+    }
+}
+
+impl<P: EventData> AsRef<str> for Event<P> {
+    fn as_ref(&self) -> &str {
+        self.id.as_str()
     }
 }
 

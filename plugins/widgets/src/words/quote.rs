@@ -16,7 +16,9 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files::for_each_line;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::text::{self, FACES};
@@ -62,22 +64,22 @@ fn turns_file() -> String {
 
 /// The quote's settings, kept in the program.
 static SETTINGS: [SettingSpec; 11] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.quote.source",
         "widgets.quote.setting.source",
         &SOURCES,
         SOURCES[2],
         ID,
     )
-    .described("widgets.quote.setting.source.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.quote.setting.source.help"),
+    SettingSpec::choice(
         "widgets.quote.change",
         "widgets.setting.change",
         &CHANGES,
         CHANGES[0],
         ID,
     )
-    .described("widgets.setting.change.help"),
+    .description("widgets.setting.change.help"),
     widgets::part_spec(
         "widgets.quote.author",
         ID,
@@ -102,22 +104,26 @@ static SETTINGS: [SettingSpec; 11] = [
         "widgets.quote.setting.caption",
         false,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.quote.face",
         "widgets.setting.font",
         &FACES,
         FACES[2],
         ID,
     )
-    .described("widgets.setting.face-font.help"),
-    widgets::size_spec("widgets.quote.size", ID, Size::Fit, true),
+    .description("widgets.setting.face-font.help"),
+    widgets::size_spec("widgets.quote.size", ID, TextSize::Fit, true),
     widgets::align_spec("widgets.quote.align", ID, Align::Center),
     widgets::frame_spec("widgets.quote.frame", ID, Frame::None),
     widgets::padding_spec("widgets.quote.padding", ID, Padding::Auto),
 ];
 
 pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.quote"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.quote");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     let changed = changes.clone();
     r.on(NEXT, move |env, _, out| {
@@ -275,7 +281,7 @@ struct Laid {
 /// says (or as fits); where a line of it would not fit with them, the
 /// large mark and who said it go.
 fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
-    let look = widgets::look::look(env, ID.as_str(), area);
+    let look = widgets::widget_look(env, ID.as_str(), area);
     let mut area = look.area;
     let caption = widgets::shows(env, ID.as_str(), CAPTION);
     if caption {
@@ -296,8 +302,8 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let height = f32::from(area.height);
     // Who said it, where a line of the quote has room above it (the
     // name shortened where it is wider than the place).
-    let author_h = f32::from(widgets::line_height(env, style.small)) + style.gap as f32 * 0.75;
-    let least = style.small * 0.85;
+    let author_h = f32::from(widgets::line_height(env, style.small())) + style.gap() as f32 * 0.75;
+    let least = style.small() * 0.85;
     let author = author.filter(|_| text::line_height(&font, least) + author_h <= height);
     let mut wished = Layout {
         mark: widgets::shows(env, ID.as_str(), MARK),
@@ -318,10 +324,10 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         !too_wide && layout.height(&font, size, lines) <= height
     };
     let (layout, size) = match widgets::size(env, ID.as_str()) {
-        Size::Fit => choices
+        TextSize::Fit => choices
             .iter()
             .find_map(|layout| {
-                widgets::largest_size(style.title * 2.0, least, |size| whole(layout, size))
+                widgets::largest_size(style.title() * 2.0, least, |size| whole(layout, size))
                     .map(|size| (*layout, size))
             })
             .unwrap_or((plain, least)),
@@ -390,10 +396,10 @@ impl Widget for QuoteWidget {
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
-        let line = widgets::line_height(env, style.title);
+        let line = widgets::line_height(env, style.title());
         line * 3
-            + widgets::line_height(env, style.small)
-            + style.gap as u16
+            + widgets::line_height(env, style.small())
+            + style.gap()
             + frame_height(env, ID.as_str())
     }
 
@@ -420,6 +426,7 @@ impl Widget for QuoteWidget {
             return;
         };
         let style = UiStyle::new(env);
+        let mut ui = paperpaw_sdk::ui::Ui::new(canvas, env, &style);
         let language = env.i18n.language();
         let (area, size, layout) = (laid.area, laid.size, laid.layout);
         let width = f32::from(area.width);
@@ -433,23 +440,35 @@ impl Widget for QuoteWidget {
             let x = align.x(area, font.measure(big, mark));
             // Quotation marks are as high as capitals, a third of them.
             let baseline = f32::from(top) + big * 0.72;
-            font.draw(canvas, big, x, baseline as i32, mark, look.faint);
+            font.draw(ui.canvas(), big, x, baseline as i32, mark, look.faint);
             top += layout.mark_height(size) as u16;
         }
-        top += text::draw_lines(canvas, &font, size, &laid.lines, area, top, align, look.ink);
-        if let (Some(author), Some(ui)) = (&laid.author, style.font(env)) {
-            top += (style.gap as f32 * 0.75) as u16;
-            let small = widgets::line_height(env, style.small);
+        top += text::draw_lines(
+            ui.canvas(),
+            &font,
+            size,
+            &laid.lines,
+            area,
+            top,
+            align,
+            look.ink,
+        );
+        if let (Some(author), Some(ui_font)) = (&laid.author, ui.font()) {
+            top += (style.gap() as f32 * 0.75) as u16;
+            let small = widgets::line_height(env, style.small());
             let row = Rect::new(area.x, top, area.width, small);
             // The whole name where it fits, else the last name alone
             // ("Bacon"), smaller where need be, then shortened.
-            let whole = ui.measure(style.small, author) <= width;
+            let whole = ui_font.measure(style.small(), author) <= width;
             let last = author.rsplit(' ').next().unwrap_or(author);
             let shown = if whole { author.as_str() } else { last };
             let (size, name) =
-                widgets::fit_line(&ui, style.small, style.small * 0.85, shown, width);
-            let x = align.x(area, ui.measure(size, &name));
-            paperpaw_sdk::ui::draw_label(canvas, &ui, size, x, row, &name, look.faint);
+                widgets::fit_line(&ui_font, style.small(), style.small() * 0.85, shown, width);
+            let x = align.x(area, ui_font.measure(size, &name));
+            paperpaw_sdk::ui::Label::new(&name)
+                .px(size)
+                .color(look.faint)
+                .draw_from(&mut ui, x, row);
         }
     }
 

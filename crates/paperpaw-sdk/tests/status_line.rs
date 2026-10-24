@@ -202,7 +202,7 @@ fn items_and_lines_are_found_by_their_ids() {
     ));
     h.status_items.add_line(
         StatusLineSpec::new(Id::new_static("t.clock"), "t.clock.title", Box::new(draw))
-            .signature(Box::new(|_, _| "10:41".to_string())),
+            .signature(Box::new(|_, _| 1041)),
     );
     let items = &h.status_items;
     let env = h.env();
@@ -219,7 +219,7 @@ fn items_and_lines_are_found_by_their_ids() {
         Some(StatusValue::Text("3".into()))
     );
     assert_eq!(items.value("t.unknown", &env, &context), None);
-    assert_eq!(items.line_signature("t.clock", &env, &context), "10:41");
+    assert_eq!(items.line_signature("t.clock", &env, &context), 1041);
     // Without a signature: drawn again when the context changes.
     let other = Params::new().with("page", "4");
     assert_ne!(
@@ -340,7 +340,7 @@ fn told(line: &StatusLine<'_>, env: &Env<'_>) -> Vec<String> {
     line.targets(env, &font, &Params::new())
         .into_iter()
         .map(|t| match t.command {
-            paperpaw_sdk::Command::RunActionWith(action, _) => action
+            paperpaw_sdk::Command::RunAction(action, _) => action
                 .as_str()
                 .trim_start_matches("t.")
                 .trim_end_matches("-tapped")

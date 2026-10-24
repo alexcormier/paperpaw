@@ -41,7 +41,6 @@ mod toc;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{
     actions as core_actions, events, groups, menus, params, settings as core_settings, slots,
@@ -50,8 +49,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::help::{self, Zone};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, ScreenSpec,
-    SettingSpec, Version,
+    Command, Commands, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar,
+    ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("reader");
@@ -82,7 +81,8 @@ const NOTE_ENTERED: Event<Typed> = Event::new("reader.note-entered");
 pub const LAYOUT_MENU: Id = menus::READER_PANEL;
 pub const MORE_MENU: Id = menus::READER_MORE;
 /// The reply when a page has been read aloud; parameter `path`.
-const SPOKEN: Id = Id::new_static("reader.spoken");
+const SPOKEN: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Spoken> =
+    paperpaw_sdk::event::Event::new("reader.spoken");
 /// Skimming through the book, an overlay (see `skim`); it asks the
 /// reader to move with `reader.skim` and hears where the book is with
 /// `reader.skimmed`.
@@ -209,7 +209,7 @@ pub struct Reader;
 /// eye with sliders.
 mod extras {
     use paperpaw_sdk::SettingExtra;
-    use paperpaw_sdk::builtin::setting_sections::{ALOUD, BEHAVIOUR, FONT};
+    use paperpaw_sdk::builtin::group_sections::{ALOUD, BEHAVIOUR, FONT};
 
     pub(crate) static IN_FONT: SettingExtra = SettingExtra::new().section(FONT);
     pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
@@ -228,15 +228,15 @@ mod extras {
 /// The reader's own settings: smooth letters, what it does, and reading
 /// aloud (the type of pages is the kernel's, see `settings`).
 static SETTINGS: [SettingSpec; 9] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         settings::SMOOTH_TEXT.static_str(),
         "reader.setting.smooth-text",
         false,
         groups::READING,
     )
     .with_extra(&extras::IN_FONT)
-    .described("reader.setting.smooth-text.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.smooth-text.help"),
+    SettingSpec::switch(
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
         true,
@@ -244,24 +244,24 @@ static SETTINGS: [SettingSpec; 9] = [
     )
     .advanced()
     .with_extra(&extras::IN_BEHAVIOUR)
-    .described("reader.setting.open-last.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.open-last.help"),
+    SettingSpec::switch(
         settings::CORNER_BOOKMARK.static_str(),
         "reader.setting.corner-bookmark",
         true,
         groups::CONTROLS,
     )
     .advanced()
-    .described("reader.setting.corner-bookmark.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.corner-bookmark.help"),
+    SettingSpec::switch(
         settings::HOLD_CHAPTERS.static_str(),
         "reader.setting.hold-chapters",
         true,
         groups::CONTROLS,
     )
     .advanced()
-    .described("reader.setting.hold-chapters.help"),
-    SettingSpec::fixed_number(
+    .description("reader.setting.hold-chapters.help"),
+    SettingSpec::number(
         settings::AUTO_TURN_SECONDS.static_str(),
         "reader.setting.auto-turn-seconds",
         5,
@@ -271,8 +271,8 @@ static SETTINGS: [SettingSpec; 9] = [
     )
     .advanced()
     .with_extra(&extras::AUTO_TURN)
-    .described("reader.setting.auto-turn-seconds.help"),
-    SettingSpec::fixed_number(
+    .description("reader.setting.auto-turn-seconds.help"),
+    SettingSpec::number(
         settings::ALOUD_SPEED.static_str(),
         "reader.setting.aloud-speed",
         50,
@@ -281,24 +281,24 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::READING,
     )
     .with_extra(&extras::ALOUD_SPEED)
-    .described("reader.setting.aloud-speed.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.aloud-speed.help"),
+    SettingSpec::switch(
         settings::ALOUD_HIGHLIGHT.static_str(),
         "reader.setting.aloud-highlight",
         true,
         groups::READING,
     )
     .with_extra(&extras::IN_ALOUD)
-    .described("reader.setting.aloud-highlight.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.aloud-highlight.help"),
+    SettingSpec::switch(
         settings::ALOUD_TURN.static_str(),
         "reader.setting.aloud-turn-pages",
         true,
         groups::READING,
     )
     .with_extra(&extras::IN_ALOUD)
-    .described("reader.setting.aloud-turn-pages.help"),
-    SettingSpec::fixed_choice(
+    .description("reader.setting.aloud-turn-pages.help"),
+    SettingSpec::choice(
         settings::ALOUD_TIMER.static_str(),
         "reader.setting.aloud-timer",
         &aloud::TIMER_CHOICES,
@@ -306,7 +306,7 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::READING,
     )
     .with_extra(&extras::IN_ALOUD)
-    .described("reader.setting.aloud-timer.help"),
+    .description("reader.setting.aloud-timer.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -335,7 +335,7 @@ impl Plugin for Reader {
             "",
         )?;
         // The page takes all of the screen; the buttons' row comes on a press.
-        r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::OnPress)?;
+        r.set_screen_hints(SCREEN, paperpaw_sdk::HintVisibility::OnPress)?;
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "reader.title",
@@ -349,15 +349,15 @@ impl Plugin for Reader {
             r,
             SCREEN.as_str(),
             &[
-                help::Hint::touch("reader.help.previous").zone(Zone::new(0, 120, 333, 760)),
-                help::Hint::touch("reader.help.menu").zone(Zone::new(333, 120, 334, 760)),
-                help::Hint::touch("reader.help.next").zone(Zone::new(667, 120, 333, 760)),
-                help::Hint::touch("reader.help.quick"),
-                help::Hint::touch("reader.help.night"),
-                help::Hint::buttons("reader.help.turn"),
-                help::Hint::buttons("reader.help.select"),
-                help::Hint::buttons("reader.help.back"),
-                help::Hint::buttons("reader.help.panel"),
+                help::HelpHint::touch("reader.help.previous").zone(Zone::new(0, 120, 333, 760)),
+                help::HelpHint::touch("reader.help.menu").zone(Zone::new(333, 120, 334, 760)),
+                help::HelpHint::touch("reader.help.next").zone(Zone::new(667, 120, 333, 760)),
+                help::HelpHint::touch("reader.help.quick"),
+                help::HelpHint::touch("reader.help.night"),
+                help::HelpHint::buttons("reader.help.turn"),
+                help::HelpHint::buttons("reader.help.select"),
+                help::HelpHint::buttons("reader.help.back"),
+                help::HelpHint::buttons("reader.help.panel"),
             ],
         )?;
         r.add_reader(paperpaw_sdk::readers::ReaderSpec::new(APP, SCREEN))?;
@@ -446,10 +446,20 @@ impl Plugin for Reader {
         )?;
 
         let font_step = |step: i64| -> paperpaw_sdk::ActionHandler {
-            Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
-                let size = env.settings.read(&settings::FONT_SIZE) + step;
-                out.push(Command::set(&settings::FONT_SIZE, size.clamp(6, 40)));
-            })
+            Box::new(
+                move |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
+                    // Within the sizes the reading font has (see the setting).
+                    let (min, max) = match env.settings.spec(settings::FONT_SIZE.as_str()) {
+                        Some(paperpaw_sdk::SettingSpec {
+                            kind: paperpaw_sdk::SettingKind::Int { min, max },
+                            ..
+                        }) => (*min, *max),
+                        _ => (6, 40),
+                    };
+                    let size = env.settings.read(&settings::FONT_SIZE) + step;
+                    out.push(Command::set(&settings::FONT_SIZE, size.clamp(min, max)));
+                },
+            )
         };
         let handlers: [(Id, &'static str, paperpaw_sdk::ActionHandler); 3] = [
             (
@@ -465,10 +475,12 @@ impl Plugin for Reader {
             (
                 actions::TOGGLE_JUSTIFY,
                 "reader.action.toggle-justify",
-                Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                    let justify = env.settings.read(&settings::JUSTIFY);
-                    out.push(Command::set(&settings::JUSTIFY, !justify));
-                }),
+                Box::new(
+                    |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
+                        let justify = env.settings.read(&settings::JUSTIFY);
+                        out.push(Command::set(&settings::JUSTIFY, !justify));
+                    },
+                ),
             ),
         ];
         for (id, title, handler) in handlers {
@@ -477,7 +489,7 @@ impl Plugin for Reader {
         // Font and layout as a panel of controls: changes show at once.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(actions::QUICK_SETTINGS, "reader.layout").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(Command::OpenSlot(
                         slots::PANEL,
                         Params::new().with(params::MENU, String::from(LAYOUT_MENU.as_str())),
@@ -627,7 +639,7 @@ fn last_in(text: &str) -> Option<String> {
         .map(|e| String::from(e.value.as_str()))
 }
 
-fn reopen_last_book(env: &Env<'_>, out: &mut Vec<Command>) {
+fn reopen_last_book(env: &Env<'_>, out: &mut Commands) {
     if !env.settings.read(&settings::OPEN_LAST) {
         return;
     }

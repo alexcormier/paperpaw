@@ -8,8 +8,8 @@ use paperpaw_i18n::Catalog;
 use paperpaw_sdk::collections::VecMap;
 use paperpaw_sdk::{
     ActionSpec, Actions, Contribution, EventHandler, FontSpec, FormatSpec, HyphenationSpec, Id,
-    MenuEntry, Priority, RegisterError, ScreenSpec, SettingGroupSpec, SettingSpec, SlotSpec,
-    StatusItemSpec, StatusLineSpec,
+    MenuEntry, Priority, RegisterError, ScreenSpec, SettingSpec, SlotSpec, StatusItemSpec,
+    StatusLineSpec,
 };
 
 /// A candidate screen for a slot, proposed by a plugin.
@@ -27,7 +27,7 @@ pub(crate) struct Registry {
     pub(crate) screens: VecMap<Id, ScreenSpec>,
     pub(crate) slots: VecMap<Id, SlotSpec>,
     /// When screens show the row of hints, where they said.
-    pub(crate) hints: VecMap<Id, paperpaw_sdk::Hints>,
+    pub(crate) hints: VecMap<Id, paperpaw_sdk::HintVisibility>,
     candidates: Vec<SlotCandidate>,
     /// Slot bindings from the user's configuration.
     user_bindings: VecMap<Id, Id>,
@@ -44,7 +44,7 @@ impl Registry {
     }
 
     /// When `screen` shows the row of hints.
-    pub(crate) fn hints_of(&self, screen: &Id) -> paperpaw_sdk::Hints {
+    pub(crate) fn hints_of(&self, screen: &Id) -> paperpaw_sdk::HintVisibility {
         self.hints.get(screen).copied().unwrap_or_default()
     }
 
@@ -147,14 +147,15 @@ impl paperpaw_sdk::ScreenMaker for Registry {
 /// the program ([`SettingSpec::fixed`]).
 pub(crate) enum Staged {
     Owned(alloc::boxed::Box<SettingSpec>),
-    Fixed(&'static SettingSpec),
+    /// Spec `.1` of the list `.0`, kept by a reference to the list.
+    Fixed(&'static [SettingSpec], usize),
 }
 
 impl Staged {
     pub(crate) fn spec(&self) -> &SettingSpec {
         match self {
             Staged::Owned(spec) => spec,
-            Staged::Fixed(spec) => spec,
+            Staged::Fixed(list, at) => &list[*at],
         }
     }
 }
@@ -180,10 +181,10 @@ pub(crate) struct Staging {
     pub(crate) ui_looks: Vec<(&'static paperpaw_sdk::ui::look::Painters, Priority)>,
     pub(crate) formats: Vec<FormatSpec>,
     pub(crate) hyphenation: Vec<HyphenationSpec>,
-    pub(crate) setting_groups: Vec<SettingGroupSpec>,
+    pub(crate) setting_groups: Vec<paperpaw_sdk::SettingGroup>,
     /// Events, the plugins that hear them, and their handlers.
     pub(crate) subscriptions: Vec<(Id, Id, EventHandler)>,
-    pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionParamsHandler)>,
+    pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionHandler)>,
     pub(crate) action_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) event_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) menu_entries: Vec<MenuEntry>,
@@ -196,7 +197,7 @@ pub(crate) struct Staging {
     pub(crate) hidden_entries: Vec<(Id, Id, Id)>,
     pub(crate) item_states: Vec<(Id, paperpaw_sdk::ItemStateFn)>,
     pub(crate) item_descriptions: Vec<(Id, Cow<'static, str>)>,
-    pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::Hints)>,
+    pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::HintVisibility)>,
     pub(crate) keymap_presets: Vec<(Id, Cow<'static, str>)>,
     pub(crate) setting_defaults: Vec<(Id, Cow<'static, str>)>,
     pub(crate) choices: Vec<(Id, Cow<'static, str>)>,
@@ -301,7 +302,9 @@ pub(crate) fn stage(
             }),
             Contribution::Setting(setting) => staging.settings.push(Staged::Owned(setting)),
             Contribution::FixedSettings(list) => {
-                staging.settings.extend(list.iter().map(Staged::Fixed));
+                staging
+                    .settings
+                    .extend((0..list.len()).map(|at| Staged::Fixed(list, at)));
             }
             Contribution::SettingGroup(group) => staging.setting_groups.push(group),
             Contribution::SettingDefault { setting, value, .. } => {
@@ -398,9 +401,6 @@ pub(crate) fn stage(
             Contribution::SetupStep(step) => staging.setup_steps.push(*step),
             Contribution::Preset(preset) => staging.presets.push(*preset),
             Contribution::FixedPresets(list) => staging.fixed_presets.push(list),
-            Contribution::Service { id, service, .. } => staging
-                .services
-                .push((id, paperpaw_sdk::services::Service::any(service))),
             Contribution::Published { id, service, .. } => staging.services.push((id, service)),
             Contribution::ToPoint { point, text, .. } => staging.contributions.push((point, text)),
             Contribution::Point(point) => staging.points.push(*point),

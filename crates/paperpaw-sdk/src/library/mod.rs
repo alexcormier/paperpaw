@@ -20,10 +20,12 @@
 #![deny(clippy::let_underscore_must_use)]
 
 pub mod catalog;
+mod fingerprint;
 pub mod index;
 pub mod listing;
 pub mod service;
 
+pub use fingerprint::Fingerprint;
 pub use service::{Badge, BookBadge, BookField, Deleted, Library, is_book_path, service};
 
 /// What changed of a book ([`events::BookChanged::what`](crate::builtin::events::BookChanged)):
@@ -65,7 +67,7 @@ pub const FOLDER: crate::setting::Setting<crate::setting::Text> =
 /// The library folder ([`FOLDER`]) as a path in the storage, without
 /// slashes around it (`""` for the storage's top).
 pub fn folder<'e>(env: &Env<'e>) -> &'e str {
-    env.settings.read(&FOLDER).trim_matches('/')
+    env.settings().read(&FOLDER).trim_matches('/')
 }
 /// Books remembered for "recently read" order.
 const MAX_OPENED: usize = 100;
@@ -246,14 +248,31 @@ pub fn key(path: &str) -> String {
 /// ([`clean_up_unused`]): a cache by itself, the reader's data only when
 /// the reader says so.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BookData {
     pub folder: alloc::borrow::Cow<'static, str>,
     pub prefix: alloc::borrow::Cow<'static, str>,
     pub kind: BookDataKind,
 }
 
+impl BookData {
+    /// Data of `kind` in `folder`, named `prefix` and the book's id.
+    pub fn new(
+        folder: impl Into<alloc::borrow::Cow<'static, str>>,
+        prefix: impl Into<alloc::borrow::Cow<'static, str>>,
+        kind: BookDataKind,
+    ) -> Self {
+        Self {
+            folder: folder.into(),
+            prefix: prefix.into(),
+            kind,
+        }
+    }
+}
+
 /// What a folder of [`BookData`] holds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BookDataKind {
     /// The reader's: a place, notes, settings for the book, a sync's
     /// state. A book not found may be on a card not inserted, or renamed
@@ -723,13 +742,23 @@ fn fit(value: &str) -> &str {
 
 /// Keeps `book` as what the library knows of the book at `path`: values
 /// cut at a kilobyte, the first 32 tags, and what a newer version wrote
-/// there that this one does not know; `false` where it could not be
-/// written (or would be too large to be read back), or the details there
-/// could not be read.
-pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> bool {
-    let Ok(before) = crate::data::Format::FIRST.load(storage, &book_file(path), MAX_DETAILS) else {
-        return false;
-    };
+/// there that this one does not know; an error where it could not be
+/// written (or would be too large to be read back,
+/// [`StorageError::TooLarge`]), or the details there could not be read.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> Result<(), crate::data::Error> {
+    write_details(storage, path, book)
+}
+
+/// [`save`], for the library's own changes of a book: `false` where it
+/// was not kept.
+fn write_book(storage: &dyn Storage, path: &str, book: &Book) -> bool {
+    write_details(storage, path, book).is_ok()
+}
+
+fn write_details(storage: &dyn Storage, path: &str, book: &Book) -> Result<(), crate::data::Error> {
+    let before = crate::data::Format::FIRST.load(storage, &book_file(path), MAX_DETAILS)?;
     let mut ini = String::new();
     let mut set = |key: &str, value: &str| ini = config::set(&ini, "book", key, fit(value));
     set("size", &book.size.to_string());
@@ -769,7 +798,10 @@ pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> bool {
             ini = config::set(&ini, entry.section, entry.key, &entry.value.as_str());
         }
     }
-    ini.len() <= MAX_DETAILS && storage.write(&book_file(path), ini.as_bytes()).is_ok()
+    if ini.len() > MAX_DETAILS {
+        return Err(StorageError::TooLarge.into());
+    }
+    Ok(storage.write(&book_file(path), ini.as_bytes())?)
 }
 
 /// Reads title, author, series, tags and cover from the book itself and
@@ -777,7 +809,7 @@ pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> bool {
 /// EPUB's package is read), so views do this for one book at a time,
 /// e.g. for the rows they show.
 pub fn index(env: &Env<'_>, path: &str) -> Book {
-    let storage = env.storage;
+    let storage = env.storage();
     // Details that could not be read are not written over.
     let (mut book, known) = match book_for_update(storage, path) {
         Ok(book) => (book, true),
@@ -788,7 +820,7 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
     if book.added.is_none() {
         book.added = today(env);
     }
-    if let Ok(document) = env.formats.open(storage, path) {
+    if let Ok(document) = env.formats().open(storage, path) {
         // What the book names; else what its source said ([`provide`]).
         let metadata = document.metadata();
         book.title = metadata.title.clone().or(book.title.take());
@@ -801,7 +833,7 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
         book.cover = document.cover(storage).ok().flatten();
     }
     if known {
-        save(storage, path, &book);
+        write_book(storage, path, &book);
     }
     book
 }
@@ -835,7 +867,7 @@ pub fn is_new_on(book: &Book, opened: bool, today: Option<u32>) -> bool {
 /// What the library knows of the book at `path`, read from the book
 /// first if it is not yet ([`index`](fn@index)).
 pub fn indexed(env: &Env<'_>, path: &str) -> Book {
-    match book(env.storage, path) {
+    match book(env.storage(), path) {
         Some(book) if book.indexed => book,
         _ => index(env, path),
     }
@@ -897,7 +929,7 @@ pub fn provide(storage: &dyn Storage, path: &str, provided: Provided) {
     }
     // Read from the book anew, keeping this where it names nothing.
     book.indexed = false;
-    save(storage, path, &book);
+    write_book(storage, path, &book);
 }
 
 /// Sets field `id` of the book at `path` (a plugin's, e.g.
@@ -910,7 +942,7 @@ pub fn set_field(storage: &dyn Storage, path: &str, id: &str, value: &str) {
     if !value.is_empty() {
         book.fields.push((id.to_string(), value.to_string()));
     }
-    save(storage, path, &book);
+    write_book(storage, path, &book);
 }
 
 /// Records a reading event (`core.book-opened`, `core.page-turned`): the
@@ -918,7 +950,7 @@ pub fn set_field(storage: &dyn Storage, path: &str, id: &str, value: &str) {
 /// opened book its place in the "recently read" order.
 pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: bool) {
     let path = reading.path.as_str();
-    let storage = env.storage;
+    let storage = env.storage();
     if opened {
         update_list(storage, &opened_file(), MAX_OPENED, |list| {
             list.retain(|p| p != path);
@@ -941,7 +973,7 @@ pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: 
         changed = true;
     }
     if changed {
-        save(storage, path, &book);
+        write_book(storage, path, &book);
     }
     // Opened: the catalog knows it at once (a page turned does not write
     // there; the book's closing does, [`note_status`]).
@@ -1003,7 +1035,7 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
         && cover.path.contains(&key(from))
     {
         cover.path = cover.path.replace(&key(from), &key(to));
-        save(storage, to, &book);
+        write_book(storage, to, &book);
     }
     let replace = |list: &mut Vec<String>| {
         for p in list.iter_mut().filter(|p| *p == from) {
@@ -1034,7 +1066,7 @@ pub fn set_finished(storage: &dyn Storage, path: &str, finished: bool) {
         return;
     };
     book.progress = finished.then_some(100);
-    save(storage, path, &book);
+    write_book(storage, path, &book);
     noted_status(storage, path);
 }
 

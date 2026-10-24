@@ -11,7 +11,7 @@ use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_plugin_manager::{OPEN, PluginManager};
 use paperpaw_sdk::{
-    ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
+    ActionSpec, Command, Commands, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, PixelFormat, Plugin, RegisterError, Registrar, Version,
 };
 
@@ -54,7 +54,7 @@ impl Plugin for Installer {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(ActionSpec::new(INSTALL, "installer.install").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::InstallPlugin(
                     Id::new_static("airy"),
                     String::from("plugins/.airy.part"),

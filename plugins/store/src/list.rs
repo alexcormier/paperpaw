@@ -16,8 +16,9 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::ui::sections::Sections;
 use paperpaw_sdk::ui::sections::{Item, Section};
-use paperpaw_sdk::ui::{self, Sections, UiStyle};
+use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Command, Cx, Env, Gesture, GestureKind, Handled, Hint, HttpRequest, Id, Params, Rect,
     RefreshMode, Screen, ask,
@@ -104,7 +105,7 @@ pub(crate) struct ListScreen {
     /// A fresh list was asked for since the screen opened.
     asked: bool,
     /// Offline mode: the offer to go online for the list.
-    offer: ui::OfflineOffer,
+    offer: ui::offline::OfflineOffer,
 }
 
 impl ListScreen {
@@ -114,7 +115,7 @@ impl ListScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
             area,
@@ -125,9 +126,9 @@ impl ListScreen {
             first: 0,
             list: Sections::new(area, 0, 1, Vec::new()),
             trouble: Trouble::None,
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             asked: false,
-            offer: ui::OfflineOffer::new(),
+            offer: ui::offline::OfflineOffer::new(),
             style,
             header,
         };
@@ -184,7 +185,7 @@ impl ListScreen {
             },
         ];
         let heading = ui::heading_height(env, &self.style);
-        self.list = Sections::new(self.area, heading, self.style.row as u16, sections);
+        self.list = Sections::new(self.area, heading, self.style.row(), sections);
         self.list.focus_on(focus);
     }
 
@@ -206,8 +207,8 @@ impl ListScreen {
         let list = env.settings.read(&CATALOG);
         let url = catalog::list_url(list.trim(), device, env.i18n.language());
         let mut request = HttpRequest::new("GET", &url, LOADED);
-        request.save_to = Some(catalog::list_part());
-        cx.command(Command::Http(request));
+        request = request.save_to(catalog::list_part());
+        cx.command(Command::http(request));
         if self.index.is_none() {
             self.trouble = Trouble::Loading;
             self.redraw(cx);
@@ -281,9 +282,9 @@ impl ListScreen {
     }
 
     /// The page and the number of pages, where there is more than one.
-    fn paging(&self) -> Option<(usize, usize)> {
+    fn paging(&self) -> Option<ui::Paging> {
         let paging = self.list.paging();
-        (paging.1 > 1).then_some(paging)
+        (paging.pages > 1).then_some(paging)
     }
 
     /// What entry `row` says at its end.
@@ -323,10 +324,10 @@ impl Screen for ListScreen {
             .room
             .as_deref()
             .filter(|_| self.index.is_some() && self.paging().is_none());
-        self.header
-            .draw(canvas, env, &style, title, note, self.paging());
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, note, self.paging());
         if self.offering(env) {
-            return self.offer.draw(canvas, env, &style, self.area);
+            return self.offer.draw(&mut ui, self.area);
         }
         if self.list.is_empty() {
             let (icon, title, text) = match self.trouble {
@@ -342,20 +343,12 @@ impl Screen for ListScreen {
             } else {
                 ui::tr_input(env, text)
             };
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
-                self.area,
-                icon,
-                env.i18n.tr(title),
-                text,
-            );
+            ui.empty(self.area, icon, env.i18n.tr(title), text);
             return;
         }
-        let room = ui::icon_room(env, &style, true);
+        let room = ui.icon_room(true);
         self.list
-            .draw(canvas, &style, self.keys, |canvas, item, rect, focused| {
+            .draw(&mut ui, self.keys, |ui, item, rect, focused| {
                 let entry = match item {
                     Item::Heading(_) => return,
                     Item::Entry(entry) => entry,
@@ -364,8 +357,7 @@ impl Screen for ListScreen {
                     return;
                 };
                 let ink = style.focus_ink(focused);
-                let rest =
-                    ui::draw_row_icon(canvas, env, &style, rect, room, Some(row.icon()), ink);
+                let rest = ui.row_icon(rect, room, Some(row.icon()), ink);
                 let name = match row {
                     Row::Search => env.i18n.tr("store.search"),
                     Row::Installed => env.i18n.tr("store.installed-list"),
@@ -376,14 +368,14 @@ impl Screen for ListScreen {
                     // How many have an update, marked as in their rows.
                     let count = self.counts.updates as i64;
                     let text = env.i18n.plural("store.updates-count", count, &[]);
-                    let right = f32::from(rect.x + rect.width) - style.margin as f32;
+                    let right = f32::from(rect.x + rect.width) - style.margin() as f32;
                     let band = rest;
-                    rows::draw_pill(canvas, env, &style, band, right, &text, focused);
-                    ui::draw_value_row(canvas, env, &style, rest, focused, name, "");
+                    rows::draw_pill(ui, band, right, &text, focused);
+                    ui::Row::plain(name).focused(focused).draw(ui, rest);
                     return;
                 }
                 let value = self.value(row);
-                ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
+                ui::Row::value(name, &value).focused(focused).draw(ui, rest);
             });
     }
 
@@ -402,7 +394,7 @@ impl Screen for ListScreen {
             // Updates waiting since the last visit (a restart, no
             // connection) go on.
             let env = *cx.env();
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             crate::queue::next(&env, &mut out);
             for command in out {
                 cx.command(command);
@@ -413,7 +405,7 @@ impl Screen for ListScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         if *a != actions::BACK && self.offering(cx.env()) {
-            if self.offer.on_action(a, cx) == Some(ui::Offer::Online) {
+            if self.offer.on_action(a, cx).done() == Some(ui::offline::Offer::Online) {
                 self.fetch(cx);
             }
             return Handled::Yes;
@@ -457,11 +449,11 @@ impl Screen for ListScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, self.paging())
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.offering(cx.env()) {
-            if self.offer.on_tap(gesture.start, cx) == Some(ui::Offer::Online) {
+            if self.offer.on_gesture(&gesture, cx).done() == Some(ui::offline::Offer::Online) {
                 self.fetch(cx);
             }
             return Handled::Yes;

@@ -16,7 +16,7 @@ mod support;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::sections::{Item, Section, Sections};
-use paperpaw_sdk::ui::{ListChange, ListView, Rows, UiStyle, list_step, step_focus};
+use paperpaw_sdk::ui::{ListChange, ListView, Paging, Rows, UiStyle, list_step, step_focus};
 use paperpaw_sdk::{Cx, Id, Output, Point, Rect, RefreshMode};
 use proptest::prelude::*;
 
@@ -24,9 +24,7 @@ use support::{Device, Harness, drawn_outside, frame, middle};
 
 /// Sizes for tests: no fonts needed.
 fn style() -> UiStyle {
-    let mut style = UiStyle::PLAIN;
-    style.corner = 6;
-    style
+    UiStyle::PLAIN.with_corner(6)
 }
 
 /// Every point of `rect` worth trying: its corners and its middle.
@@ -210,7 +208,9 @@ proptest! {
         list.set_focus(focus.min(len.saturating_sub(1)));
         let mut frame = frame(560, 1000);
         let mut focused_rows = Vec::new();
-        list.draw(&mut frame.canvas(), &style(), len, |_, index, rect, focused| {
+        let harness = support::Harness::new(support::Device::BUTTONS);
+        let env = harness.env();
+        list.draw(&mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style()), len, |_, index, rect, focused| {
             assert!(inside(rect, list.area()));
             if focused {
                 focused_rows.push((index, rect));
@@ -230,16 +230,20 @@ proptest! {
 fn an_empty_list_has_one_page_and_nothing_to_focus_or_hit() {
     let mut list = ListView::new(Rect::new(0, 0, 400, 300), 50);
     assert_eq!(list.pages(0), 1);
-    assert_eq!(list.paging(0), Some((0, 1)));
+    assert_eq!(list.paging(0), Some(Paging::new(0, 1)));
     for delta in [-1, 1, -6, 6] {
         assert_eq!(list.move_focus(delta, 0), ListChange::None);
     }
     assert_eq!(list.focus(), 0);
     assert_eq!(list.hit(Point::new(10, 10), 0), None);
     let mut rows = 0;
-    list.draw(&mut frame(400, 300).canvas(), &style(), 0, |_, _, _, _| {
-        rows += 1
-    });
+    let harness = support::Harness::new(support::Device::BUTTONS);
+    let env = harness.env();
+    list.draw(
+        &mut paperpaw_sdk::ui::Ui::new(&mut frame(400, 300).canvas(), &env, &style()),
+        0,
+        |_, _, _, _| rows += 1,
+    );
     assert_eq!(rows, 0);
 }
 
@@ -263,9 +267,11 @@ fn a_hidden_focus_shows_on_the_first_step_and_stays_hidden_while_paging() {
     let mut hidden = ListView::new(Rect::new(0, 0, 400, 300), 100).focus_on_keys(&env);
     hidden.set_focus(1);
     let mut focused = 0;
-    hidden.draw(&mut frame(400, 300).canvas(), &style(), 3, |_, _, _, f| {
-        focused += usize::from(f)
-    });
+    hidden.draw(
+        &mut paperpaw_sdk::ui::Ui::new(&mut frame(400, 300).canvas(), &env, &style()),
+        3,
+        |_, _, _, f| focused += usize::from(f),
+    );
     assert_eq!(focused, 0);
 
     // Without touch it shows from the start.
@@ -346,7 +352,7 @@ proptest! {
             return Ok(());
         }
         let pages = rows_pages(&mut rows);
-        prop_assert_eq!(pages.len(), rows.paging().1);
+        prop_assert_eq!(pages.len(), rows.paging().pages);
         let mut seen = Vec::new();
         for page in &pages {
             let mut y = ROWS_AREA.y;
@@ -383,12 +389,12 @@ proptest! {
         prop_assert_eq!(rows.focus(), entries[0]);
         let mut visited = vec![rows.focus()];
         for _ in 0..entries.len() {
-            let page = rows.paging().0;
+            let page = rows.paging().page;
             let change = rows.step(forward);
             prop_assert!(!headings[rows.focus()]);
             let expected = if entries.len() == 1 {
                 ListChange::None
-            } else if rows.paging().0 == page {
+            } else if rows.paging().page == page {
                 ListChange::Focus
             } else {
                 ListChange::Page
@@ -443,7 +449,9 @@ proptest! {
         }
         let mut frame = frame(400, 300);
         let mut focused = Vec::new();
-        rows.draw(&mut frame.canvas(), &style(), true, |_, index, _, f| {
+        let harness = support::Harness::new(support::Device::BUTTONS);
+        let env = harness.env();
+        rows.draw(&mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style()), true, |_, index, _, f| {
             if f {
                 focused.push(index);
             }
@@ -459,7 +467,7 @@ proptest! {
 fn rows_without_any_go_nowhere() {
     let mut rows = Rows::new(ROWS_AREA, Vec::new(), Vec::new());
     assert!(rows.is_empty());
-    assert_eq!(rows.paging(), (0, 1));
+    assert_eq!(rows.paging(), Paging::new(0, 1));
     assert!(rows.visible().is_empty());
     assert_eq!(rows.step(true), ListChange::None);
     assert_eq!(rows.turn(true), ListChange::None);
@@ -548,11 +556,11 @@ proptest! {
             prop_assert_eq!(list.focus(), entries.end, "turned to the first entry");
         }
         prop_assert_eq!(next, len, "the last page ends the list");
-        prop_assert_eq!(list.paging(), (pages - 1, pages));
+        prop_assert_eq!(list.paging(), Paging::new(pages - 1, pages));
         // And back again, page by page.
         for page in (0..pages - 1).rev() {
             prop_assert_ne!(list.turn(false), ListChange::None);
-            prop_assert_eq!(list.paging().0, page);
+            prop_assert_eq!(list.paging().page, page);
         }
         prop_assert_eq!(list.turn(false), ListChange::None);
     }
@@ -639,7 +647,9 @@ proptest! {
         }
         let mut frame = frame(400, 300);
         let mut focused = Vec::new();
-        list.draw(&mut frame.canvas(), &style(), true, |_, item, _, f| {
+        let harness = support::Harness::new(support::Device::BUTTONS);
+        let env = harness.env();
+        list.draw(&mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style()), true, |_, item, _, f| {
             if f {
                 focused.push(item);
             }
@@ -664,13 +674,12 @@ fn a_long_list_turns_to_its_last_page_and_back_to_its_first() {
     let mut list = Sections::new(Rect::new(0, 0, 300, 400), 20, 50, sections);
     list.focus_on(usize::MAX);
     assert_eq!(list.focus(), 6_999);
-    let (page, pages) = list.paging();
-    assert_eq!(page + 1, pages);
+    assert!(list.paging().is_last());
     assert_eq!(list.page_entries().end, 7_000);
     assert_eq!(list.turn(true), ListChange::None);
     list.step(true);
     assert_eq!(list.focus(), 0, "on from the last: the first");
-    assert_eq!(list.paging().0, 0);
+    assert_eq!(list.paging().page, 0);
 }
 
 // ---- What a move asks to be drawn ---------------------------------------

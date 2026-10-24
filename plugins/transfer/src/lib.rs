@@ -25,7 +25,6 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use paperpaw_qr::QrCode;
 use paperpaw_sdk::builtin::{actions, events, menus, slots};
@@ -33,9 +32,9 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, ServerNotice};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, ServerResponse, Version,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
+    Screen, ScreenSpec, ServerResponse, Version,
 };
 
 use paperpaw_sdk::served::{self, Guard};
@@ -90,7 +89,7 @@ impl Plugin for Transfer {
             Box::new(|env, _| Box::new(TransferScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "transfer.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -126,7 +125,7 @@ enum State {
     /// Without a network: how to get one.
     NoNetwork,
     /// Offline mode: the offer to go online for the transfer.
-    Offline(ui::OfflineOffer),
+    Offline(ui::offline::OfflineOffer),
 }
 
 /// The reader's own network, for a transfer without a router: its name
@@ -175,9 +174,9 @@ impl TransferScreen {
 
     /// What the reader chose on the offer to go online: served now, or
     /// without a network as without one.
-    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
         match chosen {
-            Some(ui::Offer::Online) => {
+            Some(ui::offline::Offer::Online) => {
                 self.state = State::Starting;
                 cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
             }
@@ -201,8 +200,8 @@ impl TransferScreen {
         }
         let area = self.content(env);
         let style = &self.style;
-        let row = style.touch_row(style.control_row) as u16;
-        let margin = style.margin as u16;
+        let row = style.touch_row(u32::from(style.control_row())) as u16;
+        let margin = style.margin();
         let width = area.width.saturating_sub(2 * margin);
         // A touch row, higher where its words take more lines.
         let label = env.i18n.tr("transfer.without-router");
@@ -261,7 +260,7 @@ impl TransferScreen {
     /// The area below the header.
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 
@@ -321,7 +320,7 @@ impl TransferScreen {
                     at: env.now,
                 };
                 let (response, done) = web::answer(env.storage, guard, &self.page, request);
-                cx.command(Command::Respond(response));
+                cx.command(Command::respond(response));
                 if let Some(done) = done {
                     // The library follows: a book added, a book removed (what
                     // plugins keep for it goes too), a folder removed (its
@@ -395,13 +394,13 @@ impl TransferScreen {
             if let Some(body) = body_file {
                 let _ = env.storage.remove(&body);
             }
-            return cx.command(Command::Respond(response));
+            return cx.command(Command::respond(response));
         }
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         let (response, ask) =
             self.installs
                 .answer(&env, number, method, target, body_file.as_deref(), &mut out);
-        out.push(Command::Respond(response));
+        out.push(Command::respond(response));
         for command in out {
             cx.command(command);
         }
@@ -476,30 +475,24 @@ fn page(env: &Env<'_>) -> String {
 
 /// The code to join the reader's own network in `area`, its name and
 /// password below it, to type where the code cannot be scanned.
-fn draw_join(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    own: &OwnNetwork,
-) {
-    let Some(font) = style.font(env) else {
+fn draw_join(ui: &mut ui::Ui<'_>, area: Rect, own: &OwnNetwork) {
+    let (env, style) = (ui.env(), ui.style());
+    let Some(font) = ui.font() else {
         return;
     };
-    let margin = style.margin as u16;
+    let margin = style.margin();
     let width = area.width.saturating_sub(2 * margin);
-    let line = font.line_metrics(style.text).line_height as u16;
-    let small = font.line_metrics(style.small).line_height as u16;
+    let line = font.line_metrics(style.text()).line_height as u16;
+    let small = font.line_metrics(style.small()).line_height as u16;
     let title = env.i18n.tr("transfer.own.join");
-    ui::draw_label(
-        canvas,
-        &font,
-        style.text,
-        f32::from(margin),
-        Rect::new(margin, area.y, width, line),
-        title,
-        Color::BLACK,
-    );
+    ui::Label::new(title)
+        .px(style.text())
+        .color(Color::BLACK)
+        .draw_from(
+            ui,
+            f32::from(margin),
+            Rect::new(margin, area.y, width, line),
+        );
     let note = env.i18n.format(
         "transfer.own.network",
         &[
@@ -511,15 +504,14 @@ fn draw_join(
         ],
     );
     let bottom = area.y + area.height;
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        f32::from(margin),
-        Rect::new(margin, bottom.saturating_sub(small), width, small),
-        &note,
-        style.faint(60),
-    );
+    ui::Label::new(&note)
+        .px(style.small())
+        .color(style.faint(ui::Ink::Note))
+        .draw_from(
+            ui,
+            f32::from(margin),
+            Rect::new(margin, bottom.saturating_sub(small), width, small),
+        );
     if let Some(qr) = &own.qr {
         let room = Rect::new(
             margin,
@@ -527,7 +519,7 @@ fn draw_join(
             width,
             area.height.saturating_sub(line + small),
         );
-        ui::draw_qr(canvas, qr, room);
+        ui::draw_qr(ui.canvas(), qr, room);
     }
 }
 
@@ -542,8 +534,9 @@ impl Screen for TransferScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("transfer.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(&mut ui, title, None, None);
         let area = self.content(env);
         let own_button = self.own_button(env);
         let (url, qr) = match &mut self.state {
@@ -554,16 +547,16 @@ impl Screen for TransferScreen {
                     Some(b) => Rect::new(area.x, area.y, area.width, b.y.saturating_sub(area.y)),
                     None => area,
                 };
-                ui::draw_message(canvas, env, &style, room, env.i18n.tr("transfer.starting"));
+                ui.message(room, env.i18n.tr("transfer.starting"));
                 if let Some(button) = button {
                     let label = env.i18n.tr("transfer.without-router");
-                    let focused = !env.device.input.touch;
-                    ui::draw_button(canvas, env, &style, button, label, false, focused);
+                    let focused = ui::focus_shown(env);
+                    ui.button(button, label, false, focused);
                 }
                 return;
             }
             State::Failed(message) => {
-                return ui::draw_message(canvas, env, &style, area, message);
+                return ui.message(area, message);
             }
             State::NoNetwork => {
                 // Where PaperPaw runs Wi-Fi, its settings join a network;
@@ -579,10 +572,7 @@ impl Screen for TransferScreen {
                     Some(b) => Rect::new(area.x, area.y, area.width, b.y.saturating_sub(area.y)),
                     None => area,
                 };
-                ui::draw_empty(
-                    canvas,
-                    env,
-                    &style,
+                ui.empty(
                     room,
                     "wifi-off",
                     env.i18n.tr("transfer.no-network.title"),
@@ -590,25 +580,21 @@ impl Screen for TransferScreen {
                 );
                 if let Some(button) = button {
                     let label = env.i18n.tr("transfer.without-router");
-                    let focused = !env.device.input.touch;
-                    ui::draw_button(canvas, env, &style, button, label, false, focused);
+                    let focused = ui::focus_shown(env);
+                    ui.button(button, label, false, focused);
                 }
                 return;
             }
-            State::Offline(offer) => return offer.draw(canvas, env, &style, area),
+            State::Offline(offer) => {
+                return offer.draw(&mut ui, area);
+            }
             State::Serving { url, qr } => (url, qr),
         };
         // Without a router: first the code to join the reader's network.
         let area = match &self.own {
             Some(own) => {
                 let half = area.height / 2;
-                draw_join(
-                    canvas,
-                    env,
-                    &style,
-                    Rect::new(area.x, area.y, area.width, half),
-                    own,
-                );
+                draw_join(&mut ui, Rect::new(area.x, area.y, area.width, half), own);
                 Rect::new(area.x, area.y + half, area.width, area.height - half)
             }
             None => area,
@@ -619,13 +605,13 @@ impl Screen for TransferScreen {
                 area.x,
                 area.y,
                 area.width,
-                button.y.saturating_sub(area.y + style.gap as u16),
+                button.y.saturating_sub(area.y + style.gap()),
             ),
             None => area,
         };
         let hint = env.i18n.tr("transfer.hint");
         ui::draw_address(
-            canvas,
+            ui.canvas(),
             env,
             &style,
             area,
@@ -636,8 +622,8 @@ impl Screen for TransferScreen {
         );
         if let Some(button) = button {
             let label = env.i18n.tr("transfer.without-router");
-            let focused = !env.device.input.touch;
-            ui::draw_button(canvas, env, &style, button, label, false, focused);
+            let focused = ui::focus_shown(env);
+            ui.button(button, label, false, focused);
         }
     }
 
@@ -660,7 +646,7 @@ impl Screen for TransferScreen {
                 self.redraw(cx);
                 return;
             }
-            let offer = ui::OfflineOffer::new();
+            let offer = ui::offline::OfflineOffer::new();
             if offer.shows(cx.env()) {
                 self.state = State::Offline(offer);
                 self.redraw(cx);
@@ -679,7 +665,7 @@ impl Screen for TransferScreen {
             self.without_router(cx);
             Handled::Yes
         } else if let State::Offline(offer) = &mut self.state {
-            let chosen = offer.on_action(action, cx);
+            let chosen = offer.on_action(action, cx).done();
             self.offered(chosen, cx);
             Handled::Yes
         } else {
@@ -694,7 +680,7 @@ impl Screen for TransferScreen {
             if action == actions::BACK {
                 self.close(cx);
             } else {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
             }
             return Handled::Yes;
         }
@@ -709,7 +695,7 @@ impl Screen for TransferScreen {
         if gesture.kind == GestureKind::Tap
             && let State::Offline(offer) = &mut self.state
         {
-            let chosen = offer.on_tap(gesture.start, cx);
+            let chosen = offer.on_gesture(&gesture, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }
@@ -727,7 +713,7 @@ impl Screen for TransferScreen {
                 return;
             };
             let id = String::from(id);
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             let installed = self.installs.approved(&env, &id, answer.yes, &mut out);
             for command in out {
                 cx.command(command);

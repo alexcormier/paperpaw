@@ -9,7 +9,9 @@ use alloc::string::{String, ToString};
 
 use paperpaw_sdk::builtin::settings::BATTERY_LOW;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec,
+};
 use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
 use super::{add_settings, caption, chosen, draw_message, draw_ring, frame_height};
@@ -30,15 +32,15 @@ static SETTINGS: [SettingSpec; 8] = [
     widgets::align_spec("widgets.battery.align", ID, Align::Center),
     widgets::frame_spec("widgets.battery.frame", ID, Frame::None),
     widgets::padding_spec("widgets.battery.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.battery.size", ID, Size::Fit, true),
-    SettingSpec::fixed_choice(
+    widgets::size_spec("widgets.battery.size", ID, TextSize::Fit, true),
+    SettingSpec::choice(
         "widgets.battery.style",
         "widgets.books.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.battery.style.help"),
+    .description("widgets.battery.style.help"),
     widgets::part_spec(
         "widgets.battery.percent",
         ID,
@@ -60,7 +62,15 @@ static SETTINGS: [SettingSpec; 8] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    add_settings(r, &ID, "widgets.battery", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.battery");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     r.add_widget(
         WidgetSpec::new(
             ID,
@@ -87,7 +97,7 @@ impl Widget for BatteryWidget {
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
-        widgets::line_height(env, style.title * 2.0) + style.gap as u16 + frame_height(env, WIDGET)
+        widgets::line_height(env, style.title() * 2.0) + style.gap() + frame_height(env, WIDGET)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -107,7 +117,7 @@ const LYING: u32 = 212;
     clippy::too_many_lines,
     reason = "longer than the limit from before it was set; split it when it is next changed"
 )]
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, charging: bool) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, percent: u8, charging: bool) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -120,32 +130,32 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
         look,
         env.i18n.tr("widgets.battery.caption"),
     );
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let charging = charging && widgets::shows(env, id, "charging");
     let low = i64::from(percent) <= env.settings.read(&BATTERY_LOW);
     let number = Number {
         font: &font,
         text: percent.to_string(),
         bolt: if charging { 0.55 } else { 0.0 },
-        least: style.small * 0.6,
-        ratio: font.line_metrics(style.text).ascent / style.text.max(1.0),
+        least: style.small() * 0.6,
+        ratio: font.line_metrics(style.text()).ascent / style.text().max(1.0),
     };
     let with_text = widgets::shows(env, id, "percent");
     let align = widgets::align(env, id);
     let fixed = match widgets::size(env, id) {
-        Size::Fit => None,
+        TextSize::Fit => None,
         other => Some(other.text(&style) * 1.4),
     };
     let (w, h) = (f32::from(area.width), f32::from(area.height));
     let style_value = chosen(env, id, "style");
     // Not larger than this, however large the place: calm, not loud.
-    let most = fixed.map_or(style.title * 4.0, |f| f * 1.2);
+    let most = fixed.map_or(style.title() * 4.0, |f| f * 1.2);
     if style_value == STYLES[2] {
         // A ring with the number inside; beside it where the ring is
         // too small for it and there is room.
         let d = area.width.min(area.height).min((most * 1.6) as u16);
         let radius = u32::from(d / 2);
-        let thick = (radius / 7).max(style.line * 2).max(2);
+        let thick = (radius / 7).max(u32::from(style.line()) * 2).max(2);
         let inner = radius.saturating_sub(thick + (radius / 8).max(1)) as f32;
         let inside = number
             .largest(fixed.unwrap_or(inner * 0.9), |s| {
@@ -157,7 +167,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
         let beside_size = number
             .largest(fixed.unwrap_or(h * 0.55), |s| number.width(s) <= room)
             .unwrap_or(0.0);
-        let beside = with_text && inside < style.small && beside_size > 0.0;
+        let beside = with_text && inside < style.small() && beside_size > 0.0;
         if with_text && !beside && inside == 0.0 {
             // Too small for a ring: the number alone.
             let Some(size) = number.largest(most, |s| {
@@ -334,7 +344,7 @@ impl Number<'_, '_> {
 /// percent sign small after it.
 fn draw_charge_text(
     canvas: &mut Canvas<'_>,
-    look: &Look,
+    look: &WidgetLook,
     number: &Number<'_, '_>,
     x: f32,
     band: Rect,
@@ -366,7 +376,7 @@ fn draw_charge_text(
 fn draw_battery(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     body: Rect,
     percent: u8,
     low: bool,
@@ -398,7 +408,9 @@ fn draw_battery(
             ),
         )
     };
-    let line = u32::from(short / 11).max(style.line * 2).max(2);
+    let line = u32::from(short / 11)
+        .max(u32::from(style.line()) * 2)
+        .max(2);
     let radius = u32::from(short / 5);
     canvas.fill_round(knob_at, u32::from(knob / 2), look.ink);
     canvas.fill_round(shell, radius, look.paper);

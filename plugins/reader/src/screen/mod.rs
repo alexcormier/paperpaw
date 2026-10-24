@@ -115,7 +115,7 @@ pub(crate) struct ReaderScreen {
     /// The last search, offered again.
     last_search: String,
     /// What the status lines showed when last drawn.
-    status_shown: String,
+    status_shown: Option<u64>,
     /// The sentence being read aloud.
     aloud: Option<Aloud>,
     /// Where reading aloud was paused: the page and its word.
@@ -155,7 +155,7 @@ impl ReaderScreen {
             selected_on: Locator::START,
             linking: None,
             last_search: String::new(),
-            status_shown: String::new(),
+            status_shown: None,
             aloud: None,
             resume: None,
             auto_turn: None,
@@ -237,7 +237,7 @@ impl ReaderScreen {
             }
         }
         cx.request_refresh(RefreshMode::Fast);
-        self.status_shown.clear();
+        self.status_shown = None;
     }
 
     /// Redraws the status lines if what they show changed, and checks again
@@ -251,8 +251,8 @@ impl ReaderScreen {
             return;
         }
         let signature = status::signature(&env, &book.status_context(&env), &book.status_lines);
-        if signature != self.status_shown {
-            self.status_shown = signature;
+        if Some(signature) != self.status_shown {
+            self.status_shown = Some(signature);
             for (area, _) in book.status_areas() {
                 cx.request_redraw_area(area);
             }
@@ -306,7 +306,10 @@ impl ReaderScreen {
         };
         let (start, end) = (book.page.start, book.page.end);
         let on_page = |m: &Mark| m.kind == Kind::Bookmark && m.start >= start && m.start < end;
-        if !annotations::remove(env.storage, &book.path, on_page) {
+        if !matches!(
+            annotations::remove(env.storage, &book.path, on_page),
+            Ok(true)
+        ) {
             let text = page_text(&book.page.lines);
             let kept = annotations::add(
                 env.storage,
@@ -325,7 +328,7 @@ impl ReaderScreen {
                     note: String::new(),
                 },
             );
-            if !kept {
+            if kept.is_err() {
                 marks_not_saved(cx);
             }
         }
@@ -778,11 +781,13 @@ impl Screen for ReaderScreen {
 impl ReaderScreen {
     /// The page, its marks and status lines, and what is chosen on it.
     fn draw_book(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let style = UiStyle::new(env);
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let book = match &mut self.book {
             Ok(book) => book,
             Err(message) => {
                 let area = Rect::from_size(env.device.display.width, env.device.display.height);
-                return ui::draw_message(canvas, env, &UiStyle::new(env), area, message);
+                return ui.message(area, message);
             }
         };
         // Word boxes are measured only when something is drawn on words.
@@ -815,27 +820,27 @@ impl ReaderScreen {
         let view = book.page_view(lines);
         let rooms = &book.typography.rooms;
         if layered {
-            env.page_layers.draw(canvas, env, &view, rooms, true);
+            env.page_layers.draw(ui.canvas(), env, &view, rooms, true);
         }
-        marks.draw_behind(canvas, env);
-        book.draw_page(canvas, env, &marks.inks);
-        marks.draw_over(canvas, env);
+        marks.draw_behind(ui.canvas(), env);
+        book.draw_page(ui.canvas(), env, &marks.inks);
+        marks.draw_over(ui.canvas(), env);
         if layered {
-            env.page_layers.draw(canvas, env, &view, rooms, false);
+            env.page_layers.draw(ui.canvas(), env, &view, rooms, false);
         }
-        book.draw_note_signs(canvas, env, words);
-        book.draw_back(canvas, env);
-        book.draw_status(canvas, env);
+        book.draw_note_signs(&mut ui, words);
+        book.draw_back(&mut ui);
+        book.draw_status(ui.canvas(), env);
         if book.bookmarked() {
-            book.draw_ribbon(canvas, env);
+            book.draw_ribbon(ui.canvas(), env);
         }
         // A bar at the bottom hides the status line under it entirely.
         let bar = self.linking.is_some() || self.selection.is_some_and(|s| s.mode == Mode::Bar);
         if let Some(status) = book.typography.status.filter(|_| bar) {
-            canvas.fill(status, Color::WHITE);
+            ui.canvas().fill(status, Color::WHITE);
         }
         if let Some(linking) = self.linking {
-            draw_linking(canvas, env, book, words, linking);
+            draw_linking(&mut ui, book, words, linking);
         }
         let Some(selection) = self.selection else {
             return;
@@ -843,7 +848,7 @@ impl ReaderScreen {
         let (lo, hi) = selection.range();
         let line = env.metrics.tenth_mm(4).max(2);
         for b in selection::line_boxes(words, |i| (lo..=hi).contains(&i)) {
-            canvas.stroke_rect(
+            ui.canvas().stroke_rect(
                 i32::from(b.x) - 4,
                 i32::from(b.y) - 2,
                 u32::from(b.width) + 8,
@@ -854,7 +859,7 @@ impl ReaderScreen {
         }
         if selection.mode == Mode::Bar {
             let items = self.items(env, words);
-            selection::draw_bar(canvas, env, &items, selection.focus);
+            selection::draw_bar(&mut ui, &items, selection.focus);
         }
     }
 
@@ -906,8 +911,10 @@ impl ReaderScreen {
             return;
         }
         let this_book = params.get(params::PATH) == Some(book.path.as_str());
-        if *event == crate::SPOKEN && this_book {
-            self.spoken(params, cx);
+        if let Some(spoken) = crate::SPOKEN.read(event, params)
+            && this_book
+        {
+            self.spoken(&spoken, cx);
             return;
         }
         // Changed elsewhere too, e.g. by a sync.
@@ -956,7 +963,10 @@ impl ReaderScreen {
             let env = *cx.env();
             let note = typed.text.as_str();
             let now = paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0);
-            if !annotations::set_note(env.storage, &book.path, at, note, now) {
+            if !matches!(
+                annotations::set_note(env.storage, &book.path, at, note, now),
+                Ok(true)
+            ) {
                 marks_not_saved(cx);
             }
             book.marks = annotations::marks(env.storage, &book.path);
@@ -1055,7 +1065,7 @@ impl ReaderScreen {
             || changed.is_some() && !font_changed && id.starts_with("core.")
         {
             // The battery, the clock format, the time zone, …
-            self.status_shown.clear();
+            self.status_shown = None;
             self.update_status(cx);
             return;
         }

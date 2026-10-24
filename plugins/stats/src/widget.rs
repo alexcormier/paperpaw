@@ -30,9 +30,9 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::round::point_at;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Look, Size, WidgetTarget};
+use paperpaw_sdk::widgets::{self, TextSize, WidgetLook, WidgetTarget};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
+    Canvas, Color, Command, Commands, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
     SettingSpec, SettingValue,
 };
 
@@ -73,14 +73,14 @@ pub(crate) fn goal(env: &Env<'_>) -> Option<u64> {
 }
 
 /// The plugin's settings for the widgets, kept in the program.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
     "stats.goal",
     "stats.setting.goal",
     &GOALS,
     GOALS[0],
     crate::GROUP,
 )
-.described("stats.setting.goal.help")];
+.description("stats.setting.goal.help")];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
@@ -104,7 +104,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 /// goes onto its first page, after the book being read, if no page shows
 /// it yet. Offered once only (kept as a file of the plugin), so that a
 /// widget the user removed stays away.
-fn offer_widget(env: &Env<'_>, out: &mut Vec<Command>) {
+fn offer_widget(env: &Env<'_>, out: &mut Commands) {
     let offered = alloc::format!(
         "{}/goal-widget-offered",
         Env::plugin_dir(crate::PLUGIN.as_str())
@@ -180,7 +180,7 @@ fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
 fn caption<'t>(env: &Env<'_>, widget: &str, area: Rect, texts: &[&'t str]) -> Option<&'t str> {
     let cap = caption_room(env, widget);
     let style = UiStyle::new(env);
-    let least = widgets::line_height(env, style.text);
+    let least = widgets::line_height(env, style.text());
     if cap == 0 || cap + least > area.height {
         return None;
     }
@@ -189,7 +189,7 @@ fn caption<'t>(env: &Env<'_>, widget: &str, area: Rect, texts: &[&'t str]) -> Op
     texts
         .iter()
         .copied()
-        .find(|text| font.measure(style.small, text) <= width)
+        .find(|text| font.measure(style.small(), text) <= width)
 }
 
 /// The room below `caption` in `area` (all of it without one).
@@ -210,7 +210,7 @@ fn captioned(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     widget: &str,
-    look: &Look,
+    look: &WidgetLook,
     caption: Option<&str>,
     height: u16,
 ) -> Rect {
@@ -233,7 +233,7 @@ fn captioned(
 /// The colour between `look`'s paper and its ink at `level` of 4 (4: the
 /// ink), for shades drawn with `fill_shaded` (dithered on panels with few
 /// grays): light on light paper, the other way round on a dark card.
-fn shade(look: &Look, level: u8) -> Color {
+fn shade(look: &WidgetLook, level: u8) -> Color {
     const LIGHT: [u8; 5] = [255, 205, 160, 95, 0];
     let gray = LIGHT[usize::from(level.min(4))];
     if look.paper.luma() < 128 {
@@ -282,10 +282,10 @@ fn text_size(
 ) -> f32 {
     let style = UiStyle::new(env);
     let max = match widgets::size(env, widget) {
-        Size::Fit => f32::from(height).max(style.text),
+        TextSize::Fit => f32::from(height).max(style.text()),
         size => size.text(&style),
     };
-    sized(font, &style, text, (width, height), (max, style.text))
+    sized(font, &style, text, (width, height), (max, style.text()))
 }
 
 /// The largest size (three times a title's at most, the small size at
@@ -296,7 +296,7 @@ fn fit_size(font: &FontHandle<'_>, style: &UiStyle, text: &str, width: u16, heig
         style,
         text,
         (width, height),
-        (style.title * 3.0, style.small),
+        (style.title() * 3.0, style.small()),
     )
 }
 
@@ -316,8 +316,8 @@ fn sized(
     widgets::largest_size(max, least.min(max), |size| {
         tall(size) && font.measure(size, text) <= wide
     })
-    .or_else(|| widgets::largest_size(max.min(least), style.small, tall))
-    .unwrap_or(style.small.min(max))
+    .or_else(|| widgets::largest_size(max.min(least), style.small(), tall))
+    .unwrap_or(style.small().min(max))
 }
 
 /// `text`, or where it is wider than `width` at `size`, the number it
@@ -345,7 +345,7 @@ fn note_lines(
     most: u16,
 ) -> Option<widgets::Wrapped> {
     let style = UiStyle::new(env);
-    let small = widgets::line_height(env, style.small).max(1);
+    let small = widgets::line_height(env, style.small()).max(1);
     let height = height.min(small * most);
     if text.is_empty() || height < small {
         return None;
@@ -353,8 +353,8 @@ fn note_lines(
     Some(widgets::Wrapped::fitting(
         env,
         text,
-        style.small,
-        style.small,
+        style.small(),
+        style.small(),
         width,
         height,
     ))
@@ -402,7 +402,7 @@ fn initial<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
 
 /// A tap on the whole widget opens the statistics.
 fn open_statistics(area: Rect) -> Vec<WidgetTarget> {
-    alloc::vec![WidgetTarget::new(area, Command::RunAction(OPEN))]
+    alloc::vec![WidgetTarget::new(area, Command::run(OPEN))]
 }
 
 /// Draws a ring into the square `at`, `thick` pixels wide: a thin track
@@ -411,7 +411,7 @@ fn open_statistics(area: Rect) -> Vec<WidgetTarget> {
 fn draw_arc(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     at: Rect,
     progress: Option<u32>,
     thick: u32,
@@ -430,7 +430,7 @@ fn draw_arc(
     );
     let (from, sweep) = if gauge { (225, 270) } else { (0, 360) };
     // The track, thin, in the middle of where the ring is drawn.
-    let track = style.line.max(1).min(thick);
+    let track = u32::from(style.line()).max(1).min(thick);
     let track_radius = radius - (thick - track) / 2;
     // Halfway between paper and ink where the panel has grays to show
     // it, else faint (black or white, told apart by its thinness).
@@ -474,7 +474,7 @@ mod tests {
     /// widget (its group): the plugin loads, the widgets read them.
     #[test]
     fn the_widgets_register() {
-        use paperpaw_sdk::contribution::Contribution;
+        use paperpaw_sdk::Contribution;
         let mut r = Registrar::new(crate::PLUGIN);
         assert!(register(&mut r).is_ok());
         let mut ids: Vec<&str> = r
@@ -529,14 +529,14 @@ mod tests {
     #[test]
     fn shades_turn_round_on_a_dark_card() {
         let area = Rect::new(0, 0, 10, 10);
-        let light = Look::new(
+        let light = WidgetLook::new(
             area,
             Color::BLACK,
             Color::gray(90),
             Color::WHITE,
             Frame::None,
         );
-        let dark = Look::new(
+        let dark = WidgetLook::new(
             area,
             Color::WHITE,
             Color::gray(90),

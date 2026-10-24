@@ -35,7 +35,7 @@ impl AboutScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area =
             paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
@@ -85,79 +85,47 @@ impl Screen for AboutScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.rows.len();
         self.list.set_len(len);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("about.title"),
             None,
             self.list.paging(len),
         );
         let rows = &self.rows;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let tr = |key| env.i18n.tr(key);
-                match rows[index] {
-                    Row::Version => ui::draw_noted_row(
-                        canvas,
-                        env,
-                        &style,
-                        rect,
-                        focused,
-                        "PaperPaw",
-                        crate::VERSION,
-                        tr("about.summary"),
-                    ),
-                    Row::Source => ui::draw_noted_row(
-                        canvas,
-                        env,
-                        &style,
-                        rect,
-                        focused,
-                        tr("about.source"),
-                        "",
-                        crate::SOURCE.trim_start_matches("https://"),
-                    ),
-                    Row::BuiltIn => {
-                        let (count, names) = built_in_names(env);
-                        ui::draw_noted_row(
-                            canvas,
-                            env,
-                            &style,
-                            rect,
-                            focused,
-                            tr("about.plugins.title"),
-                            &count,
-                            &names,
-                        );
-                    }
-                    Row::Native => {
-                        let (fingerprint, note) = crate::native(env).unwrap_or_default();
-                        ui::draw_noted_row(
-                            canvas,
-                            env,
-                            &style,
-                            rect,
-                            focused,
-                            tr("about.native.title"),
-                            &fingerprint,
-                            &note,
-                        );
-                    }
-                    Row::Licences => ui::draw_noted_row(
-                        canvas,
-                        env,
-                        &style,
-                        rect,
-                        focused,
-                        tr("about.licences"),
-                        "›",
-                        tr("about.licences.help"),
-                    ),
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let tr = |key| env.i18n.tr(key);
+            match rows[index] {
+                Row::Version => ui::Row::value("PaperPaw", crate::VERSION)
+                    .note(tr("about.summary"))
+                    .focused(focused)
+                    .draw(ui, rect),
+                Row::Source => ui::Row::value(tr("about.source"), "")
+                    .note(crate::SOURCE.trim_start_matches("https://"))
+                    .focused(focused)
+                    .draw(ui, rect),
+                Row::BuiltIn => {
+                    let (count, names) = built_in_names(env);
+                    ui::Row::value(tr("about.plugins.title"), &count)
+                        .note(&names)
+                        .focused(focused)
+                        .draw(ui, rect);
                 }
-            });
+                Row::Native => {
+                    let (fingerprint, note) = crate::native(env).unwrap_or_default();
+                    ui::Row::value(tr("about.native.title"), &fingerprint)
+                        .note(&note)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+                Row::Licences => ui::Row::value(tr("about.licences"), "›")
+                    .note(tr("about.licences.help"))
+                    .focused(focused)
+                    .draw(ui, rect),
+            }
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -185,7 +153,7 @@ impl Screen for AboutScreen {
         let env = *cx.env();
         let paging = self.list.paging(self.rows.len());
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {

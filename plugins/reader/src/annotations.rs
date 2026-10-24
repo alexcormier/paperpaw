@@ -10,7 +10,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 pub(crate) use paperpaw_sdk::annotations::{
-    Annotation, Kind, Mark, add, changed, load, marks, note_of, relocate, remove, set_note, snippet,
+    Annotation, Kind, Mark, add, changed, load, marks, note_of, relocate, remove, set_note,
+    snippet, stamp,
 };
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
@@ -86,7 +87,7 @@ impl AnnotationsScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         Self {
             path,
@@ -170,19 +171,15 @@ impl Screen for AnnotationsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("reader.annotations"),
             None,
             self.list.paging(len),
         );
         if len == 0 {
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 "bookmarks",
                 env.i18n.tr("reader.annotations.empty.title"),
@@ -191,33 +188,38 @@ impl Screen for AnnotationsScreen {
             return;
         }
         let annotations = &self.annotations;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let Some(a) = annotations.get(index) else {
-                    let title = env.i18n.tr("reader.export");
-                    let note = env.i18n.tr("reader.export.help");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", note);
-                    return;
-                };
-                let (kind, title) = match a.mark.kind {
-                    Kind::Bookmark => ("reader.bookmark", a.text.clone()),
-                    Kind::Highlight => (
-                        "reader.highlight",
-                        env.i18n.format(
-                            "reader.quoted",
-                            &[("text", paperpaw_sdk::Arg::Str(&a.text))],
-                        ),
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let Some(a) = annotations.get(index) else {
+                let title = env.i18n.tr("reader.export");
+                let note = env.i18n.tr("reader.export.help");
+                ui::Row::value(title, "›")
+                    .note(note)
+                    .focused(focused)
+                    .draw(ui, rect);
+                return;
+            };
+            let (kind, title) = match a.mark.kind {
+                Kind::Bookmark => ("reader.bookmark", a.text.clone()),
+                Kind::Highlight => (
+                    "reader.highlight",
+                    env.i18n.format(
+                        "reader.quoted",
+                        &[("text", paperpaw_sdk::Arg::Str(&a.text))],
                     ),
-                    _ => ("reader.highlight", a.text.clone()),
-                };
-                let what = if a.note.is_empty() {
-                    env.i18n.tr(kind)
-                } else {
-                    a.note.as_str()
-                };
-                let note = format!("{what} · {} %", a.percent);
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, "", &note);
-            });
+                ),
+                _ => ("reader.highlight", a.text.clone()),
+            };
+            let what = if a.note.is_empty() {
+                env.i18n.tr(kind)
+            } else {
+                a.note.as_str()
+            };
+            let note = format!("{what} · {} %", a.percent);
+            ui::Row::plain(&title)
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -244,7 +246,7 @@ impl Screen for AnnotationsScreen {
         let env = *cx.env();
         let paging = self.list.paging(self.len());
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.len()) {

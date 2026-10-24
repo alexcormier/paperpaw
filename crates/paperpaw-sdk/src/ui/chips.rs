@@ -2,9 +2,9 @@
 //! side, each as wide as its word needs ([`Chips`]). Where the choices
 //! should share the width evenly, use [`Segments`](super::Segments).
 
+use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
-use paperpaw_graphics::Canvas;
 use paperpaw_platform::{Point, Rect};
 
 use crate::Id;
@@ -23,26 +23,41 @@ use super::UiStyle;
 /// how tall the rows are. With the buttons, left and right move the
 /// focus, *Select* chooses.
 ///
-/// Made once with the layout (it measures the labels); drawing and
-/// hitting allocate nothing. The default is a row of no chips.
+/// Each label is a translation key (or text that is none, shown as it
+/// is), translated where it is measured and drawn: a key the plugin has
+/// as a constant is kept without a copy. Made once with the layout (it
+/// measures the labels); drawing and hitting allocate nothing. The
+/// default is a row of no chips.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Chips {
     /// One per label; empty for those not shown.
     cells: Vec<Rect>,
+    labels: Vec<Cow<'static, str>>,
 }
 
 impl Chips {
     /// The chips of `labels` in `area`, measured in the UI font at the
     /// size [`draw_button`](super::draw_button) sets them, centred in the
     /// area's height.
-    pub fn new(env: &Env<'_>, style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
-        Self::from_widths(style, area, widths(env, style, labels))
+    pub fn new<L: Into<Cow<'static, str>>>(
+        env: &Env<'_>,
+        style: &UiStyle,
+        area: Rect,
+        labels: impl IntoIterator<Item = L>,
+    ) -> Self {
+        let labels: Vec<Cow<'static, str>> = labels.into_iter().map(Into::into).collect();
+        let cells = Self::from_widths(style, area, widths(env, style, labels.iter())).cells;
+        Self { cells, labels }
     }
 
     /// How tall the chips of `labels` are in an area `width` wide: their
     /// rows, the style's gap apart.
     pub fn height_for(env: &Env<'_>, style: &UiStyle, width: u16, labels: &[&str]) -> u16 {
-        let cells = place(style, Rect::new(0, 0, width, 0), widths(env, style, labels));
+        let cells = place(
+            style,
+            Rect::new(0, 0, width, 0),
+            widths(env, style, labels.iter()),
+        );
         cells
             .iter()
             .map(|c| c.bottom())
@@ -51,7 +66,8 @@ impl Chips {
     }
 
     /// The chips in `area` with the label widths `widths` already known
-    /// (the room at their sides included): as [`Chips::new`].
+    /// (the room at their sides included): as [`Chips::new`], without
+    /// labels.
     pub(crate) fn from_widths(
         style: &UiStyle,
         area: Rect,
@@ -70,7 +86,10 @@ impl Chips {
             .into_iter()
             .map(|c| Rect::new(c.x, c.y + below, c.width, c.height))
             .collect();
-        Self { cells }
+        Self {
+            cells,
+            labels: Vec::new(),
+        }
     }
 
     /// The height of a row of chips: a button's in a row that can be
@@ -108,18 +127,17 @@ impl Chips {
         }
     }
 
-    /// Draws the chips shown with `labels`, `chosen` on and `focus`
-    /// (where the focus is on them) focused.
-    pub fn draw(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        style: &UiStyle,
-        labels: &[&str],
-        chosen: usize,
-        focus: Option<usize>,
-    ) {
-        for (i, (cell, label)) in self.cells.iter().zip(labels).enumerate() {
+    /// The label of chip `index`, as given (a translation key).
+    pub fn label(&self, index: usize) -> Option<&str> {
+        self.labels.get(index).map(|label| &**label)
+    }
+
+    /// Draws the chips shown, `chosen` on and `focus` (where the focus is
+    /// on them) focused.
+    pub fn draw(&self, ui: &mut super::Ui<'_>, chosen: usize, focus: Option<usize>) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
+        for (i, (cell, label)) in self.cells.iter().zip(&self.labels).enumerate() {
             if cell.width == 0 {
                 break;
             }
@@ -128,7 +146,7 @@ impl Chips {
                 env,
                 style,
                 *cell,
-                label,
+                env.i18n.tr(label),
                 i == chosen,
                 focus == Some(i),
             );
@@ -139,13 +157,14 @@ impl Chips {
 /// The width of each label's chip: its word in the size buttons set it,
 /// and half the chip's height at each side, as its rounded ends take that
 /// much; rounded up, so the word keeps all its room.
-fn widths<'a>(
+fn widths<'a, L: AsRef<str> + 'a>(
     env: &'a Env<'_>,
     style: &'a UiStyle,
-    labels: &'a [&str],
+    labels: impl Iterator<Item = &'a L> + 'a,
 ) -> impl Iterator<Item = u16> + 'a {
     let font = style.font(env);
-    labels.iter().map(move |label| {
+    labels.map(move |label| {
+        let label = env.i18n.tr(label.as_ref());
         let single = label.chars().count() == 1;
         let size = if single { style.text } else { style.small };
         let text = match &font {

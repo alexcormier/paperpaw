@@ -21,7 +21,7 @@ use paperpaw_sdk::builtin::{actions, events, menus, params, slots};
 use paperpaw_sdk::decorations::{self, Decorated, Decoration, DecoratorSpec, LineKind};
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MemoryStorage, MenuEntry, Params, Plugin,
+    ActionSpec, Commands, Env, Id, Manifest, MemoryStorage, MenuEntry, Params, Plugin,
     RegisterError, Registrar, SDK_VERSION,
 };
 
@@ -68,7 +68,7 @@ impl Plugin for Probe {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(ActionSpec::new(GO, "probe.go").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 let goto = events::Goto::to(BOOK, Locator::new(0, TARGET));
                 out.push(events::GOTO.emit(goto));
             },

@@ -118,11 +118,11 @@ impl ViewScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let view = View::of(params);
         // The installed list says at its foot how much room is left.
         let line = if view == View::Installed {
-            (style.small * 1.3) as u16 + style.gap as u16 * 2
+            (style.small() * 1.3) as u16 + style.gap() * 2
         } else {
             0
         };
@@ -249,7 +249,7 @@ impl ViewScreen {
         let env = *cx.env();
         if let Some(&top) = self.top.get(row) {
             match top {
-                Top::Fonts => cx.command(Command::RunAction(crate::FONTS)),
+                Top::Fonts => cx.command(Command::run(crate::FONTS)),
                 Top::Sort => {
                     let options: Vec<&str> = Order::ALL.iter().map(|o| o.key()).collect();
                     cx.command(
@@ -259,7 +259,7 @@ impl ViewScreen {
                     );
                 }
                 Top::UpdateAll => {
-                    let mut out = Vec::new();
+                    let mut out = paperpaw_sdk::Commands::new();
                     queue::add(&env, &self.updates, &mut out);
                     for command in out {
                         cx.command(command);
@@ -316,16 +316,14 @@ impl Screen for ViewScreen {
         let style = self.style;
         let title = self.title(env);
         let paging = self.list.paging(self.len());
-        self.header.draw(canvas, env, &style, &title, None, paging);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, &title, None, paging);
         if self.len() == 0 {
             let (icon, title, text) = match self.view {
                 View::Search(_) => ("search", "store.search.none", "store.search.none.help"),
                 _ => ("puzzle", "store.empty", ""),
             };
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 icon,
                 env.i18n.tr(title),
@@ -338,56 +336,52 @@ impl Screen for ViewScreen {
             return;
         }
         if let Some(room) = self.room.as_deref().filter(|_| self.status.height > 0) {
-            ui::draw_note_line(canvas, env, &style, self.status, room);
+            ui.note_line(self.status, room);
         }
         let job = self.job.as_ref();
         let queued = self.queued.as_slice();
         let jump = self.list.pages(self.len()) > 1;
-        let room = ui::icon_room(env, &style, true);
+        let room = ui.icon_room(true);
         let top = &self.top;
         let order = self.order;
         let len = self.len();
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                if let Some(&top) = top.get(row) {
-                    let ink = style.focus_ink(focused);
-                    let (icon, name, value) = match top {
-                        Top::Fonts => ("typography", env.i18n.tr("store.fonts"), "›".to_string()),
-                        Top::Sort => {
-                            let key = alloc::format!("store.order.{}", order.key());
-                            (
-                                "sort-ascending",
-                                env.i18n.tr("store.sort"),
-                                env.i18n.tr(&key).to_string(),
-                            )
-                        }
-                        Top::UpdateAll => (
-                            "circle-arrow-up",
-                            env.i18n.tr("store.update-all"),
-                            String::new(),
-                        ),
-                    };
-                    // Below the order of a long list: how to go to a page.
-                    if top == Top::Sort && jump {
-                        let band = ui::title_area(&style, rect);
-                        let rest =
-                            ui::draw_row_icon(canvas, env, &style, band, room, Some(icon), ink);
-                        ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
-                        let help = ui::tr_input(env, "store.jump.help");
-                        rows::draw_note(canvas, env, &style, rect, rest.x, focused, help);
-                        return;
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            if let Some(&top) = top.get(row) {
+                let ink = style.focus_ink(focused);
+                let (icon, name, value) = match top {
+                    Top::Fonts => ("typography", env.i18n.tr("store.fonts"), "›".to_string()),
+                    Top::Sort => {
+                        let key = alloc::format!("store.order.{}", order.key());
+                        (
+                            "sort-ascending",
+                            env.i18n.tr("store.sort"),
+                            env.i18n.tr(&key).to_string(),
+                        )
                     }
-                    let rest = ui::draw_row_icon(canvas, env, &style, rect, room, Some(icon), ink);
-                    ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
+                    Top::UpdateAll => (
+                        "circle-arrow-up",
+                        env.i18n.tr("store.update-all"),
+                        String::new(),
+                    ),
+                };
+                // Below the order of a long list: how to go to a page.
+                if top == Top::Sort && jump {
+                    let band = ui::title_area(&style, rect);
+                    let rest = ui.row_icon(band, room, Some(icon), ink);
+                    ui::Row::value(name, &value).focused(focused).draw(ui, rest);
+                    let help = ui::tr_input(env, "store.jump.help");
+                    rows::draw_note(ui, rect, rest.x, focused, help);
                     return;
                 }
-                if let Some((_, plugin)) = self.plugin(row) {
-                    let origins = &self.origins;
-                    rows::draw(
-                        canvas, env, &style, rect, focused, plugin, job, queued, origins,
-                    );
-                }
-            });
+                let rest = ui.row_icon(rect, room, Some(icon), ink);
+                ui::Row::value(name, &value).focused(focused).draw(ui, rest);
+                return;
+            }
+            if let Some((_, plugin)) = self.plugin(row) {
+                let origins = &self.origins;
+                rows::draw(ui, rect, focused, plugin, job, queued, origins);
+            }
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -437,7 +431,7 @@ impl Screen for ViewScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(row) = self.list.hit(gesture.start, len) else {

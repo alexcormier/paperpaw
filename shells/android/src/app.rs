@@ -607,7 +607,9 @@ fn apply(state: &mut Running, effects: Effects) -> bool {
         match io {
             Io::Http(mut call) => {
                 if let Err(e) = call.load_body(state.kernel.storage()) {
-                    let failed = paperpaw_core::HttpResponse::failed(call.id, &e.to_string());
+                    let error = paperpaw_core::sdk::HttpError::Io;
+                    let failed =
+                        paperpaw_core::HttpResponse::failed(call.id, error, &e.to_string());
                     // Answered on the next round, like the network's answers.
                     state.net.answer(failed);
                     continue;
@@ -787,6 +789,10 @@ impl Storage for Volumes {
 
     fn size(&self, path: &str) -> Result<u64, StorageError> {
         self.0.size(path)
+    }
+
+    fn modified(&self, path: &str) -> Option<i64> {
+        self.0.modified(path)
     }
 
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {

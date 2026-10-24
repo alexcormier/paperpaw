@@ -160,11 +160,12 @@ impl Harness {
 
 /// `params` as `key=value` pairs, in their order.
 pub fn describe(params: &Params) -> String {
-    params
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut told: Vec<String> = params.iter().map(|(k, v)| format!("{k}={v}")).collect();
+    // An HTTP answer's body goes along unwritten, as it came.
+    if let Some(reply) = params.carried::<paperpaw_core::sdk::HttpReply>() {
+        told.push(format!("body={} bytes={}", reply.text(), reply.body.len()));
+    }
+    told.join(" ")
 }
 
 /// The test plugin `drv`.
@@ -196,11 +197,11 @@ impl Plugin for Driver {
         r.bind_slot(slots::MENU, OVERLAY, Priority::DEFAULT)?;
         r.bind_slot(slots::NOTICE, OVERLAY, Priority::DEFAULT)?;
         let queue = self.queue.clone();
-        r.add_action(ActionSpec::new(GO, "drv.go").handler(move |_, out| {
-            out.append(&mut queue.borrow_mut());
+        r.add_action(ActionSpec::new(GO, "drv.go").handler(move |_, _, out| {
+            out.extend(queue.borrow_mut().drain(..));
         }))?;
-        r.add_action(ActionSpec::new(LOOP, "drv.loop").handler(|_, out| {
-            out.push(Command::RunAction(LOOP));
+        r.add_action(ActionSpec::new(LOOP, "drv.loop").handler(|_, _, out| {
+            out.push(Command::run(LOOP));
         }))?;
         for event in [REPLY, LATER, LATER2] {
             let log = self.log.clone();
@@ -209,13 +210,13 @@ impl Plugin for Driver {
                 Box::new(move |env, params, out| {
                     log.borrow_mut().push(format!(
                         "event {event} at {} {}",
-                        env.now.millis(),
+                        env.now().millis(),
                         describe(params)
                     ));
                     // A timer that comes again every `repeat` milliseconds.
                     if let Some(every) = params.get(REPEAT).and_then(|r| r.parse().ok()) {
-                        let at = env.now.add_millis(every);
-                        out.push(Command::Work(
+                        let at = env.now().add_millis(every);
+                        out.push(Command::work(
                             paperpaw_core::sdk::work::Work::at(event.clone(), at)
                                 .with(params.clone()),
                         ));
@@ -331,7 +332,7 @@ impl Screen for LogScreen {
     }
 
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
-        self.note(format!("timer at {}", cx.env().now.millis()));
+        self.note(format!("timer at {}", cx.env().now().millis()));
     }
 
     fn on_close(&mut self, _: &mut Cx<'_, '_>) {

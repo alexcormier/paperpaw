@@ -37,9 +37,9 @@ use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode,
+    RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use crate::store::Entry;
@@ -93,7 +93,7 @@ impl Plugin for Browser {
         ))?;
         r.bind_slot(slots::BROWSER, SCREEN, Priority::DEFAULT)?;
         r.add_action(ActionSpec::new(OPEN, "browser.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenSlot(slots::BROWSER, Params::new()));
             },
         ))?;
@@ -139,8 +139,8 @@ impl BrowserScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = style.row as u16;
+        let top = header.area().height + style.gap();
+        let line = style.row();
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -155,7 +155,7 @@ impl BrowserScreen {
             session.borrow_mut().pages.clear();
         }
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             status,
             bookmarks_read: bookmarks.is_some(),
             bookmarks: bookmarks.unwrap_or_default(),
@@ -217,7 +217,7 @@ impl BrowserScreen {
             .i18n
             .format("browser.loading", &[("host", Arg::Str(&host))]);
         self.say(message, cx);
-        cx.command(Command::Http(
+        cx.command(Command::http(
             HttpRequest::get(url, LOADED)
                 .header("User-Agent", "PaperPaw/0.1 (e-reader)")
                 .header(
@@ -266,7 +266,7 @@ impl BrowserScreen {
         // An error's page comes as text, not saved to the download file
         // (so a download never holds an error page): kept there to show.
         if status >= 400 {
-            let _ = env.storage.write(&tmp, reply.body.as_bytes());
+            let _ = env.storage.write(&tmp, &reply.body);
         }
         let mut head = [0u8; 512];
         let n = env.storage.read_at(&tmp, 0, &mut head).unwrap_or(0);
@@ -485,21 +485,17 @@ fn download_path() -> String {
 impl Screen for BrowserScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let rows = self.rows();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("browser.title"),
             None,
             self.list.paging(rows.len()),
         );
         let (bookmarks, history) = (&self.bookmarks, &self.history);
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| {
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value) = match rows[index] {
                     Row::Address => (
                         env.i18n.tr("browser.address").to_string(),
@@ -514,19 +510,15 @@ impl Screen for BrowserScreen {
                         paperpaw_sdk::web::host(&history[i].url).to_string(),
                     ),
                 };
-                ui::draw_value_row(canvas, env, &style, rect, focused, &title, &value);
-            },
-        );
-        if let (Some(message), Some(font)) = (&self.message, style.font(env)) {
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                style.margin as f32,
-                self.status,
-                message,
-                style.faint(60),
-            );
+                ui::Row::value(&title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        if let Some(message) = &self.message {
+            ui::Label::new(message)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(&mut ui, style.margin() as f32, self.status);
         }
     }
 
@@ -581,7 +573,7 @@ impl Screen for BrowserScreen {
                 .header
                 .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

@@ -3,7 +3,7 @@
 //!
 //! A preset has a kind, which the plugin that offers them names (e.g.
 //! `core.power-mode`): that plugin lists the presets of its kind
-//! ([`Presets::of_kind`], through `env.settings.presets()`), shows each
+//! ([`Presets::of_kind`], through `env.settings().presets()`), shows each
 //! as it would look ([`Command::PreviewSettings`] with
 //! [`Preset::changes`]) and applies the one chosen ([`commands`]). Any
 //! plugin adds presets, also for another plugin's kind: kept in the
@@ -340,6 +340,7 @@ mod tests {
             "a.size",
             SettingKind::Int { min: 0, max: 9 },
             SettingValue::Int(1),
+            crate::builtin::groups::OTHER,
         ))
         .unwrap();
         s.define(SettingSpec::new(
@@ -347,6 +348,7 @@ mod tests {
             "a.name",
             SettingKind::Text,
             SettingValue::Text(Cow::Borrowed("")),
+            crate::builtin::groups::OTHER,
         ))
         .unwrap();
         s.define(SettingSpec::new(
@@ -354,6 +356,7 @@ mod tests {
             "a.dots",
             SettingKind::Bool,
             SettingValue::Bool(true),
+            crate::builtin::groups::OTHER,
         ))
         .unwrap();
         s

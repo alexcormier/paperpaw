@@ -69,7 +69,7 @@ fn a_book_record_of_version_1_is_written_and_read_again() {
         .with("books/a.epub", b"12345".to_vec())
         .with(BOOK_RECORD, include_str!("../testdata/library-book.ini.v1"));
     let first = library::book(&storage, "books/a.epub").unwrap();
-    library::save(&storage, "books/a.epub", &first);
+    library::save(&storage, "books/a.epub", &first).unwrap();
     let again = library::book(&storage, "books/a.epub").unwrap();
     assert_eq!(again, first);
     // The quoted series keeps its spaces, the plugins' fields their
@@ -94,7 +94,7 @@ fn annotations_of_version_1_are_written_and_read_again() {
     let storage = MemoryStorage::new().with(&path, include_str!("../testdata/annotations.txt.v1"));
     let first = annotations::load(&storage, "books/a.epub");
     assert_eq!(first.len(), 2);
-    annotations::save(&storage, "books/a.epub", &first);
+    annotations::save(&storage, "books/a.epub", &first).unwrap();
     assert_eq!(annotations::load(&storage, "books/a.epub"), first);
     // Lines without times are written with them now: 10 fields.
     let text = String::from_utf8(storage.get(&path).unwrap()).unwrap();

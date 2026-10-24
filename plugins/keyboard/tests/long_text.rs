@@ -18,7 +18,7 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
-    ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
+    ActionSpec, Commands, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, Version,
 };
 
@@ -56,7 +56,7 @@ impl Plugin for Asker {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(ActionSpec::new(ASK, "asker.ask").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(ask::text("Address", &TYPED).command());
             },
         ))?;

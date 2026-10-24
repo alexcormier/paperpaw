@@ -68,7 +68,7 @@ impl PhoneScreen {
 
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 
@@ -114,7 +114,7 @@ impl PhoneScreen {
                     at: env.now,
                 };
                 let (response, text) = answer(number, guard, &self.page, env.storage, &request);
-                cx.command(Command::Respond(response));
+                cx.command(Command::respond(response));
                 // The text to the keyboard, and done.
                 if let Some(text) = text
                     && let Some(reply) = self
@@ -164,13 +164,14 @@ pub(crate) fn answer(
         |status, kind: &str, body: &[u8]| ServerResponse::new(number, status, kind, body.to_vec());
     match guard.check(served::param(query, "k").as_deref(), request.at) {
         Access::Granted => {}
-        Access::Denied => {
-            let text = b"The key is missing or wrong: scan the code shown on the device.";
-            return (response(403, "text/plain; charset=utf-8", text), None);
-        }
         Access::Locked => {
             let text = b"Too many wrong keys: try again in a minute.";
             return (response(429, "text/plain; charset=utf-8", text), None);
+        }
+        // Denied, and a state to come: refused as a wrong key is.
+        _ => {
+            let text = b"The key is missing or wrong: scan the code shown on the device.";
+            return (response(403, "text/plain; charset=utf-8", text), None);
         }
     }
     if request.method == "POST" && path == "/send" {
@@ -246,17 +247,16 @@ impl Screen for PhoneScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("transfer.phone.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(&mut ui, title, None, None);
         let area = self.content(env);
         match &self.state {
-            State::Starting => {
-                ui::draw_message(canvas, env, &style, area, env.i18n.tr("transfer.starting"))
-            }
-            State::Failed(message) => ui::draw_message(canvas, env, &style, area, message),
+            State::Starting => ui.message(area, env.i18n.tr("transfer.starting")),
+            State::Failed(message) => ui.message(area, message),
             State::Serving { url, qr } => {
                 let hint = env.i18n.tr("transfer.phone.hint");
-                ui::draw_address(canvas, env, &style, area, url, qr.as_ref(), hint, None);
+                ui::draw_address(ui.canvas(), env, &style, area, url, qr.as_ref(), hint, None);
             }
         }
     }
@@ -287,7 +287,7 @@ impl Screen for PhoneScreen {
         if gesture.kind == GestureKind::Tap
             && let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         Handled::No

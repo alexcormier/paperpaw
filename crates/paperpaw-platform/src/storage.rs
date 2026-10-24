@@ -50,11 +50,33 @@ impl core::error::Error for StorageError {}
 
 /// One entry of a directory listing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DirEntry<'a> {
     pub name: &'a str,
     pub is_dir: bool,
     /// Size in bytes (0 for directories).
     pub size: u64,
+    /// When it was last changed, in seconds since 1970-01-01 as the
+    /// storage keeps it (a memory card's FAT: the device's local time,
+    /// read as UTC), where the storage tells.
+    pub modified: Option<i64>,
+}
+
+impl<'a> DirEntry<'a> {
+    pub const fn new(name: &'a str, is_dir: bool, size: u64) -> Self {
+        Self {
+            name,
+            is_dir,
+            size,
+            modified: None,
+        }
+    }
+
+    /// With the time it was last changed ([`DirEntry::modified`]).
+    pub const fn with_modified(mut self, modified: Option<i64>) -> Self {
+        self.modified = modified;
+        self
+    }
 }
 
 /// Storage provided by a shell.
@@ -90,6 +112,13 @@ pub trait Storage {
 
     /// Deletes a file; deleting a missing file is not an error.
     fn remove(&self, path: &str) -> Result<(), StorageError>;
+
+    /// When the file or directory at `path` was last changed, in seconds
+    /// since 1970-01-01 as the storage keeps it ([`DirEntry::modified`]);
+    /// `None` where it is not there, or the storage does not tell.
+    fn modified(&self, _path: &str) -> Option<i64> {
+        None
+    }
 
     /// Whether a file exists.
     fn exists(&self, path: &str) -> bool {
@@ -238,11 +267,7 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
             // The root lists the mount point next to the base's entries;
             // a base that cannot be listed is told, not taken for empty.
             let base = self.base.list(dir, visit);
-            visit(DirEntry {
-                name: self.at,
-                is_dir: true,
-                size: 0,
-            });
+            visit(DirEntry::new(self.at, true, 0));
             return base;
         }
         let (storage, dir) = self.route(dir);
@@ -380,11 +405,7 @@ mod tests {
             if !dir.is_empty() {
                 return Err(StorageError::NotFound);
             }
-            visit(DirEntry {
-                name: self.0,
-                is_dir: false,
-                size: self.1,
-            });
+            visit(DirEntry::new(self.0, false, self.1));
             Ok(())
         }
 

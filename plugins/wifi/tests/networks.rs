@@ -26,7 +26,7 @@ use paperpaw_plugin_wifi::Wifi;
 use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
-    ActionSpec, Canvas, Command, Cx, DirEntry, Env, Handled, HttpRequest, Id, Manifest,
+    ActionSpec, Canvas, Command, Commands, Cx, DirEntry, Env, Handled, HttpRequest, Id, Manifest,
     MemoryStorage, Params, Plugin, Priority, RegisterError, Registrar, Screen, ScreenSpec, Storage,
     StorageError, Version,
 };
@@ -177,8 +177,8 @@ impl Plugin for NoticeKeeper {
         )?;
         // Wants the network: a request.
         r.add_action(ActionSpec::new(FETCH, "Fetch").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::Http(HttpRequest::new(
+            |_: &Env<'_>, _, out: &mut Commands| {
+                out.push(Command::http(HttpRequest::new(
                     "GET",
                     "http://example.org/",
                     Id::new_static("notices.fetched"),
@@ -189,11 +189,7 @@ impl Plugin for NoticeKeeper {
 }
 
 fn network(ssid: &str, signal: i8, secured: bool) -> WifiNetwork {
-    WifiNetwork {
-        ssid: ssid.to_string(),
-        signal,
-        secured,
-    }
+    WifiNetwork::new(ssid.to_string(), signal, secured)
 }
 
 struct Device {
@@ -748,11 +744,7 @@ fn wanted_the_radio_joins_the_saved_network_and_goes_off_after() {
             id: device.requests[0],
             status: 200,
             body: b"ok".to_vec(),
-            etag: None,
-            content_type: None,
-            url: None,
-            saved: false,
-            headers: Vec::new(),
+            ..paperpaw_core::HttpResponse::default()
         },
     );
     device.settle(effects);

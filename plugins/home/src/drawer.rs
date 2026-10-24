@@ -29,19 +29,19 @@ impl DrawerScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(
-            style.margin as u16,
+            style.margin(),
             top,
-            display.width.saturating_sub(2 * style.margin as u16),
+            display.width.saturating_sub(2 * style.margin()),
             display.height.saturating_sub(top),
         );
         // About as high as a column is wide; a line higher where a tool's
         // name takes two (its icon as large as the others').
-        let row = (u32::from(area.width) / COLUMNS * 4 / 5).max(style.row);
+        let row = (u32::from(area.width) / COLUMNS * 4 / 5).max(u32::from(style.row()));
         let tools: Vec<Id> = pages::tools(env).into_iter().map(|(id, _)| id).collect();
         // The names' lines as they fall in a row grown by that line.
-        let line = u32::from(paperpaw_sdk::widgets::line_height(env, style.small));
+        let line = u32::from(paperpaw_sdk::widgets::line_height(env, style.small()));
         let width = (u32::from(area.width) / COLUMNS) as u16;
         let cell = Rect::new(0, 0, width, (row + line) as u16);
         let lines = tools
@@ -64,7 +64,7 @@ impl DrawerScreen {
     fn run(&self, index: usize, cx: &mut Cx<'_, '_>) {
         if let Some(action) = self.tools.get(index) {
             cx.command(Command::Back);
-            cx.command(Command::RunAction(action.clone()));
+            cx.command(Command::run(action.clone()));
         }
     }
 }
@@ -73,10 +73,9 @@ impl Screen for DrawerScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.tools.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             env.i18n.tr("home.drawer"),
             None,
             self.list.paging(len),
@@ -92,13 +91,13 @@ impl Screen for DrawerScreen {
             let focused = list.shown() && index == list.focus();
             // Named after its action, also where its name is not shown.
             let name = grid::What::Tool(tools[index].clone()).title(env);
-            canvas
+            ui.canvas()
                 .describe(paperpaw_sdk::semantics::Role::Button, &name, rect)
                 .focused(focused);
-            let ink = blocks::draw_tool_lines(canvas, env, rect, &tools[index], lines);
+            let ink = blocks::draw_tool_lines(ui.canvas(), env, rect, &tools[index], lines);
             if focused {
                 // Round its icon and name, never through them.
-                paperpaw_sdk::widgets::grid::draw_tool_focus(canvas, &style, ink);
+                paperpaw_sdk::widgets::grid::draw_tool_focus(ui.canvas(), &style, ink);
             }
         }
     }
@@ -138,7 +137,7 @@ impl Screen for DrawerScreen {
                     .header
                     .tap(cx.env(), &self.style, gesture.start, paging)
                 {
-                    cx.command(Command::RunAction(action));
+                    cx.command(Command::run(action));
                     return Handled::Yes;
                 }
                 match self.list.hit(gesture.start, len) {

@@ -49,7 +49,7 @@ use paperpaw_sdk::logo::Logo;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{PlaceKind, Stack, WidgetPlace};
+use paperpaw_sdk::widgets::{PlaceKind, WidgetPlace, WidgetStack};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
     Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, ShowsThrough,
@@ -123,7 +123,7 @@ static PERCENT: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
 /// What the sleep screen shows, the folder of its pictures, its widgets
 /// and its picture over the page.
 static SETTINGS: [SettingSpec; 9] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         SHOW.static_str(),
         "sleep.setting.show",
         &[CAT, COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE],
@@ -131,17 +131,17 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&IN_SLEEP)
-    .described("sleep.setting.show.help"),
-    SettingSpec::fixed_text(
+    .description("sleep.setting.show.help"),
+    SettingSpec::text(
         FOLDER.static_str(),
         "sleep.setting.folder",
         "sleep",
         groups::DISPLAY,
     )
     .with_extra(&FOLDER_EXTRA)
-    .described("sleep.setting.folder.help"),
-    SettingSpec::fixed(
-        WIDGET_LIST.static_str(),
+    .description("sleep.setting.folder.help"),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(WIDGET_LIST.static_str()),
         "sleep.setting.widgets",
         paperpaw_sdk::SettingKind::List,
         paperpaw_sdk::SettingValue::Text(Cow::Borrowed(
@@ -150,24 +150,24 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&WIDGETS_EXTRA)
-    .described("sleep.setting.widgets.help"),
-    SettingSpec::fixed_text(
+    .description("sleep.setting.widgets.help"),
+    SettingSpec::text(
         overlay::PICTURE.static_str(),
         "sleep.setting.overlay-picture",
         "",
         groups::DISPLAY,
     )
     .with_extra(&PICKED_EXTRA)
-    .described("sleep.setting.overlay-picture.help"),
-    SettingSpec::fixed_text(
+    .description("sleep.setting.overlay-picture.help"),
+    SettingSpec::text(
         overlay::WIDGET.static_str(),
         "sleep.setting.overlay-widget",
         "",
         groups::DISPLAY,
     )
     .with_extra(&PICKED_EXTRA)
-    .described("sleep.setting.overlay-widget.help"),
-    SettingSpec::fixed_choice(
+    .description("sleep.setting.overlay-widget.help"),
+    SettingSpec::choice(
         overlay::POSITION.static_str(),
         "sleep.setting.overlay-position",
         &overlay::POSITIONS,
@@ -175,8 +175,8 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&IN_SLEEP)
-    .described("sleep.setting.overlay-position.help"),
-    SettingSpec::fixed_number(
+    .description("sleep.setting.overlay-position.help"),
+    SettingSpec::number(
         overlay::SIZE.static_str(),
         "sleep.setting.overlay-size",
         10,
@@ -185,8 +185,8 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&PERCENT)
-    .described("sleep.setting.overlay-size.help"),
-    SettingSpec::fixed_number(
+    .description("sleep.setting.overlay-size.help"),
+    SettingSpec::number(
         overlay::SEE_THROUGH.static_str(),
         "sleep.setting.overlay-see-through",
         0,
@@ -195,8 +195,8 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&PERCENT)
-    .described("sleep.setting.overlay-see-through.help"),
-    SettingSpec::fixed_choice(
+    .description("sleep.setting.overlay-see-through.help"),
+    SettingSpec::choice(
         overlay::USED.static_str(),
         "sleep.setting.overlay-when",
         &overlay::WHEN,
@@ -204,7 +204,7 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&IN_SLEEP)
-    .described("sleep.setting.overlay-when.help"),
+    .description("sleep.setting.overlay-when.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -245,7 +245,7 @@ impl Plugin for Sleep {
             Box::new(|env, params| Box::new(overlay::Picker::new(env, params))),
         ))?;
         // Asleep, the buttons do nothing but wake the device.
-        r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::Hidden)?;
+        r.set_screen_hints(SCREEN, paperpaw_sdk::HintVisibility::Hidden)?;
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "sleep.title",
@@ -287,7 +287,7 @@ pub mod cat {
 
     /// The room around the cat on each side, in pixels.
     pub fn margin(env: &Env<'_>) -> u16 {
-        UiStyle::new(env).margin as u16
+        UiStyle::new(env).margin()
     }
 
     /// The cat decoded for this screen.
@@ -374,7 +374,7 @@ struct SleepScreen {
     /// Another plugin's screen shown in its place (its mode).
     shown: Option<Box<dyn Screen>>,
     /// The widgets shown, where they go.
-    widgets: Stack,
+    widgets: WidgetStack,
     /// The logo above the message, when the message shows.
     logo: Option<Logo>,
     /// Whether the device woke since the screen opened.
@@ -429,7 +429,7 @@ impl SleepScreen {
         } else {
             ""
         };
-        let widgets = Stack::new(env, list, screen);
+        let widgets = WidgetStack::new(env, list, screen);
         let message = image.is_none()
             && widgets.is_empty()
             && show != PAGE
@@ -520,21 +520,22 @@ impl Screen for SleepScreen {
             }
             None => {
                 let style = UiStyle::new(env);
+                let mut ui = ui::Ui::new(canvas, env, &style);
                 let text = env.i18n.tr("sleep.sleeping");
                 let Some(logo) = &self.logo else {
-                    ui::draw_message(canvas, env, &style, screen, text);
+                    ui.message(screen, text);
                     return;
                 };
                 // The logo a little above the middle, the message below it.
                 let side = logo_side(env);
                 let (_, h) = logo.fit(side, side);
-                let line = paperpaw_sdk::widgets::line_height(env, style.text);
-                let gap = style.gap as u16 * 2;
+                let line = paperpaw_sdk::widgets::line_height(env, style.text());
+                let gap = style.gap() * 2;
                 let top = display.height.saturating_sub(h + gap + line) / 2;
                 let area = Rect::new(0, top, display.width, h);
-                logo.draw(canvas, env.storage, area, Color::BLACK);
+                logo.draw(ui.canvas(), env.storage, area, Color::BLACK);
                 let below = Rect::new(0, top + h + gap, display.width, line);
-                ui::draw_message(canvas, env, &style, below, text);
+                ui.message(below, text);
             }
         }
     }

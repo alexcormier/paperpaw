@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
@@ -44,7 +44,7 @@ const NAMES: [&str; 3] = [
 static LOOK: [SettingSpec; 4] = [
     widgets::frame_spec("weather.forecast.frame", ID, Frame::None),
     widgets::padding_spec("weather.forecast.padding", ID, Padding::Auto),
-    widgets::size_spec("weather.forecast.size", ID, Size::Fit, true),
+    widgets::size_spec("weather.forecast.size", ID, TextSize::Fit, true),
     widgets::align_spec("weather.forecast.align", ID, Align::Center),
 ];
 /// The rest of its settings after the days, kept in the program: what
@@ -54,26 +54,26 @@ static IN_DAYS: paperpaw_sdk::SettingExtra =
     paperpaw_sdk::SettingExtra::new().unit("weather.unit.days");
 static DAYS_SETTING: [SettingSpec; 1] =
     [
-        SettingSpec::fixed_number(DAYS.static_str(), "weather.setting.days", 3, 7, 5, ID)
+        SettingSpec::number(DAYS.static_str(), "weather.setting.days", 3, 7, 5, ID)
             .with_extra(&IN_DAYS),
     ];
 
 static SETTINGS: [SettingSpec; 11] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.forecast.start",
         "weather.setting.start",
         &STARTS,
         STARTS[0],
         ID,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.forecast.layout",
         "weather.setting.layout",
         &LAYOUTS,
         LAYOUTS[0],
         ID,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.forecast.names",
         "weather.setting.names",
         &NAMES,
@@ -91,7 +91,11 @@ static SETTINGS: [SettingSpec; 11] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "weather.widget.forecast"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "weather.widget.forecast");
+        &SPEC
+    })?;
     r.add_settings(&LOOK)?;
     r.add_settings(&DAYS_SETTING)?;
     r.add_settings(&SETTINGS)?;
@@ -124,9 +128,9 @@ impl Widget for Forecast {
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
         let probe = Rect::new(0, 0, 100, 100);
-        let frame = 100 - widgets::look::look(env, ID.as_str(), probe).area.height;
-        let small = widgets::line_height(env, style.small);
-        small * 3 + digits_height(style.title) * 2 + frame
+        let frame = 100 - widgets::widget_look(env, ID.as_str(), probe).area.height;
+        let small = widgets::line_height(env, style.small());
+        small * 3 + digits_height(style.title()) * 2 + frame
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -199,17 +203,24 @@ fn as_list(env: &Env<'_>, area: Rect, count: usize) -> bool {
 /// The temperatures' size as set; `None` for "as large as it fits".
 fn temperature_size(env: &Env<'_>, style: &UiStyle) -> Option<f32> {
     match widgets::size(env, ID.as_str()) {
-        Size::Small => Some(style.text),
-        Size::Medium => Some(style.title),
-        Size::Large => Some(style.title * 1.4),
-        Size::Fit => None,
+        TextSize::Small => Some(style.text()),
+        TextSize::Medium => Some(style.title()),
+        TextSize::Large => Some(style.title() * 1.4),
+        TextSize::Fit => None,
         _ => None,
     }
 }
 
-fn draw_forecast(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown, days: &[Day]) {
+fn draw_forecast(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &WidgetLook,
+    shown: &Shown,
+    days: &[Day],
+) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let mut caption = Vec::new();
@@ -222,13 +233,13 @@ fn draw_forecast(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Sh
     let area = if caption.is_empty() {
         look.area
     } else {
-        widgets::draw_caption(canvas, env, ID.as_str(), look, &caption.join(" · "))
+        widgets::draw_caption(ui.canvas(), env, ID.as_str(), look, &caption.join(" · "))
     };
     let days = if as_list(env, area, days.len()) {
         days
     } else {
         // As many columns as have room.
-        let least = font.measure(style.small, "-88°") * 1.4;
+        let least = font.measure(style.small(), "-88°") * 1.4;
         let fit = ((f32::from(area.width) / least) as usize).max(1);
         &days[..days.len().min(fit)]
     };
@@ -242,9 +253,9 @@ fn draw_forecast(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Sh
         today: shown.today,
     };
     if as_list(env, area, days.len()) {
-        context.list(canvas, area, days);
+        context.list(&mut ui, area, days);
     } else {
-        context.row(canvas, area, days);
+        context.row(&mut ui, area, days);
     }
 }
 
@@ -253,7 +264,7 @@ struct Context<'a, 'e> {
     env: &'a Env<'e>,
     font: &'a FontHandle<'e>,
     style: UiStyle,
-    look: &'a Look,
+    look: &'a WidgetLook,
     unit: Temperature,
     symbols: Style,
     today: Option<i32>,
@@ -293,37 +304,37 @@ impl Context<'_, '_> {
         clippy::too_many_lines,
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
-    fn row(&self, canvas: &mut Canvas<'_>, area: Rect, days: &[Day]) {
+    fn row(&self, ui: &mut ui::Ui<'_>, area: Rect, days: &[Day]) {
         let style = self.style;
         let font = self.font;
         let count = days.len().max(1) as u16;
         let column = area.width / count;
-        let gap = style.gap as u16 / 2;
+        let gap = style.gap() / 2;
         let with_symbol = self.shows("symbol");
         let mut with_low = self.shows("low");
         let with_rain = days.iter().any(|d| self.rain(d).is_some());
         let rain_h = if with_rain {
-            widgets::line_height(self.env, style.small)
+            widgets::line_height(self.env, style.small())
         } else {
             0
         };
         // The temperatures as large as the column allows, as set, and
         // smaller where the column is low; the lowest left out where even
         // the smallest do not fit.
-        let widest = (font.measure(style.title, "-88°") / style.title).max(0.1);
-        let fit = (f32::from(column) * 0.85 / widest).min(style.title * 1.5);
+        let widest = (font.measure(style.title(), "-88°") / style.title()).max(0.1);
+        let fit = (f32::from(column) * 0.85 / widest).min(style.title() * 1.5);
         let mut high = temperature_size(self.env, &style)
             .unwrap_or(fit)
             .min(fit)
-            .max(style.small);
+            .max(style.small());
         let name_of = |high: f32| {
-            if high > style.title * 1.2 {
-                style.text
+            if high > style.title() * 1.2 {
+                style.text()
             } else {
-                style.small
+                style.small()
             }
         };
-        let low_of = |high: f32| (high * 0.8).max(style.small);
+        let low_of = |high: f32| (high * 0.8).max(style.small());
         let words_of = |high: f32, low: bool| {
             widgets::line_height(self.env, name_of(high))
                 + digits_height(draw::effective(font, high))
@@ -334,7 +345,7 @@ impl Context<'_, '_> {
                 }
                 + rain_h
         };
-        while words_of(high, with_low) > area.height && high > style.small * 0.8 {
+        while words_of(high, with_low) > area.height && high > style.small() * 0.8 {
             high -= 1.0;
         }
         // The symbols rather than the largest digits: smaller digits where
@@ -348,7 +359,7 @@ impl Context<'_, '_> {
                     >= name
             };
             let mut smaller = high;
-            while !room(smaller) && smaller > style.text {
+            while !room(smaller) && smaller > style.text() {
                 smaller -= 1.0;
             }
             if room(smaller) {
@@ -395,14 +406,10 @@ impl Context<'_, '_> {
                 self.look.faint
             };
             let row = Rect::new(cell.x, y, cell.width, name_h);
-            ui::draw_label(
-                canvas,
-                font,
-                name,
+            ui::Label::new(&label).px(name).color(color).draw_from(
+                ui,
                 centre(font.measure(name, &label)),
                 row,
-                &label,
-                color,
             );
             y += name_h;
             if side > 0 {
@@ -410,7 +417,7 @@ impl Context<'_, '_> {
                 let x = cell.x + (cell.width - side) / 2;
                 let (_, symbol) = data::condition(day.code);
                 let at = Rect::new(x, y, side, side);
-                draw::draw_symbol(canvas, at, (symbol, true), self.symbols, self.look.ink);
+                draw::draw_symbol(ui.canvas(), at, (symbol, true), self.symbols, self.look.ink);
                 y += side + gap;
             }
             let text = self.degrees(day.high);
@@ -421,42 +428,37 @@ impl Context<'_, '_> {
             let beside_w = font.measure(low, &beside);
             if low_beside && high_w + space + beside_w <= f32::from(column) * 0.95 {
                 let x = centre(high_w + space + beside_w);
-                draw_digits(canvas, font, high, x, row, &text, self.look.ink);
+                draw_digits(ui, font, high, x, row, &text, self.look.ink);
                 let x = x + high_w + space;
-                draw_digits(canvas, font, low, x, row, &beside, self.look.faint);
+                draw_digits(ui, font, low, x, row, &beside, self.look.faint);
             } else {
-                draw_digits(
-                    canvas,
-                    font,
-                    high,
-                    centre(high_w),
-                    row,
-                    &text,
-                    self.look.ink,
-                );
+                draw_digits(ui, font, high, centre(high_w), row, &text, self.look.ink);
             }
             y += high_h;
             if with_low {
                 let text = self.degrees(day.low);
                 let row = Rect::new(cell.x, y, cell.width, low_h);
                 let x = centre(font.measure(low, &text));
-                draw_digits(canvas, font, low, x, row, &text, self.look.faint);
+                draw_digits(ui, font, low, x, row, &text, self.look.faint);
                 y += low_h;
             }
             if let Some(rain) = self.rain(day) {
                 let row = Rect::new(cell.x, y, cell.width, rain_h);
-                let x = centre(font.measure(style.small, &rain));
-                ui::draw_label(canvas, font, style.small, x, row, &rain, self.look.faint);
+                let x = centre(font.measure(style.small(), &rain));
+                ui::Label::new(&rain)
+                    .px(style.small())
+                    .color(self.look.faint)
+                    .draw_from(ui, x, row);
             }
             if self.shows("lines") && i > 0 {
                 let inset = total / 8;
                 let line = Rect::new(
                     cell.x,
                     top + inset,
-                    style.line.max(1) as u16,
+                    u32::from(style.line()).max(1) as u16,
                     total - 2 * inset,
                 );
-                self.rule(canvas, line);
+                self.rule(ui.canvas(), line);
             }
         }
     }
@@ -467,16 +469,16 @@ impl Context<'_, '_> {
         clippy::too_many_lines,
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
-    fn list(&self, canvas: &mut Canvas<'_>, area: Rect, days: &[Day]) {
+    fn list(&self, ui: &mut ui::Ui<'_>, area: Rect, days: &[Day]) {
         let style = self.style;
         let font = self.font;
         let env = self.env;
         // As many days as have rows a line of small text high.
-        let least = widgets::line_height(env, style.small).max(1);
+        let least = widgets::line_height(env, style.small()).max(1);
         let days = &days[..days.len().min(usize::from(area.height / least).max(1))];
         let count = days.len().max(1) as u16;
         let height = area.height / count;
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let highs: Vec<String> = days.iter().map(|d| self.degrees(d.high)).collect();
         let lows: Vec<String> = days.iter().map(|d| self.degrees(d.low)).collect();
         let rains: Vec<Option<String>> = days.iter().map(|d| self.rain(d)).collect();
@@ -489,17 +491,17 @@ impl Context<'_, '_> {
         } else {
             0
         };
-        let mut rain_w = widest(&mut rains.iter().flatten(), style.small);
+        let mut rain_w = widest(&mut rains.iter().flatten(), style.small());
         // The text as large as the rows allow, as set, and as the width
         // allows: the names shorter where they would not fit.
-        let by_height = draw::digits_size(f32::from(height) * 0.55).min(style.title * 1.1);
+        let by_height = draw::digits_size(f32::from(height) * 0.55).min(style.title() * 1.1);
         let wanted = temperature_size(env, &style)
             .unwrap_or(by_height)
-            .min(by_height.max(style.small));
-        let probe = style.title;
+            .min(by_height.max(style.small()));
+        let probe = style.title();
         let fixed = f32::from(side + rain_w + gap * 4);
         let (long, initial) = naming(env);
-        let mut size = style.small;
+        let mut size = style.small();
         let mut names = Vec::new();
         for (long, initial) in [(long, initial), (false, initial), (false, true)] {
             names = days
@@ -515,12 +517,12 @@ impl Context<'_, '_> {
                 };
             let by_width = (f32::from(area.width) - fixed) * probe / at_probe.max(1.0);
             size = wanted.min(by_width);
-            if size >= style.small {
+            if size >= style.small() {
                 break;
             }
         }
-        let size = draw::effective(font, size.max(style.small * 0.8));
-        let small = style.small.min(size);
+        let size = draw::effective(font, size.max(style.small() * 0.8));
+        let small = style.small().min(size);
         let name_w = widest(&mut names.iter(), size);
         let high_w = widest(&mut highs.iter(), size);
         let mut low_w = if with_low {
@@ -588,30 +590,36 @@ impl Context<'_, '_> {
             } else {
                 self.look.faint
             };
-            ui::draw_label(canvas, font, size, f32::from(area.x), row, &names[i], color);
+            ui::Label::new(&names[i])
+                .px(size)
+                .color(color)
+                .draw_from(ui, f32::from(area.x), row);
             if side > 0 {
                 let at = Rect::new(symbol_x, row.y + (height - side) / 2, side, side);
                 let (_, symbol) = data::condition(day.code);
-                draw::draw_symbol(canvas, at, (symbol, true), self.symbols, self.look.ink);
+                draw::draw_symbol(ui.canvas(), at, (symbol, true), self.symbols, self.look.ink);
             }
             if let Some(rain) = rains[i].as_ref().filter(|_| rain_w > 0) {
                 let w = font.measure(small, rain);
                 let x = f32::from(rain_x + rain_w) - w;
-                ui::draw_label(canvas, font, small, x, row, rain, self.look.faint);
+                ui::Label::new(rain)
+                    .px(small)
+                    .color(self.look.faint)
+                    .draw_from(ui, x, row);
             }
             if low_w > 0 {
                 let w = font.measure(size, &lows[i]);
                 let x = f32::from(low_x + low_w) - w;
-                draw_digits(canvas, font, size, x, row, &lows[i], self.look.faint);
+                draw_digits(ui, font, size, x, row, &lows[i], self.look.faint);
             }
             let w = font.measure(size, &highs[i]);
             let x = f32::from(high_x + high_w) - w;
-            draw_digits(canvas, font, size, x, row, &highs[i], self.look.ink);
+            draw_digits(ui, font, size, x, row, &highs[i], self.look.ink);
             if bars {
                 let mid = i32::from(row.y) + i32::from(row.height) / 2;
-                let track = style.line.max(1) as u16;
+                let track = u32::from(style.line()).max(1) as u16;
                 let y = (mid - i32::from(track) / 2) as u16;
-                self.rule(canvas, Rect::new(bar_x, y, bar_w, track));
+                self.rule(ui.canvas(), Rect::new(bar_x, y, bar_w, track));
                 let thick = (draw::cap(size) * 0.25).max(3.0) as u32;
                 let from = place(day.low) as i32;
                 let to = (place(day.high) as i32).max(from + thick as i32);
@@ -621,11 +629,16 @@ impl Context<'_, '_> {
                     (to - from) as u16,
                     thick as u16,
                 );
-                canvas.fill_round(bar, thick / 2, self.look.ink);
+                ui.canvas().fill_round(bar, thick / 2, self.look.ink);
             }
             if self.shows("lines") && i > 0 {
-                let line = Rect::new(area.x, row.y, area.width, style.line.max(1) as u16);
-                self.rule(canvas, line);
+                let line = Rect::new(
+                    area.x,
+                    row.y,
+                    area.width,
+                    u32::from(style.line()).max(1) as u16,
+                );
+                self.rule(ui.canvas(), line);
             }
         }
     }

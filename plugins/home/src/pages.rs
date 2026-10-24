@@ -12,11 +12,11 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{groups, settings};
-use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::ui;
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
-    Canvas, Color, Command, Env, Id, RegisterError, Registrar, SettingExtra, SettingKind,
-    SettingSpec, SettingValue,
+    Color, Command, Env, Id, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
+    SettingValue,
 };
 
 use crate::{ACTIONS, SCREEN};
@@ -43,22 +43,18 @@ pub(crate) const FOOTER_ITEMS: Setting<Text> = Setting::new("home.footer.items")
 /// Draws the dot of a page (or a layout) `size` pixels wide at `x`, `y`,
 /// filled for the current one: round where small shapes are pills or
 /// corners round, else square.
-pub(crate) fn draw_dot(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    (x, y): (i32, i32),
-    size: u32,
-    filled: bool,
-) {
+pub(crate) fn draw_dot(ui: &mut ui::Ui<'_>, (x, y): (i32, i32), size: u32, filled: bool) {
+    let (env, style) = (ui.env(), ui.style());
     let corners = env.settings.text(settings::UI_CORNERS.as_str());
-    let round = style.pill || settings::CORNERS[2..].contains(&corners);
+    let round = style.pill() || settings::CORNERS[2..].contains(&corners);
     let radius = if round { size / 2 } else { 0 };
     if filled {
-        canvas.fill_round_rect(x, y, size, size, radius, Color::BLACK);
+        ui.canvas()
+            .fill_round_rect(x, y, size, size, radius, Color::BLACK);
     } else {
-        let line = style.line.max(1);
-        canvas.stroke_round_rect(x, y, size, size, line, radius, Color::BLACK);
+        let line = u32::from(style.line()).max(1);
+        ui.canvas()
+            .stroke_round_rect(x, y, size, size, line, radius, Color::BLACK);
     }
 }
 
@@ -99,9 +95,9 @@ static ITEMS: SettingExtra = SettingExtra::new()
 
 /// The setting of page `n` (1 the first).
 const fn page(id: &'static str, title: &'static str, default: &'static str) -> SettingSpec {
-    SettingSpec::fixed_text(id, title, default, groups::LOOK)
+    SettingSpec::text(id, title, default, groups::LOOK)
         .with_extra(&PAGE)
-        .described("home.setting.page.help")
+        .description("home.setting.page.help")
         .advanced()
 }
 
@@ -115,7 +111,7 @@ static SETTINGS: [SettingSpec; 16] = [
     page("home.page-6", "home.setting.page-6", DEFAULTS[5]),
     page("home.page-7", "home.setting.page-7", DEFAULTS[6]),
     page("home.page-8", "home.setting.page-8", DEFAULTS[7]),
-    SettingSpec::fixed_number(
+    SettingSpec::number(
         COLUMNS.static_str(),
         "home.setting.columns",
         2,
@@ -124,8 +120,8 @@ static SETTINGS: [SettingSpec; 16] = [
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.columns.help"),
-    SettingSpec::fixed_number(
+    .description("home.setting.columns.help"),
+    SettingSpec::number(
         ROWS.static_str(),
         "home.setting.rows",
         0,
@@ -134,56 +130,56 @@ static SETTINGS: [SettingSpec; 16] = [
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.rows.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.rows.help"),
+    SettingSpec::switch(
         crate::blocks::TOOL_LABELS.static_str(),
         "home.setting.tool-labels",
         true,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.tool-labels.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.tool-labels.help"),
+    SettingSpec::switch(
         crate::blocks::FOCUS_AT_ONCE.static_str(),
         "home.setting.focus-at-once",
         false,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.focus-at-once.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.focus-at-once.help"),
+    SettingSpec::switch(
         STATUS_BAR.static_str(),
         "home.setting.status-bar",
         true,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.status-bar.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.status-bar.help"),
+    SettingSpec::switch(
         FOOTER_PENCIL.static_str(),
         "home.setting.footer-pencil",
         true,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.footer-pencil.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.footer-pencil.help"),
+    SettingSpec::switch(
         FOOTER_DOTS.static_str(),
         "home.setting.footer-dots",
         true,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.footer-dots.help"),
-    SettingSpec::fixed(
-        FOOTER_ITEMS.static_str(),
+    .description("home.setting.footer-dots.help"),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(FOOTER_ITEMS.static_str()),
         "home.setting.footer-items",
         SettingKind::List,
         SettingValue::Text(Cow::Borrowed("")),
         groups::LOOK,
     )
     .with_extra(&ITEMS)
-    .described("home.setting.footer-items.help"),
+    .description("home.setting.footer-items.help"),
 ];
 
 /// The pages as a place of widgets in a grid.

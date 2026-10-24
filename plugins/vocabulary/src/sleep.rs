@@ -66,25 +66,27 @@ impl SleepCard {
 impl Screen for SleepCard {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let display = env.device.display;
-        canvas.fill(Rect::new(0, 0, display.width, display.height), Color::WHITE);
         let style = UiStyle::new(env);
-        let Some(font) = style.font(env) else {
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas()
+            .fill(Rect::new(0, 0, display.width, display.height), Color::WHITE);
+        let Some(font) = ui.font() else {
             return;
         };
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let width = f32::from(display.width.saturating_sub(2 * margin));
-        let large = style.text * 1.8;
+        let large = style.text() * 1.8;
         let big = font.line_metrics(large).line_height as u16;
-        let small = font.line_metrics(style.small).line_height as u16;
+        let small = font.line_metrics(style.small()).line_height as u16;
         let lines = self
             .front
             .as_deref()
             .map(|front| font.wrap(large, front, width))
             .unwrap_or_default();
         let shown = lines.len().min(6) as u16;
-        let gap = style.gap as u16 * 3;
+        let gap = style.gap() * 3;
         // The note whole, on as many lines as it takes.
-        let notes = font.wrap(style.small, &self.note, width);
+        let notes = font.wrap(style.small(), &self.note, width);
         let height = shown * big + gap + small * notes.len() as u16;
         let mut y = display.height.saturating_sub(height) / 2;
         if let Some(front) = &self.front {
@@ -92,16 +94,22 @@ impl Screen for SleepCard {
                 let line = &front[range];
                 let x = f32::from(margin) + (width - font.measure(large, line)).max(0.0) / 2.0;
                 let row = Rect::new(margin, y, display.width.saturating_sub(2 * margin), big);
-                ui::draw_label(canvas, &font, large, x, row, line, Color::BLACK);
+                ui::Label::new(line)
+                    .px(large)
+                    .color(Color::BLACK)
+                    .draw_from(&mut ui, x, row);
                 y += big;
             }
             y += gap;
         }
         for range in notes {
             let note = self.note[range].trim();
-            let x = f32::from(margin) + (width - font.measure(style.small, note)).max(0.0) / 2.0;
+            let x = f32::from(margin) + (width - font.measure(style.small(), note)).max(0.0) / 2.0;
             let row = Rect::new(margin, y, display.width.saturating_sub(2 * margin), small);
-            ui::draw_label(canvas, &font, style.small, x, row, note, style.faint(60));
+            ui::Label::new(note)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(&mut ui, x, row);
             y += small;
         }
     }

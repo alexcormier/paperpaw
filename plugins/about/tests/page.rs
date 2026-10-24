@@ -77,7 +77,7 @@ impl Plugin for Reader {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // A line of its own on the page.
-        r.contribute(Id::new_static("about.lines"), alloc_text().into())?;
+        r.contribute(Id::new_static("about.lines"), alloc_text())?;
         let opened = self.0.clone();
         r.add_screen(ScreenSpec::new(
             Id::new_static("fake-reader.screen"),

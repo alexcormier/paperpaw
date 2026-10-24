@@ -42,6 +42,8 @@ const OLD_NAME: &str = "quireink"; // now paperpaw
 /// write to it before the kernel starts), it moves each entry the new one
 /// does not have, however deep; a file the new one has stays as it is, and
 /// the old one is left under the old name.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn take_over_old_name(storage: &dyn Storage) {
     let names = [
         (format!(".{OLD_NAME}"), DIR),
@@ -111,6 +113,12 @@ pub enum Error {
     /// Not text, or not as the format says.
     Unreadable,
     Storage(StorageError),
+}
+
+impl From<StorageError> for Error {
+    fn from(e: StorageError) -> Self {
+        Error::Storage(e)
+    }
 }
 
 impl From<Error> for StorageError {

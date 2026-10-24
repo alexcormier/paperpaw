@@ -50,7 +50,7 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events, groups, menus, params, setting_sections, slots};
+use paperpaw_sdk::builtin::{actions, events, group_sections, groups, menus, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice;
@@ -90,13 +90,13 @@ const FOCUS: &str = paperpaw_sdk::builtin::params::FOCUS;
 pub struct SettingsPlugin;
 
 /// Whether advanced settings show.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::switch(
     ADVANCED.static_str(),
     "settings.advanced",
     false,
     groups::SYSTEM,
 )
-.described("settings.advanced.help")];
+.description("settings.advanced.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -174,7 +174,7 @@ impl Plugin for SettingsPlugin {
             Box::new(|env, params| Box::new(secrets::SecretPage::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(secrets::OPEN, "settings.secrets").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::OpenScreen(secrets::SCREEN, Params::new()));
             },
         ))?;
@@ -271,7 +271,11 @@ fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
 /// `noted`.
 fn frame(env: &Env<'_>, noted: bool) -> (UiStyle, ui::Header, ListView) {
     let (style, header, area) = page(env);
-    let row = if noted { style.noted_row() } else { style.row };
+    let row = if noted {
+        style.noted_row()
+    } else {
+        u32::from(style.row())
+    };
     (style, header, ListView::new(area, row).focus_on_keys(env))
 }
 
@@ -280,7 +284,7 @@ fn page(env: &Env<'_>) -> (UiStyle, ui::Header, Rect) {
     let style = UiStyle::new(env);
     let display = env.device.display;
     let header = ui::Header::new(env, &style, true);
-    let top = header.area().height + style.gap as u16;
+    let top = header.area().height + style.gap();
     let height = display.height.saturating_sub(top);
     (style, header, Rect::new(0, top, display.width, height))
 }
@@ -357,7 +361,7 @@ impl Covered {
 }
 
 /// The page shown in a header: its number and the number of pages.
-fn paging(rows: &ui::Rows) -> Option<(usize, usize)> {
+fn paging(rows: &ui::Rows) -> Option<ui::Paging> {
     Some(rows.paging())
 }
 

@@ -12,7 +12,9 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{
     Canvas, Command, Env, Id, Rect, RegisterError, Registrar, SettingSpec, SettingValue,
 };
@@ -32,31 +34,35 @@ const TYPED: Event<Typed> = Event::new("widgets.note.typed");
 
 /// The note's settings, kept in the program.
 static SETTINGS: [SettingSpec; 7] = [
-    SettingSpec::fixed_text("widgets.note.text", "widgets.note.setting.text", "", ID)
-        .described("widgets.note.setting.text.help"),
-    SettingSpec::fixed_text(
+    SettingSpec::text("widgets.note.text", "widgets.note.setting.text", "", ID)
+        .description("widgets.note.setting.text.help"),
+    SettingSpec::text(
         "widgets.note.heading",
         "widgets.note.setting.heading",
         "",
         ID,
     )
-    .described("widgets.note.setting.heading.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.note.setting.heading.help"),
+    SettingSpec::choice(
         "widgets.note.face",
         "widgets.setting.font",
         &FACES,
         FACES[0],
         ID,
     )
-    .described("widgets.setting.face-font.help"),
-    widgets::size_spec("widgets.note.size", ID, Size::Fit, true),
+    .description("widgets.setting.face-font.help"),
+    widgets::size_spec("widgets.note.size", ID, TextSize::Fit, true),
     widgets::align_spec("widgets.note.align", ID, Align::Center),
     widgets::frame_spec("widgets.note.frame", ID, Frame::None),
     widgets::padding_spec("widgets.note.padding", ID, Padding::Auto),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.note"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.note");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.on(TYPED, |_, typed, out| {
         let text = typed.text.trim();
@@ -99,12 +105,12 @@ fn lay_out(env: &Env<'_>, area: Rect) -> Option<Laid> {
     if note.is_empty() {
         return None;
     }
-    let look = widgets::look::look(env, ID.as_str(), area);
+    let look = widgets::widget_look(env, ID.as_str(), area);
     let mut area = look.area;
     let style = UiStyle::new(env);
     let font = text::font(env, env.settings.read(&FACE))?;
     // The heading where a line of the note fits below it.
-    let least = text::line_height(&font, style.small) as u16;
+    let least = text::line_height(&font, style.small()) as u16;
     let heading = !env.settings.read(&HEADING).trim().is_empty()
         && area.height >= heading_height(env) + least;
     if heading {
@@ -113,7 +119,7 @@ fn lay_out(env: &Env<'_>, area: Rect) -> Option<Laid> {
     }
     let width = f32::from(area.width);
     let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => text::largest(style.small, style.title * 1.8, |size| {
+        TextSize::Fit => text::largest(style.small(), style.title() * 1.8, |size| {
             // Broken between words only, every word whole on a line.
             let (lines, too_wide) = text::count_lines(&font, size, note, width);
             !too_wide && lines as f32 * text::line_height(&font, size) <= f32::from(area.height)

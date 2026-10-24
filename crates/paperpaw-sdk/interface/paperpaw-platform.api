@@ -169,10 +169,14 @@ pub paperpaw_platform::storage::StorageError::Unsupported
 impl core::error::Error for paperpaw_platform::storage::StorageError
 impl core::fmt::Display for paperpaw_platform::storage::StorageError
 pub fn paperpaw_platform::storage::StorageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct paperpaw_platform::storage::DirEntry<'a>
+#[non_exhaustive] pub struct paperpaw_platform::storage::DirEntry<'a>
 pub paperpaw_platform::storage::DirEntry::is_dir: bool
+pub paperpaw_platform::storage::DirEntry::modified: core::option::Option<i64>
 pub paperpaw_platform::storage::DirEntry::name: &'a str
 pub paperpaw_platform::storage::DirEntry::size: u64
+impl<'a> paperpaw_platform::storage::DirEntry<'a>
+pub const fn paperpaw_platform::storage::DirEntry<'a>::new(&'a str, bool, u64) -> Self
+pub const fn paperpaw_platform::storage::DirEntry<'a>::with_modified(self, core::option::Option<i64>) -> Self
 pub struct paperpaw_platform::storage::Mounted<B, M>
 impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Mounted<B, M>
 pub fn paperpaw_platform::storage::Mounted<B, M>::new(B, &'static str, M) -> Self
@@ -184,6 +188,7 @@ pub fn paperpaw_platform::storage::Mounted<B, M>::free_space(&self) -> core::opt
 pub fn paperpaw_platform::storage::Mounted<B, M>::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::Mounted<B, M>::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Mounted<B, M>::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::Mounted<B, M>::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -201,6 +206,7 @@ pub fn paperpaw_platform::storage::NoStorage::free_space(&self) -> core::option:
 pub fn paperpaw_platform::storage::NoStorage::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::NoStorage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::NoStorage::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::NoStorage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -217,6 +223,7 @@ pub fn paperpaw_platform::storage::Storage::free_space(&self) -> core::option::O
 pub fn paperpaw_platform::storage::Storage::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::Storage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Storage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Storage::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::Storage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Storage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Storage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -233,6 +240,7 @@ pub fn paperpaw_platform::storage::NoStorage::free_space(&self) -> core::option:
 pub fn paperpaw_platform::storage::NoStorage::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::NoStorage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::NoStorage::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::NoStorage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -249,6 +257,7 @@ pub fn paperpaw_platform::storage::Mounted<B, M>::free_space(&self) -> core::opt
 pub fn paperpaw_platform::storage::Mounted<B, M>::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::Mounted<B, M>::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Mounted<B, M>::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::Mounted<B, M>::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -343,10 +352,14 @@ pub paperpaw_platform::DeviceInfo::id: &'static str
 pub paperpaw_platform::DeviceInfo::input: paperpaw_platform::input::InputCaps
 pub paperpaw_platform::DeviceInfo::memory: paperpaw_platform::MemoryClass
 pub paperpaw_platform::DeviceInfo::name: &'static str
-pub struct paperpaw_platform::DirEntry<'a>
+#[non_exhaustive] pub struct paperpaw_platform::DirEntry<'a>
 pub paperpaw_platform::DirEntry::is_dir: bool
+pub paperpaw_platform::DirEntry::modified: core::option::Option<i64>
 pub paperpaw_platform::DirEntry::name: &'a str
 pub paperpaw_platform::DirEntry::size: u64
+impl<'a> paperpaw_platform::storage::DirEntry<'a>
+pub const fn paperpaw_platform::storage::DirEntry<'a>::new(&'a str, bool, u64) -> Self
+pub const fn paperpaw_platform::storage::DirEntry<'a>::with_modified(self, core::option::Option<i64>) -> Self
 pub struct paperpaw_platform::DisplayInfo
 pub paperpaw_platform::DisplayInfo::color: core::option::Option<paperpaw_platform::display::ColorPanel>
 pub paperpaw_platform::DisplayInfo::dpi: u16
@@ -383,6 +396,7 @@ pub fn paperpaw_platform::storage::Mounted<B, M>::free_space(&self) -> core::opt
 pub fn paperpaw_platform::storage::Mounted<B, M>::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::Mounted<B, M>::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Mounted<B, M>::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::Mounted<B, M>::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -400,6 +414,7 @@ pub fn paperpaw_platform::storage::NoStorage::free_space(&self) -> core::option:
 pub fn paperpaw_platform::storage::NoStorage::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::NoStorage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::NoStorage::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::NoStorage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -456,6 +471,7 @@ pub fn paperpaw_platform::Storage::free_space(&self) -> core::option::Option<u64
 pub fn paperpaw_platform::Storage::ignores_case(&self) -> bool
 pub fn paperpaw_platform::Storage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::Storage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::Storage::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::Storage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::Storage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::Storage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -472,6 +488,7 @@ pub fn paperpaw_platform::storage::NoStorage::free_space(&self) -> core::option:
 pub fn paperpaw_platform::storage::NoStorage::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::NoStorage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::NoStorage::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::NoStorage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -488,6 +505,7 @@ pub fn paperpaw_platform::storage::Mounted<B, M>::free_space(&self) -> core::opt
 pub fn paperpaw_platform::storage::Mounted<B, M>::ignores_case(&self) -> bool
 pub fn paperpaw_platform::storage::Mounted<B, M>::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Mounted<B, M>::modified(&self, &str) -> core::option::Option<i64>
 pub fn paperpaw_platform::storage::Mounted<B, M>::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>

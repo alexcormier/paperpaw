@@ -52,8 +52,8 @@ use paperpaw_sdk::library::{self, catalog::State};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    RegisterError, Registrar, Screen, ScreenSpec,
+    Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
+    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use index::{Filter, Index, NEVER, cap, hash};
@@ -104,7 +104,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     ))?;
     r.add_action(
         paperpaw_sdk::ActionSpec::new(FIND, "files.list.find").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(FIND, Params::new()));
             },
         ),
@@ -230,16 +230,14 @@ impl ShelfRow {
     }
 }
 
-/// Where things go on the screen, and the words of the chips: made anew
-/// when a setting changes (the view, the size of the interface).
+/// Where things go on the screen: made anew when a setting changes (the
+/// view, the size of the interface).
 struct Layout {
     style: UiStyle,
     sizes: Sizes,
     header: ui::Header,
-    /// The filters' chips and their names (larger screens; none on
-    /// small ones).
+    /// The filters' chips (larger screens; none on small ones).
     chips: ui::Chips,
-    chip_labels: Vec<String>,
     /// The filter's row (small screens).
     filter_row: Option<Rect>,
     /// Where the books (or shelves) go.
@@ -254,11 +252,7 @@ impl Layout {
         let sizes = Sizes::new(env, &style);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let gap = style.gap as u16;
-        let chip_labels: Vec<String> = Filter::ALL
-            .iter()
-            .map(|f| env.i18n.tr(f.label()).to_string())
-            .collect();
+        let gap = style.gap();
         let (chips, filter_row, top) = if sizes.compact {
             let row = Rect::new(0, header.area().height, display.width, sizes.filter_row);
             (
@@ -268,8 +262,8 @@ impl Layout {
             )
         } else {
             // From margin to margin, with room round them for the focus.
-            let margin = style.margin as u16;
-            let labels: Vec<&str> = chip_labels.iter().map(String::as_str).collect();
+            let margin = style.margin();
+            let labels = Filter::ALL.map(Filter::label);
             let width = display.width.saturating_sub(2 * margin);
             // As many rows as the words need: none is shortened.
             let band = Rect::new(
@@ -278,7 +272,7 @@ impl Layout {
                 width,
                 ui::Chips::height_for(env, &style, width, &labels) + gap,
             );
-            let chips = ui::Chips::new(env, &style, band, &labels);
+            let chips = ui::Chips::new(env, &style, band, labels);
             (chips, None, band.y + band.height)
         };
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -289,7 +283,6 @@ impl Layout {
             sizes,
             header,
             chips,
-            chip_labels,
             filter_row,
             area,
             grid,
@@ -360,7 +353,7 @@ impl ListScreen {
             shelves: Vec::new(),
             card: false,
             focus: 0,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             filter_focused: false,
             loaded: Vec::new(),
             loaded_page: None,
@@ -823,7 +816,7 @@ impl ListScreen {
             if row.next {
                 self.set_filter(Filter::Next, cx);
             } else if row.kind == shelf::Kind::Authors {
-                cx.command(Command::RunAction(crate::BY_AUTHOR));
+                cx.command(Command::run(crate::BY_AUTHOR));
             } else {
                 cx.command(shelf::open(row.kind, &row.name));
             }
@@ -875,9 +868,9 @@ impl ListScreen {
         if let Some(row) = self.layout.filter_row {
             // At the end of the filter's row, its icon on the margin.
             let square = row.height;
-            let size = style.title * ui::ICON_SCALE;
+            let size = style.title() * ui::ICON_SCALE;
             let icon = ui::icon_width(env, "search", size) as u16;
-            let right = (row.x + row.width).saturating_sub(style.margin as u16);
+            let right = (row.x + row.width).saturating_sub(style.margin());
             let x = (right + (square - icon) / 2).saturating_sub(square);
             return Some(Rect::new(x, row.y, square, square));
         }
@@ -887,10 +880,10 @@ impl ListScreen {
         let right = if self.len() > 0 && pages > 1 {
             let font = style.font(env)?;
             let label = format!("{} / {pages}", self.page_of(self.focus) + 1);
-            let label = font.measure(style.small, &label) as u16;
+            let label = font.measure(style.small(), &label) as u16;
             (a.x + a.width).saturating_sub(2 * (square * 4 / 5) + label)
         } else {
-            (a.x + a.width).saturating_sub(style.margin as u16)
+            (a.x + a.width).saturating_sub(style.margin())
         };
         Some(Rect::new(right.saturating_sub(square), a.y, square, square))
     }
@@ -929,30 +922,24 @@ impl ListScreen {
         self.refilter_keeping(env, keep, true);
     }
 
-    fn draw_shelf(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        row: &ShelfRow,
-        rect: Rect,
-        focused: bool,
-    ) {
+    fn draw_shelf(&self, ui: &mut ui::Ui<'_>, row: &ShelfRow, rect: Rect, focused: bool) {
         let style = &self.layout.style;
         // A row, whose words are those drawn in it.
-        canvas.describe(Role::Row, "", rect).focused(focused);
+        ui.canvas().describe(Role::Row, "", rect).focused(focused);
         let ink = style.focus_ink(focused);
-        let room = ui::icon_room(env, style, true);
+        let room = ui.icon_room(true);
         let band = ui::title_area(style, rect);
-        ui::draw_row_icon(canvas, env, style, band, room, Some(row.icon), ink);
+        ui.row_icon(band, room, Some(row.icon), ink);
         let text = Rect::new(
             rect.x + room,
             rect.y,
             rect.width.saturating_sub(room),
             rect.height,
         );
-        ui::draw_noted_row(
-            canvas, env, style, text, focused, &row.title, "›", &row.note,
-        );
+        ui::Row::value(&row.title, "›")
+            .note(&row.note)
+            .focused(focused)
+            .draw(ui, text);
     }
 }
 
@@ -966,32 +953,24 @@ impl Screen for ListScreen {
         let layout = &self.layout;
         let style = layout.style;
         let len = self.len();
-        let paging = (len > 0).then(|| (self.page_of(self.focus), self.pages()));
+        let paging = (len > 0).then(|| ui::Paging::new(self.page_of(self.focus), self.pages()));
         let title = env.i18n.tr("files.title");
-        layout.header.draw(canvas, env, &style, title, None, paging);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        layout.header.draw(&mut ui, title, None, paging);
         let has_books = self.index.has_books();
         let focused_filter = self.shown && self.filter_focused;
         if let Some(row) = layout.filter_row {
             if has_books {
                 let (label, end) = (&self.filter_label, &self.filter_end);
-                rows::draw_filter_row(
-                    canvas,
-                    env,
-                    &style,
-                    row,
-                    focused_filter,
-                    label,
-                    end,
-                    self.find,
-                );
+                rows::draw_filter_row(&mut ui, row, focused_filter, label, end, self.find);
             }
         } else {
             if let Some(button) = self.find {
-                let size = style.title * ui::ICON_SCALE;
+                let size = style.title() * ui::ICON_SCALE;
                 let w = ui::icon_width(env, "search", size);
                 let x = f32::from(button.x) + (f32::from(button.width) - w) / 2.0;
                 let ink = style.header_colors().1;
-                ui::draw_icon(canvas, env, "search", size, x, button, ink);
+                ui.icon("search", size, x, button, ink);
             }
             // No chips before there are books to sort. Next in your series
             // is on the shelves: their chip is the chosen one then.
@@ -1002,14 +981,8 @@ impl Screen for ListScreen {
                     self.filter
                 };
                 let chosen = Filter::ALL.iter().position(|f| *f == shown);
-                // The names as the chips take them, without allocating.
-                let labels: [&str; Filter::ALL.len()] =
-                    core::array::from_fn(|i| layout.chip_labels[i].as_str());
                 layout.chips.draw(
-                    canvas,
-                    env,
-                    &style,
-                    &labels,
+                    &mut ui,
                     chosen.unwrap_or(usize::MAX),
                     chosen.filter(|_| focused_filter),
                 );
@@ -1018,10 +991,10 @@ impl Screen for ListScreen {
         if len == 0 {
             let area = layout.area;
             if self.collecting && !has_books {
-                ui::draw_message(canvas, env, &style, area, &self.empty_text);
+                ui.message(area, &self.empty_text);
             } else {
                 let (title, text) = (&self.empty_title, &self.empty_text);
-                ui::draw_empty(canvas, env, &style, area, "books", title, text);
+                ui.empty(area, "books", title, text);
             }
             return;
         }
@@ -1029,32 +1002,32 @@ impl Screen for ListScreen {
         let page = self.page_of(self.focus);
         for index in self.page_range(page) {
             let rect = self.place(index);
-            if canvas.clip().intersection(&rect).is_none() {
+            if ui.canvas().clip().intersection(&rect).is_none() {
                 continue;
             }
             let focused = self.shown && !self.filter_focused && index == self.focus;
             if self.card && index == 0 {
                 if let Some(book) = self.book(0) {
-                    rows::draw_card(canvas, env, &style, sizes, rect, focused, book);
+                    rows::draw_card(&mut ui, sizes, rect, focused, book);
                 }
                 continue;
             }
             if let Some(g) = self.covers() {
                 if let Some(book) = self.book(index) {
                     let count = self.counts.get(index).copied().unwrap_or(1);
-                    grid::draw_cell(canvas, env, &style, sizes, g, rect, focused, book, count);
+                    grid::draw_cell(&mut ui, sizes, g, rect, focused, book, count);
                 }
                 continue;
             }
             if focused {
-                ui::draw_focus(canvas, &style, rect);
+                ui.focus(rect);
             } else {
-                ui::draw_separator(canvas, &style, rect, 0);
+                ui.separator(rect, 0);
             }
             if self.filter == Filter::Shelves {
-                self.draw_shelf(canvas, env, &self.shelves[index], rect, focused);
+                self.draw_shelf(&mut ui, &self.shelves[index], rect, focused);
             } else if let Some(book) = self.book(index) {
-                rows::draw_book_row(canvas, env, &style, sizes, rect, focused, book, false);
+                rows::draw_book_row(&mut ui, sizes, rect, focused, book, false);
             }
         }
     }
@@ -1166,10 +1139,10 @@ impl Screen for ListScreen {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let paging = Some((self.page_of(self.focus), self.pages()));
+        let paging = Some(ui::Paging::new(self.page_of(self.focus), self.pages()));
         let style = self.layout.style;
         if let Some(action) = self.layout.header.tap(cx.env(), &style, point, paging) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.layout.header.area().contains(point) {

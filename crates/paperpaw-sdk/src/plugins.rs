@@ -210,6 +210,13 @@ impl Plugins {
         self.list.is_empty()
     }
 
+    /// PaperPaw's kernel as it runs here ([`CORE_PLUGIN`](crate::builtin::CORE_PLUGIN)):
+    /// its manifest says the version of PaperPaw and of its SDK, which a
+    /// plugin built with another SDK may not have.
+    pub fn kernel(&self) -> Option<&PluginInfo> {
+        self.get(crate::builtin::CORE_PLUGIN.as_str())
+    }
+
     pub fn get(&self, id: &str) -> Option<&PluginInfo> {
         self.list.iter().find(|p| p.manifest.id.as_str() == id)
     }
@@ -265,7 +272,7 @@ mod tests {
     use alloc::vec::Vec;
 
     use super::*;
-    use crate::{SDK_VERSION, Version};
+    use crate::Version;
 
     fn info(id: &'static str, state: PluginState, enabled: bool) -> PluginInfo {
         PluginInfo {
@@ -274,7 +281,6 @@ mod tests {
                 name: Cow::Borrowed("Name"),
                 description: Cow::Borrowed("Does things."),
                 version: Version::new(1, 0, 0),
-                sdk: SDK_VERSION,
                 uses: crate::Uses::NOTHING,
                 how: &[],
             },

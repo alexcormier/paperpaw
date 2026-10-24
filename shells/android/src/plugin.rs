@@ -23,7 +23,7 @@ pub const PDF: Id = Id::new_static("android.pdf");
 pub const VOICE: Setting<Text> = Setting::new("android.voice");
 const VOICE_SCREEN: Id = Id::new_static("android.voice-screen");
 /// The settings for reading aloud, every reader's.
-const ALOUD_SECTION: &str = paperpaw_sdk::builtin::setting_sections::ALOUD;
+const ALOUD_SECTION: &str = paperpaw_sdk::builtin::group_sections::ALOUD;
 /// Frontlight brightness (0 switches it off).
 pub const FRONTLIGHT: Setting<i64> = Setting::new("android.frontlight");
 /// Frontlight colour temperature (higher is warmer).
@@ -62,7 +62,7 @@ impl Plugin for AndroidPlugin {
         let app = self.app.clone();
         r.add_action(
             ActionSpec::new(ALLOW_STORAGE, "android.allow-storage").handler(
-                move |_: &Env<'_>, _: &mut Vec<Command>| {
+                move |_: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
                     crate::access::request(&app);
                 },
             ),
@@ -106,7 +106,7 @@ impl Screen for VoiceSettings {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !crate::speech::open_settings(&self.app) {
-            let text = cx.env().i18n.tr("android.voice.unavailable").to_string();
+            let text = cx.env().i18n().tr("android.voice.unavailable").to_string();
             cx.command(Command::Notify(text));
         }
         cx.command(Command::Back);
@@ -117,15 +117,20 @@ impl Screen for VoiceSettings {
     }
 }
 
+/// The voice's part and editor: the system's speech settings.
+static VOICE_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
+    .section(ALOUD_SECTION)
+    .editor(VOICE_SCREEN);
+/// Set with a slider.
+static SLIDER: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().slider();
+
 impl AndroidPlugin {
     /// The voice for reading aloud, with its other settings; it is
     /// chosen in the system's speech settings.
     fn register_voice(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::text(&VOICE, "android.voice", "")
-                .group(groups::READING)
-                .section(ALOUD_SECTION)
-                .editor(VOICE_SCREEN)
+            SettingSpec::text(VOICE.static_str(), "android.voice", "", groups::READING)
+                .with_extra(&VOICE_EXTRA)
                 .description("android.voice.help"),
         )?;
         r.set_menu_need(VOICE, MenuNeed::Speech)?;
@@ -148,29 +153,29 @@ impl AndroidPlugin {
         let lights = frontlight.lights;
         r.add_setting(
             SettingSpec::number(
-                &FRONTLIGHT,
+                FRONTLIGHT.static_str(),
                 "android.frontlight",
                 0,
                 i64::from(lights.max_brightness),
                 i64::from(frontlight.brightness),
+                groups::DISPLAY,
             )
-            .group(groups::DISPLAY)
             .description("android.frontlight.help")
-            .slider(),
+            .with_extra(&SLIDER),
         )?;
         let mut items = vec![FRONTLIGHT];
         if lights.has_warmth() {
             r.add_setting(
                 SettingSpec::number(
-                    &WARMTH,
+                    WARMTH.static_str(),
                     "android.warmth",
                     0,
                     i64::from(lights.max_warmth),
                     i64::from(frontlight.warmth),
+                    groups::DISPLAY,
                 )
-                .group(groups::DISPLAY)
                 .description("android.warmth.help")
-                .slider(),
+                .with_extra(&SLIDER),
             )?;
             items.push(WARMTH);
         }
@@ -188,9 +193,9 @@ impl AndroidPlugin {
         r.subscribe(
             events::SETTING_CHANGED,
             Box::new(
-                move |env: &Env<'_>, params: &Params, _: &mut Vec<Command>| {
+                move |env: &Env<'_>, params: &Params, _: &mut paperpaw_sdk::Commands| {
                     let id = params.get(params::ID).unwrap_or_default();
-                    let level = env.settings.int(id) as i32;
+                    let level = env.settings().int(id) as i32;
                     // Only real changes reach the device: taking over its
                     // own levels on start never writes back.
                     if id == FRONTLIGHT.as_str() && lights.brightness(&app) != level {
@@ -209,42 +214,46 @@ impl AndroidPlugin {
         let following = std::cell::Cell::new(false);
         r.subscribe(
             events::PREVIEW_CHANGED,
-            Box::new(move |env: &Env<'_>, _: &Params, _: &mut Vec<Command>| {
-                let shown = |id: &Setting<i64>| {
-                    env.settings.get(id.as_str()) != env.settings.global(id.as_str())
-                };
-                let light = shown(&FRONTLIGHT) || shown(&WARMTH);
-                if !following.replace(light) && !light {
-                    return;
-                }
-                let level = env.settings.read(&FRONTLIGHT) as i32;
-                if lights.brightness(&app) != level {
-                    lights.set_brightness(&app, level);
-                }
-                let warmth = env.settings.read(&WARMTH) as i32;
-                if lights.has_warmth() && lights.warmth(&app) != warmth {
-                    lights.set_warmth(&app, warmth);
-                }
-            }),
+            Box::new(
+                move |env: &Env<'_>, _: &Params, _: &mut paperpaw_sdk::Commands| {
+                    let shown = |id: &Setting<i64>| {
+                        env.settings().get(id.as_str()) != env.settings().global(id.as_str())
+                    };
+                    let light = shown(&FRONTLIGHT) || shown(&WARMTH);
+                    if !following.replace(light) && !light {
+                        return;
+                    }
+                    let level = env.settings().read(&FRONTLIGHT) as i32;
+                    if lights.brightness(&app) != level {
+                        lights.set_brightness(&app, level);
+                    }
+                    let warmth = env.settings().read(&WARMTH) as i32;
+                    if lights.has_warmth() && lights.warmth(&app) != warmth {
+                        lights.set_warmth(&app, warmth);
+                    }
+                },
+            ),
         )?;
         // The device's levels are the truth (they also change through
         // the system's own controls): take them over on start.
         let app = self.app.clone();
         r.subscribe(
             events::STARTED,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-                let levels = [
-                    (FRONTLIGHT, lights.brightness(&app)),
-                    (WARMTH, lights.warmth(&app)),
-                ];
-                for (id, level) in levels {
-                    let level = i64::from(level);
-                    let known = env.settings.get(id.as_str()).is_some();
-                    if known && env.settings.read(&id) != level {
-                        out.push(Command::set(&id, level));
+            Box::new(
+                move |env: &Env<'_>, _: &Params, out: &mut paperpaw_sdk::Commands| {
+                    let levels = [
+                        (FRONTLIGHT, lights.brightness(&app)),
+                        (WARMTH, lights.warmth(&app)),
+                    ];
+                    for (id, level) in levels {
+                        let level = i64::from(level);
+                        let known = env.settings().get(id.as_str()).is_some();
+                        if known && env.settings().read(&id) != level {
+                            out.push(Command::set(&id, level));
+                        }
                     }
-                }
-            }),
+                },
+            ),
         )?;
         Ok(())
     }

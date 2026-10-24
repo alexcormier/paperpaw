@@ -252,6 +252,10 @@ impl<S: Storage> Storage for Traced<S> {
         self.0.size(path)
     }
 
+    fn modified(&self, path: &str) -> Option<i64> {
+        self.0.modified(path)
+    }
+
     fn exists(&self, path: &str) -> bool {
         count(|c| c.sizes += 1);
         note("exists", path, 0);

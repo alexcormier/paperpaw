@@ -21,7 +21,7 @@ use core::ops::ControlFlow;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files::for_each_line;
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, Storage, StorageError};
+use paperpaw_sdk::{Arg, Command, Commands, Env, HttpRequest, Params, Storage, StorageError};
 
 use crate::{PLUGIN, Parser, SECRET, TOKEN_ENTERED};
 
@@ -165,13 +165,7 @@ pub struct Run {
 impl Run {
     /// Sends the highlights that wait, with `token` if given (else the
     /// one kept), or says why it cannot.
-    pub fn start(
-        &mut self,
-        env: &Env<'_>,
-        start: Start,
-        token: Option<&str>,
-        out: &mut Vec<Command>,
-    ) {
+    pub fn start(&mut self, env: &Env<'_>, start: Start, token: Option<&str>, out: &mut Commands) {
         if token.is_some() {
             self.refused = None;
         }
@@ -219,7 +213,7 @@ impl Run {
     }
 
     /// Sends the next notes file's highlights, or says how it went.
-    fn next(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn next(&mut self, env: &Env<'_>, out: &mut Commands) {
         let body = file(BODY);
         while !self.queue.is_empty() {
             let path = self.queue.remove(0);
@@ -233,7 +227,7 @@ impl Run {
                     let _ = remove_waiting(env.storage, &path);
                 }
                 Ok(count) => {
-                    out.push(Command::Http(self.request(&body, count)));
+                    out.push(Command::http(self.request(&body, count)));
                     self.current = Some(path);
                     return;
                 }
@@ -246,24 +240,23 @@ impl Run {
 
     /// The request sending the `count` highlights in the file `body`.
     fn request(&self, body: &str, count: usize) -> HttpRequest {
-        let mut request = HttpRequest::new("POST", URL, SENT);
-        request.headers.push((
-            String::from("Authorization"),
-            format!("Token {}", self.token),
-        ));
-        request.headers.push((
-            String::from("Content-Type"),
-            String::from("application/json"),
-        ));
-        request.body_from = Some(body.to_string());
-        // Readwise lists every highlight in its answer: not needed here.
-        request.save_to = Some(file(ANSWER));
-        request.params = Params::new().with(COUNT, count.to_string());
-        request
+        HttpRequest::new("POST", URL, SENT)
+            .header(
+                String::from("Authorization"),
+                format!("Token {}", self.token),
+            )
+            .header(
+                String::from("Content-Type"),
+                String::from("application/json"),
+            )
+            .body_from(body.to_string())
+            // Readwise lists every highlight in its answer: not needed here.
+            .save_to(file(ANSWER))
+            .with(Params::new().with(COUNT, count.to_string()))
     }
 
     /// Readwise answered.
-    pub fn answered(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub fn answered(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let Some(path) = self.current.take().filter(|_| self.running) else {
             return;
         };
@@ -291,7 +284,7 @@ impl Run {
     }
 
     /// All notes files were tried: says how it went.
-    fn finish(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn finish(&mut self, env: &Env<'_>, out: &mut Commands) {
         if self.failed > 0 {
             return self.end(env, "readwise.failed", out);
         }
@@ -307,11 +300,11 @@ impl Run {
     }
 
     /// Ends the sending with message `key`.
-    fn end(&mut self, env: &Env<'_>, key: &str, out: &mut Vec<Command>) {
+    fn end(&mut self, env: &Env<'_>, key: &str, out: &mut Commands) {
         self.end_with(env, env.i18n.tr(key).to_string(), out);
     }
 
-    fn end_with(&mut self, env: &Env<'_>, text: String, out: &mut Vec<Command>) {
+    fn end_with(&mut self, env: &Env<'_>, text: String, out: &mut Commands) {
         for name in [BODY, ANSWER] {
             let _ = env.storage.remove(&file(name));
         }
