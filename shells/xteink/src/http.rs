@@ -64,10 +64,11 @@ struct Upload {
 /// Requests at a time.
 pub const MAX_CALLS: usize = 2;
 /// A connection's buffers: more to receive (downloads), little to send.
-/// 8 KB of window keep a download at what the radio and the card take
-/// (about 190 KB/s on the X4), with memory left while a book is open.
+/// On the X4 8 KB of window keep a download at what the radio and the
+/// card take (about 190 KB/s), with memory left while a book is open; the
+/// X4 Pro and Classic, with memory to spare, take 16.
 const BUFFERS: net::Buffers = net::Buffers {
-    receive: 16 * 1024,
+    receive: if cfg!(feature = "x4") { 8 } else { 16 } * 1024,
     send: 1024,
 };
 
