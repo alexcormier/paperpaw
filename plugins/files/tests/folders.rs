@@ -235,7 +235,16 @@ fn a_folder_set_that_is_gone_starts_at_the_top() {
     let card = Card::new("gone");
     let storage = card.storage();
     storage.set_config("[core]\nlibrary-folder = books/Vanished\n");
-    let mut app = chooser(TOUCH, storage, "core.library-folder");
+    // Made again at start, the library's folder can only go while the
+    // device runs (the card taken out and changed elsewhere).
+    let mut app = App::new(TOUCH, storage.clone());
+    assert!(storage.names("books").contains(&"Vanished/".to_string()));
+    let _ = storage.remove_dir_all("books/Vanished");
+    app.open_slot(
+        slots::CHOOSE_FOLDER,
+        Params::new().with("id", "core.library-folder"),
+    );
+    assert_eq!(app.screen(), CHOOSER);
     assert!(app.shows("Device"), "{}", app.described());
 }
 
