@@ -608,6 +608,18 @@ impl Plugin for Wifi {
             .order(50)
             .applies(Box::new(|env: &Env<'_>| env.wifi().is_some())),
         )?;
+        // The setup's row for it says so where the reader is connected
+        // already (e.g. from the network the flasher wrote).
+        r.set_item_state(Id::new_static("wifi.setup"), |env: &Env<'_>| {
+            let state = paperpaw_sdk::ItemState::new();
+            if env.wifi().is_some_and(|w| w.state.is_online()) {
+                state.badge(alloc::string::String::from(
+                    env.i18n().tr("wifi.network.connected"),
+                ))
+            } else {
+                state
+            }
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

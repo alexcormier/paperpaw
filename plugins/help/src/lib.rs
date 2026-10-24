@@ -128,10 +128,17 @@ impl Plugin for Help {
     }
 }
 
-/// Opens the hints over `screen`, where it has some, they are on, and
-/// they were not shown yet.
+/// Opens the hints over `screen`, where it has some, they are on, they
+/// were not shown yet and the first-run setup is not under way: a screen
+/// passed in its course (the quick panel opened by a held button) shows
+/// them the first time it opens after it.
 fn explain(env: &Env<'_>, screen: &Id, out: &mut Commands) {
+    let in_setup = env
+        .stack()
+        .iter()
+        .any(|entry| entry.slot.as_ref() == Some(&paperpaw_sdk::builtin::slots::SETUP));
     if !env.settings().read(&SHOW)
+        || in_setup
         || screen.namespace() == PLUGIN.as_str()
         || help::hints(env, screen.as_str()).is_empty()
         || seen(env.storage(), screen.as_str())

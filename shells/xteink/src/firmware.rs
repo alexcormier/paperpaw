@@ -85,6 +85,8 @@ pub struct State {
     wake_at: Option<Instant>,
     /// When the battery was read last.
     status_read: Option<Instant>,
+    /// Whether the device was on outer power at that reading.
+    status_on_usb: bool,
     /// The latest time the kernel was given: presses that waited in the
     /// queue keep their own time, but never one before it.
     kernel_time: u64,
@@ -313,25 +315,30 @@ impl Firmware {
         }
     }
 
-    /// The battery and the time, every [`STATUS_MS`] and once the clock
-    /// was set.
+    /// The battery and the time, every [`STATUS_MS`], once the clock was
+    /// set and as soon as the device goes on or off outer power (looked at
+    /// in every round anyway, for the light sleeps): charging shows the
+    /// moment the cable goes in or out, without reading more often.
     fn status(&mut self) {
         let at = now();
         let due = self
             .state
             .status_read
             .is_none_or(|read| at.since(read) >= STATUS_MS);
-        if !due && !clock::take_changed() {
+        let on_usb = self.usb_power.is_high();
+        let plugged = on_usb != self.state.status_on_usb;
+        if !clock::take_changed() && !due && !plugged {
             return;
         }
         power::mark(power::at::STATUS);
         self.state.status_read = Some(at);
+        self.state.status_on_usb = on_usb;
         let millivolts = input::millivolts();
         let status = SystemStatus {
             clock: clock::wall(at),
             battery: Some(Battery {
                 percent: input::percent(),
-                charging: self.usb_power.is_high(),
+                charging: on_usb,
                 millivolts: Some(millivolts),
             }),
         };

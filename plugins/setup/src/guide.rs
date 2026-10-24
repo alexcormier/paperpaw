@@ -536,7 +536,18 @@ impl Guide {
             return;
         };
         let (label, more) = match (self.step(env).map(|s| &s.page), self.setting(env)) {
-            (Some(SetupPage::Screen(_)), _) => (env.i18n().tr("setup.open-page").to_string(), true),
+            // What its plugin says of it now (e.g. "Connected"), else
+            // that it opens.
+            (Some(SetupPage::Screen(_)), _) => {
+                let said = self
+                    .step(env)
+                    .and_then(|step| env.menus().state(env, step.id.as_str()).badge);
+                let label = said.map_or_else(
+                    || env.i18n().tr("setup.open-page").to_string(),
+                    alloc::borrow::Cow::into_owned,
+                );
+                (label, true)
+            }
             (_, Some(spec)) => (ui::setting_value(env, spec), ui::opens_screen(env, spec)),
             _ => (String::new(), false),
         };
@@ -738,6 +749,16 @@ impl Screen for Guide {
                     .unwrap_or(self.page.min(self.steps.len()));
                 self.layout = self.layout(&env);
                 cx.request_redraw();
+            }
+            return;
+        }
+        // A page that opens a screen shows what its plugin says of it
+        // (e.g. connected): told again as the network comes or goes.
+        if event == events::WIFI_CHANGED.id() {
+            let env = *cx.env();
+            if matches!(self.step(&env).map(|s| &s.page), Some(SetupPage::Screen(_))) {
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Fast);
             }
             return;
         }
