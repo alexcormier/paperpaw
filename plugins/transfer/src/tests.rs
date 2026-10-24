@@ -632,7 +632,10 @@ fn files_and_folders_move_and_are_renamed() {
     // Into a folder with a book of that name: beside it.
     let (status, .., done) = post("/api/move?k=abc&path=Downloads/a.epub&to=Books");
     assert_eq!(status, 200);
-    let moved = Done::Moved(String::from("Downloads/a.epub"), String::from("Books/a (2).epub"));
+    let moved = Done::Moved(
+        String::from("Downloads/a.epub"),
+        String::from("Books/a (2).epub"),
+    );
     assert_eq!(done, Some(moved));
     assert_eq!(read_file(&storage, "Books/a (2).epub", 16).unwrap(), b"new");
     assert_eq!(read_file(&storage, "Books/a.epub", 16).unwrap(), b"there");
@@ -650,8 +653,17 @@ fn files_and_folders_move_and_are_renamed() {
     let (status, .., done) = post("/api/move?k=abc&path=Books/c.epub&to=Books");
     assert_eq!((status, done), (200, None));
     // Never into itself, nor PaperPaw's settings, nor into a file.
-    assert_eq!(post("/api/move?k=abc&path=Downloads&to=Downloads/Sub").0, 400);
+    assert_eq!(
+        post("/api/move?k=abc&path=Downloads&to=Downloads/Sub").0,
+        400
+    );
     assert_eq!(post("/api/move?k=abc&path=paperpaw.ini&to=Books").0, 403);
-    assert_eq!(post("/api/move?k=abc&path=Books/c.epub&to=Books/a (2).epub").0, 404);
-    assert_eq!(post("/api/move?k=abc&path=Books/c.epub&to=Books&name=../x").0, 400);
+    assert_eq!(
+        post("/api/move?k=abc&path=Books/c.epub&to=Books/a (2).epub").0,
+        404
+    );
+    assert_eq!(
+        post("/api/move?k=abc&path=Books/c.epub&to=Books&name=../x").0,
+        400
+    );
 }
