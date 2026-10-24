@@ -9,11 +9,24 @@ change the plugin SDK.
 ## [0.5.0-beta.2] - 2026-10-24
 
 The second beta: the fixes from testing beta.1, as a new user would use
-it, from the web flasher to the plugin workshop. Store plugins now
-update from beta to beta. Code plugins built for beta.1 run unchanged:
-the plugin interface stays 2.
+it, from the web flasher to the plugin workshop. Every plugin now has
+a version of its own, so a fix to a store plugin reaches readers as an
+update, with a release or alone between releases. Code plugins built
+for beta.1 run unchanged: the plugin interface stays 2.
 
 ### Added
+
+- Every plugin has a version of its own, apart from PaperPaw's: its
+  crate's, which its manifest says (`package_version!()`, the built-in
+  plugins too), 1.0.0 to start. A release builds a store plugin that did
+  not change again for its firmware at the version it has; the plugin
+  library adds the build to it. CI fails where a store plugin changed
+  since the last release and its version did not (a commit says
+  `Plugin-unchanged: <id>` for a change no reader sees).
+- A single store plugin can be updated between releases
+  (`store-plugin.yml`): built for a release's firmware, signed and
+  published as a release of its own, `<id>-v<version>`, which the plugin
+  library imports.
 
 - Restart now, last in the settings: asked once, it saves what is open
   as when the device goes off and restarts PaperPaw.

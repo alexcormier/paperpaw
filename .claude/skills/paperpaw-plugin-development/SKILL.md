@@ -191,7 +191,9 @@ section of `docs/plugins.md`. A plugin that should run there:
   (its fingerprint holds the SDK's version and the compiler): build it
   again, and publish it again, for every release.
 - Give the plugin a version PaperPaw can read: `Version::new(1, 2, 0)`,
-  or `package_version!()` for the crate's own. A pre-release is
+  or `package_version!()` for the crate's own. It is the plugin's own,
+  apart from PaperPaw's (PaperPaw's own plugins have theirs too): raise
+  it when the plugin changes, as devices update only to a newer one. A pre-release is
   `alpha`, `beta`, `dev`, `pre` or `rc` with an optional number up to
   8190 (`0.5.0-beta.2`), ordered as SemVer orders them, so a later beta
   is an update. Any other pre-release (`-gamma`, `-beta.01`) is no

@@ -56,7 +56,10 @@ before 1.0.
 - **`paperpaw-sign`** (`tools/sign`) signs firmware updates, makes
   signing keys, and packs and signs plugin files (`--help`).
 - **`tools/plugin-files`** builds PaperPaw's own plugins that the X4s
-  install from the store as files, for every release (its README).
+  install from the store as files, for every release (its README). Each
+  plugin has a version of its own: one that changed gets a newer one
+  (CI checks it), or its commits say `Plugin-unchanged: <id>` where no
+  reader sees the change.
 - **`tools/xtensa-std`** builds and installs the X4 Pro's core libraries
   for code plugins (its README).
 - **`tools/fontgen`** converts fonts into bitmap font packs (`.ppfp`) for

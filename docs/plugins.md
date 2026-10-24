@@ -1438,7 +1438,11 @@ Calibre, the syncs and the others of
 [`tools/plugin-files/plugins.txt`](../tools/plugin-files/plugins.txt))
 come this way on the X4s: their firmware leaves them out, and each
 release builds them as files, signed with PaperPaw's plugin key, which
-readers install from the store.
+readers install from the store. Each has a version of its own, apart
+from PaperPaw's: a release builds one that did not change again for its
+firmware, at the version it has, and a fix comes as a newer version,
+with a release or alone between releases
+([`tools/plugin-files`](../tools/plugin-files/README.md)).
 
 [`samples/hello-native`](../samples/hello-native) is the sample plugin
 above as a file, in a workspace of its own as a plugin's own repository
