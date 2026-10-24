@@ -81,7 +81,11 @@ static SETTINGS: [SettingSpec; 9] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&YEAR, "stats.widget.year"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(YEAR, "stats.widget.year");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(YEAR, "stats.widget.year", |_| Box::new(Year::default()))

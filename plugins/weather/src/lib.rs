@@ -41,7 +41,7 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
     ActionSpec, Command, Commands, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, time,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, time,
 };
 
 use data::{Temperature, Wind};
@@ -472,7 +472,11 @@ impl Plugin for Weather {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
-        r.add_setting_group(SettingGroupSpec::new(GROUP, "weather.title").order(88))?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "weather.title").order(88);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("sun"))?;
         r.add_settings(&PLACE_SETTING)?;
         r.add_settings(&SETTINGS)?;

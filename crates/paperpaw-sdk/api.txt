@@ -866,7 +866,7 @@ pub paperpaw_sdk::contribution::Contribution::Setting(alloc::boxed::Box<paperpaw
 #[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::SettingDefault
 pub paperpaw_sdk::contribution::Contribution::SettingDefault::setting: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::SettingDefault::value: alloc::borrow::Cow<'static, str>
-pub paperpaw_sdk::contribution::Contribution::SettingGroup(paperpaw_sdk::SettingGroupSpec)
+pub paperpaw_sdk::contribution::Contribution::SettingGroup(paperpaw_sdk::SettingGroup)
 pub paperpaw_sdk::contribution::Contribution::SetupStep(alloc::boxed::Box<paperpaw_sdk::setup::SetupStepSpec>)
 pub paperpaw_sdk::contribution::Contribution::Slot(paperpaw_sdk::SlotSpec)
 #[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::SlotBinding
@@ -934,7 +934,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_reader(&mut self, paperpaw_sdk
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screen(&mut self, paperpaw_sdk::ScreenSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setting(&mut self, paperpaw_sdk::SettingSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::contribution::Registrar::add_setting_group(&mut self, paperpaw_sdk::SettingGroupSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_setting_group(&mut self, impl core::convert::Into<paperpaw_sdk::SettingGroup>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_settings(&mut self, &'static [paperpaw_sdk::SettingSpec]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setup_step(&mut self, paperpaw_sdk::setup::SetupStepSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_slot(&mut self, paperpaw_sdk::SlotSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -4834,7 +4834,7 @@ pub paperpaw_sdk::Contribution::Setting(alloc::boxed::Box<paperpaw_sdk::SettingS
 #[non_exhaustive] pub paperpaw_sdk::Contribution::SettingDefault
 pub paperpaw_sdk::Contribution::SettingDefault::setting: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::SettingDefault::value: alloc::borrow::Cow<'static, str>
-pub paperpaw_sdk::Contribution::SettingGroup(paperpaw_sdk::SettingGroupSpec)
+pub paperpaw_sdk::Contribution::SettingGroup(paperpaw_sdk::SettingGroup)
 pub paperpaw_sdk::Contribution::SetupStep(alloc::boxed::Box<paperpaw_sdk::setup::SetupStepSpec>)
 pub paperpaw_sdk::Contribution::Slot(paperpaw_sdk::SlotSpec)
 #[non_exhaustive] pub paperpaw_sdk::Contribution::SlotBinding
@@ -5738,7 +5738,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_reader(&mut self, paperpaw_sdk
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screen(&mut self, paperpaw_sdk::ScreenSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setting(&mut self, paperpaw_sdk::SettingSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::contribution::Registrar::add_setting_group(&mut self, paperpaw_sdk::SettingGroupSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_setting_group(&mut self, impl core::convert::Into<paperpaw_sdk::SettingGroup>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_settings(&mut self, &'static [paperpaw_sdk::SettingSpec]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setup_step(&mut self, paperpaw_sdk::setup::SetupStepSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_slot(&mut self, paperpaw_sdk::SlotSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -5864,15 +5864,27 @@ pub const fn paperpaw_sdk::SettingExtra::step(self, i64) -> Self
 pub const fn paperpaw_sdk::SettingExtra::unit(self, &'static str) -> Self
 impl core::default::Default for paperpaw_sdk::SettingExtra
 pub fn paperpaw_sdk::SettingExtra::default() -> Self
+pub struct paperpaw_sdk::SettingGroup(_)
+impl core::convert::From<&'static paperpaw_sdk::SettingGroupSpec> for paperpaw_sdk::SettingGroup
+pub fn paperpaw_sdk::SettingGroup::from(&'static paperpaw_sdk::SettingGroupSpec) -> Self
+impl core::convert::From<paperpaw_sdk::SettingGroupSpec> for paperpaw_sdk::SettingGroup
+pub fn paperpaw_sdk::SettingGroup::from(paperpaw_sdk::SettingGroupSpec) -> Self
+impl core::ops::deref::Deref for paperpaw_sdk::SettingGroup
+pub type paperpaw_sdk::SettingGroup::Target = paperpaw_sdk::SettingGroupSpec
+pub fn paperpaw_sdk::SettingGroup::deref(&self) -> &paperpaw_sdk::SettingGroupSpec
 #[non_exhaustive] pub struct paperpaw_sdk::SettingGroupSpec
 pub paperpaw_sdk::SettingGroupSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::SettingGroupSpec::order: i32
 pub paperpaw_sdk::SettingGroupSpec::page: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::SettingGroupSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::SettingGroupSpec
-pub fn paperpaw_sdk::SettingGroupSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
-pub fn paperpaw_sdk::SettingGroupSpec::order(self, i32) -> Self
-pub fn paperpaw_sdk::SettingGroupSpec::page(self, impl core::convert::Into<core::option::Option<paperpaw_sdk::Id>>) -> Self
+pub const fn paperpaw_sdk::SettingGroupSpec::new(paperpaw_sdk::Id, &'static str) -> Self
+pub const fn paperpaw_sdk::SettingGroupSpec::order(self, i32) -> Self
+pub const fn paperpaw_sdk::SettingGroupSpec::page(self, paperpaw_sdk::Id) -> Self
+impl core::convert::From<&'static paperpaw_sdk::SettingGroupSpec> for paperpaw_sdk::SettingGroup
+pub fn paperpaw_sdk::SettingGroup::from(&'static paperpaw_sdk::SettingGroupSpec) -> Self
+impl core::convert::From<paperpaw_sdk::SettingGroupSpec> for paperpaw_sdk::SettingGroup
+pub fn paperpaw_sdk::SettingGroup::from(paperpaw_sdk::SettingGroupSpec) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::SettingSpec
 pub paperpaw_sdk::SettingSpec::default: paperpaw_sdk::SettingValue
 pub paperpaw_sdk::SettingSpec::description: core::option::Option<alloc::borrow::Cow<'static, str>>

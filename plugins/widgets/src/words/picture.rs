@@ -97,7 +97,11 @@ static SETTINGS: [SettingSpec; 6] = [
 ];
 
 pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.picture"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.picture");
+        &SPEC
+    })?;
     r.add_settings(&FOLDER_SETTING)?;
     r.add_settings(&SETTINGS)?;
     let changed = changes.clone();

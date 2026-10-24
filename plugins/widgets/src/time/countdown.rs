@@ -73,8 +73,11 @@ static SETTINGS: [SettingSpec; 10] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add_settable(
         r,
-        &ID,
-        "widgets.countdown",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.countdown");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(shows),
     )?;
     r.add_settings(&SETTINGS)

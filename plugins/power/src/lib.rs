@@ -23,8 +23,8 @@ use paperpaw_sdk::builtin::{events, menus};
 use paperpaw_sdk::power::{self, PowerLevel, Wear};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SettingGroupSpec,
-    SettingSpec, StatusItemSpec, StatusValue, Version,
+    Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SettingSpec,
+    StatusItemSpec, StatusValue, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("power");
@@ -169,7 +169,11 @@ impl Plugin for Power {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting_group(SettingGroupSpec::new(GROUP, "power.title").order(86))?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "power.title").order(86);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("leaf"))?;
         r.add_settings(&SETTINGS)?;
         // The mode in the quick panel, as segments.

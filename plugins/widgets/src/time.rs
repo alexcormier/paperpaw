@@ -61,19 +61,26 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 /// Adds widget `id`, drawn by `drawn`, to the kind "Time and date", with
 /// its settings group (its settings come from a list kept in the
 /// program, each module's `SETTINGS`).
-fn add(r: &mut Registrar, id: &Id, title: &'static str, drawn: Drawn) -> Result<(), RegisterError> {
-    r.add_widget(WidgetSpec::drawn(id.clone(), title, drawn).category(widgets::categories::TIME))?;
-    r.add_setting_group(widgets::settings_group(id, title))
+fn add(
+    r: &mut Registrar,
+    group: &'static paperpaw_sdk::SettingGroupSpec,
+    drawn: Drawn,
+) -> Result<(), RegisterError> {
+    let title: &'static str = &group.title;
+    r.add_widget(
+        WidgetSpec::drawn(group.id.clone(), title, drawn).category(widgets::categories::TIME),
+    )?;
+    r.add_setting_group(group)
 }
 
 /// Adds widget `id` like [`add`], with a tap on it opening its settings:
 /// for widgets that show what the reader chose (a date, places).
 fn add_settable(
     r: &mut Registrar,
-    id: &Id,
-    title: &'static str,
+    group: &'static paperpaw_sdk::SettingGroupSpec,
     drawn: Drawn,
 ) -> Result<(), RegisterError> {
+    let (id, title): (&Id, &'static str) = (&group.id, &group.title);
     let widget = id.clone();
     r.add_widget(
         WidgetSpec::new(id.clone(), title, move |_| {
@@ -85,7 +92,7 @@ fn add_settable(
         })
         .category(widgets::categories::TIME),
     )?;
-    r.add_setting_group(widgets::settings_group(id, title))
+    r.add_setting_group(group)
 }
 
 /// A widget that draws from the clock and its settings, which a tap

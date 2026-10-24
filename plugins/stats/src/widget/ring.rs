@@ -75,7 +75,11 @@ static SETTINGS: [SettingSpec; 9] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&RING, "stats.widget.goal"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(RING, "stats.widget.goal");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(RING, "stats.widget.goal", |_| Box::new(Ring::default()))

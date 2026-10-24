@@ -91,7 +91,11 @@ static SETTINGS: [SettingSpec; 11] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "weather.widget.forecast"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "weather.widget.forecast");
+        &SPEC
+    })?;
     r.add_settings(&LOOK)?;
     r.add_settings(&DAYS_SETTING)?;
     r.add_settings(&SETTINGS)?;

@@ -52,7 +52,7 @@ use paperpaw_sdk::digest::md5;
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::{
     ActionSpec, Command, Commands, Env, Id, Instant, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, StorageError, time,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, StorageError, time,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -509,7 +509,11 @@ impl Plugin for Stats {
         let state: Shared = Rc::new(RefCell::new(State::default()));
         widget::register(r)?;
         left::register(r)?;
-        r.add_setting_group(SettingGroupSpec::new(GROUP, "stats.group").order(25))?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "stats.group").order(25);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("chart-bar"))?;
         r.add_settings(&SETTINGS)?;
 

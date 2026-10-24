@@ -252,7 +252,15 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         })?;
     }
 
-    add_settings(r, &ID, "widgets.reading", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.reading");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     r.add_widget(
         WidgetSpec::new(ID, "widgets.reading", move |_| {
             Box::new(Reading {

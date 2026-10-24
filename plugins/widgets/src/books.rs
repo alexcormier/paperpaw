@@ -38,7 +38,7 @@ use paperpaw_sdk::library::{self, catalog};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, WidgetLook, line_height};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
+    Arg, Canvas, Color, Command, Env, FontHandle, Point, Rect, RegisterError, Registrar,
     SettingSpec, Storage,
 };
 
@@ -217,16 +217,15 @@ pub(crate) fn path_hash(path: &str) -> u64 {
 
 // ---- Settings ------------------------------------------------------------------
 
-/// Registers widget `id`'s settings group, named `title`, with its
-/// settings, kept in the program (where its text sits, its frame, how
-/// large its text is, the parts it shows and the rest).
+/// Registers a widget's settings `group` with its settings, both kept in
+/// the program (where its text sits, its frame, how large its text is,
+/// the parts it shows and the rest).
 pub(crate) fn add_settings(
     r: &mut Registrar,
-    id: &Id,
-    title: &'static str,
+    group: &'static paperpaw_sdk::SettingGroupSpec,
     settings: &'static [SettingSpec],
 ) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(id, title))?;
+    r.add_setting_group(group)?;
     r.add_settings(settings)
 }
 

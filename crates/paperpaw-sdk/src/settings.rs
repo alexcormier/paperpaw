@@ -680,24 +680,64 @@ pub struct SettingGroupSpec {
 }
 
 impl SettingGroupSpec {
-    /// Made of what it needs; the rest as set with its methods.
-    pub fn new(id: Id, title: impl Into<Cow<'static, str>>) -> Self {
+    /// Group `id`, called `title` (a translation key); the rest as set
+    /// with its methods. All are `const`: a plugin declares its groups as
+    /// statics and registers a reference
+    /// ([`Registrar::add_setting_group`](crate::Registrar::add_setting_group)),
+    /// which takes next to no memory.
+    pub const fn new(id: Id, title: &'static str) -> Self {
         Self {
             id,
-            title: title.into(),
+            title: Cow::Borrowed(title),
             order: 0,
             page: None,
         }
     }
 
-    pub fn order(mut self, order: i32) -> Self {
+    /// Its place among the groups, smallest first.
+    pub const fn order(mut self, order: i32) -> Self {
         self.order = order;
         self
     }
 
-    pub fn page(mut self, page: impl Into<Option<Id>>) -> Self {
-        self.page = page.into();
+    /// Screen `page` shows the group instead of the generated page.
+    pub const fn page(mut self, page: Id) -> Self {
+        core::mem::forget(self.page.replace(page));
         self
+    }
+}
+
+/// A group of settings as registered: one kept in the program (a
+/// `static` [`SettingGroupSpec`], a reference), or one made at run time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettingGroup(GroupAt);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GroupAt {
+    Fixed(&'static SettingGroupSpec),
+    Owned(Box<SettingGroupSpec>),
+}
+
+impl core::ops::Deref for SettingGroup {
+    type Target = SettingGroupSpec;
+
+    fn deref(&self) -> &SettingGroupSpec {
+        match &self.0 {
+            GroupAt::Fixed(group) => group,
+            GroupAt::Owned(group) => group,
+        }
+    }
+}
+
+impl From<&'static SettingGroupSpec> for SettingGroup {
+    fn from(group: &'static SettingGroupSpec) -> Self {
+        Self(GroupAt::Fixed(group))
+    }
+}
+
+impl From<SettingGroupSpec> for SettingGroup {
+    fn from(group: SettingGroupSpec) -> Self {
+        Self(GroupAt::Owned(Box::new(group)))
     }
 }
 
@@ -756,7 +796,7 @@ pub struct Settings {
     /// `widgets.clock@2` (see [`Settings::with_placement`]).
     placement: core::cell::RefCell<Option<String>>,
     /// Groups by order.
-    groups: Vec<SettingGroupSpec>,
+    groups: Vec<SettingGroup>,
     /// The values of the active scope (e.g. the open book), if any.
     scope: Option<VecMap<Id, SettingValue>>,
     /// Values shown without being kept; `None`: as if not set.
@@ -910,9 +950,12 @@ impl Settings {
     /// Registers a group of settings.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn add_group(&mut self, group: SettingGroupSpec) -> Result<(), RegisterError> {
+    pub fn add_group(&mut self, group: impl Into<SettingGroup>) -> Result<(), RegisterError> {
+        let group = group.into();
         if self.groups.iter().any(|g| g.id == group.id) {
-            return Err(RegisterError::Duplicate { id: group.id });
+            return Err(RegisterError::Duplicate {
+                id: group.id.clone(),
+            });
         }
         let at = self
             .groups
@@ -923,7 +966,7 @@ impl Settings {
 
     /// Groups by order.
     pub fn groups(&self) -> impl Iterator<Item = &SettingGroupSpec> {
-        self.groups.iter()
+        self.groups.iter().map(|g| &**g)
     }
 
     /// The group a setting is shown in: its own if registered, else

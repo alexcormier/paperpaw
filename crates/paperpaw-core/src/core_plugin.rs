@@ -82,9 +82,9 @@ impl Plugin for CorePlugin {
             ));
         })?;
         // Each plugin's network (its settings made by the kernel).
-        r.add_setting_group(
-            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87),
-        )?;
+        static NETWORK: SettingGroupSpec =
+            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87);
+        r.add_setting_group(&NETWORK)?;
         r.add_icon(crate::work::NETWORK_GROUP, Cow::Borrowed("world"))?;
         Ok(())
     }

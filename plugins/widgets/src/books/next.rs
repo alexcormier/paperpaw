@@ -74,7 +74,15 @@ static SETTINGS: [SettingSpec; 9] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
-    add_settings(r, &ID, "widgets.next", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.next");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     let kept: Kept = Rc::default();
     let generation = generation.clone();
     r.add_widget(

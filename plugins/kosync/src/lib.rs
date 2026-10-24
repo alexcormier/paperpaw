@@ -58,7 +58,7 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::work::{Moments, Work};
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Commands, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params,
-    Plugin, RegisterError, Registrar, ScreenSpec, SettingGroupSpec, SettingSpec,
+    Plugin, RegisterError, Registrar, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("kosync");
@@ -791,7 +791,11 @@ impl Plugin for Kosync {
     )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
-        r.add_setting_group(SettingGroupSpec::new(GROUP, "kosync.group").order(28))?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "kosync.group").order(28);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("devices"))?;
         r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec::new(

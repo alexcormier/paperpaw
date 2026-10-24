@@ -126,8 +126,11 @@ static SETTINGS: [SettingSpec; 10] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add_settable(
         r,
-        &ID,
-        "widgets.world-clock",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.world-clock");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(super::minute_shows),
     )?;
     r.add_settings(&SETTINGS)
