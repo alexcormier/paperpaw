@@ -469,7 +469,7 @@ const CASES: &[Case] = &[
         profile: "boox-go-7",
         book: Some("books/alice-in-wonderland.epub"),
         sets: &[],
-        script: "page-forward,page-forward,run:stats.open,wait:300",
+        script: "swipe:1000:800:300:800,wait:300,swipe:1000:800:300:800,wait:300,run:stats.open,wait:300",
         colour: 0,
     },
     Case {
@@ -559,7 +559,7 @@ const CASES: &[Case] = &[
         profile: "boox-go-7",
         book: Some("books/alice-in-wonderland.epub"),
         sets: &[],
-        script: "page-forward,page-forward,run:core.library,wait:1000",
+        script: "swipe:1000:800:300:800,wait:300,swipe:1000:800:300:800,wait:300,run:core.library,wait:1000",
         colour: 0,
     },
 ];

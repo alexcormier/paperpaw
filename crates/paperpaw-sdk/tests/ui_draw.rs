@@ -311,6 +311,21 @@ fn a_label_on_one_line_keeps_to_its_area_and_alignment() {
     });
     assert_eq!(told, said);
     assert!(old.view().data == new.view().data);
+    // From between pixels, in a font given, as `draw_label` too.
+    for x in [41.37, 100.5] {
+        let (told, old) = describe(480, 200, |c| {
+            ui::draw_label(c, &font, size, x, area, text, Color::BLACK);
+        });
+        let (said, new) = describe(480, 200, |c| {
+            ui::Label::new(text)
+                .font(font)
+                .px(size)
+                .color(Color::BLACK)
+                .draw_from(&mut ui::Ui::new(c, &env, &style), x, area);
+        });
+        assert_eq!(told, said);
+        assert!(old.view().data == new.view().data, "{x}");
+    }
     // Too long: shortened within its area.
     let long = "A label far too long for the room it is given here";
     let (_, mut frame) = describe(480, 200, |c| {

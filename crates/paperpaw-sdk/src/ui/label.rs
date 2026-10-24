@@ -30,10 +30,12 @@ use super::{Ink, TextRole, Ui, UiStyle, fit};
 ///
 /// It borrows its text and is drawn without allocating, but for the
 /// words of a line that is shortened.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 #[must_use = "a label does nothing until it is drawn or measured"]
 pub struct Label<'t> {
     text: &'t str,
+    /// A font of its own; the interface's otherwise.
+    font: Option<FontHandle<'t>>,
     size: Size,
     min: Option<f32>,
     ink: Paint,
@@ -60,12 +62,20 @@ impl<'t> Label<'t> {
     pub const fn new(text: &'t str) -> Self {
         Self {
             text,
+            font: None,
             size: Size::Role(TextRole::Body),
             min: None,
             ink: Paint::Ink(Ink::Text),
             align: Align::Left,
             lines: 1,
         }
+    }
+
+    /// In `font` rather than the interface's (e.g. a book's, or a bold
+    /// one).
+    pub const fn font(mut self, font: FontHandle<'t>) -> Self {
+        self.font = Some(font);
+        self
     }
 
     /// As large as the style sets text of `role`.
@@ -127,15 +137,15 @@ impl<'t> Label<'t> {
 
     /// How wide its text is on one line.
     pub fn width(&self, env: &Env<'_>, style: &UiStyle) -> f32 {
-        style
-            .font(env)
+        self.font
+            .or_else(|| style.font(env))
             .map_or(0.0, |font| font.measure(self.size(style), self.text))
     }
 
     /// How high it is in an area `width` wide: a line, or the lines its
     /// text takes there (up to [`Label::lines`]).
     pub fn height(&self, env: &Env<'_>, style: &UiStyle, width: u16) -> u16 {
-        let Some(font) = style.font(env) else {
+        let Some(font) = self.font.or_else(|| style.font(env)) else {
             return 0;
         };
         let size = self.size(style);
@@ -153,31 +163,54 @@ impl<'t> Label<'t> {
     /// Draws it in `area`, its lines in the middle of the area's height;
     /// where its last line ends.
     pub fn draw(&self, ui: &mut Ui<'_>, area: Rect) -> f32 {
+        if self.lines == 1 {
+            return self.draw_from(ui, f32::from(area.x), area);
+        }
         let style = ui.style();
-        let Some(font) = ui.font() else {
+        let Some(font) = self.font.or_else(|| ui.font()) else {
             return f32::from(area.x);
         };
-        let color = match self.ink {
+        let color = self.paint(style);
+        self.draw_lines(ui.canvas(), &font, style, area, color)
+    }
+
+    /// Draws it on one line from `x` (between pixels, as a line goes on
+    /// after another's words) to the right of `area`, in the middle of
+    /// its height; where it ends.
+    pub fn draw_from(&self, ui: &mut Ui<'_>, x: f32, area: Rect) -> f32 {
+        let style = ui.style();
+        let Some(font) = self.font.or_else(|| ui.font()) else {
+            return x;
+        };
+        let color = self.paint(style);
+        self.draw_line(ui.canvas(), &font, style, x, area, color)
+    }
+
+    /// Its colour with `style`.
+    fn paint(&self, style: &UiStyle) -> Color {
+        match self.ink {
             Paint::Ink(ink) => style.ink(ink),
             Paint::Color(color) => color,
-        };
-        if self.lines == 1 {
-            self.draw_line(ui.canvas(), &font, style, area, color)
-        } else {
-            self.draw_lines(ui.canvas(), &font, style, area, color)
         }
     }
 
-    /// One line, shortened where it does not fit.
+    /// One line from `from`, shortened where it does not fit.
     fn draw_line(
         &self,
         canvas: &mut Canvas<'_>,
         font: &FontHandle<'_>,
         style: &UiStyle,
+        from: f32,
         area: Rect,
         color: Color,
     ) -> f32 {
-        let room = f32::from(area.width);
+        let room = f32::from(area.x) + f32::from(area.width) - from;
+        let told = Rect::new(
+            from.max(0.0) as u16,
+            area.y,
+            room.max(0.0) as u16,
+            area.height,
+        );
         let mut size = self.size(style);
         let mut width = font.measure(size, self.text);
         if let Some(min) = self.min
@@ -187,7 +220,7 @@ impl<'t> Label<'t> {
             size = (size * room / width).max(min.min(size));
             width = font.measure(size, self.text);
         }
-        canvas.describe(Role::Text, self.text, area);
+        canvas.describe(Role::Text, self.text, told);
         // A pixel of slack for rounding: callers often measured to fit.
         let text: Cow<'_, str> = if width > room + 1.0 {
             let short = fit(font, size, self.text, room);
@@ -196,7 +229,7 @@ impl<'t> Label<'t> {
         } else {
             Cow::Borrowed(self.text)
         };
-        let x = self.x(area, width);
+        let x = from + self.free(room, width);
         font.draw(canvas, size, x, baseline(font, size, area), &text, color) + x
     }
 
@@ -249,13 +282,28 @@ impl<'t> Label<'t> {
 
     /// Where a line `width` wide starts in `area`.
     fn x(&self, area: Rect, width: f32) -> f32 {
-        let free = (f32::from(area.width) - width).max(0.0);
-        f32::from(area.x)
-            + match self.align {
-                Align::Center => free / 2.0,
-                Align::Right => free,
-                _ => 0.0,
-            }
+        f32::from(area.x) + self.free(f32::from(area.width), width)
+    }
+
+    /// How far a line `width` wide goes in from the start of `room`.
+    fn free(&self, room: f32, width: f32) -> f32 {
+        let free = (room - width).max(0.0);
+        match self.align {
+            Align::Center => free / 2.0,
+            Align::Right => free,
+            _ => 0.0,
+        }
+    }
+}
+
+impl core::fmt::Debug for Label<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Label")
+            .field("text", &self.text)
+            .field("size", &self.size)
+            .field("align", &self.align)
+            .field("lines", &self.lines)
+            .finish_non_exhaustive()
     }
 }
 
