@@ -6,7 +6,7 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-### 0.5.0-beta.1 (draft)
+## [0.5.0-beta.1] - 2026-10-24
 
 This is a beta, for testers and developers. It is the first release of
 PaperPaw's firmware for the Xteink X4 and X4 Pro, and it brings much
@@ -18,7 +18,7 @@ and version you use and what you did. On the X4, a crash is written to
 `.paperpaw/crashes.txt` on the card at the next start; please add that
 file to your report.
 
-#### Reading
+### Reading
 
 - Holding a page button goes to the next or previous chapter; *Hold a
   page button for the next chapter* under Controls turns this off.
@@ -63,7 +63,7 @@ file to your report.
   its start and lost your place. A book whose file is gone says that
   too.
 
-#### Books and fonts
+### Books and fonts
 
 - HTML, FictionBook, Markdown and comic books are plugins of their own,
   so each can be switched off or replaced. Markdown files show the
@@ -88,7 +88,7 @@ file to your report.
   Plain text reads UTF-16 files, and file names that begin with a letter
   beyond ASCII ("Ärger.epub") no longer crash the X4.
 
-#### The library
+### The library
 
 - The library is a calm list. The book you are reading comes first, as a
   card. Then come all books with cover, title, author and progress; a
@@ -113,7 +113,7 @@ file to your report.
 - The file manager opens folders of any size a page at a time. Moving a
   folder takes the books' progress and notes along.
 
-#### The home screen and widgets
+### The home screen and widgets
 
 - The home screen is a grid of 3 columns by default, with up to eight
   pages. *Edit home screen* in the main menu edits it, by touch or with
@@ -134,7 +134,7 @@ file to your report.
   at once* brings the old way back. Fewer columns or rows no longer
   leave a page empty.
 
-#### The sleep screen
+### The sleep screen
 
 - By default the sleep screen shows a sleeping cat, drawn for PaperPaw.
   The cover, pictures, a message and the other choices remain.
@@ -142,7 +142,7 @@ file to your report.
   widget goes over it. You choose where it sits, its size and how much
   of the page shows through.
 
-#### Menus, settings and the look
+### Menus, settings and the look
 
 - A new look, rounder and friendlier: soft corners, pills for buttons
   and switches, plain headers, faint lines between rows and margins of
@@ -189,7 +189,7 @@ file to your report.
   (fewer words where there is no more room), and follows the size as it
   changes.
 
-#### Touch, buttons and the keyboard
+### Touch, buttons and the keyboard
 
 - The quick panel by the buttons: hold Right (on the X4), or choose
   *Quick panel* at the top of the main menu. The tips on the home screen
@@ -226,7 +226,7 @@ file to your report.
   button to select or go back with. *Reset buttons and gestures* takes
   every change back.
 
-#### Tools
+### Tools
 
 - Flash cards, in the vocabulary tool, with spaced repetition (FSRS,
   Anki's scheduler). Edit decks with your phone, also from CSV or an
@@ -243,7 +243,7 @@ file to your report.
 - A guided device check in the diagnostics tool tests every part of a
   device, one page at a time, and writes a report to the card.
 
-#### Wi-Fi, sync and the store
+### Wi-Fi, sync and the store
 
 - Wi-Fi goes off as soon as you are back home or in a book and nothing
   uses the network, not a minute later. On the X4 this frees its memory
@@ -302,7 +302,7 @@ file to your report.
   and Readwise no longer delete anything when an answer or a file cannot
   be read.
 
-#### Power and battery
+### Power and battery
 
 - Power modes: Normal, Saving, Offline and Automatic, in the quick panel
   or under Settings, System, Power. Automatic goes to Saving below 20 %
@@ -314,7 +314,7 @@ file to your report.
   battery when there is nothing to do, the radio sleeps between beacons,
   and the panel's power goes off after a refresh.
 
-#### Devices and updates
+### Devices and updates
 
 - On the X4 and X4 Pro, a secure (HTTPS) connection takes about 15 KB
   less memory and the firmware about 180 KB less flash: mbedTLS is now
@@ -365,7 +365,7 @@ file to your report.
   where they fit, and actions are not kept twice. Reading an EPUB peaks
   some 24 KiB lower.
 
-#### Your data and security
+### Your data and security
 
 - PaperPaw never writes over a file it cannot read, such as
   `paperpaw.ini`, passwords, notes, statistics, profiles or rules.
@@ -410,7 +410,7 @@ file to your report.
   (`annotations::stamp`, a line `# book <size> <md5>`). Both files keep
   their versions: PaperPaw of before reads them as before.
 
-#### For plugin authors
+### For plugin authors
 
 Plugins written against 0.3 need changes: the lists below name what
 replaces what. A code plugin is a file bound to the plugin interface
@@ -419,7 +419,7 @@ it. `crates/paperpaw-sdk/api.txt` lists the whole public API, and
 [Designing the plugin SDK](docs/sdk-design.md) says how it is kept from
 breaking again.
 
-##### Breaking SDK changes
+#### Breaking SDK changes
 
 **Handlers, commands and replies**
 
@@ -737,7 +737,7 @@ breaking again.
   (`package.actions`, `package.menus`). The ini files take a section
   name of words with single spaces between them.
 
-##### New
+#### New
 
 - The SDK's design rules ([Designing the plugin SDK](docs/sdk-design.md)):
   how it grows without breaking plugins. Tests check four of them over
@@ -797,7 +797,7 @@ breaking again.
   changes before 1.0; `api.txt` in `crates/paperpaw-sdk` lists its
   public API, and CI checks it.
 
-##### Fixed
+#### Fixed
 
 - What a plugin tells of the PaperPaw it runs in comes from the kernel
   that runs, not the SDK the plugin was built with:
@@ -811,7 +811,7 @@ breaking again.
   in an update's `files`), else by their SHA-1 as before; downloads
   kept on the card with `sha1:` go on (`install::Digest::take`).
 
-##### Devices and tools
+#### Devices and tools
 
 - `paperpaw-dev` takes font packs (`.ppfp`) in a data plugin's `fonts/`,
   where the kernel reads them, and names one elsewhere. It no longer
