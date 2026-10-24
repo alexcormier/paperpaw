@@ -155,9 +155,14 @@ impl Shopping {
     /// The store on the X4 Pro (touch and buttons), its list answered with
     /// `list`.
     pub fn touch(list: &str) -> Self {
+        Self::touch_with(None, list)
+    }
+
+    /// As [`Shopping::touch`], loading code plugins as `native` says.
+    pub fn touch_with(native: Option<Native>, list: &str) -> Self {
         let mut pro = DEVICE;
         pro.input.touch = true;
-        Self::of(pro, Some("x4-pro"), None, list, Shared::default(), None)
+        Self::of(pro, Some("x4-pro"), native, list, Shared::default(), None)
     }
 
     fn of(

@@ -33,6 +33,10 @@ change the plugin SDK.
 
 ### Fixed
 
+- In the first-run setup's Add more step, plugins switched on are added
+  also when you leave the page with Back, not only with its Add button;
+  the setup's card says how many are being added, then Added.
+
 - A code plugin built for the X4 or X4 Pro with the SDK's `outline`
   feature now stops with a message that says to build for the readers
   without it (it is in a plugin's fingerprint, and the readers draw font

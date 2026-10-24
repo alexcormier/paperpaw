@@ -164,6 +164,82 @@ fn the_plugins_chosen_are_installed_and_said_once() {
     );
 }
 
+/// The requests asked for since, by address.
+fn asked(shopping: &mut Shopping) -> Vec<String> {
+    shopping
+        .requests()
+        .into_iter()
+        .map(|call| call.url)
+        .collect()
+}
+
+/// Leaving the page with plugins chosen adds them as *Add* does: the
+/// switches are the choice. With none chosen, nothing.
+#[test]
+fn back_adds_those_chosen_and_nothing_else() {
+    let mut shopping = offer();
+    shopping.choose("Reading statistics");
+    shopping.run(actions::BACK);
+    assert_ne!(
+        shopping.kernel.active_screen().map(Id::as_str),
+        Some("store.offer")
+    );
+    assert_eq!(asked(&mut shopping), [page_url("stats")]);
+    assert!(
+        shopping
+            .storage
+            .exists(".paperpaw/plugins/store/offer-chosen.txt")
+    );
+    let shown = shopping.shown().replace(" | ", " ");
+    assert!(shown.contains("added in the background"), "{shown}");
+    // Nothing chosen: left as it was.
+    let mut shopping = offer();
+    shopping.run(actions::BACK);
+    assert!(asked(&mut shopping).is_empty());
+    assert!(
+        !shopping
+            .storage
+            .exists(".paperpaw/plugins/store/offer-chosen.txt")
+    );
+    assert!(!shopping.storage.exists(".paperpaw/plugins/store/queue.txt"));
+}
+
+/// By touch: the header's arrow back is *Back*, a plugin chosen by a tap
+/// added once (not again by the *Back* that *Add* sends).
+#[test]
+fn the_headers_arrow_adds_those_chosen_too() {
+    let mut shopping = Shopping::touch_with(Some(native()), r#"{"format": 2, "plugins": []}"#);
+    shopping.now += 100;
+    shopping.kernel.open_screen(
+        Instant(shopping.now),
+        Id::new_static("store.offer"),
+        Params::new(),
+    );
+    let _ = shopping.shown();
+    let row = shopping
+        .kernel
+        .describe()
+        .into_iter()
+        .find(|p| p.label.starts_with("Calibre"))
+        .unwrap()
+        .area;
+    shopping.touch_at(i32::from(row.x) + 40, i32::from(row.y) + 20, false);
+    // The arrow at the header's start.
+    shopping.touch_at(30, 30, false);
+    assert_ne!(
+        shopping.kernel.active_screen().map(Id::as_str),
+        Some("store.offer")
+    );
+    let page = page_url("calibre").replace("device=x4&", "device=x4-pro&");
+    assert_eq!(asked(&mut shopping), [page]);
+    let queue = String::from_utf8(
+        paperpaw_sdk::read_file(&shopping.storage, ".paperpaw/plugins/store/queue.txt", 4096)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(queue, "> ~calibre\n");
+}
+
 #[test]
 fn one_that_cannot_come_is_named() {
     let mut shopping = offer();

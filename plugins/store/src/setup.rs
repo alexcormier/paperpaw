@@ -1,6 +1,9 @@
 //! The first-run setup's offer of the plugins most readers add (ADR
 //! 0024, the lean firmware): a step after Wi-Fi with a few of PaperPaw's
-//! own plugins, each with a switch, all off; *Add* installs those chosen.
+//! own plugins, each with a switch, all off; *Add* installs those chosen,
+//! and so does leaving the page with some chosen (*Back*, the header's
+//! arrow): the switches are the choice, as everywhere else. The setup's
+//! card for the step says what became of them.
 //!
 //! Where PaperPaw loads code plugins (the X4, the X4 Pro) they are
 //! fetched from the plugin library one after another in the background,
@@ -17,8 +20,8 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::setup::{SetupPage, SetupStepSpec};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, PluginKind, Rect,
-    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Canvas, CloseCause, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, ItemState,
+    PluginKind, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use crate::{queue, trust};
@@ -40,7 +43,38 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             .help("store.offer.help")
             .order(55)
             .applies(Box::new(|env| OFFERED.iter().any(|id| can_add(env, id)))),
+    )?;
+    // The setup's card for the step: what became of those chosen.
+    r.set_item_state(STEP, |env| match badge(env) {
+        Some(badge) => ItemState::new().badge(badge),
+        None => ItemState::new(),
+    })
+}
+
+/// Where the plugins chosen on the page are kept, once added.
+fn chosen_path() -> String {
+    alloc::format!(
+        "{}/offer-chosen.txt",
+        Env::plugin_dir(crate::PLUGIN.as_str())
     )
+}
+
+/// What the setup's card says of the plugins chosen: how many are being
+/// added, or that they were; nothing before any was chosen.
+fn badge(env: &Env<'_>) -> Option<String> {
+    let waiting = queue::waiting(env)
+        .iter()
+        .filter(|id| OFFERED.contains(&id.as_str()))
+        .count();
+    if waiting > 0 {
+        return Some(
+            env.i18n()
+                .plural("store.offer.being-added", waiting as i64, &[]),
+        );
+    }
+    env.storage()
+        .exists(&chosen_path())
+        .then(|| env.i18n().tr("store.offer.added").to_string())
 }
 
 /// How plugin `id` can be added here.
@@ -81,6 +115,8 @@ struct OfferScreen {
     bar: Rect,
     /// The focus is on the button.
     on_button: bool,
+    /// Those chosen were added (*Add*, or the page left): not again.
+    added: bool,
 }
 
 impl OfferScreen {
@@ -115,6 +151,7 @@ impl OfferScreen {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             bar,
             on_button: false,
+            added: false,
         }
     }
 
@@ -158,9 +195,26 @@ impl OfferScreen {
 
     /// Adds the plugins chosen and goes back to the setup.
     fn add(&mut self, cx: &mut Cx<'_, '_>) {
+        self.add_chosen(cx);
+        cx.command(Command::Back);
+    }
+
+    /// Adds the plugins chosen, once, and says so; kept for the setup's
+    /// card.
+    fn add_chosen(&mut self, cx: &mut Cx<'_, '_>) {
+        if core::mem::replace(&mut self.added, true) {
+            return;
+        }
         let env = *cx.env();
+        let chosen = self.chosen();
+        let _ = env
+            .storage()
+            .create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
+        let _ = env
+            .storage()
+            .write(&chosen_path(), chosen.join("\n").as_bytes());
         let mut fetch: Vec<String> = Vec::new();
-        for id in self.chosen() {
+        for id in chosen {
             match way(&env, id) {
                 Way::SwitchOn => cx.command(Command::SetPluginEnabled(Id::new_static(id), true)),
                 Way::Install => fetch.push(id.to_string()),
@@ -181,7 +235,6 @@ impl OfferScreen {
             "store.offer.adding"
         };
         cx.command(Command::Notify(env.i18n().tr(key).to_string()));
-        cx.command(Command::Back);
     }
 }
 
@@ -219,17 +272,25 @@ impl Screen for OfferScreen {
             let label = env.i18n().tr("store.offer.add");
             ui.button(button, label, true, self.on_button);
         }
+        // How to choose; once some are chosen, that they are added on
+        // going on. Beside the button, on two lines where one is short.
+        let hint = if button.is_some() {
+            env.i18n().tr("store.offer.hint.chosen")
+        } else {
+            ui::tr_input(env, "store.offer.hint")
+        };
         let right = button.map_or(self.bar.width, |b| b.x);
         let area = Rect::new(
-            0,
+            style.margin(),
             self.bar.y,
-            right.saturating_sub(style.gap()),
+            right.saturating_sub(style.gap() + style.margin()),
             self.bar.height,
         );
-        ui::Label::new(ui::tr_input(env, "store.offer.hint"))
+        ui::Label::new(hint)
             .px(style.small())
             .color(style.faint(ui::Ink::Note))
-            .draw_from(&mut ui, style.margin() as f32, area);
+            .lines(2)
+            .draw(&mut ui, area);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -266,6 +327,15 @@ impl Screen for OfferScreen {
         };
         self.list.move_focus(delta, len).request(cx);
         Handled::Yes
+    }
+
+    /// Left with plugins chosen (*Back*, the header's arrow): they are
+    /// added as *Add* would.
+    fn on_close_request(&mut self, _: CloseCause, cx: &mut Cx<'_, '_>) -> Handled {
+        if !self.chosen().is_empty() {
+            self.add_chosen(cx);
+        }
+        Handled::No
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
