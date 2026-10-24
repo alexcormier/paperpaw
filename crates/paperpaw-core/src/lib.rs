@@ -756,6 +756,17 @@ impl Kernel {
         }
     }
 
+    /// The panel begins to show the frame last rendered, at `now`: shells
+    /// that know call it as the refresh begins, before [`Kernel::shown`].
+    /// A screen opened or closed is seen while the refresh goes on (a full
+    /// one takes over a second), so presses made from here on count,
+    /// those before it are dropped (see [`Kernel::shown`]).
+    pub fn showing(&mut self, now: Instant) {
+        if mem::take(&mut self.input.settling) {
+            self.input.stale_before = Some(now);
+        }
+    }
+
     /// Whether what the screen shows is secret now: a PIN or a password
     /// being entered ([`Screen::secret`]),
     /// or the device guarded. Those who show the screen elsewhere (a

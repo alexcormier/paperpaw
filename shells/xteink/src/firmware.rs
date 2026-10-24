@@ -844,6 +844,7 @@ impl Firmware {
             return self.show(area, RefreshMode::Full);
         }
         let written = now();
+        self.kernel.showing(written);
         if let Err(e) = self.panel.refresh_gray() {
             failed = Some(e);
         }
@@ -893,6 +894,7 @@ impl Firmware {
             sent.keep(top, &rows);
         });
         let drawn = now();
+        self.kernel.showing(drawn);
         if let Err(e) = self.refresh(refresh) {
             failed = Some(e);
         }
