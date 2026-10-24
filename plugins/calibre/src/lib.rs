@@ -688,17 +688,12 @@ impl Screen for CalibreScreen {
     )]
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            env.i18n.tr("calibre.title"),
-            None,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, env.i18n.tr("calibre.title"), None, None);
         if self.state == State::Offline {
             let area = self.content(env);
-            return self
-                .offer
-                .draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), area);
+            return self.offer.draw(&mut ui, area);
         }
         let Some(font) = style.font(env) else {
             return;
@@ -707,11 +702,14 @@ impl Screen for CalibreScreen {
         let margin = style.margin() as f32;
         let width = f32::from(area.width) - 2.0 * margin;
         let mut y = area.y + style.gap();
-        let mut line = |canvas: &mut Canvas<'_>, size: f32, text: &str, color: Color| {
+        let mut line = |ui: &mut ui::Ui<'_>, size: f32, text: &str, color: Color| {
             let height = font.line_metrics(size).line_height as u16;
             for range in font.wrap(size, text, width) {
                 let row = Rect::new(area.x, y, area.width, height);
-                ui::draw_label(canvas, &font, size, margin, row, &text[range], color);
+                ui::Label::new(&text[range])
+                    .px(size)
+                    .color(color)
+                    .draw_from(ui, margin, row);
                 y += height;
             }
             y += style.gap() / 2;
@@ -746,18 +744,18 @@ impl Screen for CalibreScreen {
             State::Ended(text) => text.clone(),
             State::Offline => String::new(),
         };
-        line(canvas, style.title(), &status, Color::BLACK);
+        line(&mut ui, style.title(), &status, Color::BLACK);
         if let Some(library) = &self.library {
             let text = env
                 .i18n
                 .format("calibre.library", &[("library", Arg::Str(library))]);
-            line(canvas, style.text(), &text, style.faint(ui::Ink::Detail));
+            line(&mut ui, style.text(), &text, style.faint(ui::Ink::Detail));
         }
         if self.received > 0 {
             let text = env
                 .i18n
                 .plural("calibre.received", i64::from(self.received), &[]);
-            line(canvas, style.text(), &text, Color::BLACK);
+            line(&mut ui, style.text(), &text, Color::BLACK);
         }
         let hint = match self.state {
             State::Finding | State::Ended(_) => Some("calibre.hint"),
@@ -767,7 +765,7 @@ impl Screen for CalibreScreen {
         };
         if let Some(hint) = hint {
             line(
-                canvas,
+                &mut ui,
                 style.small(),
                 env.i18n.tr(hint),
                 style.faint(ui::Ink::Detail),
@@ -789,21 +787,13 @@ impl Screen for CalibreScreen {
                 None
             };
             if let Some(again) = again {
-                line(canvas, style.small(), env.i18n.tr(again), Color::BLACK);
+                line(&mut ui, style.small(), env.i18n.tr(again), Color::BLACK);
             }
         }
         self.password_row = None;
         if self.state == State::Password {
             let row = Rect::new(area.x, y, area.width, style.row());
-            ui::draw_value_row(
-                canvas,
-                env,
-                &style,
-                row,
-                false,
-                env.i18n.tr("calibre.type-password"),
-                "›",
-            );
+            ui::Row::value(env.i18n.tr("calibre.type-password"), "›").draw(&mut ui, row);
             self.password_row = Some(row);
         }
     }

@@ -470,8 +470,8 @@ impl LockScreen {
         }
     }
 
-    fn draw_pin(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = &self.style;
+    fn draw_pin(&self, ui: &mut ui::Ui<'_>) {
+        let (env, style) = (ui.env(), &self.style);
         let l = &self.layout;
         // A dot for every digit, rings for the least still to come.
         let r = i32::from(l.dots.height) / 7;
@@ -481,9 +481,14 @@ impl LockScreen {
         let y = i32::from(l.dots.y) + i32::from(l.dots.height) / 2;
         for i in 0..count {
             if (i as usize) < self.entered.len() {
-                circle(canvas, Point::new(x, y), r, Color::BLACK);
+                circle(ui.canvas(), Point::new(x, y), r, Color::BLACK);
             } else {
-                ring(canvas, Point::new(x, y), r, u32::from(style.line()).max(2));
+                ring(
+                    ui.canvas(),
+                    Point::new(x, y),
+                    r,
+                    u32::from(style.line()).max(2),
+                );
             }
             x += gap;
         }
@@ -498,23 +503,28 @@ impl LockScreen {
                 i32::from(rect.y) + i32::from(rect.height) / 2,
             );
             let radius = i32::from(rect.width) / 2;
-            canvas.describe(Role::Button, key, rect).focused(focused);
+            ui.canvas()
+                .describe(Role::Button, key, rect)
+                .focused(focused);
             // Digits in a thin ring; delete and OK as plain signs. Chosen
             // with the buttons, a key is filled.
             let digit = *key != DELETE && *key != "OK";
             let ink = if focused {
-                circle(canvas, centre, radius, Color::BLACK);
+                circle(ui.canvas(), centre, radius, Color::BLACK);
                 Color::WHITE
             } else {
                 if digit {
-                    ring(canvas, centre, radius, u32::from(style.line()).max(1));
+                    ring(ui.canvas(), centre, radius, u32::from(style.line()).max(1));
                 }
                 Color::BLACK
             };
             if digit {
                 let size = f32::from(rect.height) * 0.42;
                 let x = f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, key)) / 2.0;
-                ui::draw_label(canvas, &font, size, x, rect, key, ink);
+                ui::Label::new(key)
+                    .px(size)
+                    .color(ink)
+                    .draw_from(ui, x, rect);
             } else {
                 let name = if *key == DELETE {
                     "arrow-left"
@@ -524,14 +534,14 @@ impl LockScreen {
                 let size = f32::from(rect.height) * 0.4;
                 let x = f32::from(rect.x)
                     + (f32::from(rect.width) - ui::icon_width(env, name, size)) / 2.0;
-                ui::draw_icon(canvas, env, name, size, x, rect, ink);
+                ui.icon(name, size, x, rect, ink);
             }
         }
     }
 
     /// The time, large, and the date below it.
-    fn draw_clock(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = &self.style;
+    fn draw_clock(&self, ui: &mut ui::Ui<'_>) {
+        let (env, style) = (ui.env(), &self.style);
         let l = &self.layout;
         let Some(font) = style.font(env) else {
             return;
@@ -540,7 +550,10 @@ impl LockScreen {
         let big = line(env, style, l.clock_size);
         let top = Rect::new(l.clock.x, l.clock.y, l.clock.width, big);
         let x = (f32::from(top.width) - font.measure(l.clock_size, &time)) / 2.0;
-        ui::draw_label(canvas, &font, l.clock_size, x, top, &time, Color::BLACK);
+        ui::Label::new(&time)
+            .px(l.clock_size)
+            .color(Color::BLACK)
+            .draw_from(ui, x, top);
         if let Some(date) = paperpaw_sdk::time::date_text(env) {
             let below = Rect::new(
                 top.x,
@@ -549,19 +562,15 @@ impl LockScreen {
                 line(env, style, style.small()),
             );
             let x = (f32::from(below.width) - font.measure(style.small(), &date)) / 2.0;
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                x,
-                below,
-                &date,
-                style.faint(ui::Ink::Detail),
-            );
+            ui::Label::new(&date)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Detail))
+                .draw_from(ui, x, below);
         }
     }
 
-    fn draw_pattern(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw_pattern(&self, ui: &mut ui::Ui<'_>) {
+        let env = ui.env();
         let l = &self.layout;
         let line = (l.radius / 2).max(2) as u32;
         let chosen: Vec<usize> = self
@@ -570,13 +579,15 @@ impl LockScreen {
             .map(|b| usize::from(b - b'0'))
             .collect();
         for pair in chosen.windows(2) {
-            canvas.draw_line(l.points[pair[0]], l.points[pair[1]], line, Color::BLACK);
+            ui.canvas()
+                .draw_line(l.points[pair[0]], l.points[pair[1]], line, Color::BLACK);
         }
         if let (Some(&last), Some((_, at))) = (chosen.last(), self.finger) {
-            canvas.draw_line(l.points[last], at, line, Color::gray(110));
+            ui.canvas()
+                .draw_line(l.points[last], at, line, Color::gray(110));
         }
         for (i, &point) in l.points.iter().enumerate() {
-            canvas
+            ui.canvas()
                 .describe(
                     Role::Button,
                     "",
@@ -590,14 +601,14 @@ impl LockScreen {
                 .focused(self.shown && self.focus == i);
             let on = chosen.contains(&i);
             circle(
-                canvas,
+                ui.canvas(),
                 point,
                 if on { l.radius } else { l.radius / 2 },
                 Color::BLACK,
             );
             if on {
                 ring(
-                    canvas,
+                    ui.canvas(),
                     point,
                     l.radius * 2,
                     u32::from(self.style.line()).max(1),
@@ -605,7 +616,7 @@ impl LockScreen {
             }
             if self.shown && self.focus == i {
                 ring(
-                    canvas,
+                    ui.canvas(),
                     point,
                     l.radius * 3,
                     u32::from(self.style.line()) * 2,
@@ -615,7 +626,7 @@ impl LockScreen {
         if !env.device.input.touch {
             let ok = env.i18n.tr("lock.ok");
             let focused = self.shown && self.focus == 9;
-            ui::draw_button(canvas, env, &self.style, l.ok, ok, false, focused);
+            ui.button(l.ok, ok, false, focused);
         }
     }
 }
@@ -648,19 +659,15 @@ impl Screen for LockScreen {
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        canvas.clear(Color::WHITE);
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().clear(Color::WHITE);
         let title = env.i18n.tr(self.title_key());
         if self.step == Step::Unlock {
-            self.draw_clock(canvas, env);
-            ui::draw_message(canvas, env, &style, self.layout.title, title);
+            self.draw_clock(&mut ui);
+            ui.message(self.layout.title, title);
         } else {
-            self.header.draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                title,
-                None,
-                None,
-            );
+            self.header.draw(&mut ui, title, None, None);
         }
         let message = if self.waiting(env) {
             let seconds = self.state.wait_until.get().map_or(0, |until| {
@@ -681,20 +688,17 @@ impl Screen for LockScreen {
             self.message.clone()
         };
         if let Some(message) = message {
-            ui::draw_message(canvas, env, &style, self.layout.message, &message);
+            ui.message(self.layout.message, &message);
         }
         if self.step == Step::Choose {
             let current = code::active(env).unwrap_or_else(|| String::from("off"));
             let kinds = Self::kinds(env);
-            self.kind_list().draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                kinds.len(),
-                |ui, i, row, focused| {
-                    let canvas = ui.canvas();
+            self.kind_list()
+                .draw(&mut ui, kinds.len(), |ui, i, row, focused| {
                     let kind = kinds[i];
                     let key = alloc::format!("{KIND_PREFIX}{kind}");
                     let name = env.i18n.tr(&key);
-                    ui::draw_value_row(canvas, env, &style, row, focused, name, "");
+                    ui::Row::plain(name).focused(focused).draw(ui, row);
                     // The kind in use, ticked.
                     if kind == current {
                         let size = style.text();
@@ -702,28 +706,19 @@ impl Screen for LockScreen {
                             - style.margin() as f32
                             - ui::icon_width(env, "check", size);
                         let ink = style.focus_ink(focused);
-                        ui::draw_icon(canvas, env, "check", size, x, row, ink);
+                        ui.icon("check", size, x, row, ink);
                     }
-                },
-            );
+                });
             return;
         }
         match self.kind.as_str() {
-            "pattern" => self.draw_pattern(canvas, env),
+            "pattern" => self.draw_pattern(&mut ui),
             "password" => {
                 let label = env.i18n.tr("lock.type-password");
                 let focused = self.shown;
-                ui::draw_button(
-                    canvas,
-                    env,
-                    &style,
-                    self.layout.password,
-                    label,
-                    false,
-                    focused,
-                );
+                ui.button(self.layout.password, label, false, focused);
             }
-            _ => self.draw_pin(canvas, env),
+            _ => self.draw_pin(&mut ui),
         }
     }
 

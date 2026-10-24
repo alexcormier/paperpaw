@@ -175,11 +175,12 @@ impl Screen for Overlay {
         let Some(font) = style.font(env) else {
             return;
         };
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let line_w = u32::from(style.line()).max(2) * 2;
         // The zones: a frame each, its text in its box.
         let small = font.line_metrics(style.small()).line_height as u16;
         for (zone, text, label) in &self.zones {
-            canvas.stroke_rect(
+            ui.canvas().stroke_rect(
                 i32::from(zone.x),
                 i32::from(zone.y),
                 u32::from(zone.width),
@@ -190,22 +191,28 @@ impl Screen for Overlay {
             let label = *label;
             let width = f32::from(label.width.saturating_sub(2 * style.gap()));
             let wrapped = font.wrap(style.small(), text, width);
-            canvas.fill(label, Color::WHITE);
-            ui::stroke_round(canvas, &style, label, u32::from(style.line()), Color::BLACK);
+            ui.canvas().fill(label, Color::WHITE);
+            ui::stroke_round(
+                ui.canvas(),
+                &style,
+                label,
+                u32::from(style.line()),
+                Color::BLACK,
+            );
             let mut y = label.y + style.gap();
             for range in wrapped {
                 let part = &text[range];
                 let x = f32::from(label.x)
                     + (f32::from(label.width) - font.measure(style.small(), part)).max(0.0) / 2.0;
                 let row = Rect::new(label.x, y, label.width, small);
-                ui::draw_label(canvas, &font, style.small(), x, row, part, Color::BLACK);
+                ui::Label::new(part)
+                    .px(style.small())
+                    .color(Color::BLACK)
+                    .draw_from(&mut ui, x, row);
                 y += small;
             }
         }
-        self.dialog.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            Some(self.focus),
-        );
+        self.dialog.draw(&mut ui, Some(self.focus));
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -264,14 +271,9 @@ impl Screen for Again {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let display = env.device.display;
         let area = Rect::new(0, 0, display.width, display.height);
-        canvas.fill(area, Color::WHITE);
-        ui::draw_message(
-            canvas,
-            env,
-            &self.style,
-            area,
-            env.i18n.tr("help.again-done"),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &self.style);
+        ui.canvas().fill(area, Color::WHITE);
+        ui.message(area, env.i18n.tr("help.again-done"));
     }
 
     fn on_action(&mut self, _: &Id, cx: &mut Cx<'_, '_>) -> Handled {

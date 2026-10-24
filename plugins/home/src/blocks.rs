@@ -868,13 +868,11 @@ fn draw_card(
     let Some(font) = style.font(env) else {
         return;
     };
-    let look = widgets::draw_frame(canvas, env, CONTINUE, area);
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let look = widgets::draw_frame(ui.canvas(), env, CONTINUE, area);
     let Some(Book { book, cover }) = shown else {
         // Nothing read yet: where the books are (a tap opens the library).
-        ui::draw_empty(
-            canvas,
-            env,
-            &style,
+        ui.empty(
             look.area,
             "books",
             env.i18n.tr("home.start.title"),
@@ -884,7 +882,7 @@ fn draw_card(
     };
     // The cover on the left, where there is one.
     if let (Some(at), Some(image)) = (parts.cover, cover) {
-        draw_cover(canvas, env, image, small, at);
+        draw_cover(ui.canvas(), env, image, small, at);
     }
     let Some(r) = parts.text else {
         return;
@@ -897,21 +895,20 @@ fn draw_card(
     let row = |y: u16, h: u16| Rect::new(r.x, y, r.width, h);
     if parts.caption {
         let label = env.i18n.tr("home.continue");
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            align.x(r, font.measure(style.small(), label)),
-            row(y, label_h),
-            label,
-            look.faint,
-        );
+        ui::Label::new(label)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(
+                &mut ui,
+                align.x(r, font.measure(style.small(), label)),
+                row(y, label_h),
+            );
         y += label_h + gap;
     }
     let title_h = parts.title.height(env);
     parts
         .title
-        .draw(canvas, env, row(y, title_h), align, look.ink);
+        .draw(ui.canvas(), env, row(y, title_h), align, look.ink);
     y += title_h + gap;
     if !parts.progress {
         return;
@@ -921,21 +918,17 @@ fn draw_card(
         &[("percent", Arg::Int((book.progress + 0.5) as i64))],
     );
     let x = f32::from(r.x);
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small(),
-        x,
-        row(y, label_h),
-        &percent,
-        look.faint,
-    );
+    ui::Label::new(&percent)
+        .px(style.small())
+        .color(look.faint)
+        .draw_from(&mut ui, x, row(y, label_h));
     // The progress bar, beside it.
     let bar_h = (u32::from(style.line()) * 4).max(3);
     let percent_w = font.measure(style.small(), &percent) + style.gap() as f32;
     let bx = (x + percent_w) as i32;
     let by = i32::from(y) + i32::from(label_h) / 2 - bar_h as i32 / 2;
     let w = (f32::from(r.width) - percent_w).max(1.0) as u32;
+    let canvas = ui.canvas();
     canvas.stroke_rect(bx, by, w, bar_h, u32::from(style.line()).max(1), look.ink);
     let filled = (w as f32 * (book.progress / 100.0).clamp(0.0, 1.0)) as u32;
     canvas.fill_rect(bx, by, filled, bar_h, look.ink);
@@ -1185,12 +1178,16 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shelf: &Shelf)
     if books.is_empty() {
         return;
     }
-    let look = widgets::draw_frame(canvas, env, RECENT, area);
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let look = widgets::draw_frame(ui.canvas(), env, RECENT, area);
     let align = widgets::align(env, RECENT);
     if let Some(row) = shelf.parts.heading {
         let text = env.i18n.tr("home.recent");
         let x = align.x(row, font.measure(style.small(), text));
-        ui::draw_label(canvas, &font, style.small(), x, row, text, look.faint);
+        ui::Label::new(text)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(&mut ui, x, row);
     }
     for (i, ((cover, row), Book { book, cover: image })) in
         shelf.parts.places.iter().zip(books).enumerate()
@@ -1202,17 +1199,20 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shelf: &Shelf)
             Some(image) => {
                 let at = fitted(image, *cover, 0.5, 1.0);
                 let small = shelf.covers.get(i).and_then(Option::as_ref);
-                draw_cover(canvas, env, image, small, at);
+                draw_cover(ui.canvas(), env, image, small, at);
             }
             None => {
                 let lines = shelf.names.get(i).map_or(&[][..], Vec::as_slice);
-                draw_placeholder(canvas, env, &style, *cover, lines, look.ink);
+                draw_placeholder(&mut ui, *cover, lines, look.ink);
             }
         }
         if let Some(row) = row {
             let title = ui::fit(&font, style.small(), &book.title, f32::from(row.width));
             let x = align.x(*row, font.measure(style.small(), &title));
-            ui::draw_label(canvas, &font, style.small(), x, *row, &title, look.ink);
+            ui::Label::new(&title)
+                .px(style.small())
+                .color(look.ink)
+                .draw_from(&mut ui, x, *row);
         }
     }
 }
@@ -1263,16 +1263,11 @@ fn placeholder_lines(env: &Env<'_>, area: Rect, title: &str) -> Vec<String> {
 }
 
 /// A book without a cover: a frame with its title (`lines`).
-fn draw_placeholder(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    lines: &[String],
-    ink: Color,
-) {
-    canvas.stroke(area, u32::from(style.line()).max(2), ink);
-    let Some(font) = style.font(env) else {
+fn draw_placeholder(ui: &mut ui::Ui<'_>, area: Rect, lines: &[String], ink: Color) {
+    let style = ui.style();
+    ui.canvas()
+        .stroke(area, u32::from(style.line()).max(2), ink);
+    let Some(font) = ui.font() else {
         return;
     };
     let pad = style.gap() as f32 / 2.0;
@@ -1280,14 +1275,10 @@ fn draw_placeholder(
     for (n, text) in lines.iter().enumerate() {
         let y = area.y + pad as u16 + (n as f32 * line) as u16;
         let row = Rect::new(area.x, y, area.width, line as u16);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
+        ui::Label::new(text).px(style.small()).color(ink).draw_from(
+            ui,
             f32::from(area.x) + pad,
             row,
-            text,
-            ink,
         );
     }
 }

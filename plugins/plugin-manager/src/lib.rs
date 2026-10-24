@@ -456,72 +456,67 @@ impl Screen for PluginList {
             self.focus = Focus::List;
         }
         self.list.set_active(self.focus == Focus::List);
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("plugin-manager.title"),
             None,
             self.list.paging(len),
         );
         let (more, plugins, origins) = (&self.more, &self.plugins, &self.origins);
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                if let Some(action) = more.get(index) {
-                    // Named by its action, told by the plugin that added it.
-                    let name = env.actions.get(action.as_str()).map_or("", |a| &a.title);
-                    let note = env
-                        .plugins
-                        .owner(action)
-                        .map_or("", |p| p.description(env.i18n));
-                    let name = env.i18n.tr(name);
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, name, "›", note);
-                } else if let Some(info) = env.plugins.get(plugins[index - more.len()].as_str()) {
-                    let value = env.i18n.tr(state(info));
-                    let name = info.name(env.i18n);
-                    let origin = origins
-                        .iter()
-                        .find(|(id, _)| *id == info.manifest.id)
-                        .map(|(_, origin)| *origin);
-                    let note = details(env, info, origin);
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, name, value, &note);
-                }
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            if let Some(action) = more.get(index) {
+                // Named by its action, told by the plugin that added it.
+                let name = env.actions.get(action.as_str()).map_or("", |a| &a.title);
+                let note = env
+                    .plugins
+                    .owner(action)
+                    .map_or("", |p| p.description(env.i18n));
+                let name = env.i18n.tr(name);
+                ui::Row::value(name, "›")
+                    .note(note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            } else if let Some(info) = env.plugins.get(plugins[index - more.len()].as_str()) {
+                let value = env.i18n.tr(state(info));
+                let name = info.name(env.i18n);
+                let origin = origins
+                    .iter()
+                    .find(|(id, _)| *id == info.manifest.id)
+                    .map(|(_, origin)| *origin);
+                let note = details(env, info, origin);
+                ui::Row::value(name, value)
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            }
+        });
         // The bar: a line above it, the hint or what a restart does, and
         // the button.
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
-        canvas.fill(line, paperpaw_sdk::Color::gray(150));
+        ui.canvas().fill(line, paperpaw_sdk::Color::gray(150));
         let button = self.restart_button(env);
         if let Some(button) = button {
             let label = env.i18n.tr("plugin-manager.restart");
             let focused = self.focus == Focus::Restart;
-            ui::draw_button(canvas, env, &style, button, label, true, focused);
+            ui.button(button, label, true, focused);
         }
-        if let Some(font) = style.font(env) {
-            let key = if button.is_some() {
-                "plugin-manager.restart.short"
-            } else {
-                "plugin-manager.hint"
-            };
-            let right = button.map_or(self.bar.width, |b| b.x);
-            let area = Rect::new(
-                0,
-                self.bar.y,
-                right.saturating_sub(style.gap()),
-                self.bar.height,
-            );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                style.margin() as f32,
-                area,
-                ui::tr_input(env, key),
-                style.faint(ui::Ink::Note),
-            );
-        }
+        let key = if button.is_some() {
+            "plugin-manager.restart.short"
+        } else {
+            "plugin-manager.hint"
+        };
+        let right = button.map_or(self.bar.width, |b| b.x);
+        let area = Rect::new(
+            0,
+            self.bar.y,
+            right.saturating_sub(style.gap()),
+            self.bar.height,
+        );
+        ui::Label::new(ui::tr_input(env, key))
+            .px(style.small())
+            .color(style.faint(ui::Ink::Note))
+            .draw_from(&mut ui, style.margin() as f32, area);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

@@ -673,9 +673,10 @@ impl Screen for Popup {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(r, Color::WHITE);
         let line = (u32::from(style.line()) * 2).max(2);
-        canvas.fill_rect(
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
@@ -696,36 +697,21 @@ impl Screen for Popup {
         let note_x = f32::from(header.width) - margin - note_width;
         let mut right = note_x;
         if let Some(online) = self.online_area(env, &note) {
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                f32::from(online.x),
-                header,
-                env.i18n.tr("dictionary.online"),
-                Color::BLACK,
-            );
+            ui::Label::new(env.i18n.tr("dictionary.online"))
+                .px(style.small())
+                .color(Color::BLACK)
+                .draw_from(&mut ui, f32::from(online.x), header);
             right = f32::from(online.x);
         }
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            note_x,
-            header,
-            &note,
-            style.faint(ui::Ink::Detail),
-        );
+        ui::Label::new(&note)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Detail))
+            .draw_from(&mut ui, note_x, header);
         let word = ui::fit(&font, style.title(), &self.word, right - margin * 2.0);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title(),
-            margin,
-            header,
-            &word,
-            Color::BLACK,
-        );
+        ui::Label::new(&word)
+            .px(style.title())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, margin, header);
         if matches!(self.state, State::Preparing(..)) {
             return;
         }
@@ -744,17 +730,24 @@ impl Screen for Popup {
             } else {
                 Color::BLACK
             };
-            font.draw(canvas, style.text(), margin, baseline as i32, text, ink);
+            font.draw(
+                ui.canvas(),
+                style.text(),
+                margin,
+                baseline as i32,
+                text,
+                ink,
+            );
             // A line that opens more: a button, for screen readers too.
             if let Some(area) = self
                 .more_at(self.top + n)
                 .and(self.line_area(env, self.top + n))
             {
                 // With the buttons, the one confirm opens.
-                let focused = ui::focus_shown(env)
+                let focused = ui.focus_shown()
                     && self.more_shown(env).map(|m| m.begins)
                         == self.more_at(self.top + n).map(|m| m.begins);
-                canvas
+                ui.canvas()
                     .describe(paperpaw_sdk::semantics::Role::Button, text, area)
                     .focused(focused);
             }

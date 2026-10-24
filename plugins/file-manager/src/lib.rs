@@ -612,17 +612,11 @@ impl Screen for Browser {
         } else {
             ops::name(&self.dir).to_string()
         };
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &title,
-            None,
-            self.list.paging(len),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, &title, None, self.list.paging(len));
         if len == 0 {
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 "folder-open",
                 "",
@@ -630,43 +624,35 @@ impl Screen for Browser {
             );
         }
         let decimal = env.i18n.tr("file-manager.decimal");
-        let room = ui::icon_room(env, &style, true);
+        let room = ui.icon_room(true);
         let (page, first) = (&self.page, self.first);
         let active = self.focus == Focus::List;
         self.list.set_active(active);
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let Some(entry) = index.checked_sub(first).and_then(|i| page.get(i)) else {
-                    return;
-                };
-                let value = if entry.is_dir {
-                    String::from("›")
-                } else {
-                    ops::size(entry.size, decimal)
-                };
-                // Folders with a folder before their name, files with a
-                // page: told apart at a glance.
-                let ink = style.focus_ink(focused);
-                let icon = if entry.is_dir { "folder" } else { "file" };
-                let rest = ui::draw_row_icon(canvas, env, &style, rect, room, Some(icon), ink);
-                ui::draw_value_row(canvas, env, &style, rest, focused, &entry.name, &value);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let Some(entry) = index.checked_sub(first).and_then(|i| page.get(i)) else {
+                return;
+            };
+            let value = if entry.is_dir {
+                String::from("›")
+            } else {
+                ops::size(entry.size, decimal)
+            };
+            // Folders with a folder before their name, files with a
+            // page: told apart at a glance.
+            let ink = style.focus_ink(focused);
+            let icon = if entry.is_dir { "folder" } else { "file" };
+            let rest = ui.row_icon(rect, room, Some(icon), ink);
+            ui::Row::value(&entry.name, &value)
+                .focused(focused)
+                .draw(ui, rest);
+        });
         // The message line above the bar.
-        if let (Some(message), Some(font)) = (&self.message, style.font(env)) {
+        if let Some(message) = &self.message {
             let line = Rect::new(0, self.bar.y - style.row(), self.bar.width, style.row());
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                style.margin() as f32,
-                line,
-                message,
-                style.faint(ui::Ink::Note),
-            );
+            ui::Label::new(message)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(&mut ui, style.margin() as f32, line);
         }
         for (i, button) in self.buttons().into_iter().enumerate() {
             let label = env.i18n.tr(match button {
@@ -676,7 +662,7 @@ impl Screen for Browser {
             });
             let focused = self.focus == Focus::Bar(i);
             let on = button == Button::Paste;
-            ui::draw_button(canvas, env, &style, self.button_rect(i), label, on, focused);
+            ui.button(self.button_rect(i), label, on, focused);
         }
     }
 

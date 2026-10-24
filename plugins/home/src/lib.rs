@@ -412,8 +412,8 @@ impl Dashboard {
         }
     }
 
-    fn draw_footer(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = self.style;
+    fn draw_footer(&self, ui: &mut ui::Ui<'_>) {
+        let (env, style) = (ui.env(), self.style);
         let f = self.footer;
         let editing = self.grid.editing();
         // Status items at the left, where adding goes while editing.
@@ -428,7 +428,7 @@ impl Dashboard {
                     style.small(),
                     style.faint(ui::Ink::Note),
                 );
-                line.draw(canvas, env, &font, &Params::new());
+                line.draw(ui.canvas(), env, &font, &Params::new());
             }
         }
         // A dot a page, the current one filled.
@@ -439,7 +439,7 @@ impl Dashboard {
             let mut x = i32::from(f.x) + (i32::from(f.width) - total as i32) / 2;
             let y = i32::from(f.y) + (i32::from(f.height) - dot as i32) / 2;
             for page in 0..self.pages {
-                pages::draw_dot(canvas, env, &style, (x, y), dot, page == self.page);
+                pages::draw_dot(ui, (x, y), dot, page == self.page);
                 x += spacing as i32;
             }
         }
@@ -447,7 +447,7 @@ impl Dashboard {
         let mut icon = |name: &str, area: Rect, ink: Color| {
             let w = ui::icon_width(env, name, size);
             let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-            ui::draw_icon(canvas, env, name, size, x, area, ink);
+            ui.icon(name, size, x, area, ink);
         };
         if editing {
             icon("plus", self.plus, Color::BLACK);
@@ -460,20 +460,13 @@ impl Dashboard {
                 let name = env.menus.icon(action.as_str()).unwrap_or("puzzle");
                 let w = ui::icon_width(env, name, size);
                 let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-                ui::draw_icon(
-                    canvas,
-                    env,
-                    name,
-                    size,
-                    x,
-                    *area,
-                    style.faint(ui::Ink::Note),
-                );
+                ui.icon(name, size, x, *area, style.faint(ui::Ink::Note));
                 let title = env
                     .menus
                     .title(action.as_str())
                     .map_or(action.as_str(), |t| env.i18n.tr(t));
-                canvas.describe(paperpaw_sdk::semantics::Role::Button, title, *area);
+                ui.canvas()
+                    .describe(paperpaw_sdk::semantics::Role::Button, title, *area);
             }
         }
     }
@@ -484,11 +477,13 @@ impl Screen for Dashboard {
         if self.stale {
             self.layout(env);
         }
+        let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         if let Some(status) = self.status {
-            blocks::draw_status(canvas, env, status);
+            blocks::draw_status(ui.canvas(), env, status);
         }
-        self.draw_footer(canvas, env);
-        self.grid.draw(canvas, env);
+        self.draw_footer(&mut ui);
+        self.grid.draw(ui.canvas(), env);
     }
 
     /// Hidden by a book or another screen: the widgets go with what they
