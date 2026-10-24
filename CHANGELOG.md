@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- After the Wi-Fi link is lost and joined again, the X4s count as
+  online only once the router gave their address again. Before, they
+  were online at once with the old one, which the router's answer then
+  took back, so a request made in between failed.
+
 ## [0.5.0-beta.4] - 2026-10-24
 
 A beta for updates over the air, from testing the update to beta.2 on
