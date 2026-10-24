@@ -382,7 +382,7 @@ const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "cod
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = CROSSING
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 2u16
-const paperpaw_sdk::native::LAYOUT: u64 = 9_529_769_984_825_922_701u64
+const paperpaw_sdk::native::LAYOUT: u64 = 7_181_479_799_679_054_301u64
 const paperpaw_sdk::native::TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") { "rustc 1.99.0, riscv32imc-unknown-none-elf" } else if cfg!(target_arch = "xtensa") { "esp 1.97.0.0, xtensa-esp32s3-none-elf" } else { "the compiler of PaperPaw's release, for this computer" }
 const paperpaw_sdk::numbers::DECIMAL_MARK: &str = "core.decimal"
 const paperpaw_sdk::pattern::MAX_PATTERN: usize = 256usize
@@ -593,7 +593,7 @@ enum paperpaw_sdk::work::WorkState { Waiting { due: core::option::Option<paperpa
 struct paperpaw_sdk::action::ActionExtra { description: core::option::Option<alloc::borrow::Cow<'static, str>>, keywords: core::option::Option<alloc::borrow::Cow<'static, str>>, sealed: bool }
 struct paperpaw_sdk::action::ActionOverride { action: paperpaw_sdk::id::Id, handler: paperpaw_sdk::action::ActionHandler, priority: paperpaw_sdk::plugin::Priority }
 struct paperpaw_sdk::action::ActionSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, handler: core::option::Option<paperpaw_sdk::action::ActionHandler>, hint: paperpaw_sdk::action::ActionHint, extra: core::option::Option<alloc::boxed::Box<paperpaw_sdk::action::ActionExtra>> }
-struct paperpaw_sdk::action::Actions { map: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::action::ActionSpec>, overrides: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::plugin::Priority, paperpaw_sdk::id::Id, paperpaw_sdk::action::ActionHandler)> }
+struct paperpaw_sdk::action::Actions { specs: alloc::vec::Vec<paperpaw_sdk::action::ActionSpec>, overrides: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::plugin::Priority, paperpaw_sdk::id::Id, paperpaw_sdk::action::ActionHandler)> }
 struct paperpaw_sdk::action::ObserverSpec { id: paperpaw_sdk::id::Id, observer: paperpaw_sdk::action::Observer }
 struct paperpaw_sdk::annotations::Annotation { mark: paperpaw_sdk::annotations::Mark, percent: u8, created: i64, updated: i64, text: alloc::string::String, note: alloc::string::String }
 struct paperpaw_sdk::annotations::Mark { kind: paperpaw_sdk::annotations::Kind, start: paperpaw_document::Locator, end: paperpaw_document::Locator, noted: bool }
@@ -680,8 +680,9 @@ struct paperpaw_sdk::host::Hosted { id: paperpaw_sdk::id::Id, params: paperpaw_s
 struct paperpaw_sdk::host::ScreenHost { hosted: core::option::Option<paperpaw_sdk::host::Hosted> }
 struct paperpaw_sdk::hyphenation::Hyphenation { languages: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::borrow::Cow<'static, str>, paperpaw_hyphen::Patterns<'static>)> }
 struct paperpaw_sdk::hyphenation::HyphenationSpec { id: paperpaw_sdk::id::Id, language: alloc::borrow::Cow<'static, str>, patterns: &'static [u8] }
-struct paperpaw_sdk::id::Id(0: alloc::borrow::Cow<'static, str>)
+struct paperpaw_sdk::id::Id(0: paperpaw_sdk::id::Text)
 struct paperpaw_sdk::id::InvalidId
+struct paperpaw_sdk::id::Text { start: core::ptr::non_null::NonNull<u8>, len: usize }
 struct paperpaw_sdk::install::Installer { owner: paperpaw_sdk::id::Id, reply: paperpaw_sdk::event::Event<paperpaw_sdk::replies::HttpReply> }
 struct paperpaw_sdk::install::Package { plugin: alloc::string::String, name: alloc::string::String, files: alloc::vec::Vec<paperpaw_sdk::install::PackageFile> }
 struct paperpaw_sdk::install::PackageFile { path: alloc::string::String, url: alloc::string::String, size: u64, digest: paperpaw_sdk::install::Digest }

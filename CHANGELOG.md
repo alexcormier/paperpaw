@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The X4 keeps less in memory from the start: ids take two words
+  instead of three, translations index their messages in two bytes
+  where they fit, and actions are not kept twice. Reading an EPUB peaks
+  some 24 KiB lower.
 - SDK: an HTTP answer's body is bytes as they came (`HttpReply::body`
   is a `Vec<u8>`, `text()` reads it as text), no longer decoded with
   losses, and it reaches the plugin's handler without a copy: an event

@@ -1,6 +1,8 @@
-use alloc::borrow::{Borrow, Cow};
+use alloc::borrow::Borrow;
+use alloc::boxed::Box;
 use alloc::string::String;
 use core::fmt;
+use core::ptr::NonNull;
 
 /// A namespaced identifier such as `core.home` or `diagnostics.screen`.
 ///
@@ -13,7 +15,108 @@ use core::fmt;
 /// place and `widgets.clock@2.face` for that place's own setting (see
 /// [`Id::placement`], [`Id::unplaced`]).
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Id(pub(crate) Cow<'static, str>);
+pub struct Id(Text);
+
+/// Text kept in the program or owned, in two words (a `Cow<str>` takes
+/// three): where it starts, and its length, whose top bit says it is
+/// owned (a `Box<str>`, freed with it). Ids are kept by the thousand.
+struct Text {
+    start: NonNull<u8>,
+    len: usize,
+}
+
+/// In [`Text::len`]: the text is owned.
+const OWNED: usize = 1 << (usize::BITS - 1);
+
+impl Text {
+    const fn borrowed(text: &'static str) -> Self {
+        // SAFETY: a reference's pointer is never null.
+        let start = unsafe { NonNull::new_unchecked(text.as_ptr().cast_mut()) };
+        Self {
+            start,
+            len: text.len(),
+        }
+    }
+
+    fn owned(text: String) -> Self {
+        let text: Box<str> = text.into_boxed_str();
+        let len = text.len();
+        // SAFETY: a box's pointer is never null.
+        let start = unsafe { NonNull::new_unchecked(Box::into_raw(text).cast::<u8>()) };
+        Self {
+            start,
+            len: len | OWNED,
+        }
+    }
+
+    const fn is_owned(&self) -> bool {
+        self.len & OWNED != 0
+    }
+
+    const fn as_str(&self) -> &str {
+        // SAFETY: made from a `str` of this length, which lives as long as
+        // this (the program's, or the box this owns).
+        unsafe {
+            let bytes = core::slice::from_raw_parts(self.start.as_ptr(), self.len & !OWNED);
+            core::str::from_utf8_unchecked(bytes)
+        }
+    }
+}
+
+impl Drop for Text {
+    fn drop(&mut self) {
+        if self.is_owned() {
+            let len = self.len & !OWNED;
+            let raw = core::ptr::slice_from_raw_parts_mut(self.start.as_ptr(), len) as *mut str;
+            // SAFETY: made by `Text::owned` from this box, dropped once.
+            drop(unsafe { Box::from_raw(raw) });
+        }
+    }
+}
+
+impl Clone for Text {
+    fn clone(&self) -> Self {
+        if self.is_owned() {
+            Self::owned(String::from(self.as_str()))
+        } else {
+            Self {
+                start: self.start,
+                len: self.len,
+            }
+        }
+    }
+}
+
+// SAFETY: as a `Cow<'static, str>`: text never changed, shared or owned.
+unsafe impl Send for Text {}
+// SAFETY: the same.
+unsafe impl Sync for Text {}
+
+impl PartialEq for Text {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for Text {}
+
+impl PartialOrd for Text {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Text {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl core::hash::Hash for Text {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
 
 /// Returned when parsing an invalid [`Id`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,20 +139,20 @@ impl Id {
     /// happens at compile time.
     pub const fn new_static(id: &'static str) -> Id {
         assert!(is_valid(id), "invalid id");
-        Id(Cow::Borrowed(id))
+        Id(Text::borrowed(id))
     }
 
     /// Parses an id at runtime, e.g. from a configuration file.
     pub fn parse(id: &str) -> Result<Id, InvalidId> {
         if is_valid(id) {
-            Ok(Id(Cow::Owned(String::from(id))))
+            Ok(Id(Text::owned(String::from(id))))
         } else {
             Err(InvalidId)
         }
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 
     /// The id as text kept in the program, for specs kept there too
@@ -58,34 +161,42 @@ impl Id {
     /// with [`Id::new_static`]; empty for ids parsed at run time. Takes
     /// the id, so it can be used in `const` and `static` items.
     pub const fn static_str(self) -> &'static str {
-        let text = match &self.0 {
-            Cow::Borrowed(id) => id,
-            Cow::Owned(_) => "",
-        };
+        let text = self.static_text();
         core::mem::forget(self);
         text
     }
 
+    /// The same, the id kept.
+    pub(crate) const fn static_text(&self) -> &'static str {
+        if self.0.is_owned() {
+            return "";
+        }
+        // SAFETY: not owned: text kept in the program.
+        unsafe {
+            let bytes = core::slice::from_raw_parts(self.0.start.as_ptr(), self.0.len);
+            core::str::from_utf8_unchecked(bytes)
+        }
+    }
+
     /// The first segment, i.e. the owning plugin's id.
     pub fn namespace(&self) -> &str {
-        self.0.split('.').next().unwrap_or_default()
+        self.as_str().split('.').next().unwrap_or_default()
     }
 
     /// The id without its placement (`widgets.clock@2.face` is
     /// `widgets.clock.face`), if it names one; see [`Id::placement`].
     pub fn unplaced(&self) -> Option<Id> {
-        unplaced(self.as_str()).map(|plain| Id(Cow::Owned(plain)))
+        unplaced(self.as_str()).map(|plain| Id(Text::owned(plain)))
     }
 
     /// The id of placement `n` of this: `widgets.clock` and 2 make
     /// `widgets.clock@2`, and so does `widgets.clock@5` (another
     /// placement of the same).
     pub fn placement(&self, n: u32) -> Id {
-        let last = self.0.rfind('.').map_or(0, |dot| dot + 1);
-        let end = self.0[last..]
-            .find('@')
-            .map_or(self.0.len(), |at| last + at);
-        Id(Cow::Owned(alloc::format!("{}@{n}", &self.0[..end])))
+        let id = self.as_str();
+        let last = id.rfind('.').map_or(0, |dot| dot + 1);
+        let end = id[last..].find('@').map_or(id.len(), |at| last + at);
+        Id(Text::owned(alloc::format!("{}@{n}", &id[..end])))
     }
 
     /// Whether this id belongs to the plugin `plugin`.
@@ -96,19 +207,19 @@ impl Id {
 
 impl Borrow<str> for Id {
     fn borrow(&self) -> &str {
-        &self.0
+        self.as_str()
     }
 }
 
 impl PartialEq<str> for Id {
     fn eq(&self, other: &str) -> bool {
-        *self.0 == *other
+        self.as_str() == other
     }
 }
 
 impl AsRef<str> for Id {
     fn as_ref(&self) -> &str {
-        &self.0
+        self.as_str()
     }
 }
 
@@ -120,13 +231,13 @@ impl From<&Id> for Id {
 
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(self.as_str())
     }
 }
 
 impl fmt::Debug for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Id({})", self.0)
+        write!(f, "Id({})", self.as_str())
     }
 }
 
@@ -220,5 +331,18 @@ mod tests {
     #[test]
     fn static_and_parsed_ids_are_equal() {
         assert_eq!(Id::new_static("core.home"), Id::parse("core.home").unwrap());
+    }
+
+    /// Two words, and none more where it is optional.
+    #[test]
+    fn ids_take_two_words() {
+        assert_eq!(size_of::<Id>(), 2 * size_of::<usize>());
+        assert_eq!(size_of::<Option<Id>>(), size_of::<Id>());
+        let owned = Id::parse("a.b").unwrap();
+        let copy = owned.clone();
+        drop(owned);
+        assert_eq!(copy.as_str(), "a.b");
+        assert_eq!(Id::new_static("a.b").static_str(), "a.b");
+        assert_eq!(copy.static_str(), "");
     }
 }
