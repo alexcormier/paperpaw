@@ -1,6 +1,6 @@
 # 0027. Bluetooth Low Energy
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-24
 
 ## Context
