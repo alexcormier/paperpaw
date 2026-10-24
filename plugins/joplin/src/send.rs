@@ -400,7 +400,11 @@ impl Run {
         let old = kept::notebook(env.storage).map(|(_, id)| id);
         let id = item::new_id(&format!("paperpaw notebook {name} {now}"), old.as_deref());
         let mut request = self.put(env, &item::file_name(&id), &NOTEBOOK_MADE);
-        request = request.body(item::notebook(&id, name, &UnixTime::from_millis(now).iso8601()));
+        request = request.body(item::notebook(
+            &id,
+            name,
+            &UnixTime::from_millis(now).iso8601(),
+        ));
         request = request.with(Params::new().with(ID, id));
         out.push(Command::http(request));
     }
