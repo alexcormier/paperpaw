@@ -41,9 +41,8 @@ pub const OPEN: Id = Id::new_static("bluetooth.open");
 pub const SEARCH: Id = Id::new_static("bluetooth.search");
 /// The status item: the Bluetooth sign while a device is connected.
 pub const STATUS: Id = Id::new_static("bluetooth.status");
-/// The icon of the page and the status item, until the icon font holds
-/// Tabler's `bluetooth`.
-const ICON: &str = "devices";
+/// The icon of the page and the status item.
+const ICON: &str = "bluetooth";
 /// What the search finds.
 pub(crate) const FOUND: Event<BtEvent> = Event::new("bluetooth.found");
 /// What happens with a device being added.
