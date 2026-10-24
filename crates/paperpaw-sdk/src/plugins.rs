@@ -223,7 +223,7 @@ impl Plugins {
 
     /// The plugin that added `id` (an action, a screen, a setting …): what
     /// a plugin adds is in its namespace, the registrar refuses anything
-    /// else ([`Registrar::add`](crate::Registrar::add)).
+    /// else (see [`Registrar`](crate::Registrar)).
     pub fn owner(&self, id: &Id) -> Option<&PluginInfo> {
         self.get(id.namespace())
     }
