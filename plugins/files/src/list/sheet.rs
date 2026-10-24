@@ -286,8 +286,17 @@ impl Screen for BookSheet {
             Color::BLACK,
         );
         // The book as a row of the list, but larger text: its cover, title,
-        // author and state, never focused.
-        rows::draw_book_row(&mut ui, &self.sizes, self.head, false, &self.book, false);
+        // author and state, never focused (so told as a heading, not a row).
+        let heading = paperpaw_sdk::semantics::Role::Heading;
+        rows::draw_book(
+            &mut ui,
+            &self.sizes,
+            self.head,
+            false,
+            &self.book,
+            false,
+            heading,
+        );
         ui.separator(self.head, 0);
         if let Some(answers) = &self.asking {
             // The question right below the book, above the answers, as
