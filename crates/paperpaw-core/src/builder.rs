@@ -46,6 +46,8 @@ struct BuilderParts {
     started: paperpaw_sdk::power::Start,
     /// Network settings kept in the program, by plugin.
     network_settings: &'static [crate::NetworkSettings],
+    /// The most Bluetooth links the shell keeps; none without a radio.
+    bluetooth_links: u8,
 }
 
 impl fmt::Debug for KernelBuilder {
@@ -198,6 +200,16 @@ impl KernelBuilder {
     pub fn wifi(mut self, managed: bool) -> Self {
         self.0.caps.wifi = managed;
         self.0.caps.network |= managed;
+        self
+    }
+
+    /// The shell drives a Bluetooth Low Energy radio for the kernel,
+    /// keeping up to `max_links` links at once ([`Io::Bluetooth`],
+    /// reported with [`Kernel::bluetooth_event`]); 0, the default, for
+    /// none. See [`paperpaw_sdk::bluetooth`].
+    pub fn bluetooth(mut self, max_links: u8) -> Self {
+        self.0.caps.bluetooth = max_links > 0;
+        self.0.bluetooth_links = max_links;
         self
     }
 
@@ -453,6 +465,7 @@ impl BuilderParts {
         caps.black_and_white = display.format == paperpaw_platform::PixelFormat::Mono1;
         caps.firmware = self.firmware.is_some();
         caps.button_row = !self.button_row.is_empty();
+        let links = self.bluetooth_links;
         Kernel {
             shared: Shared {
                 registry: Registry::default(),
@@ -486,7 +499,9 @@ impl BuilderParts {
                 book_badges: Vec::new(),
                 caps,
                 wifi: caps.wifi.then(paperpaw_sdk::wifi::Wifi::default),
-                bluetooth: None,
+                bluetooth: caps
+                    .bluetooth
+                    .then(|| paperpaw_sdk::bluetooth::Bluetooth::new(links)),
                 firmware: self.firmware.take(),
                 native: None,
                 power: paperpaw_sdk::power::Power::default(),
@@ -552,6 +567,7 @@ impl BuilderParts {
                 speech: io::speech::Speech::new(caps.speech),
                 clipboard: io::clipboard::Clipboard::new(caps.system_clipboard),
                 wifi_calls: Vec::new(),
+                bluetooth: caps.bluetooth.then(|| io::bluetooth::Radio::new(links)),
                 firmware_calls: Vec::new(),
                 network_waiting: None,
                 network_busy: false,
@@ -600,6 +616,7 @@ impl BuilderParts {
             tasks: Vec::new(),
             config_unreadable: false,
             secrets_unreadable: false,
+            pairing_nonce: None,
             plugin_defaults: Vec::new(),
             plugin_choices: Vec::new(),
             now: Instant::default(),
@@ -619,6 +636,10 @@ impl Kernel {
             Ok(data) => {
                 let text = String::from_utf8_lossy(data.as_deref().unwrap_or_default());
                 self.shared.secrets = Secrets::decode(&text);
+                if let Some(radio) = &mut self.io.bluetooth {
+                    let kept = self.shared.secrets.iter();
+                    radio.load(kept.map(|s| (s.id.as_str(), s.value.as_str())));
+                }
             }
             Err(error) => {
                 self.secrets_unreadable = true;
@@ -1020,6 +1041,7 @@ impl Kernel {
             memory: paperpaw_sdk::memory::Memory::NONE,
             started: paperpaw_sdk::power::Start::Unknown,
             network_settings: &[],
+            bluetooth_links: 0,
         }))
     }
 }

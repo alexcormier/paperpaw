@@ -6,6 +6,23 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- Bluetooth Low Energy for plugins (ADR 0027): `paperpaw_sdk::bluetooth`
+  scans, connects and reads, writes and subscribes to a device's
+  characteristics, pairs (always confirmed by the reader in the kernel's
+  own question), advertises and serves GATT services, for plugins that
+  declare `Uses::BLUETOOTH`. The kernel owns the radio, shares it
+  between plugins, lets each see only the devices it found or was given,
+  keeps bonds with the passwords and keys and switches the radio off
+  when nothing needs it. A bonded remote's or keyboard's keys are
+  buttons of the key maps (`button.hid.right`, `button.hid.page-down` …,
+  pages turned by default). The emulator has made-up devices for the X4
+  Pro's profile: a page-turner (`ble-key:right` in scripts) and a
+  heart-rate belt.
+- Plugin interface 3: code plugins are built again for it (`Command`,
+  `Env`, `Capabilities`, `MenuNeed` and `Work` changed for Bluetooth).
+
 ## [0.5.0-beta.6] - 2026-10-25
 
 ### Added

@@ -210,6 +210,7 @@ impl Kernel {
             self.sleep_due(),
             shot,
             self.network_deadline(),
+            self.bluetooth_deadline(),
         ]
         .into_iter()
         .flatten()
@@ -470,6 +471,10 @@ impl Kernel {
     /// Emits `event` to the plugin `only` alone where one is named: its
     /// handlers and screens hear it, no other plugin's.
     pub(crate) fn emit_to(&mut self, event: &Id, params: &Params, only: Option<&str>) {
+        // The reader's answer to pairing is the kernel's alone.
+        if self.bluetooth_answer(event, params) {
+            return;
+        }
         // A page turned, also by itself, is use.
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
@@ -754,6 +759,7 @@ impl Kernel {
                     self.fail_waiting_network();
                 }
             }
+            Command::Bluetooth(request) => self.apply_bluetooth(*request),
             Command::Wifi(command) => match &mut self.shared.wifi {
                 Some(wifi) => {
                     if command == WifiCommand::Scan {
@@ -931,6 +937,15 @@ pub(crate) fn vet_reserved(
     owner: &str,
     reserved: &Reserved<'_>,
 ) -> bool {
+    // Bluetooth commands say who sent them: what a plugin may do with a
+    // device depends on it.
+    for command in &mut out[from..] {
+        if let Command::Bluetooth(request) = command
+            && let Ok(plugin) = Id::parse(owner)
+        {
+            request.set_from(plugin);
+        }
+    }
     let editor = reserved.editor == Some(owner) || owner == crate::meter::CORE;
     let foreign = |id: &str, kept: fn(&paperpaw_sdk::SettingSpec) -> bool| {
         id.split('.').next() != Some(owner) && reserved.settings.spec(id).is_some_and(kept)

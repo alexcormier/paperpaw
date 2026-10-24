@@ -309,6 +309,9 @@ pub struct Profile {
     /// PaperPaw manages Wi-Fi itself, as on the X4 (emulated: made-up
     /// networks, see `wifi`); elsewhere the system does.
     pub wifi: bool,
+    /// The most Bluetooth links the device keeps (emulated: made-up
+    /// devices, see `bluetooth`); 0 for no Bluetooth.
+    pub bluetooth: u8,
     /// What plugin libraries call the device (see
     /// `KernelBuilder::catalog_device`): `None` where PaperPaw has no
     /// build for it yet, and its plugin store offers nothing.
@@ -369,6 +372,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &X4_SETTINGS,
         speech: false,
         wifi: true,
+        bluetooth: 0,
         catalog_device: Some("x4"),
         sleep: true,
         button_row: &X4_ROW,
@@ -414,6 +418,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &X4_SETTINGS,
         speech: false,
         wifi: true,
+        bluetooth: 2,
         catalog_device: Some("x4-pro"),
         sleep: true,
         button_row: &[],
@@ -460,6 +465,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &X4_SETTINGS,
         speech: false,
         wifi: true,
+        bluetooth: 0,
         catalog_device: Some("x4-classic"),
         sleep: true,
         button_row: &X4_ROW,
@@ -502,6 +508,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &X4_SETTINGS,
         speech: false,
         wifi: true,
+        bluetooth: 0,
         catalog_device: Some("x4"),
         sleep: true,
         button_row: &X4_ROW,
@@ -542,6 +549,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[],
         speech: true,
         wifi: false,
+        bluetooth: 0,
         catalog_device: Some("android"),
         sleep: false,
         button_row: &[],
@@ -590,6 +598,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[],
         speech: false,
         wifi: false,
+        bluetooth: 0,
         catalog_device: None,
         sleep: true,
         button_row: &[],
@@ -628,6 +637,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[],
         speech: false,
         wifi: false,
+        bluetooth: 0,
         catalog_device: None,
         sleep: true,
         button_row: &[],
@@ -666,6 +676,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[],
         speech: false,
         wifi: false,
+        bluetooth: 0,
         catalog_device: None,
         sleep: true,
         button_row: &[],
@@ -705,6 +716,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[("core.keymap-preset", "core.two-buttons")],
         speech: false,
         wifi: false,
+        bluetooth: 0,
         catalog_device: None,
         sleep: true,
         button_row: &[],

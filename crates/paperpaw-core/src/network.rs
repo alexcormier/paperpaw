@@ -23,6 +23,8 @@ pub(crate) struct IoState {
     pub(crate) clipboard: io::clipboard::Clipboard,
     /// What the shell is to do with the radio ([`Io::Wifi`]).
     pub(crate) wifi_calls: Vec<WifiCommand>,
+    /// Bluetooth, where the kernel uses a radio ([`Io::Bluetooth`]).
+    pub(crate) bluetooth: Option<io::bluetooth::Radio>,
     /// What the shell is to do with the firmware ([`Io::Firmware`]).
     pub(crate) firmware_calls: Vec<FirmwareCommand>,
     /// Since when plugins' network work has waited for a network.
@@ -368,6 +370,9 @@ impl Kernel {
     pub fn take_io(&mut self) -> Vec<Io> {
         let mut io: Vec<Io> = self.io.wifi_calls.drain(..).map(Io::Wifi).collect();
         io.extend(self.io.firmware_calls.drain(..).map(Io::Firmware));
+        if let Some(radio) = &mut self.io.bluetooth {
+            io.extend(radio.take().into_iter().map(Io::Bluetooth));
+        }
         io.extend(self.io.speech.take().into_iter().map(Io::Speech));
         io.extend(self.io.clipboard.take_copied().map(Io::Copy));
         if self.io.clipboard.take_read() {

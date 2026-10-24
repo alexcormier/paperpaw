@@ -1,0 +1,228 @@
+//! The kernel's side of Bluetooth (see [ADR 0027](../../../docs/adr/0027-bluetooth.md)
+//! and [`io::bluetooth`]): plugins' commands checked and passed to the
+//! radio's state, the shell's reports turned into plugins' events and
+//! into keys, bonds kept with the secrets, and pairing asked of the
+//! reader.
+
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
+use super::*;
+
+use paperpaw_sdk::bluetooth::{BtCommand, BtError, BtEvent, BtRequest, DeviceId};
+use paperpaw_sdk::event::{Event, EventData};
+use paperpaw_sdk::replies::Confirmed;
+use paperpaw_sdk::{Arg, Uses};
+
+use crate::io::bluetooth::{BOND_PREFIX, BtReport, PairQuestion};
+
+/// The reader's answer to a pairing's question.
+const PAIR_ANSWERED: Event<Confirmed> = Event::new("core.bluetooth-pair-answered");
+/// The device a pairing question is about, in its context.
+const DEVICE: &str = "device";
+/// A number the answer must bring back: only the question's own counts.
+const NONCE: &str = "nonce";
+
+impl Kernel {
+    /// Plugin `request.from()`'s Bluetooth command.
+    pub(crate) fn apply_bluetooth(&mut self, request: BtRequest) {
+        let (command, from) = request.into_parts();
+        let plugin = from.as_ref().map(|f| String::from(f.as_str()));
+        let screens = self.stack.len();
+        let reader = self.shared.reader;
+        let now = self.now;
+        let allowed = plugin.as_deref().is_some_and(|p| {
+            p == crate::meter::CORE
+                || self
+                    .shared
+                    .plugins
+                    .get(p)
+                    .is_some_and(|info| info.manifest.uses.contains(Uses::BLUETOOTH))
+        });
+        let result = match (&mut self.io.bluetooth, plugin.as_deref()) {
+            (None, _) => Err((None, BtError::Off)),
+            (Some(_), Some(_)) if !allowed => Err((None, BtError::NotAllowed)),
+            (Some(radio), Some(plugin)) => {
+                let out = &mut self.output.commands;
+                radio.command(plugin, command.clone(), screens, reader, now, out)
+            }
+            (Some(_), None) => Err((None, BtError::NotAllowed)),
+        };
+        if let Err((device, error)) = result {
+            match answer_to(&command) {
+                Some(events) => {
+                    let event = BtEvent::Failed { device, error };
+                    self.output
+                        .commands
+                        .push(Command::Emit(events, event.into_params()));
+                }
+                None => self.warn_runtime(format!(
+                    "{}: Bluetooth: {}",
+                    plugin.as_deref().unwrap_or("?"),
+                    error.to_text()
+                )),
+            }
+        }
+        self.sync_bluetooth();
+    }
+
+    /// What the shell reports about Bluetooth (see
+    /// [`KernelBuilder::bluetooth`]): plugins hear of it, a remote's keys
+    /// go to the key maps.
+    pub fn bluetooth_event(&mut self, now: Instant, report: BtReport) -> Effects {
+        let running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        let keys = match &mut self.io.bluetooth {
+            Some(radio) => {
+                radio.report(report, now, &mut self.output.commands);
+                radio.take_keys()
+            }
+            None => Vec::new(),
+        };
+        self.sync_bluetooth();
+        drop(running);
+        let mut effects = self.finish();
+        for (name, pressed) in keys {
+            let state = if pressed {
+                ButtonState::Pressed
+            } else {
+                ButtonState::Released
+            };
+            effects = effects.and(self.handle(now, InputEvent::Button { name, state }));
+        }
+        effects
+    }
+
+    /// When Bluetooth waits for a time.
+    pub(crate) fn bluetooth_deadline(&self) -> Option<Instant> {
+        self.io.bluetooth.as_ref().and_then(|r| r.deadline())
+    }
+
+    /// Time passed for Bluetooth: scans and advertising that ended, the
+    /// radio off.
+    pub(crate) fn bluetooth_tick(&mut self) {
+        if let Some(radio) = &mut self.io.bluetooth {
+            radio.tick(self.now, &mut self.output.commands);
+            self.sync_bluetooth();
+        }
+    }
+
+    /// Fewer screens are open: what they asked of Bluetooth ends.
+    pub(crate) fn bluetooth_screens_closed(&mut self) {
+        let screens = self.stack.len();
+        if let Some(radio) = &mut self.io.bluetooth {
+            radio.close_for_closed_screens(screens, self.now, &mut self.output.commands);
+            self.sync_bluetooth();
+        }
+    }
+
+    /// The device goes to sleep: Bluetooth ends.
+    pub(crate) fn bluetooth_suspend(&mut self) {
+        if let Some(radio) = &mut self.io.bluetooth {
+            radio.suspend(&mut self.output.commands);
+            self.sync_bluetooth();
+        }
+    }
+
+    /// An answer to the pairing question, where `event` is one.
+    pub(crate) fn bluetooth_answer(&mut self, event: &Id, params: &Params) -> bool {
+        let Some(answer) = PAIR_ANSWERED.read(event, params) else {
+            return false;
+        };
+        let context = &answer.context;
+        let device = context.get(DEVICE).and_then(|d| d.parse().ok());
+        let nonce = context.get(NONCE).and_then(|n| n.parse::<u64>().ok());
+        // Only the question's own answer, once.
+        if let (Some(device), Some(nonce), Some(radio)) = (device, nonce, &mut self.io.bluetooth)
+            && Some(nonce) == self.pairing_nonce
+        {
+            self.pairing_nonce = None;
+            radio.answer(DeviceId::new(device), answer.yes);
+        }
+        true
+    }
+
+    /// What every plugin sees, the bonds kept, a pairing question asked.
+    fn sync_bluetooth(&mut self) {
+        let Some(radio) = &mut self.io.bluetooth else {
+            return;
+        };
+        let state = radio.state();
+        if self.shared.bluetooth.as_ref() != Some(&state) {
+            self.shared.bluetooth = Some(state);
+            self.output
+                .commands
+                .push(events::BLUETOOTH_CHANGED.emit(()));
+        }
+        let kept: Vec<(String, String)> = self
+            .shared
+            .secrets
+            .iter()
+            .filter(|s| s.id.starts_with(BOND_PREFIX))
+            .map(|s| (s.id.clone(), s.value.clone()))
+            .collect();
+        let bonds = radio.take_bonds(&kept);
+        let question = radio.take_question();
+        for (id, label, value) in bonds {
+            let change = if value.is_empty() {
+                paperpaw_sdk::secrets::SecretChange::remove(&id)
+            } else {
+                paperpaw_sdk::secrets::SecretChange::keep(&id, &label, &value).changeable(false)
+            };
+            self.set_secret(change);
+        }
+        if let Some((device, question, name)) = question {
+            self.ask_pairing(device, question, &name);
+        }
+    }
+
+    /// Asks the reader whether to pair with `device`, in the kernel's own
+    /// words.
+    fn ask_pairing(&mut self, device: DeviceId, question: PairQuestion, name: &str) {
+        let mut bytes = [0u8; 8];
+        self.shared.random.fill(&mut bytes);
+        let nonce = u64::from_le_bytes(bytes) ^ self.now.0;
+        self.pairing_nonce = Some(nonce);
+        let i18n = &self.shared.translator;
+        let name = if name.is_empty() {
+            i18n.tr("core.bluetooth.unnamed").to_string()
+        } else {
+            String::from(name)
+        };
+        let title = i18n.format("core.bluetooth.pair", &[("name", Arg::Str(&name))]);
+        let text = match question {
+            PairQuestion::Confirm => String::new(),
+            PairQuestion::Compare(code) => i18n.format(
+                "core.bluetooth.compare",
+                &[("code", Arg::Str(&format!("{code:06}")))],
+            ),
+            PairQuestion::Show(code) => i18n.format(
+                "core.bluetooth.type",
+                &[("code", Arg::Str(&format!("{code:06}")))],
+            ),
+        };
+        let context = Params::new()
+            .with(DEVICE, device.number().to_string())
+            .with(NONCE, nonce.to_string());
+        let ask = paperpaw_sdk::ask::confirm(title, &PAIR_ANSWERED)
+            .text(text)
+            .yes(i18n.tr("core.bluetooth.pair.yes"))
+            .no(i18n.tr("core.bluetooth.pair.no"))
+            .context(&context)
+            .command();
+        self.output.commands.push(ask);
+    }
+}
+
+/// Where a command's failure is told, where it says.
+fn answer_to(command: &BtCommand) -> Option<Id> {
+    match command {
+        BtCommand::Scan(scan) => Some(scan.events.clone()),
+        BtCommand::Connect { events, .. }
+        | BtCommand::HidReports { events, .. }
+        | BtCommand::StopScan { events } => Some(events.clone()),
+        BtCommand::Advertise(advertising) => Some(advertising.events.clone()),
+        _ => None,
+    }
+}

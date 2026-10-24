@@ -627,7 +627,7 @@ fn apply(state: &mut Running, effects: Effects) -> bool {
             Io::Speech(call) => state.speech.apply(call),
             // The system manages Wi-Fi and the app: the kernel is built
             // without either, so neither is asked.
-            Io::Wifi(_) | Io::Firmware(_) => {}
+            Io::Wifi(_) | Io::Firmware(_) | Io::Bluetooth(_) => {}
         }
     }
     state.restart |= effects.restart();

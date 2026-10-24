@@ -17,6 +17,7 @@
 //! | `open:home.add-widget:kind=core.widgets.books` | open a screen with its parameters, as a plugin would |
 //! | `redraw` | draw the whole screen again, nothing on it changed |
 //! | `phone-joins` | a phone joins the device's own network (the setup with a phone) |
+//! | `ble-key:right` | the pretend Bluetooth remote's key pressed (`right`, `left`, `up`, `down`, `page-down`, `page-up`, `space`, `enter`, `escape`, `volume-up`, `volume-down`), once its keys go to the key maps |
 //! | `reset-peak` | measure the heap's peak anew from now (what one step takes) |
 //! | `emit:core.library-changed` | send an event without parameters, as a plugin would |
 //! | `type:hello world` | type into the text field shown, as if on its keys (a script's commas cannot be typed) |
@@ -106,6 +107,11 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
         }
         ["redraw"] => device.draw_again(),
         ["phone-joins"] => device.phone_joins(),
+        ["ble-key", key] => {
+            if !device.ble_key(key) {
+                return Err(format!("no Bluetooth remote types `{key}` now"));
+            }
+        }
         ["reset-peak"] => crate::budget::reset_peak(),
         ["emit", event] => {
             let event = paperpaw_core::sdk::Id::parse(event).map_err(|e| e.to_string())?;

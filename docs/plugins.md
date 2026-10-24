@@ -1331,6 +1331,91 @@ is told which device this is (a sync service, Calibre), the name is
 `env.device_name()`: the one the reader set under *Device name*, else
 the model's; a plugin never makes one of its own.
 
+### Bluetooth
+
+Where the device has a Bluetooth Low Energy radio the kernel uses
+(`env.caps().bluetooth`, `env.bluetooth()`: the radio's state and the
+bonded devices), a plugin that says so in its manifest
+(`.uses(Uses::BLUETOOTH)`) sends commands written with
+`paperpaw_sdk::bluetooth` and hears everything about them as its own
+events, each a `BtEvent` (ADR 0027). The kernel switches the radio on for
+the first request and off a little after the last; scans, links and
+advertising end with the screen that asked for them (or with declared
+work, `Work::bluetooth`), and all of them before the device sleeps.
+
+- **Scanning**: `bluetooth::scan(&FOUND).service(Uuid::sig(0x180D))
+  .for_ms(10_000).command()` finds devices in reach (`BtEvent::Found`
+  with a `Device`: its id, name, signal, services and kind), then
+  `BtEvent::ScanEnded`. A plugin hears only what passes its own filters.
+- **A GATT client**: `connect(device, &LINK)`, then `discover(device)`
+  lists the services and their characteristics (`BtEvent::Discovered`;
+  `bluetooth::characteristic(&services, service, characteristic)` finds
+  one), `read`, `write(device, handle, bytes)` (`.without_response()`),
+  `subscribe` to notifications (`BtEvent::Value`), `disconnect`.
+- **Pairing**: `pair(device)` asks the reader, in the kernel's own
+  question, never the plugin's; the device is then bonded and given to
+  the plugin (`BtEvent::Paired`). A plugin sees only devices its scans
+  found and bonded devices the reader gave it; anything else fails with
+  `BtError::NotFound`. Devices are known by a `DeviceId`, never by their
+  address. `forget` and `give` count only as the reader's own doing.
+- **Keys of a remote or a keyboard** need no plugin: once the reader lets
+  a bonded device type (`keys(device)`), its keys are buttons of the key
+  maps, `button.hid.right`, `button.hid.page-down`,
+  `button.hid.volume-up` and so on, bound like the device's own. A
+  plugin that wants the reports themselves asks with
+  `hid_reports(device, &REPORTS)`.
+- **Being seen**: `advertise(&SEEN).name("…").service(uuid).for_ms(…)`,
+  and services of the device's own GATT server declared with
+  `Registrar::add_gatt_service`: centrals' reads (`BtEvent::ReadRequest`,
+  answered with `respond`), writes and subscriptions come as events, and
+  `notify` sends to those subscribed.
+
+Every command is answered: by its result or a `BtEvent::Failed` with a
+`BtError` (`Off`, `NotAllowed`, `NotFound`, `Busy`, `Timeout`,
+`Refused`, `Lost`, `Att(code)`, `Unsupported`). A heart-rate reader:
+
+```rust
+const FOUND: Event<BtEvent> = Event::new("pulse.found");
+const LINK: Event<BtEvent> = Event::new("pulse.link");
+const HEART_RATE: Uuid = Uuid::sig(0x180D);
+const MEASUREMENT: Uuid = Uuid::sig(0x2A37);
+
+r.add_action(ActionSpec::new(START, "pulse.start").handler(|_, _, out| {
+    out.push(bluetooth::scan(&FOUND).service(HEART_RATE).command());
+}))?;
+r.on(FOUND, |_, event: &BtEvent, out| {
+    if let BtEvent::Found(device) = event {
+        out.push(bluetooth::stop_scan(&FOUND));
+        out.push(bluetooth::connect(device.id, &LINK));
+    }
+})?;
+r.on(LINK, |_, event: &BtEvent, out| match event {
+    BtEvent::Connected { device } => out.push(bluetooth::discover(*device)),
+    BtEvent::Discovered { device, services } => {
+        if let Some(c) = bluetooth::characteristic(services, HEART_RATE, MEASUREMENT) {
+            out.push(bluetooth::subscribe(*device, c.handle));
+        }
+    }
+    BtEvent::Value { bytes, .. } if bytes.len() > 1 => {
+        // Flags first; the rate is one byte, or two where flag 0 is set.
+        let bpm = if bytes[0] & 1 == 0 {
+            u16::from(bytes[1])
+        } else {
+            u16::from_le_bytes([bytes[1], *bytes.get(2).unwrap_or(&0)])
+        };
+        out.push(Command::set(&BPM, i64::from(bpm)));
+    }
+    _ => {}
+})?;
+```
+
+The emulator pretends to have Bluetooth for the X4 Pro's profile, with
+made-up devices in reach: `PaperPaw Remote`, a page-turner whose keys a
+script presses with `ble-key:right` (or `left`, `page-down`,
+`volume-up` …) once they go to the key maps, and `Pulse HR`, a
+heart-rate belt that answers the example above, notifying a rate each
+second.
+
 ### Work in the background
 
 What a plugin does on its own, not because the reader just asked for

@@ -3,7 +3,7 @@
 //! may use a radio ([`Capabilities::bluetooth`](crate::Capabilities)).
 //!
 //! A plugin that declares [`Uses::BLUETOOTH`](crate::Uses::BLUETOOTH)
-//! sends [`Command::Bluetooth`](crate::Command::Bluetooth), written with
+//! sends [`Command::Bluetooth`], written with
 //! the functions here, and hears what happens as its own events, each a
 //! [`BtEvent`]: one event for a scan ([`scan`]), one for a link
 //! ([`connect`]), one for being seen ([`advertise`]). Every command is
@@ -13,7 +13,7 @@
 //!   reach ([`BtEvent::Found`]). Several plugins' scans are one scan of
 //!   the radio, each plugin hearing what passes its own filters.
 //! - **A GATT client**: [`connect`], [`discover`] the services and their
-//!   characteristics, [`read`], [`write`], [`subscribe`] to notifications
+//!   characteristics, [`read`], [`write()`], [`subscribe`] to notifications
 //!   ([`BtEvent::Value`]).
 //! - **Pairing** ([`pair`]) is always confirmed by the reader, in the
 //!   kernel's own prompt: a plugin only asks.
@@ -469,7 +469,7 @@ pub enum BtEvent {
         handle: Handle,
         bytes: Vec<u8>,
     },
-    /// A [`write`] with a response was done.
+    /// A [`write()`] with a response was done.
     Written {
         device: DeviceId,
         handle: Handle,
@@ -753,7 +753,7 @@ impl EventData for BtEvent {
     }
 }
 
-/// How a [`write`] is made.
+/// How a [`write()`] is made.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum WriteKind {
@@ -1012,7 +1012,7 @@ pub fn write(device: DeviceId, handle: Handle, bytes: impl Into<Vec<u8>>) -> Wri
     }
 }
 
-/// A [`write`] being written.
+/// A [`write()`] being written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Write {
     device: DeviceId,

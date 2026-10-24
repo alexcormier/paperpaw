@@ -425,6 +425,11 @@ impl Kernel {
         for filter in staging.input_filters.drain(..) {
             self.shared.input_filters.add(filter);
         }
+        for service in staging.gatt_services.drain(..) {
+            if let Some(radio) = &mut self.io.bluetooth {
+                radio.add_service(&service);
+            }
+        }
         for filter in staging.refresh_filters.drain(..) {
             self.shared.refresh_filters.add(filter);
         }

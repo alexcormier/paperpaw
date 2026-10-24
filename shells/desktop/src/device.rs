@@ -188,6 +188,7 @@ pub struct Device {
     pub sockets: paperpaw_serve::Sockets,
     /// The pretend radio, where the profile's device manages Wi-Fi.
     wifi: crate::wifi::Wifi,
+    bluetooth: crate::bluetooth::Bluetooth,
     /// Sleeping (see `Effects::sleep`): only the power button wakes it.
     asleep: bool,
     /// How the screen is turned (see `Kernel::rotation`).
@@ -288,6 +289,7 @@ impl Device {
             servers: servers(),
             sockets: paperpaw_serve::Sockets::new(|| {}),
             wifi: crate::wifi::Wifi::default(),
+            bluetooth: crate::bluetooth::Bluetooth::default(),
             speech: std::collections::VecDeque::new(),
             warnings: Vec::new(),
             fixtures: false,
@@ -344,7 +346,10 @@ impl Device {
     /// the fixtures (answered at once), a tool lets time pass until it
     /// ends, as a reader would wait.
     pub fn network_settling(&self) -> bool {
-        self.http.in_flight > 0 || self.kernel.holds_sleep() || self.wifi.next_due().is_some()
+        self.http.in_flight > 0
+            || self.kernel.holds_sleep()
+            || self.wifi.next_due().is_some()
+            || self.bluetooth.settling()
     }
 
     /// Answers plugins' requests from the emulator's fixtures from now on
@@ -477,6 +482,15 @@ impl Device {
         self.tick_if_due();
     }
 
+    /// The pretend Bluetooth remote's key `name` pressed and let go, where
+    /// its keys go to the key maps (scripts' `ble-key`).
+    pub fn ble_key(&mut self, name: &str) -> bool {
+        let now = self.now();
+        let pressed = self.bluetooth.press(name, now);
+        self.tick_if_due();
+        pressed
+    }
+
     /// Draws the whole screen again, nothing on it changed (scripts'
     /// `redraw`).
     pub fn draw_again(&mut self) {
@@ -553,10 +567,15 @@ impl Device {
             return None;
         }
         let speech = self.speech.front().map(|&(_, end)| end);
-        [self.wake_at, speech, self.wifi.next_due()]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            self.wake_at,
+            speech,
+            self.wifi.next_due(),
+            self.bluetooth.next_due(),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     /// Ticks the kernel if a requested wake-up is due.
@@ -569,6 +588,10 @@ impl Device {
         let now = self.now();
         while let Some(event) = self.wifi.take_due(now) {
             let effects = budget::track(|| self.kernel.wifi_event(now, event));
+            self.execute(effects);
+        }
+        while let Some(report) = self.bluetooth.take_due(now) {
+            let effects = budget::track(|| self.kernel.bluetooth_event(now, report));
             self.execute(effects);
         }
         while let Some(&(id, end)) = self.speech.front()
@@ -723,6 +746,10 @@ impl Device {
                     let now = self.now();
                     self.wifi.apply(call, now);
                 }
+                Io::Bluetooth(call) => {
+                    let now = self.now();
+                    self.bluetooth.apply(call, now);
+                }
                 // The emulator's clipboard is the kernel's own: nothing to
                 // copy to, and it is not asked to read one.
                 Io::Copy(_) => {}
@@ -799,6 +826,7 @@ impl Device {
         self.servers = servers();
         self.sockets = paperpaw_serve::Sockets::new(|| {});
         self.wifi = crate::wifi::Wifi::default();
+        self.bluetooth = crate::bluetooth::Bluetooth::default();
         self.speech.clear();
         // The old kernel goes first, as on the device: a minimal one (one
         // frame row, no plugins) holds its place meanwhile.
@@ -880,6 +908,7 @@ fn build_kernel(
             .colors(profile.colors)
             .network(true)
             .wifi(profile.wifi)
+            .bluetooth(profile.bluetooth)
             .speech(profile.speech)
             .sleep(profile.sleep)
             .button_row(profile.button_row)
