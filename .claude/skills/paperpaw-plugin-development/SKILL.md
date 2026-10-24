@@ -347,7 +347,8 @@ every device's *More plugins*), follow
 [`publishing.md`](publishing.md) in this folder, step by step, with the
 site's guide for authors (<https://paperpaw.org/authors>) as the
 reference for the site's names: what to upload (the folder with
-`store/store.ini`, a code plugin's signed builds and source), the
+`store/store.ini`, a code plugin's signed builds and source, or all of
+it in one store file, as the PaperPaw Workshop makes it), the
 author's signing key, builds the site can rebuild to compare, the
 upload form, updates, every check code with
 its fix, and a final checklist. Its rules for the
