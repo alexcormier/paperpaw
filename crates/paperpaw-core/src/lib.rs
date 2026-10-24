@@ -103,8 +103,9 @@ use crate::keymap::{InputKey, Keymap, Origin, Zone};
 use crate::refresh::RefreshPolicy;
 use crate::registry::{Registry, Staging};
 use crate::screens::uncovered;
+pub use crate::work::NetworkSettings;
 #[doc(hidden)]
-pub use crate::work::fixed_network_plugins;
+pub use crate::work::network_specs_of;
 use paperpaw_sdk::Registrar;
 use paperpaw_sdk::filters::InputVerdict;
 pub use paperpaw_sdk::firmware::{Firmware, FirmwareCommand, FirmwareState, InstallFailure};

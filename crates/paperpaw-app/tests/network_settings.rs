@@ -61,7 +61,10 @@ fn fixed_network_settings_cover_the_plugins() {
         .map(|p| p.manifest.id.as_str())
         .collect();
     networked.sort_unstable();
-    let mut fixed: Vec<&str> = paperpaw_core::fixed_network_plugins().collect();
+    let mut fixed: Vec<&str> = paperpaw_app::NETWORK_SETTINGS
+        .iter()
+        .map(|(p, _)| *p)
+        .collect();
     fixed.sort_unstable();
     assert_eq!(
         networked, fixed,
@@ -72,7 +75,7 @@ fn fixed_network_settings_cover_the_plugins() {
 #[test]
 fn network_settings_keep_their_ids_defaults_and_values() {
     let kernel = app("");
-    for plugin in paperpaw_core::fixed_network_plugins() {
+    for (plugin, _) in paperpaw_app::NETWORK_SETTINGS {
         let network = format!("core.network.{plugin}");
         let saving = format!("core.saving.{plugin}");
         let settings = kernel.settings();

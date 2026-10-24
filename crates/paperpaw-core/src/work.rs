@@ -130,10 +130,10 @@ pub(crate) const SAVING_CHOICES: [&str; 3] = [
     "core.saving.manual",
 ];
 
-/// A networked plugin's two settings: whether it may use the network
+/// The two settings of a networked plugin: whether it may use the network
 /// ([`network_setting`]), and how its work saves energy
 /// ([`saving_setting`]).
-const fn network_specs(network: Id, saving: Id) -> [paperpaw_sdk::SettingSpec; 2] {
+pub(crate) const fn network_specs(network: Id, saving: Id) -> [paperpaw_sdk::SettingSpec; 2] {
     [
         paperpaw_sdk::SettingSpec::new(
             network,
@@ -156,51 +156,33 @@ const fn network_specs(network: Id, saving: Id) -> [paperpaw_sdk::SettingSpec; 2
     ]
 }
 
-/// [`network_specs`] of `plugin`s, kept in the program.
-macro_rules! fixed_network_specs {
+/// The network settings of a plugin, kept in the program: what the
+/// kernel would otherwise make on the heap at every start (two settings,
+/// some hundred and fifty bytes each). Handed to the kernel by who
+/// composes the firmware ([`network_settings!`](crate::network_settings),
+/// [`KernelBuilder::network_settings`](crate::KernelBuilder::network_settings)).
+pub type NetworkSettings = (&'static str, [paperpaw_sdk::SettingSpec; 2]);
+
+/// [`NetworkSettings`] of the plugins named, the same as the kernel makes
+/// for any other networked plugin: e.g.
+/// `static NETWORK: &[NetworkSettings] = network_settings!("my-plugin");`.
+#[macro_export]
+macro_rules! network_settings {
     ($($plugin:literal),* $(,)?) => {
         &[$((
             $plugin,
-            network_specs(
-                Id::new_static(concat!("core.network.", $plugin)),
-                Id::new_static(concat!("core.saving.", $plugin)),
+            $crate::network_specs_of(
+                $crate::sdk::Id::new_static(concat!("core.network.", $plugin)),
+                $crate::sdk::Id::new_static(concat!("core.saving.", $plugin)),
             ),
         )),*]
     };
 }
 
-/// The network settings of the networked plugins PaperPaw comes with,
-/// kept in the program rather than made on the heap at every start (two
-/// settings a plugin, some hundred and fifty bytes each): the same as
-/// those made for any other plugin. A plugin missing here only costs
-/// memory (`fixed_network_settings_cover_the_plugins` in the app's
-/// tests says so).
-static FIXED_NETWORK: &[(&str, [paperpaw_sdk::SettingSpec; 2])] = fixed_network_specs!(
-    "browser",
-    "calibre",
-    "fonts-browser",
-    "joplin",
-    "kosync",
-    "news",
-    "opds",
-    "readwise",
-    "stats",
-    "store",
-    "transfer",
-    "translate",
-    "update",
-    "vocabulary",
-    "wallabag",
-    "weather",
-    "wifi",
-    "wikipedia",
-);
-
-/// The plugins whose network settings are kept in the program
-/// ([`FIXED_NETWORK`]), for the app's tests.
+/// [`network_specs`], for [`network_settings!`](crate::network_settings).
 #[doc(hidden)]
-pub fn fixed_network_plugins() -> impl Iterator<Item = &'static str> {
-    FIXED_NETWORK.iter().map(|(plugin, _)| *plugin)
+pub const fn network_specs_of(network: Id, saving: Id) -> [paperpaw_sdk::SettingSpec; 2] {
+    network_specs(network, saving)
 }
 
 /// The work plugins declared, and the jobs' steps.
@@ -885,7 +867,7 @@ impl Kernel {
     /// The reader's settings for each plugin that uses the network: its
     /// network on or off, and its work in saving modes (ADR 0025), a
     /// part of the group *Network per plugin* each, named as the plugin.
-    pub(crate) fn define_network_settings(&mut self) {
+    pub(crate) fn define_network_settings(&mut self, fixed: &'static [NetworkSettings]) {
         let networked: Vec<String> = self
             .shared
             .plugins
@@ -896,7 +878,7 @@ impl Kernel {
             .map(|p| String::from(p.manifest.id.as_str()))
             .collect();
         for plugin in networked {
-            let defined = match FIXED_NETWORK.iter().find(|(p, _)| *p == plugin) {
+            let defined = match fixed.iter().find(|(p, _)| *p == plugin) {
                 Some((_, specs)) => {
                     (0..specs.len()).try_for_each(|at| self.shared.settings.define_fixed(specs, at))
                 }
