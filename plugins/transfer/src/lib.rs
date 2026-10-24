@@ -456,6 +456,7 @@ fn page(env: &Env<'_>) -> String {
         ("uploading", "transfer.web.uploading"),
         ("done", "transfer.web.done"),
         ("failed", "transfer.web.failed"),
+        ("target", "transfer.web.target"),
     ];
     let mut json = String::from("{");
     for (i, (name, key)) in texts.iter().enumerate() {
@@ -471,6 +472,12 @@ fn page(env: &Env<'_>) -> String {
     json.push_str(&format!(
         ",name:{}",
         served::json_string(&env.device_name())
+    ));
+    // Where it opens: the library's folder.
+    let library = env.settings().read(&paperpaw_sdk::builtin::settings::LIBRARY_FOLDER);
+    json.push_str(&format!(
+        ",library:{}",
+        served::json_string(library.trim_matches('/'))
     ));
     json.push('}');
     PAGE.replace("/*STRINGS*/{}", &json)
