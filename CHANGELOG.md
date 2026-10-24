@@ -21,7 +21,8 @@ change the plugin SDK.
 - Moving through the library and its shelves on the X4 takes a fast
   refresh of the two rows or covers that changed (some 0.6 s), not a
   frame in grays or a full refresh of the screen (1.7 to 2 s). Covers
-  there show in black and white.
+  there show in black and white; a setting (Library › Covers) shows them
+  in gray, finer but slower to move over.
 
 ## [0.5.0-beta.1] - 2026-10-24
 

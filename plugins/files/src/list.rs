@@ -246,6 +246,8 @@ struct Layout {
     area: Rect,
     /// The covers' grid, where books show as covers ([`crate::VIEW`]).
     grid: Option<grid::Grid>,
+    /// Covers in grays ([`crate::COVERS`]).
+    grays: bool,
 }
 
 impl Layout {
@@ -288,6 +290,7 @@ impl Layout {
             filter_row,
             area,
             grid,
+            grays: crate::covers_in_grays(env),
         }
     }
 }
@@ -957,11 +960,12 @@ impl ListScreen {
 }
 
 impl Screen for ListScreen {
-    /// Its covers in black and white: the focus moves over them all the
-    /// time, and after a frame in grays the next change refreshes the
-    /// whole screen (see [`Screen::pictures_in_grays`]).
+    /// Its covers in black and white unless set otherwise
+    /// ([`crate::COVERS`]): the focus moves over them all the time, and
+    /// after a frame in grays the next change refreshes the whole screen
+    /// (see [`Screen::pictures_in_grays`]).
     fn pictures_in_grays(&self) -> bool {
-        false
+        self.layout.grays
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {

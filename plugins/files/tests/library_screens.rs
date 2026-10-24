@@ -226,9 +226,21 @@ fn a_focus_moved_on_a_page_refreshes_its_rows_fast() {
     // the grid along its first row of covers and back.
     let (down, up) = (actions::DOWN, actions::UP);
     let (right, left) = (actions::RIGHT, actions::LEFT);
-    let list = [down.clone(), down.clone(), up.clone(), up.clone(), up.clone()];
+    let list = [
+        down.clone(),
+        down.clone(),
+        up.clone(),
+        up.clone(),
+        up.clone(),
+    ];
     let grid = [right.clone(), right, left.clone(), left, up];
-    for (config, moves) in [("", list), ("[files]\nview = files.view.covers\n", grid)] {
+    // Covers in grays too: a step is no page in grays.
+    let gray = "[files]\nview = files.view.covers\ncovers = files.covers.gray\n";
+    for (config, moves) in [
+        ("", list),
+        ("[files]\nview = files.view.covers\n", grid.clone()),
+        (gray, grid),
+    ] {
         let mut app = library(X4, config, &many(30));
         app.run(down.clone());
         let screen = X4.display;
