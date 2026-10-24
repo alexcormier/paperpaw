@@ -128,6 +128,31 @@ pub fn install(builder: KernelBuilder, fonts: Fonts) -> KernelBuilder {
     install_with(builder, fonts, store)
 }
 
+/// The network settings of every networked first-party plugin, kept in
+/// the program rather than made on the heap at every start (see
+/// [`KernelBuilder::network_settings`]); one missing here only costs
+/// memory (the tests say so).
+pub static NETWORK_SETTINGS: &[paperpaw_core::NetworkSettings] = paperpaw_core::network_settings!(
+    "browser",
+    "calibre",
+    "fonts-browser",
+    "joplin",
+    "kosync",
+    "news",
+    "opds",
+    "readwise",
+    "stats",
+    "store",
+    "transfer",
+    "translate",
+    "update",
+    "vocabulary",
+    "wallabag",
+    "weather",
+    "wifi",
+    "wikipedia",
+);
+
 /// Adds the first-party plugins to `builder`, those the store offers as
 /// files too as `store` says.
 pub fn install_with(
@@ -135,6 +160,7 @@ pub fn install_with(
     fonts: Fonts,
     store: StorePlugins<'_>,
 ) -> KernelBuilder {
+    let builder = builder.network_settings(NETWORK_SETTINGS);
     let builder = match fonts {
         #[cfg(feature = "outline")]
         Fonts::Outline => builder.plugin(paperpaw_plugin_fonts_default::DefaultFonts),
