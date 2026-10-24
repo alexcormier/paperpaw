@@ -8,6 +8,14 @@ change the plugin SDK.
 
 ### Added
 
+- A book downloaded from a catalog (OPDS) shows how far it came: its
+  percent and a bar where the size is known, the bytes so far where not.
+  Back stops the download, and nothing of it is left in the library.
+- SDK: `HttpRequest::progress(&event)` and `HttpProgress` tell a plugin
+  how far a download came (at most every 5 % or 2 seconds, never after
+  the reply); shells report it with `Kernel::http_progress`. Only new
+  items: the plugin interface stays 2.
+
 - The emulator answers the requests of PaperPaw's own plugins offline
   with `--network fixtures`: a small plugin library (a data plugin with a
   long summary, screenshots and a source, a code plugin, a long name),
