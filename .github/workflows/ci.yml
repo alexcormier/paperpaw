@@ -34,6 +34,24 @@ jobs:
       # Builds without runtime font rendering use bitmap font packs.
       - run: cargo test -p paperpaw-text -p paperpaw-plugin-fonts-default --no-default-features
 
+  screens:
+    name: Screens checked (paperpaw-dev)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p paperpaw-dev
+      # Every screen and widget on the X4s and the Boox, offline from the
+      # emulator's fixtures: a text under a row or a control, a part off
+      # the screen and the other errors of `visual` fail the run.
+      - name: Every screen drawn without faults
+        run: target/release/paperpaw-dev visual --quick --network fixtures
+      # Every screen reached with the buttons alone; one that waits for
+      # data the fixtures do not give fails the run.
+      - name: Every screen reached with the buttons alone
+        run: target/release/paperpaw-dev reach --quick --network fixtures
+
   msrv:
     name: Oldest Rust
     runs-on: ubuntu-latest

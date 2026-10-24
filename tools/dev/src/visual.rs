@@ -265,7 +265,7 @@ impl Looker {
     /// does not open by itself (it needs parameters).
     pub fn screen(&self, session: &mut Session, id: &str) -> Result<Option<Looked>, String> {
         cases::home(session);
-        let shown = cases::show_screen(session, id, &[])?;
+        let shown = cases::show_screen(session, id, cases::params(session, id))?;
         if !shown.opened() {
             return Ok(None);
         }

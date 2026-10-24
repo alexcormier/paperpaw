@@ -152,6 +152,20 @@ pub fn some_sizes(grid: (u8, u8)) -> Vec<(u8, u8)> {
     sizes
 }
 
+/// The parameters `screen` is opened with to show it with data: with the
+/// emulator's fixtures, those their plugin opens it with where the
+/// fixtures give its data ([`paperpaw_emulator::offline::SCREENS`]);
+/// else none.
+pub fn params(session: &Session, screen: &str) -> &'static [(&'static str, &'static str)] {
+    if !session.fixtures() {
+        return &[];
+    }
+    paperpaw_emulator::offline::SCREENS
+        .iter()
+        .find(|(id, _)| *id == screen)
+        .map_or(&[], |(_, params)| params)
+}
+
 /// Opens `screen` (with `params`) on the session and shows what is drawn.
 pub fn show_screen(
     session: &mut Session,

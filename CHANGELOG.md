@@ -14,7 +14,14 @@ change the plugin SDK.
   so that the store's screens can be drawn and checked without a
   network, alike everywhere. On the X4 profiles the pretend radio's test
   network is known from the start, so it is joined when a plugin wants
-  the network.
+  the network. Besides the library it answers an OPDS catalog (Project
+  Gutenberg's, with books to download), fonts to download, KOReader's
+  progress sync, the weather, Wikipedia and a news feed.
+- `paperpaw-dev --network fixtures` checks offline with these answers:
+  `visual` draws the screens that show them with their data, and `reach`
+  takes a screen out of reach whose requests went unanswered for an
+  error. `visual.overlap` now also finds a text under a row, a control
+  or another text. CI runs `visual` and `reach` so.
 
 ### Fixed
 

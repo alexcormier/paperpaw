@@ -7,7 +7,9 @@
 //! plugins looked at add:
 //!
 //! - `reach.unreachable`: it could not be reached from the home screen
-//!   with the buttons alone. A screen a setting offers among its choices
+//!   with the buttons alone. With the emulator's fixtures
+//!   (`--network fixtures`), one that asked for data they do not give is
+//!   an error: it waits for data, it is no dead end. A screen a setting offers among its choices
 //!   (a mode of the sleep screen, shown in that one's place) is reached
 //!   through that setting instead: a note (`reach.chosen`) says which.
 //! - `reach.no-close`: back (the button, or what stands for it on a
@@ -335,6 +337,7 @@ impl<'a> Driver<'a> {
             }
         }
         wait(device, STEP_MS);
+        self.session.settle_network();
         if self.session.device.asleep() {
             if let Some(screen) = self.session.screen() {
                 self.asleep.insert(screen);
@@ -1134,21 +1137,38 @@ pub fn check(
                 continue;
             }
             None => {
-                // Pictured opened directly, as a plugin would.
+                // Pictured opened directly, as a plugin would; with the
+                // fixtures, what it asked for that they did not answer.
                 let open = vec![format!("open:{screen}")];
+                let _ = paperpaw_emulator::offline::unanswered();
                 let Some(_) = driver.go(&open, None) else {
                     continue;
                 };
-                let mut unreachable = Finding::warning(
-                    "reach.unreachable",
-                    screen.clone(),
-                    format!(
-                        "It could not be reached from the home screen with the buttons alone \
-                         ({} screens searched, up to {} presses): give it a way in, such as \
-                         a menu entry or a row of another screen.",
-                        found.views, limits.presses
-                    ),
-                );
+                let wanted = paperpaw_emulator::offline::unanswered();
+                let mut unreachable = if context.fixtures && !wanted.is_empty() {
+                    Finding::error(
+                        "reach.unreachable",
+                        screen.clone(),
+                        format!(
+                            "It could not be reached from the home screen with the buttons \
+                             alone, and it asked for data the emulator's fixtures do not give \
+                             ({}): give it an answer in shells/desktop/src/offline.rs, or a way \
+                             in without.",
+                            wanted.join(", ")
+                        ),
+                    )
+                } else {
+                    Finding::warning(
+                        "reach.unreachable",
+                        screen.clone(),
+                        format!(
+                            "It could not be reached from the home screen with the buttons \
+                             alone ({} screens searched, up to {} presses): give it a way in, \
+                             such as a menu entry or a row of another screen.",
+                            found.views, limits.presses
+                        ),
+                    )
+                };
                 if let Some(path) = picture(
                     context,
                     variant,

@@ -62,6 +62,11 @@ OPTIONS:
     --bless               Write the reference pictures anew
     --release <version>   Check compatibility with this PaperPaw release
     --out <dir>           Output folder (default: target/paperpaw-dev)
+    --network <how>       Where plugins' requests go: `real` (the default), or
+                          `fixtures`, answered offline from the emulator's own
+                          (PaperPaw's plugins' servers; others fail), alike
+                          everywhere; then a screen that stays unreachable
+                          while requests went unanswered is an error
     --strict              Warnings fail the run too
     --labels-whole        A label shortened to fit is an error, wherever it ends
                           (`visual`; `ui-kit` checks its strict pages so by itself)
@@ -111,6 +116,9 @@ pub struct Context {
     /// warning, and reported wherever it ends: labels are never cut (the
     /// UI kit's blocks always so checked).
     pub labels_whole: bool,
+    /// Plugins' requests answered from the emulator's fixtures, offline
+    /// (`--network fixtures`), not sent to the network.
+    pub fixtures: bool,
     app_languages: OnceLock<Vec<String>>,
 }
 
@@ -137,6 +145,7 @@ impl Context {
             keep: false,
             in_memory: false,
             labels_whole: false,
+            fixtures: false,
             app_languages: OnceLock::new(),
         }
     }
@@ -397,6 +406,15 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Conte
             "--release" => context.release = Some(value("--release")?),
             "--out" => out = Some(PathBuf::from(value("--out")?)),
             "--strict" => context.strict = true,
+            "--network" => {
+                context.fixtures = match value("--network")?.as_str() {
+                    "real" => false,
+                    "fixtures" => true,
+                    other => {
+                        return Err(format!("--network expects real or fixtures, got `{other}`"));
+                    }
+                };
+            }
             "--labels-whole" => context.labels_whole = true,
             "--verbose" => context.verbose = true,
             "--keep" => context.keep = true,
