@@ -163,7 +163,13 @@ pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
 /// Draws a switch at the right end of `row`: filled with the knob on the
 /// right when `on`, outlined with the knob on the left when off. `inverted`
 /// for a focused (black) row.
-pub(crate) fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool, inverted: bool) {
+pub(crate) fn draw_switch(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    row: Rect,
+    on: bool,
+    inverted: bool,
+) {
     let r = switch_rect(style, row);
     canvas.describe(Role::Switch, "", r).on(Some(on));
     let part = super::look::SwitchPart {

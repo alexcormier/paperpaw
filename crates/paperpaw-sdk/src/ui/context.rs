@@ -72,7 +72,6 @@ impl<'c> Ui<'c> {
         self.font
     }
 
-
     /// The translation of `key`.
     pub fn tr(&self, key: &'c str) -> &'c str {
         self.env.i18n().tr(key)
@@ -137,7 +136,6 @@ impl<'c> Ui<'c> {
         super::draw_heading(&mut self.canvas, self.env, self.style, rect, text);
     }
 
-
     /// A switch in `row`.
     pub fn switch(&mut self, row: Rect, on: bool, inverted: bool) {
         super::draw_switch(&mut self.canvas, self.style, row, on, inverted);
@@ -148,12 +146,10 @@ impl<'c> Ui<'c> {
         super::draw_message(&mut self.canvas, self.env, self.style, area, text);
     }
 
-
     /// A note at the bottom of a screen.
     pub fn note_line(&mut self, area: Rect, text: &str) {
         super::draw_note_line(&mut self.canvas, self.env, self.style, area, text);
     }
-
 
     /// What a screen with nothing to show says.
     pub fn empty(&mut self, area: Rect, icon: &str, title: &str, text: &str) {
@@ -167,7 +163,6 @@ impl<'c> Ui<'c> {
             text,
         );
     }
-
 
     /// A card or frame round `area`; the room inside it.
     pub fn card(&mut self, area: Rect, frame: Frame) -> Rect {
@@ -196,7 +191,6 @@ impl<'c> Ui<'c> {
             ink,
         )
     }
-
 
     /// A screen's header.
     pub fn header(&mut self, area: Rect, title: &str, note: Option<&str>) {

@@ -291,7 +291,12 @@ fn columns_of(area: Rect, count: u16, gap: u16) -> Vec<Rect> {
 /// paints frames ([`look::Painters::frame`](super::look::Painters)), and
 /// returns where its parts go: the style's margin in from its edges
 /// (nothing in for [`Frame::None`]). On a dark card, draw in white.
-pub(crate) fn draw_card(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, frame: Frame) -> Rect {
+pub(crate) fn draw_card(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    area: Rect,
+    frame: Frame,
+) -> Rect {
     paint_frame(canvas, style, area, frame);
     card_inside(style, area, frame)
 }
