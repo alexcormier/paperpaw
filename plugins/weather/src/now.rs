@@ -49,14 +49,16 @@ static SETTINGS: [SettingSpec; 17] = [
         &SYMBOLS,
         SYMBOLS[0],
         ID,
-    ),
+    )
+    .description("weather.setting.symbol.help"),
     SettingSpec::choice(
         "weather.now.placing",
         "weather.setting.placing",
         &PLACINGS,
         PLACINGS[0],
         ID,
-    ),
+    )
+    .description("weather.setting.placing.help"),
     draw::style_spec("weather.now.style", ID),
     widgets::part_spec("weather.now.place", ID, "weather.part.place", true),
     widgets::part_spec("weather.now.condition", ID, "weather.part.condition", true),

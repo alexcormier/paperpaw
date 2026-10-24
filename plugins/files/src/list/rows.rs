@@ -586,9 +586,23 @@ pub(crate) fn draw_book_row(
     book: &Loaded,
     next: bool,
 ) {
+    draw_book(ui, sizes, rect, focused, book, next, Role::Row);
+}
+
+/// [`draw_book_row`], told as `role`: a heading where the book is only
+/// shown (over the actions of its sheet) and no row takes the focus.
+pub(crate) fn draw_book(
+    ui: &mut ui::Ui<'_>,
+    sizes: &Sizes,
+    rect: Rect,
+    focused: bool,
+    book: &Loaded,
+    next: bool,
+    role: Role,
+) {
     let (env, style) = (ui.env(), ui.style());
     ui.canvas()
-        .describe(Role::Row, &book.spoken, rect)
+        .describe(role, &book.spoken, rect)
         .focused(focused);
     if sizes.compact {
         draw_compact_row(ui, sizes, rect, focused, book, next);

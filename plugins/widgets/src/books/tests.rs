@@ -936,6 +936,45 @@ fn titles_break_between_words_only() {
     }
 }
 
+/// Lines made to fit by way of a memo come out as made to fit without one,
+/// the first time (worked out) and the next (recalled), in each room, and
+/// the memo keeps no more than a few rooms.
+#[test]
+fn a_memo_gives_the_lines_made_to_fit_without_one() {
+    use super::{FitMemo, Lines, Role};
+    let h = Harness::new(MemoryStorage::new());
+    let env = h.env();
+    let style = paperpaw_sdk::ui::UiStyle::new(&env);
+    let title = "Alice's Adventures in Wonderland, an Unexpectedly Long Title";
+    let add = |lines: &mut Lines<'_>| {
+        lines.add(Role::Caption, style.small(), "Next up", Color::BLACK);
+        lines.add(Role::Title, style.title(), title, Color::BLACK);
+        lines.add(Role::Note, style.small(), "Ann Author", Color::BLACK);
+    };
+    let said = |lines: &Lines<'_>| {
+        lines
+            .lines
+            .iter()
+            .map(|l| (l.role, l.size.to_bits(), l.text.to_string()))
+            .collect::<Vec<_>>()
+    };
+    let memo = FitMemo::default();
+    for round in 0..2 {
+        for width in [40u16, 90, 180, 400] {
+            for height in [30u16, 60, 120, 240] {
+                let mut plain = Lines::new();
+                add(&mut plain);
+                plain.fit(&env, width, height);
+                let mut memoed = Lines::remembering(&memo);
+                add(&mut memoed);
+                memoed.fit(&env, width, height);
+                assert_eq!(said(&plain), said(&memoed), "{round}: {width}x{height}");
+                assert_eq!(plain.height(&env), memoed.height(&env));
+            }
+        }
+    }
+}
+
 /// A library of one's own gives the widgets its books, none of them on
 /// the card.
 #[test]

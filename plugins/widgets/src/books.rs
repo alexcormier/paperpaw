@@ -30,7 +30,8 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
+use core::fmt::Write as _;
 
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::document::ImageRef;
@@ -339,14 +340,73 @@ pub(crate) struct Lines<'t> {
     /// The title as given, its size and the lines it shows in, while it
     /// shows in more than one.
     title: Option<(f32, Cow<'t, str>, usize)>,
+    /// Where made to fit is kept for the frames that follow, if the
+    /// widget keeps it.
+    memo: Option<&'t FitMemo>,
 }
+
+/// What [`Lines::fit`] made of lines, by the room they had and what they
+/// said: the same lines in the same room need not be worked out in every
+/// frame (measuring a title at one size after another, in more and more
+/// lines, takes long on a small device). Kept by the widget that draws,
+/// a few entries.
+#[derive(Debug, Default)]
+pub(crate) struct FitMemo(RefCell<Vec<Kept>>);
+
+/// One entry of a [`FitMemo`].
+#[derive(Debug)]
+struct Kept {
+    key: String,
+    lines: Vec<Line<'static>>,
+    title: Option<(f32, String, usize)>,
+}
+
+/// The most entries a [`FitMemo`] keeps: the rooms one frame fits lines
+/// in (a layout tried, then drawn).
+const MEMO_ENTRIES: usize = 6;
 
 impl<'t> Lines<'t> {
     pub(crate) fn new() -> Self {
         Self {
             lines: Vec::new(),
             title: None,
+            memo: None,
         }
+    }
+
+    /// Lines made to fit by way of `memo`.
+    pub(crate) fn remembering(memo: &'t FitMemo) -> Self {
+        Self {
+            memo: Some(memo),
+            ..Self::new()
+        }
+    }
+
+    /// What tells that lines fit as before: the room, the sizes and the
+    /// font they are measured by, and the lines.
+    fn key(&self, env: &Env<'_>, width: u16, height: u16) -> String {
+        let style = UiStyle::new(env);
+        let mut key = String::new();
+        let font = style.font(env).map(|f| f.id().clone());
+        let _ = write!(
+            key,
+            "{width}x{height} {} {} {} {:?}",
+            style.small().to_bits(),
+            style.text().to_bits(),
+            style.gap(),
+            font.as_ref().map(paperpaw_sdk::Id::as_str)
+        );
+        for line in &self.lines {
+            let _ = write!(
+                key,
+                "|{:?} {} {:?} {}",
+                line.role,
+                line.size.to_bits(),
+                line.color,
+                line.text
+            );
+        }
+        key
     }
 
     /// Adds a line, if it says anything.
@@ -414,6 +474,55 @@ impl<'t> Lines<'t> {
     /// last, the main lines from the last. The title and the first line
     /// stay. Made again with the same room, nothing changes.
     pub(crate) fn fit(&mut self, env: &Env<'_>, width: u16, height: u16) {
+        let Some(memo) = self.memo else {
+            return self.fit_now(env, width, height);
+        };
+        let key = self.key(env, width, height);
+        let kept = memo.0.borrow();
+        if let Some(entry) = kept.iter().find(|entry| entry.key == key) {
+            self.lines = entry
+                .lines
+                .iter()
+                .map(|line| Line {
+                    size: line.size,
+                    text: Cow::Owned(line.text.to_string()),
+                    color: line.color,
+                    role: line.role,
+                })
+                .collect();
+            self.title = entry
+                .title
+                .as_ref()
+                .map(|(size, text, count)| (*size, Cow::Owned(text.clone()), *count));
+            return;
+        }
+        drop(kept);
+        self.fit_now(env, width, height);
+        let mut kept = memo.0.borrow_mut();
+        if kept.len() >= MEMO_ENTRIES {
+            kept.remove(0);
+        }
+        kept.push(Kept {
+            key,
+            lines: self
+                .lines
+                .iter()
+                .map(|line| Line {
+                    size: line.size,
+                    text: Cow::Owned(line.text.to_string()),
+                    color: line.color,
+                    role: line.role,
+                })
+                .collect(),
+            title: self
+                .title
+                .as_ref()
+                .map(|(size, text, count)| (*size, text.to_string(), *count)),
+        });
+    }
+
+    /// [`fit`](Self::fit), without asking what was kept.
+    fn fit_now(&mut self, env: &Env<'_>, width: u16, height: u16) {
         let style = UiStyle::new(env);
         let Some(font) = style.font(env) else {
             return;

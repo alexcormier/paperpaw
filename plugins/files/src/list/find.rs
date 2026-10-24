@@ -11,6 +11,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
@@ -131,6 +132,10 @@ impl Screen for FindScreen {
         };
         // The search, as a field.
         let focused = self.shown && self.focus == 0;
+        let hint = env.i18n().tr("files.list.find.search");
+        ui.canvas()
+            .describe(Role::Button, hint, self.search)
+            .focused(focused);
         if focused {
             ui.focus(self.search);
         } else {
@@ -144,7 +149,6 @@ impl Screen for FindScreen {
         let size = style.text() * ui::ICON_SCALE;
         let w = ui.icon("search", size, margin, self.search, ink);
         let x = margin + w + style.gap() as f32;
-        let hint = env.i18n().tr("files.list.find.search");
         let faint = style.focus_faint(focused, ui::Ink::Detail);
         ui::Label::new(hint)
             .px(style.text())
@@ -154,6 +158,11 @@ impl Screen for FindScreen {
         let big = style.title() * 1.2;
         for (n, (cell, letter)) in self.cells.iter().zip(&self.letters).enumerate() {
             let focused = self.shown && self.focus == n + 1;
+            let label = [*letter];
+            let text = core::str::from_utf8(&label).unwrap_or("#");
+            ui.canvas()
+                .describe(Role::Button, text, *cell)
+                .focused(focused);
             let ink = if focused {
                 let inner = cell.inset(style.gap() / 3, style.gap() / 3);
                 ui.canvas()
@@ -162,8 +171,6 @@ impl Screen for FindScreen {
             } else {
                 Color::BLACK
             };
-            let label = [*letter];
-            let text = core::str::from_utf8(&label).unwrap_or("#");
             let w = font.measure(big, text);
             let x = f32::from(cell.x) + (f32::from(cell.width) - w) / 2.0;
             ui::Label::new(text)

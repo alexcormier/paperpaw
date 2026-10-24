@@ -91,9 +91,10 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Store {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "More plugins", Version::new(0, 1, 0)).description(
-                "Finds plugins for this device on the internet and installs, updates and removes them.",
-            ).how(&HOW).uses(paperpaw_sdk::Uses::NETWORK)
+        Manifest::new(PLUGIN, "More plugins", Version::new(0, 1, 0))
+            .description("Finds, installs, updates and removes plugins for this device.")
+            .how(&HOW)
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
