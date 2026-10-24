@@ -62,6 +62,10 @@ change the plugin SDK.
   in gray, finer but slower to move over.
 - On the X4, pictures in gray (the sleeping cat, covers) are as dark as
   on the X4 Pro; they were faint.
+- Small changes on the screen (a download's progress, a focus moved, the
+  clock) no longer make the whole screen flash every few times: only
+  page turns count towards Settings › Full refresh, as it says. A book's
+  download refreshes its progress line without a flash, and goes faster.
 
 ## [0.5.0-beta.1] - 2026-10-24
 

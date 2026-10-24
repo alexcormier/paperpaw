@@ -159,7 +159,9 @@ impl Kernel {
                 Some(refresh) => {
                     self.frame.defers = 0;
                     // Counted as done, after the filters.
-                    self.frame.refresh.done(refresh.mode);
+                    self.frame
+                        .refresh
+                        .done(refresh.mode, refresh.region, screen);
                     effects.refresh = Some((refresh.region, refresh.mode));
                     effects.grays = refresh.grays;
                     self.shared.usage.refreshed(refresh.mode, refresh.region);

@@ -2,8 +2,11 @@
 
 use paperpaw_platform::{Rect, RefreshMode};
 
-/// Upgrades every n-th partial refresh to a full refresh of the whole
-/// screen to remove ghosting. It counts the refreshes as they are done
+/// Upgrades every n-th partial refresh of a page (most of the screen, as
+/// a page turned) to a full refresh of the whole screen to remove
+/// ghosting, as the setting says ("after this many page turns"): smaller
+/// ones (a line of progress, a focus moved, the clock) neither count nor
+/// flash. It counts the refreshes as they are done
 /// ([`RefreshPolicy::done`]), after refresh filters changed them: a full
 /// refresh a filter asked for starts the count anew.
 #[derive(Debug, Default)]
@@ -23,7 +26,7 @@ impl RefreshPolicy {
     ) -> (RefreshMode, Rect) {
         match requested {
             RefreshMode::Partial | RefreshMode::Gray
-                if interval > 0 && self.partials + 1 >= interval =>
+                if interval > 0 && is_page(dirty, screen) && self.partials + 1 >= interval =>
             {
                 (RefreshMode::Full, screen)
             }
@@ -37,17 +40,24 @@ impl RefreshPolicy {
         self.partials
     }
 
-    /// A refresh in `mode` was done.
-    pub(crate) fn done(&mut self, mode: RefreshMode) {
+    /// A refresh in `mode` of `region` (of `screen`) was done.
+    pub(crate) fn done(&mut self, mode: RefreshMode, region: Rect, screen: Rect) {
         match mode {
             RefreshMode::Full | RefreshMode::Clear => self.partials = 0,
-            RefreshMode::Partial | RefreshMode::Gray => {
+            RefreshMode::Partial | RefreshMode::Gray if is_page(region, screen) => {
                 self.partials = self.partials.saturating_add(1)
             }
-            // Fast and black and white leave ghosting as they find it.
+            // Smaller ones, fast and black and white leave ghosting as
+            // they find it.
             _ => {}
         }
     }
+}
+
+/// Whether `region` is most of `screen` (half or more): a page.
+fn is_page(region: Rect, screen: Rect) -> bool {
+    let area = |r: Rect| u32::from(r.width) * u32::from(r.height);
+    area(region) * 2 >= area(screen)
 }
 
 #[cfg(test)]
@@ -55,13 +65,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn small_partials_never_flash_nor_count() {
+        let mut policy = RefreshPolicy::default();
+        let screen = Rect::new(0, 0, 480, 800);
+        let line = Rect::new(0, 740, 480, 40);
+        for _ in 0..50 {
+            let (mode, region) = policy.decide(RefreshMode::Partial, line, screen, 6);
+            assert_eq!((mode, region), (RefreshMode::Partial, line));
+            policy.done(mode, region, screen);
+        }
+        assert_eq!(policy.since_full(), 0);
+        // Pages still flash at the interval: the sixth.
+        let page = Rect::new(0, 0, 480, 760);
+        let modes: alloc::vec::Vec<RefreshMode> = (0..6)
+            .map(|_| {
+                let (mode, region) = policy.decide(RefreshMode::Partial, page, screen, 6);
+                policy.done(mode, region, screen);
+                mode
+            })
+            .collect();
+        assert_eq!(modes[..5], [RefreshMode::Partial; 5]);
+        assert_eq!(modes[5], RefreshMode::Full);
+    }
+
+    #[test]
     fn every_nth_partial_becomes_full() {
         let mut policy = RefreshPolicy::default();
-        let dirty = Rect::new(1, 1, 2, 2);
+        let dirty = Rect::new(0, 0, 10, 6);
         let screen = Rect::new(0, 0, 10, 10);
         let modes: [RefreshMode; 4] = core::array::from_fn(|_| {
             let (mode, _) = policy.decide(RefreshMode::Partial, dirty, screen, 3);
-            policy.done(mode);
+            policy.done(mode, screen, screen);
             mode
         });
         assert_eq!(
@@ -80,12 +114,12 @@ mod tests {
         let mut policy = RefreshPolicy::default();
         let r = Rect::new(0, 0, 1, 1);
         for _ in 0..10 {
-            policy.done(RefreshMode::Fast);
+            policy.done(RefreshMode::Fast, r, r);
             assert_eq!(
                 policy.decide(RefreshMode::Fast, r, r, 2).0,
                 RefreshMode::Fast
             );
-            policy.done(RefreshMode::Partial);
+            policy.done(RefreshMode::Partial, r, r);
             assert_eq!(
                 policy.decide(RefreshMode::Partial, r, r, 0).0,
                 RefreshMode::Partial
@@ -99,15 +133,15 @@ mod tests {
     fn the_count_follows_the_refreshes_done() {
         let mut policy = RefreshPolicy::default();
         let r = Rect::new(0, 0, 1, 1);
-        policy.done(RefreshMode::Partial);
-        policy.done(RefreshMode::Full);
+        policy.done(RefreshMode::Partial, r, r);
+        policy.done(RefreshMode::Full, r, r);
         assert_eq!(
             policy.decide(RefreshMode::Partial, r, r, 2).0,
             RefreshMode::Partial
         );
-        policy.done(RefreshMode::Partial);
+        policy.done(RefreshMode::Partial, r, r);
         // The full refresh the policy wanted became partial: still due.
-        policy.done(RefreshMode::Partial);
+        policy.done(RefreshMode::Partial, r, r);
         assert_eq!(
             policy.decide(RefreshMode::Partial, r, r, 2).0,
             RefreshMode::Full

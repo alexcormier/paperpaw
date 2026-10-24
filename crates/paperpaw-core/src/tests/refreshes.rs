@@ -11,6 +11,7 @@ const SHEET: Id = Id::new_static("r.sheet");
 const STATUS: Id = Id::new_static("r.status");
 const EXACT: Id = Id::new_static("r.exact");
 const GRAYS: Id = Id::new_static("r.grays");
+const TURN: Id = Id::new_static("r.turn");
 const LOCK: Id = Id::new_static("r.lock");
 const OPEN: Id = Id::new_static("r.open");
 
@@ -48,6 +49,9 @@ impl Screen for Page {
             cx.set_refresh(RefreshMode::Fast);
         } else if *action == GRAYS {
             cx.request_redraw_area(Rect::new(0, 40, 10, 5));
+        } else if *action == TURN {
+            // A page turned: the whole screen.
+            cx.request_redraw();
         } else if *action == OPEN {
             // A screen opened, said to be a status line.
             cx.refresh_cause(RefreshCause::Status);
@@ -168,10 +172,14 @@ fn the_periodic_full_refresh_says_so() {
         .set_setting(Instant(1), settings::FULL_REFRESH_INTERVAL.as_str(), "2")
         .unwrap();
     render(&mut kernel);
-    kernel.frame.refresh.done(RefreshMode::Clear);
+    let screen = kernel.framebuffer.bounds();
+    kernel
+        .frame
+        .refresh
+        .done(RefreshMode::Clear, screen, screen);
     seen.borrow_mut().clear();
     for at in [10, 20] {
-        kernel.run_action(Instant(at), GRAYS);
+        kernel.run_action(Instant(at), TURN);
         render(&mut kernel);
     }
     let seen = seen.borrow();

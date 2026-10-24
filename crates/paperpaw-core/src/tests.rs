@@ -507,15 +507,14 @@ fn user_settings_are_applied_and_validated() {
     assert!(warnings[0].contains("`b.level`: unknown setting"));
     assert!(warnings[1].contains("`a.level`: invalid value"));
 
-    // Every second partial refresh becomes a full refresh of the screen.
+    // Every second partial refresh of a page would become full; this
+    // small part of the screen never does.
+    assert_eq!(kernel.settings().int("core.full-refresh-interval"), 2);
     kernel.start(Instant(0));
     let first = press(&mut kernel, 100, "page-forward");
     let second = press(&mut kernel, 300, "page-forward");
     assert_eq!(first.refresh().map(|r| r.1), Some(RefreshMode::Partial));
-    assert_eq!(
-        second.refresh(),
-        Some((Rect::new(0, 0, 90, 90), RefreshMode::Full))
-    );
+    assert_eq!(second.refresh().map(|r| r.1), Some(RefreshMode::Partial));
 }
 
 #[test]
