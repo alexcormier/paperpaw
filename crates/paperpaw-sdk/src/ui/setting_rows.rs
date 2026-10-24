@@ -225,9 +225,9 @@ pub(crate) fn value_row_height(
 }
 
 /// The height of a noted row `width` wide with `title`, `value` and
-/// `note` (as [`draw_noted_row`] draws it): a noted row
-/// ([`UiStyle::noted_row`]), taller where the title takes more lines
-/// beside the value; without a note, [`value_row_height`].
+/// `note` (as [`draw_noted_row`] draws it): a noted row as high as its
+/// note needs ([`UiStyle::noted_row_for`]), taller where the title takes
+/// more lines beside the value; without a note, [`value_row_height`].
 pub(crate) fn noted_row_height(
     env: &Env<'_>,
     style: &UiStyle,
@@ -239,7 +239,7 @@ pub(crate) fn noted_row_height(
     if note.is_empty() {
         return value_row_height(env, style, width, title, value);
     }
-    let base = style.noted_row() as u16;
+    let base = style.noted_row_for(env, width, [note]) as u16;
     let Some(font) = style.font(env) else {
         return base;
     };
@@ -250,7 +250,7 @@ pub(crate) fn noted_row_height(
 
 /// The height of a row `width` wide with a switch, `title` and `note` (as
 /// [`draw_switch_row`] draws it): a row ([`UiStyle::row`]) or a noted one
-/// ([`UiStyle::noted_row`]), taller where the title takes more lines
+/// ([`UiStyle::noted_row_for`]), taller where the title takes more lines
 /// beside the switch. Its title is never shortened in a row as high.
 pub(crate) fn switch_row_height(
     env: &Env<'_>,
@@ -263,7 +263,7 @@ pub(crate) fn switch_row_height(
     let base = if note.is_empty() {
         style.row
     } else {
-        style.noted_row()
+        style.noted_row_for(env, width, [note])
     } as u16;
     let Some(font) = style.font(env) else {
         return base;
@@ -305,7 +305,9 @@ pub fn note_fits(env: &Env<'_>, style: &UiStyle, width: u16, note: &str) -> bool
 }
 
 /// Draws the note of a row from `below` down to the end of `rect`: in
-/// small gray text (light on a focused row), wrapped to [`NOTE_LINES`].
+/// small gray text (light on a focused row), wrapped to [`NOTE_LINES`],
+/// or to more in a row higher than [`UiStyle::noted_row`] by them (see
+/// [`UiStyle::noted_row_for`]).
 pub(super) fn draw_note_below(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -333,7 +335,8 @@ pub(super) fn draw_note_below(
     let lines = font.wrap(style.small, note, width);
     // Only as many as the row holds below its title: never past its end.
     let room = (f32::from(at.height) / line) as usize;
-    let most = NOTE_LINES.min(room);
+    let more = (f32::from(rect.height) - style.noted_row() as f32).max(0.0) / line;
+    let most = (NOTE_LINES + (more + 0.5) as usize).min(room);
     // What is drawn, so that what describes the screen sees a cut.
     let mut shown = String::new();
     for (n, range) in lines.iter().take(most).enumerate() {

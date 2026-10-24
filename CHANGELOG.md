@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- SDK: `UiStyle::noted_row_for` makes a list's rows as high as its
+  notes need, up to `NOTE_LINES_MOST` (4) lines, and
+  `ListView::set_row` sizes them anew; a row's note shows as many lines
+  as its row holds.
+
+### Fixed
+
+- At the largest interface text on small screens the notes of About,
+  Keys, News, a catalog's fields, Plugins, Profiles, Cards and Wi-Fi
+  show whole.
+
 ## [0.5.0-beta.3] - 2026-10-24
 
 A beta with fixes from testing beta.2: a press made while a new screen

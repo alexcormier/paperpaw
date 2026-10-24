@@ -3646,6 +3646,7 @@ pub fn paperpaw_sdk::ui::ListView::set_active(&mut self, bool)
 pub fn paperpaw_sdk::ui::ListView::set_area(&mut self, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::ui::ListView::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
+pub fn paperpaw_sdk::ui::ListView::set_row(&mut self, u32)
 pub fn paperpaw_sdk::ui::ListView::set_shown(&mut self, bool)
 pub fn paperpaw_sdk::ui::ListView::shown(&self) -> bool
 pub struct paperpaw_sdk::ui::NumberEdit
@@ -3808,6 +3809,7 @@ pub fn paperpaw_sdk::ui::UiStyle::header_colors(&self) -> (paperpaw_platform::pi
 pub fn paperpaw_sdk::ui::UiStyle::ink(&self, paperpaw_sdk::ui::Ink) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::ui::UiStyle::new(&paperpaw_sdk::Env<'_>) -> Self
 pub fn paperpaw_sdk::ui::UiStyle::noted_row(&self) -> u32
+pub fn paperpaw_sdk::ui::UiStyle::noted_row_for<'n>(&self, &paperpaw_sdk::Env<'_>, u16, impl core::iter::traits::collect::IntoIterator<Item = &'n str>) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::noted_row_of(&self, usize) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::radius(&self, u32) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::size(&self, paperpaw_sdk::ui::TextRole) -> f32
@@ -3846,6 +3848,7 @@ pub fn paperpaw_sdk::ui::UiStyle::with_strong(self, bool) -> Self
 pub fn paperpaw_sdk::ui::UiStyle::with_text(self, f32) -> Self
 pub const paperpaw_sdk::ui::ICON_SCALE: f32
 pub const paperpaw_sdk::ui::NOTE_LINES: usize
+pub const paperpaw_sdk::ui::NOTE_LINES_MOST: usize
 pub fn paperpaw_sdk::ui::address_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str, &str, core::option::Option<&str>) -> u16
 pub fn paperpaw_sdk::ui::button_border(&paperpaw_sdk::ui::UiStyle) -> u32
 pub fn paperpaw_sdk::ui::button_cells(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &[&str], u16) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>

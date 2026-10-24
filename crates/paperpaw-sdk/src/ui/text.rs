@@ -10,6 +10,10 @@ use super::*;
 /// Lines of a row's note, e.g. a setting's description.
 pub const NOTE_LINES: usize = 2;
 
+/// The lines a row's note takes at most, in a row made higher for it
+/// ([`UiStyle::noted_row_for`]).
+pub const NOTE_LINES_MOST: usize = 4;
+
 /// Line height of notes, relative to the small text size.
 pub(super) const NOTE_LINE_HEIGHT: f32 = 1.3;
 

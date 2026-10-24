@@ -441,6 +441,7 @@ const paperpaw_sdk::ui::style::Palette::DEFAULT: paperpaw_sdk::ui::style::Palett
 const paperpaw_sdk::ui::style::UiStyle::PLAIN: paperpaw_sdk::ui::style::UiStyle = UiStyle { text: 20.0, small: 15.0, title: 23.0, head: 23.0, row: 60, control_row: 60, header: 64, margin: 12, gap: 8, line: 2, dark_header: false, corner: 0, strong: false, pill: false, focus: Focus::Fill, separators: Separators::Line, plain_header: false, cards: false, grays: 2, finger: 0, look: super::look::Look::none(), palette: Palette::DEFAULT, }
 const paperpaw_sdk::ui::text::ICON_SCALE: f32 = 1.25f32
 const paperpaw_sdk::ui::text::NOTE_LINES: usize = 2usize
+const paperpaw_sdk::ui::text::NOTE_LINES_MOST: usize = 4usize
 const paperpaw_sdk::version::DATA_FORMATS: u32 = 3u32
 const paperpaw_sdk::version::MAX_PRE_NUMBER: u16 = 8_190u16
 const paperpaw_sdk::version::SDK_VERSION: paperpaw_sdk::version::Version = crate::package_version!()
