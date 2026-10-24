@@ -17,7 +17,7 @@ use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::replies::{HttpProgress, HttpReply, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, Thumbnail, UiStyle};
 use paperpaw_sdk::web::host;
@@ -76,8 +76,8 @@ pub(crate) struct BrowseScreen {
     /// Where searches go, once known.
     template: Option<String>,
     message: Option<String>,
-    /// The title of the book being downloaded, while it is.
-    downloading: Option<String>,
+    /// The book being downloaded, while it is, and how far it came.
+    downloading: Option<Download>,
     /// Covers of the feed's entries, where loaded (on devices with the
     /// memory for them).
     covers: Vec<Option<Thumbnail>>,
@@ -377,7 +377,32 @@ impl BrowseScreen {
             self.status
         };
         ui.canvas().fill(status, Color::WHITE);
-        ui.note_line(status, &text);
+        // A download's bar at the foot of the line, where its size is
+        // known; its text above it.
+        let share = self.downloading.as_ref().and_then(Download::permille);
+        match share {
+            Some(permille) => {
+                let style = *ui.style();
+                let (margin, gap) = (style.margin(), style.gap());
+                let height = (gap / 2).max(3);
+                let bar = Rect::new(
+                    status.x + margin,
+                    (status.bottom() as u16).saturating_sub(gap + height),
+                    status.width.saturating_sub(2 * margin),
+                    height,
+                );
+                let text_area = Rect::new(
+                    status.x,
+                    status.y,
+                    status.width,
+                    bar.y.saturating_sub(status.y),
+                );
+                ui.note_line(text_area, &text);
+                let ink = style.ink(ui::Ink::Text);
+                ui.progress(bar, permille, ink);
+            }
+            None => ui.note_line(status, &text),
+        }
     }
 }
 
@@ -516,6 +541,9 @@ impl Screen for BrowseScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        if let Some(progress) = PROGRESS.read(event, params) {
+            return self.progressed(&progress, cx);
+        }
         let answers: [(&Event<HttpReply>, Answer); 4] = [
             (&LOADED, Self::loaded),
             (&COVER, Self::cover_loaded),

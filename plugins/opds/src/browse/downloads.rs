@@ -8,6 +8,24 @@ use super::*;
 
 pub(super) const DOWNLOADED: Event<HttpReply> = Event::new("opds.downloaded");
 
+/// How far a download came, while it comes.
+pub(super) const PROGRESS: Event<HttpProgress> = Event::new("opds.download-progress");
+
+/// A book being downloaded: its title, and how much came of how much
+/// (where the server said).
+pub(super) struct Download {
+    title: String,
+    received: u64,
+    total: Option<u64>,
+}
+
+impl Download {
+    /// How much came, in thousandths, where the size is known.
+    pub(super) fn permille(&self) -> Option<u16> {
+        HttpProgress::new(self.received, self.total, Params::new()).permille()
+    }
+}
+
 /// Parameter: the file name a download gets.
 pub(super) const NAME: &str = "name";
 
@@ -33,18 +51,25 @@ impl BrowseScreen {
                 .with(NAME, name.clone())
                 .with(params::TITLE, entry.title.clone())
                 .with(AUTHORS, entry.authors.clone());
-            cx.command(Command::http(request(
-                &paperpaw_sdk::web::user_agent_of(cx.env()),
-                &self.catalog,
-                &book.url,
-                self.temp.next("tmp"),
-                &DOWNLOADED,
-                params,
-            )));
+            cx.command(Command::http(
+                request(
+                    &paperpaw_sdk::web::user_agent_of(cx.env()),
+                    &self.catalog,
+                    &book.url,
+                    self.temp.next("tmp"),
+                    &DOWNLOADED,
+                    params,
+                )
+                .progress(&PROGRESS),
+            ));
             let message = env
                 .i18n()
                 .format("opds.downloading", &[("title", Arg::Str(&entry.title))]);
-            self.downloading = Some(entry.title.clone());
+            self.downloading = Some(Download {
+                title: entry.title.clone(),
+                received: 0,
+                total: None,
+            });
             return self.say(message, cx);
         }
         if let Some(url) = entry.feed.clone() {
@@ -52,6 +77,37 @@ impl BrowseScreen {
         }
         let message = env.i18n().tr("opds.no-format").to_string();
         self.say(message, cx);
+    }
+
+    /// How far the download came: its share (or its bytes, where its
+    /// size is not known) in the line below, redrawn there alone.
+    pub(super) fn progressed(&mut self, progress: &HttpProgress, cx: &mut Cx<'_, '_>) {
+        let Some(download) = self.downloading.as_mut() else {
+            return;
+        };
+        download.received = progress.received;
+        download.total = progress.total;
+        let env = *cx.env();
+        let title = Arg::Str(&download.title);
+        let message = match download.permille() {
+            Some(permille) => env.i18n().format(
+                "opds.downloading-share",
+                &[
+                    ("title", title),
+                    ("percent", Arg::Int(i64::from(permille / 10))),
+                ],
+            ),
+            None => {
+                let size = files::size(download.received, env.i18n().tr("opds.decimal"));
+                env.i18n().format(
+                    "opds.downloading-size",
+                    &[("title", title), ("size", Arg::Str(&size))],
+                )
+            }
+        };
+        self.message = Some(message);
+        cx.request_redraw_area(self.status);
+        cx.request_refresh(RefreshMode::Partial);
     }
 
     /// Stops the download going on: its answer is not waited for, and

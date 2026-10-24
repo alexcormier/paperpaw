@@ -16,7 +16,7 @@ use common::{Device, Shared, authorized, catalogs_path};
 use paperpaw_core::HttpCall;
 use paperpaw_plugin_opds::OPEN;
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::{Params, Storage};
+use paperpaw_sdk::{Instant, Params, Storage};
 
 /// The catalog the list starts with.
 const START: &str = "https://www.gutenberg.org/ebooks.opds/";
@@ -150,6 +150,50 @@ fn a_book_is_downloaded_into_the_library() {
     assert!(saved[0].ends_with(".epub"), "{saved:?}");
     let book = format!("Project Gutenberg/{}", saved[0]);
     assert_eq!(browsing.storage.get(&book).unwrap(), b"PK the book");
+}
+
+/// While a book downloads, the line below the feed says how far it came:
+/// its percent and a bar where the size is known, the bytes so far where
+/// not; only that line is drawn again, and Effects ask no more refresh
+/// than a partial one.
+#[test]
+fn a_download_says_how_far_it_came() {
+    let (mut browsing, call) = browse_start();
+    browsing.answer(&call, 200, FEED);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::CONFIRM);
+    let call = browsing.request();
+    assert!(call.progress);
+    let _ = browsing.shown();
+    let effects = browsing
+        .kernel
+        .http_progress(Instant(10_000), call.id, 250, Some(1000));
+    let (area, refresh) = effects.refresh().expect("the line drawn again");
+    assert_ne!(refresh, paperpaw_sdk::RefreshMode::Full);
+    // The line at the foot only, not the feed.
+    assert!(area.y > 600 && area.height < 200, "{area:?}");
+    let shown = browsing.shown();
+    assert!(shown.iter().any(|l| l.contains("25 %")), "{shown:?}");
+    // Without a size: the bytes so far.
+    let (mut browsing, call) = browse_start();
+    browsing.answer(&call, 200, FEED);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::CONFIRM);
+    let call = browsing.request();
+    let _ = browsing
+        .kernel
+        .http_progress(Instant(10_000), call.id, 3 << 20, None);
+    let shown = browsing.shown();
+    assert!(
+        shown.iter().any(|l| l.contains("3.0 MB so far")),
+        "{shown:?}"
+    );
+    // Done: saved as before, and said so.
+    browsing.answer(&call, 200, "PK the book");
+    let shown = browsing.shown();
+    assert!(!shown.iter().any(|l| l.contains("so far")), "{shown:?}");
 }
 
 /// *Back* while a book is downloading stops the download: the feed stays
