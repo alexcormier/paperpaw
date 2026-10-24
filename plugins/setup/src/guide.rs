@@ -92,6 +92,43 @@ fn sample_font<'a>(env: &Env<'a>, style: &UiStyle) -> Option<paperpaw_sdk::FontH
         .or_else(|| style.font(env))
 }
 
+/// The text size (in points) `step`s on from `now`, within `min` and
+/// `max`, that the reading font draws differently from `now`: a font pack
+/// has a few pixel sizes, and the sizes between them come out the same
+/// (on the X4 Pro 9 and 10 points are both 28 pixels). `None` where no
+/// size that way looks different.
+fn next_visible_size(
+    env: &Env<'_>,
+    style: &UiStyle,
+    now: i64,
+    step: i64,
+    (min, max): (i64, i64),
+) -> Option<i64> {
+    let Some(font) = sample_font(env, style) else {
+        return Some((now + step).clamp(min, max.max(min)));
+    };
+    let looks = |points: i64| {
+        let px = env.metrics().pt(points as f32);
+        let height = font.line_metrics(px).line_height;
+        (
+            height.to_bits(),
+            font.measure(px, "Hamburgefonstiv").to_bits(),
+        )
+    };
+    let before = looks(now);
+    let mut points = now;
+    loop {
+        let next = (points + step).clamp(min, max.max(min));
+        if next == points {
+            return None;
+        }
+        points = next;
+        if looks(points) != before {
+            return Some(points);
+        }
+    }
+}
+
 /// The height of the whole sample `text` at `size`, wrapped to `width`.
 fn sample_height(env: &Env<'_>, style: &UiStyle, size: f32, width: u16, text: &str) -> u16 {
     let Some(font) = sample_font(env, style) else {
@@ -436,12 +473,22 @@ impl Guide {
         );
     }
 
-    /// Changes the number by `step`.
+    /// Changes the number by `step`: a text size on to the next one that
+    /// looks different.
     fn change(&mut self, step: i64, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if let Some(spec) = self.setting(&env)
-            && let Some(value) = ui::next_value(&env, spec, step)
-        {
+        let Some(spec) = self.setting(&env) else {
+            return;
+        };
+        let value = match (self.sample_size(&env), &spec.kind) {
+            (Some(_), SettingKind::Int { min, max }) => {
+                let now = env.settings().int(spec.id.as_str());
+                let step = step.saturating_mul(spec.extra().step);
+                next_visible_size(&env, &self.style, now, step, (*min, *max)).map(SettingValue::Int)
+            }
+            _ => ui::next_value(&env, spec, step),
+        };
+        if let Some(value) = value {
             cx.command(Command::SetSetting(spec.id.clone(), value));
             self.redraw(cx, RefreshMode::Fast);
         }
@@ -685,6 +732,25 @@ impl Screen for Guide {
             let spec = self.setting(&env).cloned();
             if *a == actions::NEXT_PAGE || *a == actions::PREV_PAGE {
                 self.edit.finish(&env, spec.as_ref(), true, cx);
+            } else if let (Some(step), Some(spec), Some(_)) = (
+                ui::slider::key_step(a),
+                spec.as_ref(),
+                self.sample_size(&env),
+            ) && let SettingKind::Int { min, max } = spec.kind
+            {
+                // A text size: shown on at the next size that looks
+                // different, as with + and −.
+                let now = env.settings().int(spec.id.as_str());
+                let step = step.saturating_mul(spec.extra().step);
+                if let Some(points) = next_visible_size(&env, &self.style, now, step, (min, max)) {
+                    let value = Some(SettingValue::Int(points));
+                    cx.command(Command::PreviewSettings(alloc::vec![(
+                        spec.id.clone(),
+                        value
+                    )]));
+                }
+                self.redraw(cx, RefreshMode::Fast);
+                return Handled::Yes;
             } else {
                 let handled = self.edit.on_action(&env, spec.as_ref(), a, cx).handled();
                 self.redraw(cx, RefreshMode::Fast);
