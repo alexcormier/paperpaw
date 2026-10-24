@@ -8,8 +8,8 @@ use paperpaw_i18n::Catalog;
 use paperpaw_sdk::collections::VecMap;
 use paperpaw_sdk::{
     ActionSpec, Actions, Contribution, EventHandler, FontSpec, FormatSpec, HyphenationSpec, Id,
-    MenuEntry, Priority, RegisterError, ScreenSpec, SettingGroupSpec, SettingSpec, SlotSpec,
-    StatusItemSpec, StatusLineSpec,
+    MenuEntry, Priority, RegisterError, ScreenSpec, SettingSpec, SlotSpec, StatusItemSpec,
+    StatusLineSpec,
 };
 
 /// A candidate screen for a slot, proposed by a plugin.
@@ -181,7 +181,7 @@ pub(crate) struct Staging {
     pub(crate) ui_looks: Vec<(&'static paperpaw_sdk::ui::look::Painters, Priority)>,
     pub(crate) formats: Vec<FormatSpec>,
     pub(crate) hyphenation: Vec<HyphenationSpec>,
-    pub(crate) setting_groups: Vec<SettingGroupSpec>,
+    pub(crate) setting_groups: Vec<paperpaw_sdk::SettingGroup>,
     /// Events, the plugins that hear them, and their handlers.
     pub(crate) subscriptions: Vec<(Id, Id, EventHandler)>,
     pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionHandler)>,

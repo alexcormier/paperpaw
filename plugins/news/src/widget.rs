@@ -84,7 +84,11 @@ static SETTINGS: [SettingSpec; 9] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&HEADLINES, "news.widget.headlines"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(HEADLINES, "news.widget.headlines");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(HEADLINES, "news.widget.headlines", |_| {

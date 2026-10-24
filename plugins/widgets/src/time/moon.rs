@@ -69,8 +69,11 @@ static SETTINGS: [SettingSpec; 9] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.moon",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.moon");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(super::today_shows),
     )?;
     r.add_settings(&SETTINGS)

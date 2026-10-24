@@ -58,7 +58,11 @@ static SETTINGS: [SettingSpec; 7] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.note"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.note");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.on(TYPED, |_, typed, out| {
         let text = typed.text.trim();

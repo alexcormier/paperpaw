@@ -460,6 +460,11 @@ file to your report.
 
 #### For developers
 
+- SDK: settings groups can be kept in the program too:
+  `SettingGroupSpec`'s builders are `const`, and `add_setting_group`
+  takes `&'static SettingGroupSpec` (a reference, next to no memory) or
+  one made at run time. The kernel's and the plugins' groups are
+  statics; on the X4 the reading flow's heap peak is 2.3 KiB lower.
 - SDK: `SettingSpec` has one builder set, all `const`, so settings are
   declared as `static` lists: `switch`, `number`, `choice`, `text`,
   `language` and `list` take the id, title, default and group;

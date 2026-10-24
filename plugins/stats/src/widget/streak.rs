@@ -86,7 +86,11 @@ static SETTINGS: [SettingSpec; 11] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&STREAK, "stats.widget.streak"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(STREAK, "stats.widget.streak");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(STREAK, "stats.widget.streak", |_| {

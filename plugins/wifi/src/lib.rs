@@ -31,7 +31,7 @@ use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
     Arg, Command, Commands, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
+    ScreenSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -265,11 +265,13 @@ impl Plugin for Wifi {
 
         // The settings, on the group's own page; only where PaperPaw
         // manages Wi-Fi.
-        r.add_setting_group(
-            SettingGroupSpec::new(GROUP, "wifi.title")
-                .order(85)
-                .page(PAGE),
-        )?;
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "wifi.title")
+                    .order(85)
+                    .page(PAGE);
+            &SPEC
+        })?;
         r.add_icon(GROUP, Cow::Borrowed("wifi"))?;
         // Tapped, the Wi-Fi page.
         r.add_status_item(

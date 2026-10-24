@@ -97,8 +97,11 @@ static SETTINGS: [SettingSpec; 9] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.word-clock",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.word-clock");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(shows),
     )?;
     r.add_settings(&SETTINGS)

@@ -72,7 +72,15 @@ static SETTINGS: [SettingSpec; 10] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    add_settings(r, &ID, "widgets.favourites", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.favourites");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     r.add_widget(
         WidgetSpec::new(
             ID,

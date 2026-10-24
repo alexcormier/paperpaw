@@ -36,7 +36,7 @@ use crate::menus::{MenuEntry, MenuNeed, MenuSection};
 use crate::plugin::{Priority, RegisterError, SlotSpec};
 use crate::presets::Preset;
 use crate::screen::{Hints, ScreenSpec};
-use crate::settings::{SettingGroupSpec, SettingSpec};
+use crate::settings::SettingSpec;
 use crate::setup::SetupStepSpec;
 use crate::status::{Place as StatusPlace, StatusItemSpec, StatusLineSpec};
 use crate::widgets::WidgetSpec;
@@ -58,7 +58,7 @@ pub enum Contribution {
     Setting(Box<SettingSpec>),
     /// Settings kept in the program ([`SettingSpec::fixed`]).
     FixedSettings(&'static [SettingSpec]),
-    SettingGroup(SettingGroupSpec),
+    SettingGroup(crate::settings::SettingGroup),
     /// Another default for any plugin's setting (see
     /// [`Registrar::set_setting_default`]).
     #[non_exhaustive]
@@ -815,9 +815,14 @@ impl Registrar {
         self.add(Contribution::ScreenHints { screen, hints })
     }
 
-    /// Adds a group for the settings screen.
-    pub fn add_setting_group(&mut self, group: SettingGroupSpec) -> Result<(), RegisterError> {
-        self.add(Contribution::SettingGroup(group))
+    /// Adds a group for the settings screen: best a `static` one, kept
+    /// by reference (`r.add_setting_group(&GROUP)`), which takes next to
+    /// no memory; one made at run time is kept on the heap.
+    pub fn add_setting_group(
+        &mut self,
+        group: impl Into<crate::settings::SettingGroup>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::SettingGroup(group.into()))
     }
 
     /// Adds a file format.

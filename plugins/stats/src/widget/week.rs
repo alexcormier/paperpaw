@@ -66,7 +66,11 @@ static SETTINGS: [SettingSpec; 9] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&WEEK, "stats.widget.week"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(WEEK, "stats.widget.week");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(WEEK, "stats.widget.week", |_| Box::new(Week::default()))

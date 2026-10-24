@@ -104,7 +104,15 @@ pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(),
         out.push(open(&goto.path));
         out.push(events::GOTO.emit(goto.clone()));
     })?;
-    add_settings(r, &ID, "widgets.highlight", &SETTINGS)?;
+    add_settings(
+        r,
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.highlight");
+            &SPEC
+        },
+        &SETTINGS,
+    )?;
     let kept: Kept = Rc::default();
     let shown = Rc::new(Showings::default());
     let generation = generation.clone();

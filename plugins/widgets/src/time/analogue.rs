@@ -92,8 +92,11 @@ static SETTINGS: [SettingSpec; 9] = [
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
-        &ID,
-        "widgets.analogue-clock",
+        {
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(ID, "widgets.analogue-clock");
+            &SPEC
+        },
         Drawn::new(height, draw).shows(super::minute_shows),
     )?;
     r.add_settings(&SETTINGS)

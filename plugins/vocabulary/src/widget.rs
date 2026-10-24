@@ -131,7 +131,11 @@ static DUE_SETTINGS: [SettingSpec; 5] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&WORD, "vocabulary.widget.word"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(WORD, "vocabulary.widget.word");
+        &SPEC
+    })?;
     r.add_settings(&WORD_SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(WORD, "vocabulary.widget.word", |_| {
@@ -139,7 +143,11 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         })
         .category(widgets::categories::WORDS),
     )?;
-    r.add_setting_group(widgets::settings_group(&SAVED, "vocabulary.widget.saved"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(SAVED, "vocabulary.widget.saved");
+        &SPEC
+    })?;
     r.add_settings(&SAVED_SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(SAVED, "vocabulary.widget.saved", |_| {
@@ -147,7 +155,11 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         })
         .category(widgets::categories::WORDS),
     )?;
-    r.add_setting_group(widgets::settings_group(&DUE, "vocabulary.widget.due"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(DUE, "vocabulary.widget.due");
+        &SPEC
+    })?;
     r.add_settings(&DUE_SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(DUE, "vocabulary.widget.due", |_| Box::new(Due::default()))

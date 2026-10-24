@@ -71,7 +71,11 @@ static SETTINGS: [SettingSpec; 17] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "weather.widget.now"))?;
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(ID, "weather.widget.now");
+        &SPEC
+    })?;
     r.add_settings(&SETTINGS)?;
     let state = state.clone();
     r.add_widget(
