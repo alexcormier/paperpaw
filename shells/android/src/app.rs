@@ -791,6 +791,10 @@ impl Storage for Volumes {
         self.0.size(path)
     }
 
+    fn modified(&self, path: &str) -> Option<i64> {
+        self.0.modified(path)
+    }
+
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         self.0.write(path, data)
     }

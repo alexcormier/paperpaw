@@ -576,7 +576,7 @@ enum paperpaw_sdk::widgets::WidgetInput { Swipe(0: paperpaw_sdk::gesture::Direct
 enum paperpaw_sdk::widgets::grid::What { Widget(0: alloc::string::String), Tool(0: paperpaw_sdk::id::Id) }
 enum paperpaw_sdk::widgets::grid::view::GridResponse { Ignored, Handled, Changed(0: alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>), Editing(0: bool), Button(0: u16), Option { item: paperpaw_sdk::widgets::grid::Item, option: alloc::string::String } }
 enum paperpaw_sdk::widgets::grid::view::Mode { Choose, Move, Resize }
-enum paperpaw_sdk::widgets::grid::view::Target { Run(0: paperpaw_sdk::command::Command, 1: core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::Command>>), Item(0: usize), Button(0: u16) }
+enum paperpaw_sdk::widgets::grid::view::Target { Run(0: alloc::boxed::Box<paperpaw_sdk::command::Command>, 1: core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::Command>>), Item(0: usize), Button(0: u16) }
 enum paperpaw_sdk::widgets::look::Frame { None, Line, Card, Dark }
 enum paperpaw_sdk::widgets::look::Padding { Auto, None, Small, Normal, Large }
 enum paperpaw_sdk::widgets::look::TextSize { Small, Medium, Large, Fit }
@@ -723,7 +723,8 @@ struct paperpaw_sdk::lookup::LookupProviderSpec { id: paperpaw_sdk::id::Id, titl
 struct paperpaw_sdk::lookup::LookupProviders { list: alloc::vec::Vec<paperpaw_sdk::lookup::LookupProviderSpec> }
 struct paperpaw_sdk::lookup::LookupQuery { word: alloc::string::String, language: core::option::Option<alloc::string::String>, reply: paperpaw_sdk::id::Id }
 struct paperpaw_sdk::memory::Memory { read: core::option::Option<fn() -> core::option::Option<paperpaw_sdk::memory::MemoryUse>> }
-struct paperpaw_sdk::memory::MemoryUse { heap_free: u32, heap_size: u32, stack_free: core::option::Option<u32>, stack_size: core::option::Option<u32> }
+struct paperpaw_sdk::memory::MemoryRegion { free: u32, size: u32, external: bool }
+struct paperpaw_sdk::memory::MemoryUse { heap_free: u32, heap_size: u32, stack_free: core::option::Option<u32>, stack_size: core::option::Option<u32>, largest_free: core::option::Option<u32>, regions: [core::option::Option<paperpaw_sdk::memory::MemoryRegion>; 3] }
 struct paperpaw_sdk::memory_storage::MemoryStorage { files: core::cell::RefCell<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<u8>>> }
 struct paperpaw_sdk::menus::ItemState { label: core::option::Option<alloc::borrow::Cow<'static, str>>, checked: core::option::Option<bool>, enabled: bool, shown: bool, badge: core::option::Option<alloc::borrow::Cow<'static, str>> }
 struct paperpaw_sdk::menus::MenuEntry { menu: paperpaw_sdk::id::Id, item: paperpaw_sdk::id::Id, order: i16, place: core::option::Option<paperpaw_sdk::menus::MenuPlace> }

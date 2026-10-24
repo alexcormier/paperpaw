@@ -24,6 +24,42 @@ pub struct MemoryUse {
     pub stack_free: Option<u32>,
     /// The stack's size, where the shell knows it.
     pub stack_size: Option<u32>,
+    /// The largest block the heap could give now, where the shell tells:
+    /// less than [`MemoryUse::heap_free`] where the free memory is in
+    /// pieces. What a large buffer can have at most.
+    pub largest_free: Option<u32>,
+    /// The heap's regions where it has more than one (the X4 Pro's
+    /// internal RAM and PSRAM), the first ones; the rest `None`.
+    pub regions: [Option<MemoryRegion>; 3],
+}
+
+/// A region of the heap, e.g. a device's internal RAM or its PSRAM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct MemoryRegion {
+    /// Bytes of it free now.
+    pub free: u32,
+    pub size: u32,
+    /// Memory outside the chip (PSRAM): larger, slower, not for
+    /// everything.
+    pub external: bool,
+}
+
+impl MemoryRegion {
+    /// `free` bytes of `size`, of internal RAM.
+    pub const fn new(free: u32, size: u32) -> Self {
+        Self {
+            free,
+            size,
+            external: false,
+        }
+    }
+
+    /// Of memory outside the chip (PSRAM).
+    pub const fn external(mut self) -> Self {
+        self.external = true;
+        self
+    }
 }
 
 impl MemoryUse {
@@ -34,6 +70,8 @@ impl MemoryUse {
             heap_size,
             stack_free: None,
             stack_size: None,
+            largest_free: None,
+            regions: [None; 3],
         }
     }
 
@@ -41,6 +79,21 @@ impl MemoryUse {
     pub const fn with_stack(mut self, free: u32, size: u32) -> Self {
         self.stack_free = Some(free);
         self.stack_size = Some(size);
+        self
+    }
+
+    /// With the largest block the heap could give now.
+    pub const fn with_largest_free(mut self, bytes: u32) -> Self {
+        self.largest_free = Some(bytes);
+        self
+    }
+
+    /// With `region` after those given before (three at most; more are
+    /// left out).
+    pub fn with_region(mut self, region: MemoryRegion) -> Self {
+        if let Some(slot) = self.regions.iter_mut().find(|slot| slot.is_none()) {
+            *slot = Some(region);
+        }
         self
     }
 }
@@ -83,14 +136,28 @@ mod tests {
     #[test]
     fn a_probe_is_read_when_asked() {
         fn probe() -> Option<MemoryUse> {
-            Some(MemoryUse {
-                heap_free: 10,
-                heap_size: 20,
-                stack_free: None,
-                stack_size: None,
-            })
+            Some(MemoryUse::new(10, 20))
         }
         assert_eq!(Memory::NONE.read(), None);
         assert_eq!(Memory::new(probe).read().map(|m| m.heap_free), Some(10));
+    }
+
+    #[test]
+    fn regions_go_in_order_three_at_most() {
+        let used = MemoryUse::new(10, 20)
+            .with_largest_free(8)
+            .with_region(MemoryRegion::new(4, 8))
+            .with_region(MemoryRegion::new(6, 12).external());
+        assert_eq!(used.largest_free, Some(8));
+        assert_eq!(
+            used.regions,
+            [
+                Some(MemoryRegion::new(4, 8)),
+                Some(MemoryRegion::new(6, 12).external()),
+                None
+            ]
+        );
+        let full = (0..4).fold(used, |u, i| u.with_region(MemoryRegion::new(i, 9)));
+        assert_eq!(full.regions[2], Some(MemoryRegion::new(0, 9)));
     }
 }

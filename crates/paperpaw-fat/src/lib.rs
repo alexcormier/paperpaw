@@ -528,6 +528,27 @@ fn aside_name<IO: ReadWriteSeek + 'static>(
     Ok(None)
 }
 
+/// A FAT date and time (the device's local time) in seconds since
+/// 1970-01-01, read as UTC.
+fn seconds(at: fatfs::DateTime) -> i64 {
+    let (year, month, day) = (
+        i64::from(at.date.year),
+        i64::from(at.date.month),
+        i64::from(at.date.day),
+    );
+    // Howard Hinnant's days from civil.
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * ((month + 9) % 12) + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    days * 86_400
+        + i64::from(at.time.hour) * 3600
+        + i64::from(at.time.min) * 60
+        + i64::from(at.time.sec)
+}
+
 /// What tells whether file `entry` was changed: a hash of its time,
 /// size and first cluster. The new content of a file is marked with it
 /// ([`fatfs::File::set_mark`]): where the file is no longer so after a
@@ -1251,13 +1272,21 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
                 continue;
             }
             let is_dir = entry.is_dir();
-            visit(DirEntry::new(
-                &name,
-                is_dir,
-                if is_dir { 0 } else { entry.len() },
-            ));
+            let modified = Some(seconds(entry.modified()));
+            visit(
+                DirEntry::new(&name, is_dir, if is_dir { 0 } else { entry.len() })
+                    .with_modified(modified),
+            );
         }
         Ok(())
+    }
+
+    fn modified(&self, path: &str) -> Option<i64> {
+        let path = path.trim_matches('/');
+        check(path).ok()?;
+        let (dir, name) = path.rsplit_once('/').unwrap_or(("", path));
+        let entry = lookup(&self.dir(dir).ok()?, name, false).ok()?.entry?;
+        Some(seconds(entry.modified()))
     }
 
     fn remove(&self, path: &str) -> Result<(), StorageError> {

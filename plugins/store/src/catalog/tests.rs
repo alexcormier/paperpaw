@@ -1,0 +1,471 @@
+use super::*;
+use paperpaw_sdk::MemoryStorage;
+
+const SHA1: &str = "0123456789abcdef0123456789abcdef01234567";
+const SHA256: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const KEY: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+const FILES: [&str; 3] = ["i.txt", "i.bin", "i.head"];
+/// The X4 running a PaperPaw that loads code plugins of this build.
+const X4: Device<'static> = Device {
+    name: "x4",
+    fingerprint: Some(Fingerprint(0x0123_4567_89ab_cdef)),
+    code_file: "code.ppn",
+    plugins: None,
+    sdk: paperpaw_sdk::SDK_VERSION,
+    official: true,
+};
+
+fn plugin(id: &str, group: &str, extra: &str) -> String {
+    format!(
+        r#"{{"id": "{id}", "name": "Name {id}", "summary": "Does {id}.", "group": "{group}",
+  "kind": "data", "author": "A", "licence": "MIT", {extra}
+  "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 30}}}}"#
+    )
+}
+
+/// A build for `device` and `abi`.
+fn build_of(device: &str, abi: &str) -> String {
+    format!(
+        r#"{{"device": "{device}", "abi": "{abi}", "url": "/b/{device}.ppn", "size": 70000, "sha256": "{SHA256}"}}"#
+    )
+}
+
+/// A code plugin with `builds`.
+fn code(id: &str, builds: &[String]) -> String {
+    plugin(id, "reading", &format!(r#""author_key": "{KEY}","#))
+        .replace(r#""kind": "data""#, r#""kind": "code""#)
+        .replace(
+            r#""size": 30}"#,
+            &format!(r#""size": 30, "builds": [{}]}}"#, builds.join(",")),
+        )
+}
+
+fn list(plugins: &[String]) -> MemoryStorage {
+    let text = format!(r#"{{"format": 2, "plugins": [{}]}}"#, plugins.join(","));
+    MemoryStorage::new().with("p.json", text)
+}
+
+/// Plugin `n` of the index built in `storage`.
+fn entry(storage: &MemoryStorage, n: usize) -> Entry {
+    let offset = number_at(storage, "i.bin", n).unwrap();
+    Entry::parse(&line_at(storage, "i.txt", offset).unwrap()).unwrap()
+}
+
+/// The plugins of the list for `device` through the index, in its
+/// order, and its runs of groups.
+fn entries_for(storage: &MemoryStorage, device: &Device<'_>) -> (Vec<Entry>, Vec<(usize, usize)>) {
+    assert!(build(storage, "p.json", FILES, device));
+    let index = Index::open(storage, "i.head").unwrap();
+    let entries = (0..index.len()).map(|n| entry(storage, n)).collect();
+    (entries, index.runs)
+}
+
+fn entries(storage: &MemoryStorage) -> (Vec<Entry>, Vec<(usize, usize)>) {
+    entries_for(storage, &X4)
+}
+
+fn ids(entries: &[Entry]) -> Vec<&str> {
+    entries.iter().map(|e| e.id.as_str()).collect()
+}
+
+#[test]
+fn only_what_fits_is_listed_in_its_order() {
+    let later = format!(r#""formats": {}"#, paperpaw_sdk::DATA_FORMATS + 1);
+    let storage = list(&[
+        plugin("plain", "reading", ""),
+        plugin("built", "reading", r#""built_in": true,"#),
+        plugin("later", "look", "").replace(r#""formats": 1"#, &later),
+        plugin("next-sdk", "look", "").replace(r#""sdk": "0.4""#, r#""sdk": "0.9""#),
+        plugin("Bad_Id", "look", ""),
+        plugin("phone", "look", r#""devices": ["android"],"#),
+        plugin("theme", "look", r#""devices": ["x4", "x4-pro"],"#),
+        plugin("odd", "elsewhere", ""),
+    ]);
+    let (entries, runs) = entries(&storage);
+    assert_eq!(ids(&entries), ["plain", "theme", "odd"]);
+    // Groups as they come, an unknown one under `system`.
+    assert_eq!(runs, [(0, 1), (5, 1), (6, 1)]);
+    assert_eq!(entries[0].summary, "Does plain.");
+    assert_eq!((entries[0].size, entries[0].code), (30, false));
+}
+
+/// PaperPaw's mark is kept with the index, and taken only where the
+/// plugin's key is PaperPaw's own: never from the list's word alone.
+#[test]
+fn only_paperpaws_own_key_makes_a_plugin_official() {
+    let fits = build_of("x4", "0123456789abcdef");
+    let ours = "148ccf3ebc30506b355c6b5cb2baf87d9265606cc6a81f085bb3b9740a95aebd";
+    let official =
+        |plugin: String| plugin.replace(r#""author": "A","#, r#""author": "A", "official": true,"#);
+    let storage = list(&[
+        official(code("own", core::slice::from_ref(&fits)).replace(KEY, ours)),
+        official(code("forged", core::slice::from_ref(&fits))),
+        official(plugin("data", "reading", "")),
+        code("unsaid", core::slice::from_ref(&fits)).replace(KEY, ours),
+    ]);
+    let (entries, _) = entries(&storage);
+    let marked: Vec<(&str, bool)> = entries
+        .iter()
+        .map(|e| (e.id.as_str(), e.official))
+        .collect();
+    assert_eq!(
+        marked,
+        [
+            ("own", true),
+            ("forged", false),
+            ("data", true),
+            ("unsaid", false)
+        ]
+    );
+    assert!(entries[0].code);
+    // From another list, with PaperPaw's key and its word: no mark.
+    let elsewhere = Device {
+        official: false,
+        ..X4
+    };
+    let forged = list(&[
+        official(code("own", core::slice::from_ref(&fits)).replace(KEY, ours)),
+        official(plugin(
+            "data",
+            "reading",
+            &format!(r#""author_key": "{ours}","#),
+        )),
+    ]);
+    let (entries, _) = entries_for(&forged, &elsewhere);
+    assert_eq!(entries.len(), 2);
+    assert!(entries.iter().all(|e| !e.official), "{entries:?}");
+    // Lines an index kept before the mark read as they did.
+    let old = "0\t30\t1\t0\t0\tclock\t1.0.0\t0.4\tA\tMIT\tClock\tTells the time.";
+    let entry = Entry::parse(old).unwrap();
+    assert_eq!((entry.code, entry.official), (true, false));
+    assert_eq!(entry.summary, "Tells the time.");
+}
+
+#[test]
+fn code_plugins_are_listed_where_a_build_fits() {
+    let fits = build_of("x4", "0123456789abcdef");
+    let storage = list(&[
+        code(
+            "clock",
+            &[build_of("x4-pro", "0123456789abcdef"), fits.clone()],
+        ),
+        code("other-build", &[build_of("x4", "fedcba9876543210")]),
+        code("pro-only", &[build_of("x4-pro", "0123456789abcdef")]),
+        code("no-builds", &[]),
+    ]);
+    let (entries, _) = entries(&storage);
+    assert_eq!(ids(&entries), ["clock"]);
+    // Its code counted in, and what it is made for.
+    let clock = &entries[0];
+    assert_eq!(
+        (clock.code, clock.size, clock.sdk.as_str()),
+        (true, 70_030, "0.4")
+    );
+    // A PaperPaw that loads no code plugins lists none.
+    let without = Device {
+        fingerprint: None,
+        code_file: "",
+        ..X4
+    };
+    let storage = list(&[code("clock", &[fits])]);
+    assert!(entries_for(&storage, &without).0.is_empty());
+}
+
+#[test]
+fn many_plugins_take_no_memory_each() {
+    let plugins: Vec<String> = (0..500)
+        .map(|n| plugin(&format!("p{n}"), "look", ""))
+        .collect();
+    let storage = list(&plugins);
+    let (_, runs) = entries(&storage);
+    assert_eq!(runs, [(5, 500)]);
+    assert_eq!(entry(&storage, 499).id, "p499");
+}
+
+#[test]
+fn other_lists_are_not_read() {
+    let storage = MemoryStorage::new().with("p.json", r#"{"format": 1, "plugins": []}"#);
+    assert!(!build(&storage, "p.json", FILES, &X4));
+    assert!(!build(&storage, "missing.json", FILES, &X4));
+    assert!(!storage.exists("i.txt"));
+    assert!(Index::open(&storage, "i.head").is_none());
+}
+
+fn page(files: &str) -> MemoryStorage {
+    page_of(files, "data", "")
+}
+
+fn page_of(files: &str, kind: &str, more: &str) -> MemoryStorage {
+    let text = format!(
+        r#"{{"format": 2, "plugin": {{"id": "airy", "name": "Airy", "summary": "Roomy.",
+  "group": "look", "kind": "{kind}", "author": "A", "licence": "MIT", {more}
+  "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 20, "files": [{files}]{}}}}}}}"#,
+        if kind == "code" {
+            format!(r#", "builds": [{}]"#, build_of("x4", "0123456789abcdef"))
+        } else {
+            String::new()
+        }
+    );
+    MemoryStorage::new().with("a.json", text)
+}
+
+fn file(path: &str) -> String {
+    format!(
+        r#"{{"path": "{path}", "url": "/api/v1/plugins/airy/1.0.0/{path}", "size": 10, "sha1": "{SHA1}"}}"#
+    )
+}
+
+const BASE: &str = "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en";
+
+#[test]
+fn a_plugins_files_come_with_its_page() {
+    let storage = page(&format!("{},{}", file("i18n/de.ini"), file("plugin.ini")));
+    let plugin = read_plugin(&storage, "a.json", &X4, BASE).unwrap();
+    let (entry, package) = (&plugin.entry, &plugin.package);
+    assert_eq!((entry.id.as_str(), entry.name.as_str()), ("airy", "Airy"));
+    assert_eq!(package.plugin, "airy");
+    let urls: Vec<&str> = package.files.iter().map(|f| f.url.as_str()).collect();
+    assert_eq!(
+        urls,
+        [
+            "https://paperpaw.org/api/v1/plugins/airy/1.0.0/i18n/de.ini",
+            "https://paperpaw.org/api/v1/plugins/airy/1.0.0/plugin.ini"
+        ]
+    );
+    assert_eq!(plugin.author_key, None);
+    assert!(matches!(&package.files[0].digest, Digest::Sha1(hex) if hex == SHA1));
+    // Given with its SHA-256 too, a file is checked by that.
+    let both = file("plugin.ini").replace(
+        &format!(r#""sha1": "{SHA1}""#),
+        &format!(r#""sha1": "{SHA1}", "sha256": "{SHA256}""#),
+    );
+    let plugin = read_plugin(&page(&both), "a.json", &X4, BASE).unwrap();
+    assert_eq!(
+        plugin.package.files[0].digest,
+        Digest::Sha256(SHA256.into())
+    );
+}
+
+#[test]
+fn a_code_plugins_page_brings_its_code_and_its_authors_key() {
+    let author = format!(r#""author_key": "{KEY}","#);
+    let storage = page_of(&file("plugin.ini"), "code", &author);
+    let plugin = read_plugin(&storage, "a.json", &X4, BASE).unwrap();
+    let code = plugin.package.files.last().unwrap();
+    assert_eq!(code.path, "code.ppn");
+    assert_eq!(code.url, "https://paperpaw.org/b/x4.ppn");
+    assert_eq!(code.digest, Digest::Sha256(SHA256.into()));
+    assert_eq!(plugin.author_key, Some([0x11; 32]));
+    assert!(plugin.entry.code);
+    // Without the author's key, a code plugin is not offered.
+    let storage = page_of(&file("plugin.ini"), "code", "");
+    assert!(read_plugin(&storage, "a.json", &X4, BASE).is_none());
+}
+
+#[test]
+fn unsafe_files_are_refused() {
+    for bad in ["../evil.ini", "/abs.ini", "a/../../b", ".hidden/x"] {
+        let storage = page(&format!("{},{}", file("plugin.ini"), file(bad)));
+        let read = read_plugin(&storage, "a.json", &X4, "https://x/");
+        assert!(read.is_none(), "{bad}");
+    }
+    let short = file("plugin.ini").replace(SHA1, "abc");
+    assert!(read_plugin(&page(&short), "a.json", &X4, "https://x/").is_none());
+    // No plugin.ini.
+    assert!(read_plugin(&page(&file("theme.ini")), "a.json", &X4, "https://x/").is_none());
+    // More files than a package may have.
+    let many: Vec<String> = (0..=MAX_FILES)
+        .map(|n| file(&format!("f{n}.ini")))
+        .chain([file("plugin.ini")])
+        .collect();
+    assert!(read_plugin(&page(&many.join(",")), "a.json", &X4, "https://x/").is_none());
+}
+
+#[test]
+fn addresses_name_the_device_and_the_language() {
+    let list = "https://paperpaw.org/api/v1/plugins.json";
+    assert_eq!(
+        list_url(list, "x4-pro", "de"),
+        "https://paperpaw.org/api/v1/plugins.json?device=x4-pro&lang=de"
+    );
+    assert_eq!(
+        list_url("https://x/p.json?key=1", "x4", "en"),
+        "https://x/p.json?key=1&device=x4&lang=en"
+    );
+    assert_eq!(
+        plugin_url(list, "x4", "en", "airy"),
+        "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en"
+    );
+    // A library's key goes with its pages.
+    assert_eq!(
+        plugin_url("https://x/lib/p.json?key=1#top", "x4", "en", "airy"),
+        "https://x/lib/plugins/airy.json?key=1&device=x4&lang=en"
+    );
+}
+
+#[test]
+fn searches_find_names_and_summaries() {
+    let storage = list(&[
+        plugin("airy", "look", ""),
+        plugin("dark", "look", "").replace("Does dark.", "Night colours for AIRY rooms."),
+        plugin("keys", "system", ""),
+    ]);
+    let index = take(&storage, "p.json", &X4).unwrap();
+    assert!(!storage.exists("p.json"));
+    assert_eq!(index.search(&storage, " Airy "), 2);
+    assert_eq!((hit(&storage, 0), hit(&storage, 1)), (Some(0), Some(1)));
+    assert_eq!(hit(&storage, 2), None);
+    assert_eq!(index.entry(&storage, 2).unwrap().id, "keys");
+    assert_eq!(index.search(&storage, "nothing"), 0);
+    // A list fetched anew: the hits of the one before go.
+    index.search(&storage, "keys");
+    let storage = storage.with("p.json", r#"{"format": 2, "plugins": []}"#);
+    let index = take(&storage, "p.json", &X4).unwrap();
+    assert_eq!(index.len(), 0);
+    assert_eq!(hit(&storage, 0), None);
+}
+
+#[test]
+fn dates_are_read_as_numbers() {
+    assert_eq!(date("2026-10-07"), 20261007);
+    assert_eq!(date("2026-10-07T12:00:00Z"), 20261007);
+    assert_eq!(date("2024"), 20240101);
+    assert_eq!(date("soon"), 0);
+    assert_eq!(date(""), 0);
+}
+
+#[test]
+fn a_page_tells_its_source_author_and_screenshots() {
+    let more = r#""source": "https://example.org/airy", "author_since": "2024-03-02",
+  "author_plugins": 3, "screenshots": [
+{"url": "s/1.png", "width": 360, "height": 600, "size": 2000},
+{"url": "s/2.webp", "width": 360, "height": 600, "size": 2000},
+{"url": "s/3.JPG?v=2", "width": 360, "height": 600, "size": 2000},
+{"url": "s/4.png", "width": 4000, "height": 600, "size": 2000},
+{"url": "http://example.org/5.jpeg", "width": 10, "height": 10, "size": 20},
+{"url": "s/6.png", "width": 10, "height": 10, "size": 20}],"#;
+    let storage = page_of(&file("plugin.ini"), "data", more);
+    let plugin = read_plugin(&storage, "a.json", &X4, BASE).unwrap();
+    let more = &plugin.more;
+    assert_eq!(more.source, "https://example.org/airy");
+    assert_eq!((more.author_since, more.author_plugins), (20240302, 3));
+    // Data plugins carry no build to check.
+    assert_eq!(more.verified, "");
+    // Only what PaperPaw decodes, not too large, four at most; their
+    // addresses relative to the page's.
+    let shots: Vec<&str> = more.shots.iter().map(|s| s.url.as_str()).collect();
+    assert_eq!(
+        shots,
+        [
+            "https://paperpaw.org/api/v1/plugins/s/1.png",
+            "https://paperpaw.org/api/v1/plugins/s/3.JPG?v=2",
+            "http://example.org/5.jpeg",
+            "https://paperpaw.org/api/v1/plugins/s/6.png"
+        ]
+    );
+    assert_eq!((more.heap, more.image_len), (None, None));
+}
+
+#[test]
+fn a_code_plugins_page_tells_whether_its_build_was_checked() {
+    let author = format!(r#""author_key": "{KEY}", "source": "https://example.org/clock","#);
+    let with = |latest: &str, build: &str| {
+        let storage = page_of(&file("plugin.ini"), "code", &author);
+        let text = paperpaw_sdk::read_file(&storage, "a.json", 1 << 16).unwrap();
+        let text = String::from_utf8(text)
+            .unwrap()
+            .replace(r#""latest": {"#, &format!(r#""latest": {{{latest}"#))
+            .replace(r#""device": "x4","#, &format!(r#""device": "x4", {build}"#));
+        let storage = MemoryStorage::new().with("a.json", text);
+        read_plugin(&storage, "a.json", &X4, BASE).unwrap().more
+    };
+    let more = with(
+        r#""verified": true, "heap": 40000,
+  "source": {"url": "https://example.org/clock/src/tag/v1.0.0"},"#,
+        r#""image_len": 9000, "rebuilt": "matches","#,
+    );
+    assert_eq!(more.verified, "verified");
+    assert_eq!(more.source, "https://example.org/clock/src/tag/v1.0.0");
+    assert_eq!((more.heap, more.image_len), (Some(40000), Some(9000)));
+    let more = with(r#""verified": false,"#, r#""rebuilt": "differs","#);
+    assert_eq!(more.verified, "failed");
+    assert_eq!(more.source, "https://example.org/clock");
+    let more = with(r#""verified": false,"#, r#""rebuilt": "none","#);
+    assert_eq!(more.verified, "unverified");
+}
+
+#[test]
+fn plugins_are_picked_in_the_order_asked() {
+    let dated = |id: &str, added: &str, date: &str| {
+        plugin(id, "look", "")
+            .replace(r#""kind""#, &format!(r#""added": "{added}", "kind""#))
+            .replace(r#""size": 30"#, &format!(r#""size": 30, "date": "{date}""#))
+    };
+    let storage = list(&[
+        dated("a", "2025-01-01", "2026-03-01"),
+        dated("b", "2026-01-01", "2026-01-01"),
+        dated("c", "2025-06-01", "2026-09-01"),
+        plugin("d", "system", ""),
+    ]);
+    let index = take(&storage, "p.json", &X4).unwrap();
+    let picked = |order: Order, most: usize| {
+        let count = index.pick(
+            &storage,
+            |_, e| (e.group == group("look")).then_some(u32::from(e.id == "c")),
+            order,
+            most,
+        );
+        (0..count)
+            .map(|n| index.entry(&storage, hit(&storage, n).unwrap()).unwrap().id)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(picked(Order::Name, usize::MAX), ["a", "b", "c"]);
+    assert_eq!(picked(Order::Name, 2), ["a", "b"]);
+    assert_eq!(picked(Order::Added, usize::MAX), ["b", "c", "a"]);
+    assert_eq!(picked(Order::Added, 1), ["b"]);
+    assert_eq!(picked(Order::Updated, usize::MAX), ["c", "a", "b"]);
+    assert_eq!(picked(Order::Rank, usize::MAX), ["c", "a", "b"]);
+    // Read through the index in one pass, every plugin.
+    let mut ids = Vec::new();
+    index.scan(&storage, &mut |n, e| ids.push((n, e.id)));
+    assert_eq!(ids.len(), 4);
+    assert_eq!(ids[3], (3, String::from("d")));
+}
+
+#[test]
+fn long_lists_are_sorted_in_runs_on_the_storage() {
+    // More plugins than a run holds, their dates in no order, many of
+    // one day.
+    let count = 3 * RUN + 77;
+    let day = |i: usize| 20250101 + ((i * 7919) % 400) as u32;
+    let plugins: Vec<String> = (0..count)
+        .map(|i| {
+            let date = day(i).to_string();
+            let date = format!("{}-{}-{}", &date[..4], &date[4..6], &date[6..]);
+            plugin(&format!("p{i:05}"), "look", "")
+                .replace(r#""kind""#, &format!(r#""added": "{date}", "kind""#))
+        })
+        .collect();
+    let storage = list(&plugins);
+    let index = take(&storage, "p.json", &X4).unwrap();
+    let mut expected: Vec<(u32, u32)> = (0..count).map(|i| (day(i), i as u32)).collect();
+    expected.sort_by(|a, b| order_of(*a, *b));
+    for most in [usize::MAX, RUN + 1, 30] {
+        let picked = index.pick(&storage, |_, _| Some(0), Order::Added, most);
+        let want: Vec<u32> = expected.iter().take(most).map(|(_, n)| *n).collect();
+        assert_eq!(picked, want.len());
+        let got: Vec<u32> = (0..picked)
+            .map(|h| hit(&storage, h).unwrap() as u32)
+            .collect();
+        assert_eq!(got, want, "{most}");
+    }
+    // The runs are gone again.
+    assert!(!storage.exists(&file("sort.bin")));
+}
+
+#[test]
+fn keys_are_read_from_hex() {
+    assert_eq!(key(KEY), Some([0x11; 32]));
+    assert_eq!(key("11"), None);
+    assert_eq!(key(&"zz".repeat(32)), None);
+}
