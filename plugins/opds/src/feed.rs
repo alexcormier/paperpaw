@@ -37,6 +37,9 @@ pub(crate) struct Feed {
     /// The next page of the list.
     pub next: Option<String>,
     pub search: Option<Search>,
+    /// The heap had no room to read all of it: what is here is the part
+    /// before.
+    pub memory: bool,
 }
 
 /// Where a catalog is searched.
@@ -363,7 +366,13 @@ pub(crate) fn read(storage: &dyn Storage, path: &str, base: &str) -> Feed {
         if n == 0 {
             break;
         }
-        tokenizer.feed(&buf[..n], &mut |token| reader.token(token));
+        if tokenizer
+            .try_feed(&buf[..n], &mut |token| reader.token(token))
+            .is_err()
+        {
+            reader.feed.memory = true;
+            return reader.feed;
+        }
         offset += n as u64;
     }
     tokenizer.finish(&mut |token| reader.token(token));
@@ -405,6 +414,7 @@ pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed
     let mut tokenizer = Tokenizer::new();
     let mut buf = [0u8; CHUNK];
     let mut offset = 0;
+    let mut short = false;
     let mut token = |token: Token<'_>| match token {
         Token::Start {
             name, self_closing, ..
@@ -486,10 +496,16 @@ pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed
         if n == 0 {
             break;
         }
-        tokenizer.feed(&buf[..n], &mut token);
+        if tokenizer.try_feed(&buf[..n], &mut token).is_err() {
+            short = true;
+            break;
+        }
         offset += n as u64;
     }
-    tokenizer.finish(&mut token);
+    if !short {
+        tokenizer.finish(&mut token);
+    }
+    feed.memory = short;
     feed.title = own.rsplit('/').next().unwrap_or("").to_string();
     feed.entries
         .sort_by_cached_key(|e| (e.feed.is_none(), e.title.to_lowercase()));
@@ -501,7 +517,8 @@ pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed
 pub(crate) fn search_template(storage: &dyn Storage, path: &str, base: &str) -> Option<String> {
     let data = paperpaw_sdk::read_file(storage, path, 64 * 1024).ok()?;
     let mut template = None;
-    Tokenizer::parse(&data, &mut |token| {
+    let mut tokenizer = Tokenizer::new();
+    let mut emit = |token: Token<'_>| {
         if let Token::Start { name, attrs, .. } = token
             && local_name(name) == "Url"
             && template.is_none()
@@ -510,7 +527,11 @@ pub(crate) fn search_template(storage: &dyn Storage, path: &str, base: &str) -> 
         {
             template = Some(join_url(base, &url));
         }
-    });
+    };
+    // Out of memory: no address, as for a description without one.
+    if tokenizer.try_feed(&data, &mut emit).is_ok() {
+        tokenizer.finish(&mut emit);
+    }
     template
 }
 

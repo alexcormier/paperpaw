@@ -350,8 +350,13 @@ impl Run {
                 let file = kept::file(LOCKS_FILE);
                 let upgrading = locks::upgrading(Service::of(env), env.storage(), &file, now);
                 let _ = env.storage().remove(&file);
-                if upgrading {
-                    return self.end(env, "joplin.upgrading", &[], End::Again, out);
+                match upgrading {
+                    Some(false) => {}
+                    Some(true) => {
+                        return self.end(env, "joplin.upgrading", &[], End::Again, out);
+                    }
+                    // Not known: nothing is written to a target that may be upgrading.
+                    None => return self.end(env, "joplin.no-memory", &[], End::Again, out),
                 }
                 self.find_notebook(env, out);
             }

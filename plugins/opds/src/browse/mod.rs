@@ -237,6 +237,10 @@ impl BrowseScreen {
         }
         let base = reply.final_url.as_deref().unwrap_or(&url).to_string();
         let feed = crate::read_list(&self.catalog, env.storage(), file, &base);
+        if feed.memory {
+            let message = env.i18n().tr("opds.no-memory").to_string();
+            return self.say(message, cx);
+        }
         if feed.entries.is_empty() && feed.title.is_empty() {
             let message = env.i18n().tr("opds.not-a-catalog").to_string();
             return self.say(message, cx);
