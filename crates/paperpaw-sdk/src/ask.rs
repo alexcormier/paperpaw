@@ -1,5 +1,5 @@
 //! Asking the reader for text, a folder, one of a few options or yes or
-//! no, with the answer as a typed event ([`Typed`], [`Chosen`],
+//! no, with the answer as a typed event ([`Typed`], [`FolderChosen`],
 //! [`Picked`], [`Confirmed`]) the plugin hears with
 //! [`Registrar::on`](crate::Registrar::on):
 //!
@@ -32,7 +32,7 @@ use crate::builtin::{params, slots};
 use crate::command::Command;
 use crate::event::Event;
 use crate::params::Params;
-use crate::replies::{Chosen, Confirmed, Typed};
+use crate::replies::{Confirmed, FolderChosen, Typed};
 use crate::ui::choice::Picked;
 
 /// A question for text (see [`text`]).
@@ -113,7 +113,7 @@ pub struct FolderQuestion {
 }
 
 /// Asks for a folder; the answer comes as `reply`.
-pub fn folder(reply: &Event<Chosen>) -> FolderQuestion {
+pub fn folder(reply: &Event<FolderChosen>) -> FolderQuestion {
     FolderQuestion {
         params: Params::new().with(params::REPLY, reply.as_str()),
     }

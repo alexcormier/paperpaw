@@ -15,7 +15,7 @@ use crate::id::Id;
 use crate::menus::{MenuEntry, MenuNeed, MenuSection};
 use crate::plugin::{Priority, SlotSpec};
 use crate::presets::Preset;
-use crate::screen::{Hints, ScreenSpec};
+use crate::screen::{HintVisibility, ScreenSpec};
 use crate::settings::{SettingGroupSpec, SettingSpec};
 use crate::setup::SetupStepSpec;
 use crate::status::{Place as StatusPlace, StatusItemSpec, StatusLineSpec};
@@ -125,7 +125,7 @@ pub enum Contribution {
     #[non_exhaustive]
     ScreenHints {
         screen: Id,
-        hints: Hints,
+        hints: HintVisibility,
     },
     #[non_exhaustive]
     Subscription {

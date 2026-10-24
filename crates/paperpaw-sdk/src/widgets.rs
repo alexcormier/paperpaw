@@ -357,7 +357,7 @@ pub struct WidgetSpec {
     pub previews: Option<Id>,
     /// The cells it takes in a grid ([`WidgetSpec::cells`]); without it,
     /// the grid's width and the rows it needs.
-    pub cells: Option<CellsHint>,
+    pub cells: Option<CellSpan>,
 }
 
 impl WidgetSpec {
@@ -379,7 +379,7 @@ impl WidgetSpec {
 
     /// Takes `cells` in a grid: added, that many; resized, no fewer than
     /// its least.
-    pub fn cells(self, cells: CellsHint) -> Self {
+    pub fn cells(self, cells: CellSpan) -> Self {
         Self {
             cells: Some(cells),
             ..self
@@ -527,7 +527,7 @@ pub fn changed(id: &Id) -> crate::Command {
 /// it is high, in cells (a round clock, an icon).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct CellsHint {
+pub struct CellSpan {
     pub w: u8,
     pub h: u8,
     pub min_w: u8,
@@ -535,7 +535,7 @@ pub struct CellsHint {
     pub square: bool,
 }
 
-impl CellsHint {
+impl CellSpan {
     /// `w` by `h` cells, at least one by one.
     pub const fn new(w: u8, h: u8) -> Self {
         Self {
@@ -869,7 +869,7 @@ impl Widgets {
 
     /// The cells widget `id` takes in a grid, where it says
     /// ([`WidgetSpec::cells`]).
-    pub fn cells(&self, id: &str) -> Option<CellsHint> {
+    pub fn cells(&self, id: &str) -> Option<CellSpan> {
         self.get(id)?.cells
     }
 

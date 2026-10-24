@@ -23,7 +23,7 @@ pub const PDF: Id = Id::new_static("android.pdf");
 pub const VOICE: Setting<Text> = Setting::new("android.voice");
 const VOICE_SCREEN: Id = Id::new_static("android.voice-screen");
 /// The settings for reading aloud, every reader's.
-const ALOUD_SECTION: &str = paperpaw_sdk::builtin::setting_sections::ALOUD;
+const ALOUD_SECTION: &str = paperpaw_sdk::builtin::group_sections::ALOUD;
 /// Frontlight brightness (0 switches it off).
 pub const FRONTLIGHT: Setting<i64> = Setting::new("android.frontlight");
 /// Frontlight colour temperature (higher is warmer).

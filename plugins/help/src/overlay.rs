@@ -13,7 +13,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, params};
-use paperpaw_sdk::help::Hint;
+use paperpaw_sdk::help::HelpHint;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
@@ -43,7 +43,7 @@ impl Overlay {
         let display = env.device.display;
         let whole = Rect::new(0, 0, display.width, display.height);
         let (mut zones, mut lines) = (Vec::new(), Vec::new());
-        for Hint { text, zone, .. } in paperpaw_sdk::help::hints(env, &screen) {
+        for HelpHint { text, zone, .. } in paperpaw_sdk::help::hints(env, &screen) {
             let text = String::from(env.i18n.tr(&text));
             match zone {
                 Some(zone) => zones.push((zone.on(whole), text, Rect::new(0, 0, 0, 0))),

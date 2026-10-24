@@ -209,7 +209,7 @@ pub struct Reader;
 /// eye with sliders.
 mod extras {
     use paperpaw_sdk::SettingExtra;
-    use paperpaw_sdk::builtin::setting_sections::{ALOUD, BEHAVIOUR, FONT};
+    use paperpaw_sdk::builtin::group_sections::{ALOUD, BEHAVIOUR, FONT};
 
     pub(crate) static IN_FONT: SettingExtra = SettingExtra::new().section(FONT);
     pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
@@ -335,7 +335,7 @@ impl Plugin for Reader {
             "",
         )?;
         // The page takes all of the screen; the buttons' row comes on a press.
-        r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::OnPress)?;
+        r.set_screen_hints(SCREEN, paperpaw_sdk::HintVisibility::OnPress)?;
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "reader.title",
@@ -349,15 +349,15 @@ impl Plugin for Reader {
             r,
             SCREEN.as_str(),
             &[
-                help::Hint::touch("reader.help.previous").zone(Zone::new(0, 120, 333, 760)),
-                help::Hint::touch("reader.help.menu").zone(Zone::new(333, 120, 334, 760)),
-                help::Hint::touch("reader.help.next").zone(Zone::new(667, 120, 333, 760)),
-                help::Hint::touch("reader.help.quick"),
-                help::Hint::touch("reader.help.night"),
-                help::Hint::buttons("reader.help.turn"),
-                help::Hint::buttons("reader.help.select"),
-                help::Hint::buttons("reader.help.back"),
-                help::Hint::buttons("reader.help.panel"),
+                help::HelpHint::touch("reader.help.previous").zone(Zone::new(0, 120, 333, 760)),
+                help::HelpHint::touch("reader.help.menu").zone(Zone::new(333, 120, 334, 760)),
+                help::HelpHint::touch("reader.help.next").zone(Zone::new(667, 120, 333, 760)),
+                help::HelpHint::touch("reader.help.quick"),
+                help::HelpHint::touch("reader.help.night"),
+                help::HelpHint::buttons("reader.help.turn"),
+                help::HelpHint::buttons("reader.help.select"),
+                help::HelpHint::buttons("reader.help.back"),
+                help::HelpHint::buttons("reader.help.panel"),
             ],
         )?;
         r.add_reader(paperpaw_sdk::readers::ReaderSpec::new(APP, SCREEN))?;

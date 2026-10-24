@@ -253,10 +253,10 @@ impl Plugin for Vocabulary {
             r,
             review::SCREEN.as_str(),
             &[
-                paperpaw_sdk::help::Hint::any("vocabulary.help.answers"),
-                paperpaw_sdk::help::Hint::touch("vocabulary.help.tap"),
-                paperpaw_sdk::help::Hint::buttons("vocabulary.help.select"),
-                paperpaw_sdk::help::Hint::any("vocabulary.help.back"),
+                paperpaw_sdk::help::HelpHint::any("vocabulary.help.answers"),
+                paperpaw_sdk::help::HelpHint::touch("vocabulary.help.tap"),
+                paperpaw_sdk::help::HelpHint::buttons("vocabulary.help.select"),
+                paperpaw_sdk::help::HelpHint::any("vocabulary.help.back"),
             ],
         )?;
         r.add_screen(ScreenSpec::new(

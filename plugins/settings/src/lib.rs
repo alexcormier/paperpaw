@@ -50,7 +50,7 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events, groups, menus, params, setting_sections, slots};
+use paperpaw_sdk::builtin::{actions, events, group_sections, groups, menus, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice;

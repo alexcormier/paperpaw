@@ -34,7 +34,7 @@ use crate::id::Id;
 use crate::menus::{MenuEntry, MenuNeed, MenuSection};
 use crate::plugin::{Priority, RegisterError, SlotSpec};
 use crate::presets::Preset;
-use crate::screen::{Hints, ScreenSpec};
+use crate::screen::{HintVisibility, ScreenSpec};
 use crate::settings::{SettingGroupSpec, SettingSpec};
 use crate::setup::SetupStepSpec;
 use crate::status::{Place as StatusPlace, StatusItemSpec, StatusLineSpec};
@@ -506,12 +506,12 @@ impl Registrar {
     }
 
     /// When `screen` shows the row of hints for the buttons below it
-    /// ([`Hints::Shown`](crate::Hints) unless set), and so the size it is
+    /// ([`HintVisibility::Shown`](crate::HintVisibility) unless set), and so the size it is
     /// made for.
     pub fn set_screen_hints(
         &mut self,
         screen: impl Into<Id>,
-        hints: Hints,
+        hints: HintVisibility,
     ) -> Result<(), RegisterError> {
         let screen = screen.into();
         self.add_checked(Contribution::ScreenHints { screen, hints })

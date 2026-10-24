@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::event::{Event, EventData};
-use paperpaw_sdk::replies::{Chosen, Typed};
+use paperpaw_sdk::replies::{FolderChosen, Typed};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
@@ -184,7 +184,7 @@ impl FolderChooser {
                     cx.command(Command::SetSetting(id, value));
                 }
                 if let Some((reply, params)) = &self.reply {
-                    let chosen = Chosen::new(self.dir.clone(), params.clone());
+                    let chosen = FolderChosen::new(self.dir.clone(), params.clone());
                     cx.command(Command::Emit(reply.clone(), chosen.to_params()));
                 }
             }

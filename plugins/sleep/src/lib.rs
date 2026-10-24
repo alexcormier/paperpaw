@@ -245,7 +245,7 @@ impl Plugin for Sleep {
             Box::new(|env, params| Box::new(overlay::Picker::new(env, params))),
         ))?;
         // Asleep, the buttons do nothing but wake the device.
-        r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::Hidden)?;
+        r.set_screen_hints(SCREEN, paperpaw_sdk::HintVisibility::Hidden)?;
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "sleep.title",

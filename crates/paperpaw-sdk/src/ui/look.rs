@@ -124,7 +124,7 @@ pub struct HeaderPart {
 /// line that sets it apart; the hints come after.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct HintsPart {
+pub struct HintRowPart {
     pub area: Rect,
 }
 
@@ -177,7 +177,7 @@ pub struct Painters {
     separator: Option<Painter<SeparatorPart>>,
     button: Option<InkPainter<ButtonPart>>,
     header: Option<InkPainter<HeaderPart>>,
-    hints: Option<Painter<HintsPart>>,
+    hints: Option<Painter<HintRowPart>>,
     progress: Option<Painter<ProgressPart>>,
     slider: Option<Painter<SliderPart>>,
     frame: Option<Painter<FramePart>>,
@@ -254,7 +254,7 @@ impl Painters {
         self
     }
 
-    pub const fn hints(mut self, painter: Painter<HintsPart>) -> Self {
+    pub const fn hints(mut self, painter: Painter<HintRowPart>) -> Self {
         self.hints = Some(painter);
         self
     }
@@ -358,7 +358,12 @@ impl Look {
             .and_then(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
-    pub(super) fn hints(&self, canvas: &mut Canvas<'_>, style: &UiStyle, part: HintsPart) -> bool {
+    pub(super) fn hints(
+        &self,
+        canvas: &mut Canvas<'_>,
+        style: &UiStyle,
+        part: HintRowPart,
+    ) -> bool {
         self.0
             .and_then(|p| p.hints)
             .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))

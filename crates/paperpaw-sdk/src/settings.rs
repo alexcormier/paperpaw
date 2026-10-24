@@ -236,7 +236,7 @@ pub struct SettingExtra {
     /// in its steps; with buttons alone it keeps `−` and `+`.
     pub slider: bool,
     /// Translation key of the part of its group it belongs to (e.g.
-    /// [`setting_sections::FONT`](crate::builtin::setting_sections::FONT)),
+    /// [`group_sections::FONT`](crate::builtin::group_sections::FONT)),
     /// shown as a heading above it in large groups.
     pub section: Option<Cow<'static, str>>,
     /// Its part is the name of the plugin its id ends in
@@ -670,7 +670,7 @@ pub struct SettingGroupSpec {
     pub id: Id,
     /// Translation key of the group's name.
     pub title: Cow<'static, str>,
-    /// By order, smallest first; 0 names none (`builtin::settings_sections`).
+    /// By order, smallest first; 0 names none (`builtin::settings_page`).
     pub order: i32,
     /// A screen of the group's plugin shown instead of the generated page
     /// (opened with [`params::ID`](crate::builtin::params::ID), the

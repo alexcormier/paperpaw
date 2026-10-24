@@ -2941,7 +2941,10 @@ impl Plugin for SizedPlugin {
             ))?;
             r.bind_slot(slot, id, Priority::DEFAULT)?;
         }
-        r.set_screen_hints(Id::new_static("sized.reader"), paperpaw_sdk::Hints::OnPress)?;
+        r.set_screen_hints(
+            Id::new_static("sized.reader"),
+            paperpaw_sdk::HintVisibility::OnPress,
+        )?;
         Ok(())
     }
 }

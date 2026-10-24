@@ -197,11 +197,11 @@ impl Plugin for Files {
             r,
             SCREEN.as_str(),
             &[
-                paperpaw_sdk::help::Hint::touch("files.help.open"),
-                paperpaw_sdk::help::Hint::touch("files.help.hold"),
-                paperpaw_sdk::help::Hint::touch("files.help.pages"),
-                paperpaw_sdk::help::Hint::buttons("files.help.choose"),
-                paperpaw_sdk::help::Hint::buttons("files.help.more"),
+                paperpaw_sdk::help::HelpHint::touch("files.help.open"),
+                paperpaw_sdk::help::HelpHint::touch("files.help.hold"),
+                paperpaw_sdk::help::HelpHint::touch("files.help.pages"),
+                paperpaw_sdk::help::HelpHint::buttons("files.help.choose"),
+                paperpaw_sdk::help::HelpHint::buttons("files.help.more"),
             ],
         )?;
         r.add_settings(&SETTINGS)?;

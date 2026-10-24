@@ -84,9 +84,9 @@ use paperpaw_sdk::native::{Native, SafeMode};
 use paperpaw_sdk::setting::{Setting, SettingType};
 use paperpaw_sdk::{
     Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
-    Fonts, Formats, Gesture, GestureKind, Handled, Hints, Hyphenation, Id, Manifest, Menus,
-    Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor,
-    Screen, Settings, ShowsThrough, StatusItems,
+    Fonts, Formats, Gesture, GestureKind, Handled, HintVisibility, Hyphenation, Id, Manifest,
+    Menus, Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError,
+    RequiredFor, Screen, Settings, ShowsThrough, StatusItems,
 };
 
 pub use crate::builder::KernelBuilder;
@@ -311,7 +311,7 @@ struct ActiveScreen {
     /// The slot it was opened for, if any.
     slot: Option<Id>,
     /// Made for the part above the row of hints (when the row shows), as
-    /// it asked ([`Hints::Shown`]).
+    /// it asked ([`HintVisibility::Shown`]).
     hinted: bool,
     /// The part of the screen it is made for and drawn into: all of it
     /// but the bars shown over it and the row of hints (see

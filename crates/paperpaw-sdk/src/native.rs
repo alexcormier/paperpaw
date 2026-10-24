@@ -999,7 +999,7 @@ mod layout {
         crate::widgets::WidgetSpec,
         crate::work::WorkSpec,
         // What trait methods take and give.
-        crate::screen::Hints,
+        crate::screen::HintVisibility,
         crate::screen::Outside,
         crate::screen::ShowsThrough,
         crate::screen::CloseCause,
