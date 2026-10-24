@@ -92,7 +92,7 @@ jobs:
     strategy:
       matrix:
         # The devices the base release has firmware for.
-        device: [x4, x4-pro]
+        device: [x4, x4-pro, x4-classic]
     env:
       DEVICE: ${{ matrix.device }}
     steps:
@@ -110,8 +110,12 @@ jobs:
         run: |
           base="${BASE#v}"
           dir="$RUNNER_TEMP/base"
-          gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" -p "paperpaw-$DEVICE-$base-abi.txt"
-          echo "FINGERPRINT=$(awk 'NR == 1 { print $1 }' "$dir/paperpaw-$DEVICE-$base-abi.txt")" >> "$GITHUB_ENV"
+          # The X4 Classic has the X4 Pro's chip: its plugins are the
+          # Pro's, fingerprint and all, and a release names the Pro's only.
+          abi="$DEVICE"
+          [[ "$DEVICE" == x4-classic ]] && abi=x4-pro
+          gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" -p "paperpaw-$abi-$base-abi.txt"
+          echo "FINGERPRINT=$(awk 'NR == 1 { print $1 }' "$dir/paperpaw-$abi-$base-abi.txt")" >> "$GITHUB_ENV"
           if [[ "$DEVICE" != x4 ]]; then
             gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" \
               -p "paperpaw-xtensa-std-$base.tar.gz" -p "paperpaw-xtensa-std-$base.tar.gz.sha256"
