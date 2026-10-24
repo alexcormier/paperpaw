@@ -118,6 +118,9 @@ pub struct State {
     /// shortest seen, see [`Firmware::refresh`]): the processor sleeps
     /// about that long while the next one goes (on battery).
     refresh_ms: [u64; 3],
+    /// An update was kept after its trial, which started without code
+    /// plugins, and there are some to load: a start at a calm moment.
+    restart_for_code: bool,
 }
 
 impl Firmware {
@@ -157,14 +160,19 @@ impl Firmware {
         if let Some(ota) = &mut self.ota
             && ota.check_trial(now().0)
         {
-            // An update on trial starts without code plugins, so those
-            // fetched for it wait: a start once it is kept installs and
-            // loads them (ADR 0024).
+            // An update on trial starts without code plugins: those
+            // installed before (an update that keeps the fingerprint
+            // fetches none) and those fetched for it wait for a start once
+            // it is kept, which installs and loads them (ADR 0024).
             let native = crate::native::this_firmware();
-            if !paperpaw_sdk::native::fetched_for(self.kernel.storage(), &native).is_empty() {
-                info!("native: the update is kept; restarting for the plugins fetched for it");
-                self.restart();
-            }
+            self.state.restart_for_code =
+                paperpaw_core::code_to_load(self.kernel.storage(), &native);
+        }
+        // At a calm moment: at once, unless a book is open, then once it
+        // is left. A sleep on battery before is a start too.
+        if self.state.restart_for_code && !self.reading() {
+            info!("native: the update is kept; restarting to load the code plugins");
+            self.restart();
         }
         let installing = self.installing();
         if self.state.sleep && !installing {
@@ -300,6 +308,14 @@ impl Firmware {
 
     /// Restarts the X4 once what plugins keep is saved and all written
     /// is on the card (the kernel's stop writes it back): no sleep.
+    /// Whether a book is open in the reader, shown now.
+    fn reading(&self) -> bool {
+        // The reader plugin's screen (`paperpaw_plugin_reader::SCREEN`).
+        self.kernel
+            .active_screen()
+            .is_some_and(|screen| screen.as_str() == "reader.screen")
+    }
+
     fn restart(&mut self) -> ! {
         info!("restarting");
         self.pause_trial();

@@ -18,6 +18,11 @@ change the plugin SDK.
 - At the largest interface text on small screens the notes of About,
   Keys, News, a catalog's fields, Plugins, Profiles, Cards and Wi-Fi
   show whole.
+- After an update over the air the plugins installed from the store
+  (statistics, widgets, the syncs) work again by themselves: once the
+  update ran its 30 seconds of trial, which go without them, the X4s
+  start again, at once or once the book open is left. Before, an update
+  that kept the plugins' builds left them off until the next start.
 
 ## [0.5.0-beta.3] - 2026-10-24
 

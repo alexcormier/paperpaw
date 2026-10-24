@@ -90,7 +90,7 @@ use paperpaw_sdk::{
 };
 
 pub use crate::builder::KernelBuilder;
-pub use crate::code_plugin::{CodeFile, CodeLoader};
+pub use crate::code_plugin::{CodeFile, CodeLoader, code_to_load};
 use crate::config::{mono_coverage, plugin_switches, read_config};
 use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};

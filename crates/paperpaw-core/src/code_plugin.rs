@@ -50,6 +50,31 @@ pub(crate) fn fetched(storage: &dyn Storage, native: &Native) -> Vec<(Id, String
         .collect()
 }
 
+/// Whether a start with code plugins would load any that fit `native`:
+/// one installed (a folder of [`PLUGIN_DIR`](paperpaw_sdk::builtin::PLUGIN_DIR)
+/// with its code) or fetched for a firmware update. A start without them
+/// (an update on trial) asks it once the update is kept: if so, the shell
+/// starts again for them.
+pub fn code_to_load(storage: &dyn Storage, native: &Native) -> bool {
+    if !paperpaw_sdk::native::fetched_for(storage, native).is_empty() {
+        return true;
+    }
+    let mut folders: Vec<String> = Vec::new();
+    let _ = storage.list(paperpaw_sdk::builtin::PLUGIN_DIR, &mut |entry| {
+        if entry.is_dir && !entry.name.starts_with('.') {
+            folders.push(format!(
+                "{}/{}",
+                paperpaw_sdk::builtin::PLUGIN_DIR,
+                entry.name
+            ));
+        }
+    });
+    folders.iter().any(|folder| {
+        paperpaw_sdk::native::read_header(storage, &native.path(folder))
+            .is_some_and(|header| native.fits(&header))
+    })
+}
+
 /// What loads the code of code plugins: the shell's, which knows where it
 /// can run.
 pub trait CodeLoader {
@@ -861,5 +886,39 @@ version = 2.0.0
         let mut other = Native::new("code.ppn");
         other.fingerprint.0 ^= 1;
         assert!(paperpaw_sdk::native::fetched_for(storage, &other).is_empty());
+        assert!(super::code_to_load(storage, &native));
+        assert!(!super::code_to_load(storage, &other));
+    }
+
+    /// An update that keeps the fingerprint fetches nothing: the code
+    /// installed before still fits, and a start once the update is kept
+    /// loads it (the trial's start went without).
+    #[test]
+    fn code_installed_that_fits_is_code_to_load() {
+        let native = Native::new("code.ppn");
+        let plugins = storage().with(
+            "plugins/stats/plugin.ini",
+            "[plugin]\nid = stats\nname = Statistics\nversion = 1.0.0\n",
+        );
+        assert!(!super::code_to_load(&plugins, &native));
+        plugins
+            .write(
+                "plugins/stats/code.ppn",
+                &code_file(native.fingerprint.0, installed("stats")),
+            )
+            .unwrap();
+        assert!(super::code_to_load(&plugins, &native));
+        let mut other = Native::new("code.ppn");
+        other.fingerprint.0 ^= 1;
+        assert!(!super::code_to_load(&plugins, &other));
+        // A folder being installed or put aside is not one to load.
+        let aside = storage().with("plugins/.stats.old/code.ppn", "");
+        aside
+            .write(
+                "plugins/.stats.old/code.ppn",
+                &code_file(native.fingerprint.0, installed("stats")),
+            )
+            .unwrap();
+        assert!(!super::code_to_load(&aside, &native));
     }
 }
