@@ -1,9 +1,10 @@
 //! The first-run setup's offer of the plugins most readers add (ADR
 //! 0024, the lean firmware): a step after Wi-Fi with a few of PaperPaw's
-//! own plugins, each with a switch, all off; *Add* installs those chosen,
-//! and so does leaving the page with some chosen (*Back*, the header's
-//! arrow): the switches are the choice, as everywhere else. The setup's
-//! card for the step says what became of them.
+//! own plugins, each with a switch, all off. *Done* goes back to the
+//! setup and installs those chosen, and so does leaving the page with
+//! *Back* or the header's arrow: the switches are the choice, as
+//! everywhere else. The setup's card for the step says what became of
+//! them.
 //!
 //! Where PaperPaw loads code plugins (the X4, the X4 Pro) they are
 //! fetched from the plugin library one after another in the background,
@@ -111,11 +112,11 @@ struct OfferScreen {
     style: UiStyle,
     header: ui::Header,
     list: ListView,
-    /// The bar at the bottom: what *Add* does, and the button.
+    /// The bar at the bottom: the hint, and *Done*.
     bar: Rect,
     /// The focus is on the button.
     on_button: bool,
-    /// Those chosen were added (*Add*, or the page left): not again.
+    /// Those chosen were added (*Done*, or the page left): not again.
     added: bool,
 }
 
@@ -163,13 +164,10 @@ impl OfferScreen {
             .collect()
     }
 
-    /// The *Add* button, once something is chosen.
+    /// The *Done* button, always there: the plain way back to the setup.
     fn button(&self, env: &Env<'_>) -> Option<Rect> {
-        if self.chosen().is_empty() {
-            return None;
-        }
         let font = self.style.font(env)?;
-        let label = env.i18n().tr("store.offer.add");
+        let label = env.i18n().tr("store.offer.finish");
         let pad = self.style.margin();
         let width = font.measure(self.style.text(), label) as u16 + 2 * pad;
         let band = ui::edge_bar_band(&self.style, self.bar, false);
@@ -193,9 +191,11 @@ impl OfferScreen {
         }
     }
 
-    /// Adds the plugins chosen and goes back to the setup.
-    fn add(&mut self, cx: &mut Cx<'_, '_>) {
-        self.add_chosen(cx);
+    /// Adds the plugins chosen, if any, and goes back to the setup.
+    fn done(&mut self, cx: &mut Cx<'_, '_>) {
+        if !self.chosen().is_empty() {
+            self.add_chosen(cx);
+        }
         cx.command(Command::Back);
     }
 
@@ -269,12 +269,12 @@ impl Screen for OfferScreen {
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
         ui.canvas().fill(line, Color::gray(150));
         if let Some(button) = button {
-            let label = env.i18n().tr("store.offer.add");
+            let label = env.i18n().tr("store.offer.finish");
             ui.button(button, label, true, self.on_button);
         }
         // How to choose; once some are chosen, that they are added on
         // going on. Beside the button, on two lines where one is short.
-        let hint = if button.is_some() {
+        let hint = if !self.chosen().is_empty() {
             env.i18n().tr("store.offer.hint.chosen")
         } else {
             ui::tr_input(env, "store.offer.hint")
@@ -301,7 +301,7 @@ impl Screen for OfferScreen {
         let forward = [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a);
         if self.on_button {
             if *a == actions::CONFIRM {
-                self.add(cx);
+                self.done(cx);
             } else if back {
                 self.on_button = false;
                 Self::redraw(cx);
@@ -330,7 +330,7 @@ impl Screen for OfferScreen {
     }
 
     /// Left with plugins chosen (*Back*, the header's arrow): they are
-    /// added as *Add* would.
+    /// added as *Done* adds them.
     fn on_close_request(&mut self, _: CloseCause, cx: &mut Cx<'_, '_>) -> Handled {
         if !self.chosen().is_empty() {
             self.add_chosen(cx);
@@ -349,7 +349,7 @@ impl Screen for OfferScreen {
             return Handled::Yes;
         }
         if self.button(&env).is_some_and(|b| b.contains(gesture.start)) {
-            self.add(cx);
+            self.done(cx);
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {
