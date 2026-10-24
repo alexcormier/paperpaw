@@ -53,6 +53,9 @@ const PHONE_SCREEN: Id = Id::new_static("transfer.phone");
 /// Transfer over the cable (USB).
 pub(crate) const CABLE_SCREEN: Id = Id::new_static("transfer.cable");
 
+/// The most books of a folder moved whose data is told to go along (as
+/// the file manager does); the catalog is made anew past them.
+const MAX_TOLD: usize = 2000;
 /// The port asked for; the next free one is taken if it is in use.
 pub(crate) const PORT: u16 = 8080;
 /// Without a request this long, the reader's own network closes (and
@@ -322,25 +325,7 @@ impl TransferScreen {
                 let (response, done) = web::answer(env.storage(), guard, &self.page, request);
                 cx.command(Command::respond(response));
                 if let Some(done) = done {
-                    // The library follows: a book added, a book removed (what
-                    // plugins keep for it goes too), a folder removed (its
-                    // books' files only: the reader's places and notes in
-                    // them stay, the catalog is made anew).
-                    match &done {
-                        web::Done::Received(path) => {
-                            cx.command(paperpaw_sdk::library::added(path, "transfer"));
-                        }
-                        web::Done::Deleted(path) => {
-                            let removed = events::BookRemoved::new(path.clone());
-                            cx.command(events::BOOK_REMOVED.emit(removed));
-                            cx.command(paperpaw_sdk::library::changed());
-                        }
-                        web::Done::DeletedFolder(_) => {
-                            cx.command(paperpaw_sdk::library::request_catalog_anew());
-                            cx.command(paperpaw_sdk::library::changed());
-                        }
-                        web::Done::Folder(_) | web::Done::Sent(_) | web::Done::NotReceived(_) => {}
-                    }
+                    library_follows(&env, &done, cx);
                     let (key, name) = match &done {
                         web::Done::Received(path) => {
                             ("transfer.received", paperpaw_sdk::files::name(path))
@@ -349,6 +334,9 @@ impl TransferScreen {
                         web::Done::Folder(name) => ("transfer.folder", name.as_str()),
                         web::Done::Deleted(path) | web::Done::DeletedFolder(path) => {
                             ("transfer.deleted", paperpaw_sdk::files::name(path))
+                        }
+                        web::Done::Moved(_, to) => {
+                            ("transfer.moved", paperpaw_sdk::files::name(to))
                         }
                         web::Done::NotReceived(name) => ("transfer.not-received", name.as_str()),
                     };
@@ -441,6 +429,38 @@ pub(crate) fn no_random(env: &Env<'_>) -> String {
     env.i18n().tr("transfer.no-random").into()
 }
 
+/// The library follows what a request did: a book added, a book removed
+/// (what plugins keep for it goes too), a folder removed (its books'
+/// files only: the reader's places and notes in them stay, the catalog is
+/// made anew), a book or folder moved (what is kept for its books goes
+/// along).
+fn library_follows(env: &Env<'_>, done: &web::Done, cx: &mut Cx<'_, '_>) {
+    match done {
+        web::Done::Received(path) => {
+            cx.command(paperpaw_sdk::library::added(path, "transfer"));
+        }
+        web::Done::Deleted(path) => {
+            let removed = events::BookRemoved::new(path.clone());
+            cx.command(events::BOOK_REMOVED.emit(removed));
+            cx.command(paperpaw_sdk::library::changed());
+        }
+        web::Done::DeletedFolder(_) => {
+            cx.command(paperpaw_sdk::library::request_catalog_anew());
+            cx.command(paperpaw_sdk::library::changed());
+        }
+        // Moved: what is kept for its books goes along.
+        web::Done::Moved(from, to) => {
+            let more = paperpaw_sdk::library::tell_moved(env, from, to, MAX_TOLD, &mut |command| {
+                cx.command(command)
+            });
+            if more {
+                cx.command(paperpaw_sdk::library::request_catalog_anew());
+            }
+        }
+        web::Done::Folder(_) | web::Done::Sent(_) | web::Done::NotReceived(_) => {}
+    }
+}
+
 /// The web page, with its texts in the device's language.
 fn page(env: &Env<'_>) -> String {
     let texts = [
@@ -460,6 +480,12 @@ fn page(env: &Env<'_>) -> String {
         ("outside", "transfer.web.outside"),
         ("toLibrary", "transfer.web.to-library"),
         ("here", "transfer.web.here"),
+        ("move", "transfer.web.move"),
+        ("rename", "transfer.web.rename"),
+        ("moving", "transfer.web.moving"),
+        ("moveHere", "transfer.web.move-here"),
+        ("cancel", "transfer.web.cancel"),
+        ("newName", "transfer.web.new-name"),
     ];
     let mut json = String::from("{");
     for (i, (name, key)) in texts.iter().enumerate() {
@@ -477,7 +503,9 @@ fn page(env: &Env<'_>) -> String {
         served::json_string(&env.device_name())
     ));
     // Where it opens: the library's folder.
-    let library = env.settings().read(&paperpaw_sdk::builtin::settings::LIBRARY_FOLDER);
+    let library = env
+        .settings()
+        .read(&paperpaw_sdk::builtin::settings::LIBRARY_FOLDER);
     json.push_str(&format!(
         ",library:{}",
         served::json_string(library.trim_matches('/'))

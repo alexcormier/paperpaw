@@ -616,3 +616,42 @@ fn hostile_paths_reach_nothing_on_a_lax_storage() {
 fn hostile_paths_reach_nothing_on_a_fat_card() {
     hostile_paths_reach_nothing_on(&fat());
 }
+
+/// Moving and renaming on a FAT card: a rename, never over what is there
+/// (`name (2)`), never a folder into itself, never PaperPaw's settings.
+#[test]
+fn files_and_folders_move_and_are_renamed() {
+    let storage = fat();
+    for dir in ["Books", "Books/Sub", "Downloads"] {
+        storage.create_dir(dir).unwrap();
+    }
+    storage.write("Books/a.epub", b"there").unwrap();
+    storage.write("Downloads/a.epub", b"new").unwrap();
+    storage.write("paperpaw.ini", b"[core]\n").unwrap();
+    let post = |target: &str| ask(&storage, "POST", target, None);
+    // Into a folder with a book of that name: beside it.
+    let (status, .., done) = post("/api/move?k=abc&path=Downloads/a.epub&to=Books");
+    assert_eq!(status, 200);
+    let moved = Done::Moved(String::from("Downloads/a.epub"), String::from("Books/a (2).epub"));
+    assert_eq!(done, Some(moved));
+    assert_eq!(read_file(&storage, "Books/a (2).epub", 16).unwrap(), b"new");
+    assert_eq!(read_file(&storage, "Books/a.epub", 16).unwrap(), b"there");
+    assert!(!storage.exists("Downloads/a.epub"));
+    // Renamed where it is.
+    let (status, .., done) = post("/api/move?k=abc&path=Books/a.epub&to=Books&name=c.epub");
+    assert_eq!(status, 200);
+    let renamed = Done::Moved(String::from("Books/a.epub"), String::from("Books/c.epub"));
+    assert_eq!(done, Some(renamed));
+    // A folder with what is in it.
+    let (status, .., done) = post("/api/move?k=abc&path=Books/Sub&to=Downloads");
+    assert_eq!((status, done.is_some()), (200, true));
+    assert!(files::is_dir(&storage, "Downloads/Sub"));
+    // Where it is, as it is: nothing done.
+    let (status, .., done) = post("/api/move?k=abc&path=Books/c.epub&to=Books");
+    assert_eq!((status, done), (200, None));
+    // Never into itself, nor PaperPaw's settings, nor into a file.
+    assert_eq!(post("/api/move?k=abc&path=Downloads&to=Downloads/Sub").0, 400);
+    assert_eq!(post("/api/move?k=abc&path=paperpaw.ini&to=Books").0, 403);
+    assert_eq!(post("/api/move?k=abc&path=Books/c.epub&to=Books/a (2).epub").0, 404);
+    assert_eq!(post("/api/move?k=abc&path=Books/c.epub&to=Books&name=../x").0, 400);
+}

@@ -783,6 +783,10 @@ breaking again.
 - `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).
+- `library::tell_moved` tells the plugins that a file or folder moved
+  (its books' progress, notes and statistics go along, settings holding
+  the folder follow), as the file manager and Wi-Fi transfer do;
+  `library::moved_folder` gives a folder's new path after a move.
 - `ui::shown_step`, `ui::shown_number` and `ui::shown_slider_value`
   give the value a number setting steps or slides to: for the size of
   book text the next one the reading font draws differently.

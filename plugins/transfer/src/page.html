@@ -21,8 +21,11 @@ button,.btn{font:inherit;padding:8px 14px;border:1px solid var(--fg);background:
 #hint{border:1px solid var(--fg);border-radius:8px;padding:12px;margin-bottom:12px}
 #hint p{margin:0 0 8px}
 ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
-li{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
-li a{flex:1;min-width:0;color:var(--fg);text-decoration:none;overflow-wrap:anywhere}
+li{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
+li .acts{display:flex;gap:6px;margin-left:auto}
+#moving{border:1px solid var(--fg);border-radius:8px;padding:12px;margin-bottom:12px}
+#moving p{margin:0 0 8px;overflow-wrap:anywhere}
+li a{flex:1 1 12em;min-width:0;color:var(--fg);text-decoration:none;overflow-wrap:anywhere}
 li .size{color:var(--mute);white-space:nowrap}
 li button{padding:4px 10px}
 </style>
@@ -36,6 +39,7 @@ li button{padding:4px 10px}
 <button id="mkdir"></button>
 </div>
 <div id="target"></div>
+<div id="moving" hidden><p id="movingText"></p><div class="bar"><button id="moveHere"></button><button id="moveCancel"></button></div></div>
 <div id="hint" hidden><p id="outside"></p><div class="bar"><button id="toLibrary"></button><button id="here"></button></div></div>
 <div id="drop"></div>
 <div id="status"></div>
@@ -65,6 +69,27 @@ function open(path) { location.hash = encodeURIComponent(path); }
 // Only the latest listing asked for is shown: one asked before it (a
 // folder left meanwhile) is dropped.
 let listing = 0;
+// What is being moved: the folder it goes to is opened, then "Move here".
+let moving = null;
+
+async function move(from, to, name) {
+  let q = '/api/move?' + query(from) + '&to=' + encodeURIComponent(to);
+  if (name) q += '&name=' + encodeURIComponent(name);
+  const answer = await fetch(q, {method: 'POST'});
+  say(answer.ok ? T.done : T.failed);
+  load();
+}
+
+function showMoving() {
+  const box = $('moving');
+  box.hidden = !moving;
+  if (!moving) return;
+  $('movingText').textContent = named(T.moving, moving.name);
+  $('moveHere').textContent = T.moveHere;
+  $('moveCancel').textContent = T.cancel;
+  $('moveHere').onclick = () => { const m = moving; moving = null; showMoving(); move(m.path, dir()); };
+  $('moveCancel').onclick = () => { moving = null; showMoving(); };
+}
 
 async function load() {
   const mine = ++listing;
@@ -125,15 +150,27 @@ async function load() {
       s.className = 'size'; s.textContent = size(entry.size);
       li.append(s);
     }
-    const remove = document.createElement('button');
-    remove.textContent = T.delete;
+    const acts = document.createElement('span');
+    acts.className = 'acts';
+    const action = (label, run) => {
+      const b = document.createElement('button');
+      b.textContent = label; b.onclick = run;
+      acts.append(b);
+      return b;
+    };
+    action(T.move, () => { moving = {path, name: entry.name}; showMoving(); window.scrollTo(0, 0); });
+    action(T.rename, () => {
+      const name = prompt(T.newName, entry.name);
+      if (name && name !== entry.name) move(path, here, name);
+    });
+    const remove = action(T.delete, null);
     remove.onclick = async () => {
       if (!confirm(named(T.deleteQuestion, entry.name))) return;
       const answer = await fetch('/api/delete?' + query(path), {method: 'POST'});
       say(answer.ok ? T.done : T.failed);
       load();
     };
-    li.append(remove);
+    li.append(acts);
     list.append(li);
   }
 }
@@ -180,6 +217,7 @@ function upload(files) {
   hint.hidden = false;
 }
 
+showMoving();
 $('title').textContent = T.title;
 document.title = T.name;
 $('upload').textContent = T.upload;

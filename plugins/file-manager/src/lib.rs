@@ -24,7 +24,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{actions, events, groups, menus, params, screens, slots};
+use paperpaw_sdk::builtin::{actions, events, groups, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
@@ -32,7 +32,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, SettingSpec, SettingValue, Storage, StorageError, Version,
+    ScreenSpec, SettingSpec, Storage, StorageError, Version,
 };
 
 use paperpaw_sdk::files::{self as ops, Entry};
@@ -844,41 +844,14 @@ fn refused(env: &Env<'_>, path: &str) -> Option<String> {
     })
 }
 
-/// The folder chooser of the `files` plugin: settings edited with it (or
-/// with whatever is bound to `core.choose-folder`) hold folders.
-const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
-
 /// Tells the other plugins that the books at `from` are now at `to`
-/// ([`events::BOOK_MOVED`]), so the data they keep by a book's path
-/// (progress, notes, statistics) goes along: for a folder, of each book in
-/// it (each file a format plugin opens), up to [`MAX_TOLD`]; a file,
-/// whatever its name now (`a.epub.bak` may be named back). Settings
-/// that hold the folder moved, or one in it (the library folder, say),
-/// follow it. Says so where the data of some books could not go along.
+/// ([`paperpaw_sdk::library::tell_moved`]), so the data they keep by a
+/// book's path (progress, notes, statistics) goes along, up to
+/// [`MAX_TOLD`] books, and settings holding the folder follow it. Says so
+/// where the data of some books could not go along.
 fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Option<String> {
-    follow_folders(env, from, to, cx);
-    // The reading apps chosen for the folder and those in it go along.
-    let _ = paperpaw_sdk::readers::folder_moved(env.storage(), from, to);
-    let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
-    if !ops::is_dir(env.storage(), to) {
-        cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(from.into(), to.into())));
-        return None;
-    }
-    let mut told = 0;
-    let mut more = false;
-    paperpaw_sdk::library::books_in(env.storage(), env.formats(), to, &mut |book| {
-        let Some(rest) = book.strip_prefix(to) else {
-            return;
-        };
-        if told == MAX_TOLD {
-            more = true;
-            return;
-        }
-        told += 1;
-        cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(
-            format!("{from}{rest}"),
-            book.to_string(),
-        )));
+    let more = paperpaw_sdk::library::tell_moved(env, from, to, MAX_TOLD, &mut |command| {
+        cx.command(command);
     });
     more.then(|| env.i18n().tr("file-manager.moved-many").to_string())
 }
@@ -899,55 +872,6 @@ fn tell_partly_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
             cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(was, book.to_string())));
         }
     });
-}
-
-/// Folder `value` (a setting's), after folder `from` moved to `to`: where
-/// it is `from` or in it, as the storage names entries (`Books` is `books`
-/// on the memory card), the same folder at `to`.
-fn moved_folder(storage: &dyn Storage, value: &str, from: &str, to: &str) -> Option<String> {
-    let (value, from, to) = (
-        value.trim_matches('/'),
-        from.trim_matches('/'),
-        to.trim_matches('/'),
-    );
-    if from.is_empty() || !ops::is_within(storage, value, from) {
-        return None;
-    }
-    let rest = value.split('/').skip(from.split('/').count());
-    Some(
-        core::iter::once(to)
-            .chain(rest)
-            .collect::<Vec<_>>()
-            .join("/"),
-    )
-}
-
-/// Settings that name folder `from` or one in it, chosen with the folder
-/// chooser, name it at `to` now.
-fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
-    for spec in env.settings().specs() {
-        let folder = spec
-            .extra()
-            .editor
-            .as_ref()
-            .is_some_and(|editor| match editor {
-                paperpaw_sdk::Editor::Slot(slot) => *slot == slots::CHOOSE_FOLDER,
-                paperpaw_sdk::Editor::Screen(screen) => {
-                    [CHOOSE_FOLDER, screens::FOLDER_EDITOR].contains(screen)
-                }
-                _ => false,
-            });
-        if !folder {
-            continue;
-        }
-        let value = env.settings().text(spec.id.as_str());
-        if let Some(moved) = moved_folder(env.storage(), value, from, to) {
-            cx.command(Command::SetSetting(
-                spec.id.clone(),
-                SettingValue::Text(moved.into()),
-            ));
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1088,16 +1012,20 @@ mod tests {
     #[test]
     fn folders_follow_as_the_storage_names_them() {
         let card = Folding::default();
-        let moved = |value| moved_folder(&card, value, "books", "Library");
+        let moved = |value| paperpaw_sdk::library::moved_folder(&card, value, "books", "Library");
         assert_eq!(moved("Books").as_deref(), Some("Library"));
         assert_eq!(moved("Books/Archive/").as_deref(), Some("Library/Archive"));
         assert_eq!(moved("books2"), None);
         assert_eq!(moved("Notes"), None);
         // Where case counts, `Books` is another folder.
         let disk = MemoryStorage::new();
-        assert_eq!(moved_folder(&disk, "Books", "books", "Library"), None);
         assert_eq!(
-            moved_folder(&disk, "books/Archive", "books", "Library").as_deref(),
+            paperpaw_sdk::library::moved_folder(&disk, "Books", "books", "Library"),
+            None
+        );
+        assert_eq!(
+            paperpaw_sdk::library::moved_folder(&disk, "books/Archive", "books", "Library")
+                .as_deref(),
             Some("Library/Archive")
         );
     }
