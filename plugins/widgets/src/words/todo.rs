@@ -383,10 +383,11 @@ impl Widget for TodoWidget {
         let Some(font) = style.font(env) else {
             return;
         };
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let align = widgets::align(env, ID.as_str());
         if self.unreadable {
             let text = env.i18n.tr("widgets.todo.unreadable");
-            super::draw_empty(canvas, env, &look, text);
+            super::draw_empty(ui.canvas(), env, &look, text);
             return;
         }
         if self.items.is_empty() {
@@ -397,18 +398,18 @@ impl Widget for TodoWidget {
                 "widgets.todo.none"
             };
             let text = env.i18n.tr(key);
-            super::draw_empty(canvas, env, &look, text);
+            super::draw_empty(ui.canvas(), env, &look, text);
             return;
         }
         let places = places(env, look.area, self);
         if places.caption.is_some() {
             let text = caption_text(env, self.open);
-            widgets::draw_caption(canvas, env, ID.as_str(), &look, &text);
+            widgets::draw_caption(ui.canvas(), env, ID.as_str(), &look, &text);
         }
         let boxes = env.settings.read(&BOX);
         let size = items_size(env, &font, &places.rows, &self.items, boxes);
         for (row, item) in places.rows.iter().zip(&self.items) {
-            draw_item(canvas, env, &font, size, *row, item, boxes, align, &look);
+            draw_item(&mut ui, size, *row, item, boxes, align, &look);
         }
         if let Some((row, more)) = places.more {
             let text = env
@@ -416,7 +417,10 @@ impl Widget for TodoWidget {
                 .format("widgets.todo.more", &[("count", Arg::Int(more as i64))]);
             let text = ui::fit(&font, style.small(), &text, f32::from(row.width));
             let x = align.x(row, font.measure(style.small(), &text));
-            ui::draw_label(canvas, &font, style.small(), x, row, &text, look.faint);
+            ui::Label::new(&text)
+                .px(style.small())
+                .color(look.faint)
+                .draw_from(&mut ui, x, row);
         }
     }
 
@@ -529,9 +533,7 @@ fn places(env: &Env<'_>, area: Rect, widget: &TodoWidget) -> Places {
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
 fn draw_item(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    font: &FontHandle<'_>,
+    ui: &mut ui::Ui<'_>,
     size: f32,
     row: Rect,
     item: &Item,
@@ -539,6 +541,11 @@ fn draw_item(
     align: Align,
     look: &WidgetLook,
 ) {
+    let env = ui.env();
+    let Some(font) = ui.font() else {
+        return;
+    };
+    let font = &font;
     let style = UiStyle::new(env);
     let done = item.done.is_some();
     let side = (size * 0.8) as u16;
@@ -552,10 +559,13 @@ fn draw_item(
     if with_box {
         let mid = row.y + row.height / 2;
         let place = Rect::new(x, mid - side / 2, side, side);
-        draw_box(canvas, env, place, boxes == BOXES[1], done, look);
+        draw_box(ui.canvas(), env, place, boxes == BOXES[1], done, look);
     }
     let label = Rect::new(x + lead, row.y, row.width.saturating_sub(lead), row.height);
-    ui::draw_label(canvas, font, size, f32::from(label.x), label, &text, color);
+    ui::Label::new(&text)
+        .px(size)
+        .color(color)
+        .draw_from(ui, f32::from(label.x), label);
     if done {
         // A line through the middle of the small letters.
         let metrics = font.line_metrics(size);
@@ -563,7 +573,8 @@ fn draw_item(
             f32::from(row.y) + (f32::from(row.height) + metrics.ascent - metrics.descent) / 2.0;
         let y = (baseline - size * 0.27) as u16;
         let line = u32::from(style.line()).max(1) as u16;
-        canvas.fill(Rect::new(label.x, y, width as u16, line), color);
+        ui.canvas()
+            .fill(Rect::new(label.x, y, width as u16, line), color);
     }
 }
 
@@ -742,70 +753,58 @@ impl Screen for TodoScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("widgets.todo"),
             None,
             self.list.paging(len),
         );
-        let Some(font) = style.font(env) else {
+        if ui.font().is_none() {
             return;
-        };
+        }
         let items = &self.items;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, row, rect, focused| {
-                let canvas = ui.canvas();
-                let (ink, paper) = (style.focus_ink(focused), style.focus_paper(focused));
-                let margin = style.margin();
-                let inner = Rect::new(
-                    rect.x + margin,
-                    rect.y,
-                    rect.width.saturating_sub(2 * margin),
-                    rect.height,
-                );
-                let look = WidgetLook::new(
-                    inner,
-                    ink,
-                    if focused && style.dark_focus() {
-                        Color::gray(200)
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            let (ink, paper) = (style.focus_ink(focused), style.focus_paper(focused));
+            let margin = style.margin();
+            let inner = Rect::new(
+                rect.x + margin,
+                rect.y,
+                rect.width.saturating_sub(2 * margin),
+                rect.height,
+            );
+            let look = WidgetLook::new(
+                inner,
+                ink,
+                if focused && style.dark_focus() {
+                    Color::gray(200)
+                } else {
+                    style.faint(ui::Ink::Muted)
+                },
+                paper,
+                widgets::Frame::None,
+            );
+            if row == 0 {
+                let icon = style.text() * 1.1;
+                let width = ui.icon("plus", icon, f32::from(inner.x), inner, ink);
+                let x = f32::from(inner.x)
+                    + if width > 0.0 {
+                        width + style.gap() as f32
                     } else {
-                        style.faint(ui::Ink::Muted)
-                    },
-                    paper,
-                    widgets::Frame::None,
-                );
-                if row == 0 {
-                    let icon = style.text() * 1.1;
-                    let width =
-                        ui::draw_icon(canvas, env, "plus", icon, f32::from(inner.x), inner, ink);
-                    let x = f32::from(inner.x)
-                        + if width > 0.0 {
-                            width + style.gap() as f32
-                        } else {
-                            0.0
-                        };
-                    let text = env.i18n.tr("widgets.todo.add");
-                    ui::draw_label(canvas, &font, style.text(), x, inner, text, ink);
-                    return;
-                }
-                if let Some(item) = items.get(row - 1) {
-                    let boxes = BOXES[0];
-                    draw_item(
-                        canvas,
-                        env,
-                        &font,
-                        style.text(),
-                        inner,
-                        item,
-                        boxes,
-                        Align::Left,
-                        &look,
-                    );
-                }
-            },
-        );
+                        0.0
+                    };
+                let text = env.i18n.tr("widgets.todo.add");
+                ui::Label::new(text)
+                    .px(style.text())
+                    .color(ink)
+                    .draw_from(ui, x, inner);
+                return;
+            }
+            if let Some(item) = items.get(row - 1) {
+                let boxes = BOXES[0];
+                draw_item(ui, style.text(), inner, item, boxes, Align::Left, &look);
+            }
+        });
         if self.items.is_empty() {
             let key = if self.unreadable {
                 "widgets.todo.unreadable"
@@ -826,7 +825,7 @@ impl Screen for TodoScreen {
                 Color::WHITE,
                 widgets::Frame::None,
             );
-            widgets::draw_message(canvas, env, &look, env.i18n.tr(key));
+            widgets::draw_message(ui.canvas(), env, &look, env.i18n.tr(key));
         }
     }
 

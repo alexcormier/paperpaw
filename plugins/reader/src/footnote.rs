@@ -132,8 +132,9 @@ impl Screen for FootnoteScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill(
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill(
             Rect::new(r.x, r.y, r.width, (u32::from(style.line()) * 2) as u16),
             Color::BLACK,
         );
@@ -145,15 +146,15 @@ impl Screen for FootnoteScreen {
         for line in &self.lines {
             let area = Rect::new(r.x, y, r.width, line_height);
             let x = f32::from(r.x) + style.margin() as f32;
-            ui::draw_label(canvas, &font, style.text(), x, area, line, Color::BLACK);
+            ui::Label::new(line)
+                .px(style.text())
+                .color(Color::BLACK)
+                .draw_from(&mut ui, x, area);
             y += line_height;
         }
         for (i, (slot, label)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             let label = env.i18n.tr(label);
-            ui::draw_button(
-                canvas,
-                env,
-                &style,
+            ui.button(
                 ui::button_in_slot(&style, *slot),
                 label,
                 false,

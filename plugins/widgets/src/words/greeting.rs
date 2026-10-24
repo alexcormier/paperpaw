@@ -182,7 +182,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     else {
         return;
     };
-    let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let look = widgets::draw_frame(ui.canvas(), env, ID.as_str(), area);
     let area = look.area;
     let part = part(env);
     let width = f32::from(area.width);
@@ -278,7 +279,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             });
         }
         let gap = style.gap() as f32 / 2.0;
-        crate::time::draw_stack(canvas, &font, area, align, &parts, gap);
+        crate::time::draw_stack(ui.canvas(), &font, area, align, &parts, gap);
         return;
     }
     let icon_width = |size: f32| if icon { icon_width(size) } else { 0.0 };
@@ -291,22 +292,21 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let row = Rect::new(area.x, top + big * n as u16, area.width, big);
         if icon {
             let icon_size = font.size_for(size, shown) * 0.9;
-            ui::draw_icon(canvas, env, part.icon(), icon_size, x, row, look.ink);
+            ui.icon(part.icon(), icon_size, x, row, look.ink);
         }
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            x + icon_width(size),
-            row,
-            shown,
-            look.ink,
-        );
+        ui::Label::new(shown)
+            .font(font)
+            .px(size)
+            .color(look.ink)
+            .draw_from(&mut ui, x + icon_width(size), row);
     }
     if let Some(below) = below {
         let x = align.x(area, ui_font.measure(style.small(), &below));
         let row = Rect::new(area.x, top + big * count, area.width, small);
-        ui::draw_label(canvas, &ui_font, style.small(), x, row, &below, look.faint);
+        ui::Label::new(&below)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(&mut ui, x, row);
     }
 }
 

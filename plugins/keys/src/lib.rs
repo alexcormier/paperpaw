@@ -474,10 +474,11 @@ fn navigate(list: &mut ListView, len: usize, action: &Id, cx: &mut Cx<'_, '_>) -
 
 /// Draws a small 3×3 grid at the left of `rect` with `zone` filled: the
 /// part of the screen a tap zone is.
-fn draw_zone(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, zone: &str, ink: Color) {
+fn draw_zone(ui: &mut ui::Ui<'_>, rect: Rect, zone: &str, ink: Color) {
     let Some(index) = ZONES.iter().position(|z| *z == zone) else {
         return;
     };
+    let (style, canvas) = (ui.style(), ui.canvas());
     let cell = (rect.height / 6).max(4);
     let side = cell * 3;
     let x = rect.x + style.margin();
@@ -620,8 +621,9 @@ impl ListScreen {
 impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("keys.title"),
             None,
             Some(self.rows.paging()),
@@ -629,74 +631,70 @@ impl Screen for ListScreen {
         let place = self.place().clone();
         let layers = place.layer_refs();
         let entries = &self.entries;
-        let room = ui::icon_room(env, &style, true);
-        let shown = ui::focus_shown(env);
-        self.rows.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            shown,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let ink = style.focus_ink(focused);
-                match &entries[index] {
-                    Row::Heading(key) => {
-                        ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(key))
-                    }
-                    Row::Place => {
-                        let title = env.i18n.tr("keys.place");
-                        let note = ui::tr_input(env, "keys.place.help");
-                        ui::draw_noted_row(
-                            canvas,
-                            env,
-                            &style,
-                            rect,
-                            focused,
-                            title,
-                            &place.title,
-                            note,
-                        );
-                    }
-                    Row::Policy => {
-                        let now = env.keys.bound(&layers, POLICY);
-                        let value = now
-                            .as_ref()
-                            .filter(|id| POLICIES.contains(&id.as_str()))
-                            .map_or(POLICIES[0], Id::as_str);
-                        let title = env.i18n.tr("keys.policy");
-                        let (help, name) = (format!("keys.{value}.help"), format!("keys.{value}"));
-                        let (note, shown) = (env.i18n.tr(&help), env.i18n.tr(&name));
-                        ui::draw_noted_row(canvas, env, &style, rect, focused, title, shown, note);
-                    }
-                    Row::Input(input) => {
-                        let action = env.keys.bound(&layers, input);
-                        let does = match &action {
-                            Some(id) => action_name(env, id),
-                            None => env.i18n.tr("core.action.nothing").to_string(),
-                        };
-                        // Tap zones as a small picture of the screen.
-                        let zone = input
-                            .strip_prefix("tap.")
-                            .or_else(|| input.strip_prefix("long-tap."))
-                            .or_else(|| input.strip_prefix("double-tap."));
-                        let rect = match zone {
-                            Some(zone) => {
-                                let band = ui::title_area(&style, rect);
-                                draw_zone(canvas, &style, band, zone, ink);
-                                let shift = room.min(rect.width);
-                                Rect::new(rect.x + shift, rect.y, rect.width - shift, rect.height)
-                            }
-                            None => rect,
-                        };
-                        let name = input_name(env, input);
-                        ui::draw_noted_row(canvas, env, &style, rect, focused, &name, "›", &does);
-                    }
-                    Row::Reset => {
-                        let title = env.i18n.tr("keys.reset");
-                        let note = env.i18n.tr("keys.reset.help");
-                        ui::draw_noted_row(canvas, env, &style, rect, focused, title, "", note);
-                    }
+        let room = ui.icon_room(true);
+        let shown = ui.focus_shown();
+        self.rows.draw(&mut ui, shown, |ui, index, rect, focused| {
+            let ink = style.focus_ink(focused);
+            match &entries[index] {
+                Row::Heading(key) => ui.heading(rect, env.i18n.tr(key)),
+                Row::Place => {
+                    let title = env.i18n.tr("keys.place");
+                    let note = ui::tr_input(env, "keys.place.help");
+                    ui::Row::value(title, &place.title)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
                 }
-            },
-        );
+                Row::Policy => {
+                    let now = env.keys.bound(&layers, POLICY);
+                    let value = now
+                        .as_ref()
+                        .filter(|id| POLICIES.contains(&id.as_str()))
+                        .map_or(POLICIES[0], Id::as_str);
+                    let title = env.i18n.tr("keys.policy");
+                    let (help, name) = (format!("keys.{value}.help"), format!("keys.{value}"));
+                    let (note, shown) = (env.i18n.tr(&help), env.i18n.tr(&name));
+                    ui::Row::value(title, shown)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+                Row::Input(input) => {
+                    let action = env.keys.bound(&layers, input);
+                    let does = match &action {
+                        Some(id) => action_name(env, id),
+                        None => env.i18n.tr("core.action.nothing").to_string(),
+                    };
+                    // Tap zones as a small picture of the screen.
+                    let zone = input
+                        .strip_prefix("tap.")
+                        .or_else(|| input.strip_prefix("long-tap."))
+                        .or_else(|| input.strip_prefix("double-tap."));
+                    let rect = match zone {
+                        Some(zone) => {
+                            let band = ui::title_area(&style, rect);
+                            draw_zone(ui, band, zone, ink);
+                            let shift = room.min(rect.width);
+                            Rect::new(rect.x + shift, rect.y, rect.width - shift, rect.height)
+                        }
+                        None => rect,
+                    };
+                    let name = input_name(env, input);
+                    ui::Row::value(&name, "›")
+                        .note(&does)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+                Row::Reset => {
+                    let title = env.i18n.tr("keys.reset");
+                    let note = env.i18n.tr("keys.reset.help");
+                    ui::Row::plain(title)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
+            }
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -838,21 +836,19 @@ impl Screen for PlaceScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.places.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("keys.place"),
             None,
             self.list.paging(len),
         );
         let places = &self.places;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                ui::draw_value_row(canvas, env, &style, rect, focused, &places[index].title, "");
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            ui::Row::plain(&places[index].title)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -1069,49 +1065,38 @@ impl PickScreen {
 impl Screen for PickScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &self.title,
-            None,
-            Some(self.rows.paging()),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, &self.title, None, Some(self.rows.paging()));
         let entries = &self.entries;
         let query = &self.query;
-        let room = ui::icon_room(env, &style, true);
-        let shown = ui::focus_shown(env);
-        self.rows.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            shown,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let ink = style.focus_ink(focused);
-                match &entries[index] {
-                    Pick::Heading(key) => {
-                        ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(key))
-                    }
-                    Pick::Search => {
-                        let rect =
-                            ui::draw_row_icon(canvas, env, &style, rect, room, Some("search"), ink);
-                        let title = if query.is_empty() {
-                            env.i18n.tr("keys.search")
-                        } else {
-                            query.as_str()
-                        };
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
-                    }
-                    Pick::Standard => {
-                        let rect = ui::draw_row_icon(canvas, env, &style, rect, room, None, ink);
-                        let title = env.i18n.tr("keys.standard");
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
-                    }
-                    Pick::Action(id, name) => {
-                        let icon = env.menus.icon(id.as_str());
-                        let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
-                        ui::draw_value_row(canvas, env, &style, rect, focused, name, "");
-                    }
+        let room = ui.icon_room(true);
+        let shown = ui.focus_shown();
+        self.rows.draw(&mut ui, shown, |ui, index, rect, focused| {
+            let ink = style.focus_ink(focused);
+            match &entries[index] {
+                Pick::Heading(key) => ui.heading(rect, env.i18n.tr(key)),
+                Pick::Search => {
+                    let rect = ui.row_icon(rect, room, Some("search"), ink);
+                    let title = if query.is_empty() {
+                        env.i18n.tr("keys.search")
+                    } else {
+                        query.as_str()
+                    };
+                    ui::Row::plain(title).focused(focused).draw(ui, rect);
                 }
-            },
-        );
+                Pick::Standard => {
+                    let rect = ui.row_icon(rect, room, None, ink);
+                    let title = env.i18n.tr("keys.standard");
+                    ui::Row::plain(title).focused(focused).draw(ui, rect);
+                }
+                Pick::Action(id, name) => {
+                    let icon = env.menus.icon(id.as_str());
+                    let rect = ui.row_icon(rect, room, icon, ink);
+                    ui::Row::plain(name).focused(focused).draw(ui, rect);
+                }
+            }
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

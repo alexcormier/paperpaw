@@ -426,6 +426,7 @@ impl Widget for QuoteWidget {
             return;
         };
         let style = UiStyle::new(env);
+        let mut ui = paperpaw_sdk::ui::Ui::new(canvas, env, &style);
         let language = env.i18n.language();
         let (area, size, layout) = (laid.area, laid.size, laid.layout);
         let width = f32::from(area.width);
@@ -439,23 +440,35 @@ impl Widget for QuoteWidget {
             let x = align.x(area, font.measure(big, mark));
             // Quotation marks are as high as capitals, a third of them.
             let baseline = f32::from(top) + big * 0.72;
-            font.draw(canvas, big, x, baseline as i32, mark, look.faint);
+            font.draw(ui.canvas(), big, x, baseline as i32, mark, look.faint);
             top += layout.mark_height(size) as u16;
         }
-        top += text::draw_lines(canvas, &font, size, &laid.lines, area, top, align, look.ink);
-        if let (Some(author), Some(ui)) = (&laid.author, style.font(env)) {
+        top += text::draw_lines(
+            ui.canvas(),
+            &font,
+            size,
+            &laid.lines,
+            area,
+            top,
+            align,
+            look.ink,
+        );
+        if let (Some(author), Some(ui_font)) = (&laid.author, ui.font()) {
             top += (style.gap() as f32 * 0.75) as u16;
             let small = widgets::line_height(env, style.small());
             let row = Rect::new(area.x, top, area.width, small);
             // The whole name where it fits, else the last name alone
             // ("Bacon"), smaller where need be, then shortened.
-            let whole = ui.measure(style.small(), author) <= width;
+            let whole = ui_font.measure(style.small(), author) <= width;
             let last = author.rsplit(' ').next().unwrap_or(author);
             let shown = if whole { author.as_str() } else { last };
             let (size, name) =
-                widgets::fit_line(&ui, style.small(), style.small() * 0.85, shown, width);
-            let x = align.x(area, ui.measure(size, &name));
-            paperpaw_sdk::ui::draw_label(canvas, &ui, size, x, row, &name, look.faint);
+                widgets::fit_line(&ui_font, style.small(), style.small() * 0.85, shown, width);
+            let x = align.x(area, ui_font.measure(size, &name));
+            paperpaw_sdk::ui::Label::new(&name)
+                .px(size)
+                .color(look.faint)
+                .draw_from(&mut ui, x, row);
         }
     }
 

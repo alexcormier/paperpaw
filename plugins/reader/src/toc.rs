@@ -310,8 +310,9 @@ impl Screen for TocScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("reader.toc"),
             None,
             self.list.paging(len),
@@ -322,28 +323,26 @@ impl Screen for TocScreen {
             } else {
                 "reader.no-toc"
             };
-            ui::draw_message(canvas, env, &style, self.list.area(), env.i18n.tr(message));
+            ui.message(self.list.area(), env.i18n.tr(message));
             return;
         }
         let Some(font) = style.font(env) else {
             return;
         };
         let (first, visible) = (self.first, &self.visible);
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let Some(entry) = index.checked_sub(first).and_then(|i| visible.get(i)) else {
-                    return;
-                };
-                let color = if focused { Color::WHITE } else { Color::BLACK };
-                let indent = style.margin() as f32 * (1.0 + 2.0 * f32::from(entry.level.min(4)));
-                let width = f32::from(rect.width) - indent - style.margin() as f32;
-                let title = ui::fit(&font, style.text(), &entry.title, width);
-                ui::draw_label(canvas, &font, style.text(), indent, rect, &title, color);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let Some(entry) = index.checked_sub(first).and_then(|i| visible.get(i)) else {
+                return;
+            };
+            let color = if focused { Color::WHITE } else { Color::BLACK };
+            let indent = style.margin() as f32 * (1.0 + 2.0 * f32::from(entry.level.min(4)));
+            let width = f32::from(rect.width) - indent - style.margin() as f32;
+            let title = ui::fit(&font, style.text(), &entry.title, width);
+            ui::Label::new(&title)
+                .px(style.text())
+                .color(color)
+                .draw_from(ui, indent, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

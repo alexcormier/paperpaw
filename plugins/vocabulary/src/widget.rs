@@ -542,36 +542,35 @@ fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, laid: &L
     let Some(font) = style.font(env) else {
         return;
     };
+    let mut ui = ui::Ui::new(canvas, env, &style);
     let id = WORD_NAME;
     let area = look.area;
     if laid.caption > 0 {
         let caption = caption_text(env, id);
         let at = look.within(laid.block);
-        widgets::draw_caption(canvas, env, id, &at, caption);
+        widgets::draw_caption(ui.canvas(), env, id, &at, caption);
     }
     let align = widgets::align(env, id);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     let top = laid.block.y + laid.caption;
     let x = align.x(area, font.measure(laid.size, &laid.shown));
     let shown = &laid.shown;
-    ui::draw_label(
-        canvas,
-        &font,
-        laid.size,
-        x,
-        row(top, laid.big),
-        shown,
-        look.ink,
-    );
+    ui::Label::new(shown)
+        .px(laid.size)
+        .color(look.ink)
+        .draw_from(&mut ui, x, row(top, laid.big));
     let y = top + laid.big;
     if let Some(sentence) = &laid.sentence {
-        sentence.draw(canvas, env, row(y, laid.sentence_h), align, look.faint);
+        sentence.draw(ui.canvas(), env, row(y, laid.sentence_h), align, look.faint);
     }
     if let Some(book) = &laid.book {
         let small = line(&font, style.small());
         let x = align.x(area, font.measure(style.small(), book));
         let at = row(y + laid.sentence_h, small);
-        ui::draw_label(canvas, &font, style.small(), x, at, book, look.faint);
+        ui::Label::new(book)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(&mut ui, x, at);
     }
 }
 
@@ -707,7 +706,8 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, summary
     let size = text_size(env, &font, id, &headline, (area.width, room - notes_h));
     let big = line(&font, size);
     let caption = caption_text(env, id);
-    let block = captioned(canvas, env, id, look, caption, big + notes_h);
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let block = captioned(ui.canvas(), env, id, look, caption, big + notes_h);
     let align = widgets::align(env, id);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     // Too wide: the number alone ("128 words": "128").
@@ -718,20 +718,18 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, summary
     };
     let headline = ui::fit(&font, size, &headline, width);
     let x = align.x(area, font.measure(size, &headline));
-    ui::draw_label(
-        canvas,
-        &font,
-        size,
-        x,
-        row(block.y, big),
-        &headline,
-        look.ink,
-    );
+    ui::Label::new(&headline)
+        .px(size)
+        .color(look.ink)
+        .draw_from(&mut ui, x, row(block.y, big));
     for (n, note) in notes.iter().enumerate() {
         let note = ui::fit(&font, style.small(), note, width);
         let x = align.x(area, font.measure(style.small(), &note));
         let at = row(block.y + big + n as u16 * small, small);
-        ui::draw_label(canvas, &font, style.small(), x, at, &note, look.faint);
+        ui::Label::new(&note)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(&mut ui, x, at);
     }
 }
 
@@ -815,8 +813,9 @@ impl Widget for Due {
             headline
         };
         let big = line(&font, size);
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let block = captioned(
-            canvas,
+            ui.canvas(),
             env,
             DUE_NAME,
             &look,
@@ -826,7 +825,10 @@ impl Widget for Due {
         let headline = ui::fit(&font, size, &headline, width);
         let x = widgets::align(env, DUE_NAME).x(inner, font.measure(size, &headline));
         let at = Rect::new(inner.x, block.y, inner.width, big);
-        ui::draw_label(canvas, &font, size, x, at, &headline, look.ink);
+        ui::Label::new(&headline)
+            .px(size)
+            .color(look.ink)
+            .draw_from(&mut ui, x, at);
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {

@@ -518,17 +518,15 @@ impl Screen for WordsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("vocabulary.title"),
             None,
             self.list.paging(len),
         );
         if len == 0 {
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 "vocabulary",
                 env.i18n.tr("vocabulary.empty.title"),
@@ -538,28 +536,29 @@ impl Screen for WordsScreen {
         }
         let count = self.count;
         let visible = &self.visible;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, row, rect, focused| {
-                let canvas = ui.canvas();
-                if row == count {
-                    let title = env.i18n.tr("vocabulary.export");
-                    let note = env.i18n.tr("vocabulary.export.help");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", note);
-                    return;
-                }
-                let Some((_, _, word)) = visible.iter().find(|(r, _, _)| *r == row) else {
-                    return;
-                };
-                let note = if word.sentence.is_empty() {
-                    word.title.as_str()
-                } else {
-                    word.sentence.as_str()
-                };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &word.word, "", note);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            if row == count {
+                let title = env.i18n.tr("vocabulary.export");
+                let note = env.i18n.tr("vocabulary.export.help");
+                ui::Row::value(title, "›")
+                    .note(note)
+                    .focused(focused)
+                    .draw(ui, rect);
+                return;
+            }
+            let Some((_, _, word)) = visible.iter().find(|(r, _, _)| *r == row) else {
+                return;
+            };
+            let note = if word.sentence.is_empty() {
+                word.title.as_str()
+            } else {
+                word.sentence.as_str()
+            };
+            ui::Row::plain(&word.word)
+                .note(note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     /// Back from a book or a lookup: with the words looked up meanwhile.

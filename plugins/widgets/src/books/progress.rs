@@ -520,6 +520,7 @@ fn draw_bar_and_text(
     let Some(font) = style.font(env) else {
         return;
     };
+    let mut ui = paperpaw_sdk::ui::Ui::new(canvas, env, &style);
     let gap = style.gap();
     let align = widgets::align(env, WIDGET);
     let mut lines = texts(env, look, book);
@@ -529,7 +530,7 @@ fn draw_bar_and_text(
     let total = (text_h + gap + row).min(area.height);
     let top = area.y + (area.height - total) / 2;
     lines.draw(
-        canvas,
+        ui.canvas(),
         env,
         Rect::new(area.x, top, area.width, text_h),
         align,
@@ -538,15 +539,10 @@ fn draw_bar_and_text(
     let percent = percent_text(env, book.percent());
     let row_area = Rect::new(area.x, y, area.width, row);
     let text_w = font.measure(style.small(), &percent) as u16;
-    paperpaw_sdk::ui::draw_label(
-        canvas,
-        &font,
-        style.small(),
-        f32::from(area.x),
-        row_area,
-        &percent,
-        look.faint,
-    );
+    paperpaw_sdk::ui::Label::new(&percent)
+        .px(style.small())
+        .color(look.faint)
+        .draw_from(&mut ui, f32::from(area.x), row_area);
     let bar_h = (thickness(env, WIDGET, row * 4) as u16).min(row);
     let shift = (text_w + gap).min(area.width);
     let bar = Rect::new(
@@ -555,5 +551,5 @@ fn draw_bar_and_text(
         area.width - shift,
         bar_h,
     );
-    draw_bar(canvas, env, look, bar, book.percent());
+    draw_bar(ui.canvas(), env, look, bar, book.percent());
 }

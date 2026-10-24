@@ -189,13 +189,8 @@ pub(super) fn link_label(book: &Book, words: &[WordBox], link: &Link) -> String 
 /// The link or mark being chosen, framed like selected text, and a bar at
 /// the bottom saying where it leads (or whose mark it is) and what the
 /// buttons do.
-pub(super) fn draw_linking(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    book: &Book,
-    words: &[WordBox],
-    linking: Linking,
-) {
+pub(super) fn draw_linking(ui: &mut ui::Ui<'_>, book: &Book, words: &[WordBox], linking: Linking) {
+    let (env, style) = (ui.env(), ui.style());
     let target = linking
         .focus
         .and_then(|i| book.targets(env).get(i).copied());
@@ -204,7 +199,7 @@ pub(super) fn draw_linking(
     if let Some(Target::Layer(i)) = target
         && let Some((_, room)) = book.typography.rooms.get(i)
     {
-        canvas.stroke_rect(
+        ui.canvas().stroke_rect(
             i32::from(room.x),
             i32::from(room.y),
             u32::from(room.width),
@@ -216,7 +211,7 @@ pub(super) fn draw_linking(
     if let Some((start, end)) = target.and_then(|t| book.target_range(t)) {
         let inside = |i: usize| words[i].end > start && words[i].start < end;
         for b in selection::line_boxes(words, inside) {
-            canvas.stroke_rect(
+            ui.canvas().stroke_rect(
                 i32::from(b.x) - 4,
                 i32::from(b.y) - 2,
                 u32::from(b.width) + 8,
@@ -226,17 +221,16 @@ pub(super) fn draw_linking(
             );
         }
     }
-    let style = UiStyle::new(env);
-    let bar = selection::bar_area(env, &style);
-    canvas.fill(bar, Color::WHITE);
-    canvas.fill_rect(
+    let bar = selection::bar_area(env, style);
+    ui.canvas().fill(bar, Color::WHITE);
+    ui.canvas().fill_rect(
         i32::from(bar.x),
         i32::from(bar.y),
         u32::from(bar.width),
         u32::from(style.line()).max(2),
         Color::BLACK,
     );
-    let Some(font) = style.font(env) else {
+    let Some(font) = ui.font() else {
         return;
     };
     let text = match target {
@@ -276,13 +270,8 @@ pub(super) fn draw_linking(
         &text,
         f32::from(bar.width) - 2.0 * margin,
     );
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small(),
-        f32::from(bar.x) + margin,
-        bar,
-        &text,
-        Color::BLACK,
-    );
+    ui::Label::new(&text)
+        .px(style.small())
+        .color(Color::BLACK)
+        .draw_from(ui, f32::from(bar.x) + margin, bar);
 }

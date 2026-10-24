@@ -66,9 +66,11 @@ impl SleepCard {
 impl Screen for SleepCard {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let display = env.device.display;
-        canvas.fill(Rect::new(0, 0, display.width, display.height), Color::WHITE);
         let style = UiStyle::new(env);
-        let Some(font) = style.font(env) else {
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas()
+            .fill(Rect::new(0, 0, display.width, display.height), Color::WHITE);
+        let Some(font) = ui.font() else {
             return;
         };
         let margin = style.margin();
@@ -92,7 +94,10 @@ impl Screen for SleepCard {
                 let line = &front[range];
                 let x = f32::from(margin) + (width - font.measure(large, line)).max(0.0) / 2.0;
                 let row = Rect::new(margin, y, display.width.saturating_sub(2 * margin), big);
-                ui::draw_label(canvas, &font, large, x, row, line, Color::BLACK);
+                ui::Label::new(line)
+                    .px(large)
+                    .color(Color::BLACK)
+                    .draw_from(&mut ui, x, row);
                 y += big;
             }
             y += gap;
@@ -101,15 +106,10 @@ impl Screen for SleepCard {
             let note = self.note[range].trim();
             let x = f32::from(margin) + (width - font.measure(style.small(), note)).max(0.0) / 2.0;
             let row = Rect::new(margin, y, display.width.saturating_sub(2 * margin), small);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                x,
-                row,
-                note,
-                style.faint(ui::Ink::Note),
-            );
+            ui::Label::new(note)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(&mut ui, x, row);
             y += small;
         }
     }
