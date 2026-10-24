@@ -177,6 +177,45 @@ fn the_radio_comes_on_before_a_link_is_asked_for() {
 }
 
 #[test]
+fn what_scans_found_leaves_with_the_radio() {
+    let mut radio = radio();
+    let mut out = Vec::new();
+    let scan = bt::scan(&FOUND).lasting(Duration::from_secs(1)).command();
+    run(&mut radio, "a", scan, asked(0), &mut out).unwrap();
+    for n in 0..20 {
+        found(
+            &mut radio,
+            &alloc::format!("d{n:02}"),
+            vec![Uuid::sig(0x180D)],
+            &mut out,
+        );
+    }
+    radio.tick(Instant(1_000), &mut out);
+    radio.tick(Instant(1_000 + RADIO_GRACE_MS), &mut out);
+    assert!(radio.take().contains(&BtCall::Radio { on: false }));
+    // The newest stay, with their names, without what they advertised.
+    assert_eq!(radio.known.len(), FOUND_KEPT);
+    assert_eq!(radio.known[0].name(), Some("D04"));
+    assert!(radio.known.iter().all(|k| k.found.services.is_empty()));
+    // A plugin may still connect to one it found.
+    let device = radio.known[FOUND_KEPT - 1].id;
+    run(
+        &mut radio,
+        "a",
+        bt::connect(device, &FOUND).command(),
+        asked(2_000),
+        &mut out,
+    )
+    .unwrap();
+    assert!(
+        radio
+            .take()
+            .iter()
+            .any(|c| matches!(c, BtCall::Connect { .. }))
+    );
+}
+
+#[test]
 fn a_scan_is_never_longer_than_a_minute() {
     let mut radio = radio();
     let mut out = Vec::new();

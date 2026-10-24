@@ -26,6 +26,9 @@ use paperpaw_sdk::{Command, Id};
 
 /// How long the radio stays on after the last request, for the next one.
 pub const RADIO_GRACE_MS: u64 = 3_000;
+/// Devices found that nobody bonded, kept at most while the radio is off
+/// (the newest).
+pub const FOUND_KEPT: usize = 16;
 /// The secrets that keep the bonds: `core.bluetooth.<device number>`.
 pub const BOND_PREFIX: &str = "core.bluetooth.";
 /// How long after a plugin's scan its next one waits, unless the reader
@@ -862,6 +865,35 @@ impl Radio {
             self.on_ms += now.since(since);
         }
         self.calls.push(BtCall::Radio { on: false });
+        self.forget_found();
+    }
+
+    /// What scans found leaves with the radio, so that Bluetooth off
+    /// keeps (almost) nothing: of a device nobody bonded only its
+    /// number, address and name stay (a plugin may still connect to it),
+    /// and only the newest [`FOUND_KEPT`] of them.
+    fn forget_found(&mut self) {
+        for known in self.known.iter_mut().filter(|k| k.bond.is_none()) {
+            let name = known.found.name.take();
+            known.found = Found {
+                name,
+                ..Found::default()
+            };
+            known.found.services.shrink_to_fit();
+        }
+        let linked = |links: &[Link], id: DeviceId| links.iter().any(|l| l.device == id);
+        let mut unbonded = self.known.iter().filter(|k| k.bond.is_none()).count();
+        let mut at = 0;
+        while unbonded > FOUND_KEPT && at < self.known.len() {
+            let known = &self.known[at];
+            if known.bond.is_none() && !linked(&self.links, known.id) {
+                self.known.remove(at);
+                unbonded -= 1;
+            } else {
+                at += 1;
+            }
+        }
+        self.known.shrink_to_fit();
     }
 
     fn known_mut(&mut self, device: DeviceId) -> Option<&mut Known> {
