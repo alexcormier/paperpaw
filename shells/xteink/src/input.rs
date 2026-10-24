@@ -142,8 +142,8 @@ impl Sampler {
         let mut push = |change: Change| {
             queue.push(change);
         };
-        self.debouncer.update(reading, now, &mut |name, down| {
-            push(Change::Button(name, down, now));
+        self.debouncer.update(reading, now, &mut |name, down, at| {
+            push(Change::Button(name, down, at));
         });
         keys.touch(&mut |touch| push(Change::Touch(touch, now)));
         #[cfg(feature = "remote")]

@@ -125,12 +125,15 @@ impl Debouncer {
     }
 
     /// Takes a reading at time `now` (ms); `changed` gets each button that
-    /// went down (`true`) or up (`false`).
+    /// went down (`true`) or up (`false`), and when: when the reading that
+    /// counts now was first seen, not when it had held long enough, so
+    /// that how long a press lasted is as it was (a press is long from
+    /// some 500 ms on).
     pub fn update(
         &mut self,
         reading: State,
         now: u64,
-        changed: &mut dyn FnMut(&'static str, bool),
+        changed: &mut dyn FnMut(&'static str, bool, u64),
     ) {
         if reading != self.reading {
             self.reading = reading;
@@ -156,7 +159,7 @@ impl Debouncer {
         for (i, name) in ALL.iter().enumerate() {
             let bit = 1 << i;
             if before & bit != after & bit {
-                changed(name, after & bit != 0);
+                changed(name, after & bit != 0, self.since);
             }
         }
     }
@@ -186,13 +189,29 @@ mod tests {
         let down = State::read(0, 4095, false);
         let up = State::read(4095, 4095, false);
         assert!(!debouncer.settling());
-        debouncer.update(down, 0, &mut |b, d| changes.push((b, d)));
+        debouncer.update(down, 0, &mut |b, d, _| changes.push((b, d)));
         assert!(debouncer.settling(), "seen once, not counted yet");
-        debouncer.update(down, DEBOUNCE_MS, &mut |b, d| changes.push((b, d)));
+        debouncer.update(down, DEBOUNCE_MS, &mut |b, d, _| changes.push((b, d)));
         assert!(!debouncer.settling());
         assert_eq!(changes, [(buttons::RIGHT, true)]);
-        debouncer.update(up, 100, &mut |b, d| changes.push((b, d)));
+        debouncer.update(up, 100, &mut |b, d, _| changes.push((b, d)));
         assert!(debouncer.settling(), "a release too");
+    }
+
+    #[test]
+    fn presses_and_releases_are_timed_when_first_seen() {
+        let mut debouncer = Debouncer::new();
+        let mut changes = Vec::new();
+        let right = State::read(0, 4095, false);
+        // Read every 30 ms, as between light sleeps: down at 60, up at 150.
+        for (now, reading) in [(0, State(0)), (30, State(0)), (60, right), (90, right), (120, right)]
+            .into_iter()
+            .chain([(150, State(0)), (180, State(0)), (210, State(0))])
+        {
+            debouncer.update(reading, now, &mut |b, d, at| changes.push((b, d, at)));
+        }
+        // Held 90 ms, not 120: no long press made of a click.
+        assert_eq!(changes, [(buttons::RIGHT, true, 60), (buttons::RIGHT, false, 150)]);
     }
 
     #[test]
@@ -243,7 +262,7 @@ mod tests {
             nothing,
         ];
         for (i, reading) in readings.into_iter().enumerate() {
-            debouncer.update(reading, i as u64 * 5, &mut |name, down| {
+            debouncer.update(reading, i as u64 * 5, &mut |name, down, _| {
                 events.push((name, down))
             });
         }
@@ -258,7 +277,7 @@ mod tests {
         let both = State::read(2694, 3, false);
         let mut events = Vec::new();
         for i in 0..5 {
-            debouncer.update(both, 100 + i * 5, &mut |name, down| {
+            debouncer.update(both, 100 + i * 5, &mut |name, down, _| {
                 events.push((name, down))
             });
         }
@@ -274,7 +293,7 @@ mod tests {
         let mut events = Vec::new();
         let confirm = State::read(2694, 4095, false);
         let mut at = |reading, now, events: &mut Vec<(&str, bool)>| {
-            debouncer.update(reading, now, &mut |name, down| events.push((name, down)));
+            debouncer.update(reading, now, &mut |name, down, _| events.push((name, down)));
         };
         at(confirm, 0, &mut events);
         at(State(0), 2, &mut events);

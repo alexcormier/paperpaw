@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- On the X4 and X4 Pro on battery, clicks made while the screen refreshes
+  are no longer lost, and a quick click is no longer taken as a long
+  press (which opened the quick panel while turning pages).
+
 ## [0.5.0-beta.1] - 2026-10-24
 
 This is a beta, for testers and developers. It is the first release of

@@ -739,11 +739,18 @@ impl Firmware {
         };
         let started = now();
         self.panel.start_refresh(refresh, false)?;
-        // A little early: the rest is watched.
+        // A little early: the rest is watched. In naps no longer than the
+        // idle ones, the buttons read after each: the readings stop in a
+        // light sleep, and a click within a refresh would be missed, a
+        // release seen only after it (a press that looks long). None
+        // while a press or a release settles.
         let expected = self.state.refresh_ms[kind].saturating_sub(20);
-        if expected > 0 {
-            power::nap_until(started.0 + expected);
-        }
+        let idle = if self.faster() { IDLE_FAST_MS } else { IDLE_MS };
+        let until = started.0 + expected;
+        while expected > 0
+            && !input::settling()
+            && power::nap_until(until.min(now().0 + idle))
+        {}
         let woke = now();
         let waited = self.panel.wait();
         let took = now().since(started);
