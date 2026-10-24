@@ -770,33 +770,6 @@ mod tests {
             })
         );
         assert_eq!(parse("drag 1 2 3 4 0 10"), None);
-        assert_eq!(
-            parse("clicks right 30 800 100"),
-            Some(Command::Clicks {
-                button: crate::buttons::ALL[3],
-                count: 30,
-                every: 800,
-                held: 100,
-                jitter: 0,
-            })
-        );
-        assert_eq!(
-            parse("clicks right 20 800 100 500"),
-            Some(Command::Clicks {
-                button: crate::buttons::ALL[3],
-                count: 20,
-                every: 800,
-                held: 100,
-                jitter: 500,
-            })
-        );
-        assert_eq!(parse("clicks right 20 800 100 700"), None);
-        // The gaps of a seed, as tools reckon them too.
-        let mut seed = 1;
-        let gaps: Vec<u16> = (0..4).map(|_| click_gap(800, 500, &mut seed)).collect();
-        assert_eq!(gaps, [1122, 788, 403, 533]);
-        assert_eq!(parse("clicks right 30 100 100"), None);
-        assert_eq!(parse("clicks nose 30 800 100"), None);
         assert_eq!(parse("drag 1 2 3"), None);
         assert_eq!(
             parse("emit core.book-opened path=2f61"),
@@ -843,6 +816,37 @@ mod tests {
             Some(Command::Panic(String::from("oh")))
         );
         assert_eq!(parse("restart now"), None);
+    }
+
+    #[test]
+    fn clicks_and_their_gaps() {
+        assert_eq!(
+            parse("clicks right 30 800 100"),
+            Some(Command::Clicks {
+                button: crate::buttons::ALL[3],
+                count: 30,
+                every: 800,
+                held: 100,
+                jitter: 0,
+            })
+        );
+        assert_eq!(
+            parse("clicks right 20 800 100 500"),
+            Some(Command::Clicks {
+                button: crate::buttons::ALL[3],
+                count: 20,
+                every: 800,
+                held: 100,
+                jitter: 500,
+            })
+        );
+        assert_eq!(parse("clicks right 20 800 100 700"), None);
+        // The gaps of a seed, as tools reckon them too.
+        let mut seed = 1;
+        let gaps: Vec<u16> = (0..4).map(|_| click_gap(800, 500, &mut seed)).collect();
+        assert_eq!(gaps, [1122, 788, 403, 533]);
+        assert_eq!(parse("clicks right 30 100 100"), None);
+        assert_eq!(parse("clicks nose 30 800 100"), None);
     }
 
     #[test]
