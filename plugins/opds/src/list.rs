@@ -58,9 +58,11 @@ impl ListScreen {
         // half; a catalog's row above it whole.
         let hint = ui::tr_input(env, "opds.hint");
         let help = ui::note_line_height(env, &style, display.width, hint);
-        let line = ((style.control_row()) * 3 / 2)
-            .max(help)
-            .min(display.height.saturating_sub(top + style.noted_row() as u16));
+        let line = ((style.control_row()) * 3 / 2).max(help).min(
+            display
+                .height
+                .saturating_sub(top + style.noted_row() as u16),
+        );
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
