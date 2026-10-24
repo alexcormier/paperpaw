@@ -66,12 +66,13 @@ pub fn request(
 
 /// Whether the list of locks in the file `path` (the answer to
 /// [`request`]) holds an exclusive lock still held at `now` (ms since
-/// 1970): a client upgrading the target.
-pub fn upgrading(service: Service, storage: &dyn Storage, path: &str, now: i64) -> bool {
+/// 1970): a client upgrading the target; `None` where the heap had no
+/// room to read the list (not known: nothing is written then either).
+pub fn upgrading(service: Service, storage: &dyn Storage, path: &str, now: i64) -> Option<bool> {
     let held = |renewed: Option<i64>| renewed.is_some_and(|at| now - at < TTL);
     match service {
         Service::WebDav => webdav_upgrading(storage, path, &held),
-        _ => server_upgrading(storage, path, &held),
+        _ => Some(server_upgrading(storage, path, &held)),
     }
 }
 
@@ -99,7 +100,11 @@ fn server_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>
 
 /// A WebDAV listing of the folder `locks`: a `<response>` per file, its
 /// `<href>` and `<getlastmodified>`.
-fn webdav_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>) -> bool) -> bool {
+fn webdav_upgrading(
+    storage: &dyn Storage,
+    path: &str,
+    held: &dyn Fn(Option<i64>) -> bool,
+) -> Option<bool> {
     let (mut found, mut href, mut modified) = (false, String::new(), String::new());
     let mut field: Option<bool> = None;
     let mut tokenizer = Tokenizer::new();
@@ -141,11 +146,11 @@ fn webdav_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>
         if n == 0 {
             break;
         }
-        tokenizer.feed(&piece[..n], &mut emit);
+        tokenizer.try_feed(&piece[..n], &mut emit).ok()?;
         at += n as u64;
     }
     tokenizer.finish(&mut emit);
-    found
+    Some(found)
 }
 
 /// Adds `text` to `field`, as much as fits in [`MAX_FIELD`] bytes.
@@ -186,7 +191,7 @@ mod tests {
 
     fn webdav(xml: &str) -> bool {
         let storage = MemoryStorage::new().with("locks.xml", xml);
-        upgrading(Service::WebDav, &storage, "locks.xml", NOW)
+        upgrading(Service::WebDav, &storage, "locks.xml", NOW).expect("read")
     }
 
     #[test]
@@ -228,7 +233,7 @@ mod tests {
 
     fn server(json: &str) -> bool {
         let storage = MemoryStorage::new().with("locks.json", json);
-        upgrading(Service::Server, &storage, "locks.json", NOW)
+        upgrading(Service::Server, &storage, "locks.json", NOW).expect("read")
     }
 
     #[test]

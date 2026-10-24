@@ -279,14 +279,20 @@ fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let at = feeds.iter().position(|f| f.url == url);
     if let Some(at) = at {
         match make_book(env, reply, &feeds, at) {
-            Some(feed) => {
+            Ok(feed) => {
                 done += 1;
                 if feeds[at] != feed {
                     feeds[at] = feed;
                     save(env.storage(), &feeds);
                 }
             }
-            None => failed += 1,
+            Err(Made::Failed) => failed += 1,
+            // The rest would fail as well: stopped, with the reason.
+            Err(Made::Memory) => {
+                let _ = env.storage().remove(&download(url));
+                out.push(Command::Notify(env.i18n().tr("news.no-memory").to_string()));
+                return;
+            }
         }
     }
     let _ = env.storage().remove(&download(url));
@@ -310,12 +316,19 @@ fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     out.push(Command::Notify(message));
 }
 
+/// Why a feed was not made into its book.
+enum Made {
+    Failed,
+    /// The heap had no room to read it.
+    Memory,
+}
+
 /// Makes the answer for `feeds[at]` its book: the feed, with the name it
-/// may have brought; `None` when that failed or the answer held no
+/// may have brought; an error when that failed or the answer held no
 /// article, as a Wi-Fi's sign-in page does: then the book there is stays.
-fn make_book(env: &Env<'_>, reply: &HttpReply, feeds: &[Feed], at: usize) -> Option<Feed> {
+fn make_book(env: &Env<'_>, reply: &HttpReply, feeds: &[Feed], at: usize) -> Result<Feed, Made> {
     if !reply.ok() {
-        return None;
+        return Err(Made::Failed);
     }
     let max_text = if env.device().memory == MemoryClass::Small {
         MAX_TEXT_SMALL
@@ -336,9 +349,13 @@ fn make_book(env: &Env<'_>, reply: &HttpReply, feeds: &[Feed], at: usize) -> Opt
     );
     let converted = match converted {
         Ok(converted) if converted.articles > 0 => converted,
+        Err(convert::Failure::Memory) => {
+            let _ = env.storage().remove(&page);
+            return Err(Made::Memory);
+        }
         _ => {
             let _ = env.storage().remove(&page);
-            return None;
+            return Err(Made::Failed);
         }
     };
     if feed.name.is_empty() && !converted.title.is_empty() {
@@ -347,11 +364,11 @@ fn make_book(env: &Env<'_>, reply: &HttpReply, feeds: &[Feed], at: usize) -> Opt
     let book = feed.book(&folder);
     if env.storage().rename(&page, &book).is_err() {
         let _ = env.storage().remove(&page);
-        return None;
+        return Err(Made::Failed);
     }
     keep_headlines(env, &book, &converted.headlines);
     retire_old_book(env.storage(), &folder, feeds, &feed);
-    Some(feed)
+    Ok(feed)
 }
 
 /// Where the newest headlines are kept: `title<TAB>book` lines, the

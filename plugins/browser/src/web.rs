@@ -110,7 +110,8 @@ pub(crate) fn title(storage: &dyn Storage, path: &str) -> Option<String> {
     let n = storage.read_at(path, 0, &mut head).ok()?;
     let mut title: Option<String> = None;
     let mut done = false;
-    Tokenizer::parse(&head[..n], &mut |token| match token {
+    let mut tokenizer = Tokenizer::new();
+    let mut emit = |token: Token<'_>| match token {
         Token::Start { name, .. } if !done && local_name(name).eq_ignore_ascii_case("title") => {
             title = Some(String::new());
         }
@@ -121,7 +122,10 @@ pub(crate) fn title(storage: &dyn Storage, path: &str) -> Option<String> {
             }
         }
         _ => {}
-    });
+    };
+    // Out of memory: no title (the page shows by its address).
+    tokenizer.try_feed(&head[..n], &mut emit).ok()?;
+    tokenizer.finish(&mut emit);
     let title = title?.split_whitespace().collect::<Vec<_>>().join(" ");
     (!title.is_empty()).then_some(title)
 }

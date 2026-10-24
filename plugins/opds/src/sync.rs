@@ -282,6 +282,14 @@ impl Sync {
         let Some(run) = &mut self.run else {
             return;
         };
+        // No room to read the list: a list that could not be read.
+        if page.memory {
+            let first = run.pages.len() <= 1;
+            if first && let Some(report) = &mut self.report {
+                report.unreachable += 1;
+            }
+            return self.next_catalog(env, out);
+        }
         // Sync follows no further lists: a catalog of lists has no books.
         let first = run.pages.len() == 1;
         if first

@@ -12,6 +12,20 @@ use alloc::vec::Vec;
 use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 use paperpaw_sdk::{Storage, StorageError};
 
+/// Why a feed was not made into a page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Failure {
+    /// The heap had no room to read it.
+    Memory,
+    Storage(StorageError),
+}
+
+impl From<StorageError> for Failure {
+    fn from(e: StorageError) -> Self {
+        Self::Storage(e)
+    }
+}
+
 /// Pieces the feed is read in.
 const CHUNK: usize = 2048;
 /// Headlines kept of a feed.
@@ -62,7 +76,7 @@ pub(crate) fn convert(
     to: &str,
     max_articles: usize,
     max_text: usize,
-) -> Result<Converted, StorageError> {
+) -> Result<Converted, Failure> {
     let mut reader = Reader {
         storage,
         to,
@@ -74,6 +88,7 @@ pub(crate) fn convert(
         depth: 0,
         started: false,
         failed: None,
+        memory: false,
         channel_title: String::new(),
     };
     let mut tokenizer = Tokenizer::new();
@@ -85,14 +100,22 @@ pub(crate) fn convert(
             break;
         }
         at += n as u64;
-        tokenizer.feed(&buf[..n], &mut |token| reader.token(token));
-        if reader.failed.is_some() || reader.converted.articles >= max_articles {
+        if tokenizer
+            .try_feed(&buf[..n], &mut |token| reader.token(token))
+            .is_err()
+        {
+            reader.memory = true;
+        }
+        if reader.memory || reader.failed.is_some() || reader.converted.articles >= max_articles {
             break;
         }
     }
     tokenizer.finish(&mut |token| reader.token(token));
+    if reader.memory {
+        return Err(Failure::Memory);
+    }
     if let Some(e) = reader.failed {
-        return Err(e);
+        return Err(e.into());
     }
     reader.begin()?;
     storage.append(to, b"</body>\n</html>\n")?;
@@ -112,12 +135,14 @@ struct Reader<'a> {
     /// The page's beginning is written.
     started: bool,
     failed: Option<StorageError>,
+    /// The heap had no room to read the feed or an article.
+    memory: bool,
     channel_title: String,
 }
 
 impl Reader<'_> {
     fn token(&mut self, token: Token<'_>) {
-        if self.failed.is_some() || self.converted.articles >= self.max_articles {
+        if self.memory || self.failed.is_some() || self.converted.articles >= self.max_articles {
             return;
         }
         match token {
@@ -254,7 +279,12 @@ impl Reader<'_> {
             return Ok(());
         }
         self.started = true;
-        let title = one_line(&text_of(&self.channel_title));
+        // Without room, no title: the feed fails as a whole at its end.
+        let title = text_of(&self.channel_title).unwrap_or_else(|| {
+            self.memory = true;
+            String::new()
+        });
+        let title = one_line(&title);
         self.converted.title = title.clone();
         let head = format!(
             "{HEAD}{0}</title>\n</head>\n<body>\n<h1>{0}</h1>\n",
@@ -268,13 +298,19 @@ impl Reader<'_> {
             self.failed = Some(e);
             return;
         }
-        let title = one_line(&text_of(&article.title));
+        let Some(title) = text_of(&article.title).map(|title| one_line(&title)) else {
+            self.memory = true;
+            return;
+        };
         let markup = if article.content.trim().is_empty() {
             &article.summary
         } else {
             &article.content
         };
-        let paragraphs = paragraphs(markup, self.max_text);
+        let Some(paragraphs) = paragraphs(markup, self.max_text) else {
+            self.memory = true;
+            return;
+        };
         if title.is_empty() && paragraphs.is_empty() {
             return;
         }
@@ -315,9 +351,10 @@ fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The text of markup, without its tags (for titles).
-fn text_of(markup: &str) -> String {
-    paragraphs(markup, MAX_FIELD).join(" ")
+/// The text of markup, without its tags (for titles); `None` where the
+/// heap had no room to read it.
+fn text_of(markup: &str) -> Option<String> {
+    Some(paragraphs(markup, MAX_FIELD)?.join(" "))
 }
 
 /// Elements that start a new paragraph.
@@ -349,8 +386,9 @@ fn is_block(name: &str) -> bool {
     )
 }
 
-/// The paragraphs of the text of `markup`, at most `max` bytes in all.
-fn paragraphs(markup: &str, max: usize) -> Vec<String> {
+/// The paragraphs of the text of `markup`, at most `max` bytes in all;
+/// `None` where the heap had no room to read it.
+fn paragraphs(markup: &str, max: usize) -> Option<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     let mut current = String::new();
     let mut total = 0;
@@ -393,10 +431,10 @@ fn paragraphs(markup: &str, max: usize) -> Vec<String> {
         }
         _ => {}
     };
-    tokenizer.feed(markup.as_bytes(), &mut emit);
+    tokenizer.try_feed(markup.as_bytes(), &mut emit).ok()?;
     tokenizer.finish(&mut emit);
     flush(&mut current, &mut out);
-    out
+    Some(out)
 }
 
 /// `text` safe in HTML.

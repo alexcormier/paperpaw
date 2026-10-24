@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use crate::builtin::{fonts, settings};
 use crate::document::{Document, DocumentError, Locator};
 use crate::layout::{Face, Page, PageImage, PageLine, Style, Typesetter};
-use crate::{Canvas, Color, Env, FontHandle, FontSet, Id, Rect};
+use crate::{Canvas, Color, Env, FontHandle, FontSet, Id, Point, Rect};
 
 /// Relative sizes of headings 1 to 6.
 const HEADING_SCALE: [f32; 6] = [1.6, 1.4, 1.2, 1.1, 1.0, 1.0];
@@ -743,17 +743,76 @@ pub fn draw_lines(
     }
 }
 
-/// Draws a picture of the page at its place in `page_type`'s box.
+/// Draws a picture of the page at its place in `page_type`'s box; where
+/// it was not decoded (the heap had no room for it), a frame with a note
+/// in its place.
 pub fn draw_image(canvas: &mut Canvas<'_>, env: &Env<'_>, page_type: &PageType, image: &PageImage) {
     let t = page_type;
     let left = (t.x + image.x + 0.5) as i32;
     let top = (t.y + image.y + 0.5) as i32;
     let (w, h) = ((image.width + 0.5) as i32, (image.height + 0.5) as i32);
-    crate::ui::draw_image(
-        canvas,
-        env.storage(),
-        &image.image,
-        Rect::new(left as u16, top as u16, w as u16, h as u16),
+    let area = Rect::new(left as u16, top as u16, w as u16, h as u16);
+    // Frames are drawn in bands: nothing read for those it is not in, nor
+    // where it is only described.
+    if area.intersection(&canvas.clip()).is_some()
+        && !canvas.is_blind()
+        && crate::image::Decoded::peek(env.storage(), &image.image.path).is_none()
+    {
+        return draw_missing_image(canvas, env, area);
+    }
+    crate::ui::draw_image(canvas, env.storage(), &image.image, area);
+}
+
+/// A frame in `area` where a picture is not there: with a short note
+/// where the note fits whole, else crossed out.
+fn draw_missing_image(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let style = crate::ui::UiStyle::new(env);
+    let line = u32::from(style.line()).max(1);
+    canvas.stroke(area, line, Color::BLACK);
+    let pad = style.gap();
+    let inner = Rect::new(
+        area.x.saturating_add(pad),
+        area.y.saturating_add(pad),
+        area.width.saturating_sub(2 * pad),
+        area.height.saturating_sub(2 * pad),
+    );
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
+    let text = env.i18n().tr("core.picture.missing");
+    let note = crate::widgets::Wrapped::fitting(
+        env,
+        text,
+        style.small(),
+        style.small() * 0.8,
+        inner.width,
+        inner.height,
+    );
+    if note.whole() {
+        let height = note.height(env).min(inner.height);
+        let at = Rect::new(
+            inner.x,
+            inner.y + (inner.height - height) / 2,
+            inner.width,
+            height,
+        );
+        note.draw(canvas, env, at, crate::widgets::Align::Center, Color::BLACK);
+        return;
+    }
+    let to = |edge: u32| i32::try_from(edge).unwrap_or(i32::MAX);
+    let (right, bottom) = (to(inner.right()), to(inner.bottom()));
+    let (x, y) = (i32::from(inner.x), i32::from(inner.y));
+    canvas.draw_line(
+        Point::new(x, y),
+        Point::new(right, bottom),
+        line,
+        Color::BLACK,
+    );
+    canvas.draw_line(
+        Point::new(right, y),
+        Point::new(x, bottom),
+        line,
+        Color::BLACK,
     );
 }
 
