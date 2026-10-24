@@ -1,6 +1,7 @@
 //! What lies behind the running firmware's image in the app partition it
 //! runs from: the room for the X4's plugins (`flash`), and where the web
-//! flasher leaves its bundle of plugins (`bundle`), on both chips.
+//! flasher left its bundle of plugins (`bundle`) before it could put it
+//! into the other app partition ([`other_app`]), on both chips.
 
 use esp_bootloader_esp_idf::partitions::{self, FlashStorage, PARTITION_TABLE_MAX_LEN};
 use esp_hal::peripherals::MMU_TABLE;
@@ -36,6 +37,29 @@ pub fn behind_image(flash: &mut FlashStorage<'static>) -> Result<Behind, &'stati
         end: offset + size,
         firmware,
     })
+}
+
+/// The other app partition of the two the OTA data chooses between (its
+/// offset and size): where the web flasher puts its bundle of plugins on a
+/// first flash, when nothing is in it yet (`bundle`).
+pub fn other_app(flash: &mut FlashStorage<'static>) -> Result<(u32, u32), &'static str> {
+    let (running, _) = running_partition(flash)?;
+    let mut table = alloc::vec![0u8; PARTITION_TABLE_MAX_LEN];
+    let table = partitions::read_partition_table(flash, &mut table)
+        .map_err(|_| "the partition table cannot be read")?;
+    table
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.partition_type(),
+                partitions::PartitionType::App(
+                    partitions::AppPartitionSubType::Ota0 | partitions::AppPartitionSubType::Ota1
+                )
+            )
+        })
+        .map(|p| (p.offset(), p.len()))
+        .find(|&(offset, _)| offset != running)
+        .ok_or("no other app partition")
 }
 
 /// The app partition this code runs from (its offset and size): the one

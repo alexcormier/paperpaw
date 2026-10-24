@@ -1,5 +1,8 @@
 //! The web flasher's bundle of plugins (`paperpaw_native::bundle`), found
-//! behind the firmware's image at its first start. Its plugins are copied
+//! at the firmware's first start at the start of the other app partition
+//! (the flasher puts it there for firmware that says it looks there,
+//! [`OTHER_SLOT`]: room for the whole store), or behind the firmware's
+//! image (where it put it before). Its plugins are copied
 //! onto the card into folders PaperPaw does not load (`plugins/.<id>.part`),
 //! each file checked by its SHA-256 as it is copied and a plugin's code by
 //! its author's signature, for the kernel to install before it loads
@@ -10,7 +13,9 @@
 //! author than the version installed before is not installed, and the plugin manager says
 //! so (`Native::not_installed`): the reader decides in the store, warned.
 //! Once they are all on the card, the bundle's first sector is erased
-//! (on the X4 its code plugins go there).
+//! (on the X4 its code plugins go there; in the other app partition an
+//! update goes there, which writes it whole anyway). A power cut before
+//! that leaves the bundle as it was: copied again at the next start.
 //!
 //! A bundle for another image, or one that is damaged, is erased without
 //! installing anything; one that cannot be copied (no card, a card full)
@@ -31,11 +36,30 @@ use paperpaw_sdk::Id;
 use paperpaw_sdk::builtin::PLUGIN_DIR;
 use paperpaw_sdk::native::{self, Author, NotInstalled, NotInstalledReason};
 
-use super::partition::behind_image;
+use super::partition::{behind_image, other_app};
 use crate::ota::Flash;
 
 /// Read and copied a piece at a time.
 const PIECE: usize = 4096;
+
+/// Says in the image that this firmware takes a bundle from the start of
+/// the other app partition: the web flasher looks for these bytes before
+/// putting it there, and puts it behind the image for a firmware without
+/// them.
+#[used]
+pub static OTHER_SLOT: [u8; 32] = *b"PaperPaw bundle: other slot, 1\0\0";
+
+/// Where a bundle lies, if one does: from `start` to at most `end`.
+fn found(flash: &mut FlashStorage<'static>, behind: (u32, u32)) -> Option<(u32, u32)> {
+    let mut head = [0u8; 4];
+    let other = other_app(flash)
+        .ok()
+        .map(|(offset, size)| (offset, offset + size));
+    [Some(behind), other]
+        .into_iter()
+        .flatten()
+        .find(|&(start, _)| flash.read(start, &mut head).is_ok() && head == BUNDLE_MAGIC)
+}
 
 /// The bundle's bytes, from flash.
 struct InFlash<'a> {
@@ -64,20 +88,17 @@ pub struct Staged {
 pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
     let mut flash = flash.borrow_mut();
     let behind = behind_image(&mut flash).ok()?;
-    let mut head = [0u8; 4];
-    flash.read(behind.start, &mut head).ok()?;
-    if head != BUNDLE_MAGIC {
-        return None;
-    }
+    let (start, end) = found(&mut flash, (behind.start, behind.end))?;
+    info!("bundle: at {start:#x}");
     let mut source = InFlash {
         flash: &mut flash,
-        at: behind.start,
+        at: start,
     };
-    let bundle = match Bundle::read(&mut source, &behind.firmware, behind.end - behind.start) {
+    let bundle = match Bundle::read(&mut source, &behind.firmware, end - start) {
         Ok(bundle) => bundle,
         Err(why) => {
             warn!("bundle: {why}: erased, nothing installed");
-            erase(&mut flash, behind.start);
+            erase(&mut flash, start);
             return None;
         }
     };
@@ -87,7 +108,7 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
     buf.resize(PIECE, 0);
     let mut source = InFlash {
         flash: &mut flash,
-        at: behind.start,
+        at: start,
     };
     let mut staged = Staged::default();
     // The authors' keys and the code of the plugins installed, kept once
@@ -133,7 +154,7 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
             warn!("bundle: {plugin}: its code not named as installed");
         }
     }
-    erase(&mut flash, behind.start);
+    erase(&mut flash, start);
     info!(
         "bundle: {} plugins copied onto the card in {} ms, {} not installed",
         staged.installs.len(),

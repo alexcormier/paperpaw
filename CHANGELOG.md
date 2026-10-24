@@ -30,6 +30,11 @@ change the plugin SDK.
 
 ### Added
 
+- The web flasher can write almost the whole store with the firmware:
+  the X4s take its bundle of plugins from the other app partition too,
+  empty on a first flash (8 MB), not only from behind the image (about
+  2 MB), and say so in the image for the flasher to find.
+
 - Switching from CrossPoint without a computer: each release has an
   install file per device (`paperpaw-<device>-<version>-install.bin`)
   for CrossPoint's *SD firmware update*, and CI fails a build that no

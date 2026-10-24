@@ -1,8 +1,10 @@
 //! The web flasher's bundle of plugins (ADR 0024): the plugins a reader
 //! chose, each with its files (a data plugin's folder, a code plugin's
-//! `code.ppn` for this device and firmware), written behind the
-//! firmware's image in the app partition it goes to, which the firmware
-//! installs onto the card at its first start, then erases. The format is
+//! `code.ppn` for this device and firmware), written with the firmware:
+//! at the start of the other app partition, empty on a first flash, where
+//! the firmware says it looks there (room for the whole store), else
+//! behind the firmware's image in the app partition it goes to. The
+//! firmware installs it onto the card at its first start, then erases it. The format is
 //! the web flasher's (paperpaw.org, `static/flash/bundle.js`); this reader
 //! takes what it writes and nothing else.
 //!
@@ -15,7 +17,7 @@
 //! | 6..8 | P, the number of plugins (1 to 256) |
 //! | 8..12 | F, the number of files (P to 4096) |
 //! | 12..16 | the bundle's length, to the end of the last file |
-//! | 16..48 | the SHA-256 the app image ends with: the image it lies behind |
+//! | 16..48 | the SHA-256 the app image ends with: the image it came with |
 //! | 48..80 | the SHA-256 of bytes 80 to the bundle's length |
 //! | 80.. | P plugins of 16 bytes, in the order to install |
 //! | then | F files of 48 bytes, by plugin in that order |
