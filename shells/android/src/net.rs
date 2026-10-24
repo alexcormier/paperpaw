@@ -5,6 +5,7 @@
 //! says for every shell: never down to plain `http`, never with
 //! credentials to another server.
 
+use std::cell::RefCell;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 
@@ -15,12 +16,51 @@ use jni::objects::{JObject, JValue};
 use paperpaw_core::sdk::HttpError;
 use paperpaw_core::{HttpCall, HttpResponse, MAX_RESPONSE};
 
+/// How much of an answer's body came: the request's id, the bytes so
+/// far, and in all where the answer said.
+type Progress = (u32, u64, Option<u64>);
+
 /// Requests in flight and their answers.
 pub struct Net {
     vm: usize,
     waker: AndroidAppWaker,
     sender: Sender<HttpResponse>,
     receiver: Receiver<HttpResponse>,
+    /// How far the answers that ask for it have come.
+    progress: (Sender<Progress>, Receiver<Progress>),
+}
+
+/// Where a request's thread tells how far its answer came: set on the
+/// thread of a request that asks ([`HttpCall::progress`]).
+struct Teller {
+    sender: Sender<Progress>,
+    waker: AndroidAppWaker,
+    /// The bytes last told: the next once a hundredth further on (or
+    /// 256 KiB where the size is not known), so the loop is woken seldom.
+    told: Option<u64>,
+}
+
+thread_local! {
+    static TELLER: RefCell<Option<Teller>> = const { RefCell::new(None) };
+}
+
+/// Tells how much of request `id`'s body came, where its thread tells.
+fn tell(id: u32, received: u64, total: Option<u64>) {
+    TELLER.with_borrow_mut(|teller| {
+        let Some(teller) = teller.as_mut() else {
+            return;
+        };
+        let step = total.map_or(256 << 10, |total| (total / 100).max(1));
+        if teller
+            .told
+            .is_some_and(|told| received < told.saturating_add(step))
+        {
+            return;
+        }
+        teller.told = Some(received);
+        let _ = teller.sender.send((id, received, total));
+        teller.waker.wake();
+    });
 }
 
 impl Net {
@@ -31,13 +71,20 @@ impl Net {
             waker: app.create_waker(),
             sender,
             receiver,
+            progress: channel(),
         }
     }
 
     /// Starts a request.
     pub fn start(&self, call: HttpCall) {
         let (vm, waker, sender) = (self.vm, self.waker.clone(), self.sender.clone());
+        let teller = call.progress.then(|| Teller {
+            sender: self.progress.0.clone(),
+            waker: self.waker.clone(),
+            told: None,
+        });
         thread::spawn(move || {
+            TELLER.with_borrow_mut(|told| *told = teller);
             // SAFETY: the process's Java VM, valid while the app runs.
             let response = match unsafe { JavaVM::from_raw(vm as *mut jni::sys::JavaVM) } {
                 Ok(vm) => perform(&vm, call),
@@ -58,6 +105,11 @@ impl Net {
     /// An answer that has arrived, if any.
     pub fn next(&self) -> Option<HttpResponse> {
         self.receiver.try_recv().ok()
+    }
+
+    /// How far an answer that asks for it has come, if it did since.
+    pub fn next_progress(&self) -> Option<Progress> {
+        self.progress.1.try_recv().ok()
     }
 }
 
@@ -296,6 +348,15 @@ fn answer(
     };
     let etag = header(env, conn, "ETag")?;
     let content_type = header(env, conn, "Content-Type")?;
+    // The size, for the progress of a successful answer (-1: not said).
+    let total = if success && call.progress {
+        let length = env
+            .call_method(conn, "getContentLengthLong", "()J", &[])?
+            .j()?;
+        u64::try_from(length).ok()
+    } else {
+        None
+    };
     let mut headers = Vec::new();
     for name in &call.want_headers {
         if let Some(value) = header(env, conn, name)? {
@@ -329,6 +390,9 @@ fn answer(
             let mut chunk = vec![0i8; n.min(room)];
             env.get_byte_array_region(&buffer, 0, &mut chunk)?;
             body.extend(chunk.iter().map(|&b| b as u8));
+            if success && call.progress {
+                tell(call.id, body.len() as u64, total);
+            }
             if too_long {
                 break;
             }

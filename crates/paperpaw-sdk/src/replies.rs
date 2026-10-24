@@ -298,6 +298,59 @@ impl EventData for HttpReply {
     }
 }
 
+/// How far the answer to a request has come while its body comes
+/// ([`HttpRequest::progress`](crate::HttpRequest::progress)): for a bar
+/// with its percent where the size is known, else the bytes received.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct HttpProgress {
+    /// The bytes of the body received so far.
+    pub received: u64,
+    /// The bytes of the body in all, where the server said
+    /// (`Content-Length`).
+    pub total: Option<u64>,
+    /// The request's own parameters
+    /// ([`HttpRequest::with`](crate::HttpRequest::with)).
+    pub context: Params,
+}
+
+impl HttpProgress {
+    pub fn new(received: u64, total: Option<u64>, context: Params) -> Self {
+        Self {
+            received,
+            total,
+            context,
+        }
+    }
+
+    /// How much came, in thousandths of the whole (at most 1000), where
+    /// its size is known.
+    pub fn permille(&self) -> Option<u16> {
+        let total = self.total.filter(|t| *t > 0)?;
+        let share = u128::from(self.received) * 1000 / u128::from(total);
+        Some(u16::try_from(share.min(1000)).unwrap_or(1000))
+    }
+}
+
+impl EventData for HttpProgress {
+    fn to_params(&self) -> Params {
+        let params = with_context(Params::new(), &self.context)
+            .with(http_params::RECEIVED, self.received.to_string());
+        match self.total {
+            Some(total) => params.with(http_params::TOTAL, total.to_string()),
+            None => params,
+        }
+    }
+
+    fn from_params(params: &Params) -> Option<Self> {
+        Some(Self {
+            received: params.get(http_params::RECEIVED)?.parse().ok()?,
+            total: params.get(http_params::TOTAL).and_then(|t| t.parse().ok()),
+            context: context(params, &[http_params::RECEIVED, http_params::TOTAL]),
+        })
+    }
+}
+
 /// The reply to [`Command::Speak`](crate::Command::Speak): whether the
 /// text was spoken, and the speech's own parameters
 /// ([`Speech::with`](crate::Speech::with)).
@@ -681,6 +734,40 @@ impl EventData for Confirmed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A download's progress, written and read again: its thousandths
+    /// where the size is known, the request's parameters along; a
+    /// request keeps its progress event whatever parameters it gets.
+    #[test]
+    fn progress_is_written_and_read_with_its_share() {
+        let context = Params::new().with("book", "b");
+        let half = HttpProgress::new(512, Some(1024), context.clone());
+        assert_eq!(half.permille(), Some(500));
+        assert_eq!(HttpProgress::from_params(&half.to_params()), Some(half));
+        let unsized_ = HttpProgress::new(10, None, context);
+        assert_eq!(unsized_.permille(), None);
+        assert_eq!(
+            HttpProgress::new(9, Some(4), Params::new()).permille(),
+            Some(1000)
+        );
+        assert_eq!(
+            HttpProgress::new(9, Some(0), Params::new()).permille(),
+            None
+        );
+        assert_eq!(
+            HttpProgress::from_params(&unsized_.to_params()),
+            Some(unsized_)
+        );
+        const PROGRESS: crate::event::Event<HttpProgress> = crate::event::Event::new("t.progress");
+        let request = crate::HttpRequest::get("https://h.org/b", Id::new_static("t.reply"))
+            .progress(&PROGRESS)
+            .with(Params::new().with("book", "b"));
+        assert_eq!(
+            request.params().get(http_params::PROGRESS),
+            Some("t.progress")
+        );
+        assert_eq!(request.params().get("book"), Some("b"));
+    }
 
     #[test]
     fn replies_through_params_and_back() {

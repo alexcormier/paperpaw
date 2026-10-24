@@ -399,6 +399,7 @@ mod tests {
             timeout_ms: 1000,
             want_headers: Vec::new(),
             save_to: None,
+            progress: false,
         };
         assert!(http::Route::start(&mut route, call).is_none());
         let polls = (0..100)

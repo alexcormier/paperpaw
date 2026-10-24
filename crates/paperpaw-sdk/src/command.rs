@@ -213,7 +213,23 @@ impl HttpRequest {
 
     /// With these parameters, passed back with the reply.
     pub fn with(mut self, params: Params) -> Self {
+        let progress = self.params.get(http_params::PROGRESS).map(String::from);
         self.params = params;
+        if let Some(progress) = progress {
+            self.params.set(http_params::PROGRESS, progress);
+        }
+        self
+    }
+
+    /// With `event` while its answer's body comes (a download, see
+    /// [`save_to`](Self::save_to)): how much came and, where the server
+    /// said, how much there is in all ([`HttpProgress`](crate::HttpProgress),
+    /// with this request's parameters). The kernel passes it on at most
+    /// every 5 % or every 2 seconds, and never after the reply: a screen
+    /// redraws its progress no more often than that.
+    pub fn progress(mut self, event: &crate::event::Event<crate::HttpProgress>) -> Self {
+        self.params
+            .set(http_params::PROGRESS, String::from(event.id().as_str()));
         self
     }
 
@@ -469,6 +485,15 @@ pub mod http_params {
     pub const ERROR: &str = "error";
     /// `true` where the body was cut to the most the request takes.
     pub const TRUNCATED: &str = "truncated";
+    /// In a request's parameters, the event its progress comes as
+    /// ([`HttpRequest::progress`](crate::HttpRequest::progress)); the
+    /// kernel takes it out.
+    pub const PROGRESS: &str = "http-progress";
+    /// How many bytes of the body came so far
+    /// ([`HttpProgress`](crate::HttpProgress)).
+    pub const RECEIVED: &str = "received";
+    /// How many bytes the body has in all, where the server said.
+    pub const TOTAL: &str = "total";
 }
 
 /// Text to speak aloud (see [`Command::Speak`]).

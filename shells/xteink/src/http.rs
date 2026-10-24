@@ -103,6 +103,8 @@ struct Call {
     sink: Sink,
     /// Bytes of the body so far.
     got: u64,
+    /// Bytes of the body last told the kernel ([`Calls::progress`]).
+    told: u64,
     /// Until when it may wait for the network, or for progress.
     until: u64,
     /// Until when it may take in all ([`HttpCall::timeout_ms`]).
@@ -150,10 +152,30 @@ impl Calls {
             phase: Phase::Waiting,
             sink,
             got: 0,
+            told: 0,
             until: now_ms() + OFFLINE_MS,
             deadline,
             replaced: false,
         });
+    }
+
+    /// How far the successful answers of requests that ask for it
+    /// ([`HttpCall::progress`]) came since the last call: the request's
+    /// id, its body's bytes so far, and in all where the answer said
+    /// (the kernel thins them out).
+    pub fn progress(&mut self) -> Vec<(u32, u64, Option<u64>)> {
+        self.calls
+            .iter_mut()
+            .filter(|c| c.call.progress && c.got > c.told)
+            .filter_map(|c| {
+                let Phase::Exchanging { parser, .. } = &c.phase else {
+                    return None;
+                };
+                let head = parser.head().filter(|h| (200..300).contains(&h.status))?;
+                c.told = c.got;
+                Some((c.call.id, c.got, head.length))
+            })
+            .collect()
     }
 
     /// Requests are going on.

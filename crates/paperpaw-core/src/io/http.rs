@@ -7,9 +7,12 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_platform::{Storage, StorageError};
+use paperpaw_platform::{Instant, Storage, StorageError};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::{Command, HttpError, HttpOptions, HttpReply, HttpRequest, Id, Params};
+use paperpaw_sdk::http_params;
+use paperpaw_sdk::{
+    Command, HttpError, HttpOptions, HttpProgress, HttpReply, HttpRequest, Id, Params,
+};
 
 /// Longest response body passed on to plugins.
 pub const MAX_RESPONSE: usize = 1 << 20;
@@ -24,6 +27,12 @@ pub const TIMEOUT_MS: u32 = 30_000;
 pub const DOWNLOAD_TIMEOUT_MS: u32 = 10 * 60_000;
 /// Longest response body saved to a file, and longest file sent.
 pub const MAX_FILE: usize = 64 << 20;
+/// A request's progress is passed on once it came this much further, in
+/// thousandths of the whole ([`HttpRequest::progress`]), ...
+pub const PROGRESS_STEP: u16 = 50;
+/// ... or this long after it was last, if more came: a screen redraws
+/// its bar no more often (on e-ink each redraw costs).
+pub const PROGRESS_MS: u64 = 2000;
 
 /// A request for the shell to make, e.g. on a background thread.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,6 +68,10 @@ pub struct HttpCall {
     /// any case) replaces this one: a shell that writes the file itself
     /// drops this one's transfer then; its answer is passed over.
     pub save_to: Option<String>,
+    /// The plugin wants to hear how much of the body came: the shell says
+    /// so as it comes ([`Kernel::http_progress`](crate::Kernel::http_progress)),
+    /// as often as it likes (the kernel thins it out).
+    pub progress: bool,
 }
 
 impl HttpCall {
@@ -132,6 +145,30 @@ struct Awaiting {
     save_to: Option<String>,
     /// Made while the kernel handled the reader's input.
     reader: bool,
+    /// The event its progress comes as, and how far it was when last.
+    progress: Option<Progress>,
+}
+
+/// A request's progress, as last passed on: when, how many bytes, and in
+/// thousandths of the whole where known.
+#[derive(Debug)]
+struct Progress {
+    event: Id,
+    shown: Option<(Instant, u64, Option<u16>)>,
+}
+
+/// `params` without the event a request's progress comes as, and that
+/// event.
+fn take_progress(params: Params) -> (Params, Option<Id>) {
+    let Some(event) = params.get(http_params::PROGRESS) else {
+        return (params, None);
+    };
+    let event = Id::parse(event).ok();
+    let mut kept = Params::new();
+    for (key, value) in params.iter().filter(|(k, _)| *k != http_params::PROGRESS) {
+        kept.set(String::from(key), value);
+    }
+    (kept, event)
 }
 
 /// Plugins' requests: those for the shell, and those it has not answered.
@@ -181,7 +218,9 @@ impl Http {
         storage: &dyn Storage,
         out: &mut Vec<Command>,
     ) {
-        let request = request.into_parts();
+        let mut request = request.into_parts();
+        let (params, progress) = take_progress(request.params);
+        request.params = params;
         if !network {
             return reply(
                 request.reply,
@@ -248,6 +287,7 @@ impl Http {
             timeout_ms,
             want_headers,
             save_to: request.save_to.clone(),
+            progress: progress.is_some(),
         });
         self.awaiting.push(Awaiting {
             id,
@@ -255,7 +295,45 @@ impl Http {
             context: request.params,
             save_to: request.save_to,
             reader,
+            progress: progress.map(|event| Progress { event, shown: None }),
         });
+    }
+
+    /// How much of the body of request `id` came (`received` of `total`,
+    /// where known), at `now`: the plugin's progress event, where it asked
+    /// for one, the first time, then once it came [`PROGRESS_STEP`] further
+    /// or [`PROGRESS_MS`] passed with more come. Nothing for a request
+    /// answered or taken back.
+    pub fn progress(
+        &mut self,
+        id: u32,
+        received: u64,
+        total: Option<u64>,
+        now: Instant,
+        out: &mut Vec<Command>,
+    ) {
+        let Some(awaiting) = self.awaiting.iter_mut().find(|a| a.id == id) else {
+            return;
+        };
+        let Some(progress) = awaiting.progress.as_mut() else {
+            return;
+        };
+        let shown = HttpProgress::new(received, total, awaiting.context.clone());
+        let permille = shown.permille();
+        let due = match progress.shown {
+            None => true,
+            Some((at, before, was)) => {
+                let further = match (permille, was) {
+                    (Some(permille), Some(was)) => permille >= was.saturating_add(PROGRESS_STEP),
+                    _ => false,
+                };
+                received > before && (further || now.since(at) >= PROGRESS_MS)
+            }
+        };
+        if due {
+            progress.shown = Some((now, received, permille));
+            out.push(Command::Emit(progress.event.clone(), shown.into_params()));
+        }
     }
 
     /// Turns a request's answer into the plugin's event; a successful
@@ -444,6 +522,80 @@ mod tests {
         };
         http.answer(response, &storage, &mut out);
         assert_eq!(reply_of(&out).header("Last-Modified"), Some("Tue"));
+    }
+
+    const PROGRESS: paperpaw_sdk::event::Event<HttpProgress> =
+        paperpaw_sdk::event::Event::new("test.progress");
+
+    /// The progress passed on: bytes received and thousandths, each time.
+    fn progress_of(out: &[Command]) -> Vec<(u64, Option<u16>)> {
+        out.iter()
+            .filter_map(|c| match c {
+                Command::Emit(event, params) if *event == *PROGRESS.id() => {
+                    HttpProgress::from_params(params).map(|p| (p.received, p.permille()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A download's progress, as the shell says it: passed on the first
+    /// time, then 5 % further on or 2 seconds later with more come, never
+    /// after the answer; without a size, every 2 seconds. The request's
+    /// own parameters come with it and with the reply, the event not.
+    #[test]
+    fn progress_is_passed_on_thinned_and_ends_with_the_answer() {
+        let storage = MemoryStorage::new();
+        let mut out = Vec::new();
+        let mut http = Http::default();
+        let request = get("https://h.org/book.epub", Some("book.epub"))
+            .progress(&PROGRESS)
+            .with(Params::new().with("book", "b"));
+        http.request(request, true, false, &storage, &mut out);
+        let plain = get("https://h.org/feed", None);
+        http.request(plain, true, false, &storage, &mut out);
+        let calls = http.take();
+        assert!(calls[0].progress && !calls[1].progress);
+        let (book, feed) = (calls[0].id, calls[1].id);
+        let said = [
+            (0, 0),
+            (100, 10),
+            (200, 49),
+            (300, 50),
+            (400, 60),
+            (2400, 61),
+            (5000, 61),
+        ];
+        for (at, received) in said {
+            http.progress(book, received, Some(1000), Instant(at), &mut out);
+        }
+        // Asked for nothing: nothing heard.
+        http.progress(feed, 10, Some(100), Instant(0), &mut out);
+        assert_eq!(
+            progress_of(&out),
+            [(0, Some(0)), (50, Some(50)), (61, Some(61))]
+        );
+        let Some(Command::Emit(_, params)) = out.last() else {
+            panic!("no progress");
+        };
+        let heard = HttpProgress::from_params(params).unwrap();
+        assert_eq!(heard.context.get("book"), Some("b"));
+        assert_eq!(heard.context.get(http_params::PROGRESS), None);
+        out.clear();
+        let mut done = answer(200, b"PK");
+        done.id = book;
+        http.answer(done, &storage, &mut out);
+        assert_eq!(reply_of(&out).context.get(http_params::PROGRESS), None);
+        http.progress(book, 1000, Some(1000), Instant(9000), &mut out);
+        assert!(progress_of(&out).is_empty());
+        // Without a size: once, then every 2 seconds.
+        let unsized_ = get("https://h.org/other.epub", Some("other.epub")).progress(&PROGRESS);
+        http.request(unsized_, true, false, &storage, &mut out);
+        let other = http.take()[0].id;
+        for (at, received) in [(0, 100), (1000, 200), (2100, 300)] {
+            http.progress(other, received, None, Instant(at), &mut out);
+        }
+        assert_eq!(progress_of(&out), [(100, None), (300, None)]);
     }
 
     #[test]

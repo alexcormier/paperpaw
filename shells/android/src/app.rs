@@ -232,6 +232,10 @@ fn android_main(app: AndroidApp) {
             let effects = state.kernel.set_status(at, status::read(&app, at));
             changed |= apply(state, effects);
         }
+        while let Some((id, received, total)) = state.net.next_progress() {
+            let effects = state.kernel.http_progress(now(), id, received, total);
+            changed |= apply(state, effects);
+        }
         while let Some(response) = state.net.next() {
             let effects = state.kernel.http_response(now(), response);
             changed |= apply(state, effects);
