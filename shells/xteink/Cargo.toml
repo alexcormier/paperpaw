@@ -99,9 +99,28 @@ esp-radio = { version = "=1.0.0-beta.1", features = ["wifi", "unstable", "esp-al
 esp-rtos = { version = "0.4", features = ["esp-radio", "esp-alloc"] }
 smoltcp = { version = "0.12", default-features = false, features = ["medium-ethernet", "proto-ipv4", "proto-dhcpv4", "proto-dns", "socket-tcp", "socket-udp", "socket-dhcpv4", "socket-dns", "alloc"] }
 embassy-net-driver = "0.2"
-mbedtls-rs = "0.3"
+# mbedTLS, built here (cmake, Ninja and a C compiler: clang for the X4,
+# espup's GCC for the ESP32-S3 below) with what PaperPaw's HTTPS client
+# uses alone, and 4 KB for the records it sends (requests, small
+# uploads) instead of 16: 12 KB less for each secure connection, where
+# the X4's memory is tightest. Records received stay 16 KB, as servers
+# send them that large.
+mbedtls-rs = { version = "0.3", default-features = false, features = [
+    "tls-client", "tls-core", "tls-proto-tls12", "tls-proto-tls13",
+    "x509-parse", "pk", "drbg-ctr", "entropy",
+    "alg-rsa", "alg-rsa-pss", "alg-ecp", "alg-ecdh", "alg-ecdsa",
+    "curve-secp256r1", "curve-secp384r1", "curve-secp521r1", "curve-curve25519",
+    "alg-aes", "alg-gcm", "alg-chacha20", "alg-chachapoly", "cipher-mode-cbc",
+    "alg-sha1", "alg-sha256", "alg-sha512", "alg-hkdf",
+    "kex-ecdhe-ecdsa", "kex-ecdhe-rsa", "kex-rsa",
+    "ssl-in-content-len-16384", "ssl-out-content-len-4096",
+] }
 webpki-roots = "1"
 rand_core = "0.10"
+
+# The ESP32-S3's mbedTLS is built with espup's Xtensa GCC.
+[target.'cfg(target_arch = "xtensa")'.dependencies]
+mbedtls-rs = { version = "0.3", default-features = false, features = ["use-gcc"] }
 
 [build-dependencies]
 # The list of the plugins built in, written as updates read it.
