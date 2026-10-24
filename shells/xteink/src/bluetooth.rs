@@ -10,6 +10,11 @@
 //! of its own ([`LINKS`] of them, the kernel's `max_links`): connecting,
 //! its GATT client, pairing and the HID reports of a remote.
 //!
+//! Switched off it costs no heap: the host, its resources, its packets
+//! and what the main loop shares with it are made when the radio comes
+//! up and dropped when it goes down. What stays is code and some 0.5 KB
+//! of the controller's statics.
+//!
 //! Advertising and the GATT server come with step 4 of the ADR: until
 //! then advertising ends at once and the server's calls are dropped.
 
@@ -22,6 +27,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use core::future::{Future, poll_fn};
 use core::pin::Pin;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll, Waker};
 
 use bt_hci::param::FilterDuplicates;
@@ -58,11 +64,84 @@ const REPORT_MAP_MOST: usize = 512;
 const AD_APPEARANCE: u8 = 0x19;
 const AD_SERVICE_DATA_128: u8 = 0x21;
 
+/// Packets the host has at once, at most, and the bytes of each.
+const PACKETS: usize = 16;
+const PACKET_BYTES: usize = 251;
+
 type Hci = ExternalController<BleConnector<'static>, 10>;
-type Pool = DefaultPacketPool;
+type Pool = HeapPool;
 type Host<'a> = Stack<'a, Hci, Pool>;
 type Resources = HostResources<Hci, Pool, LINKS, 1, 1, 8>;
 type Client<'a> = GattClient<'a, Hci, Pool, SERVICES>;
+
+/// embassy-time's clock, for the host's timeouts: the main loop polls
+/// the host while the radio is up, so a timer needs no wake-up of its
+/// own (and no executor, whose code would stay in IRAM).
+struct Clock;
+
+impl embassy_time_driver::Driver for Clock {
+    fn now(&self) -> u64 {
+        crate::micros() * embassy_time_driver::TICK_HZ / 1_000_000
+    }
+
+    fn schedule_wake(&self, _at: u64, _waker: &Waker) {}
+}
+
+embassy_time_driver::time_driver_impl!(static CLOCK: Clock = Clock);
+
+/// The host's packets, from the heap and only while the radio is up
+/// (trouble-host's own pool is a static of 4 KB of internal RAM, kept
+/// while Bluetooth is off).
+struct HeapPool;
+
+/// Packets alive now.
+static LIVE_PACKETS: AtomicUsize = AtomicUsize::new(0);
+
+impl PacketPool for HeapPool {
+    type Packet = HeapPacket;
+    const MTU: usize = PACKET_BYTES;
+
+    fn allocate() -> Option<HeapPacket> {
+        if LIVE_PACKETS.fetch_add(1, Ordering::Relaxed) >= PACKETS {
+            LIVE_PACKETS.fetch_sub(1, Ordering::Relaxed);
+            return None;
+        }
+        let mut bytes = Vec::new();
+        if bytes.try_reserve_exact(PACKET_BYTES).is_err() {
+            LIVE_PACKETS.fetch_sub(1, Ordering::Relaxed);
+            return None;
+        }
+        bytes.resize(PACKET_BYTES, 0);
+        Some(HeapPacket(bytes))
+    }
+
+    fn capacity() -> usize {
+        PACKETS
+    }
+}
+
+/// A packet of [`HeapPool`].
+struct HeapPacket(Vec<u8>);
+
+impl Packet for HeapPacket {}
+
+impl AsRef<[u8]> for HeapPacket {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl AsMut<[u8]> for HeapPacket {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
+impl Drop for HeapPacket {
+    fn drop(&mut self) {
+        LIVE_PACKETS.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 
 /// What the main loop and the future share: calls in, reports out.
 #[derive(Default)]
@@ -92,50 +171,62 @@ impl Shared {
 
 /// The radio as the main loop sees it.
 pub struct Bluetooth {
-    shared: Rc<Shared>,
+    /// The bonds as the kernel keeps them, for the next start.
+    bonds: Vec<Bond>,
     /// Everything while the controller is up.
-    session: Option<Pin<Box<dyn Future<Output = ()>>>>,
+    on: Option<On>,
+    /// What was reported as the radio went down, for the next poll.
+    reports: Vec<BtReport>,
+}
+
+/// The radio up: what the main loop shares with the host, and the host.
+struct On {
+    shared: Rc<Shared>,
+    session: Pin<Box<dyn Future<Output = ()>>>,
 }
 
 impl Bluetooth {
     pub fn new() -> Self {
         Self {
-            shared: Rc::default(),
-            session: None,
+            bonds: Vec::new(),
+            on: None,
+            reports: Vec::new(),
         }
     }
 
     /// The controller is up: the main loop keeps coming by (no light
     /// sleep).
     pub fn is_on(&self) -> bool {
-        self.session.is_some()
+        self.on.is_some()
     }
 
     /// Does what the kernel asked. `start_scheduler` starts the tasks
     /// the controller runs on, where they are not yet.
     pub fn apply(&mut self, call: BtCall, start_scheduler: impl FnOnce()) {
-        match call {
-            BtCall::Radio { on: true } if self.session.is_none() => {
+        match (call, &self.on) {
+            (BtCall::Radio { on: true }, None) => {
                 start_scheduler();
                 self.start();
             }
-            BtCall::Radio { on: false } if self.session.is_some() => {
-                // Dropped: the host, the links and the controller go down.
-                self.session = None;
+            (BtCall::Radio { on: false }, Some(_)) => {
+                // Dropped: the host, the links and the controller go down,
+                // and everything they had on the heap.
+                self.on = None;
                 log::info!("bluetooth: off");
-                self.shared.calls.borrow_mut().clear();
-                self.shared.report(BtReport::Radio { on: false });
+                self.reports.push(BtReport::Radio { on: false });
             }
-            BtCall::Radio { .. } => {}
-            BtCall::Bonds(bonds) => {
-                *self.shared.bonds.borrow_mut() = bonds;
-                self.shared.bonds_new.set(true);
+            (BtCall::Bonds(bonds), on) => {
+                if let Some(on) = on {
+                    on.shared.bonds.borrow_mut().clone_from(&bonds);
+                    on.shared.bonds_new.set(true);
+                }
+                self.bonds = bonds;
             }
-            other if self.session.is_some() => self.shared.calls.borrow_mut().push_back(other),
+            (call, Some(on)) => on.shared.calls.borrow_mut().push_back(call),
             // A bond forgotten comes with the bonds left; the GATT server
             // comes with step 4 of the ADR.
-            BtCall::Forget { .. } | BtCall::Server(_) => {}
-            other => log::warn!("bluetooth: off, dropped {other:?}"),
+            (BtCall::Radio { .. } | BtCall::Forget { .. } | BtCall::Server(_), None) => {}
+            (call, None) => log::warn!("bluetooth: off, dropped {call:?}"),
         }
     }
 
@@ -146,13 +237,20 @@ impl Bluetooth {
         match BleConnector::new(bt, esp_radio::ble::Config::default()) {
             Ok(connector) => {
                 log::info!("bluetooth: on");
-                self.shared.bonds_new.set(true);
-                self.session = Some(Box::pin(session(self.shared.clone(), connector)));
-                self.shared.report(BtReport::Radio { on: true });
+                let shared = Rc::new(Shared::default());
+                shared.bonds.borrow_mut().clone_from(&self.bonds);
+                shared.bonds_new.set(true);
+                shared.report(BtReport::Radio { on: true });
+                let session = Box::pin(session(shared.clone(), connector));
+                log::info!(
+                    "bluetooth: the host takes {} bytes",
+                    core::mem::size_of_val(&*session)
+                );
+                self.on = Some(On { shared, session });
             }
             Err(e) => {
                 log::warn!("bluetooth: controller: {e:?}");
-                self.shared.report(BtReport::Radio { on: false });
+                self.reports.push(BtReport::Radio { on: false });
             }
         }
     }
@@ -161,15 +259,18 @@ impl Bluetooth {
     // A frame of its own: the host's futures are deep.
     #[inline(never)]
     pub fn poll(&mut self) -> Vec<BtReport> {
-        if let Some(session) = &mut self.session {
+        let mut reports = core::mem::take(&mut self.reports);
+        if let Some(on) = &mut self.on {
             let mut cx = Context::from_waker(Waker::noop());
-            if session.as_mut().poll(&mut cx).is_ready() {
+            let stopped = on.session.as_mut().poll(&mut cx).is_ready();
+            reports.append(&mut on.shared.reports.borrow_mut());
+            if stopped {
                 log::warn!("bluetooth: the host stopped");
-                self.session = None;
-                self.shared.report(BtReport::Radio { on: false });
+                self.on = None;
+                reports.push(BtReport::Radio { on: false });
             }
         }
-        core::mem::take(&mut *self.shared.reports.borrow_mut())
+        reports
     }
 }
 

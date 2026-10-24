@@ -52,10 +52,11 @@ fn main() {
 
 /// The least main stack the ESP32-S3 devices are linked with. Their IRAM
 /// and DRAM are one SRAM and the stack gets what is left, so code moved
-/// to IRAM (Bluetooth's controller takes 22 KB) shrinks it unseen, and
+/// to IRAM (Bluetooth's controller takes 21 KB) shrinks it unseen, and
 /// the firmware then overruns it at start. The deepest use measured is
-/// some 23 KB; the X4 Pro has 41 KB without Bluetooth.
-const STACK_FLOOR: u32 = 36 * 1024;
+/// some 32 KB (a book's first opening, ADR 0017); the X4 Pro has 41.3 KB,
+/// with Bluetooth too (its heap is smaller by as much as Bluetooth takes).
+const STACK_FLOOR: u32 = 40 * 1024;
 
 /// Fails the link where the main stack is below [`STACK_FLOOR`]: a
 /// linker script of its own, read beside esp-hal's.
