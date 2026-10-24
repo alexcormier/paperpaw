@@ -599,6 +599,9 @@ fn controller_config() -> ControllerConfig {
         .with_dynamic_tx_buf_num(DYNAMIC)
         // Below the receive buffers, as the driver requires.
         .with_rx_ba_win(STATIC_RX - 1)
+        // Aggregated sending: what PaperPaw sends is small (requests, a
+        // reading position), and its sessions take memory.
+        .with_ampdu_tx_enable(false)
 }
 
 /// Receive buffers kept while the radio is on.
