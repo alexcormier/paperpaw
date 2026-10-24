@@ -263,7 +263,7 @@ impl Layout {
         } else {
             // From margin to margin, with room round them for the focus.
             let margin = style.margin();
-            let labels: Vec<&str> = Filter::ALL.iter().map(|f| env.i18n.tr(f.label())).collect();
+            let labels = Filter::ALL.map(Filter::label);
             let width = display.width.saturating_sub(2 * margin);
             // As many rows as the words need: none is shortened.
             let band = Rect::new(
@@ -272,7 +272,7 @@ impl Layout {
                 width,
                 ui::Chips::height_for(env, &style, width, &labels) + gap,
             );
-            let chips = ui::Chips::new(env, &style, band, &labels);
+            let chips = ui::Chips::new(env, &style, band, labels);
             (chips, None, band.y + band.height)
         };
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
