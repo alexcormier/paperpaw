@@ -232,21 +232,26 @@ struct Clicks {
     left: u16,
     every: u16,
     held: u16,
+    jitter: u16,
+    seed: u32,
     next: u64,
 }
 
 #[cfg(feature = "remote")]
 static CLICKS: Mutex<Cell<Option<Clicks>>> = Mutex::new(Cell::new(None));
 
-/// Clicks `button` `count` times, `every` ms apart, held `held` ms each,
-/// read in the interrupt as the button's own readings are.
+/// Clicks `button` `count` times, `every` ms apart (give or take
+/// `jitter`), held `held` ms each, read in the interrupt as the button's
+/// own readings are.
 #[cfg(feature = "remote")]
-pub fn clicks(button: &'static str, count: u16, every: u16, held: u16) {
+pub fn clicks(button: &'static str, count: u16, every: u16, held: u16, jitter: u16) {
     let clicks = Clicks {
         button,
         left: count,
         every,
         held,
+        jitter,
+        seed: 1,
         next: millis(),
     };
     critical_section::with(|cs| CLICKS.borrow(cs).set(Some(clicks)));
@@ -264,7 +269,8 @@ fn clicked(now: u64) -> paperpaw_x4::buttons::State {
         if now >= clicks.next + u64::from(clicks.held) {
             // This one let go: the next, if any is left.
             clicks.left = clicks.left.saturating_sub(1);
-            clicks.next += u64::from(clicks.every);
+            let gap = paperpaw_x4::remote::click_gap(clicks.every, clicks.jitter, &mut clicks.seed);
+            clicks.next += u64::from(gap);
             cell.set((clicks.left > 0).then_some(clicks));
             return State(0);
         }
