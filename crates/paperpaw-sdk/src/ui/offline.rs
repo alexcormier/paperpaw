@@ -21,11 +21,13 @@
 //! ```
 
 use crate::builtin::actions;
-use crate::power::PowerLevel;
 use crate::gesture::{Gesture, GestureKind};
+use crate::power::PowerLevel;
 use crate::{Canvas, Command, Cx, Env, Id, Rect};
 
-use super::{Response, UiStyle, button_height, button_height_for, draw_button, draw_empty, empty_height};
+use super::{
+    Response, UiStyle, button_height, button_height_for, draw_button, draw_empty, empty_height,
+};
 
 /// The keys of its buttons' words, *Go online* first.
 const BUTTONS: [&str; 2] = ["core.offline.go-online", "core.offline.not-now"];

@@ -551,7 +551,10 @@ impl Screen for GroupPage {
         let env = *cx.env();
         if self.edit.active() {
             let spec = self.focused().cloned();
-            return self.edit.on_action(&env, spec.as_ref(), action, cx).handled();
+            return self
+                .edit
+                .on_action(&env, spec.as_ref(), action, cx)
+                .handled();
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
             change.request(cx);

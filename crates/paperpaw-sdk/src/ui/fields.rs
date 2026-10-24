@@ -554,7 +554,10 @@ mod tests {
     #[test]
     fn a_text_view_scrolls_by_touch() {
         let mut v = view(25);
-        assert!(v.on_gesture(&gesture(GestureKind::Swipe(Direction::Up), 150)).changed());
+        assert!(
+            v.on_gesture(&gesture(GestureKind::Swipe(Direction::Up), 150))
+                .changed()
+        );
         assert_eq!(v.top(), 10);
         assert!(v.on_gesture(&gesture(GestureKind::Tap, 120)).changed());
         assert_eq!(v.top(), 0);

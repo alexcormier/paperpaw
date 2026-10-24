@@ -90,7 +90,11 @@ impl InputMode {
     /// touched first, so no focus shows before a button is pressed
     /// ([`ui::focus_shown`](crate::ui::focus_shown)); buttons elsewhere.
     pub fn at_start(input: &InputCaps) -> Self {
-        if input.touch { Self::Touch } else { Self::Buttons }
+        if input.touch {
+            Self::Touch
+        } else {
+            Self::Buttons
+        }
     }
 }
 
