@@ -154,8 +154,8 @@ fn a_book_is_downloaded_into_the_library() {
 
 /// While a book downloads, the line below the feed says how far it came:
 /// its percent and a bar where the size is known, the bytes so far where
-/// not; only that line is drawn again, and Effects ask no more refresh
-/// than a partial one.
+/// not; only that line is drawn again, with a fast refresh, at most every
+/// 10 % or 5 seconds.
 #[test]
 fn a_download_says_how_far_it_came() {
     let (mut browsing, call) = browse_start();
@@ -170,11 +170,25 @@ fn a_download_says_how_far_it_came() {
         .kernel
         .http_progress(Instant(10_000), call.id, 250, Some(1000));
     let (area, refresh) = effects.refresh().expect("the line drawn again");
-    assert_ne!(refresh, paperpaw_sdk::RefreshMode::Full);
+    assert_eq!(refresh, paperpaw_sdk::RefreshMode::Fast);
     // The line at the foot only, not the feed.
     assert!(area.y > 600 && area.height < 200, "{area:?}");
     let shown = browsing.shown();
     assert!(shown.iter().any(|l| l.contains("25 %")), "{shown:?}");
+    // Not again for a little more a moment later: each refresh holds
+    // the device, and the download with it; 10 % further, or 5 s later.
+    let effects = browsing
+        .kernel
+        .http_progress(Instant(12_100), call.id, 300, Some(1000));
+    assert!(effects.refresh().is_none(), "{:?}", effects.refresh());
+    let effects = browsing
+        .kernel
+        .http_progress(Instant(14_200), call.id, 350, Some(1000));
+    assert!(effects.refresh().is_some(), "10 % further");
+    let effects = browsing
+        .kernel
+        .http_progress(Instant(19_300), call.id, 400, Some(1000));
+    assert!(effects.refresh().is_some(), "5 s later");
     // Without a size: the bytes so far.
     let (mut browsing, call) = browse_start();
     browsing.answer(&call, 200, FEED);

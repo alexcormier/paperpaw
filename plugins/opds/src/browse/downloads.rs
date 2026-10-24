@@ -17,7 +17,15 @@ pub(super) struct Download {
     title: String,
     received: u64,
     total: Option<u64>,
+    /// When the line was last drawn, and the share it showed.
+    shown: Option<(paperpaw_sdk::Instant, Option<u16>)>,
 }
+
+/// The line is drawn again at most once it came this many thousandths
+/// further, or this long after: each refresh holds the device (on the X4
+/// Pro some 0.6 s), and the download waits meanwhile.
+const SHOWN_STEP: u16 = 100;
+const SHOWN_MS: u64 = 5_000;
 
 impl Download {
     /// How much came, in thousandths, where the size is known.
@@ -66,6 +74,7 @@ impl BrowseScreen {
                 .i18n()
                 .format("opds.downloading", &[("title", Arg::Str(&entry.title))]);
             self.downloading = Some(Download {
+                shown: None,
                 title: entry.title.clone(),
                 received: 0,
                 total: None,
@@ -88,6 +97,15 @@ impl BrowseScreen {
         download.received = progress.received;
         download.total = progress.total;
         let env = *cx.env();
+        let share = download.permille();
+        let due = download.shown.is_none_or(|(at, was)| {
+            env.now().since(at) >= SHOWN_MS
+                || matches!((share, was), (Some(now), Some(was)) if now >= was.saturating_add(SHOWN_STEP))
+        });
+        if !due {
+            return;
+        }
+        download.shown = Some((env.now(), share));
         let title = Arg::Str(&download.title);
         let message = match download.permille() {
             Some(permille) => env.i18n().format(
@@ -106,8 +124,10 @@ impl BrowseScreen {
             }
         };
         self.message = Some(message);
+        // A line that changes: refreshed fast, no flash of the whole
+        // panel's partial (1.7 s on the X4 Pro).
         cx.request_redraw_area(self.status);
-        cx.request_refresh(RefreshMode::Partial);
+        cx.set_refresh(RefreshMode::Fast);
     }
 
     /// Stops the download going on: its answer is not waited for, and
