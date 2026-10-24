@@ -211,11 +211,18 @@ impl Net {
     }
 
     /// The link came up (a network was joined): DHCP asks at once, not
-    /// after the waits it grew while nothing answered.
+    /// after the waits it grew while nothing answered. An address kept
+    /// from before is not used until DHCP gives it again: reported online
+    /// with it, a request made then went out on an address DHCP was about
+    /// to take back.
     pub fn joined(&mut self) {
         if let Some(dhcp) = self.dhcp {
             self.sockets.get_mut::<dhcpv4::Socket<'_>>(dhcp).reset();
             self.asked = Some(now());
+            if self.address.is_some() {
+                log::info!("net: asking DHCP for the address again");
+                self.forget_address();
+            }
         }
     }
 
@@ -273,11 +280,26 @@ impl Net {
             }
             Some(dhcpv4::Event::Deconfigured) => {
                 log::info!("net: address gone");
-                self.address = None;
-                self.stack.update_ip_addrs(|addrs| addrs.clear());
-                self.stack.routes_mut().remove_default_ipv4_route();
+                self.forget_address();
             }
         }
+    }
+
+    /// The link went (out of reach, the router restarted): the address
+    /// DHCP gave goes with it, so the network counts as joined only once
+    /// DHCP gave one again, and what was open on the old one ends then
+    /// (requests see no address) rather than waiting on a link gone.
+    pub fn link_lost(&mut self) {
+        if self.dhcp.is_some() && self.address.is_some() {
+            log::info!("net: address let go with the link");
+            self.forget_address();
+        }
+    }
+
+    fn forget_address(&mut self) {
+        self.address = None;
+        self.stack.update_ip_addrs(|addrs| addrs.clear());
+        self.stack.routes_mut().remove_default_ipv4_route();
     }
 
     /// In the device's own network: how many phones took an address from

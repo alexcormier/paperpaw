@@ -291,6 +291,7 @@ impl Radio {
                 log::info!("wifi: link lost");
                 on.linked = false;
                 on.ssid = None;
+                on.net.link_lost();
             }
         }
         let idle = matches!(self.on.as_ref().map(|on| &on.work), Some(Work::Idle(_)));
