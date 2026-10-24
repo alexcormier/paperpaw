@@ -79,7 +79,7 @@ const GRAY_LUT: [u8; 110] = [
 ];
 
 /// How dark the two grays between black and white come out with
-/// [`GRAY_LUT`]: its every level is first driven white, then black for 12
+/// the stock gray waveform: its every level is first driven white, then black for 12
 /// frames (black for 21), the grays then lightened by 2 (dark) or 4 (light)
 /// frames of white, which leaves them faint beside the X4 Pro's (which
 /// shows them black first and lightens them by one or two of its frames).
