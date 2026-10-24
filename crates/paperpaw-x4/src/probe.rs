@@ -32,6 +32,10 @@ pub enum Controller {
     /// UltraChip's: X4 Pros and X4 Classics of later batches.
     Uc8179,
     Uc8279,
+    /// UltraChip's, on the X3 (792 × 528, its waveforms sent by the
+    /// driver); not told apart by [`Probe::controller`], the X3's build
+    /// takes it for granted (see [`Probe::x3_uc8279d`]).
+    Uc8253,
 }
 
 impl Controller {
@@ -40,6 +44,7 @@ impl Controller {
             Controller::Ssd1677 => "SSD1677",
             Controller::Uc8179 => "UC8179",
             Controller::Uc8279 => "UC8279",
+            Controller::Uc8253 => "UC8253",
         }
     }
 }
@@ -112,6 +117,13 @@ impl Probe {
         }
         let silent = self.flg == 0xFF && self.rev == [0xFF; 5];
         (!self.busy_high && silent).then_some(Controller::Ssd1677)
+    }
+
+    /// On an X3: whether it has the newer UC8279d (the revision's third
+    /// byte 0x66, as the FreeInk SDK's `XteinkDetect` reads it), which the
+    /// X3's build does not drive yet.
+    pub fn x3_uc8279d(&self) -> bool {
+        self.rev[2] == 0x66
     }
 }
 

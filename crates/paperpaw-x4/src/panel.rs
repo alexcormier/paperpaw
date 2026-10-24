@@ -10,6 +10,7 @@ use paperpaw_platform::{FrameView, Rotation};
 use crate::display::{self, Error, Planes, Refresh};
 use crate::probe::Controller;
 use crate::uc8179::{self, Chip, Frame};
+use crate::uc8253;
 
 /// Which device the panel is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +22,9 @@ pub enum Device {
     /// [`Rotation::Deg90`] (see [`uc8179::turned`]). The X4 Classic too,
     /// which has its glass and PSRAM (its turning not yet seen on one).
     X4Pro,
+    /// The X3: a UC8253 at 792 × 528, whichever controller was found (see
+    /// [`uc8253`]); no frame of its own, as the X4.
+    X3,
 }
 
 /// A panel, its controller's driver.
@@ -33,6 +37,7 @@ pub enum Panel<SPI, DC, RST, BUSY, D> {
         sides_swapped: bool,
     },
     UltraChip(uc8179::Display<SPI, DC, RST, BUSY, D>),
+    Uc8253(uc8253::Display<SPI, DC, RST, BUSY, D>),
 }
 
 /// The same call to whichever driver.
@@ -43,6 +48,7 @@ macro_rules! each {
                 display: $display, ..
             } => $call,
             Panel::UltraChip($display) => $call,
+            Panel::Uc8253($display) => $call,
         }
     };
 }
@@ -66,6 +72,9 @@ where
         busy: BUSY,
         delay: D,
     ) -> Self {
+        if device == Device::X3 {
+            return Panel::Uc8253(uc8253::Display::new(spi, dc, reset, busy, delay));
+        }
         let chip = match controller {
             Controller::Ssd1677 => {
                 return Panel::Ssd1677 {
@@ -74,10 +83,10 @@ where
                 };
             }
             Controller::Uc8179 => Chip::Uc8179,
-            Controller::Uc8279 => Chip::Uc8279,
+            Controller::Uc8279 | Controller::Uc8253 => Chip::Uc8279,
         };
         let frame = match device {
-            Device::X4 => Frame::InController,
+            Device::X4 | Device::X3 => Frame::InController,
             Device::X4Pro => Frame::Kept,
         };
         Panel::UltraChip(uc8179::Display::new(
@@ -93,6 +102,7 @@ where
                 Chip::Uc8179 => Controller::Uc8179,
                 Chip::Uc8279 => Controller::Uc8279,
             },
+            Panel::Uc8253(_) => Controller::Uc8253,
         }
     }
 
@@ -105,6 +115,7 @@ where
                 sides_swapped,
             } => display.set_rotation(swapped(rotation, *sides_swapped)),
             Panel::UltraChip(display) => display.set_rotation(rotation),
+            Panel::Uc8253(display) => display.set_rotation(rotation),
         }
     }
 
@@ -115,6 +126,7 @@ where
                 sides_swapped,
             } => swapped(display.rotation(), *sides_swapped),
             Panel::UltraChip(display) => display.rotation(),
+            Panel::Uc8253(display) => display.rotation(),
         }
     }
 
@@ -185,7 +197,7 @@ where
     pub fn power_up_ms(&self) -> u64 {
         match self {
             Panel::Ssd1677 { .. } => 0,
-            Panel::UltraChip(_) => 130,
+            Panel::UltraChip(_) | Panel::Uc8253(_) => 130,
         }
     }
 }
@@ -253,6 +265,18 @@ mod tests {
                 let ultra = matches!(panel, Panel::UltraChip(_));
                 assert_eq!(ultra, controller != Controller::Ssd1677);
             }
+        }
+    }
+
+    /// An X3 gets its UC8253 driver whatever the probe said, and draws
+    /// 528 × 792 upright.
+    #[test]
+    fn an_x3_has_its_uc8253() {
+        for controller in [Controller::Ssd1677, Controller::Uc8179, Controller::Uc8253] {
+            let panel = panel(Device::X3, controller);
+            assert_eq!(panel.controller(), Controller::Uc8253);
+            assert_eq!(panel.size(), (528, 792));
+            assert_eq!(panel.power_up_ms(), 130);
         }
     }
 
