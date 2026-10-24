@@ -126,15 +126,15 @@ fn the_plugins_chosen_are_installed_and_said_once() {
     ] {
         assert!(shown.contains(name), "{shown}");
     }
-    // Nothing chosen: no *Add*.
-    assert!(!shown.contains("| Add"), "{shown}");
+    // *Done* there with nothing chosen too.
+    assert!(shown.contains("| Done"), "{shown}");
     shopping.choose("Reading statistics");
     shopping.choose("Calibre");
-    // Past KOReader sync to *Add*.
+    // Past KOReader sync to *Done*.
     shopping.run(actions::DOWN);
     shopping.run(actions::DOWN);
     let shown = shopping.shown();
-    assert!(shown.contains("Add"), "{shown}");
+    assert!(shown.contains("Done"), "{shown}");
     shopping.run(actions::CONFIRM);
     let code = ppn();
     serve(&mut shopping, "stats", &code);
@@ -173,7 +173,7 @@ fn asked(shopping: &mut Shopping) -> Vec<String> {
         .collect()
 }
 
-/// Leaving the page with plugins chosen adds them as *Add* does: the
+/// Leaving the page with plugins chosen adds them as *Done* does: the
 /// switches are the choice. With none chosen, nothing.
 #[test]
 fn back_adds_those_chosen_and_nothing_else() {
@@ -205,7 +205,7 @@ fn back_adds_those_chosen_and_nothing_else() {
 }
 
 /// By touch: the header's arrow back is *Back*, a plugin chosen by a tap
-/// added once (not again by the *Back* that *Add* sends).
+/// added once (not again by the *Back* that *Done* sends).
 #[test]
 fn the_headers_arrow_adds_those_chosen_too() {
     let mut shopping = Shopping::touch_with(Some(native()), r#"{"format": 2, "plugins": []}"#);
@@ -238,6 +238,26 @@ fn the_headers_arrow_adds_those_chosen_too() {
     )
     .unwrap();
     assert_eq!(queue, "> ~calibre\n");
+}
+
+/// *Done* with nothing chosen goes back to the setup, adding nothing.
+#[test]
+fn done_with_nothing_chosen_adds_nothing() {
+    let mut shopping = offer();
+    for _ in 0..4 {
+        shopping.run(actions::DOWN);
+    }
+    shopping.run(actions::CONFIRM);
+    assert_ne!(
+        shopping.kernel.active_screen().map(Id::as_str),
+        Some("store.offer")
+    );
+    assert!(asked(&mut shopping).is_empty());
+    assert!(
+        !shopping
+            .storage
+            .exists(".paperpaw/plugins/store/offer-chosen.txt")
+    );
 }
 
 #[test]
@@ -307,7 +327,7 @@ fn built_in_ones_are_switched_on() {
         "{shown:?}"
     );
     assert!(!shown.iter().any(|l| l.starts_with("Calibre")), "{shown:?}");
-    // Chosen, then *Add*.
+    // Chosen, then *Done*.
     kernel.run_action(Instant(200), actions::CONFIRM);
     kernel.run_action(Instant(300), actions::DOWN);
     kernel.run_action(Instant(400), actions::CONFIRM);
