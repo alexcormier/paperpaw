@@ -13,11 +13,11 @@
 //! pub const THEME: Setting<Text> = Setting::new("demo.theme");
 //!
 //! // In a handler, with an `env`:
-//! // let size: i64 = env.settings.read(&SIZE);
+//! // let size: i64 = env.settings().read(&SIZE);
 //! // out.push(Command::set(&PICTURES, false));
 //! ```
 //!
-//! Settings by text (`env.settings.bool("demo.pictures")`) stay for what
+//! Settings by text (`env.settings().bool("demo.pictures")`) stay for what
 //! is only known at run time, e.g. a settings page for any plugin.
 
 use alloc::borrow::Cow;

@@ -13,7 +13,7 @@
 //!
 //! let style = UiStyle::new(env);
 //! let mut dialog = Dialog::new(env, &style, "Delete the book?", &["It goes for good."], &["Delete", "Keep"]);
-//! let room = env.device.display.height - dialog.height();
+//! let room = env.device().display.height - dialog.height();
 //! dialog.place(room / 2);
 //! # }
 //! ```

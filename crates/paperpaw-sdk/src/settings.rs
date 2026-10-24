@@ -240,7 +240,7 @@ pub struct SettingExtra {
     pub section: Option<Cow<'static, str>>,
     /// A secret such as an API key: shown as dots, entered afresh rather
     /// than edited, and kept with the secrets, not the settings: read it
-    /// with `env.secrets.get(id)` (see [`secrets`](crate::secrets)).
+    /// with `env.secrets().get(id)` (see [`secrets`](crate::secrets)).
     pub secret: bool,
     /// Another setting of the same kind whose value this one has until it
     /// is set itself, e.g. the margins at the top and bottom those at the
