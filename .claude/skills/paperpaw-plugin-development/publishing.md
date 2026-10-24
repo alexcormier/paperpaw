@@ -147,8 +147,9 @@ version = 1.0.0
 formats = 1
 ```
 
-`id`, `name` and `version` are needed. `version` is three numbers and
-the code's manifest says the same; `description` is one sentence the
+`id`, `name` and `version` are needed. `version` is three numbers,
+a pre-release after them if wanted (`1.2.0-beta.1`, which comes before
+`1.2.0`, as SemVer orders them), and the code's manifest says the same; `description` is one sentence the
 store takes as the summary when `store.ini` gives none.
 
 ### store/store.ini
@@ -574,7 +575,7 @@ change, so go by the code.
 | `upload` | the files can be read: a ZIP of at most 20 MB (40 MB unpacked), no name leading outside the folder, builds at most 4 MB, source at most 50 MB; warns when it left out files that are no part of a plugin | "not a ZIP", "larger than 20 MB", "a name outside the folder" (`..` or a backslash): zip again as in section 5a. "Left out what is no part of a plugin: .DS_Store" (warning): zip without them |
 | `manifest` | `plugin.ini` at the top or in one folder at the top, with `id`, `name`, `version` | "The ZIP has no plugin.ini at its top": zip the plugin's folder itself, not the folder around it. "plugin.ini names no id": add the key |
 | `id` | the id is free or the author's | "belongs to another author", "is one of PaperPaw's own plugins", "was taken down and cannot be used again": choose another id in `plugin.ini` and the code |
-| `version` | three numbers, not published before, not older than the newest | "was published before; a new version needs a new number", "is older than": raise `version` |
+| `version` | three numbers (a pre-release after them or not), not published before, not older than the newest | "was published before; a new version needs a new number", "is older than": raise `version` |
 | `metadata` | the entry: id's letters, name, summary, description, licence, group, tags, languages, screenshots' names and alt, `source` https, `sdk` like `0.5`; for code its readers, key and source | fix the field the sentence names, in the form or `store.ini`. "sdk is not like 0.3": fill in `sdk`. "source: the revision is a tag or a commit": fill in `source-revision` |
 | `package` | the folder readers install: allowed file types, names, at most 64 files (63 for code), `plugin.ini`'s id and version, `formats`, translations that parse | "only ini, css, ttf, otf, ttc, ppfp, txt, md, png files belong in a data plugin": take that file out. "names are letters, digits, dots, hyphens and underscores": rename. "more than 63 files": fewer. A translation that does not parse names its line |
 | `build.x4`, `build.x4-pro`, `build.x4-classic` | each build: a plugin file of format 1, that reader's chip, as long as its header says, digest whole, signed | "The file is not signed": sign it. "built for chip 5, x4-pro has chip 9": the X4's file in the X4 Pro's field. "not a PaperPaw plugin file": that is the linked program; make the `.ppn` with `paperpaw-sign pack`. "Changed or damaged": build and pack again. "The file of this build is missing": upload it again |

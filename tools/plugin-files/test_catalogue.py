@@ -68,5 +68,24 @@ class HowItWorks(unittest.TestCase):
             self.assertIn("battery-0.4.0.zip", sums)
 
 
+
+class Versions(unittest.TestCase):
+    def test_a_beta_s_plugins_carry_its_whole_version(self):
+        with tempfile.TemporaryDirectory() as dist:
+            dist = pathlib.Path(dist)
+            for plugin, _ in catalogue.plugins():
+                dist.joinpath(f"{plugin}-0.5.0-beta.2-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+            argv = ["catalogue.py", str(dist), "0.5.0-beta.2", "https://example.invalid/r", "--date", "2026-10-24"]
+            with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                catalogue.main()
+            entry = dist.joinpath("catalogue", "battery.toml").read_text(encoding="utf-8")
+            # The beta's version, so beta.1's plugins take it as an update;
+            # the SDK its release's.
+            self.assertIn('version = "0.5.0-beta.2"', entry)
+            self.assertIn('sdk = "0.5"', entry)
+            self.assertIn('revision = "v0.5.0-beta.2"', entry)
+            with zipfile.ZipFile(dist / "battery-0.5.0-beta.2.zip") as z:
+                self.assertIn("version = 0.5.0-beta.2" + chr(10), z.read("plugin.ini").decode("utf-8"))
+
 if __name__ == "__main__":
     unittest.main()

@@ -463,12 +463,10 @@ pub fn code_versions(
         let Some(info) = plugins.iter().find(|p| p.manifest.id.as_str() == id) else {
             continue;
         };
+        // Whole versions, a beta's too (0.5.0-beta.1): the store offers
+        // a newer one as an update by them.
         let built = info.manifest.version;
-        // A build of a PaperPaw beta names the beta (0.5.0-beta.1); its
-        // plugin.ini, like the plugin library, the release's numbers.
-        let built_text = built.to_string();
-        let release = built_text.split('-').next().unwrap_or_default();
-        if built != *declared && declared.to_string() != release {
+        if built != *declared {
             report.add(
                 Finding::error(
                     "package.version",

@@ -580,11 +580,26 @@ fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Findin
                 ),
             ));
         }
-        Some(text) if text.split('.').count() != 3 => add(Finding::error(
-            "package.version",
-            place,
-            format!("The plugin library takes versions like 1.2.0 only, not `{text}`."),
-        )),
+        // Three numbers, a pre-release after them (1.2.0-beta.1) or not,
+        // no build metadata: as the library orders them.
+        Some(text)
+            if text.contains('+')
+                || text
+                    .split('-')
+                    .next()
+                    .unwrap_or_default()
+                    .split('.')
+                    .count()
+                    != 3 =>
+        {
+            add(Finding::error(
+                "package.version",
+                place,
+                format!(
+                    "The plugin library takes versions like 1.2.0 or 1.2.0-beta.1 only, not `{text}`."
+                ),
+            ));
+        }
         Some(_) => {}
     }
     if manifest.name.as_deref().is_none_or(str::is_empty) {
