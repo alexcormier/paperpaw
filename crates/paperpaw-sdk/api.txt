@@ -3586,6 +3586,8 @@ impl<'t> paperpaw_sdk::ui::Label<'t>
 pub const fn paperpaw_sdk::ui::Label<'t>::align(self, paperpaw_sdk::widgets::Align) -> Self
 pub const fn paperpaw_sdk::ui::Label<'t>::color(self, paperpaw_platform::pixel::Color) -> Self
 pub fn paperpaw_sdk::ui::Label<'t>::draw(&self, &mut paperpaw_sdk::ui::Ui<'_>, paperpaw_platform::geometry::Rect) -> f32
+pub fn paperpaw_sdk::ui::Label<'t>::draw_from(&self, &mut paperpaw_sdk::ui::Ui<'_>, f32, paperpaw_platform::geometry::Rect) -> f32
+pub const fn paperpaw_sdk::ui::Label<'t>::font(self, paperpaw_sdk::FontHandle<'t>) -> Self
 pub fn paperpaw_sdk::ui::Label<'t>::height(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16) -> u16
 pub const fn paperpaw_sdk::ui::Label<'t>::ink(self, paperpaw_sdk::ui::Ink) -> Self
 pub const fn paperpaw_sdk::ui::Label<'t>::lines(self, usize) -> Self
@@ -3596,6 +3598,8 @@ pub const fn paperpaw_sdk::ui::Label<'t>::role(self, paperpaw_sdk::ui::TextRole)
 pub fn paperpaw_sdk::ui::Label<'t>::size(&self, &paperpaw_sdk::ui::UiStyle) -> f32
 pub fn paperpaw_sdk::ui::Label<'t>::width(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle) -> f32
 pub const fn paperpaw_sdk::ui::Label<'t>::wrap(self) -> Self
+impl core::fmt::Debug for paperpaw_sdk::ui::Label<'_>
+pub fn paperpaw_sdk::ui::Label<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::ui::ListView
 impl paperpaw_sdk::ui::ListView
 pub fn paperpaw_sdk::ui::ListView::active(&self) -> bool

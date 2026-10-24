@@ -838,7 +838,7 @@ struct paperpaw_sdk::ui::fields::TextView { area: paperpaw_platform::geometry::R
 struct paperpaw_sdk::ui::header::Header { area: paperpaw_platform::geometry::Rect, note_focused: bool, note_button: bool, back: bool, arrows: bool }
 struct paperpaw_sdk::ui::header::Pager { area: paperpaw_platform::geometry::Rect, arrows: bool }
 struct paperpaw_sdk::ui::items::ItemsScreen { setting: core::option::Option<paperpaw_sdk::id::Id>, items: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::string::String)>, style: paperpaw_sdk::ui::style::UiStyle, header: paperpaw_sdk::ui::header::Header, list: paperpaw_sdk::ui::list::ListView, reorder: paperpaw_sdk::ui::reorder::Reorder, moving: bool }
-struct paperpaw_sdk::ui::label::Label<'t> { text: &'t str, size: paperpaw_sdk::ui::label::Size, min: core::option::Option<f32>, ink: paperpaw_sdk::ui::label::Paint, align: paperpaw_sdk::widgets::Align, lines: usize }
+struct paperpaw_sdk::ui::label::Label<'t> { text: &'t str, font: core::option::Option<paperpaw_sdk::fonts::FontHandle<'t>>, size: paperpaw_sdk::ui::label::Size, min: core::option::Option<f32>, ink: paperpaw_sdk::ui::label::Paint, align: paperpaw_sdk::widgets::Align, lines: usize }
 struct paperpaw_sdk::ui::layout::CellGrid { area: paperpaw_platform::geometry::Rect, columns: u16, cell_height: u16, gap: u16 }
 struct paperpaw_sdk::ui::layout::Segments { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::borrow::Cow<'static, str>> }
 struct paperpaw_sdk::ui::layout::Stack { area: paperpaw_platform::geometry::Rect, gap: u16, top: u16, bottom: u16, taken_top: bool, taken_bottom: bool }

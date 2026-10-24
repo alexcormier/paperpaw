@@ -644,8 +644,9 @@ file to your report.
 - SDK: `ui::Label`, one builder for the interface's text:
   `Label::new(text).role(TextRole::Small)` (or `.px(size)`), `.ink(..)`
   or `.color(..)`, `.align(widgets::Align::Center)`, `.min(size)` (smaller
-  before shortened), `.lines(n)` or `.wrap()`; `width`, `height` and
-  `draw(&mut ui, area)`. It borrows its text and allocates only the words
+  before shortened), `.lines(n)` or `.wrap()`, `.font(..)` for a font of
+  its own; `width`, `height`, `draw(&mut ui, area)` and `draw_from(&mut
+  ui, x, area)` (on one line from an `x` between pixels). It borrows its text and allocates only the words
   of a line it shortens.
 - SDK: the interface's parts draw with a `ui::Ui`: `Chips`, `Segments`,
   `Dialog`, `Header`, `Pager`, `TextView`, `DatePicker`, `TimePicker`,
