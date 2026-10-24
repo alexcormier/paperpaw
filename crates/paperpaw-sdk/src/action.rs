@@ -3,7 +3,6 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::collections::VecMap;
 use crate::env::Env;
 use crate::id::Id;
 use crate::params::Params;
@@ -213,7 +212,9 @@ pub enum ActionHint {
 /// Every registered action, e.g. for menu and key map editors.
 #[derive(Default)]
 pub struct Actions {
-    map: VecMap<Id, ActionSpec>,
+    /// Sorted by id; each spec's own id is the key (not kept twice: there
+    /// are some hundred).
+    specs: Vec<ActionSpec>,
     /// Handlers plugins put in place of actions' own, the highest
     /// priority first: the action, the plugin, the handler.
     overrides: Vec<(Id, Priority, Id, ActionHandler)>,
@@ -223,7 +224,7 @@ impl fmt::Debug for Actions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let overrides: Vec<&Id> = self.overrides.iter().map(|(action, ..)| action).collect();
         f.debug_struct("Actions")
-            .field("map", &self.map)
+            .field("specs", &self.specs)
             .field("overrides", &overrides)
             .finish()
     }
@@ -237,19 +238,26 @@ impl Actions {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn insert(&mut self, action: ActionSpec) {
-        self.map.insert(action.id.clone(), action);
+        match self.find(action.id.as_str()) {
+            Ok(at) => self.specs[at] = action,
+            Err(at) => self.specs.insert(at, action),
+        }
+    }
+
+    fn find(&self, id: &str) -> Result<usize, usize> {
+        self.specs.binary_search_by(|spec| spec.id.as_str().cmp(id))
     }
 
     pub fn get(&self, id: &str) -> Option<&ActionSpec> {
-        self.map.get(id)
+        self.find(id).ok().map(|at| &self.specs[at])
     }
 
     pub fn contains(&self, id: &str) -> bool {
-        self.map.contains_key(id)
+        self.find(id).is_ok()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &ActionSpec> {
-        self.map.values()
+        self.specs.iter()
     }
 
     /// Whether action `id` runs without a screen that takes it: it has a
@@ -286,9 +294,11 @@ impl Actions {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn drop_sealed_overrides(&mut self) -> Vec<Id> {
         let mut dropped = Vec::new();
-        let map = &self.map;
+        let specs = &self.specs;
         self.overrides.retain(|(action, ..)| {
-            let sealed = map.get(action.as_str()).is_some_and(ActionSpec::is_sealed);
+            let sealed = specs
+                .binary_search_by(|spec| spec.id.as_str().cmp(action.as_str()))
+                .is_ok_and(|at| specs[at].is_sealed());
             if sealed {
                 dropped.push(action.clone());
             }
@@ -339,7 +349,7 @@ impl Actions {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
-        self.map.shrink_to_fit();
+        self.specs.shrink_to_fit();
         self.overrides.shrink_to_fit();
     }
 }

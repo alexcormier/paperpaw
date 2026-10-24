@@ -382,7 +382,7 @@ const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "cod
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = CROSSING
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 2u16
-const paperpaw_sdk::native::LAYOUT: u64 = 9_529_769_984_825_922_701u64
+const paperpaw_sdk::native::LAYOUT: u64 = 7_181_479_799_679_054_301u64
 const paperpaw_sdk::native::TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") { "rustc 1.99.0, riscv32imc-unknown-none-elf" } else if cfg!(target_arch = "xtensa") { "esp 1.97.0.0, xtensa-esp32s3-none-elf" } else { "the compiler of PaperPaw's release, for this computer" }
 const paperpaw_sdk::numbers::DECIMAL_MARK: &str = "core.decimal"
 const paperpaw_sdk::pattern::MAX_PATTERN: usize = 256usize
@@ -558,6 +558,7 @@ enum paperpaw_sdk::ui::offline::Offer { Online, NotNow }
 enum paperpaw_sdk::ui::picker::DateOrder { DayMonthYear, MonthDayYear, YearMonthDay }
 enum paperpaw_sdk::ui::picker::PickerPart { Plus(0: usize), Minus(0: usize), Value(0: usize) }
 enum paperpaw_sdk::ui::reorder::ReorderStep { Changed, Same, Dropped { from: usize, to: usize } }
+enum paperpaw_sdk::ui::response::Response<T> { Ignored, Same, Changed, Done(0: T) }
 enum paperpaw_sdk::ui::sections::Item { Heading(0: usize), Entry(0: usize) }
 enum paperpaw_sdk::ui::slider::SliderFocus { None, Focused, Editing }
 enum paperpaw_sdk::ui::slider::SliderStep { Moved(0: i64), Same, Chosen(0: i64), Cancelled }
@@ -592,7 +593,7 @@ enum paperpaw_sdk::work::WorkState { Waiting { due: core::option::Option<paperpa
 struct paperpaw_sdk::action::ActionExtra { description: core::option::Option<alloc::borrow::Cow<'static, str>>, keywords: core::option::Option<alloc::borrow::Cow<'static, str>>, sealed: bool }
 struct paperpaw_sdk::action::ActionOverride { action: paperpaw_sdk::id::Id, handler: paperpaw_sdk::action::ActionHandler, priority: paperpaw_sdk::plugin::Priority }
 struct paperpaw_sdk::action::ActionSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, handler: core::option::Option<paperpaw_sdk::action::ActionHandler>, hint: paperpaw_sdk::action::ActionHint, extra: core::option::Option<alloc::boxed::Box<paperpaw_sdk::action::ActionExtra>> }
-struct paperpaw_sdk::action::Actions { map: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::action::ActionSpec>, overrides: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::plugin::Priority, paperpaw_sdk::id::Id, paperpaw_sdk::action::ActionHandler)> }
+struct paperpaw_sdk::action::Actions { specs: alloc::vec::Vec<paperpaw_sdk::action::ActionSpec>, overrides: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::plugin::Priority, paperpaw_sdk::id::Id, paperpaw_sdk::action::ActionHandler)> }
 struct paperpaw_sdk::action::ObserverSpec { id: paperpaw_sdk::id::Id, observer: paperpaw_sdk::action::Observer }
 struct paperpaw_sdk::annotations::Annotation { mark: paperpaw_sdk::annotations::Mark, percent: u8, created: i64, updated: i64, text: alloc::string::String, note: alloc::string::String }
 struct paperpaw_sdk::annotations::Mark { kind: paperpaw_sdk::annotations::Kind, start: paperpaw_document::Locator, end: paperpaw_document::Locator, noted: bool }
@@ -679,8 +680,9 @@ struct paperpaw_sdk::host::Hosted { id: paperpaw_sdk::id::Id, params: paperpaw_s
 struct paperpaw_sdk::host::ScreenHost { hosted: core::option::Option<paperpaw_sdk::host::Hosted> }
 struct paperpaw_sdk::hyphenation::Hyphenation { languages: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::borrow::Cow<'static, str>, paperpaw_hyphen::Patterns<'static>)> }
 struct paperpaw_sdk::hyphenation::HyphenationSpec { id: paperpaw_sdk::id::Id, language: alloc::borrow::Cow<'static, str>, patterns: &'static [u8] }
-struct paperpaw_sdk::id::Id(0: alloc::borrow::Cow<'static, str>)
+struct paperpaw_sdk::id::Id(0: paperpaw_sdk::id::Text)
 struct paperpaw_sdk::id::InvalidId
+struct paperpaw_sdk::id::Text { start: core::ptr::non_null::NonNull<u8>, len: usize }
 struct paperpaw_sdk::install::Installer { owner: paperpaw_sdk::id::Id, reply: paperpaw_sdk::event::Event<paperpaw_sdk::replies::HttpReply> }
 struct paperpaw_sdk::install::Package { plugin: alloc::string::String, name: alloc::string::String, files: alloc::vec::Vec<paperpaw_sdk::install::PackageFile> }
 struct paperpaw_sdk::install::PackageFile { path: alloc::string::String, url: alloc::string::String, size: u64, digest: paperpaw_sdk::install::Digest }
@@ -792,11 +794,11 @@ struct paperpaw_sdk::services::Service { value: alloc::boxed::Box<dyn core::any:
 struct paperpaw_sdk::services::Services { services: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::services::Service)>, contributions: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::id::Id, alloc::borrow::Cow<'static, str>)>, points: alloc::vec::Vec<paperpaw_sdk::services::PointSpec>, events: alloc::vec::Vec<paperpaw_sdk::services::EventSpec> }
 struct paperpaw_sdk::setting::Setting<T> { id: paperpaw_sdk::id::Id, value: core::marker::PhantomData<fn() -> T> }
 struct paperpaw_sdk::settings::SettingCheck(0: fn(&paperpaw_sdk::settings::Settings, &paperpaw_sdk::settings::SettingValue) -> core::result::Result<(), &'static str>)
-struct paperpaw_sdk::settings::SettingExtra { unit: core::option::Option<alloc::borrow::Cow<'static, str>>, editor: core::option::Option<paperpaw_sdk::settings::Editor>, step: i64, slider: bool, section: core::option::Option<alloc::borrow::Cow<'static, str>>, secret: bool, follows: core::option::Option<paperpaw_sdk::id::Id>, keeps_unknown: bool, shown_if: core::option::Option<(paperpaw_sdk::id::Id, &'static str)>, check: core::option::Option<paperpaw_sdk::settings::SettingCheck> }
+struct paperpaw_sdk::settings::SettingExtra { unit: core::option::Option<alloc::borrow::Cow<'static, str>>, editor: core::option::Option<paperpaw_sdk::settings::Editor>, step: i64, slider: bool, section: core::option::Option<alloc::borrow::Cow<'static, str>>, section_of_plugin: bool, secret: bool, follows: core::option::Option<paperpaw_sdk::id::Id>, keeps_unknown: bool, shown_if: core::option::Option<(paperpaw_sdk::id::Id, &'static str)>, check: core::option::Option<paperpaw_sdk::settings::SettingCheck> }
 struct paperpaw_sdk::settings::SettingGroupSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, order: i32, page: core::option::Option<paperpaw_sdk::id::Id> }
 struct paperpaw_sdk::settings::SettingSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, kind: paperpaw_sdk::settings::SettingKind, default: paperpaw_sdk::settings::SettingValue, group: paperpaw_sdk::id::Id, level: paperpaw_sdk::settings::Level, description: core::option::Option<alloc::borrow::Cow<'static, str>>, scoped: bool, guarded: bool, kept_on_reset: bool, extra: core::option::Option<paperpaw_sdk::settings::Extra> }
-struct paperpaw_sdk::settings::Settings { specs: paperpaw_sdk::settings::Specs, values: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::settings::SettingValue>, placement: core::cell::RefCell<core::option::Option<alloc::string::String>>, groups: alloc::vec::Vec<paperpaw_sdk::settings::SettingGroupSpec>, scope: core::option::Option<paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::settings::SettingValue>>, preview: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, core::option::Option<paperpaw_sdk::settings::SettingValue>>, worn: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::settings::SettingValue>, limits: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::settings::SettingValue>, released: alloc::vec::Vec<paperpaw_sdk::id::Id>, presets: paperpaw_sdk::presets::Presets }
-struct paperpaw_sdk::settings::Specs { owned: alloc::vec::Vec<paperpaw_sdk::settings::SettingSpec>, fixed: alloc::vec::Vec<&'static paperpaw_sdk::settings::SettingSpec>, order: alloc::vec::Vec<u16>, by_id: alloc::vec::Vec<u16> }
+struct paperpaw_sdk::settings::Settings { specs: paperpaw_sdk::settings::specs::Specs, values: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::settings::SettingValue>, placement: core::cell::RefCell<core::option::Option<alloc::string::String>>, groups: alloc::vec::Vec<paperpaw_sdk::settings::SettingGroupSpec>, scope: core::option::Option<paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::settings::SettingValue>>, preview: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, core::option::Option<paperpaw_sdk::settings::SettingValue>>, worn: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::settings::SettingValue>, limits: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::settings::SettingValue>, released: alloc::vec::Vec<paperpaw_sdk::id::Id>, presets: paperpaw_sdk::presets::Presets }
+struct paperpaw_sdk::settings::specs::Specs { owned: alloc::vec::Vec<paperpaw_sdk::settings::SettingSpec>, lists: alloc::vec::Vec<(&'static [paperpaw_sdk::settings::SettingSpec], u16)>, order: alloc::vec::Vec<u16>, by_id: alloc::vec::Vec<u16> }
 struct paperpaw_sdk::setup::SetupStepSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, help: alloc::borrow::Cow<'static, str>, order: i32, page: paperpaw_sdk::setup::SetupPage, applies: core::option::Option<paperpaw_sdk::setup::AppliesFn> }
 struct paperpaw_sdk::setup::SetupSteps { steps: alloc::vec::Vec<paperpaw_sdk::setup::SetupStepSpec> }
 struct paperpaw_sdk::status::Place { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, parts: [paperpaw_sdk::id::Id; 3], line: core::option::Option<paperpaw_sdk::id::Id> }
@@ -813,7 +815,7 @@ struct paperpaw_sdk::time::Rule { day: paperpaw_sdk::time::Day, time: i32 }
 struct paperpaw_sdk::time::Summer { offset: i32, start: paperpaw_sdk::time::Rule, end: paperpaw_sdk::time::Rule }
 struct paperpaw_sdk::time::Time { hour: u8, minute: u8, second: u8 }
 struct paperpaw_sdk::time::TimeZone { standard: i32, summer: core::option::Option<paperpaw_sdk::time::Summer> }
-struct paperpaw_sdk::ui::chips::Chips { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::string::String> }
+struct paperpaw_sdk::ui::chips::Chips { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::borrow::Cow<'static, str>> }
 struct paperpaw_sdk::ui::choice::Choice { style: paperpaw_sdk::ui::style::UiStyle, region: paperpaw_platform::geometry::Rect, title: paperpaw_platform::geometry::Rect, list: paperpaw_sdk::ui::list::ListView, pager: core::option::Option<paperpaw_sdk::ui::header::Pager>, title_text: alloc::string::String, path: alloc::string::String, reply: core::option::Option<paperpaw_sdk::id::Id>, labels: alloc::string::String, options: alloc::vec::Vec<alloc::string::String> }
 struct paperpaw_sdk::ui::choice::Picked { path: alloc::string::String, option: alloc::string::String }
 struct paperpaw_sdk::ui::confirm::Confirm { style: paperpaw_sdk::ui::style::UiStyle, dialog: paperpaw_sdk::ui::dialog::Dialog, focus: usize, labels: [alloc::string::String; 2], params: paperpaw_sdk::params::Params, reply: core::option::Option<paperpaw_sdk::id::Id> }
@@ -823,7 +825,7 @@ struct paperpaw_sdk::ui::header::Header { area: paperpaw_platform::geometry::Rec
 struct paperpaw_sdk::ui::header::Pager { area: paperpaw_platform::geometry::Rect, arrows: bool }
 struct paperpaw_sdk::ui::items::ItemsScreen { setting: core::option::Option<paperpaw_sdk::id::Id>, items: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::string::String)>, style: paperpaw_sdk::ui::style::UiStyle, header: paperpaw_sdk::ui::header::Header, list: paperpaw_sdk::ui::list::ListView, reorder: paperpaw_sdk::ui::reorder::Reorder, moving: bool }
 struct paperpaw_sdk::ui::layout::CellGrid { area: paperpaw_platform::geometry::Rect, columns: u16, cell_height: u16, gap: u16 }
-struct paperpaw_sdk::ui::layout::Segments { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::string::String> }
+struct paperpaw_sdk::ui::layout::Segments { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::borrow::Cow<'static, str>> }
 struct paperpaw_sdk::ui::layout::Stack { area: paperpaw_platform::geometry::Rect, gap: u16, top: u16, bottom: u16, taken_top: bool, taken_bottom: bool }
 struct paperpaw_sdk::ui::list::ListView { area: paperpaw_platform::geometry::Rect, row: u32, focus: usize, active: bool, shown: bool, columns: u32, before: usize }
 struct paperpaw_sdk::ui::look::ButtonPart { rect: paperpaw_platform::geometry::Rect, on: bool, focused: bool }

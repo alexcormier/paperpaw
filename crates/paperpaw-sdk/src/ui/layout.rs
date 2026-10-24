@@ -17,7 +17,7 @@
 //! assert_eq!((ok.width, cancel.x, cancel.right()), (234, 246, 480));
 //! ```
 
-use alloc::string::{String, ToString};
+use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
 use paperpaw_graphics::Canvas;
@@ -344,37 +344,52 @@ pub(crate) fn paint_frame(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, 
 /// pick from at a glance, or tabs over a page. Each segment is a button
 /// ([`draw_button`](super::draw_button)), the chosen one on; with the
 /// buttons, left and right move the focus, *Select* chooses. They keep
-/// their labels: drawing and hitting allocate nothing.
+/// their labels, translation keys (or text that is none) translated where
+/// they are measured and drawn, as [`Chips`](super::Chips) do: drawing and
+/// hitting allocate nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segments {
     cells: Vec<Rect>,
-    labels: Vec<String>,
+    labels: Vec<Cow<'static, str>>,
 }
 
 impl Segments {
     /// Segments with `labels` in `area`, of equal width, the style's gap
     /// apart.
-    pub fn new(style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
+    pub fn new<L: Into<Cow<'static, str>>>(
+        style: &UiStyle,
+        area: Rect,
+        labels: impl IntoIterator<Item = L>,
+    ) -> Self {
+        let labels = keep(labels);
         Self {
             cells: columns(area, labels.len(), style.gap as u16),
-            labels: owned(labels),
+            labels,
         }
     }
 
     /// Segments with `labels` in `area`, from its top, every word whole:
     /// side by side where each fits its share, else in more rows
     /// ([`button_cells`]); as high as [`Segments::height_for`] says.
-    pub fn fitted(env: &Env<'_>, style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
+    pub fn fitted<L: Into<Cow<'static, str>>>(
+        env: &Env<'_>,
+        style: &UiStyle,
+        area: Rect,
+        labels: impl IntoIterator<Item = L>,
+    ) -> Self {
+        let labels = keep(labels);
+        let shown: Vec<&str> = labels.iter().map(|l| env.i18n.tr(l)).collect();
         Self {
-            cells: button_cells(env, style, area, labels, style.gap as u16),
-            labels: owned(labels),
+            cells: button_cells(env, style, area, &shown, style.gap as u16),
+            labels,
         }
     }
 
     /// The height [`Segments::fitted`] takes for `labels` in an area
     /// `width` wide: [`Segments::height`] where they fit side by side.
     pub fn height_for(env: &Env<'_>, style: &UiStyle, width: u16, labels: &[&str]) -> u16 {
-        button_cells_height(env, style, width, labels, style.gap as u16)
+        let shown: Vec<&str> = labels.iter().map(|l| env.i18n.tr(l)).collect();
+        button_cells_height(env, style, width, &shown, style.gap as u16)
     }
 
     /// The height a row of segments takes: a button's in a row that can
@@ -408,9 +423,9 @@ impl Segments {
         }
     }
 
-    /// The label of segment `index`.
+    /// The label of segment `index`, as given (a translation key).
     pub fn label(&self, index: usize) -> Option<&str> {
-        self.labels.get(index).map(String::as_str)
+        self.labels.get(index).map(|label| &**label)
     }
 
     /// Draws the segments, `chosen` on and `focus` (where the focus is on
@@ -429,7 +444,7 @@ impl Segments {
                 env,
                 style,
                 *cell,
-                label,
+                env.i18n.tr(label),
                 i == chosen,
                 focus == Some(i),
             );
@@ -437,9 +452,9 @@ impl Segments {
     }
 }
 
-/// `labels` as owned strings, for parts that keep them.
-fn owned(labels: &[&str]) -> Vec<String> {
-    labels.iter().map(ToString::to_string).collect()
+/// `labels` as the parts keep them: keys without a copy.
+fn keep<L: Into<Cow<'static, str>>>(labels: impl IntoIterator<Item = L>) -> Vec<Cow<'static, str>> {
+    labels.into_iter().map(Into::into).collect()
 }
 
 #[cfg(test)]
@@ -494,7 +509,7 @@ mod tests {
 
     #[test]
     fn segments_hit_and_step_within_their_row() {
-        let segments = Segments::new(&STYLE, Rect::new(0, 0, 300, 40), &["a", "b", "c"]);
+        let segments = Segments::new(&STYLE, Rect::new(0, 0, 300, 40), ["a", "b", "c"]);
         let first = segments.cell(0).unwrap();
         assert_eq!(
             segments.hit(Point::new(i32::from(first.x) + 1, 10)),

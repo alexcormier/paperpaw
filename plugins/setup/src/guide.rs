@@ -205,7 +205,7 @@ impl Guide {
             steps: steps(env),
             page: 0,
             focus: Target::Next,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             edit: ui::NumberEdit::default(),
             style: UiStyle::new(env),
             layout: Layout::default(),
@@ -720,7 +720,7 @@ impl Screen for Guide {
             if *a == actions::NEXT_PAGE || *a == actions::PREV_PAGE {
                 self.edit.finish(&env, spec.as_ref(), true, cx);
             } else {
-                let handled = self.edit.on_action(&env, spec.as_ref(), a, cx);
+                let handled = self.edit.on_action(&env, spec.as_ref(), a, cx).handled();
                 self.redraw(cx, RefreshMode::Fast);
                 return handled;
             }

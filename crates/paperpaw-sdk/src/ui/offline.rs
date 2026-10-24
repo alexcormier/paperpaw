@@ -22,9 +22,10 @@
 
 use crate::builtin::actions;
 use crate::power::PowerLevel;
-use crate::{Canvas, Command, Cx, Env, Id, Point, Rect};
+use crate::gesture::{Gesture, GestureKind};
+use crate::{Canvas, Command, Cx, Env, Id, Rect};
 
-use super::{UiStyle, button_height, button_height_for, draw_button, draw_empty, empty_height};
+use super::{Response, UiStyle, button_height, button_height_for, draw_button, draw_empty, empty_height};
 
 /// The keys of its buttons' words, *Go online* first.
 const BUTTONS: [&str; 2] = ["core.offline.go-online", "core.offline.not-now"];
@@ -148,7 +149,7 @@ impl OfflineOffer {
             );
             top += buttons.row + extra + gap / 2;
             self.buttons[index] = rect;
-            let focused = !env.device.input.touch && self.focus == index;
+            let focused = super::focus_shown(env) && self.focus == index;
             draw_button(
                 canvas,
                 env,
@@ -162,11 +163,12 @@ impl OfflineOffer {
     }
 
     /// The buttons with the buttons: up and down (or left and right)
-    /// move between them, *Select* chooses; `None` for other actions and
-    /// once chosen.
-    pub fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Option<Offer> {
+    /// move between them ([`Response::Changed`]), *Select* chooses
+    /// ([`Response::Done`] with the choice). Ignored for other actions
+    /// and once chosen. It asks for its own drawing.
+    pub fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Response<Offer> {
         if !self.shows(cx.env()) {
-            return None;
+            return Response::Ignored;
         }
         let a = action;
         if [actions::UP, actions::DOWN, actions::LEFT, actions::RIGHT].contains(a)
@@ -176,18 +178,25 @@ impl OfflineOffer {
             self.focus = 1 - self.focus;
             cx.request_redraw();
             cx.request_refresh(crate::RefreshMode::Fast);
-            return None;
+            return Response::Changed;
         }
-        (*a == actions::CONFIRM).then(|| self.choose(self.focus, cx))
+        if *a == actions::CONFIRM {
+            Response::Done(self.choose(self.focus, cx))
+        } else {
+            Response::Ignored
+        }
     }
 
-    /// A tap: on a button, what it chooses.
-    pub fn on_tap(&mut self, point: Point, cx: &mut Cx<'_, '_>) -> Option<Offer> {
-        if !self.shows(cx.env()) {
-            return None;
+    /// A tap on a button: [`Response::Done`] with what it chooses.
+    /// Other gestures, and taps beside the buttons, are the caller's.
+    pub fn on_gesture(&mut self, gesture: &Gesture, cx: &mut Cx<'_, '_>) -> Response<Offer> {
+        if gesture.kind != GestureKind::Tap || !self.shows(cx.env()) {
+            return Response::Ignored;
         }
-        let index = self.buttons.iter().position(|b| b.contains(point))?;
-        Some(self.choose(index, cx))
+        match self.buttons.iter().position(|b| b.contains(gesture.start)) {
+            Some(index) => Response::Done(self.choose(index, cx)),
+            None => Response::Ignored,
+        }
     }
 
     fn choose(&mut self, index: usize, cx: &mut Cx<'_, '_>) -> Offer {

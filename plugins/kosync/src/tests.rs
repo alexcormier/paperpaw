@@ -205,8 +205,8 @@ impl Harness {
         for contribution in r.into_contributions() {
             match contribution {
                 Contribution::FixedSettings(list) => {
-                    for spec in list {
-                        h.settings.define_fixed(spec).unwrap();
+                    for at in 0..list.len() {
+                        h.settings.define_fixed(list, at).unwrap();
                     }
                 }
                 Contribution::SettingGroup(group) => h.settings.add_group(group).unwrap(),
@@ -280,7 +280,7 @@ impl Harness {
             work: paperpaw_sdk::work::WorkStates::none(),
             reader: true,
             clipboard: false,
-            last_input: Default::default(),
+            last_input: paperpaw_sdk::keys::InputMode::at_start(&DEVICE.input),
             inputs: &[],
             content: paperpaw_platform::Rect::default(),
             stack: &[],

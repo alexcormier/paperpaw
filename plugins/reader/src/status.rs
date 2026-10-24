@@ -230,15 +230,12 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(draw_progress),
         )
         .signature(Box::new(|_, cx| {
-            use core::fmt::Write;
             let mut hash = paperpaw_sdk::digest::Fnv1a64::new();
-            let _ = write!(
-                hash,
-                "{}|{}|{}",
-                cx.get(params::PROGRESS).unwrap_or_default(),
-                cx.get(context::PAGE).unwrap_or_default(),
-                cx.get(context::CHAPTERS).unwrap_or_default().len(),
-            );
+            hash.feed(cx.get(params::PROGRESS).unwrap_or_default().as_bytes());
+            hash.feed(b"|");
+            hash.feed(cx.get(context::PAGE).unwrap_or_default().as_bytes());
+            let chapters = cx.get(context::CHAPTERS).unwrap_or_default().len();
+            hash.feed(&chapters.to_le_bytes());
             hash.value()
         })),
     )?;

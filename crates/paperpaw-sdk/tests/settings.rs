@@ -302,12 +302,12 @@ fn fixed_specs_are_copied_before_they_change() {
     ];
     let mut s = Settings::new();
     s.define(SettingSpec::switch(&ON, "", false)).unwrap();
-    for spec in &SPECS {
-        s.define_fixed(spec).unwrap();
+    for at in 0..SPECS.len() {
+        s.define_fixed(&SPECS, at).unwrap();
     }
     s.define(SettingSpec::number(&SIZE, "", 0, 9, 1)).unwrap();
     assert!(matches!(
-        s.define_fixed(&SPECS[0]),
+        s.define_fixed(&SPECS, 0),
         Err(RegisterError::Duplicate { .. })
     ));
     // Choices made at run time replace the fixed ones; the order of the
@@ -420,7 +420,7 @@ fn previews_and_placements_together() {
         groups::OTHER,
     )];
     let mut s = Settings::new();
-    s.define_fixed(&SPECS[0]).unwrap();
+    s.define_fixed(&SPECS, 0).unwrap();
     s.set("w.clock@2.size", SettingValue::Int(2)).unwrap();
     s.set("w.clock@3.size", SettingValue::Int(3)).unwrap();
     s.set_preview(vec![
@@ -515,7 +515,7 @@ fn presets_set_placements_and_leave_out_what_does_not_fit() {
         groups::OTHER,
     )];
     let mut s = Settings::new();
-    s.define_fixed(&SPECS[0]).unwrap();
+    s.define_fixed(&SPECS, 0).unwrap();
     let preset = Preset::new(
         Id::new_static("p.one"),
         Id::new_static("p.kind"),
@@ -621,7 +621,7 @@ fn a_full_store_says_so_when_a_fixed_setting_is_changed() {
         groups::DISPLAY,
     );
     let mut s = Settings::new();
-    s.define_fixed(&LOOK).unwrap();
+    s.define_fixed(core::slice::from_ref(&LOOK), 0).unwrap();
     for i in 0..32_768u32 {
         let id = Id::parse(&format!("a.s{i}")).unwrap();
         s.define(SettingSpec::new(

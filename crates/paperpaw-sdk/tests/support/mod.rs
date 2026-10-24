@@ -254,7 +254,7 @@ impl Harness {
             work: paperpaw_sdk::work::WorkStates::none(),
             reader: true,
             clipboard: false,
-            last_input: Default::default(),
+            last_input: paperpaw_sdk::keys::InputMode::at_start(&self.device.input),
             inputs: &[],
             content: paperpaw_platform::Rect::default(),
             stack: &[],

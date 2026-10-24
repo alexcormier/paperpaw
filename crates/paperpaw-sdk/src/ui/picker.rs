@@ -7,11 +7,22 @@ use crate::fonts::FontHandle;
 use crate::id::Id;
 use crate::time::{Date, Time, days_in_month};
 use crate::widgets::largest_size;
+use crate::gesture::{Gesture, GestureKind};
 use crate::{Canvas, Env, Point, Rect};
 
 use super::{
-    Stack, TextRole, UiStyle, button_height, columns, draw_button, draw_focus, draw_label,
+    Response, Stack, TextRole, UiStyle, button_height, columns, draw_button, draw_focus,
+    draw_label,
 };
+
+/// The answer to an action the wheels `taken`, the picker `changed` or not.
+fn answer(taken: bool, changed: bool) -> Response {
+    if taken {
+        Response::changed_if(changed)
+    } else {
+        Response::Ignored
+    }
+}
 
 /// What a point of a picker is on ([`DatePicker::hit`],
 /// [`TimePicker::hit`]): the `+` or the `−` of a field, or its value;
@@ -128,6 +139,11 @@ impl Wheels {
     }
 
     /// Acts on a tap at `point` (see [`Wheels::on_action`]).
+    /// Whether `gesture` is a tap on one of the buttons.
+    fn takes(&self, gesture: &Gesture) -> bool {
+        gesture.kind == GestureKind::Tap && self.hit(gesture.start).is_some()
+    }
+
     fn on_tap(&mut self, point: Point, mut step: impl FnMut(usize, i32)) {
         let (field, by) = match self.hit(point) {
             Some(PickerPart::Plus(i)) => (i, 1),
@@ -315,7 +331,7 @@ enum DateField {
 /// let style = UiStyle::PLAIN;
 /// let area = Rect::new(0, 0, 300, TimePicker::height(&style));
 /// let mut picker = TimePicker::new(&style, area, Time::new(23, 59));
-/// assert!(picker.on_action(&actions::UP));
+/// assert!(picker.on_action(&actions::UP).changed());
 /// assert_eq!(picker.value(), Time::new(0, 59));
 /// ```
 ///
@@ -396,10 +412,10 @@ impl DatePicker {
         self.wheels.hit(point)
     }
 
-    /// Acts on a button's `action`: whether the picker is to be drawn
-    /// again (the date or the focus changed). False for actions it does
-    /// not take, such as *confirm*.
-    pub fn on_action(&mut self, action: &Id) -> bool {
+    /// Acts on a button's `action`: [`Response::Changed`] where the date
+    /// or the focus changed. Actions it does not take, such as *confirm*,
+    /// are the caller's.
+    pub fn on_action(&mut self, action: &Id) -> Response {
         let before = *self;
         let fields = self.fields();
         let Self {
@@ -418,11 +434,17 @@ impl DatePicker {
                 by,
             );
         });
-        taken && *self != before
+        answer(taken, *self != before)
     }
 
-    /// Acts on a tap at `point`: whether the picker is to be drawn again.
-    pub fn on_tap(&mut self, point: Point) -> bool {
+    /// Acts on a tap on a button: [`Response::Changed`] where the date
+    /// changed. Other gestures, and taps beside its buttons, are the
+    /// caller's.
+    pub fn on_gesture(&mut self, gesture: &Gesture) -> Response {
+        if !self.wheels.takes(gesture) {
+            return Response::Ignored;
+        }
+        let point = gesture.start;
         let before = *self;
         let fields = self.fields();
         let Self {
@@ -441,7 +463,7 @@ impl DatePicker {
                 by,
             );
         });
-        *self != before
+        Response::changed_if(*self != before)
     }
 
     /// Draws the picker.
@@ -560,10 +582,10 @@ impl TimePicker {
         self.wheels.hit(point)
     }
 
-    /// Acts on a button's `action`: whether the picker is to be drawn
-    /// again (the time or the focus changed). False for actions it does
-    /// not take, such as *confirm*.
-    pub fn on_action(&mut self, action: &Id) -> bool {
+    /// Acts on a button's `action`: [`Response::Changed`] where the time
+    /// or the focus changed. Actions it does not take, such as *confirm*,
+    /// are the caller's.
+    pub fn on_action(&mut self, action: &Id) -> Response {
         let before = *self;
         let Self {
             wheels,
@@ -572,11 +594,17 @@ impl TimePicker {
             ..
         } = self;
         let taken = wheels.on_action(action, |field, by| step_time(hour, minute, field, by));
-        taken && *self != before
+        answer(taken, *self != before)
     }
 
-    /// Acts on a tap at `point`: whether the picker is to be drawn again.
-    pub fn on_tap(&mut self, point: Point) -> bool {
+    /// Acts on a tap on a button: [`Response::Changed`] where the time
+    /// changed. Other gestures, and taps beside its buttons, are the
+    /// caller's.
+    pub fn on_gesture(&mut self, gesture: &Gesture) -> Response {
+        if !self.wheels.takes(gesture) {
+            return Response::Ignored;
+        }
+        let point = gesture.start;
         let before = *self;
         let Self {
             wheels,
@@ -585,7 +613,7 @@ impl TimePicker {
             ..
         } = self;
         wheels.on_tap(point, |field, by| step_time(hour, minute, field, by));
-        *self != before
+        Response::changed_if(*self != before)
     }
 
     /// Draws the picker, with a `:` between hour and minute.
@@ -652,6 +680,10 @@ fn step_time(hour: &mut u8, minute: &mut u8, field: usize, by: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tap(point: Point) -> Gesture {
+        Gesture::new(GestureKind::Tap, point, point, crate::PointerTool::Finger)
+    }
     use crate::ui::tests::STYLE;
 
     fn area() -> Rect {
@@ -669,25 +701,25 @@ mod tests {
     #[test]
     fn buttons_choose_the_field_and_change_it() {
         let mut date = DatePicker::new(&STYLE, area(), Date::new(2026, 10, 22));
-        assert!(date.on_action(&actions::UP));
+        assert!(date.on_action(&actions::UP).changed());
         assert_eq!(date.value(), Date::new(2026, 10, 23));
-        assert!(date.on_action(&actions::RIGHT));
+        assert!(date.on_action(&actions::RIGHT).changed());
         assert_eq!(date.focus(), 1);
-        assert!(date.on_action(&actions::NEXT_PAGE));
+        assert!(date.on_action(&actions::NEXT_PAGE).changed());
         assert_eq!(date.value(), Date::new(2026, 11, 23));
-        assert!(date.on_action(&actions::RIGHT));
-        assert!(date.on_action(&actions::DOWN));
+        assert!(date.on_action(&actions::RIGHT).changed());
+        assert!(date.on_action(&actions::DOWN).changed());
         assert_eq!(date.value(), Date::new(2025, 11, 23));
         // Round from the last field to the first, and back.
-        assert!(date.on_action(&actions::RIGHT));
+        assert!(date.on_action(&actions::RIGHT).changed());
         assert_eq!(date.focus(), 0);
-        assert!(date.on_action(&actions::LEFT));
+        assert!(date.on_action(&actions::LEFT).changed());
         assert_eq!(date.focus(), 2);
-        assert!(!date.on_action(&actions::CONFIRM));
+        assert!(!date.on_action(&actions::CONFIRM).taken());
         // Years stay within the range.
         let mut date = DatePicker::new(&STYLE, area(), Date::new(2030, 1, 1)).years(2000, 2030);
         date.set_focus(2);
-        assert!(!date.on_action(&actions::UP));
+        assert!(!date.on_action(&actions::UP).changed());
         assert_eq!(date.value(), Date::new(2030, 1, 1));
     }
 
@@ -695,24 +727,24 @@ mod tests {
     fn days_keep_within_their_month_and_leap_years() {
         let mut date = DatePicker::new(&STYLE, area(), Date::new(2024, 1, 31));
         date.set_focus(1);
-        assert!(date.on_action(&actions::UP));
+        assert!(date.on_action(&actions::UP).changed());
         assert_eq!(date.value(), Date::new(2024, 2, 29));
         date.set_focus(2);
-        assert!(date.on_action(&actions::UP));
+        assert!(date.on_action(&actions::UP).changed());
         assert_eq!(date.value(), Date::new(2025, 2, 28));
         // Days go round within the month.
         date.set_focus(0);
-        assert!(date.on_action(&actions::UP));
+        assert!(date.on_action(&actions::UP).changed());
         assert_eq!(date.value(), Date::new(2025, 2, 1));
-        assert!(date.on_action(&actions::DOWN));
+        assert!(date.on_action(&actions::DOWN).changed());
         assert_eq!(date.value(), Date::new(2025, 2, 28));
         // Months go round without changing the year; 1900 is no leap year,
         // 2000 is.
         let mut date = DatePicker::new(&STYLE, area(), Date::new(2000, 2, 29));
         assert_eq!(date.value(), Date::new(2000, 2, 29));
         date.set_focus(1);
-        date.on_action(&actions::DOWN);
-        date.on_action(&actions::DOWN);
+        let _ = date.on_action(&actions::DOWN);
+        let _ = date.on_action(&actions::DOWN);
         assert_eq!(date.value(), Date::new(2000, 12, 29));
         assert_eq!(
             DatePicker::new(&STYLE, area(), Date::new(1900, 2, 29)).value(),
@@ -732,25 +764,25 @@ mod tests {
     fn the_order_says_which_field_is_where() {
         let mut date =
             DatePicker::new(&STYLE, area(), Date::new(2026, 3, 9)).order(DateOrder::YearMonthDay);
-        assert!(date.on_action(&actions::UP));
+        assert!(date.on_action(&actions::UP).changed());
         assert_eq!(date.value(), Date::new(2027, 3, 9));
         date.set_focus(2);
-        assert!(date.on_action(&actions::UP));
+        assert!(date.on_action(&actions::UP).changed());
         assert_eq!(date.value(), Date::new(2027, 3, 10));
     }
 
     #[test]
     fn hours_and_minutes_go_round() {
         let mut time = TimePicker::new(&STYLE, area(), Time::new(23, 59));
-        assert!(time.on_action(&actions::UP));
+        assert!(time.on_action(&actions::UP).changed());
         assert_eq!(time.value(), Time::new(0, 59));
-        assert!(time.on_action(&actions::PREVIOUS));
+        assert!(time.on_action(&actions::PREVIOUS).changed());
         assert_eq!(time.value(), Time::new(23, 59));
         assert!(time.next_field());
         assert!(!time.next_field());
-        assert!(time.on_action(&actions::NEXT));
+        assert!(time.on_action(&actions::NEXT).changed());
         assert_eq!(time.value(), Time::new(23, 0));
-        assert!(time.on_action(&actions::PREV_PAGE));
+        assert!(time.on_action(&actions::PREV_PAGE).changed());
         assert_eq!(time.value(), Time::new(23, 59));
         assert_eq!(
             TimePicker::new(&STYLE, area(), Time::new(30, 75)).value(),
@@ -767,23 +799,23 @@ mod tests {
         assert!(value.bottom() < u32::from(minus.y));
         assert_eq!(minus.bottom(), u32::from(area().height));
         assert_eq!(time.hit(middle(plus)), Some(PickerPart::Plus(1)));
-        assert!(time.on_tap(middle(plus)));
+        assert!(time.on_gesture(&tap(middle(plus))).changed());
         assert_eq!((time.value(), time.focus()), (Time::new(7, 31), 1));
-        assert!(time.on_tap(middle(minus)));
-        assert!(time.on_tap(middle(minus)));
+        assert!(time.on_gesture(&tap(middle(minus))).changed());
+        assert!(time.on_gesture(&tap(middle(minus))).changed());
         assert_eq!(time.value(), Time::new(7, 29));
         // A tap on a value focuses it; one beside the picker does nothing.
         let (_, hour, _) = time.wheels.parts(0);
         assert_eq!(time.hit(middle(hour)), Some(PickerPart::Value(0)));
-        assert!(time.on_tap(middle(hour)));
-        assert!(!time.on_tap(middle(hour)));
+        assert!(time.on_gesture(&tap(middle(hour))).changed());
+        assert!(!time.on_gesture(&tap(middle(hour))).changed());
         assert_eq!((time.value(), time.focus()), (Time::new(7, 29), 0));
-        assert!(!time.on_tap(Point::new(10, 400)));
+        assert!(!time.on_gesture(&tap(Point::new(10, 400))).taken());
         // The minus of a date's year.
         let mut date = DatePicker::new(&STYLE, area(), Date::new(2026, 10, 22));
         let (_, _, minus) = date.wheels.parts(2);
         assert_eq!(date.hit(middle(minus)), Some(PickerPart::Minus(2)));
-        assert!(date.on_tap(middle(minus)));
+        assert!(date.on_gesture(&tap(middle(minus))).changed());
         assert_eq!(date.value(), Date::new(2025, 10, 22));
     }
 
@@ -794,9 +826,9 @@ mod tests {
             ..STYLE
         };
         let mut time = TimePicker::new(&touch, area(), Time::new(7, 30));
-        assert!(time.on_action(&actions::UP));
+        assert!(time.on_action(&actions::UP).changed());
         assert_eq!(time.value(), Time::new(7, 30));
-        assert!(time.on_action(&actions::UP));
+        assert!(time.on_action(&actions::UP).changed());
         assert_eq!(time.value(), Time::new(8, 30));
     }
 
@@ -809,7 +841,7 @@ mod tests {
         let mut date = DatePicker::new(&touch, area(), Date::new(2026, 10, 22));
         assert!(!date.wheels.shown);
         let (_, month, _) = date.wheels.parts(1);
-        assert!(date.on_tap(middle(month)));
+        assert!(date.on_gesture(&tap(middle(month))).changed());
         assert!(date.wheels.shown);
         assert_eq!(date.focus(), 1);
     }

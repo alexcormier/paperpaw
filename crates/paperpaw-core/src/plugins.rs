@@ -250,7 +250,7 @@ impl Kernel {
             // Cannot fail: checked above.
             let _ = match setting {
                 registry::Staged::Owned(spec) => self.shared.settings.define(*spec),
-                registry::Staged::Fixed(spec) => self.shared.settings.define_fixed(spec),
+                registry::Staged::Fixed(list, at) => self.shared.settings.define_fixed(list, at),
             };
         }
         for source in staging.keymaps.drain(..) {

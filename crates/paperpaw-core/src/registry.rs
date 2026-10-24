@@ -147,14 +147,15 @@ impl paperpaw_sdk::ScreenMaker for Registry {
 /// the program ([`SettingSpec::fixed`]).
 pub(crate) enum Staged {
     Owned(alloc::boxed::Box<SettingSpec>),
-    Fixed(&'static SettingSpec),
+    /// Spec `.1` of the list `.0`, kept by a reference to the list.
+    Fixed(&'static [SettingSpec], usize),
 }
 
 impl Staged {
     pub(crate) fn spec(&self) -> &SettingSpec {
         match self {
             Staged::Owned(spec) => spec,
-            Staged::Fixed(spec) => spec,
+            Staged::Fixed(list, at) => &list[*at],
         }
     }
 }
@@ -301,7 +302,9 @@ pub(crate) fn stage(
             }),
             Contribution::Setting(setting) => staging.settings.push(Staged::Owned(setting)),
             Contribution::FixedSettings(list) => {
-                staging.settings.extend(list.iter().map(Staged::Fixed));
+                staging
+                    .settings
+                    .extend((0..list.len()).map(|at| Staged::Fixed(list, at)));
             }
             Contribution::SettingGroup(group) => staging.setting_groups.push(group),
             Contribution::SettingDefault { setting, value, .. } => {

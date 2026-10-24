@@ -126,7 +126,7 @@ impl ListScreen {
             first: 0,
             list: Sections::new(area, 0, 1, Vec::new()),
             trouble: Trouble::None,
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             asked: false,
             offer: ui::offline::OfflineOffer::new(),
             style,
@@ -414,7 +414,7 @@ impl Screen for ListScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         if *a != actions::BACK && self.offering(cx.env()) {
-            if self.offer.on_action(a, cx) == Some(ui::offline::Offer::Online) {
+            if self.offer.on_action(a, cx).done() == Some(ui::offline::Offer::Online) {
                 self.fetch(cx);
             }
             return Handled::Yes;
@@ -462,7 +462,7 @@ impl Screen for ListScreen {
             return Handled::Yes;
         }
         if self.offering(cx.env()) {
-            if self.offer.on_tap(gesture.start, cx) == Some(ui::offline::Offer::Online) {
+            if self.offer.on_gesture(&gesture, cx).done() == Some(ui::offline::Offer::Online) {
                 self.fetch(cx);
             }
             return Handled::Yes;

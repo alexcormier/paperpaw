@@ -27,6 +27,10 @@ use crate::Kernel;
 
 /// The settings group of every plugin's network.
 pub(crate) const NETWORK_GROUP: Id = Id::new_static("core.group.network");
+/// The extra of every plugin's network settings: shown under the plugin's
+/// name.
+static NETWORK_EXTRA: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().section_of_plugin();
 
 /// Where the worn power mode is kept across starts (on the X4, every
 /// wake is a start): its id, whether Automatic chose it, the values the
@@ -817,7 +821,6 @@ impl Kernel {
             .map(|p| String::from(p.manifest.id.as_str()))
             .collect();
         for plugin in networked {
-            let section = alloc::format!("{plugin}.plugin.name");
             let (Ok(network), Ok(saving)) = (
                 Id::parse(&network_setting(&plugin)),
                 Id::parse(&saving_setting(&plugin)),
@@ -845,7 +848,7 @@ impl Kernel {
                 .description("core.saving.help"),
             ];
             for spec in specs {
-                let spec = spec.group(NETWORK_GROUP).section(section.clone());
+                let spec = spec.group(NETWORK_GROUP).with_extra(&NETWORK_EXTRA);
                 if let Err(e) = self.shared.settings.define(spec) {
                     self.warn_runtime(alloc::format!("{plugin}: {e:?}"));
                 }

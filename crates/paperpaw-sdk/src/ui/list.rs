@@ -195,10 +195,11 @@ impl ListView {
         len.div_ceil(self.rows()).max(1)
     }
 
-    /// On touch screens, hides the focus until a button moves it: taps
-    /// need no focus, and a black row nobody chose looks like a mistake.
+    /// On touch screens, hides the focus until a button moves it
+    /// ([`focus_shown`](super::focus_shown)): taps need no focus, and a
+    /// black row nobody chose looks like a mistake.
     pub fn focus_on_keys(mut self, env: &Env<'_>) -> Self {
-        self.shown = !env.device.input.touch;
+        self.shown = super::focus_shown(env);
         self
     }
 

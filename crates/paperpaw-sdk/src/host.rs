@@ -13,7 +13,7 @@
 //!
 //! impl Screen for Tabs {
 //!     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-//!         let pane = Rect::new(0, 40, cx.env().device.display.width, 400);
+//!         let pane = Rect::new(0, 40, cx.env().device().display.width, 400);
 //!         self.host.show(cx, LIBRARY, Params::new(), pane);
 //!         self.host.on_show(cx);
 //!     }

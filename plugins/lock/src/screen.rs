@@ -229,7 +229,7 @@ impl LockScreen {
             entered: String::new(),
             message: None,
             focus: 0,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             finger: None,
             asked: false,
             layout: Layout::new(env, &style, header),

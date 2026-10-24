@@ -183,18 +183,18 @@ impl GroupPage {
             .collect::<Vec<SettingSpec>>();
         // Sections: settings without one first, then the standard ones,
         // then the others as they come.
-        let mut sections: Vec<Option<&str>> = Vec::new();
+        let mut sections: Vec<Option<Cow<'static, str>>> = Vec::new();
         for spec in &specs {
-            let section = spec.extra().section.as_deref();
+            let section = spec.section_key();
             if !sections.contains(&section) {
                 sections.push(section);
             }
         }
-        let rank = |section: &Option<&str>| match section {
+        let rank = |section: &Option<Cow<'static, str>>| match section {
             None => 0,
             Some(key) => setting_sections::ORDER
                 .iter()
-                .position(|s| s == key)
+                .position(|s| *s == key.as_ref())
                 .map_or(setting_sections::ORDER.len() + 1, |p| p + 1),
         };
         sections.sort_by_key(rank);
@@ -210,13 +210,13 @@ impl GroupPage {
             }
         }
         for section in &sections {
-            if let Some(key) = section.filter(|_| headed) {
+            if let Some(key) = section.as_deref().filter(|_| headed) {
                 entries.push(Row::Heading(env.i18n.tr(key).to_string()));
             }
             entries.extend(
                 specs
                     .iter()
-                    .filter(|spec| spec.extra().section.as_deref() == *section)
+                    .filter(|spec| spec.section_key() == *section)
                     .cloned()
                     .map(|spec| Row::Setting(Box::new(spec))),
             );
@@ -303,7 +303,7 @@ impl GroupPage {
             style,
             header,
             rows: ui::Rows::new(area, heights, headings),
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             edit: ui::NumberEdit::default(),
             drag: SliderDrag::default(),
             dragged: None,
@@ -551,7 +551,7 @@ impl Screen for GroupPage {
         let env = *cx.env();
         if self.edit.active() {
             let spec = self.focused().cloned();
-            return self.edit.on_action(&env, spec.as_ref(), action, cx);
+            return self.edit.on_action(&env, spec.as_ref(), action, cx).handled();
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
             change.request(cx);
@@ -630,7 +630,7 @@ impl Screen for GroupPage {
             return Handled::Yes;
         }
         // Anything else acts at once; the focus hides again.
-        let keys = !env.device.input.touch;
+        let keys = ui::focus_shown(&env);
         if index != self.rows.focus() || keys != self.keys {
             self.rows.set_focus(index);
             self.keys = keys;

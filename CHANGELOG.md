@@ -15,6 +15,10 @@ change the plugin SDK.
   (`HttpRequest::param` is new; `Speech::in_language`, `at_rate`,
   `with` and `queued` take the place of `language`, `rate`, `params`
   and `queue`) and read with methods.
+- The X4 keeps less in memory from the start: ids take two words
+  instead of three, translations index their messages in two bytes
+  where they fit, and actions are not kept twice. Reading an EPUB peaks
+  some 24 KiB lower.
 - SDK: an HTTP answer's body is bytes as they came (`HttpReply::body`
   is a `Vec<u8>`, `text()` reads it as text), no longer decoded with
   losses, and it reaches the plugin's handler without a copy: an event
@@ -451,6 +455,15 @@ file to your report.
 
 #### For developers
 
+- SDK: settings kept in the program take less memory: the kernel holds
+  each list given to `add_settings` once, not each spec, and the network
+  settings it makes for every plugin share one fixed extra
+  (`SettingExtra::section_of_plugin`, shown under the plugin's name). On
+  the X4 the reading flow's heap peak is 9.5 KiB lower.
+- SDK: `Env`'s parts are read through methods (`env.settings()`,
+  `env.i18n()`, `env.now()`, one for each part), so what it carries can
+  change without a change to plugins. The docs and samples use them; the
+  fields stay public until every plugin reads through the methods.
 - The SDK's design rules ([Designing the plugin SDK](docs/sdk-design.md)):
   how it grows without breaking plugins. Tests check four of them over
   the crates whose types cross: growing types are `#[non_exhaustive]`,
@@ -575,9 +588,25 @@ file to your report.
   `grid`.
 - SDK: `ui::choice::open` and `GridView::new` are gone (`ask::choice`,
   `GridView::asking`).
+- SDK: one input contract for the building blocks. Those that take the
+  buttons' actions and gestures (`on_action`, `on_gesture`) answer with
+  a `ui::Response`: `Ignored` (the screen's), `Same`, `Changed` (draw it
+  again; `request` asks for it) or `Done` with a result. `TextView`,
+  `Dialog` (`on_scroll_action` is `on_action`), `DatePicker` and
+  `TimePicker` (`on_tap` is `on_gesture`), `NumberEdit` (`Done` with
+  whether the value was kept) and `offline::OfflineOffer` (`on_tap` is
+  `on_gesture`, `Done` with the `Offer`).
+- SDK: `ui::focus_shown(env)` says whether a focus is shown: always
+  without a touch screen, with one once the buttons were used last. The
+  kernel starts with `Env::last_input` at `InputMode::at_start` (`Touch`
+  on touch screens). The SDK's parts and the plugins ask it rather than
+  the device.
 - SDK: `ui::Chips` and `ui::Segments` keep their labels: they are given
   once when the part is made (`Segments::new` takes the labels, not
   their count) and `draw` no longer takes them; `label(index)` reads one.
+  A label is a translation key (or text that is none), kept as a
+  `Cow<'static, str>` without a copy and translated where it is measured
+  and drawn.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

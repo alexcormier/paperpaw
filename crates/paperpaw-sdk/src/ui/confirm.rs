@@ -149,9 +149,12 @@ impl Screen for Confirm {
             return Handled::Yes;
         }
         // Where question and text do not fit, the page buttons scroll them.
-        if self.dialog.on_scroll_action(action) {
+        let scrolled = self.dialog.on_action(action);
+        if scrolled.changed() {
             cx.request_redraw_area(self.dialog.panel());
             cx.request_refresh(RefreshMode::Fast);
+        }
+        if scrolled.taken() {
             return Handled::Yes;
         }
         // Up and down, and the page buttons (beside the screen on the X4),
@@ -178,9 +181,12 @@ impl Screen for Confirm {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
-        if self.dialog.on_gesture(&gesture) {
+        let scrolled = self.dialog.on_gesture(&gesture);
+        if scrolled.changed() {
             cx.request_redraw_area(self.dialog.panel());
             cx.request_refresh(RefreshMode::Fast);
+        }
+        if scrolled.taken() {
             return Handled::Yes;
         }
         if gesture.kind == GestureKind::Tap {
