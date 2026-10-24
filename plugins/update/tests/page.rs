@@ -1160,3 +1160,67 @@ fn only_the_stores_code_plugins_are_fetched_for_an_update() {
         assert_eq!(origin(v031), paperpaw_sdk::install::Origin::Store);
     }
 }
+
+impl Device {
+    /// Plugged in, at `unix` seconds since 1970: a cheap moment.
+    fn charge(&mut self, unix: i64) {
+        self.power(unix, true);
+    }
+
+    /// Plugged in or not, at `unix` seconds since 1970.
+    fn power(&mut self, unix: i64, charging: bool) {
+        self.now += 100;
+        let status = paperpaw_platform::SystemStatus {
+            clock: Some(paperpaw_platform::WallClock {
+                at: Instant(self.now),
+                unix_millis: unix * 1000,
+                utc_offset_minutes: None,
+            }),
+            battery: Some(paperpaw_platform::Battery {
+                percent: 50,
+                charging,
+                millivolts: None,
+            }),
+        };
+        self.kernel.set_status(Instant(self.now), status);
+    }
+}
+
+/// *Look for updates*: off unless chosen; then the server is asked at a
+/// cheap moment (here: charging), what it names waits quietly on the
+/// update page (nothing opened, its entry badged), and a start within the
+/// week asks again only once the week is over.
+#[test]
+fn looking_for_updates_is_chosen_and_weekly_at_a_cheap_moment() {
+    const DAY: i64 = 24 * 3600;
+    let start = 1_790_000_000;
+    let storage = Shared::default();
+    let mut device = Device::at(storage.clone(), Some(start));
+    device.charge(start + 10);
+    device.no_request();
+    device.power(start + 15, false);
+
+    device
+        .kernel
+        .set_setting(Instant(1), "update.look", "true")
+        .unwrap();
+    // On the battery, the radio off: nothing yet.
+    device.no_request();
+    device.charge(start + 20);
+    let call = device.request();
+    assert!(call.url.ends_with("/api/v1/updates"), "{}", call.url);
+    let file = update_file("0.5.0", &[("paperpaw-plugin-stats", "0.5.0")]);
+    device.answer(&call, 200, offer(file.len()).as_bytes());
+    // Kept for the page, which does not open by itself.
+    assert!(storage.exists(OFFER));
+    assert!(!device.shown().contains("is available"));
+
+    // Two days later, started again and charging: not yet.
+    let mut device = Device::at(storage.clone(), Some(start + 2 * DAY));
+    device.charge(start + 2 * DAY + 10);
+    device.no_request();
+    // A week after the last look: again.
+    let mut device = Device::at(storage.clone(), Some(start + 8 * DAY));
+    device.charge(start + 8 * DAY + 10);
+    let _ = device.request();
+}

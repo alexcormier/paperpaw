@@ -16,6 +16,12 @@ for beta.1 run unchanged: the plugin interface stays 2.
 
 ### Added
 
+- Look for updates (Update, off unless chosen, also asked in the
+  first-run setup): about once a week the device asks for a newer
+  PaperPaw by itself, only while Wi-Fi is on anyway or it charges, never
+  waking the radio on the battery. What it finds waits on the Update
+  page, its entry in the settings marked New; nothing over reading.
+
 - Every plugin has a version of its own, apart from PaperPaw's: its
   crate's, which its manifest says (`package_version!()`, the built-in
   plugins too), 1.0.0 to start. A release builds a store plugin that did

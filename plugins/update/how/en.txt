@@ -2,4 +2,6 @@ Update installs new firmware, on devices where PaperPaw is the firmware, such as
 
 Search online asks the update server for a newer PaperPaw and downloads it, which takes a few minutes over Wi-Fi. Or copy an update file (ending in .bin, from paperpaw.org) into the folder updates on the card, for example with Wi-Fi transfer. Install then takes about a minute and the device restarts; books, settings and reading positions stay.
 
+With Look for updates on (in the settings, off at first), the device asks about once a week by itself, only while Wi-Fi is on anyway or it charges. A newer PaperPaw it finds waits here, marked New in the settings; nothing interrupts your reading.
+
 If plugins you use have no version for the new release yet, you can wait for them or update without them. An older version installs only if you choose it.

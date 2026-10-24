@@ -14,7 +14,9 @@
 //! reader chooses it, told it is older. An update without some of the
 //! plugins built in now says which, and the reader chooses to update
 //! without them or to wait. An update whose plugins have no builds for it
-//! yet waits for them (module `waiting`).
+//! yet waits for them (module `waiting`). Where the reader chose it,
+//! the device looks for updates by itself about once a week, at a cheap
+//! moment (module `look`).
 
 #![no_std]
 
@@ -22,6 +24,7 @@ extern crate alloc;
 
 mod fetch;
 mod found;
+mod look;
 pub mod online;
 mod page;
 mod waiting;
@@ -34,9 +37,11 @@ use alloc::string::String;
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::firmware::Firmware;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, MenuNeed, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingSpec, Storage,
+    ActionSpec, Arg, Command, Commands, Env, Id, ItemState, Manifest, MenuEntry, MenuNeed, Params,
+    Plugin, RegisterError, Registrar, ScreenSpec, SettingSpec, Storage,
 };
+
+pub use look::LOOK;
 
 pub const PLUGIN: Id = Id::new_static("update");
 /// Opens the page.
@@ -55,8 +60,9 @@ const INSTALLING: &str = "installing.txt";
 /// the version for one named by the update server): offered once.
 const OFFERED: &str = "offered.txt";
 
-/// The update server's address, for developers and servers of one's own.
-static SETTINGS: [SettingSpec; 2] = [
+/// The update server's address, for developers and servers of one's own;
+/// looking for updates by itself; betas.
+static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::text(
         online::SERVER.static_str(),
         "update.setting.server",
@@ -64,6 +70,13 @@ static SETTINGS: [SettingSpec; 2] = [
         groups::DEVELOPER,
     )
     .description("update.setting.server.help"),
+    SettingSpec::switch(
+        look::LOOK.static_str(),
+        "update.setting.look",
+        false,
+        groups::SYSTEM,
+    )
+    .description("update.setting.look.help"),
     SettingSpec::switch(
         online::BETAS.static_str(),
         "update.setting.betas",
@@ -108,6 +121,11 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Commands) {
     let storage = env.storage();
     online::clear_download(storage);
     fetch::interrupted(storage, firmware);
+    // An update named before and installed since (or older now): no
+    // longer one.
+    if online::has_offer(storage) && online::offer(storage, firmware).is_none() {
+        online::clear_offer(storage);
+    }
     if let Some((path, version)) = read_pair(storage, INSTALLING) {
         let _ = storage.remove(&file(INSTALLING));
         if !firmware.undone && version == firmware.version {
@@ -196,6 +214,25 @@ impl Plugin for Update {
             },
         ))?;
         r.on(CHECK_DUE, |env, (), out| online::check(env, true, out))?;
+        // Looking by itself: declared at each start and when the setting
+        // changes.
+        r.on(look::LOOK_DUE, |env, (), out| look::due(env, out))?;
+        r.on(events::SETTING_CHANGED, |env, changed, out| {
+            if changed.id == *look::LOOK.id() {
+                look::plan(env, out);
+            }
+        })?;
+        r.set_menu_need(look::LOOK.id().clone(), MenuNeed::Firmware)?;
+        // The first-run setup asks it, as the setting it is.
+        r.add_setup_step(
+            paperpaw_sdk::setup::SetupStepSpec::new(
+                Id::new_static("update.setup"),
+                "",
+                paperpaw_sdk::setup::SetupPage::Setting(look::LOOK.id().clone()),
+            )
+            .order(57)
+            .applies(alloc::boxed::Box::new(|env| env.firmware().is_some())),
+        )?;
         r.set_menu_need(CHECK, MenuNeed::Firmware)?;
         r.add_icon(CHECK, Cow::Borrowed("cloud-download"))?;
         // Answers and downloads go on while the page is closed.
@@ -206,10 +243,19 @@ impl Plugin for Update {
         r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(98))?;
         r.set_menu_need(OPEN, MenuNeed::Firmware)?;
         r.add_icon(OPEN, Cow::Borrowed("circle-arrow-up"))?;
+        // An update the server named waits quietly: a badge on the entry.
+        r.set_item_state(OPEN, |env| {
+            if online::has_offer(env.storage()) {
+                ItemState::new().badge(String::from(env.i18n().tr("update.badge")))
+            } else {
+                ItemState::new()
+            }
+        })?;
         r.on(events::STARTED, |env, _, out| {
             if let Some(firmware) = env.firmware() {
                 started(env, firmware, out);
             }
+            look::plan(env, out);
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
