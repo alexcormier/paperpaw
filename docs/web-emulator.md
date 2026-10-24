@@ -169,7 +169,7 @@ whose profile places no keys has its buttons in a row below it.
 keys at the edges (`ink`), the body (`body`) and the keys on it
 (`onBody`). The data is the same in `device.body` (from `start`) and in
 `paperpaw-emu --registry` under each profile's `body`, for other
-emulators that draw the device (the plugin workshop):
+emulators that draw the device:
 
 ```json
 {"bezel": [7, 7, 30, 7],

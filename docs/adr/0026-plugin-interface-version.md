@@ -109,12 +109,12 @@ with that before the betas of 0.5:
   (`usize` is 32 bits there) and change with the computer's compiler,
   while what changes a type's layout on a chip is either in its source,
   which the gate sees, or the compiler, which the file names.
-- **Services found by name only within the interface.** A service is
-  found across builds by its type's name only where that type is made of
-  the crates that cross, `core` and `alloc` alone, and is of the same
-  size and alignment. A type of a plugin's own crate may be another one
-  of the same name in another build, so such a service needs a contract
-  (`ServiceType`), whose key its author raises when the type changes.
+- **Services are found by a key.** A service type of a plugin's own
+  crate may be another type of the same name in another build, so a
+  service has a contract (`ServiceType`, written with `service_type!`):
+  a key that its author raises when the type changes. A service is found
+  across builds by that key (`Services::get`), with its size and
+  alignment checked.
 - **Where a plugin's code lands binds it to nothing.** A `.ppn` file is
   linked at a fixed base and relocated where it is loaded; it reaches the
   firmware only through the table whose address the loader writes into
