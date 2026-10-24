@@ -5,8 +5,8 @@ over the USB cable or over the Wi-Fi transfer page. Both ways use the same
 requests and the same install routine. Nothing is written before the
 reader agrees on the device.
 
-This page is for those who write such a computer program (a desktop
-tool, a page in a browser with Web Serial, a script). `tools/usb-transfer.py`
+This page is for those who write such a computer program (the plugin
+workshop, a page in a browser with Web Serial, a script). `tools/usb-transfer.py`
 is a small client to read along with.
 
 ## The cable

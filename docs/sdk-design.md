@@ -71,9 +71,9 @@ must leave its list.
    ```
 
 6. **No deprecation outlives a release.** What goes is `#[deprecated]`
-   while plugins move on, and it is gone before the next release. Until
-   1.0 every release's plugins are built anew anyway
-   ([ADR 0024](adr/0024-native-code-plugins.md)). Check:
+   while plugins move on, and it is gone before the next release, which
+   raises the plugin interface for it
+   ([ADR 0026](adr/0026-plugin-interface-version.md)). Check:
    `no_deprecated_item_reaches_a_release`, once the workspace's version
    is a release.
 
