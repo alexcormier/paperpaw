@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use paperpaw_checks::{control_characters, lines, root, rust_files};
+use paperpaw_checks::{assigned_through_calls, control_characters, lines, root, rust_files};
 
 /// The most lines a Rust file has: split it where it gets longer.
 const MAX_LINES: usize = 1500;
@@ -75,6 +75,23 @@ fn rust_files_have_no_control_characters() {
     assert!(
         found.is_empty(),
         "control characters (write them as escapes, e.g. \\0):\n{}",
+        found.join("\n")
+    );
+}
+
+#[test]
+fn no_field_of_what_a_call_returned_is_assigned() {
+    let mut found = Vec::new();
+    for (path, file) in rust_files(&root()) {
+        let text = std::fs::read_to_string(&file).expect("readable");
+        for (line, method) in assigned_through_calls(&text) {
+            found.push(format!("{path}:{line}: `{method}()`"));
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "a field of what a call returned is assigned, which changes a copy only (a part's \
+         area is set with its `set_area`):\n{}",
         found.join("\n")
     );
 }

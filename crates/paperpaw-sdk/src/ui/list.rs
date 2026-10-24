@@ -81,7 +81,8 @@ impl ListView {
         }
     }
 
-    /// Where the rows are drawn.
+    /// Where the rows are drawn: a copy, so a change to it changes
+    /// nothing; [`set_area`](Self::set_area) moves the rows.
     pub fn area(&self) -> Rect {
         self.area
     }
