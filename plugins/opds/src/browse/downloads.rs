@@ -1,6 +1,8 @@
 //! A book downloaded from a catalog: in the best format PaperPaw reads,
 //! into the catalog's folder in the library, with what the catalog
-//! says of it; then read at once, or later.
+//! says of it; then read at once, or later. It comes into a file of its
+//! own and goes into the library only once it is whole, so a download
+//! stopped (*Back*) or failed leaves nothing there.
 
 use super::*;
 
@@ -42,6 +44,7 @@ impl BrowseScreen {
             let message = env
                 .i18n()
                 .format("opds.downloading", &[("title", Arg::Str(&entry.title))]);
+            self.downloading = Some(entry.title.clone());
             return self.say(message, cx);
         }
         if let Some(url) = entry.feed.clone() {
@@ -51,8 +54,22 @@ impl BrowseScreen {
         self.say(message, cx);
     }
 
+    /// Stops the download going on: its answer is not waited for, and
+    /// what came of it goes with its file.
+    pub(super) fn stop_download(&mut self, cx: &mut Cx<'_, '_>) {
+        self.downloading = None;
+        cx.command(Command::CancelHttp(DOWNLOADED.id().clone()));
+        let message = cx.env().i18n().tr("opds.download-stopped").to_string();
+        self.say(message, cx);
+    }
+
     pub(super) fn downloaded(&mut self, reply: &HttpReply, file: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        // Stopped: said so already.
+        if reply.error == Some(paperpaw_sdk::HttpError::Cancelled) {
+            return;
+        }
+        self.downloading = None;
         let url = reply.context.get(URL).unwrap_or_default().to_string();
         if !self.answered(reply, &url, cx) {
             return;

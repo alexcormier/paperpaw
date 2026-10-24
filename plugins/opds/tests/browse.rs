@@ -1,7 +1,7 @@
 //! Browsing a catalog with the real kernel: its feed is loaded and shown,
 //! an entry leads to a further feed and *Back* to the one before, a book
-//! is downloaded into the catalog's folder in the library, and what goes
-//! wrong is said. The catalog's password goes to the catalog only, and a
+//! is downloaded into the catalog's folder in the library (or stopped
+//! with *Back*, leaving nothing), and what goes wrong is said. The catalog's password goes to the catalog only, and a
 //! list that cannot be read is never saved over.
 
 #![allow(
@@ -150,6 +150,42 @@ fn a_book_is_downloaded_into_the_library() {
     assert!(saved[0].ends_with(".epub"), "{saved:?}");
     let book = format!("Project Gutenberg/{}", saved[0]);
     assert_eq!(browsing.storage.get(&book).unwrap(), b"PK the book");
+}
+
+/// *Back* while a book is downloading stops the download: the feed stays
+/// and says so, and an answer that still comes (the transfer went on)
+/// leaves no file, in the library nor of the plugin's own.
+#[test]
+fn back_stops_a_download_and_leaves_nothing() {
+    let (mut browsing, call) = browse_start();
+    browsing.answer(&call, 200, FEED);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::CONFIRM);
+    let call = browsing.request();
+    let shown = browsing.shown();
+    assert!(
+        shown.iter().any(|l| l.contains("Back stops it")),
+        "{shown:?}"
+    );
+    browsing.run(actions::BACK);
+    let shown = browsing.shown();
+    assert!(
+        shown.iter().any(|l| l.contains("Download stopped")),
+        "{shown:?}"
+    );
+    assert!(shown.iter().any(|l| l.contains("Alice")), "{shown:?}");
+    browsing.answer(&call, 200, "PK the book");
+    assert!(!browsing.storage.exists("Project Gutenberg"));
+    let mut left = Vec::new();
+    let tmp = format!("{}/tmp", paperpaw_sdk::Env::plugin_dir("opds"));
+    let _ = browsing.storage.list(&tmp, &mut |entry| {
+        left.push(entry.name.to_string());
+    });
+    assert!(left.is_empty(), "{left:?}");
+    // Back again leaves the catalog, as without a download.
+    browsing.run(actions::BACK);
+    assert!(!browsing.shown().iter().any(|l| l.contains("Alice")));
 }
 
 /// A page the server answers with instead of the book is not saved as

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<id>https://www.gutenberg.org/ebooks.opds/</id>
+<title>Project Gutenberg</title>
+<link rel="search" type="application/atom+xml" href="/ebooks/search.opds/?query={searchTerms}"/>
+<entry><id>popular</id><title>Popular books</title>
+<content type="text">The books read most this month</content>
+<link rel="subsection" type="application/atom+xml;profile=opds-catalog" href="/ebooks/search.opds/?sort_order=downloads"/></entry>
+<entry><id>latest</id><title>Latest books</title>
+<link rel="subsection" type="application/atom+xml;profile=opds-catalog" href="/ebooks/search.opds/?sort_order=release_date"/></entry>
+</feed>

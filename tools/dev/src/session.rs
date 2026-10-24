@@ -63,6 +63,8 @@ pub struct Session {
     /// The library's folder, unless it is kept in memory.
     root: Option<PathBuf>,
     keep: bool,
+    /// Requests answered from the emulator's fixtures (`--network`).
+    fixtures: bool,
 }
 
 impl Session {
@@ -150,6 +152,10 @@ impl Session {
             (device, Some(root))
         };
         let mut device = device.map_err(|e| format!("{}: {e}", variant.name()))?;
+        // A variation's own network stays (see `vary`).
+        if context.fixtures {
+            device.use_fixtures();
+        }
         device.start();
         device.tick_if_due();
         let mut session = Session {
@@ -157,6 +163,7 @@ impl Session {
             variant: variant.clone(),
             root,
             keep: context.keep,
+            fixtures: context.fixtures,
         };
         session.settle();
         Ok(session)
@@ -201,7 +208,35 @@ impl Session {
         }
         self.device.open_screen(id, given);
         self.settle();
+        self.settle_network();
         Ok(())
+    }
+
+    /// Whether requests are answered from the emulator's fixtures.
+    pub fn fixtures(&self) -> bool {
+        self.fixtures
+    }
+
+    /// With the fixtures, lets emulated time pass while network work is
+    /// under way (the radio joining, requests answered), up to as long as
+    /// a request waits for a network: what a screen shows once its data
+    /// came is what is looked at. Without, nothing (the computer's
+    /// network answers in its own time).
+    pub fn settle_network(&mut self) {
+        if !self.fixtures {
+            return;
+        }
+        let end = self
+            .device
+            .now()
+            .add_millis(paperpaw_core::sdk::wifi::NETWORK_WAIT_MS + 1000);
+        while self.device.network_settling() && self.device.now() < end {
+            let now = self.device.now();
+            let next = self.device.next_wake().filter(|&at| at > now);
+            let step = next.map_or(100, |at| at.since(now).clamp(1, 100));
+            self.device.advance(step);
+            self.device.tick_if_due();
+        }
     }
 
     /// Changes a setting as the settings screen would.

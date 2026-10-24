@@ -45,6 +45,10 @@ OPTIONS:
     --heap-budget <KiB>   Override the profile's heap budget (`none` = unlimited)
     --trace-alloc <bytes> Print every kernel allocation of at least this size, with where
     --heap-report         After a headless run, list the live heap by call site
+    --network <how>       Where plugins' requests go: `real` (the default), or
+                          `fixtures`, answered offline from the emulator's own
+                          (a small plugin library and the servers PaperPaw's
+                          plugins ask; others fail), alike everywhere
     --free-space <bytes>  Say the storage has this much free, not the computer's
                           disk (screenshots alike everywhere)
     --trace               Print what each frame's drawing asks the storage, band by band,
@@ -80,6 +84,8 @@ struct Options {
     cable: bool,
     /// Install the code plugins built for this computer on the card.
     trust_code: bool,
+    /// Requests answered from the emulator's fixtures (`--network`).
+    fixtures: bool,
 }
 
 fn main() -> ExitCode {
@@ -126,6 +132,9 @@ fn run() -> Result<(), String> {
     }
     let mut device = Device::new(profile, user_config(&options)?, storage, options.headless)
         .map_err(|e| format!("{}: {e}", profile.device.id))?;
+    if options.fixtures {
+        device.use_fixtures();
+    }
 
     if options.headless {
         device.start();
@@ -293,6 +302,15 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
             }
             "--heap-report" => options.heap_report = true,
             "--trust-code" => options.trust_code = true,
+            "--network" => {
+                options.fixtures = match value("--network")?.as_str() {
+                    "real" => false,
+                    "fixtures" => true,
+                    other => {
+                        return Err(format!("--network expects real or fixtures, got `{other}`"));
+                    }
+                };
+            }
             "--free-space" => {
                 let bytes = value("--free-space")?;
                 device::set_free_space(

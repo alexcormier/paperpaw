@@ -607,10 +607,10 @@ impl Screen for PageScreen {
         let style = self.style;
         let rows = self.rows(env);
         let title = self.plugin.as_ref().map_or("", |p| p.name.as_str());
-        let mut ui = ui::Ui::new(canvas, env, &style);
-        self.header
-            .draw(&mut ui, title, None, self.list.paging(rows.len()));
         let Some(plugin) = &self.plugin else {
+            let mut ui = ui::Ui::new(canvas, env, &style);
+            self.header
+                .draw(&mut ui, title, None, self.list.paging(rows.len()));
             let (icon, title, text) = match self.details {
                 Details::Failed => ("cloud", "store.gone", "store.gone.help"),
                 _ => ("cloud-download", "store.loading-plugin", ""),
@@ -634,67 +634,84 @@ impl Screen for PageScreen {
         };
         // What it does (or the notice, the warning), then the facts in
         // small print, then what can be done, each right below the other.
+        // Laid out once without drawing, to place the rows (and so the
+        // page number above them), then drawn the same way: where the
+        // text ends and where the rows begin are one value.
         let margin = style.margin() as f32;
         let width = f32::from(self.list.area().width) - 2.0 * margin;
-        let mut y = f32::from(self.top);
-        let paragraph = |canvas: &mut Canvas<'_>,
-                         y: &mut f32,
-                         text: &str,
-                         size: f32,
-                         color: Color,
-                         most: usize,
-                         indent: f32| {
-            let metrics = font.line_metrics(size);
-            let width = width - indent;
-            let margin = margin + indent;
-            let lines = font.wrap(size, text, width);
-            let shown = lines.len().min(most);
-            let area = Rect::new(
-                margin as u16,
-                *y as u16,
-                width as u16,
-                (metrics.line_height * shown as f32) as u16,
-            );
-            canvas.describe(Role::Text, text, area);
-            for (n, range) in lines.iter().take(shown).enumerate() {
-                let text = if n + 1 == shown && lines.len() > shown {
-                    ui::fit(&font, size, text[range.start..].trim_end(), width)
-                } else {
-                    text[range.clone()].trim_end().to_string()
-                };
-                let baseline = *y + metrics.ascent;
-                font.draw(canvas, size, margin, baseline as i32, &text, color);
-                *y += metrics.line_height;
-            }
-        };
         let (text, facts) = self.texts(env, plugin);
-        paragraph(
-            ui.canvas(),
-            &mut y,
-            &text,
-            style.text(),
-            Color::BLACK,
-            SUMMARY_LINES,
-            0.0,
-        );
-        y += style.gap() as f32;
-        // The facts each after its icon, their texts lined up.
-        let room = f32::from(ui::icon_room(ui.env(), ui.style(), true));
+        let room = f32::from(ui::icon_room(env, &style, true));
         let icon_size = style.small() * ui::ICON_SCALE;
         let line = font.line_metrics(style.small()).line_height;
-        for (icon, fact) in facts {
-            let first = Rect::new(0, y as u16, self.list.area().width, line as u16);
+        let top = f32::from(self.top);
+        let full = self.list.area().width;
+        let content = |mut ui: Option<&mut ui::Ui<'_>>| -> f32 {
+            let mut y = top;
+            let paragraph = |ui: &mut Option<&mut ui::Ui<'_>>,
+                             y: &mut f32,
+                             text: &str,
+                             size: f32,
+                             color: Color,
+                             most: usize,
+                             indent: f32| {
+                let metrics = font.line_metrics(size);
+                let width = width - indent;
+                let margin = margin + indent;
+                let lines = font.wrap(size, text, width);
+                let shown = lines.len().min(most);
+                let Some(ui) = ui.as_deref_mut() else {
+                    *y += metrics.line_height * shown as f32;
+                    return;
+                };
+                let area = Rect::new(
+                    margin as u16,
+                    *y as u16,
+                    width as u16,
+                    (metrics.line_height * shown as f32) as u16,
+                );
+                ui.canvas().describe(Role::Text, text, area);
+                for (n, range) in lines.iter().take(shown).enumerate() {
+                    let text = if n + 1 == shown && lines.len() > shown {
+                        ui::fit(&font, size, text[range.start..].trim_end(), width)
+                    } else {
+                        text[range.clone()].trim_end().to_string()
+                    };
+                    let baseline = *y + metrics.ascent;
+                    font.draw(ui.canvas(), size, margin, baseline as i32, &text, color);
+                    *y += metrics.line_height;
+                }
+            };
+            paragraph(
+                &mut ui,
+                &mut y,
+                &text,
+                style.text(),
+                Color::BLACK,
+                SUMMARY_LINES,
+                0.0,
+            );
+            y += style.gap() as f32;
+            // The facts each after its icon, their texts lined up.
             let ink = style.faint(ui::Ink::Detail);
-            ui.icon(icon, icon_size, margin, first, ink);
-            paragraph(ui.canvas(), &mut y, &fact, style.small(), ink, 3, room);
-            y += style.gap() as f32 / 3.0;
-        }
+            for (icon, fact) in &facts {
+                if let Some(ui) = ui.as_deref_mut() {
+                    let first = Rect::new(0, y as u16, full, line as u16);
+                    ui.icon(icon, icon_size, margin, first, ink);
+                }
+                paragraph(&mut ui, &mut y, fact, style.small(), ink, 3, room);
+                y += style.gap() as f32 / 3.0;
+            }
+            y
+        };
         let gap = style.gap();
-        // The rows right below the facts (set, not a copy changed).
         let mut area = self.list.area();
-        area.y = y as u16 + gap;
+        area.y = content(None) as u16 + gap;
         area.height = self.status.y.saturating_sub(area.y);
         self.list.set_area(area);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(rows.len()));
+        content(Some(&mut ui));
         let texts: Vec<(String, String)> = rows
             .iter()
             .map(|&row| self.row_text(env, plugin, row))

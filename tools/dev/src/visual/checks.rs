@@ -455,14 +455,10 @@ pub fn outside_cell(scene: &Scene<'_>, baseline: &Image, own: &[Described]) -> V
 }
 
 /// Buttons, switches and sliders over each other, rows over each other,
-/// text over a row, text running into a switch or button.
+/// text under a control, a row or another text, text running into a
+/// switch or button.
 pub fn overlap(scene: &Scene<'_>) -> Vec<Issue> {
     let mut issues = Vec::new();
-    let partly = |a: Rect, b: Rect| {
-        a.intersection(&b)
-            .filter(|i| i.width >= 2 && i.height >= 2)
-            .filter(|_| !inside(a, b) && !inside(b, a))
-    };
     for kinds in [CONTROLS, &[Role::Row][..]] {
         let parts: Vec<&Described> = scene.parts(kinds).collect();
         for (i, a) in parts.iter().enumerate() {
@@ -481,17 +477,7 @@ pub fn overlap(scene: &Scene<'_>) -> Vec<Issue> {
         if !says_something(&t.label) {
             continue;
         }
-        // A text lying partly over a row: drawn where the rows are, or
-        // the rows placed where the text is.
-        for r in scene.parts(&[Role::Row]) {
-            if let Some(common) = partly(t.area, r.area) {
-                issues.push(Issue::error(
-                    OVERLAP,
-                    common,
-                    format!("{} and {} overlap", quote(&t.label), named(r)),
-                ));
-            }
-        }
+        issues.extend(covered(scene, t));
         let Some(visible) = scene.visible(t) else {
             continue;
         };
@@ -548,13 +534,80 @@ pub fn overlap(scene: &Scene<'_>) -> Vec<Issue> {
     issues
 }
 
-/// A text that starts in a button but whose ink reaches out of it: the
-/// button's frame, or its focus, cuts through the text.
+/// Two areas that lie partly over each other (by 2 px at least), neither
+/// within the other: where they do.
+fn partly(a: Rect, b: Rect) -> Option<Rect> {
+    a.intersection(&b)
+        .filter(|i| i.width >= 2 && i.height >= 2)
+        .filter(|_| !inside(a, b) && !inside(b, a))
+}
+
+/// Whether a text is a part's own (a row's or a button's words): at
+/// least half of it lies within the part.
+fn belongs(text: Rect, part: Rect) -> bool {
+    let size = |r: Rect| u32::from(r.width) * u32::from(r.height);
+    text.intersection(&part)
+        .is_some_and(|common| size(common) * 2 >= size(text))
+}
+
+/// A text with words that lies partly under a part it is not of: a row,
+/// a control starting where the text starts or before it (one starting
+/// within the text is looked at by its ink, in `overlap`), or another
+/// text. Drawn where the rows are, or the rows placed where it is.
+fn covered(scene: &Scene<'_>, t: &Described) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    let mut under = |part: &Described, common: Rect| {
+        issues.push(Issue::error(
+            OVERLAP,
+            common,
+            format!(
+                "{} lies under {}: place each where the other is not",
+                quote(&t.label),
+                named(part)
+            ),
+        ));
+    };
+    for r in scene.parts(&[Role::Row]) {
+        if let Some(common) = partly(t.area, r.area).filter(|_| !belongs(t.area, r.area)) {
+            under(r, common);
+        }
+    }
+    for c in scene.parts(CONTROLS) {
+        if c.area.x > t.area.x + 2 {
+            continue;
+        }
+        if let Some(common) = partly(t.area, c.area).filter(|_| !belongs(t.area, c.area)) {
+            under(c, common);
+        }
+    }
+    // Each pair once: only the texts after this one.
+    let texts: Vec<&Described> = scene.parts(&[Role::Text]).collect();
+    let after = texts
+        .iter()
+        .position(|other| core::ptr::eq(*other, t))
+        .map_or(texts.len(), |i| i + 1);
+    for other in &texts[after..] {
+        if !says_something(&other.label) {
+            continue;
+        }
+        // Lines a few pixels into each other's room are no overlap.
+        let lower = t.area.height.min(other.area.height);
+        if let Some(common) = partly(t.area, other.area).filter(|c| c.height * 3 >= lower) {
+            under(other, common);
+        }
+    }
+    issues
+}
+
+/// A text that starts in a button, is the button's own but whose ink
+/// reaches out of it: the button's frame, or its focus, cuts through the
+/// text.
 fn out_of_button(scene: &Scene<'_>, t: &Described) -> Option<Issue> {
     let start = Point::new(i32::from(t.area.x), i32::from(t.area.y));
     let b = scene
         .parts(&[Role::Button])
         .filter(|b| b.area.contains(start) && !inside(t.area, b.area))
+        .filter(|b| belongs(t.area, b.area))
         .last()?;
     let (run, _) = text_run(scene, t, INK)?;
     let out = run.right() > b.area.right() + 1 || run.bottom() > b.area.bottom() + 1;

@@ -198,6 +198,9 @@ pub struct Device {
     /// The kernel's warnings since start (the last `KEPT_WARNINGS`),
     /// besides printed: for tools that check there are none.
     pub warnings: Vec<Warning>,
+    /// Requests are answered from the emulator's fixtures
+    /// ([`Device::use_fixtures`]).
+    fixtures: bool,
 }
 
 /// How many of the kernel's warnings [`Device::warnings`] keeps.
@@ -287,6 +290,7 @@ impl Device {
             wifi: crate::wifi::Wifi::default(),
             speech: std::collections::VecDeque::new(),
             warnings: Vec::new(),
+            fixtures: false,
             asleep: false,
             rotation,
             wall: None,
@@ -326,6 +330,33 @@ impl Device {
         self.execute(effects);
         let effects = budget::track(|| self.kernel.start(now));
         self.execute(effects);
+        if self.fixtures && self.profile.wifi {
+            // Known as if joined before: joined when a plugin wants the
+            // network, as a device of the reader's would.
+            let keep = paperpaw_core::sdk::wifi::keep(crate::wifi::TEST_NETWORK, "fixtures");
+            self.kernel.set_secret(keep);
+        }
+    }
+
+    /// Whether network work is under way that the emulated time brings to
+    /// an end: requests not answered yet (waiting for the network or in
+    /// flight), or the pretend radio starting, scanning or joining. With
+    /// the fixtures (answered at once), a tool lets time pass until it
+    /// ends, as a reader would wait.
+    pub fn network_settling(&self) -> bool {
+        self.http.in_flight > 0 || self.kernel.holds_sleep() || self.wifi.next_due().is_some()
+    }
+
+    /// Answers plugins' requests from the emulator's fixtures from now on
+    /// ([`crate::offline`], on this thread; a route set already, such as
+    /// a tool's network that fails on purpose, stays), and, where
+    /// PaperPaw manages Wi-Fi, knows the pretend radio's test network from
+    /// each start, so that what waits for the network gets it, offline.
+    pub fn use_fixtures(&mut self) {
+        if !crate::http::routed() {
+            crate::http::set_route(Some(Box::new(crate::offline::Offline)));
+        }
+        self.fixtures = true;
     }
 
     /// The emulated clock and battery: the computer's time and time zone

@@ -1,0 +1,50 @@
+{
+ "format": 2,
+ "plugin": {
+  "id": "reading-aids",
+  "name": "Reading aids",
+  "summary": "Reading aids for the words: bold starts of words, wider spacing of letters, words and lines, and a calmer type for those who read with dyslexia.",
+  "group": "reading",
+  "author": "Someone",
+  "licence": "MIT",
+  "kind": "data",
+  "added": "2025-06-01",
+  "description": "Bold starts of words lead the eye along a line. Wider spacing of letters, words and lines gives each word more room, and a calmer type keeps similar letters apart.\n\nEach aid can be switched on alone, in the reader's menu, and set for each book.",
+  "source": "https://codeberg.org/someone/reading-aids",
+  "author_since": "2024-03-02",
+  "author_plugins": 3,
+  "screenshots": [
+   {
+    "url": "shots/reading-aids-1.png",
+    "width": 360,
+    "height": 600,
+    "alt": "A page with bold starts of words",
+    "size": 19438
+   },
+   {
+    "url": "shots/reading-aids-2.png",
+    "width": 360,
+    "height": 600,
+    "alt": "The aids in the reader's menu",
+    "size": 10946
+   }
+  ],
+  "latest": {
+   "version": "1.2.0",
+   "sdk": "0.4",
+   "formats": 1,
+   "size": 75,
+   "files": [
+    {
+     "path": "plugin.ini",
+     "url": "reading-aids/1.2.0/plugin.ini",
+     "size": 75,
+     "sha1": "a997b6d3b2c4690443f76bb06228d7eca7bc056b"
+    }
+   ],
+   "source": {
+    "url": "https://codeberg.org/someone/reading-aids/src/tag/v1.2.0"
+   }
+  }
+ }
+}

@@ -18,6 +18,7 @@ pub mod http;
 pub mod light;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
+pub mod offline;
 pub mod panel;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod private;

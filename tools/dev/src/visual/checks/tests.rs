@@ -162,31 +162,84 @@ fn parts_off_screen_and_overlapping() {
     assert_eq!(checks(&overlap(&scene)), [OVERLAP]);
 }
 
-#[test]
-fn text_over_a_row_is_found() {
-    let image = paper();
-    let row = Rect::new(0, 100, 480, 60);
-    // A row's own label lies within it.
-    let fine = vec![
-        d(Role::Row, "", row),
-        d(Role::Text, "Install", Rect::new(26, 100, 330, 60)),
-    ];
-    assert!(overlap(&scene(&image, fine)).is_empty());
-    // A description drawn where the rows are.
-    let over = vec![
-        d(Role::Row, "", row),
+/// The store's plugin page as it was drawn wrongly (the parts' places as
+/// it described them on the X4): the rows left under the header, over
+/// the summary; and as it is drawn now, the rows below the facts.
+fn store_page(rows_at: u16, install: Role) -> Vec<Described> {
+    vec![
         d(
             Role::Text,
-            "A long description",
-            Rect::new(26, 130, 428, 90),
+            "Reading aids for the words: bold starts of words",
+            Rect::new(35, 84, 410, 199),
         ),
-    ];
-    let issues = overlap(&scene(&image, over));
-    assert_eq!(checks(&issues), [OVERLAP]);
+        d(
+            Role::Text,
+            "Data plugin: settings, looks and texts, no code.",
+            Rect::new(86, 300, 359, 56),
+        ),
+        d(
+            Role::Text,
+            "By Someone, since 2024, 3 plugins",
+            Rect::new(86, 363, 359, 28),
+        ),
+        d(
+            Role::Text,
+            "Version 1.0.0, 61 B, Licence: MIT",
+            Rect::new(86, 397, 359, 28),
+        ),
+        d(install, "Install, 61 B", Rect::new(0, rows_at, 480, 63)),
+        d(
+            Role::Row,
+            "Source code",
+            Rect::new(0, rows_at + 63, 480, 63),
+        ),
+        // A row's own words lie within it.
+        d(
+            Role::Text,
+            "Source code",
+            Rect::new(35, rows_at + 63, 300, 63),
+        ),
+    ]
+}
+
+#[test]
+fn text_under_a_row_is_found() {
+    let image = paper();
+    assert!(overlap(&scene(&image, store_page(442, Role::Row))).is_empty());
+    let issues = overlap(&scene(&image, store_page(84, Role::Row)));
+    assert_eq!(checks(&issues), [OVERLAP, OVERLAP], "{issues:?}");
+    assert!(issues[0].message.contains("\"Reading aids"), "{issues:?}");
+    assert!(issues[0].message.contains("Install"), "{issues:?}");
+    assert!(issues[1].message.contains("Source code"), "{issues:?}");
+}
+
+#[test]
+fn text_under_a_control_starting_before_it_is_found() {
+    let image = paper();
+    // Install as a button, starting left of the summary.
+    assert!(overlap(&scene(&image, store_page(442, Role::Button))).is_empty());
+    let issues = overlap(&scene(&image, store_page(84, Role::Button)));
     assert!(
-        issues[0].message.contains("\"A long description\""),
+        issues
+            .iter()
+            .any(|i| i.message.contains("\"Reading aids") && i.message.contains("Install")),
         "{issues:?}"
     );
+}
+
+#[test]
+fn text_under_another_text_is_found() {
+    let image = paper();
+    let mut parts = store_page(442, Role::Row);
+    // The facts begun before the summary's last line.
+    parts[1].area.y = 260;
+    let issues = overlap(&scene(&image, parts));
+    assert_eq!(checks(&issues), [OVERLAP], "{issues:?}");
+    assert!(issues[0].message.contains("\"Data plugin"), "{issues:?}");
+    // Lines a few pixels into each other's room pass.
+    let mut parts = store_page(442, Role::Row);
+    parts[2].area.y = 352;
+    assert!(overlap(&scene(&image, parts)).is_empty());
 }
 
 #[test]

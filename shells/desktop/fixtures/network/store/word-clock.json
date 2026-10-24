@@ -1,0 +1,59 @@
+{
+ "format": 2,
+ "plugin": {
+  "id": "word-clock",
+  "name": "Word clock",
+  "summary": "The time in words on the home screen.",
+  "group": "home",
+  "author": "Someone",
+  "licence": "MIT",
+  "kind": "code",
+  "added": "2026-02-01",
+  "author_key": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
+  "description": "Shows the time as a sentence, such as \"ten past nine\", in the language of the device.",
+  "latest": {
+   "version": "1.0.0",
+   "sdk": "0.4",
+   "formats": 1,
+   "size": 59,
+   "files": [
+    {
+     "path": "plugin.ini",
+     "url": "word-clock/1.0.0/plugin.ini",
+     "size": 59,
+     "sha1": "a54edcb7859763bb4a6fb992519c55859b4c57d4"
+    }
+   ],
+   "builds": [
+    {
+     "device": "x4",
+     "abi": "{abi}",
+     "url": "word-clock/1.0.0/x4.ppn",
+     "size": 41000,
+     "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "device": "x4-pro",
+     "abi": "{abi}",
+     "url": "word-clock/1.0.0/x4-pro.ppn",
+     "size": 41000,
+     "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "device": "x4-classic",
+     "abi": "{abi}",
+     "url": "word-clock/1.0.0/x4-classic.ppn",
+     "size": 41000,
+     "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "device": "android",
+     "abi": "{abi}",
+     "url": "word-clock/1.0.0/android.ppn",
+     "size": 41000,
+     "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+   ]
+  }
+ }
+}
