@@ -17,8 +17,7 @@ use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::document::{Document, Locator, TocEntry};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen,
+    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
 };
 
 use paperpaw_sdk::builtin::events;
@@ -334,7 +333,7 @@ impl Screen for TocScreen {
             let Some(entry) = index.checked_sub(first).and_then(|i| visible.get(i)) else {
                 return;
             };
-            let color = if focused { Color::WHITE } else { Color::BLACK };
+            let color = style.focus_ink(focused);
             let indent = style.margin() as f32 * (1.0 + 2.0 * f32::from(entry.level.min(4)));
             let width = f32::from(rect.width) - indent - style.margin() as f32;
             let title = ui::fit(&font, style.text(), &entry.title, width);
