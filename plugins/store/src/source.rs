@@ -52,12 +52,8 @@ impl Screen for SourceScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("store.source");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, None);
         let Some(font) = style.font(env) else {
             return;
         };
@@ -68,21 +64,16 @@ impl Screen for SourceScreen {
         // Who it is from, then the code, then the address in full.
         let line = font.line_metrics(style.text()).line_height as u16;
         let name = Rect::new(margin, y, width, line);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.text(),
-            f32::from(margin),
-            name,
-            &self.title,
-            Color::BLACK,
-        );
+        ui::Label::new(&self.title)
+            .px(style.text())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, f32::from(margin), name);
         y += line + style.gap();
         if let Some(qr) = &self.qr {
             // Three quarters of the width, at most half the height.
             let side = (width * 3 / 4).min(display.height / 2);
             let area = Rect::new((display.width - side) / 2, y, side, side);
-            if let Some(drawn) = ui::draw_qr(canvas, qr, area) {
+            if let Some(drawn) = ui::draw_qr(ui.canvas(), qr, area) {
                 y = drawn.y + drawn.height + style.gap();
             }
         }
@@ -99,7 +90,10 @@ impl Screen for SourceScreen {
                 } else {
                     style.faint(ui::Ink::Detail)
                 };
-                ui::draw_label(canvas, &font, style.small(), x, at, part, color);
+                ui::Label::new(part)
+                    .px(style.small())
+                    .color(color)
+                    .draw_from(&mut ui, x, at);
                 y += small as u16;
             }
             y += style.gap();

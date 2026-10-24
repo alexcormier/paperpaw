@@ -271,23 +271,15 @@ impl Screen for FolderChooser {
             }
             None => title,
         };
+        let mut ui = ui::Ui::new(canvas, env, &style);
         if self.pending.is_some() {
-            self.header.draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                &title,
-                None,
-                None,
-            );
+            self.header.draw(&mut ui, &title, None, None);
             let text = env.i18n.tr("files.choose.opening");
-            ui::draw_message(canvas, env, &style, self.list.area(), text);
+            ui.message(self.list.area(), text);
             return;
         }
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, &title, None, self.list.paging(len));
         let this = &*self;
         let rows: Vec<(usize, String, &str)> = (0..len)
             .skip(this.list.page() * this.list.rows())
@@ -302,16 +294,11 @@ impl Screen for FolderChooser {
                 })
             })
             .collect();
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                if let Some((_, title, value)) = rows.iter().find(|(i, _, _)| *i == index) {
-                    ui::draw_value_row(canvas, env, &style, rect, focused, title, value);
-                }
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            if let Some((_, title, value)) = rows.iter().find(|(i, _, _)| *i == index) {
+                ui::Row::value(title, value).focused(focused).draw(ui, rect);
+            }
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

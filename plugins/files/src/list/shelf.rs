@@ -341,26 +341,15 @@ impl Screen for ShelfScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.entries.len();
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &self.title_text,
-            None,
-            self.list.paging(len),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, &self.title_text, None, self.list.paging(len));
         let x = style.margin() as f32;
         let faint = style.faint(ui::Ink::Detail);
-        if let Some(font) = style.font(env) {
-            let summary = &self.summary_text;
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                x,
-                self.summary,
-                summary,
-                faint,
-            );
-        }
+        ui::Label::new(&self.summary_text)
+            .px(style.small())
+            .color(faint)
+            .draw_from(&mut ui, x, self.summary);
         if len == 0 {
             let (icon, title, text) = match self.kind {
                 Kind::Favourites => (
@@ -370,7 +359,7 @@ impl Screen for ShelfScreen {
                 ),
                 _ => ("books", "", env.i18n.tr("files.search.none")),
             };
-            ui::draw_empty(canvas, env, &style, self.list.area(), icon, title, text);
+            ui.empty(self.list.area(), icon, title, text);
             return;
         }
         // Each book a row that says itself (its title first), so drawn
@@ -379,21 +368,21 @@ impl Screen for ShelfScreen {
         let first = self.list.page() * rows;
         for (slot, index) in (first..len).take(rows).enumerate() {
             let rect = self.list.row_rect(slot);
-            if canvas.clip().intersection(&rect).is_none() {
+            if ui.canvas().clip().intersection(&rect).is_none() {
                 continue;
             }
             let focused = self.list.active() && self.list.shown() && index == self.list.focus();
             if focused {
-                ui::draw_focus(canvas, &style, rect);
+                ui.focus(rect);
             } else {
-                ui::draw_separator(canvas, &style, rect, 0);
+                ui.separator(rect, 0);
             }
             if self.loaded_page != Some(index / rows) {
                 continue;
             }
             if let Some(book) = self.loaded.get(index % rows) {
                 let next = self.next == Some(index);
-                rows::draw_book_row(canvas, env, &style, &self.sizes, rect, focused, book, next);
+                rows::draw_book_row(&mut ui, &self.sizes, rect, focused, book, next);
             }
         }
     }

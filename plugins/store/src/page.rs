@@ -607,12 +607,9 @@ impl Screen for PageScreen {
         let style = self.style;
         let rows = self.rows(env);
         let title = self.plugin.as_ref().map_or("", |p| p.name.as_str());
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(rows.len()),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(rows.len()));
         let Some(plugin) = &self.plugin else {
             let (icon, title, text) = match self.details {
                 Details::Failed => ("cloud", "store.gone", "store.gone.help"),
@@ -629,7 +626,7 @@ impl Screen for PageScreen {
             } else {
                 env.i18n.tr(text)
             };
-            ui::draw_empty(canvas, env, &style, area, icon, env.i18n.tr(title), text);
+            ui.empty(area, icon, env.i18n.tr(title), text);
             return;
         };
         let Some(font) = style.font(env) else {
@@ -672,7 +669,7 @@ impl Screen for PageScreen {
         };
         let (text, facts) = self.texts(env, plugin);
         paragraph(
-            canvas,
+            ui.canvas(),
             &mut y,
             &text,
             style.text(),
@@ -682,14 +679,14 @@ impl Screen for PageScreen {
         );
         y += style.gap() as f32;
         // The facts each after its icon, their texts lined up.
-        let room = f32::from(ui::icon_room(env, &style, true));
+        let room = f32::from(ui.icon_room(true));
         let icon_size = style.small() * ui::ICON_SCALE;
         let line = font.line_metrics(style.small()).line_height;
         for (icon, fact) in facts {
             let first = Rect::new(0, y as u16, self.list.area().width, line as u16);
             let ink = style.faint(ui::Ink::Detail);
-            ui::draw_icon(canvas, env, icon, icon_size, margin, first, ink);
-            paragraph(canvas, &mut y, &fact, style.small(), ink, 3, room);
+            ui.icon(icon, icon_size, margin, first, ink);
+            paragraph(ui.canvas(), &mut y, &fact, style.small(), ink, 3, room);
             y += style.gap() as f32 / 3.0;
         }
         let gap = style.gap();
@@ -699,16 +696,12 @@ impl Screen for PageScreen {
             .iter()
             .map(|&row| self.row_text(env, plugin, row))
             .collect();
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (name, value) = &texts[index];
-                ui::draw_value_row(canvas, env, &style, rect, focused, name, value);
-            },
-        );
-        canvas.fill(self.status, Color::WHITE);
+                ui::Row::value(name, value).focused(focused).draw(ui, rect);
+            });
+        ui.canvas().fill(self.status, Color::WHITE);
         let note = match (&self.job, rows.first()) {
             (Some(job), Some(Row::Stop)) if job.plugin == plugin.id => {
                 env.i18n.tr("store.downloading").to_string()
@@ -720,7 +713,7 @@ impl Screen for PageScreen {
             _ => String::new(),
         };
         if !note.is_empty() {
-            ui::draw_note_line(canvas, env, &style, self.status, &note);
+            ui.note_line(self.status, &note);
         }
     }
 

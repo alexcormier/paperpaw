@@ -119,43 +119,28 @@ impl Screen for ShotsScreen {
         let style = self.style;
         let title = env.i18n.tr("store.shots");
         let paging = Some(ui::Paging::new(self.at, self.urls.len()));
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            paging,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, paging);
         match &self.picture {
             Picture::Here(image) => {
                 let (w, h) = ui::fit_image(image, self.area.width, self.area.height);
                 let at = Rect::new(self.area.x + (self.area.width - w) / 2, self.area.y, w, h);
-                ui::draw_image(canvas, env.storage, image, at);
+                ui::draw_image(ui.canvas(), env.storage, image, at);
                 // A thin frame: the screenshot's own paper apart from ours.
-                canvas.stroke_round(
+                ui.canvas().stroke_round(
                     at,
                     u32::from(style.line()).max(1),
                     0,
                     style.faint(ui::Ink::Rule),
                 );
             }
-            Picture::Loading => ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            Picture::Loading => ui.empty(
                 self.area,
                 "cloud-download",
                 env.i18n.tr("store.loading-plugin"),
                 "",
             ),
-            Picture::Failed => ui::draw_empty(
-                canvas,
-                env,
-                &style,
-                self.area,
-                "cloud",
-                env.i18n.tr("store.shot-failed"),
-                "",
-            ),
+            Picture::Failed => ui.empty(self.area, "cloud", env.i18n.tr("store.shot-failed"), ""),
         }
     }
 

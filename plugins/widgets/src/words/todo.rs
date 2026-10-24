@@ -528,10 +528,6 @@ fn places(env: &Env<'_>, area: Rect, widget: &TodoWidget) -> Places {
 
 /// Draws an item in `row`: its box, ticked if done, and its text, struck
 /// through if done.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "its inputs are separate things; a struct of them would serve this call alone"
-)]
 fn draw_item(
     ui: &mut ui::Ui<'_>,
     size: f32,

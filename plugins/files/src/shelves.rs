@@ -147,19 +147,16 @@ impl Screen for ShelfScreen {
         let style = self.style;
         let len = self.names.len();
         let title = env.i18n.tr(self.title());
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(len),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
             let area = self.list.area();
             // An empty view says what would be in it.
             let (icon, text) = match self.shelf {
                 _ if self.collecting => {
                     let message = env.i18n.tr("files.list.collecting");
-                    ui::draw_message(canvas, env, &style, area, message);
+                    ui.message(area, message);
                     return;
                 }
                 Shelf::Series => ("books", "files.no-series"),
@@ -167,25 +164,23 @@ impl Screen for ShelfScreen {
                 Shelf::Authors => ("books", "files.no-books"),
             };
             let text = ui::tr_input(env, text);
-            ui::draw_empty(canvas, env, &style, area, icon, "", text);
+            ui.empty(area, icon, "", text);
             return;
         }
         let names = &self.names;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let (name, count) = &names[index];
-                let name = if name.is_empty() {
-                    env.i18n.tr("files.unknown-author")
-                } else {
-                    name.as_str()
-                };
-                let note = env.i18n.plural("files.books", *count as i64, &[]);
-                ui::draw_noted_row(canvas, env, &style, rect, focused, name, "›", &note);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (name, count) = &names[index];
+            let name = if name.is_empty() {
+                env.i18n.tr("files.unknown-author")
+            } else {
+                name.as_str()
+            };
+            let note = env.i18n.plural("files.books", *count as i64, &[]);
+            ui::Row::value(name, "›")
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

@@ -101,32 +101,26 @@ impl Screen for ChooseScreen {
         let style = self.style;
         let len = self.rows.len();
         let title = env.i18n.tr("keyboard.setting.layouts");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(len),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
         let chosen = chosen(env);
         let rows = &self.rows;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let id = rows[index].as_str();
-                let on = chosen.iter().position(|c| *c == id);
-                // Chosen layouts carry their place in switching: "On (2)".
-                let value = match on {
-                    Some(at) if chosen.len() > 1 => {
-                        format!("{} ({})", env.i18n.tr("keyboard.on"), at + 1)
-                    }
-                    Some(_) => env.i18n.tr("keyboard.on").to_string(),
-                    None => env.i18n.tr("keyboard.off").to_string(),
-                };
-                ui::draw_value_row(canvas, env, &style, rect, focused, env.i18n.tr(id), &value);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let id = rows[index].as_str();
+            let on = chosen.iter().position(|c| *c == id);
+            // Chosen layouts carry their place in switching: "On (2)".
+            let value = match on {
+                Some(at) if chosen.len() > 1 => {
+                    format!("{} ({})", env.i18n.tr("keyboard.on"), at + 1)
+                }
+                Some(_) => env.i18n.tr("keyboard.on").to_string(),
+                None => env.i18n.tr("keyboard.off").to_string(),
+            };
+            ui::Row::value(env.i18n.tr(id), &value)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
