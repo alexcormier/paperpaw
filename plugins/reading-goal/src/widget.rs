@@ -185,7 +185,8 @@ impl Widget for Cat {
             return;
         }
         let style = UiStyle::new(env);
-        let Some(font) = style.font(env) else {
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        let Some(font) = ui.font() else {
             return;
         };
         let text = progress(env, today);
@@ -193,7 +194,10 @@ impl Widget for Cat {
         let text = ui::fit(&font, style.small(), &text, width);
         let x = f32::from(inner.x) + (width - font.measure(style.small(), &text)).max(0.0) / 2.0;
         let row = Rect::new(inner.x, inner.y + inner.height - line, inner.width, line);
-        ui::draw_label(canvas, &font, style.small(), x, row, &text, look.ink);
+        ui::Label::new(&text)
+            .px(style.small())
+            .color(look.ink)
+            .draw_from(&mut ui, x, row);
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {

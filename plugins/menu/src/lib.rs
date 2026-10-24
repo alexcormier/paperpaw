@@ -349,70 +349,66 @@ impl MenuScreen {
         }
     }
 
+    /// Draws the line under entry `item` (its description), below its
+    /// row in `rect`; the row, the rest of `rect`.
+    fn draw_description(
+        &self,
+        ui: &mut ui::Ui<'_>,
+        (item, laid): (&Item, Option<&(ui::RowLines, String)>),
+        rect: Rect,
+    ) -> Rect {
+        let (env, style) = (ui.env(), self.style);
+        let (Some(key), Some(font)) = (&item.description, ui.font()) else {
+            return rect;
+        };
+        let row = laid.map_or(style.row(), |(l, _)| l.height);
+        let row = row.min(rect.height);
+        let below = Rect::new(rect.x, rect.y + row, rect.width, rect.height - row);
+        let x = f32::from(below.x) + style.margin() as f32 + f32::from(self.icon_width);
+        let width = f32::from(below.width) - x - style.margin() as f32;
+        let text = ui::fit(&font, style.small(), env.i18n.tr(key), width);
+        ui::Label::new(&text)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Detail))
+            .draw_from(ui, x, below);
+        Rect::new(rect.x, rect.y, rect.width, row)
+    }
+
     /// Draws entry `item` in `rect`: its icon, label and value.
     fn draw_entry(
         &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
+        ui: &mut ui::Ui<'_>,
         (item, laid): (&Item, Option<&(ui::RowLines, String)>),
         rect: Rect,
         focused: bool,
     ) {
+        let env = ui.env();
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let state = env.menus.state(env, item.id.as_str());
         // Faint: told as doing nothing now, however it is drawn.
-        let mut canvas = canvas.disabling(!state.enabled);
-        let canvas = &mut canvas;
+        let mut ui = ui.disabling(!state.enabled);
+        let ui = &mut ui;
         let ink = match state.enabled {
             true => style.focus_ink(focused),
             false => style.faint(ui::Ink::Note),
         };
-        // The line under it, below the row.
-        let rect = match &item.description {
-            Some(key) => {
-                let row = laid.map_or(style.row(), |(l, _)| l.height);
-                let row = row.min(rect.height);
-                let below = Rect::new(rect.x, rect.y + row, rect.width, rect.height - row);
-                let x = f32::from(below.x) + style.margin() as f32 + f32::from(self.icon_width);
-                let width = f32::from(below.width) - x - style.margin() as f32;
-                let text = ui::fit(&font, style.small(), env.i18n.tr(key), width);
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.small(),
-                    x,
-                    below,
-                    &text,
-                    style.faint(ui::Ink::Detail),
-                );
-                Rect::new(rect.x, rect.y, rect.width, row)
-            }
-            None => rect,
-        };
+        let rect = self.draw_description(ui, (item, laid), rect);
         // The label and value right of the icons.
-        let rect = ui::draw_row_icon(
-            canvas,
-            env,
-            &style,
-            rect,
-            self.icon_width,
-            item.icon.as_deref(),
-            ink,
-        );
+        let rect = ui.row_icon(rect, self.icon_width, item.icon.as_deref(), ink);
         let label = state
             .label
             .as_deref()
             .unwrap_or_else(|| env.i18n.tr(&item.title));
         // As its plugin says it is now: a switch, a badge.
         if let Some(on) = state.checked {
-            ui::draw_switch_row(canvas, env, &style, rect, focused, label, "", on);
+            ui::Row::switch(label, on).focused(focused).draw(ui, rect);
             return;
         }
         if let Some(badge) = &state.badge {
-            ui::draw_value_row(canvas, env, &style, rect, focused, label, badge);
+            ui::Row::value(label, badge).focused(focused).draw(ui, rect);
             return;
         }
         let (lines, room) = match laid {
@@ -423,33 +419,65 @@ impl MenuScreen {
         match Self::setting(env, &item.id) {
             Some(spec) if matches!(spec.kind, SettingKind::Bool) => {
                 let on = env.settings.bool(spec.id.as_str());
-                ui::draw_switch_lines(canvas, env, &style, rect, lines, focused, label, "", on);
+                ui::draw_switch_lines(
+                    ui.canvas(),
+                    env,
+                    &style,
+                    rect,
+                    lines,
+                    focused,
+                    label,
+                    "",
+                    on,
+                );
             }
             Some(spec) if focused && number(spec) => {
                 let value = ui::setting_value(env, spec);
                 let editing = self.edit.active();
-                ui::draw_stepper_lines(canvas, env, &style, lines, label, &value, room, editing);
+                ui::draw_stepper_lines(
+                    ui.canvas(),
+                    env,
+                    &style,
+                    lines,
+                    label,
+                    &value,
+                    room,
+                    editing,
+                );
             }
             // On touch screens − and + are always there.
             Some(spec) if env.device.input.touch && number(spec) => {
                 let value = ui::setting_value(env, spec);
-                ui::draw_number_lines(canvas, env, &style, lines, label, &value, room, None);
+                ui::draw_number_lines(ui.canvas(), env, &style, lines, label, &value, room, None);
             }
             Some(spec) => {
                 let mut value = ui::setting_value(env, spec);
                 if ui::opens_screen(env, spec) {
                     value.push_str(" ›");
                 }
-                ui::draw_setting_row(canvas, env, &style, rect, lines, focused, label, &value, "");
+                ui::draw_setting_row(
+                    ui.canvas(),
+                    env,
+                    &style,
+                    rect,
+                    lines,
+                    focused,
+                    label,
+                    &value,
+                    "",
+                );
             }
             None if is_menu(env, &item.id) => {
-                ui::draw_value_row(canvas, env, &style, rect, focused, label, "›");
+                ui::Row::value(label, "›").focused(focused).draw(ui, rect);
             }
             None => {
                 let x = f32::from(rect.x) + style.margin() as f32;
                 let width = f32::from(rect.width) - 2.0 * style.margin() as f32;
                 let label = ui::fit(&font, style.text(), label, width);
-                ui::draw_label(canvas, &font, style.text(), x, rect, &label, ink);
+                ui::Label::new(&label)
+                    .px(style.text())
+                    .color(ink)
+                    .draw_from(ui, x, rect);
             }
         }
     }
@@ -496,47 +524,35 @@ impl Screen for MenuScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        canvas.fill(self.region, Color::WHITE);
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(self.region, Color::WHITE);
         let border = Rect::new(
             self.region.x,
             self.region.y,
             self.region.width,
             u32::from(style.line()).max(1) as u16,
         );
-        canvas.fill(border, Color::BLACK);
-        if style.font(env).is_none() {
+        ui.canvas().fill(border, Color::BLACK);
+        if ui.font().is_none() {
             return;
         }
         if self.items.is_empty() {
-            ui::draw_message(
-                canvas,
-                env,
-                &style,
-                self.rows.area(),
-                env.i18n.tr("menu.empty"),
-            );
+            ui.message(self.rows.area(), env.i18n.tr("menu.empty"));
             return;
         }
         let items = &self.items;
-        self.rows.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            self.keys,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.rows
+            .draw(&mut ui, self.keys, |ui, index, rect, focused| {
                 let item = &items[index];
                 if item.heading {
-                    ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(&item.title));
+                    ui.heading(rect, env.i18n.tr(&item.title));
                 } else {
                     let laid = self.lines.get(index).and_then(Option::as_ref);
-                    self.draw_entry(canvas, env, (item, laid), rect, focused);
+                    self.draw_entry(ui, (item, laid), rect, focused);
                 }
-            },
-        );
+            });
         if let Some(pager) = &self.pager {
-            pager.draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                self.rows.paging(),
-            );
+            pager.draw(&mut ui, self.rows.paging());
         }
     }
 

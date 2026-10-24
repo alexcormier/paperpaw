@@ -242,30 +242,24 @@ impl SetupScreen {
 impl Screen for SetupScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("joplin.title");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        self.header.draw(&mut ui, title, None, None);
         let rows = self.rows();
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let row = rows[index];
                 let title = env.i18n.tr(row.title(self.service));
                 let value = self.value(row, env);
-                ui::draw_value_row(canvas, env, &style, rect, focused, title, &value);
-            },
-        );
+                ui::Row::value(title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
         // The help in small letters, to fit on small screens.
         let help = env.i18n.tr(self.focused().help());
         let small = style.with_text(style.small());
-        ui::draw_message(canvas, env, &small, self.help, help);
-        ui::draw_note_line(canvas, env, &style, self.status, &self.message);
+        ui::draw_message(ui.canvas(), env, &small, self.help, help);
+        ui.note_line(self.status, &self.message);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

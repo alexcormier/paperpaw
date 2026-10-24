@@ -322,10 +322,11 @@ impl Screen for BarScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
+        ui.canvas().fill(r, Color::WHITE);
         let border = (u32::from(style.line()) * 2) as u16;
-        canvas.fill(
+        ui.canvas().fill(
             Rect::new(r.x, r.y + r.height - border, r.width, border),
             Color::BLACK,
         );
@@ -337,22 +338,26 @@ impl Screen for BarScreen {
             let line = font.line_metrics(style.text()).line_height as u16;
             let title = Rect::new(0, self.info.y, r.width, line);
             let text = Rect::new(0, self.info.y + line, r.width, self.info.height - line);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.text(),
-                margin,
-                title,
-                &self.title,
-                Color::BLACK,
-            );
+            ui::Label::new(&self.title)
+                .px(style.text())
+                .font(font)
+                .color(Color::BLACK)
+                .draw_from(&mut ui, margin, title);
             let width = f32::from(r.width) - 2.0 * margin;
             let (chapter, page, page_width) =
                 ui::fit_pair(&font, style.small(), &self.text, &self.page, width, margin);
             let gray = style.faint(ui::Ink::Detail);
-            ui::draw_label(canvas, &font, style.small(), margin, text, &chapter, gray);
+            ui::Label::new(&chapter)
+                .px(style.small())
+                .font(font)
+                .color(gray)
+                .draw_from(&mut ui, margin, text);
             let x = f32::from(r.width) - margin - page_width;
-            ui::draw_label(canvas, &font, style.small(), x, text, &page, gray);
+            ui::Label::new(&page)
+                .px(style.small())
+                .font(font)
+                .color(gray)
+                .draw_from(&mut ui, x, text);
         }
         let size = style.text() * ICON_SCALE;
         let small_line = font.line_metrics(style.small()).line_height as u16;
@@ -370,7 +375,7 @@ impl Screen for BarScreen {
             );
             // Told as a button: what it is, which has the focus, which is on.
             let focused = self.keys && i == self.focus;
-            canvas
+            ui.canvas()
                 .describe(Role::Button, &entry.label(env), frame)
                 .focused(focused)
                 .on(on.then_some(true));
@@ -380,11 +385,11 @@ impl Screen for BarScreen {
                 } else {
                     style.faint(ui::Ink::Note)
                 };
-                ui::fill_round(canvas, &style, frame, back);
+                ui::fill_round(ui.canvas(), &style, frame, back);
             }
             if focused {
                 ui::stroke_round(
-                    canvas,
+                    ui.canvas(),
                     &style,
                     frame,
                     ui::button_border(&style),
@@ -400,7 +405,7 @@ impl Screen for BarScreen {
             if let Some(icon) = &entry.icon {
                 let width = ui::icon_width(env, icon, size);
                 let x = f32::from(inner.x) + (f32::from(inner.width) - width) / 2.0;
-                ui::draw_icon(canvas, env, icon, size, x, icon_area, ink);
+                ui.icon(icon, size, x, icon_area, ink);
             }
             let label_area = Rect::new(
                 inner.x,
@@ -412,7 +417,11 @@ impl Screen for BarScreen {
             let label = ui::fit(&font, style.small(), &entry.label(env), room);
             let x = f32::from(inner.x)
                 + (f32::from(inner.width) - font.measure(style.small(), &label)) / 2.0;
-            ui::draw_label(canvas, &font, style.small(), x, label_area, &label, ink);
+            ui::Label::new(&label)
+                .px(style.small())
+                .font(font)
+                .color(ink)
+                .draw_from(&mut ui, x, label_area);
         }
     }
 

@@ -64,11 +64,12 @@ impl Screen for NoticeScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
         // Round, with what is below in the corners; never quite square.
         let corner = u32::from(style.corner()).max(u32::from(style.gap()) / 2);
-        canvas.fill_round(r, corner, Color::BLACK);
-        let Some(font) = style.font(env) else {
+        ui.canvas().fill_round(r, corner, Color::BLACK);
+        let Some(font) = ui.font() else {
             return;
         };
         let line_height = font.line_metrics(style.text()).line_height as u16;
@@ -77,7 +78,10 @@ impl Screen for NoticeScreen {
             let width = font.measure(style.text(), line);
             let x = f32::from(r.x) + (f32::from(r.width) - width) / 2.0;
             let area = Rect::new(r.x, y, r.width, line_height);
-            ui::draw_label(canvas, &font, style.text(), x, area, line, Color::WHITE);
+            ui::Label::new(line)
+                .px(style.text())
+                .color(Color::WHITE)
+                .draw_from(&mut ui, x, area);
             y += line_height;
         }
     }

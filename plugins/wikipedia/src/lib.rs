@@ -317,16 +317,17 @@ impl Screen for Summary {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
             (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let header = self.header();
@@ -334,25 +335,15 @@ impl Screen for Summary {
         let source = env.i18n.tr("wikipedia.title");
         let source_width = font.measure(style.small(), source);
         let right = f32::from(header.width) - margin - source_width;
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            right,
-            header,
-            source,
-            style.faint(ui::Ink::Detail),
-        );
+        ui::Label::new(source)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Detail))
+            .draw_from(&mut ui, right, header);
         let word = ui::fit(&font, style.title(), &self.word, right - margin * 2.0);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title(),
-            margin,
-            header,
-            &word,
-            Color::BLACK,
-        );
+        ui::Label::new(&word)
+            .px(style.title())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, margin, header);
         let height = self.line_height(env);
         let ascent = font.line_metrics(style.text()).ascent;
         let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
@@ -360,7 +351,7 @@ impl Screen for Summary {
         for (n, &(start, end)) in self.lines.iter().skip(self.top).take(rows).enumerate() {
             let baseline = top + height * n as f32 + ascent;
             font.draw(
-                canvas,
+                ui.canvas(),
                 style.text(),
                 margin,
                 baseline as i32,

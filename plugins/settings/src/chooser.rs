@@ -100,37 +100,29 @@ impl Chooser {
 impl Screen for Chooser {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.len();
         let title = self
             .spec
             .as_ref()
             .map_or("", |spec| env.i18n.tr(&spec.title));
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
         let (options, more) = (&self.options, &self.more);
         let current = self
             .spec
             .as_ref()
             .map_or("", |spec| env.settings.text(spec.id.as_str()));
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                // Lined up with the options, leading on.
-                if let Some((_, name)) = index.checked_sub(options.len()).map(|i| &more[i]) {
-                    ui::draw_value_row(canvas, env, &style, rect, focused, name, "›");
-                    return;
-                }
-                let (value, name) = &options[index];
-                let mark = if value == current { "•" } else { "" };
-                ui::draw_value_row(canvas, env, &style, rect, focused, name, mark);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            // Lined up with the options, leading on.
+            if let Some((_, name)) = index.checked_sub(options.len()).map(|i| &more[i]) {
+                ui::Row::value(name, "›").focused(focused).draw(ui, rect);
+                return;
+            }
+            let (value, name) = &options[index];
+            let mark = if value == current { "•" } else { "" };
+            ui::Row::value(name, mark).focused(focused).draw(ui, rect);
+        });
     }
 
     fn on_event(&mut self, event: &Id, _params: &Params, cx: &mut Cx<'_, '_>) {

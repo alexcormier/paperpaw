@@ -167,33 +167,38 @@ fn outcome(reply: &HttpReply, name: String) -> (Vec<Place>, Search) {
 impl Screen for PlaceScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.len(env);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("weather.setting.place"),
             None,
             self.list.paging(len),
         );
         let places = &self.places;
         let note = self.note(env);
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, row, rect, focused| {
-                let canvas = ui.canvas();
-                if row == 0 {
-                    let title = env.i18n.tr("weather.place.search");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", &note);
-                } else if let Some(place) = places.get(row - 1) {
-                    let note = place.whereabouts();
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, &place.name, "", &note);
-                } else {
-                    let title = env.i18n.tr("weather.place.none");
-                    let note = env.i18n.tr("weather.place.none.help");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "", note);
-                }
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            if row == 0 {
+                let title = env.i18n.tr("weather.place.search");
+                ui::Row::value(title, "›")
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            } else if let Some(place) = places.get(row - 1) {
+                let note = place.whereabouts();
+                ui::Row::value(&place.name, "")
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            } else {
+                let title = env.i18n.tr("weather.place.none");
+                let note = env.i18n.tr("weather.place.none.help");
+                ui::Row::value(title, "")
+                    .note(note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            }
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

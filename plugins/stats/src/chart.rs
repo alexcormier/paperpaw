@@ -1,8 +1,8 @@
 //! A bar chart for e-ink: black bars on a thin base line, a label below
 //! each, the value of the highest above it.
 
-use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::{Canvas, Color, Env, Rect};
+use paperpaw_sdk::ui;
+use paperpaw_sdk::{Color, Rect};
 
 /// Bars are never wider than those of a week.
 const MIN_SLOTS: usize = 7;
@@ -11,15 +11,14 @@ const MIN_SLOTS: usize = 7;
 /// `highlight` (e.g. today) is framed. `top` labels the highest bar. A
 /// few values keep the width of a week's bars, at the right (the newest).
 pub(crate) fn bars(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
+    ui: &mut ui::Ui<'_>,
     area: Rect,
     values: &[u32],
     labels: &[&str],
     (highlight, top): (Option<usize>, &str),
 ) {
-    let Some(font) = style.font(env) else {
+    let style = ui.style();
+    let Some(font) = ui.font() else {
         return;
     };
     if values.is_empty() {
@@ -40,7 +39,7 @@ pub(crate) fn bars(
     let bar_w = (slot * 0.6).max(2.0);
     let base_y = i32::from(chart.y + chart.height);
     let line = u32::from(style.line()).max(1);
-    canvas.fill_rect(
+    ui.canvas().fill_rect(
         i32::from(chart.x),
         base_y,
         u32::from(chart.width),
@@ -60,26 +59,22 @@ pub(crate) fn bars(
         if value > 0 {
             // At least visible.
             let h = h.max(line as i32 * 2);
-            canvas.fill_rect(x as i32, base_y - h, bar_w as u32, h as u32, Color::BLACK);
+            ui.canvas()
+                .fill_rect(x as i32, base_y - h, bar_w as u32, h as u32, Color::BLACK);
             if value == max && !top.is_empty() {
                 let w = font.measure(style.small(), top);
                 let tx = (x + bar_w / 2.0 - w / 2.0)
                     .clamp(f32::from(area.x), f32::from(area.x + area.width) - w);
                 let row = Rect::new(area.x, (base_y - h) as u16 - top_h, area.width, top_h);
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.small(),
-                    tx,
-                    row,
-                    top,
-                    style.faint(ui::Ink::Note),
-                );
+                ui::Label::new(top)
+                    .px(style.small())
+                    .color(style.faint(ui::Ink::Note))
+                    .draw_from(ui, tx, row);
             }
         }
         if highlight == Some(i) {
             let pad = (slot - bar_w) / 4.0;
-            canvas.stroke_rect(
+            ui.canvas().stroke_rect(
                 (x - pad) as i32,
                 i32::from(chart.y),
                 (bar_w + 2.0 * pad) as u32,
@@ -98,7 +93,10 @@ pub(crate) fn bars(
             } else {
                 style.faint(ui::Ink::Muted)
             };
-            ui::draw_label(canvas, &font, style.small(), lx, row, label, color);
+            ui::Label::new(label)
+                .px(style.small())
+                .color(color)
+                .draw_from(ui, lx, row);
         }
     }
 }

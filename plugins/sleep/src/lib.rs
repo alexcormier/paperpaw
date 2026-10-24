@@ -520,9 +520,10 @@ impl Screen for SleepScreen {
             }
             None => {
                 let style = UiStyle::new(env);
+                let mut ui = ui::Ui::new(canvas, env, &style);
                 let text = env.i18n.tr("sleep.sleeping");
                 let Some(logo) = &self.logo else {
-                    ui::draw_message(canvas, env, &style, screen, text);
+                    ui.message(screen, text);
                     return;
                 };
                 // The logo a little above the middle, the message below it.
@@ -532,9 +533,9 @@ impl Screen for SleepScreen {
                 let gap = style.gap() * 2;
                 let top = display.height.saturating_sub(h + gap + line) / 2;
                 let area = Rect::new(0, top, display.width, h);
-                logo.draw(canvas, env.storage, area, Color::BLACK);
+                logo.draw(ui.canvas(), env.storage, area, Color::BLACK);
                 let below = Rect::new(0, top + h + gap, display.width, line);
-                ui::draw_message(canvas, env, &style, below, text);
+                ui.message(below, text);
             }
         }
     }

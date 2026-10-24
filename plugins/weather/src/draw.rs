@@ -5,7 +5,7 @@
 use alloc::format;
 use alloc::string::String;
 
-use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{self, WidgetLook, Wrapped};
 use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Rect, SettingSpec, time};
 
@@ -65,7 +65,7 @@ fn cap_ratio() -> f32 {
 /// Draws `text` `size` pixels large with its digits in the middle of `row`
 /// from top to bottom, from `x`.
 pub(crate) fn draw_digits(
-    canvas: &mut Canvas<'_>,
+    ui: &mut ui::Ui<'_>,
     font: &FontHandle<'_>,
     size: f32,
     x: f32,
@@ -75,7 +75,7 @@ pub(crate) fn draw_digits(
 ) {
     let metrics = font.line_metrics(size);
     let baseline = f32::from(row.y) + (f32::from(row.height) + cap(size)) / 2.0;
-    // `draw_label` centres the font's line in its area: an area whose
+    // A label centres the font's line in its area: an area whose
     // baseline falls where the digits' does.
     let top = baseline - metrics.ascent;
     let area = Rect::new(
@@ -84,7 +84,11 @@ pub(crate) fn draw_digits(
         row.width,
         (metrics.ascent + metrics.descent) as u16,
     );
-    paperpaw_sdk::ui::draw_label(canvas, font, size, x, area, text, color);
+    ui::Label::new(text)
+        .px(size)
+        .color(color)
+        .font(*font)
+        .draw_from(ui, x, area);
 }
 
 /// The size digits `size` pixels large are drawn in: smaller where the
