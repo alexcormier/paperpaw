@@ -941,7 +941,7 @@ mod setup_under_the_lock {
                     SettingValue::Text("lock.kind.off".into()),
                 ));
                 out.push(Command::ResetSetting(Id::new_static("lock.kind")));
-                out.push(Command::SetSecret(SecretChange::remove("lock.code")));
+                out.push(Command::set_secret(SecretChange::remove("lock.code")));
                 out.push(Command::SetPluginEnabled(Id::new_static("lock"), false));
                 out.push(Command::RemovePlugin(Id::new_static("lock")));
                 out.push(Command::LoadPlugin(String::from("plugins/intruder")));

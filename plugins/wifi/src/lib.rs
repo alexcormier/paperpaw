@@ -112,7 +112,7 @@ fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
     if wifi.state.is_on() && policy.may_go_off(charging_keeps_it(env)) {
         let at = env.now.add_millis(idle_seconds(env) * 1000);
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
-        out.push(Command::Work(Work::at(IDLE_CHECK, at).with(params)));
+        out.push(Command::work(Work::at(IDLE_CHECK, at).with(params)));
     }
 }
 
@@ -125,7 +125,7 @@ fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
     };
     if policy.still_wanted(wifi, env.now) || charging_keeps_it(env) {
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
-        out.push(Command::Work(
+        out.push(Command::work(
             Work::at(RETRY, env.now.add_millis(RETRY_MS)).with(params),
         ));
     } else if !wifi.busy {
@@ -171,7 +171,7 @@ fn read_wifi_file(env: &Env<'_>) -> Vec<Command> {
         .iter()
         // A network without a password does not take the password kept.
         .filter(|(ssid, password)| !password.is_empty() || !known.iter().any(|(k, _)| k == ssid))
-        .map(|(ssid, password)| Command::SetSecret(wifi::keep(ssid, password)))
+        .map(|(ssid, password)| Command::set_secret(wifi::keep(ssid, password)))
         .collect();
     // Removed once kept (the commands before it carried out).
     out.push(Command::Emit(WIFI_FILE_KEPT, Params::new()));
@@ -364,7 +364,7 @@ impl Plugin for Wifi {
                 && let Some((pending, password)) = policy.pending.take()
             {
                 if pending == *ssid {
-                    out.push(Command::SetSecret(wifi::keep(&pending, &password)));
+                    out.push(Command::set_secret(wifi::keep(&pending, &password)));
                 } else {
                     policy.pending = Some((pending, password));
                 }

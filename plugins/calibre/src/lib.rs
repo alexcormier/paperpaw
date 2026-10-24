@@ -849,7 +849,7 @@ impl Screen for CalibreScreen {
         } else if let Some(typed) = PASSWORD_TYPED.read(event, params)
             && !typed.text.is_empty()
         {
-            cx.command(Command::SetSecret(SecretChange::keep(
+            cx.command(Command::set_secret(SecretChange::keep(
                 PASSWORD,
                 "calibre.password",
                 &typed.text,

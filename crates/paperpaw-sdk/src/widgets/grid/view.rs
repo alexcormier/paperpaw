@@ -110,9 +110,8 @@ struct Edit {
 /// What a target does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Target {
-    /// What a tap runs, and a long press where it says (boxed: a
-    /// command is large).
-    Run(Box<Command>, Option<Box<Command>>),
+    /// What a tap runs, and a long press where it says (boxed: rare).
+    Run(Command, Option<Box<Command>>),
     /// An item, when editing: its index.
     Item(usize),
     /// One of the screen's own buttons.
@@ -263,19 +262,15 @@ impl GridView {
                             } else {
                                 self.targets.push((
                                     target.area,
-                                    Target::Run(
-                                        Box::new(target.command),
-                                        target.hold.map(Box::new),
-                                    ),
+                                    Target::Run(target.command, target.hold.map(Box::new)),
                                 ));
                             }
                         }
                     }
                     (What::Widget(_), None) => {}
-                    (What::Tool(action), _) => self.targets.push((
-                        shown.area,
-                        Target::Run(Box::new(Command::run(action.clone())), None),
-                    )),
+                    (What::Tool(action), _) => self
+                        .targets
+                        .push((shown.area, Target::Run(Command::run(action.clone()), None))),
                 }
             }
             let name = shown.item.what.title(env);
@@ -719,10 +714,10 @@ impl GridView {
         match target {
             Target::Run(command, _) => {
                 // A tool shown faint by its plugin: nothing to do now.
-                let faint = matches!(&*command, Command::RunAction(action, _)
+                let faint = matches!(&command, Command::RunAction(action, _)
                     if !cx.env().menus.state(cx.env(), action.as_str()).enabled);
                 if !faint {
-                    cx.command(*command);
+                    cx.command(command);
                 }
             }
             Target::Item(item) => self.options(item, cx),

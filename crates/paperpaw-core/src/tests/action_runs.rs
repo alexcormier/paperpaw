@@ -570,7 +570,7 @@ mod secrets_of_others {
             )?;
             r.add_action(
                 ActionSpec::new(Id::new_static("editor.change"), "x").handler(|_, _, out| {
-                    out.push(Command::SetSecret(SecretChange::keep(
+                    out.push(Command::set_secret(SecretChange::keep(
                         "keeper.pw",
                         "",
                         "new",
@@ -591,12 +591,12 @@ mod secrets_of_others {
         fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
             r.add_action(
                 ActionSpec::new(Id::new_static("snoop.rename"), "x").handler(|_, _, out| {
-                    out.push(Command::SetSecret(SecretChange::keep(
+                    out.push(Command::set_secret(SecretChange::keep(
                         "keeper.pw",
                         "Mine",
                         "y",
                     )));
-                    out.push(Command::SetSecret(SecretChange::keep(
+                    out.push(Command::set_secret(SecretChange::keep(
                         "snoop.own",
                         "Own",
                         "z",
@@ -605,7 +605,7 @@ mod secrets_of_others {
             )?;
             r.add_action(
                 ActionSpec::new(Id::new_static("snoop.change"), "x").handler(|_, _, out| {
-                    out.push(Command::SetSecret(SecretChange::keep(
+                    out.push(Command::set_secret(SecretChange::keep(
                         "keeper.pw",
                         "",
                         "new",
@@ -615,7 +615,7 @@ mod secrets_of_others {
             r.subscribe(
                 Id::new_static("snoop.when"),
                 Box::new(|_, _, out| {
-                    out.push(Command::SetSecret(SecretChange::remove("keeper.pw")));
+                    out.push(Command::set_secret(SecretChange::remove("keeper.pw")));
                 }),
             )
         }
@@ -672,7 +672,7 @@ mod originals_work {
         fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
             r.add_action(
                 ActionSpec::new(Id::new_static("wk.plan"), "plan").handler(|_, _, out| {
-                    out.push(Command::Work(Work::at(
+                    out.push(Command::work(Work::at(
                         Id::new_static("wk.later"),
                         Instant(5000),
                     )));

@@ -559,7 +559,7 @@ impl Catalog {
         self.urgent.set(self.urgent.get() || now);
         let calm = Moments::IDLE | Moments::BOOK_CLOSED | Moments::CHARGING;
         let within = if self.urgent.get() { 0 } else { 60 };
-        out.push(Command::Work(
+        out.push(Command::work(
             Work::new(CATALOG_WORK)
                 .at_moments(calm)
                 .within(core::time::Duration::from_secs(within)),
@@ -806,7 +806,7 @@ fn declare_clean_up(env: &Env<'_>, out: &mut Commands) {
         seen
     });
     let wait = (last + CLEAN_UP_EVERY - now).clamp(0, CLEAN_UP_EVERY);
-    out.push(Command::Work(
+    out.push(Command::work(
         Work::new(CLEAN_UP_WORK)
             .charging()
             .after(core::time::Duration::from_secs(wait as u64))

@@ -334,7 +334,7 @@ impl Harness {
         for command in out {
             match command {
                 Command::SetSetting(id, value) => self.settings.set(id.as_str(), value).unwrap(),
-                Command::SetSecret(change) => self.secrets.apply(change),
+                Command::SetSecret(change) => self.secrets.apply(*change),
                 _ => {}
             }
         }

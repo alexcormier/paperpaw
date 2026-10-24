@@ -188,7 +188,7 @@ impl Plugin for Update {
                     online::check(env, true, out);
                 } else {
                     let due = CHECK_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));

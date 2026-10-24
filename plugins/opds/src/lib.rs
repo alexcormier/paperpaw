@@ -261,7 +261,7 @@ impl Plugin for Opds {
                     shared.borrow_mut().start(env, marked(env), out);
                 } else {
                     let due = SYNC_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));

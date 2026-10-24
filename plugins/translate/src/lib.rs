@@ -468,7 +468,7 @@ impl Screen for Panel {
             if key.is_empty() {
                 return;
             }
-            cx.command(Command::SetSecret(SecretChange::keep(
+            cx.command(Command::set_secret(SecretChange::keep(
                 KEY.as_str(),
                 "translate.key",
                 &key,

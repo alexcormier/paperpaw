@@ -219,7 +219,7 @@ impl WifiPage {
         {
             return false;
         }
-        cx.command(Command::SetSecret(wifi::forget(&network.ssid)));
+        cx.command(Command::set_secret(wifi::forget(&network.ssid)));
         if env.wifi.and_then(|w| w.state.ssid()) == Some(&network.ssid) {
             cx.command(Command::Wifi(WifiCommand::Leave));
         }

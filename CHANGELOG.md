@@ -6,9 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-- SDK: commands stay small (a test keeps them so): `Command::Http`,
-  `Speak`, `Respond` and `Broadcast` hold their payload boxed, made with
-  `Command::http`, `speak`, `respond` and `broadcast`. `HttpRequest`,
+- SDK: commands stay small, 88 bytes in place of 216 (a test keeps
+  them so): `Command::Http`, `Speak`, `Respond`, `Broadcast`, `Work`
+  and `SetSecret` hold their payload boxed, made with `Command::http`,
+  `speak`, `respond`, `broadcast`, `work` and `set_secret`. `HttpRequest`,
   `Speech`, `ServerResponse` and the new `Broadcast` keep their fields
   to themselves: they are made with their builders
   (`HttpRequest::param` is new; `Speech::in_language`, `at_rate`,

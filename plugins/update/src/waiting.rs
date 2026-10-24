@@ -263,7 +263,7 @@ fn ask(after: Option<Duration>, within: Duration) -> Command {
     if let Some(after) = after {
         work = work.after(after);
     }
-    Command::Work(work)
+    Command::work(work)
 }
 
 /// After an answer that waits: asked again in a day, at a cheap moment.

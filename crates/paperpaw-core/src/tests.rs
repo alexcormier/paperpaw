@@ -1189,11 +1189,11 @@ fn scheduled_events_come_at_their_time() {
     kernel.start(Instant(0));
     let event = Id::new_static("ov.later");
     let params = paperpaw_sdk::Params::new().with("id", "x");
-    kernel.apply(Command::Work(
+    kernel.apply(Command::work(
         paperpaw_sdk::work::Work::at(event.clone(), Instant(9000)).with(params.clone()),
     ));
     // Scheduled again: moved, not doubled.
-    kernel.apply(Command::Work(
+    kernel.apply(Command::work(
         paperpaw_sdk::work::Work::at(event, Instant(5000)).with(params),
     ));
     assert_eq!(kernel.finish().wake_at(), Some(Instant(5000)));
@@ -1980,7 +1980,7 @@ fn secrets_are_kept_apart_and_read_at_start() {
     kernel
         .output
         .commands
-        .push(Command::SetSecret(SecretChange::keep(
+        .push(Command::set_secret(SecretChange::keep(
             "a.key", "a.label", "hunter2",
         )));
     kernel.run_commands();
@@ -2011,7 +2011,7 @@ fn secrets_are_kept_apart_and_read_at_start() {
     kernel
         .output
         .commands
-        .push(Command::SetSecret(SecretChange::remove("a.key")));
+        .push(Command::set_secret(SecretChange::remove("a.key")));
     kernel.run_commands();
     assert!(kernel.shared.secrets.is_empty());
     assert!(!kernel.shared.storage.exists(FILE));

@@ -136,7 +136,7 @@ fn password<'a>(env: &Env<'a>) -> &'a str {
 
 /// Keeps the password as typed (spaces too), or removes it if empty.
 fn save_password(password: &str) -> Command {
-    Command::SetSecret(if password.is_empty() {
+    Command::set_secret(if password.is_empty() {
         SecretChange::remove(SECRET)
     } else {
         SecretChange::keep(SECRET, "stats.secret", password)

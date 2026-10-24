@@ -368,7 +368,7 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
         .optional()
         .after(core::time::Duration::from_secs(next as u64))
         .at_moments(paperpaw_sdk::work::Moments::WAKE | paperpaw_sdk::work::Moments::ONLINE);
-    out.push(Command::Work(look));
+    out.push(Command::work(look));
     if state.asked.is_some_and(|at| env.now.since(at) < PATIENCE) {
         return;
     }

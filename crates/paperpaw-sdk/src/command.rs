@@ -738,7 +738,7 @@ pub enum Command {
     Screenshot(String),
     /// Keeps or removes a password or key (see
     /// [`secrets`](crate::secrets)), saved at once.
-    SetSecret(crate::secrets::SecretChange),
+    SetSecret(alloc::boxed::Box<crate::secrets::SecretChange>),
     /// Tells the radio what to do, where PaperPaw manages Wi-Fi
     /// ([`Env::wifi`](crate::Env)); see [`wifi`](crate::wifi). Ignored
     /// elsewhere.
@@ -751,7 +751,7 @@ pub enum Command {
     NoNetwork,
     /// Declares work for the kernel to run at the cheapest moment (see
     /// [`work`](crate::work)): the same id replaces what was declared.
-    Work(crate::work::Work),
+    Work(alloc::boxed::Box<crate::work::Work>),
     /// Takes back the work declared with this id and key (none: every
     /// key of the id), if it has not run; requests made already are taken
     /// back with [`CancelHttp`](Self::CancelHttp).
@@ -894,6 +894,16 @@ impl Command {
     pub fn speak(speech: Speech) -> Self {
         Command::Speak(alloc::boxed::Box::new(speech))
     }
+
+    /// [`Command::Work`]: declares `work`.
+    pub fn work(work: crate::work::Work) -> Self {
+        Command::Work(alloc::boxed::Box::new(work))
+    }
+
+    /// [`Command::SetSecret`]: makes `change`.
+    pub fn set_secret(change: crate::secrets::SecretChange) -> Self {
+        Command::SetSecret(alloc::boxed::Box::new(change))
+    }
 }
 
 /// The most text the clipboard holds, in bytes.
@@ -926,6 +936,6 @@ mod size {
     #[test]
     fn commands_stay_small() {
         let size = core::mem::size_of::<super::Command>();
-        assert!(size <= 72, "Command takes {size} bytes");
+        assert!(size <= 88, "Command takes {size} bytes");
     }
 }

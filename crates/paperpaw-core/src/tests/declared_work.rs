@@ -137,7 +137,7 @@ fn kernel(log: &Log, network: bool) -> Kernel {
 
 fn declare(kernel: &mut Kernel, at: u64, work: Work) -> Effects {
     kernel.now = Instant(at);
-    kernel.apply(Command::Work(work));
+    kernel.apply(Command::work(work));
     kernel.finish()
 }
 
@@ -330,7 +330,7 @@ impl Plugin for Sayer {
             Id::new_static("sy.foreign"),
             Box::new(|_, _, out| {
                 let work = Work::new(Id::new_static("wk.push")).at_moments(Moments::NONE);
-                out.push(Command::Work(work));
+                out.push(Command::work(work));
             }),
         )?;
         r.subscribe(

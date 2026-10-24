@@ -427,7 +427,7 @@ impl Kernel {
         match command {
             Command::Work(work) => self
                 .works
-                .declare(work, self.now, &mut self.output.commands),
+                .declare(*work, self.now, &mut self.output.commands),
             Command::CancelWork(id, key) => self.works.cancel(&id, key.as_deref()),
             Command::CancelHttp(reply) => self.io.http.cancel(&reply, &mut self.output.commands),
             Command::Wear(wear) => self.wear(wear),

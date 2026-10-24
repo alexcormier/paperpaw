@@ -648,7 +648,7 @@ impl Plugin for Wallabag {
                     s.borrow_mut().start(env, out);
                 } else {
                     let due = FETCH_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));
@@ -742,7 +742,7 @@ fn entered(typed: &Typed, out: &mut Commands) {
     };
     let text = typed.text.trim();
     let setting = |id: Setting<Text>| Command::set(&id, Cow::Owned(text.to_string()));
-    let secret = |id: &str, label: &str| Command::SetSecret(SecretChange::keep(id, label, text));
+    let secret = |id: &str, label: &str| Command::set_secret(SecretChange::keep(id, label, text));
     // An empty answer keeps what was kept: a confirm by mistake on the
     // empty field (a password is never shown in it) loses nothing.
     if text.is_empty() && matches!(row, Row::Password | Row::Secret) {

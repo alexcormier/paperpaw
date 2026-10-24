@@ -184,7 +184,7 @@ pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Commands) {
     let ids: Vec<String> = catalogs.iter().map(|c| secret_id(&c.url)).collect();
     for secret in env.secrets.iter() {
         if secret.id.starts_with(SECRETS) && !ids.contains(&secret.id) {
-            out.push(Command::SetSecret(SecretChange::remove(&secret.id)));
+            out.push(Command::set_secret(SecretChange::remove(&secret.id)));
         }
     }
     let _ = env.storage.write(&path(), encode(catalogs).as_bytes());
@@ -198,13 +198,13 @@ fn keep_passwords(env: &Env<'_>, catalogs: &[Catalog], out: &mut Commands) {
         let kept = env.secrets.get(&id);
         if c.password.is_empty() {
             if kept.is_some() {
-                out.push(Command::SetSecret(SecretChange::remove(&id)));
+                out.push(Command::set_secret(SecretChange::remove(&id)));
             }
         } else if kept != Some(c.password.as_str()) {
             let label = env
                 .i18n
                 .format("opds.secret", &[("name", Arg::Str(&c.name))]);
-            out.push(Command::SetSecret(SecretChange::keep(
+            out.push(Command::set_secret(SecretChange::keep(
                 &id,
                 &label,
                 &c.password,

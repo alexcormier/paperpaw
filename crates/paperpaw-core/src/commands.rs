@@ -642,7 +642,7 @@ impl Kernel {
             Command::PreviewSettings(values) => self.preview_settings(values),
             Command::SetScope(path) => self.set_scope(path),
             Command::SetPluginEnabled(id, enabled) => self.set_plugin_enabled(&id, enabled),
-            Command::SetSecret(change) => self.set_secret(change),
+            Command::SetSecret(change) => self.set_secret(*change),
             Command::SetMenu(menu, entries) => self.set_menu(menu, entries),
             Command::Bind {
                 layer,

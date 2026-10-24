@@ -152,7 +152,7 @@ impl Plugin for Joplin {
                     state.borrow_mut().start(env, Start::Action, out);
                 } else {
                     let due = SEND_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));
@@ -228,7 +228,7 @@ fn retry_later(env: &Env<'_>, out: &mut Commands) {
         let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
             .within(core::time::Duration::from_secs(30 * 60))
             .at_moments(paperpaw_sdk::work::Moments::ONLINE);
-        out.push(Command::Work(work));
+        out.push(Command::work(work));
     }
 }
 
