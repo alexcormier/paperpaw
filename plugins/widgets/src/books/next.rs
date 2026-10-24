@@ -23,9 +23,9 @@ use paperpaw_sdk::{Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar
 
 use super::series::{Member, members};
 use super::{
-    Book, Covers, Generation, Lines, Role, add_settings, catalog_stamp, chosen, cover_size,
-    current, draw_cover, draw_message, each_book, frame_height, least_cover_width, mix, path_hash,
-    text_size, today,
+    Book, Covers, FitMemo, Generation, Lines, Role, add_settings, catalog_stamp, chosen,
+    cover_size, current, draw_cover, draw_message, each_book, frame_height, least_cover_width, mix,
+    path_hash, text_size, today,
 };
 use crate::PLUGIN;
 use paperpaw_sdk::SettingSpec;
@@ -93,6 +93,7 @@ pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(),
                 book: None,
                 area: None,
                 covers: Covers::default(),
+                memo: FitMemo::default(),
             })
         })
         .category(widgets::categories::BOOKS),
@@ -300,6 +301,8 @@ struct Next {
     /// Where it is drawn, once placed.
     area: Option<Rect>,
     covers: Covers,
+    /// Its lines made to fit, kept for the frames that follow.
+    memo: FitMemo,
 }
 
 impl Next {
@@ -308,7 +311,7 @@ impl Next {
         self.covers = match (self.area, &self.book) {
             (Some(area), Some(book)) => {
                 let look = widgets::widget_look(env, WIDGET, area);
-                let at = layout(env, &look, book).cover;
+                let at = layout(env, &look, book, &self.memo).cover;
                 Covers::make(env, at.map(|at| (book, at)))
             }
             _ => Covers::default(),
@@ -376,7 +379,7 @@ impl Widget for Next {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, WIDGET, area);
         match &self.book {
-            Some(book) => draw(canvas, env, &look, book, &self.covers),
+            Some(book) => draw(canvas, env, &look, book, (&self.covers, &self.memo)),
             None => draw_message(canvas, env, &look, "widgets.next.none"),
         }
     }
@@ -418,13 +421,13 @@ struct Layout<'b> {
 /// the text alone; where wide enough, the cover on the left and the text
 /// beside it; else the cover above and the text below (what fits in
 /// half), or the cover alone.
-fn layout<'b>(env: &Env<'b>, look: &WidgetLook, book: &'b Book) -> Layout<'b> {
+fn layout<'b>(env: &Env<'b>, look: &WidgetLook, book: &'b Book, memo: &'b FitMemo) -> Layout<'b> {
     let style = UiStyle::new(env);
     let id = WIDGET;
     let gap = style.gap();
     let area = look.area;
     let align = widgets::align(env, id);
-    let mut lines = Lines::new();
+    let mut lines = Lines::remembering(memo);
     let caption = widgets::shows(env, id, "caption");
     if caption {
         lines.add(
@@ -497,12 +500,18 @@ fn layout<'b>(env: &Env<'b>, look: &WidgetLook, book: &'b Book) -> Layout<'b> {
     }
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, book: &Book, covers: &Covers) {
+fn draw<'b>(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'b>,
+    look: &WidgetLook,
+    book: &'b Book,
+    (covers, memo): (&Covers, &'b FitMemo),
+) {
     let Layout {
         cover,
         mut lines,
         text,
-    } = layout(env, look, book);
+    } = layout(env, look, book, memo);
     if let Some(at) = cover {
         draw_cover(canvas, env, look, at, book, covers);
     }

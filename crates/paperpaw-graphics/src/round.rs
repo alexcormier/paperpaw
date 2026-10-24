@@ -189,6 +189,42 @@ impl Ring {
         ]
     }
 
+    /// The columns of row `y` that a full ring certainly covers in whole
+    /// (`coverage` says 255), as [`stretches`](Self::stretches) gives
+    /// them; none where the ring is an arc, whose edges are not round.
+    pub(crate) fn solid(&self, y: i64) -> [Option<(i64, i64)>; 2] {
+        if !self.arc.full() {
+            return [None, None];
+        }
+        let north = -(8 * y + 4);
+        let columns = |reach: i64| (-((reach + 4).div_euclid(8)), (reach - 4).div_euclid(8));
+        // `distance + HALF_DIAGONAL <= outer` is `square < (outer -
+        // HALF_DIAGONAL + 1)²`, and `distance - HALF_DIAGONAL > inner` is
+        // `square >= (inner + HALF_DIAGONAL + 1)²`.
+        let within = self.outer - HALF_DIAGONAL + 1;
+        let reach = within * within - north * north;
+        if within <= 0 || reach < 1 {
+            return [None, None];
+        }
+        let (first, last) = columns((reach - 1).isqrt());
+        if self.inner == 0 {
+            return [(first <= last).then_some((first, last)), None];
+        }
+        let beyond = self.inner + HALF_DIAGONAL + 1;
+        let hole = beyond * beyond - north * north;
+        if hole < 1 {
+            return [(first <= last).then_some((first, last)), None];
+        }
+        let (hole_first, hole_last) = columns((hole - 1).isqrt());
+        if hole_first > hole_last {
+            return [(first <= last).then_some((first, last)), None];
+        }
+        [
+            (first < hole_first).then_some((first, (hole_first - 1).min(last))),
+            (hole_last < last).then_some(((hole_last + 1).max(first), last)),
+        ]
+    }
+
     /// How much of the pixel `x`, `y` pixels right of and below the
     /// centre (the corner between four pixels) the ring covers, 0 to 255:
     /// pixels on its edges sampled sixteen times.
@@ -365,5 +401,26 @@ mod tests {
         let half = Ring::new(10, 2, Arc::new(0, 180));
         assert_eq!(half.coverage(-2, -9), 0);
         assert_eq!(half.coverage(1, 8), 255);
+    }
+
+    /// What `solid` gives is covered in whole, in full rings and discs.
+    #[test]
+    fn solid_stretches_are_covered_in_whole() {
+        for radius in [1_u32, 2, 5, 17, 60, 230] {
+            for thickness in [0, 1, 3, radius / 2, radius] {
+                let ring = Ring::new(radius, thickness, Arc::new(0, 360));
+                let r = i64::from(radius);
+                for y in -r - 2..r + 2 {
+                    for (first, last) in ring.solid(y).into_iter().flatten() {
+                        for x in first..=last {
+                            assert_eq!(ring.coverage(x, y), 255, "r{radius} t{thickness} {x},{y}");
+                        }
+                    }
+                }
+            }
+        }
+        // Arcs have no solid stretch.
+        let arc = Ring::new(30, 5, Arc::new(0, 90));
+        assert!((-30..30).all(|y| arc.solid(y) == [None, None]));
     }
 }

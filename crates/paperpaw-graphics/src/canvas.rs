@@ -683,17 +683,44 @@ impl<'a> Canvas<'a> {
         let top = y + i64::from(self.origin.1);
         for row in i64::from(shown.y)..i64::from(shown.bottom()) {
             let dy = row - top;
+            let solid = ring.solid(dy - r);
             for (first, last) in ring.stretches(dy - r).into_iter().flatten() {
-                // In the box's columns.
+                // In the box's columns, what is covered in whole as one
+                // stretch, the pixels by it as the ring covers them.
                 let (first, last) = (first + r, last + r);
-                let from = first.max(0);
-                let width = (last + 1).min(size as i64) - from;
-                if width > 0 {
-                    self.mask_wide(x + from, y + dy, width as u64, 1, color, |dx, _| {
-                        ring.coverage(dx + from - r, dy - r)
-                    });
+                let mut at = first.max(0);
+                let end = (last + 1).min(size as i64);
+                for (whole_first, whole_last) in solid.into_iter().flatten() {
+                    let whole = (whole_first + r).max(at)..(whole_last + r + 1).min(end);
+                    if whole.start >= whole.end {
+                        continue;
+                    }
+                    self.ring_pixels(&ring, (x, y, r), dy, at..whole.start, color);
+                    let (from, to) = (whole.start, whole.end);
+                    self.fill_wide(x + from, y + dy, (to - from) as u64, 1, color);
+                    at = whole.end;
                 }
+                self.ring_pixels(&ring, (x, y, r), dy, at..end, color);
             }
+        }
+    }
+
+    /// The pixels of row `dy` of a ring's box (at `x`, `y`, `r` round),
+    /// in the columns `columns` of it, as much of each as the ring covers.
+    fn ring_pixels(
+        &mut self,
+        ring: &round::Ring,
+        (x, y, r): (i64, i64, i64),
+        dy: i64,
+        columns: core::ops::Range<i64>,
+        color: Color,
+    ) {
+        let from = columns.start;
+        if from < columns.end {
+            let width = (columns.end - from) as u64;
+            self.mask_wide(x + from, y + dy, width, 1, color, |dx, _| {
+                ring.coverage(dx + from - r, dy - r)
+            });
         }
     }
 
