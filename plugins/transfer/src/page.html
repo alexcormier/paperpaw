@@ -18,6 +18,8 @@ button,.btn{font:inherit;padding:8px 14px;border:1px solid var(--fg);background:
 #drop.over{border-color:var(--fg)}
 #status{min-height:1.4em;color:var(--mute);margin-bottom:8px}
 #target{margin-bottom:8px;overflow-wrap:anywhere}
+#hint{border:1px solid var(--fg);border-radius:8px;padding:12px;margin-bottom:12px}
+#hint p{margin:0 0 8px}
 ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
 li{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
 li a{flex:1;min-width:0;color:var(--fg);text-decoration:none;overflow-wrap:anywhere}
@@ -34,6 +36,7 @@ li button{padding:4px 10px}
 <button id="mkdir"></button>
 </div>
 <div id="target"></div>
+<div id="hint" hidden><p id="outside"></p><div class="bar"><button id="toLibrary"></button><button id="here"></button></div></div>
 <div id="drop"></div>
 <div id="status"></div>
 <ul id="list"></ul>
@@ -59,7 +62,12 @@ function size(bytes) {
 
 function open(path) { location.hash = encodeURIComponent(path); }
 
+// Only the latest listing asked for is shown: one asked before it (a
+// folder left meanwhile) is dropped.
+let listing = 0;
+
 async function load() {
+  const mine = ++listing;
   const here = dir();
   const nav = $('path');
   nav.textContent = '';
@@ -78,7 +86,6 @@ async function load() {
     crumb(part, path);
   }
   const list = $('list');
-  list.textContent = '';
   // Big folders come in parts.
   const entries = [];
   let from = 0;
@@ -88,9 +95,12 @@ async function load() {
     if (!answer.ok && here && here === T.library) { open(''); return; }
     if (!answer.ok) { say(T.failed); return; }
     const part = await answer.json();
+    if (mine !== listing) return;
     entries.push(...part.entries);
     from = part.next;
   }
+  if (mine !== listing) return;
+  list.textContent = '';
   // Folders first, then by name.
   entries.sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name, undefined, {sensitivity: 'base'}));
   if (!entries.length) {
@@ -128,10 +138,10 @@ async function load() {
   }
 }
 
-function put(file) {
+function put(file, folder) {
   return new Promise((done, fail) => {
     const request = new XMLHttpRequest();
-    request.open('PUT', '/api/file?' + query(join(dir(), file.name)));
+    request.open('PUT', '/api/file?' + query(join(folder, file.name)));
     request.upload.onprogress = e => {
       if (e.lengthComputable) say(named(T.uploading, file.name) + ' ' + Math.round(e.loaded * 100 / e.total) + ' %');
     };
@@ -141,12 +151,33 @@ function put(file) {
   });
 }
 
-async function upload(files) {
+async function send(files, folder) {
   for (const file of files) {
-    try { await put(file); } catch (e) { say(T.failed + ' (' + file.name + ')'); load(); return; }
+    try { await put(file, folder); } catch (e) { say(T.failed + ' (' + file.name + ')'); load(); return; }
   }
   say(T.done);
   load();
+}
+
+// Whether the library reads what is in `folder`: it or one in it.
+const inLibrary = folder => {
+  const [a, b] = [folder.toLowerCase(), T.library.toLowerCase()];
+  return !b || a === b || a.startsWith(b + '/');
+};
+const isBook = name => T.books.some(e => name.toLowerCase().endsWith('.' + e));
+
+// Books sent where the library does not read them: said, with the
+// library's folder offered instead; sending them here stays possible.
+function upload(files) {
+  const here = dir();
+  const hint = $('hint');
+  if (inLibrary(here) || !files.some(f => isBook(f.name))) { hint.hidden = true; send(files, here); return; }
+  $('outside').textContent = T.outside;
+  $('toLibrary').textContent = T.toLibrary.replace('{folder}', shown(T.library));
+  $('here').textContent = T.here;
+  $('toLibrary').onclick = () => { hint.hidden = true; send(files, T.library).then(() => open(T.library)); };
+  $('here').onclick = () => { hint.hidden = true; send(files, here); };
+  hint.hidden = false;
 }
 
 $('title').textContent = T.title;

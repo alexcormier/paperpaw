@@ -457,6 +457,9 @@ fn page(env: &Env<'_>) -> String {
         ("done", "transfer.web.done"),
         ("failed", "transfer.web.failed"),
         ("target", "transfer.web.target"),
+        ("outside", "transfer.web.outside"),
+        ("toLibrary", "transfer.web.to-library"),
+        ("here", "transfer.web.here"),
     ];
     let mut json = String::from("{");
     for (i, (name, key)) in texts.iter().enumerate() {
@@ -479,6 +482,15 @@ fn page(env: &Env<'_>) -> String {
         ",library:{}",
         served::json_string(library.trim_matches('/'))
     ));
+    // What the library reads, by extension: for the hint where books are
+    // sent elsewhere.
+    let books: alloc::vec::Vec<String> = env
+        .formats()
+        .iter()
+        .flat_map(|format| format.extensions.iter())
+        .map(|extension| served::json_string(extension))
+        .collect();
+    json.push_str(&format!(",books:[{}]", books.join(",")));
     json.push('}');
     PAGE.replace("/*STRINGS*/{}", &json)
 }
