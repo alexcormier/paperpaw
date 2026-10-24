@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- Touch lock: the way out it explains (tap twice, hold the second tap)
+  unlocks; it wanted a third touch held after two taps, which still
+  works too.
+
 ## [0.5.0-beta.4] - 2026-10-24
 
 A beta for updates over the air, from testing the update to beta.2 on

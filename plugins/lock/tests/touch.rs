@@ -1,6 +1,7 @@
 //! The touch lock with the real kernel: on a touch screen, taps and
-//! swipes turn no page while it is on and the buttons still do; two taps
-//! and a hold unlock, a hand resting does not, and the power button held
+//! swipes turn no page while it is on and the buttons still do; a tap
+//! and a held tap unlock (as the notice says), so do two taps and a hold,
+//! a hand resting does not, and the power button held
 //! unlocks where it is bound; with the lock off, both do what they always
 //! do.
 
@@ -169,6 +170,15 @@ impl Test {
         self.pointer(millis - millis / 2, PointerPhase::Up, (245, 404));
     }
 
+    /// A quick tap in the middle, then the finger down again and kept
+    /// down `millis`, not moving: tap twice, holding the second tap.
+    fn tap_and_hold(&mut self, millis: u64) {
+        self.pointer(200, PointerPhase::Down, (240, 400));
+        self.pointer(80, PointerPhase::Up, (240, 400));
+        self.pointer(300, PointerPhase::Down, (242, 401));
+        self.pointer(millis, PointerPhase::Up, (242, 401));
+    }
+
     /// Two quick taps in the middle, then the finger kept down `millis`.
     fn taps_and_hold(&mut self, millis: u64) {
         for _ in 0..2 {
@@ -259,6 +269,20 @@ fn locked_touch_turns_no_page_but_the_buttons_do() {
     t.toggle();
     t.tap_right();
     assert_eq!(t.turned(), 3, "unlocked, a tap works again");
+}
+
+/// The way out as the notice tells it: down, up, down, held past
+/// HOLD_MS, then lifted.
+#[test]
+fn a_tap_and_a_held_tap_unlock() {
+    let mut t = Test::new(true);
+    t.toggle();
+    t.tap_and_hold(HOLD_MS / 2);
+    assert!(t.locked(), "held too short");
+    t.wait(2_000);
+    t.tap_and_hold(HOLD_MS + 100);
+    assert!(!t.locked(), "a tap and a held tap unlock");
+    assert_eq!(t.turned(), 0, "and turn no page");
 }
 
 #[test]
