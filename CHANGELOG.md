@@ -464,6 +464,14 @@ file to your report.
 
 #### For developers
 
+- SDK: services have one path, by their contract: a service type names
+  its key with `service_type!` (`ServiceType` is an `unsafe` trait, the
+  key the promise that every type naming it is this one), is provided
+  with `r.provide(id, value, version)` and found with
+  `env.services().get::<T>(id, min_version)`. A trait object is wrapped
+  in a struct of the plugin's own (`struct Weather(Box<dyn Forecast>)`).
+  `publish`, the lookup by type name, `get_typed` and `get_versioned`
+  are gone; a library of one's own is a `library::service::LibraryService`.
 - SDK: settings groups can be kept in the program too:
   `SettingGroupSpec`'s builders are `const`, and `add_setting_group`
   takes `&'static SettingGroupSpec` (a reference, next to no memory) or

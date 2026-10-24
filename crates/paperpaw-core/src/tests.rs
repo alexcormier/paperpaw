@@ -2788,9 +2788,17 @@ impl Plugin for ServicePlugin {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         if self.id == "provider" {
-            r.publish(Id::new_static("provider.greeting"), "hello")?;
+            r.provide(
+                Id::new_static("provider.greeting"),
+                Greeting("hello"),
+                Version::new(1, 0, 0),
+            )?;
             // Not in its namespace: refused.
-            let stolen = r.publish(Id::new_static("core.greeting"), 1u8);
+            let stolen = r.provide(
+                Id::new_static("core.greeting"),
+                Greeting("x"),
+                Version::new(1, 0, 0),
+            );
             assert!(matches!(stolen, Err(RegisterError::Namespace { .. })));
             return r.contribute(Id::new_static("provider.shapes"), Cow::Borrowed("circle"));
         }
@@ -2800,7 +2808,10 @@ impl Plugin for ServicePlugin {
             paperpaw_sdk::builtin::events::STARTED,
             Box::new(
                 move |env: &Env<'_>, _: &paperpaw_sdk::Params, _: &mut paperpaw_sdk::Commands| {
-                    let greeting = env.services.get::<&str>("provider.greeting");
+                    let greeting = env
+                        .services
+                        .get::<Greeting>("provider.greeting", Version::new(1, 0, 0))
+                        .map(|g| &g.0);
                     log.borrow_mut().push(alloc::format!("{greeting:?}"));
                     for (plugin, shape) in env.services.contributions("provider.shapes") {
                         log.borrow_mut().push(alloc::format!("{plugin}:{shape}"));
@@ -3371,3 +3382,7 @@ mod services_declared;
 mod settings_files;
 mod stack;
 mod storage;
+
+/// A greeting, provided as a service in a test.
+struct Greeting(&'static str);
+paperpaw_sdk::service_type!(Greeting, "provider.greeting/1");

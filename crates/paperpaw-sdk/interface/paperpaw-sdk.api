@@ -854,7 +854,6 @@ pub fn paperpaw_sdk::contribution::Registrar::override_action(&mut self, impl co
 pub fn paperpaw_sdk::contribution::Registrar::place_menu_entry(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuPlace) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::plugin(&self) -> &paperpaw_sdk::Id
 pub fn paperpaw_sdk::contribution::Registrar::provide<T: paperpaw_sdk::services::ServiceType>(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, T, paperpaw_sdk::Version) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::contribution::Registrar::publish<T: core::any::Any>(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, T) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_item_state(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> paperpaw_sdk::ItemState + 'static) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_menu_need(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuNeed) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_screen_hints(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::Hints) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -1975,7 +1974,13 @@ pub fn paperpaw_sdk::library::service::Kept::refresh(&self, &paperpaw_sdk::Env<'
 pub fn paperpaw_sdk::library::service::Kept::set_favourite(&self, &paperpaw_sdk::Env<'_>, &str, bool) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::library::service::Kept::set_finished(&self, &paperpaw_sdk::Env<'_>, &str, bool) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::library::service::Kept::version(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<u64>
+pub struct paperpaw_sdk::library::service::LibraryService(pub alloc::boxed::Box<dyn paperpaw_sdk::library::service::Library>)
+impl core::fmt::Debug for paperpaw_sdk::library::service::LibraryService
+pub fn paperpaw_sdk::library::service::LibraryService::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl paperpaw_sdk::services::ServiceType for paperpaw_sdk::library::service::LibraryService
+pub const paperpaw_sdk::library::service::LibraryService::KEY: &'static str
 pub const paperpaw_sdk::library::service::SERVICE: &str
+pub const paperpaw_sdk::library::service::VERSION: paperpaw_sdk::Version
 pub trait paperpaw_sdk::library::service::Library
 pub fn paperpaw_sdk::library::service::Library::book(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::Book>
 pub fn paperpaw_sdk::library::service::Library::can_delete(&self, &paperpaw_sdk::Env<'_>, &str) -> bool
@@ -2797,9 +2802,8 @@ pub fn paperpaw_sdk::services::PointSpec::doc(self, impl core::convert::Into<all
 pub fn paperpaw_sdk::services::PointSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub struct paperpaw_sdk::services::Service
 impl paperpaw_sdk::services::Service
-pub fn paperpaw_sdk::services::Service::new<T: core::any::Any>(T) -> Self
-pub fn paperpaw_sdk::services::Service::typed<T: paperpaw_sdk::services::ServiceType>(T, paperpaw_sdk::Version) -> Self
-pub fn paperpaw_sdk::services::Service::version(&self) -> core::option::Option<paperpaw_sdk::Version>
+pub fn paperpaw_sdk::services::Service::new<T: paperpaw_sdk::services::ServiceType>(T, paperpaw_sdk::Version) -> Self
+pub fn paperpaw_sdk::services::Service::version(&self) -> paperpaw_sdk::Version
 impl core::fmt::Debug for paperpaw_sdk::services::Service
 pub fn paperpaw_sdk::services::Service::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::services::Services
@@ -2807,9 +2811,7 @@ impl paperpaw_sdk::services::Services
 pub fn paperpaw_sdk::services::Services::contributed_points(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 pub fn paperpaw_sdk::services::Services::contributions<'a>(&'a self, &'a str) -> impl core::iter::traits::iterator::Iterator<Item = (&'a paperpaw_sdk::Id, &'a str)>
 pub fn paperpaw_sdk::services::Services::events(&self) -> &[paperpaw_sdk::services::EventSpec]
-pub fn paperpaw_sdk::services::Services::get<T: core::any::Any>(&self, &str) -> core::option::Option<&T>
-pub fn paperpaw_sdk::services::Services::get_typed<T: paperpaw_sdk::services::ServiceType>(&self, &str) -> core::option::Option<&T>
-pub fn paperpaw_sdk::services::Services::get_versioned<T: paperpaw_sdk::services::ServiceType>(&self, &str, paperpaw_sdk::Version) -> core::option::Option<&T>
+pub fn paperpaw_sdk::services::Services::get<T: paperpaw_sdk::services::ServiceType>(&self, &str, paperpaw_sdk::Version) -> core::option::Option<&T>
 pub fn paperpaw_sdk::services::Services::has(&self, &str) -> bool
 pub fn paperpaw_sdk::services::Services::ids(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 pub fn paperpaw_sdk::services::Services::new() -> Self
@@ -2817,8 +2819,10 @@ pub fn paperpaw_sdk::services::Services::points(&self) -> &[paperpaw_sdk::servic
 impl core::fmt::Debug for paperpaw_sdk::services::Services
 pub fn paperpaw_sdk::services::Services::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const paperpaw_sdk::services::REPLACEABLE: &[&str]
-pub trait paperpaw_sdk::services::ServiceType: core::any::Any
+pub unsafe trait paperpaw_sdk::services::ServiceType: core::any::Any
 pub const paperpaw_sdk::services::ServiceType::KEY: &'static str
+impl paperpaw_sdk::services::ServiceType for paperpaw_sdk::library::service::LibraryService
+pub const paperpaw_sdk::library::service::LibraryService::KEY: &'static str
 pub mod paperpaw_sdk::setting
 pub enum paperpaw_sdk::setting::Text
 impl paperpaw_sdk::setting::SettingType for paperpaw_sdk::setting::Text
@@ -4545,6 +4549,7 @@ pub macro paperpaw_sdk::event_data!
 pub macro paperpaw_sdk::package_version!
 pub macro paperpaw_sdk::plugin!
 pub macro paperpaw_sdk::role_settings!
+pub macro paperpaw_sdk::service_type!
 #[non_exhaustive] pub enum paperpaw_sdk::ActionHint
 pub paperpaw_sdk::ActionHint::Hidden
 pub paperpaw_sdk::ActionHint::Icon(&'static str)
@@ -5559,7 +5564,6 @@ pub fn paperpaw_sdk::contribution::Registrar::override_action(&mut self, impl co
 pub fn paperpaw_sdk::contribution::Registrar::place_menu_entry(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuPlace) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::plugin(&self) -> &paperpaw_sdk::Id
 pub fn paperpaw_sdk::contribution::Registrar::provide<T: paperpaw_sdk::services::ServiceType>(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, T, paperpaw_sdk::Version) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::contribution::Registrar::publish<T: core::any::Any>(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, T) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_item_state(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> paperpaw_sdk::ItemState + 'static) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_menu_need(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuNeed) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_screen_hints(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::Hints) -> core::result::Result<(), paperpaw_sdk::RegisterError>

@@ -22,7 +22,7 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::any::Any;
+
 
 use crate::action::ActionSpec;
 use crate::event::EventHandler;
@@ -809,21 +809,11 @@ impl Registrar {
         self.add_checked(Contribution::WidgetCategory(Box::new(category)))
     }
 
-    /// Publishes `service` for other plugins as `id`, usually a trait
-    /// object such as `Box<dyn Weather>` (see
-    /// [`services`](crate::services)).
-    pub fn publish<T: Any>(&mut self, id: impl Into<Id>, service: T) -> Result<(), RegisterError> {
-        let id = id.into();
-        self.add_checked(Contribution::Published {
-            id,
-            service: crate::services::Service::new(service),
-        })
-    }
-
-    /// Publishes `service` for other plugins as `id` in `version`, a type
-    /// with a contract ([`services::ServiceType`](crate::services::ServiceType)):
-    /// found by its key also by native plugins built apart, and by the
-    /// version others need ([`Services::get_versioned`](crate::services::Services::get_versioned)).
+    /// Provides `service` for other plugins as `id` in `version`: a type
+    /// with a contract ([`services::ServiceType`](crate::services::ServiceType),
+    /// usually a struct holding a trait object), found by its key also by
+    /// native plugins built apart, and by the version others need
+    /// ([`Services::get`](crate::services::Services::get)).
     pub fn provide<T: crate::services::ServiceType>(
         &mut self,
         id: impl Into<Id>,
@@ -833,7 +823,7 @@ impl Registrar {
         let id = id.into();
         self.add_checked(Contribution::Published {
             id,
-            service: crate::services::Service::typed(service, version),
+            service: crate::services::Service::new(service, version),
         })
     }
 

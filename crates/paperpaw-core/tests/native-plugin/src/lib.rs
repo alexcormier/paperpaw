@@ -20,8 +20,18 @@ impl Plugin for Probe {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         Hello.register(r)?;
-        r.publish(Id::new_static("hello.version"), Version::new(1, 2, 3))
+        r.provide(
+            Id::new_static("hello.version"),
+            HelloVersion(Version::new(1, 2, 3)),
+            Version::new(1, 0, 0),
+        )
     }
 }
 
 paperpaw_sdk::plugin!(Probe);
+
+/// Its version as a service, the type the test that loads it names
+/// too, under the same key.
+#[repr(C)]
+pub struct HelloVersion(pub Version);
+paperpaw_sdk::service_type!(HelloVersion, "hello.version/1");
