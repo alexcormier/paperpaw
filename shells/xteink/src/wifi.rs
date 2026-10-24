@@ -605,7 +605,7 @@ fn controller_config() -> ControllerConfig {
 }
 
 /// Receive buffers kept while the radio is on.
-const STATIC_RX: u8 = 5;
+const STATIC_RX: u8 = 4;
 /// Buffers taken as frames come and go, at most, each way: a connection's
 /// window (8 KB, `http`) in frames, and some.
 const DYNAMIC: u16 = 16;
