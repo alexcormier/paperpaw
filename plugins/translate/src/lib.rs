@@ -126,12 +126,18 @@ fn request(key: &str, text: &str, target: &str) -> HttpRequest {
     let text: String = text.chars().take(MAX_CHARS).collect();
     let body = format!("text={}&target_lang={}", encode(&text), encode(target));
     HttpRequest::new("POST", &format!("https://{host}/v2/translate"), ANSWERED)
-        .header(String::from("Authorization"), format!("DeepL-Auth-Key {key}"))
+        .header(
+            String::from("Authorization"),
+            format!("DeepL-Auth-Key {key}"),
+        )
         .header(
             String::from("Content-Type"),
             String::from("application/x-www-form-urlencoded"),
         )
-        .header(String::from("User-Agent"), String::from("PaperPaw/0.1 (e-reader)"))
+        .header(
+            String::from("User-Agent"),
+            String::from("PaperPaw/0.1 (e-reader)"),
+        )
         .body(body)
 }
 

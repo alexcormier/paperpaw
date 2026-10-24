@@ -279,7 +279,10 @@ impl Fetch {
     ) -> HttpRequest {
         let (agent, name) = paperpaw_sdk::web::user_agent_of(env);
         HttpRequest::new(method, &format!("{}{path}", server(env)), reply)
-            .header(String::from("Authorization"), format!("Bearer {}", self.token))
+            .header(
+                String::from("Authorization"),
+                format!("Bearer {}", self.token),
+            )
             .header(agent, name)
     }
 

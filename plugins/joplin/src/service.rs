@@ -112,7 +112,10 @@ pub fn sign_in(base: &str, email: &str, password: &str, reply: &Event<HttpReply>
         paperpaw_sdk::json::string(password)
     );
     HttpRequest::new("POST", &format!("{base}/api/sessions"), reply)
-        .header(String::from("Content-Type"), String::from("application/json"))
+        .header(
+            String::from("Content-Type"),
+            String::from("application/json"),
+        )
         .body(body)
 }
 

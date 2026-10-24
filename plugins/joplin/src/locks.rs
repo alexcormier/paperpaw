@@ -54,7 +54,10 @@ pub fn request(
     let request = match service {
         Service::WebDav => service::request(&url, "PROPFIND", auth, reply)
             .header(String::from("Depth"), String::from("1"))
-            .header(String::from("Content-Type"), String::from("application/xml"))
+            .header(
+                String::from("Content-Type"),
+                String::from("application/xml"),
+            )
             .body(String::from(PROPFIND)),
         _ => service::request(&url, "GET", auth, reply),
     };

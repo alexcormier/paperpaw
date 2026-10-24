@@ -241,8 +241,14 @@ impl Run {
     /// The request sending the `count` highlights in the file `body`.
     fn request(&self, body: &str, count: usize) -> HttpRequest {
         HttpRequest::new("POST", URL, SENT)
-            .header(String::from("Authorization"), format!("Token {}", self.token))
-            .header(String::from("Content-Type"), String::from("application/json"))
+            .header(
+                String::from("Authorization"),
+                format!("Token {}", self.token),
+            )
+            .header(
+                String::from("Content-Type"),
+                String::from("application/json"),
+            )
             .body_from(body.to_string())
             // Readwise lists every highlight in its answer: not needed here.
             .save_to(file(ANSWER))

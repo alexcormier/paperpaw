@@ -386,7 +386,10 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
         }
     }
     let mut request = HttpRequest::new("GET", &url, FETCHED)
-        .header(String::from("User-Agent"), String::from("PaperPaw/0.1 (e-reader)"))
+        .header(
+            String::from("User-Agent"),
+            String::from("PaperPaw/0.1 (e-reader)"),
+        )
         .with(Params::new().with(params::ID, coordinates));
     if why == Why::Asked {
         request = request.param(TOLD, "1");

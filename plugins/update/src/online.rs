@@ -372,8 +372,10 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
         return;
     };
     let url = format!("{}/api/v1/updates", server(env));
-    let request = HttpRequest::new("POST", &url, CHECKED)
-        .header(String::from("content-type"), String::from("application/json"));
+    let request = HttpRequest::new("POST", &url, CHECKED).header(
+        String::from("content-type"),
+        String::from("application/json"),
+    );
     let code: Vec<(&str, String)> = env
         .plugins
         .iter()

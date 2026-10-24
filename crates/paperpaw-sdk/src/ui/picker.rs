@@ -4,15 +4,14 @@ use core::fmt::{self, Write};
 
 use crate::builtin::actions;
 use crate::fonts::FontHandle;
+use crate::gesture::{Gesture, GestureKind};
 use crate::id::Id;
 use crate::time::{Date, Time, days_in_month};
 use crate::widgets::largest_size;
-use crate::gesture::{Gesture, GestureKind};
 use crate::{Canvas, Env, Point, Rect};
 
 use super::{
-    Response, Stack, TextRole, UiStyle, button_height, columns, draw_button, draw_focus,
-    draw_label,
+    Response, Stack, TextRole, UiStyle, button_height, columns, draw_button, draw_focus, draw_label,
 };
 
 /// The answer to an action the wheels `taken`, the picker `changed` or not.

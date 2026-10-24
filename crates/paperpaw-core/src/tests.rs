@@ -2740,7 +2740,10 @@ fn speech_goes_to_the_shell_and_stops_with_its_screen() {
     assert!(log.borrow().contains(&String::from("event ov.reply b")));
 
     // Queued texts follow; each is answered when done.
-    kernel.output.commands.extend([speech("q1", false), speech("q2", true)]);
+    kernel
+        .output
+        .commands
+        .extend([speech("q1", false), speech("q2", true)]);
     kernel.run_commands();
     let calls = kernel.take_speech();
     let ids: Vec<(u32, bool)> = calls
