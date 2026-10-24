@@ -83,8 +83,8 @@ fn only_what_fits_is_listed_in_its_order() {
     ]);
     let (entries, runs) = entries(&storage);
     assert_eq!(ids(&entries), ["plain", "theme", "odd"]);
-    // Groups as they come, an unknown one under `system`.
-    assert_eq!(runs, [(0, 1), (5, 1), (6, 1)]);
+    // Groups as they come, an unknown one under `system`, the last.
+    assert_eq!(runs, [(0, 1), (5, 1), (11, 1)]);
     assert_eq!(entries[0].summary, "Does plain.");
     assert_eq!((entries[0].size, entries[0].code), (30, false));
 }

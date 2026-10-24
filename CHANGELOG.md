@@ -15,6 +15,13 @@ change the plugin SDK.
 - Touch lock: the way out it explains (tap twice, hold the second tap)
   unlocks; it wanted a third touch held after two taps, which still
   works too.
+### Added
+
+- The plugin store has five more groups, so every kind of plugin has a
+  place: notes, learning, news, tools and games, before system. Of
+  PaperPaw's own plugins, vocabulary moved to learning; news, wallabag
+  and the browser to news; readwise and joplin to notes.
+- paperpaw-dev checks the group in `store/store.ini` (`package.store-group`).
 
 ## [0.5.0-beta.4] - 2026-10-24
 

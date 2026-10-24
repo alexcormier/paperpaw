@@ -39,7 +39,9 @@ download written as it arrives, nothing unpacked in memory.
   - `name`, `summary`: in the language asked for (from an optional
     `[i18n.<lang>]` table of the catalogue entry), English otherwise.
   - `group`: one of `reading`, `formats`, `library`, `sync`, `home`,
-    `look`, `system`, in that order.
+    `look`, `notes`, `learning`, `news`, `tools`, `games`, `system`, in
+    that order (the five before `system` came later; a device that does
+    not know a group shows its plugins under `system`).
   - `kind`: `data` or `code`; `built_in` where true.
   - `latest.formats`: the data format the plugin says in its
     `plugin.ini` (`formats = 1`, ADR 0020's data formats), read by the
