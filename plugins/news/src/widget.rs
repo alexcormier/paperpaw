@@ -55,14 +55,16 @@ static SETTINGS: [SettingSpec; 9] = [
         &COUNTS,
         COUNTS[2],
         HEADLINES,
-    ),
+    )
+    .description("news.setting.count.help"),
     SettingSpec::choice(
         "news.widget.headlines.lines",
         "news.setting.lines",
         &LINES,
         LINES[0],
         HEADLINES,
-    ),
+    )
+    .description("news.setting.lines.help"),
     widgets::part_spec(
         "news.widget.headlines.caption",
         HEADLINES,
