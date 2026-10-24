@@ -287,6 +287,54 @@ fn now() -> Instant {
 #[main]
 fn main() -> ! {
     stack::paint();
+    start().run()
+}
+
+/// Everything before the main loop, in frames of their own: what only the
+/// start needs is off the stack once the loop runs, where only the
+/// firmware stays (in `main`'s frame). The kernel is built last, over
+/// little else: its start goes deepest.
+#[inline(never)]
+fn start() -> Firmware {
+    let ready = prepare();
+    Firmware {
+        panel: ready.panel,
+        network: ready.network,
+        ota: ready.ota,
+        power_latch: ready.power_latch,
+        usb_power: ready.usb_power,
+        delay: ready.delay,
+        usb: ready.usb,
+        #[cfg(feature = "remote")]
+        remote: remote::Remote,
+        #[cfg(feature = "x4-pro")]
+        light: ready.light,
+        state: State::default(),
+        // Last, and built right in its place: the kernel is large.
+        kernel: kernel(ready.storage, ready.firmware, ready.code, ready.staged),
+    }
+}
+
+/// What [`prepare`] made ready for the firmware and its kernel.
+struct Ready {
+    panel: board::Panel,
+    network: network::Network,
+    ota: Option<ota::Ota>,
+    power_latch: esp_hal::gpio::Output<'static>,
+    usb_power: board::UsbPower,
+    delay: esp_hal::delay::Delay,
+    usb: usb_lines::UsbLines,
+    #[cfg(feature = "x4-pro")]
+    light: Option<light::Light>,
+    storage: Box<dyn Storage>,
+    firmware: Option<paperpaw_sdk::firmware::Firmware>,
+    code: CodePlugins,
+    staged: native::bundle::Staged,
+}
+
+/// The chip, the board and the card, up to the kernel.
+#[inline(never)]
+fn prepare() -> Ready {
     let p = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::max()));
     // `init` stopped the watchdogs: a start that hangs begins again.
     power::watch_start(START_WATCHDOG_S);
@@ -372,11 +420,11 @@ fn main() -> ! {
     // Plugins the web flasher wrote behind the image, onto the card first.
     let staged = native::bundle::stage(&flash, storage.as_ref()).unwrap_or_default();
     let code = code_plugins(ota.as_ref(), &flash);
-    let kernel = kernel(storage, ota.as_ref(), code, staged);
-    // Light sleeps while idle on battery, the deep one at the end.
+    // Light sleeps while idle on battery (allowed only by the main loop),
+    // the deep one at the end.
     power::init(LowPower::new(board.low_power));
-    Firmware {
-        kernel,
+    Ready {
+        firmware: ota.as_ref().map(ota::Ota::firmware),
         panel,
         network,
         ota,
@@ -385,13 +433,12 @@ fn main() -> ! {
         delay: board.delay,
         // Lines from a computer on USB; the log goes out the same way.
         usb: usb_lines::UsbLines::new(board.usb),
-        #[cfg(feature = "remote")]
-        remote: remote::Remote,
         #[cfg(feature = "x4-pro")]
         light: board.light,
-        state: State::default(),
+        storage,
+        code,
+        staged,
     }
-    .run()
 }
 
 /// How this start treats code plugins (ADR 0024).
@@ -473,9 +520,11 @@ const CALM_STATUS: [(&str, &str); 6] = [
     clippy::expect_used,
     reason = "the plugins are built in: a kernel that cannot be built is a bug to see at once"
 )]
+// A frame of its own, over the little `start` keeps.
+#[inline(never)]
 fn kernel(
     storage: Box<dyn Storage>,
-    ota: Option<&ota::Ota>,
+    firmware: Option<paperpaw_sdk::firmware::Firmware>,
     code: CodePlugins,
     staged: native::bundle::Staged,
 ) -> Kernel {
@@ -526,8 +575,8 @@ fn kernel(
         // network joined before, for transfers and for trying things.
         .wifi(true)
         .setting_default(&paperpaw_plugin_wifi::WHILE_CHARGING, true);
-    let builder = match ota {
-        Some(ota) => builder.firmware(ota.firmware()),
+    let builder = match firmware {
+        Some(firmware) => builder.firmware(firmware),
         None => builder,
     };
     let builder = match code {
@@ -553,9 +602,7 @@ fn kernel(
         paperpaw_app::StorePlugins::Left,
     )
     .plugin(device::X4);
-    let mut kernel = builder.build().expect("kernel");
-    for warning in kernel.take_warnings() {
-        warn!("{warning}");
-    }
-    kernel
+    // Its warnings are logged as the main loop starts: taken here, the
+    // kernel would be one more copy on the stack.
+    builder.build().expect("kernel")
 }

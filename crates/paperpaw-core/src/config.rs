@@ -608,7 +608,7 @@ impl Kernel {
                     && !self.shared.menus.is_section(id.as_str())
             })
             .collect();
-        unknown.sort();
+        unknown.sort_unstable();
         unknown.dedup();
         for action in unknown {
             messages.push(format!("unknown action `{action}` in a key map or menu"));

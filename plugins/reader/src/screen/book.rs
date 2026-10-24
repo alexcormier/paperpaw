@@ -888,7 +888,7 @@ impl Book {
                 .filter(|(_, m)| m.taps)
                 .map(|(i, m)| (m.start, Target::Mark(i))),
         );
-        order.sort_by_key(|(at, _)| *at);
+        order.sort_by_cached_key(|(at, _)| *at);
         let mut targets: Vec<Target> = order.into_iter().map(|(_, target)| target).collect();
         // Then the rooms of layers that hear taps.
         targets.extend(
@@ -1020,7 +1020,7 @@ impl Book {
                 let mut starts: Vec<Locator> = (0..self.document.toc_len(storage).min(2000))
                     .filter_map(|i| self.document.toc_target(storage, i))
                     .collect();
-                starts.sort();
+                starts.sort_unstable();
                 starts.dedup();
                 let here = self.page.start;
                 if value > 0 {

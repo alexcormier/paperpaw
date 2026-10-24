@@ -479,7 +479,7 @@ impl EpubDocument {
             }
             true
         });
-        pages.here.sort_by_key(|(offset, _)| *offset);
+        pages.here.sort_by_cached_key(|(offset, _)| *offset);
         pages
     }
 

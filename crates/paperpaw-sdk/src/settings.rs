@@ -893,7 +893,7 @@ impl Settings {
                 self.limits.insert(id, value);
             }
         }
-        touched.sort();
+        touched.sort_unstable();
         touched.dedup();
         touched
     }

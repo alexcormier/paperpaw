@@ -15,6 +15,8 @@ use crate::board::{self, CardParts};
 
 /// The card's FAT file system as PaperPaw's storage, then the bus at full
 /// speed; without a card or one PaperPaw cannot read, no storage.
+// A frame of its own, off the stack before the kernel is built.
+#[inline(never)]
 pub fn mount(parts: CardParts) -> Box<dyn Storage> {
     let CardParts {
         bus,

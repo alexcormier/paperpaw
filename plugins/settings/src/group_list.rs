@@ -141,7 +141,7 @@ impl GroupList {
                 icon: Some(String::from("refresh")),
             },
         ));
-        placed.sort_by_key(|(order, entry, _)| (*order, *entry));
+        placed.sort_by_cached_key(|(order, entry, _)| (*order, *entry));
         let mut entries: Vec<Entry> = placed.into_iter().map(|(_, _, entry)| entry).collect();
         // Headings with nothing under them go.
         let empty: Vec<bool> = (0..entries.len())

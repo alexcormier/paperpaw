@@ -163,6 +163,8 @@ impl Calls {
 
     /// Moves every request on; the answers of those done. `net` is `None`
     /// while the radio is off.
+    // A frame of its own: not under the kernel's work in `Network::step`.
+    #[inline(never)]
     pub fn poll(
         &mut self,
         mut net: Option<&mut Net>,
