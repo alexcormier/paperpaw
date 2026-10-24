@@ -33,6 +33,13 @@ const WRITE_MS: u64 = 1000;
 const WRITE_TRIES: u32 = 3;
 /// Between polls of a card that is still writing, in microseconds.
 const POLL_US: u32 = 20;
+/// Times the card is started: the X4 Classic's up to four, its power off
+/// and on before each (the FreeInk SDK's `SdmmcBlockDevice`, MIT); the
+/// X4 Pro's once.
+#[cfg(feature = "x4-classic")]
+const TRIES: u32 = 4;
+#[cfg(not(feature = "x4-classic"))]
+const TRIES: u32 = 1;
 
 /// The buffer the SD host's DMA moves blocks through: in the chip's RAM
 /// (a static, never on the heap, which reaches into PSRAM).
@@ -56,6 +63,8 @@ pub fn mount(parts: CardParts) -> Box<dyn Storage> {
         command,
         data,
         delay,
+        #[cfg(feature = "x4-classic")]
+        mut power,
     } = parts;
     delay.delay_millis(20);
     let Ok(host) = SdHostController::new(host, Config::default()) else {
@@ -67,10 +76,27 @@ pub fn mount(parts: CardParts) -> Box<dyn Storage> {
         warn!("SD card: no slot");
         return Box::new(NoStorage);
     };
-    let slot = slot.with_clk(clock).with_cmd(command).with_data0(data);
+    let mut slot = slot.with_clk(clock).with_cmd(command).with_data0(data);
+    let mut started = Err("not started");
+    for attempt in 1..=TRIES {
+        #[cfg(feature = "x4-classic")]
+        crate::board::power_card(&mut power, &delay);
+        started = Card::start(&mut slot, &delay);
+        match started {
+            Err(e) if attempt < TRIES => warn!("SD card: {e}, started again"),
+            _ => break,
+        }
+    }
     // SAFETY: mounted once, so the buffer is taken once.
     let buffer = unsafe { &mut *BUFFER.0.get() };
-    match Card::start(slot, buffer, delay) {
+    match started.map(|found| Card {
+        slot,
+        buffer,
+        rca: found.rca,
+        by_block: found.by_block,
+        blocks: found.blocks,
+        delay,
+    }) {
         Ok(card) => {
             info!("SD card: {} MB", card.blocks >> 11);
             crate::volume::mount(card)
@@ -94,6 +120,13 @@ struct Card {
     delay: Delay,
 }
 
+/// What starting a card found out.
+struct Found {
+    rca: u32,
+    by_block: bool,
+    blocks: u32,
+}
+
 const NONE: CommandFlags = CommandFlags {
     wait_complete: false,
     stop_abort: false,
@@ -101,11 +134,8 @@ const NONE: CommandFlags = CommandFlags {
 };
 
 impl Card {
-    fn start(
-        mut slot: CardSlot,
-        buffer: &'static mut Buffer,
-        delay: Delay,
-    ) -> Result<Self, &'static str> {
+    /// Starts the card in `slot`, as the SD specification says.
+    fn start(slot: &mut CardSlot, delay: &Delay) -> Result<Found, &'static str> {
         slot.set_bus_low_level(BusWidth::Bit1, START_HZ)
             .map_err(|_| "bus")?;
         slot.send_init_sequence().map_err(|_| "no clock")?;
@@ -152,13 +182,10 @@ impl Card {
         }
         slot.set_bus_low_level(BusWidth::Bit1, RUN_HZ)
             .map_err(|_| "speed")?;
-        Ok(Self {
-            slot,
-            buffer,
+        Ok(Found {
             rca,
             by_block,
             blocks,
-            delay,
         })
     }
 

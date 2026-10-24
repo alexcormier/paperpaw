@@ -29,7 +29,13 @@ change the plugin SDK.
 ### Added
 
 - The X4 Classic's firmware comes with each release, marked
-  experimental: built, not yet tried on a real device.
+  experimental: built, not yet tried on a real device. It follows its
+  stock firmware where the FreeInk SDK and Papyrix agree: the panel at
+  10 MHz with its factory frame rate, its controller as the factory's
+  NVS names it (else as it answers, else a UC8279), the charging pin
+  high while charging, the card started up to four times, and its
+  power kept on through sleep. Its partitions keep the factory's NVS
+  whole.
 - A build for the Xteink X3 (`cargo x3`), experimental and not yet tried
   on one: the X4's chip and buttons, its UC8253 panel at 792 x 528 in
   black and white, a fuel gauge and a clock; an emulator profile too.

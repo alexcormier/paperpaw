@@ -5,7 +5,7 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use esp_hal::delay::Delay;
-use esp_hal::gpio::Input;
+use esp_hal::gpio::{Input, Level};
 
 /// The X3's fuel gauge said the battery charges, at its last reading
 /// (the main loop reads it with the battery).
@@ -21,13 +21,13 @@ pub fn gauge_says(charging: Option<bool>) {
 }
 
 /// Whether the device is on outer power. It has no pin that says so: it
-/// counts as on USB while it charges (the charging pin low) or while a
-/// computer talks to it (the USB frames' number moves on, a frame a
+/// counts as on USB while it charges (the charging pin says so) or while
+/// a computer talks to it (the USB frames' number moves on, a frame a
 /// millisecond), so it stays awake and in reach of the computer then.
 pub struct UsbPower {
-    /// Low while charging; the X3 has none: its fuel gauge says it
-    /// ([`gauge_says`]).
-    charging: Option<Input<'static>>,
+    /// The charging pin and its level while charging; the X3 has none:
+    /// its fuel gauge says it ([`gauge_says`]).
+    charging: Option<(Input<'static>, Level)>,
     /// When the frames were last looked at (ms), and whether they moved.
     seen: core::cell::Cell<(u64, bool)>,
 }
@@ -44,9 +44,10 @@ impl UsbPower {
         feature = "x3",
         expect(dead_code, reason = "the X3 has no charging pin")
     )]
-    pub fn new(charging: Input<'static>) -> Self {
+    /// With the charging pin, at `while_charging` while it charges.
+    pub fn new(charging: Input<'static>, while_charging: Level) -> Self {
         Self {
-            charging: Some(charging),
+            charging: Some((charging, while_charging)),
             seen: core::cell::Cell::new((0, false)),
         }
     }
@@ -64,7 +65,7 @@ impl UsbPower {
 
     pub fn is_high(&self) -> bool {
         let charging = match &self.charging {
-            Some(pin) => pin.is_low(),
+            Some((pin, level)) => pin.level() == *level,
             None => GAUGE_CHARGING.load(Ordering::Relaxed),
         };
         if charging {

@@ -227,6 +227,7 @@ impl Board {
             p.GPIO14.reborrow(),
             p.GPIO6.reborrow(),
             delay,
+            paperpaw_x4::probe::RESET_MS,
         );
         let spi = Spi::new(
             p.SPI2,
@@ -308,7 +309,7 @@ impl Board {
             power_button: Input::new(p.GPIO3, pulled),
             light: crate::light::Light::new(p.LEDC, p.GPIO8, p.GPIO9),
             clock_ms,
-            usb_power: UsbPower::new(Input::new(p.GPIO21, pulled)),
+            usb_power: UsbPower::new(Input::new(p.GPIO21, pulled), Level::Low),
             timers: TimerGroup::new(p.TIMG0),
             timers1: TimerGroup::new(p.TIMG1),
             rtc: p.RTC_TIMER,

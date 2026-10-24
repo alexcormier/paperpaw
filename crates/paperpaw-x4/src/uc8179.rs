@@ -218,6 +218,9 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     busy: BUSY,
     delay: D,
     chip: Chip,
+    /// The frame rate is set ([`Sequences::pll`]); not where the stock
+    /// firmware leaves the factory's ([`Display::with_factory_pll`]).
+    set_pll: bool,
     /// The frame, line by line as the panel lies (480 lines of 100 bytes),
     /// if it is kept; empty if not.
     frame: Vec<u8>,
@@ -261,6 +264,7 @@ where
             busy,
             delay,
             chip,
+            set_pll: true,
             frame: match frame {
                 Frame::Kept => vec![0xFF; LINE * usize::from(PANEL_HEIGHT)],
                 Frame::InController => Vec::new(),
@@ -274,6 +278,14 @@ where
             pending: None,
             buffer: Vec::new(),
         }
+    }
+
+    /// Keeps the frame rate the controller has from the factory: the X4
+    /// Classic's stock firmware never sets it.
+    #[must_use]
+    pub fn with_factory_pll(mut self) -> Self {
+        self.set_pll = false;
+        self
     }
 
     pub fn chip(&self) -> Chip {
@@ -334,7 +346,7 @@ where
         if let Some(booster) = s.booster {
             self.command(cmd::BOOSTER_SOFT_START, &booster)?;
         }
-        if let Some(pll) = s.pll {
+        if let Some(pll) = s.pll.filter(|_| self.set_pll) {
             self.command(cmd::PLL, &[pll])?;
         }
         self.command(cmd::GATE_SCAN, &[0x02])?;
@@ -1189,6 +1201,24 @@ mod tests {
         // Where the bands go without a frame: the same line.
         assert_eq!(addressed(Chip::Uc8279, Rotation::Deg0, 5, 3), (594, 3));
         assert_eq!(addressed(Chip::Uc8179, Rotation::Deg0, 5, 3), (5, 3));
+    }
+
+    #[test]
+    fn an_x4_classic_keeps_its_factory_frame_rate() {
+        let c = Rc::new(RefCell::new(Controller::default()));
+        let mut d = Display::new(
+            Chip::Uc8279,
+            Frame::Kept,
+            Spi(c.clone()),
+            Dc(c.clone()),
+            Pin,
+            Pin,
+            Delay,
+        )
+        .with_factory_pll();
+        d.init().unwrap();
+        assert_eq!(c.borrow().last(cmd::PLL), None);
+        assert_eq!(c.borrow().log[0], (cmd::PANEL_SETTING, vec![0x37, 0x4D]));
     }
 
     #[test]

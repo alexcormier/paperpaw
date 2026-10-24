@@ -64,8 +64,9 @@ pub struct Firmware {
     pub network: Network,
     /// Updates, where the flash has room for them.
     pub ota: Option<Ota>,
-    /// Holds the battery's power on (the X4s); the X3's card power (see
-    /// its board). Low before deep sleep.
+    /// Holds the battery's power on (the X4 and the X4 Pro); the X3's
+    /// card power (see its board): low before deep sleep. The X4
+    /// Classic's parts' power, kept on through it.
     pub power_latch: Output<'static>,
     /// High while on USB power.
     pub usb_power: crate::board::UsbPower,
@@ -574,11 +575,17 @@ impl Firmware {
             return;
         }
         let mut power = input::stop().expect("the power button");
-        // The ESP32-S3 devices hold their latch through resets: let go
-        // first.
-        #[cfg(feature = "esp32s3")]
-        self.power_latch.set_pad_hold(false);
-        self.power_latch.set_low();
+        // The X4 Classic keeps its power on and holds its lines, as its
+        // stock firmware sleeps (see its board).
+        #[cfg(feature = "x4-classic")]
+        crate::board::hold_for_sleep(&mut self.power_latch);
+        #[cfg(not(feature = "x4-classic"))]
+        {
+            // The X4 Pro holds its latch through resets: let go first.
+            #[cfg(feature = "esp32s3")]
+            self.power_latch.set_pad_hold(false);
+            self.power_latch.set_low();
+        }
         power.listen(Event::LowLevel);
         let _ = power.apply_wakeup_config(&WakeupConfig::default().with_low_power_path(true));
         power::deep();

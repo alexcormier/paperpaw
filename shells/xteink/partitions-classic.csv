@@ -1,0 +1,9 @@
+# The X4 Classic's 16 MB of flash: the X4's two app partitions, but the
+# factory's NVS (0x9000 to 0xE000) kept whole, never written: it says
+# which panel the device has (see src/probe.rs). The OTA data is where
+# the stock firmware has it, after the NVS.
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x5000
+otadata,  data, ota,     0xe000,   0x2000
+ota_0,    app,  ota_0,   0x10000,  0x7F0000
+ota_1,    app,  ota_1,   0x800000, 0x7F0000

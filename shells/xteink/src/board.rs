@@ -158,6 +158,7 @@ impl Board {
             p.GPIO5.reborrow(),
             p.GPIO6.reborrow(),
             delay,
+            paperpaw_x4::probe::RESET_MS,
         );
         // One SPI bus for the display and the card, with DMA for all but
         // short transfers: the processor fed the bus a word at a time and

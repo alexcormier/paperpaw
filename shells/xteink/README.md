@@ -149,6 +149,13 @@ It answers on USB (through its pogo adapter) as the X4 Pro does, so
 check which one is connected before flashing. Its pins come from the
 FreeInk SDK's and Papyrix's notes; not yet tried on one.
 
+Its partitions are its own (`partitions-classic.csv`, which
+`x4classic-run` and the release use): the factory's NVS, which names the
+panel's controller, stays whole from 0x9000 to 0xE000, and the OTA data
+follows it where the stock firmware has it. An image merged for the
+whole flash covers that NVS with erased bytes too, so a flasher writes
+its parts apart (or backs the flash up first).
+
 ## The X3
 
 Experimental: built (`cargo x3`), but not yet tried on one, and not

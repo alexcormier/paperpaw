@@ -408,7 +408,12 @@ fn prepare() -> Ready {
     if let Some(message) = &panicked {
         warn!("the last run panicked: {message}");
     }
+    #[cfg(not(feature = "x4-classic"))]
     let board = Board::take(p);
+    // The X4 Classic's panel as the factory wrote it down, as its stock
+    // firmware reads it.
+    #[cfg(feature = "x4-classic")]
+    let board = Board::take(p, probe::factory_controller(&flash));
     #[cfg(feature = "x3")]
     let ota = x3_panel_or_back(ota, &board.display);
 

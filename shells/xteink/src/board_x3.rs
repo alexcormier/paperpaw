@@ -177,6 +177,8 @@ impl Board {
             p.GPIO5.reborrow(),
             p.GPIO6.reborrow(),
             delay,
+            // Held as its stock firmware holds it (the FreeInk SDK's).
+            paperpaw_x4::probe::STOCK_RESET_MS,
         );
         let spi = SpiConfig::default()
             .with_frequency(Rate::from_khz(CARD_START_KHZ))
