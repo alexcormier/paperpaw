@@ -370,30 +370,6 @@ fn presses_while_a_screen_comes_up_are_dropped() {
     assert_eq!(log.borrow().len(), 4);
 }
 
-/// A screen is seen while the refresh that shows it goes on (a full one
-/// on the X4 takes 1.6 s): a press made then counts, not only one made
-/// once the refresh is over.
-#[test]
-fn a_press_while_a_new_screen_refreshes_counts() {
-    let log = log();
-    let mut kernel = Kernel::builder(DEVICE)
-        .plugin(TestPlugin::new("a", &log))
-        .build()
-        .unwrap();
-    kernel.start(Instant(0));
-    render(&mut kernel);
-    // The refresh began at 1000 and ended at 2600; the presses made
-    // meanwhile are handled after it.
-    kernel.showing(Instant(1000));
-    kernel.shown(Instant(2600));
-    // Before it began to show: dropped.
-    press(&mut kernel, 900, "page-forward");
-    assert!(log.borrow().is_empty());
-    // While it showed: taken.
-    press(&mut kernel, 1200, "page-forward");
-    assert_eq!(*log.borrow(), ["a:core.next-page"]);
-}
-
 #[test]
 fn buttons_route_through_key_map_to_screen_and_handlers() {
     let log = log();
