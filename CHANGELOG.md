@@ -376,6 +376,9 @@ file to your report.
   PaperPaw wrote.
 - An audit of everything PaperPaw keeps found ways it could lose notes,
   places, statistics, cards or passwords; each is closed, with a test.
+- A web request printed for debugging (in a log or a report) shows no
+  password or key: not the values of its headers and params, not its
+  body, not the query of its address.
   Among them:
   - *Clean up storage* removes by itself only what can be made again.
     The notes and places of books not found go only when you agree.
