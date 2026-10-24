@@ -189,7 +189,9 @@ fn the_page_shows_rows_and_opens_the_licences_in_the_reader() {
         page.starts_with("![PaperPaw](logo.png)\n\n# PaperPaw "),
         "{page}"
     );
-    assert!(page.contains(env!("CARGO_PKG_VERSION")));
+    // The version as shown: a beta as "0.5.0 Beta 1", so its release part.
+    let release = env!("CARGO_PKG_VERSION").split('-').next().unwrap();
+    assert!(page.contains(release), "{page}");
     assert!(page.contains("https://github.com/hthoene/paperpaw"));
     // The licences of what it bundles.
     assert!(page.contains("Literata"));

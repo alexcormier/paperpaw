@@ -14,7 +14,11 @@ use paperpaw_platform::RefreshMode;
 /// Made with [`get`](Self::get) or [`new`](Self::new) and the methods
 /// that set the rest; every request is answered once, also when it is
 /// refused or taken back ([`HttpReply::refused`](crate::HttpReply)).
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Printed for debugging without what may be secret: the address without
+/// its query, the headers' names without their values, the body's length
+/// without the body, the params' names without their values.
+#[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct HttpRequest {
     /// `GET`, `PUT`, `POST`, …
@@ -33,6 +37,25 @@ pub struct HttpRequest {
     /// What few requests set, kept apart so that commands stay small
     /// ([`options`](Self::options)).
     options: Option<alloc::boxed::Box<HttpOptions>>,
+}
+
+impl core::fmt::Debug for HttpRequest {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let address = self.url.split(['?', '#']).next().unwrap_or_default();
+        let headers: Vec<&str> = self.headers.iter().map(|(name, _)| name.as_str()).collect();
+        let params: Vec<&str> = self.params.iter().map(|(name, _)| name).collect();
+        f.debug_struct("HttpRequest")
+            .field("method", &self.method)
+            .field("url", &address)
+            .field("headers", &headers)
+            .field("body", &self.body.as_ref().map(String::len))
+            .field("body_from", &self.body_from)
+            .field("save_to", &self.save_to)
+            .field("reply", &self.reply)
+            .field("params", &params)
+            .field("options", &self.options)
+            .finish()
+    }
 }
 
 /// An [`HttpRequest`]'s parts, for the kernel to take over.
@@ -935,5 +958,36 @@ mod size {
     fn commands_stay_small() {
         let size = core::mem::size_of::<super::Command>();
         assert!(size <= 88, "Command takes {size} bytes");
+    }
+}
+
+#[cfg(test)]
+mod printed {
+    extern crate std;
+    use alloc::format;
+
+    /// A request printed for debugging, alone or in a command, shows no
+    /// header value, body, query or param value: where secrets go.
+    #[test]
+    fn requests_print_no_secrets() {
+        let request = super::HttpRequest::new(
+            "POST",
+            "https://sync.example/api?key=QUERYSECRET",
+            crate::Id::new_static("demo.reply"),
+        )
+        .header("Authorization", "Basic HEADERSECRET")
+        .body("{\"password\":\"BODYSECRET\"}")
+        .with(crate::Params::new().with("token", "PARAMSECRET"));
+        let printed = format!("{:?}", super::Command::http(request));
+        for secret in ["QUERYSECRET", "HEADERSECRET", "BODYSECRET", "PARAMSECRET"] {
+            assert!(!printed.contains(secret), "{printed}");
+        }
+        assert!(printed.contains("https://sync.example/api") && printed.contains("Authorization"));
+        let change = crate::secrets::SecretChange::keep("demo.password", "Password", "KEPTSECRET");
+        let printed = format!("{:?}", super::Command::set_secret(change));
+        assert!(
+            !printed.contains("KEPTSECRET") && printed.contains("demo.password"),
+            "{printed}"
+        );
     }
 }

@@ -464,7 +464,11 @@ pub fn code_versions(
             continue;
         };
         let built = info.manifest.version;
-        if built != *declared {
+        // A build of a PaperPaw beta names the beta (0.5.0-beta.1); its
+        // plugin.ini, like the plugin library, the release's numbers.
+        let built_text = built.to_string();
+        let release = built_text.split('-').next().unwrap_or_default();
+        if built != *declared && declared.to_string() != release {
             report.add(
                 Finding::error(
                     "package.version",

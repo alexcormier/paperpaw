@@ -5192,6 +5192,8 @@ pub fn paperpaw_sdk::HttpRequest::timeout(self, core::time::Duration) -> Self
 pub fn paperpaw_sdk::HttpRequest::url(&self) -> &str
 pub fn paperpaw_sdk::HttpRequest::want_headers(self, &[&str]) -> Self
 pub fn paperpaw_sdk::HttpRequest::with(self, paperpaw_sdk::Params) -> Self
+impl core::fmt::Debug for paperpaw_sdk::HttpRequest
+pub fn paperpaw_sdk::HttpRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::Hyphenation
 impl paperpaw_sdk::Hyphenation
 pub fn paperpaw_sdk::Hyphenation::contains(&self, &str) -> bool
