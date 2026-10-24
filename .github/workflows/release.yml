@@ -254,8 +254,8 @@ jobs:
         with:
           archive: ${{ runner.temp }}/xtensa-std/paperpaw-xtensa-std-${{ env.VERSION }}.tar.gz
       # One image for the whole flash (with the partitions of
-      # `partitions.csv`, the X4 Classic's of `partitions-classic.csv`),
-      # and the app alone for updates.
+      # `partitions.csv`, the X4 Classic's of `partitions-classic.csv`);
+      # the app alone after it.
       - name: Build the firmware
         working-directory: shells/xteink
         # Without remote control over USB, which is for testing.
@@ -269,8 +269,12 @@ jobs:
           fi
           espflash save-image --chip "$FIRMWARE_CHIP" --merge --skip-padding --flash-size 16mb \
             --partition-table "$table" "$elf" "$GITHUB_WORKSPACE/dist/paperpaw-$DEVICE-$VERSION.bin"
-          espflash save-image --chip "$FIRMWARE_CHIP" --flash-size 16mb \
-            --partition-table "$table" "$elf" "$RUNNER_TEMP/app.bin"
+      # The app alone, unsigned: what another firmware's installer
+      # (CrossPoint's menu) takes, and what the signed update is made of.
+      - name: The install image
+        uses: ./.github/actions/install-image
+        with:
+          out: ${{ github.workspace }}/dist/paperpaw-${{ matrix.device }}-${{ env.VERSION }}-install.bin
       # Which code plugins run on it, for the plugin library and authors:
       # the fingerprint alone, 16 hexadecimal digits.
       - name: The sample code plugin fits the firmware
@@ -315,9 +319,9 @@ jobs:
           # The plugins built in, which updates compare: the release fails
           # if the image does not list them.
           cargo run --release -p paperpaw-sign -- plugins \
-            "$RUNNER_TEMP/app.bin" > "dist/paperpaw-$DEVICE-$VERSION-plugins.txt"
+            "dist/paperpaw-$DEVICE-$VERSION-install.bin" > "dist/paperpaw-$DEVICE-$VERSION-plugins.txt"
           cargo run --release -p paperpaw-sign -- sign \
-            "$RUNNER_TEMP/app.bin" "dist/paperpaw-$DEVICE-$VERSION-update.bin"
+            "dist/paperpaw-$DEVICE-$VERSION-install.bin" "dist/paperpaw-$DEVICE-$VERSION-update.bin"
           # Devices install only updates for their own chip.
           shown="$(cargo run -q --release -p paperpaw-sign -- show "dist/paperpaw-$DEVICE-$VERSION-update.bin")"
           echo "$shown"
@@ -331,6 +335,7 @@ jobs:
           cd dist
           sha256sum "paperpaw-$DEVICE-$VERSION.bin" > "paperpaw-$DEVICE-$VERSION.bin.sha256"
           sha256sum "paperpaw-$DEVICE-$VERSION-update.bin" > "paperpaw-$DEVICE-$VERSION-update.bin.sha256"
+          sha256sum "paperpaw-$DEVICE-$VERSION-install.bin" > "paperpaw-$DEVICE-$VERSION-install.bin.sha256"
       - uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.device }}
@@ -419,8 +424,8 @@ jobs:
           # The devices of the firmware job; the X4 Classic's are
           # experimental (not yet tried on one).
           for device in x4 x4-pro x4-classic; do
-            for part in .bin .bin.sha256 .bin.sig -update.bin -update.bin.sha256 -plugins.txt \
-              -abi.txt; do
+            for part in .bin .bin.sha256 .bin.sig -update.bin -update.bin.sha256 -install.bin \
+              -install.bin.sha256 -plugins.txt -abi.txt; do
               assets+=("dist/paperpaw-$device-$VERSION$part")
             done
           done

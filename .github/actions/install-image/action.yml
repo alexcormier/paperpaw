@@ -1,0 +1,43 @@
+name: Install image
+description: >
+  The firmware's app image alone (no bootloader, no partition table, no
+  signature), as another firmware's own installer takes it: CrossPoint's
+  "SD firmware update" writes such a file into its other app slot. Made
+  from the release build of shells/xteink after the action xteink-tools
+  (with espflash), and checked to fit CrossPoint's slot of 0x640000
+  bytes: the build fails when it does not, and the log says how much
+  room is left.
+inputs:
+  out:
+    description: Where the image goes.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: The install image, and its room in CrossPoint's slot
+      shell: bash
+      working-directory: shells/xteink
+      env:
+        OUT: ${{ inputs.out }}
+      run: |
+        table=partitions.csv
+        if [[ "$DEVICE" == x4-classic ]]; then
+          table=partitions-classic.csv
+        fi
+        mkdir -p "$(dirname "$OUT")"
+        espflash save-image --chip "$FIRMWARE_CHIP" --flash-size 16mb --partition-table "$table" \
+          "target/$FIRMWARE_TARGET/release/paperpaw-xteink" "$OUT"
+        # CrossPoint's app slots (its partitions.csv, as the stock X4's).
+        slot=$((0x640000))
+        size=$(stat -c %s "$OUT")
+        spare=$((slot - size))
+        percent=$(awk -v s="$spare" -v t="$slot" 'BEGIN { printf "%.1f", 100 * s / t }')
+        line="$DEVICE install image: $size bytes, CrossPoint's slot $slot, room left $spare bytes ($percent %)"
+        if ((spare < 0)); then
+          echo "::error::$line: it does not fit, CrossPoint cannot install it"
+          exit 1
+        elif ((spare < 64 * 1024)); then
+          echo "::warning::$line: less than 64 KiB left"
+        else
+          echo "::notice::$line"
+        fi

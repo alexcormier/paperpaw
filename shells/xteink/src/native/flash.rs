@@ -178,16 +178,18 @@ impl Flash {
     }
 
     /// The room for plugins at this start: the region they were placed
-    /// in, or, where none was placed, the one they would be (found, not
-    /// mapped); `None` where there is none (a bundle waits).
+    /// in, or, where none was placed or none could be, the one they would
+    /// be (found, not mapped): little or nothing behind an image in a
+    /// smaller slot (another firmware's partitions, CrossPoint's), which
+    /// the store then says has no room. `None` where the running image
+    /// cannot be measured.
     pub fn room(&self) -> Option<CodeRoom> {
         let (start, end, images_end) = match &self.layout {
             Some(Some(layout)) => {
                 let region = layout.region();
                 (region.start, region.end, layout.end())
             }
-            Some(None) => return None,
-            None => {
+            Some(None) | None => {
                 let behind = behind_image(&mut self.flash.borrow_mut()).ok()?;
                 let (_, free) = free_entries();
                 let first_page = behind.start / PAGE;

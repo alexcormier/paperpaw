@@ -55,6 +55,27 @@ flashes the X4 and shows its log. Books go on a microSD card formatted
 with FAT32, e.g. in `Books`. PaperPaw does not read exFAT, which large
 cards often come with.
 
+## From CrossPoint's menu
+
+Each release has an install file for every device,
+`paperpaw-<device>-<version>-install.bin`: the app image alone,
+unsigned, as CrossPoint's installer takes it.
+
+- **From CrossPoint to PaperPaw**: copy the install file onto the card
+  and choose it in CrossPoint's *Settings*, *General*, *SD firmware
+  update*. CrossPoint writes it into its other app slot and starts it;
+  PaperPaw starts on trial and, if it fails, CrossPoint comes back.
+  PaperPaw then runs in CrossPoint's partitions as it finds them and
+  never writes the partition table. Their slots (6.25 MB) are smaller
+  than PaperPaw's own: CI fails a build whose image no longer fits, and
+  on the X4 code plugins from the store have little or no room there
+  (the store says so).
+- **Back to the stock firmware by card** (the X4's *Up* and *Power*
+  with `update.bin`) works only while the stock bootloader is still in
+  the flash: a device that got PaperPaw by the menu keeps it, one
+  flashed whole from a computer or the web flasher does not. Without it,
+  the way back is the saved flash (above).
+
 ## Remote control
 
 Over USB, [`tools/x4-remote.py`](../../tools/x4-remote.py) presses the

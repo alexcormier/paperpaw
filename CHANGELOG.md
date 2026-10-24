@@ -28,6 +28,12 @@ change the plugin SDK.
   and RSS, show short as the language writes them (Sat 24 Oct 2026).
 ### Added
 
+- Switching from CrossPoint without a computer: each release has an
+  install file per device (`paperpaw-<device>-<version>-install.bin`)
+  for CrossPoint's *SD firmware update*, and CI fails a build that no
+  longer fits CrossPoint's app slot. PaperPaw runs in the partitions it
+  finds; where no room for code plugins is left there (the X4), the
+  store says so and refuses them.
 - The X4 Classic's firmware comes with each release, marked
   experimental: built, not yet tried on a real device. It follows its
   stock firmware where the FreeInk SDK and Papyrix agree: the panel at

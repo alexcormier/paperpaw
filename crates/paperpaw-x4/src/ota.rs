@@ -443,6 +443,35 @@ mod tests {
         }
     }
 
+    /// CrossPoint's menu installs into its other slot and writes the entry
+    /// not in force as ESP-IDF's bootloader reads it: the next sequence
+    /// number for that slot, its label unwritten, state New. PaperPaw
+    /// started so finds itself on trial, and the way back is CrossPoint's
+    /// entry, untouched.
+    #[test]
+    fn an_install_by_crosspoints_menu_is_on_trial() {
+        let mut flash = ota_data();
+        // CrossPoint runs from its first slot.
+        let mut data = OtaData::read(&mut flash).unwrap();
+        data.choose(&mut flash, 0, State::Valid, 0).unwrap();
+        // Its `ota_boot::switchTo`, in the second entry.
+        let mut entry = [0xFF; ENTRY_LEN];
+        entry[..4].copy_from_slice(&2u32.to_le_bytes());
+        entry[24..28].copy_from_slice(&0u32.to_le_bytes());
+        entry[28..].copy_from_slice(&crc(2).to_le_bytes());
+        flash.bytes[SECTOR as usize..][..ENTRY_LEN].copy_from_slice(&entry);
+        let mut read = OtaData::read(&mut flash).unwrap();
+        assert_eq!(read.chosen(), Some(1));
+        assert_eq!(read.state_of(1), Some((State::New, 0)));
+        // As the firmware's start puts it on trial, and gives up.
+        read.set_state(&mut flash, 1, State::PendingVerify, 0)
+            .unwrap();
+        read.set_state(&mut flash, 1, State::Invalid, 0).unwrap();
+        let read = OtaData::read(&mut flash).unwrap();
+        assert_eq!(read.state_of(1), Some((State::Invalid, 0)));
+        assert_eq!(read.state_of(0), Some((State::Valid, 0)));
+    }
+
     #[test]
     fn a_pending_update_is_given_up_before_an_install() {
         let mut flash = ota_data();
