@@ -9,6 +9,12 @@
 use super::*;
 use crate::commands::{Reserved, vet_reserved};
 
+/// On the same screen, how long before the last frame showed a press
+/// made more than a frame behind may be and still count: a click made
+/// while the device was busy counts, a long tail of them does not (see
+/// [`crate::Kernel::shown`]).
+const STALE_MS: u64 = 1000;
+
 /// Where input is: gestures being recognized, the edges' swipes, presses
 /// dropped while a frame was not shown yet.
 #[derive(Debug)]
@@ -1030,8 +1036,10 @@ impl Kernel {
     /// press of it held, the one taken or the one dropped, and a press
     /// taken ends one dropped before whose release was missed.
     pub(crate) fn stale(&mut self, now: Instant, event: &InputEvent) -> bool {
-        let early = self.input.stale_before.is_some_and(|before| now < before)
-            || self.input.shown_at[0].is_some_and(|before| now < before);
+        // More than a frame behind, and long ago when the last showed.
+        let behind = self.input.shown_at[0].is_some_and(|before| now < before)
+            && self.input.shown_at[1].is_some_and(|last| last.0.saturating_sub(now.0) > STALE_MS);
+        let early = self.input.stale_before.is_some_and(|before| now < before) || behind;
         match event {
             InputEvent::Button { name, state } => {
                 let held = self.input.recognizer.holds(self.held_as(name));

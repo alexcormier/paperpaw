@@ -13,6 +13,8 @@ change the plugin SDK.
   press (which opened the quick panel while turning pages).
 - On the X4 and X4 Pro, a click of Right while a page is shown is no
   longer taken for a long press (which opened the quick panel).
+- Clicks made while the X4 was busy, up to about a second before it
+  showed the next page, count; only a long tail of them is dropped.
 
 ## [0.5.0-beta.1] - 2026-10-24
 
