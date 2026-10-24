@@ -130,10 +130,7 @@ impl Speech {
 
 /// The reply to a [`Command::Speak`].
 fn reply(reply: Id, params: Params, spoken: bool, out: &mut Vec<Command>) {
-    let params = if spoken {
-        params
-    } else {
-        params.with(paperpaw_sdk::speech_params::FAILED, "1")
-    };
-    out.push(Command::Emit(reply, params));
+    use paperpaw_sdk::event::EventData;
+    let spoken = paperpaw_sdk::replies::Spoken::new(spoken, params);
+    out.push(Command::Emit(reply, spoken.into_params()));
 }

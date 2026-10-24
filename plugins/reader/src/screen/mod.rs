@@ -909,8 +909,10 @@ impl ReaderScreen {
             return;
         }
         let this_book = params.get(params::PATH) == Some(book.path.as_str());
-        if *event == crate::SPOKEN && this_book {
-            self.spoken(params, cx);
+        if let Some(spoken) = crate::SPOKEN.read(event, params)
+            && this_book
+        {
+            self.spoken(&spoken, cx);
             return;
         }
         // Changed elsewhere too, e.g. by a sync.
