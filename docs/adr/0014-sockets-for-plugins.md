@@ -33,7 +33,7 @@ what the user is doing.
     at a time per socket; nothing arrives unasked, so a plugin reads at
     its own pace.
   - `Command::Disconnect(socket)` closes it.
-  - `Command::Broadcast { id, ports, data, wait_ms, events }` sends a UDP
+  - `Command::broadcast(id, ports, data, wait_ms, events)` sends a UDP
     datagram to the local network on each of `ports` and passes the
     answers that come within `wait_ms` on as events, then that it is
     done.

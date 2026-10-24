@@ -28,13 +28,13 @@ the plugin itself never sees it):
 
 ```toml
 [dependencies]
-paperpaw-sdk = "0.4"
+paperpaw-sdk = "0.5.0-beta.1"
 
 [dev-dependencies]
-paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.4.0" }
+paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.1" }
 
 [patch.crates-io]
-paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.4.0" }
+paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.1" }
 ```
 
 The patch matters. Your plugin builds on `paperpaw-sdk` from crates.io;
@@ -45,7 +45,7 @@ your `paperpaw-sdk` the repository's at the same tag, one crate for both;
 patch the other PaperPaw crates your plugin uses from crates.io the same
 way (`paperpaw-digest`, `paperpaw-json`, and so on). Keep the two tags the
 same, and move them together when you move to a new release. Tags before
-`v0.4.0` have no `paperpaw-dev`.
+`v0.5.0-beta.1` have no `paperpaw-dev`.
 
 `cargo update -p paperpaw-dev` is never needed for a tag; with
 `branch = "main"` instead (for PaperPaw's newest SDK, which changes every
@@ -95,9 +95,9 @@ A plugin without code needs no harness: install the command once and give
 it the folder.
 
 ```sh
-cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.4.0 paperpaw-dev
+cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.1 paperpaw-dev
 paperpaw-dev check path/to/my-theme --quick
-paperpaw-dev package path/to/my-theme --release 0.4.0
+paperpaw-dev package path/to/my-theme --release 0.5.0-beta.1
 ```
 
 Or take `paperpaw-dev` ready built from a release. It is in

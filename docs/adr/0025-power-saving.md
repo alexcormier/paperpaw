@@ -2,8 +2,9 @@
 
 - Status: Accepted; implemented in the kernel, the SDK, the power plugin
   and the first-party plugins, and the base fixes in the X4 and X4 Pro
-  shell; the shells' part (`Io::Power`, `KernelBuilder::power`) still
-  to come
+  shell; the shells' part (`Io::Power`, `KernelBuilder::power`) and the
+  kernel's shared server routes (`Registrar::add_web_route`) still to
+  come
 - Date: 2026-10-20; jobs, timers by key, HTTP and servers (G2 of
   the SDK gaps) folded in the same day
 
@@ -431,7 +432,7 @@ makes. A question appears only when the reader actively opens
 something that needs the network (the store, Calibre, Wi-Fi transfer,
 an OPDS catalog): that screen shows it once, inline in its own layout
 and not as a pop-up over the page, "Offline mode. Go online for this?"
-with *Go online* and *Not now* (`ui::offline_offer`, the same for every
+with *Go online* and *Not now* (`ui::offline::OfflineOffer`, the same for every
 plugin). *Go online* sends `Command::GoOnline`: network for that screen
 until it closes, and the work held back rides along on the same
 connection. A request the reader makes elsewhere in Offline (an action
@@ -581,7 +582,7 @@ so all of it can be tried without hardware.
   `Registrar::add_work`), HTTP (`HttpRequest::{timeout, want_headers,
   max_body}`, `HttpReply::headers`, `Command::CancelHttp`), servers
   (`Registrar::add_web_route`, `Serve`'s lifetime),
-  `ui::offline_offer`, `HttpReply::refused`,
+  `ui::offline::OfflineOffer`, `HttpReply::refused`,
   `Manifest::uses`, `power` (`PowerLevel`, `Power`), `Env::power`,
   `events::POWER_CHANGED`, the settings' mode layer and limits.
   `Command::Schedule` is removed in favour of `Work::at` (its callers

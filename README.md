@@ -22,10 +22,12 @@ firmware of its own on the Xteink X4 and X4 Pro, and as an app for
 Android e-readers. Free and open source: no account, no ads, no
 tracking.
 
-> **Status: beta (0.5.0-beta.1), for testers and developers.** The
-> firmware for the Xteink X4 and X4 Pro runs on both readers and in the
-> desktop emulator. It is a beta: expect rough edges, and keep a copy of
-> your books. Please report problems in the
+> **Status: beta (0.5.0-beta.1), for testers and plugin developers.**
+> The firmware for the Xteink X4 and X4 Pro runs on both readers and in
+> the desktop emulator. It is a beta: expect rough edges, and keep a
+> copy of your books. The plugin SDK is a beta too: it may still change
+> before 1.0, and a plugin with code is rebuilt when a release raises
+> the plugin interface. Please report problems in the
 > [issues](https://github.com/hthoene/paperpaw/issues). It reads EPUB,
 > FB2, Markdown, HTML, CBZ, plain text and XTC. It shares reading
 > positions, bookmarks and highlights with KOReader, takes books from
@@ -298,13 +300,15 @@ cargo run -p paperpaw-emulator -- --headless --profile boox-go-7 --set core.lang
 | `tools/plugin-files` | Builds PaperPaw's own store plugins as files for each release |
 | `tools/xtensa-std` | The X4 Pro's core libraries for code plugins |
 | `tools/x4-remote.py` | Drives an X4 over USB with developer firmware |
+| `tools/usb-transfer.py` | Installs plugins and adds books over the USB cable or to the emulator ([docs/usb-transfer.md](docs/usb-transfer.md)) |
+| `tools/interface.py` | Writes the files that show what code plugins see of the SDK (`api.txt`, `shape.txt`) |
 | `tools/checks` | Checks of the source: file sizes, control characters |
 | `shells/desktop` | Desktop emulator with device profiles |
 | `shells/web` | The emulator in a browser (WebAssembly), with data plugins and their checks ([web emulator](docs/web-emulator.md)) |
 | `shells/android` | Android app for e-readers such as Boox ([build and install](shells/android/README.md)) |
 | `shells/xteink` | Firmware for the Xteink X4 and X4 Pro ([build, save the stock firmware, flash](shells/xteink/README.md)) |
 | `samples/` | Emulator library with public-domain books, sample plugins |
-| `docs/` | [Writing plugins](docs/plugins.md) and [architecture decisions](docs/adr/) |
+| `docs/` | [Writing plugins](docs/plugins.md), the [SDK's design rules](docs/sdk-design.md), [files on the card](docs/data-files.md), [porting to a device](docs/porting.md), the [security model](docs/security-model.md), the [USB transfer](docs/usb-transfer.md), the [web emulator](docs/web-emulator.md) and [architecture decisions](docs/adr/) |
 
 ## Contributing
 

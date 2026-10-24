@@ -1,6 +1,7 @@
 # PaperPaw on the Xteink X4
 
-The firmware for the Xteink X4 and the X4 Pro. See
+The firmware for the Xteink X4 and the X4 Pro, in beta with
+0.5.0-beta.1. See
 [ADR 0013](../../docs/adr/0013-x4-firmware.md) for how it is built; its
 hardware parts are in [`paperpaw-x4`](../../crates/paperpaw-x4) and
 [`paperpaw-fat`](../../crates/paperpaw-fat), tested on a computer.
@@ -10,14 +11,14 @@ hardware parts are in [`paperpaw-x4`](../../crates/paperpaw-x4) and
 It is for the X4 and, built with the feature `x4-pro`, for the X4 Pro
 (ESP32-S3); the display controller (SSD1677, UC8179 or UC8279) is
 found at start. A build for the X4 Classic is there too, but not part
-of the beta ([below](#the-x4-classic)).
+of 0.5.0-beta.1 ([below](#the-x4-classic)).
 
 ## Build
 
 The Rust release pinned in this folder's `rust-toolchain.toml` builds
 it (rustup fetches it, with the target `riscv32imc-unknown-none-elf`):
 native code plugins run only on firmware built by the same compiler
-(ADR 0024), so each release names its toolchains; `versions.env` names
+(ADR 0026), so each release names its toolchains; `versions.env` names
 the X4 Pro's.
 
 ```sh
@@ -128,7 +129,7 @@ measured.
 
 ## The X4 Classic
 
-Not part of the beta: built, but not yet tried on one.
+Not part of 0.5.0-beta.1: built, but not yet tried on one.
 
 The X4 Classic ("X4 v2") is an ESP32-S3 board like the X4 Pro, with the
 X4's buttons and no touch or front light; an X4 image cannot run on it.

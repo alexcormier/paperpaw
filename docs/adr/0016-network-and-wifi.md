@@ -41,7 +41,7 @@ stays sans-I/O ([ADR 0003](0003-sans-io-kernel.md)).
   `NETWORK_WAIT_MS` (30 s), and goes to the shell once the state is
   online; then it fails as without a network. When work starts to wait
   the kernel emits `core.network-wanted`; when nothing uses the network
-  any more, `core.network-idle`. `Env::network` keeps its meaning: the
+  any more, `core.network-idle`. `env.caps().network` keeps its meaning: the
   device can reach a network, not that it does now.
 - **Known networks are shared data**: their passwords are kept with the
   passwords and keys as `wifi.<name>` (`paperpaw_sdk::wifi::{known,
