@@ -525,9 +525,21 @@ mod tests {
         // The keys in order, apart; out with a reinit, sealed.
         assert_eq!(
             gauge.sent,
-            [0x0414, 0x3672, 0xFFFF, 0xFFFF, ENTER_CONFIG, EXIT_REINIT, SEAL]
+            [
+                0x0414,
+                0x3672,
+                0xFFFF,
+                0xFFFF,
+                ENTER_CONFIG,
+                EXIT_REINIT,
+                SEAL
+            ]
         );
-        assert!(waited.0 >= 4 * KEY_GAP_MS && waited.0 < 20_000, "{}", waited.0);
+        assert!(
+            waited.0 >= 4 * KEY_GAP_MS && waited.0 < 20_000,
+            "{}",
+            waited.0
+        );
     }
 
     #[test]
