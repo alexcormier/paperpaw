@@ -645,6 +645,14 @@ impl Screen for PageScreen {
         let line = font.line_metrics(style.small()).line_height;
         let top = f32::from(self.top);
         let full = self.list.area().width;
+        // The text and the facts end where two rows still fit above the
+        // note (the largest text on a small screen): the text shortened,
+        // the facts that do not fit left out.
+        let kept = rows.len().min(2) as f32 * f32::from(style.row());
+        let bottom = f32::from(self.status.y.saturating_sub(style.gap())) - kept;
+        let fit = |y: f32, size: f32| {
+            ((bottom - y) / font.line_metrics(size).line_height).max(1.0) as usize
+        };
         let content = |mut ui: Option<&mut ui::Ui<'_>>| -> f32 {
             let mut y = top;
             let paragraph = |ui: &mut Option<&mut ui::Ui<'_>>,
@@ -681,19 +689,24 @@ impl Screen for PageScreen {
                     *y += metrics.line_height;
                 }
             };
+            let most = SUMMARY_LINES.min(fit(y, style.text()));
             paragraph(
                 &mut ui,
                 &mut y,
                 &text,
                 style.text(),
                 Color::BLACK,
-                SUMMARY_LINES,
+                most,
                 0.0,
             );
             y += style.gap() as f32;
             // The facts each after its icon, their texts lined up.
             let ink = style.faint(ui::Ink::Detail);
             for (icon, fact) in &facts {
+                let lines = font.wrap(style.small(), fact, width - room).len().min(3);
+                if y + line * lines as f32 > bottom {
+                    break;
+                }
                 if let Some(ui) = ui.as_deref_mut() {
                     let first = Rect::new(0, y as u16, full, line as u16);
                     ui.icon(icon, icon_size, margin, first, ink);
