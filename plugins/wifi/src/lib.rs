@@ -6,8 +6,8 @@
 //!
 //! By default the radio is off and comes on only when a plugin wants the
 //! network (a catalog, a sync, a transfer), joins the strongest network
-//! joined before, and goes off again a minute after nothing uses it: it
-//! costs battery and memory.
+//! joined before, and goes off again a minute after nothing uses it, or
+//! at once when home or a book shows: it costs battery and memory.
 
 #![no_std]
 
@@ -24,7 +24,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use paperpaw_sdk::builtin::{events, params};
+use paperpaw_sdk::builtin::{events, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
@@ -102,6 +102,15 @@ fn idle_seconds(env: &Env<'_>) -> u64 {
 
 fn wifi_commands(out: &mut Commands, commands: Vec<WifiCommand>) {
     out.extend(commands.into_iter().map(Command::Wifi));
+}
+
+/// Home or a book shows (the screen on top is the home's or the
+/// reader's): nothing there uses the network.
+fn at_rest(env: &Env<'_>) -> bool {
+    env.stack()
+        .last()
+        .and_then(|top| top.slot.as_ref())
+        .is_some_and(|slot| *slot == slots::HOME || *slot == slots::READER)
 }
 
 /// Sets the timer to switch the radio off, if nothing keeps it on.
@@ -353,6 +362,27 @@ impl Plugin for Wifi {
                 no_network(&mut policy, out);
             }
             wifi_commands(out, policy.wanted(&wifi.state, &known));
+        })?;
+
+        // Back home or in a book: the radio goes off now, not after its
+        // idle time, so that its memory (about 45 KB on the X4) is free
+        // before a book opens, and no battery goes on a radio nothing uses.
+        let p = policy.clone();
+        r.on(events::SCREEN_SHOWN, move |env, _, out| {
+            let Some(wifi) = env.wifi() else {
+                return;
+            };
+            let policy = p.borrow();
+            if at_rest(env)
+                && wifi.state.is_on()
+                && !wifi.state.is_hosting()
+                && !wifi.busy
+                && !policy.phone
+                && !policy.still_wanted(wifi, env.now())
+                && policy.may_go_off(charging_keeps_it(env))
+            {
+                out.push(Command::Wifi(WifiCommand::Off));
+            }
         })?;
 
         // The radio's state changed.

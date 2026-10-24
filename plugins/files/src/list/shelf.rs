@@ -332,9 +332,9 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
         }
     });
     if kind == Kind::Series {
-        entries.sort_by_key(|e| (e.number, e.key, e.offset));
+        entries.sort_unstable_by_key(|e| (e.number, e.key, e.offset));
     } else {
-        entries.sort_by_key(|e| (e.key, e.offset));
+        entries.sort_unstable_by_key(|e| (e.key, e.offset));
     }
     entries
 }

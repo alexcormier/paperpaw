@@ -21,6 +21,8 @@ const WIFI_FILE: &str = "wifi.ini";
 
 /// Gives the networks the flasher wrote to the card, and erases them
 /// from the flash.
+// A frame of its own, off the stack before the kernel is built.
+#[inline(never)]
 pub fn take(flash: &Flash, storage: &dyn Storage) {
     let mut flash = flash.borrow_mut();
     let mut table = Box::new([0u8; PARTITION_TABLE_MAX_LEN]);

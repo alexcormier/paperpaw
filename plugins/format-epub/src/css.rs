@@ -12,6 +12,7 @@
 //!
 //! The parser is fed text in chunks and keeps only the rule being read.
 
+use alloc::collections::TryReserveError;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -412,6 +413,8 @@ pub(crate) struct Rules {
     pub faces: Vec<FontFace>,
     /// One's own rules (see [`Rules::add_own`]): after all others.
     own: Vec<(Selector, Props)>,
+    /// A rule or font was dropped as the heap had no room for it.
+    pub out_of_memory: bool,
 }
 
 /// A font embedded with `@font-face`.
@@ -501,6 +504,10 @@ impl Rules {
             return;
         }
         let (path, _) = resolve(base, &url);
+        if self.faces.try_reserve(1).is_err() {
+            self.out_of_memory = true;
+            return;
+        }
         self.faces.push(FontFace {
             family,
             bold,
@@ -515,56 +522,82 @@ impl Rules {
             return;
         }
         for selector in selectors.split(',').filter_map(Selector::parse) {
-            if self.rules.len() < MAX_RULES {
-                self.rules.push((selector, props));
+            if self.rules.len() >= MAX_RULES {
+                break;
             }
+            if self.rules.try_reserve(1).is_err() {
+                self.out_of_memory = true;
+                break;
+            }
+            self.rules.push((selector, props));
         }
     }
 
     /// Cache form: one `@family<TAB>name` line per family, then one
     /// `selector<TAB>props` line per rule (embedded fonts are kept apart,
     /// see `package`).
+    #[cfg(test)]
     pub fn encode(&self) -> String {
         let mut out = String::new();
-        for family in &self.families {
-            out.push_str("@family\t");
-            out.push_str(family);
-            out.push('\n');
-        }
-        for (selector, props) in &self.rules {
-            if let Some(tag) = &selector.tag {
-                out.push_str(tag);
-            }
-            if let Some(class) = &selector.class {
-                out.push('.');
-                out.push_str(class);
-            }
-            out.push('\t');
-            props.encode(&mut out);
-            out.push('\n');
-        }
+        self.encode_lines(&mut |line| out.push_str(line));
         out
     }
 
+    /// The cache form (see `encode`) a line at a time, each with its line
+    /// end, so that it is never all in memory.
+    pub fn encode_lines(&self, out: &mut dyn FnMut(&str)) {
+        let mut line = String::new();
+        for family in &self.families {
+            line.clear();
+            line.push_str("@family\t");
+            line.push_str(family);
+            line.push('\n');
+            out(&line);
+        }
+        for (selector, props) in &self.rules {
+            line.clear();
+            if let Some(tag) = &selector.tag {
+                line.push_str(tag);
+            }
+            if let Some(class) = &selector.class {
+                line.push('.');
+                line.push_str(class);
+            }
+            line.push('\t');
+            props.encode(&mut line);
+            line.push('\n');
+            out(&line);
+        }
+    }
+
+    #[cfg(test)]
     pub fn decode(text: &str) -> Rules {
+        Self::try_decode(text).unwrap_or_default()
+    }
+
+    /// The rules of their cache form; an error where the heap has no room
+    /// for them. The list of rules is made once, as long as it must be.
+    pub fn try_decode(text: &str) -> Result<Rules, TryReserveError> {
         let mut families = Vec::new();
-        let rules = text
-            .lines()
-            .filter_map(|line| {
-                let (selector, props) = line.split_once('\t')?;
-                if selector == "@family" {
-                    families.push(String::from(props));
-                    return None;
-                }
-                Some((Selector::parse(selector)?, Props::decode(props)))
-            })
-            .collect();
-        Rules {
+        let mut rules = Vec::new();
+        let lines = text.lines().filter(|l| !l.starts_with("@family\t"));
+        rules.try_reserve_exact(lines.count())?;
+        for line in text.lines() {
+            let Some((selector, props)) = line.split_once('\t') else {
+                continue;
+            };
+            if selector == "@family" {
+                families.try_reserve(1)?;
+                families.push(String::from(props));
+            } else if let Some(selector) = Selector::parse(selector) {
+                rules.push((selector, Props::decode(props)));
+            }
+        }
+        Ok(Rules {
             rules,
             families,
-            faces: Vec::new(),
-            own: Vec::new(),
-        }
+            ..Rules::default()
+        })
     }
 }
 

@@ -12,11 +12,13 @@
 use paperpaw_core::{Io, Kernel, WifiEvent};
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_wifi::Wifi;
+use paperpaw_sdk::builtin::slots;
 use paperpaw_sdk::secrets::{FILE, Secrets};
 use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiNetwork, WifiState};
 use paperpaw_sdk::{
     Command, DeviceInfo, DisplayInfo, HttpRequest, Id, InputCaps, Instant, Manifest, MemoryClass,
-    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, Version,
+    MemoryStorage, Params, PixelFormat, Plugin, Priority, RegisterError, Registrar, ScreenSpec,
+    Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -42,6 +44,22 @@ const DEVICE: DeviceInfo = DeviceInfo {
 /// Asked for, the probe makes a request, which wants the network.
 const FETCH: Id = Id::new_static("probe.fetch");
 const REPLY: Id = Id::new_static("probe.reply");
+/// Asked for, the probe opens its tool, or goes home.
+const OPEN_TOOL: Id = Id::new_static("probe.open-tool");
+const GO_HOME: Id = Id::new_static("probe.go-home");
+const TOOL: Id = Id::new_static("probe.tool");
+const HOME: Id = Id::new_static("probe.home");
+
+/// A screen that shows nothing.
+struct Blank;
+
+impl paperpaw_sdk::Screen for Blank {
+    fn draw(&mut self, _: &mut paperpaw_sdk::Canvas<'_>, _: &paperpaw_sdk::Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled {
+        paperpaw_sdk::Handled::No
+    }
+}
 
 struct Probe;
 
@@ -52,6 +70,25 @@ impl Plugin for Probe {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec::new(
+            HOME,
+            "home",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            TOOL,
+            "tool",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
+        r.bind_slot(slots::HOME, HOME, Priority::DEFAULT)?;
+        r.subscribe(
+            OPEN_TOOL,
+            Box::new(|_, _, out| out.push(Command::OpenScreen(TOOL, Params::new()))),
+        )?;
+        r.subscribe(
+            GO_HOME,
+            Box::new(|_, _, out| out.push(Command::open_slot(slots::HOME))),
+        )?;
         r.subscribe(
             FETCH,
             Box::new(|_, _, out| {
@@ -151,6 +188,13 @@ impl Test {
         told
     }
 
+    /// The probe is asked for `what`; what the radio is told then.
+    fn ask(&mut self, what: Id) -> Vec<WifiCommand> {
+        let now = self.later(1);
+        self.kernel.send_event(now, what, Params::new());
+        self.radio()
+    }
+
     /// A plugin wants the network: the radio comes on and looks for
     /// networks.
     fn want(&mut self) {
@@ -221,4 +265,27 @@ fn the_radio_goes_off_once_joining_failed_for_as_long_as_work_waits() {
     assert!((1..=3).contains(&rounds), "{told:?}");
     assert_eq!(told.last(), Some(&WifiCommand::Off), "{told:?}");
     assert_eq!(told.iter().filter(|c| **c == WifiCommand::Off).count(), 1);
+}
+
+/// Back home from a tool that used the network, the radio goes off at
+/// once, not after its idle time: its memory is free before a book opens.
+#[test]
+fn the_radio_goes_off_at_once_back_home() {
+    let mut test = Test::new();
+    test.ask(OPEN_TOOL);
+    test.want();
+    // None in reach: the request fails, nothing waits; the radio waits
+    // for its idle time while the tool shows.
+    while test.event(WifiEvent::Scanned(Vec::new())) == [WifiCommand::Scan] {}
+    assert_eq!(test.wait(10, &[]), []);
+    assert_eq!(test.ask(GO_HOME), [WifiCommand::Off]);
+}
+
+/// Home while the network is still wanted: the radio stays on.
+#[test]
+fn the_radio_stays_on_at_home_while_work_waits() {
+    let mut test = Test::new();
+    test.ask(OPEN_TOOL);
+    test.want();
+    assert_eq!(test.ask(GO_HOME), []);
 }

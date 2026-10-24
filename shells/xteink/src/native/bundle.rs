@@ -59,6 +59,8 @@ pub struct Staged {
 
 /// Copies the plugins of the bundle behind the image onto the card, if
 /// there is one, and erases it (see the [module documentation](self)).
+// A frame of its own, off the stack before the kernel is built.
+#[inline(never)]
 pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
     let mut flash = flash.borrow_mut();
     let behind = behind_image(&mut flash).ok()?;

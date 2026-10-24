@@ -144,7 +144,12 @@ may exceed them. Existing code is not reworked for them in bulk.
    in memory while it is not used, large buffers allocated fallibly.
    Measure new features on the `xteink-x4` profile of the emulator. The
    memory tests (`shells/desktop/tests/memory.rs`) fail when opening and
-   reading a book takes more than 85 % of the heap.
+   reading a book takes more than 85 % of the heap. The stack (about
+   41 KiB) keeps 10 KiB or more unused: no large values built on it.
+   A stable sort (`sort`, `sort_by`, `sort_by_key`) takes 4 KiB of it
+   for any slice: use `sort_unstable*` where equal items cannot be told
+   apart, else `sort_by_cached_key`. `tools/stack-frames.py` shows the
+   biggest frames and the deepest chains of a firmware build.
 8. **No panics on bad input**: see architecture rule 6.
 9. **Comments in plain English**, written for readers whose first
    language is not English. English comes first everywhere, other

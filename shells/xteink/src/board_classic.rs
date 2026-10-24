@@ -151,6 +151,8 @@ impl Board {
         clippy::expect_used,
         reason = "without its buses the X4 Classic can do nothing; a panic shows why"
     )]
+    // A frame of its own, off the stack before the kernel is built.
+    #[inline(never)]
     pub fn take(mut p: Peripherals) -> Self {
         let mut power_latch = Output::new(p.GPIO1, Level::High, OutputConfig::default());
         power_latch.set_pad_hold(true);

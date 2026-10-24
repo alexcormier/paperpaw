@@ -123,7 +123,7 @@ impl Kernel {
         disabled: &[String],
         code: Option<CodePlugins>,
     ) {
-        found.sort_by(|a, b| a.manifest().id.cmp(&b.manifest().id));
+        found.sort_by_cached_key(|plugin| plugin.manifest().id);
         let Some(CodePlugins {
             mut native,
             mut loader,

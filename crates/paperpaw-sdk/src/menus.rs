@@ -457,7 +457,7 @@ impl Menus {
             .map(|e| &e.menu)
             .chain(self.custom.keys())
             .collect();
-        ids.sort();
+        ids.sort_unstable();
         ids.dedup();
         ids
     }
@@ -503,7 +503,7 @@ impl Menus {
             .copied()
             .filter(|e| e.by_order().is_some())
             .collect();
-        ordered.sort_by_key(|e| e.by_order());
+        ordered.sort_by_cached_key(|e| e.by_order());
         let mut ids: Vec<&Id> = ordered.into_iter().map(|e| &e.item).collect();
         let mut placed: Vec<&MenuEntry> = entries
             .into_iter()

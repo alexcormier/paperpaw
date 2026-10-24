@@ -141,7 +141,9 @@ impl Network {
     }
 
     /// One step: what the kernel asked, what happened, the answers. The
-    /// kernel's effects for the main loop to apply.
+    /// kernel's effects for the main loop to apply. The radio's, the
+    /// requests' and the clock's work keep frames of their own
+    /// (`#[inline(never)]`): the kernel's, called here too, goes deep.
     pub fn step(&mut self, kernel: &mut Kernel, now: Instant) -> Vec<Effects> {
         let mut effects = Vec::new();
         // The radio sleeps between beacons unless data moves, a page is
@@ -237,6 +239,7 @@ impl Network {
 
     /// Sets the clock over the network when it is not known or old, once
     /// the radio is online; a step at a time, never waiting.
+    #[inline(never)]
     fn sync_clock(&mut self, now: Instant) {
         let ms = now.0;
         let Some(net) = self.radio.online() else {

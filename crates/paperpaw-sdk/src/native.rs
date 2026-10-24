@@ -170,7 +170,7 @@ pub fn fetched_for(storage: &dyn Storage, native: &Native) -> Vec<(String, [u8; 
             ids.push(String::from(id));
         }
     });
-    ids.sort();
+    ids.sort_unstable();
     ids.into_iter()
         .filter_map(|id| {
             let header = read_header(storage, &native.path(&fetched_folder(&id)))?;

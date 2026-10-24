@@ -337,10 +337,13 @@ where
     // Where `set` would put the next entry of each of these sections
     // (before which line: after its last entry, else after its header),
     // and the line of each key (the last one, as it is the one read).
-    let mut anchors: BTreeMap<&str, (Option<usize>, Option<usize>)> = keys
-        .iter()
-        .map(|&(section, _)| (section, (None, None)))
-        .collect();
+    // Inserted one by one: collecting into a map sorts with `sort_by`,
+    // whose scratch takes 4 KiB of stack (too much on the X4). So below,
+    // where an unstable sort orders alike.
+    let mut anchors: BTreeMap<&str, (Option<usize>, Option<usize>)> = BTreeMap::new();
+    for &(section, _) in &keys {
+        anchors.insert(section, (None, None));
+    }
     let mut line_of: Vec<Option<usize>> = alloc::vec![None; texts.len()];
     let mut current = "";
     let mut line_count = 0;
@@ -386,15 +389,16 @@ where
             appended.entry(section).or_default().push(t);
         }
     }
-    // In the order `set` would append them.
+    // In the order `set` would append them (each line in one section only).
     let mut appended: Vec<(&str, Vec<usize>)> = appended.into_iter().collect();
-    appended.sort_by_key(|(_, lines)| lines[0]);
+    appended.sort_unstable_by_key(|(_, lines)| lines[0]);
 
     let mut out = if replaced.is_empty() && inserted.is_empty() {
         String::from(source)
     } else {
-        // Stable, so lines inserted at the same place keep their order.
-        inserted.sort_by_key(|&(at, _)| at);
+        // Lines inserted at the same place keep their order: the second
+        // of each pair counts up as they were pushed.
+        inserted.sort_unstable();
         let mut inserted = inserted.iter().peekable();
         let mut insert_before = |i: usize, out: &mut String| {
             while let Some(&(_, t)) = inserted.next_if(|&&(at, _)| at == i) {

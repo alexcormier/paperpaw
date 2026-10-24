@@ -47,6 +47,8 @@ type CardSlot = Slot<'static, 1, Blocking>;
 
 /// The card's FAT file system as PaperPaw's storage; without a card or
 /// one PaperPaw cannot read, no storage.
+// A frame of its own, off the stack before the kernel is built.
+#[inline(never)]
 pub fn mount(parts: CardParts) -> Box<dyn Storage> {
     let CardParts {
         host,

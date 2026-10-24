@@ -89,7 +89,7 @@ fn names(books: catalog::Books<'_>, shelf: Shelf) -> Vec<(String, usize)> {
             }
         }
     });
-    names.sort_by_key(|(n, _)| n.to_lowercase());
+    names.sort_by_cached_key(|(n, _)| n.to_lowercase());
     names
 }
 

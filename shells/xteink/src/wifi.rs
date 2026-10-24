@@ -268,6 +268,8 @@ impl Radio {
     }
 
     /// Moves the radio on: tasks, the network, what to report.
+    // A frame of its own: not under the kernel's work in `Network::step`.
+    #[inline(never)]
     pub fn poll(&mut self) -> Vec<WifiEvent> {
         if let Some(on) = &mut self.on {
             on.net.poll();

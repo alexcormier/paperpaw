@@ -85,7 +85,11 @@ pub(crate) fn feed(
     emit: &mut dyn FnMut(Token<'_>),
 ) -> Result<(), DocumentError> {
     let mut chunk = [0u8; 1024];
-    let mut utf8 = Vec::with_capacity(3 * chunk.len());
+    let mut utf8 = Vec::new();
+    if matches!(encoding, Encoding::Single(_)) {
+        utf8.try_reserve_exact(3 * chunk.len())
+            .map_err(|_| DocumentError::OutOfMemory)?;
+    }
     let mut at = 0u64;
     loop {
         let n = storage.read_at(path, at, &mut chunk)?;
@@ -93,8 +97,8 @@ pub(crate) fn feed(
             break;
         }
         at += n as u64;
-        match encoding {
-            Encoding::Utf8 => tokenizer.feed(&chunk[..n], emit),
+        let fed = match encoding {
+            Encoding::Utf8 => tokenizer.try_feed(&chunk[..n], emit),
             Encoding::Single(table) => {
                 utf8.clear();
                 let mut buf = [0u8; 4];
@@ -106,9 +110,10 @@ pub(crate) fn feed(
                         utf8.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
                     }
                 }
-                tokenizer.feed(&utf8, emit);
+                tokenizer.try_feed(&utf8, emit)
             }
-        }
+        };
+        fed.map_err(|_| DocumentError::OutOfMemory)?;
     }
     tokenizer.finish(emit);
     Ok(())

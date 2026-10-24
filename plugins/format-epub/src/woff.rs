@@ -103,7 +103,7 @@ mod tests {
                 (tag, &font[offset..offset + length])
             })
             .collect();
-        out.sort_by_key(|(tag, _)| *tag);
+        out.sort_by_cached_key(|(tag, _)| *tag);
         out
     }
 
