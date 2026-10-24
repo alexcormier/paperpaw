@@ -6,6 +6,25 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.4] - 2026-10-24
+
+A beta for updates over the air, from testing the update to beta.2 on
+the X4 and X4 Pro, and for the largest interface text, which every
+screen now takes. Code plugins built for earlier betas run unchanged:
+the plugin interface stays 2.
+
+### Fixed
+
+- After an update passed its first minute on trial, the X4s restart by
+  themselves, so that code plugins (store tools) are there again; before,
+  they were missing until the next start.
+- A download that got no answer at all (seen on the second connection
+  after the update check, until a restart) is tried once more with the
+  radio started anew.
+- After an update the device no longer asks to make Diagnostics the home
+  screen: it no longer binds the home slot, and the plugin manager offers
+  a new screen for a slot only when it is bound as high as the one in use.
+
 ### Added
 
 - SDK: `UiStyle::noted_row_for` makes a list's rows as high as its

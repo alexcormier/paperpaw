@@ -127,7 +127,7 @@ network, updates and remote control stay one. In the order it was done:
     coalesced while the panel refreshes, the light in steps the eye sees
     as even.
 
-The X4 Classic took a day after that. It is not part of 0.5.0-beta.3:
+The X4 Classic took a day after that. It is not part of 0.5.0-beta.4:
 its firmware is built but not yet tried on one. It is an ESP32-S3 board with the X4
 Pro's glass, card, gauge and clock, the panel on other pins, and the
 X4's seven buttons each on a pin. It is a board file, `board_classic.rs`,
