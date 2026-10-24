@@ -120,7 +120,9 @@ fn a_drawn_list_tells_its_rows_and_their_texts() {
             rows.len(),
             |ui, i, rect, focused| {
                 let canvas = ui.canvas();
-                ui::draw_value_row(canvas, &env, &style, rect, focused, rows[i].0, rows[i].1);
+                ui::Row::value(rows[i].0, rows[i].1)
+                    .focused(focused)
+                    .draw(&mut ui::Ui::new(canvas, &env, &style), rect);
             },
         );
     });

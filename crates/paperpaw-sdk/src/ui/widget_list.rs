@@ -218,7 +218,7 @@ impl Screen for ListScreen {
         self.header
             .draw(&mut ui, &title, None, self.list.paging(rows.len()));
         let list = self.target.widgets(env);
-        let room = ui.icon_room(true);
+        let room = ui::icon_room(ui.env(), ui.style(), true);
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let ink = style.focus_ink(focused);

@@ -428,7 +428,7 @@ pub enum TextRole {
     Numeral,
 }
 
-/// How the focus of rows and items is drawn ([`draw_focus`]).
+/// How the focus of rows and items is drawn ([`Ui::focus`](super::Ui::focus)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Focus {
@@ -441,7 +441,7 @@ pub enum Focus {
     Soft,
 }
 
-/// The lines between rows ([`draw_separator`]).
+/// The lines between rows ([`Ui::separator`](super::Ui::separator)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Separators {
@@ -690,7 +690,7 @@ impl UiStyle {
     }
 
     /// Height of a row with a note: the title line, then up to
-    /// [`NOTE_LINES`] lines of small text (see [`draw_noted_row`]).
+    /// [`NOTE_LINES`] lines of small text (see [`Row::value`](super::Row::value)).
     pub fn noted_row(&self) -> u32 {
         self.noted_row_of(NOTE_LINES)
     }
@@ -720,7 +720,7 @@ pub fn focus_rect(style: &UiStyle, rect: Rect) -> Rect {
 /// Draws the focus of the row or item in `rect` (see [`focus_rect`]):
 /// black, for content drawn white on it. Every list draws its focus this
 /// way, so it looks the same everywhere.
-pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
+pub(crate) fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
     let r = focus_rect(style, rect);
     if style
         .look
@@ -750,7 +750,7 @@ pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
 /// Draws the line below the row in `rect` as the style's separators
 /// are: `indent` is where the row's text starts after the margin (e.g.
 /// right of an icon), where faint lines start.
-pub fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, indent: u16) {
+pub(crate) fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, indent: u16) {
     let part = super::look::SeparatorPart { row: rect, indent };
     if style.look.separator(canvas, style, part) {
         return;

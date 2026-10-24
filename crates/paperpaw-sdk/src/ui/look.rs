@@ -40,7 +40,7 @@ use paperpaw_platform::{Color, Rect};
 
 use super::UiStyle;
 
-/// The switch of an on/off setting ([`draw_switch`](super::draw_switch)).
+/// The switch of an on/off setting ([`Ui::switch`](super::Ui::switch)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SwitchPart {
@@ -63,7 +63,7 @@ pub struct CheckPart {
     pub inverted: bool,
 }
 
-/// The focus of a row or an item ([`draw_focus`](super::draw_focus)):
+/// The focus of a row or an item ([`Ui::focus`](super::Ui::focus)):
 /// what is drawn on it comes in white.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -72,7 +72,7 @@ pub struct FocusPart {
     pub rect: Rect,
 }
 
-/// The line below a row ([`draw_separator`](super::draw_separator)).
+/// The line below a row ([`Ui::separator`](super::Ui::separator)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SeparatorPart {
@@ -99,8 +99,8 @@ impl FramePart {
     }
 }
 
-/// A button's frame ([`draw_button`](super::draw_button),
-/// [`draw_icon_button`](super::draw_icon_button)); its label or drawing
+/// A button's frame ([`Ui::button`](super::Ui::button),
+/// [`Ui::icon_button`](super::Ui::icon_button)); its label or drawing
 /// comes after, in the ink the painter returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -112,7 +112,7 @@ pub struct ButtonPart {
     pub focused: bool,
 }
 
-/// A header's background ([`draw_header`](super::draw_header)); its title
+/// A header's background ([`Ui::header`](super::Ui::header)); its title
 /// and note come after, in the ink the painter returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -128,7 +128,7 @@ pub struct HintRowPart {
     pub area: Rect,
 }
 
-/// A progress bar ([`draw_progress`](super::draw_progress)).
+/// A progress bar ([`Ui::progress`](super::Ui::progress)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ProgressPart {

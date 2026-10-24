@@ -308,7 +308,7 @@ enum DateField {
 ///   first), up and down change it by one, as do the page buttons (the
 ///   only ones up and down on devices such as the Xteink X4) and *next*
 ///   and *previous*. The focused field's value stands on the focus
-///   ([`draw_focus`](crate::ui::draw_focus)). On touch screens the focus shows
+///   ([`Ui::focus`](crate::ui::Ui::focus)). On touch screens the focus shows
 ///   from the first button pressed, which does nothing else.
 ///
 /// Minutes and hours go round (59 to 0, 23 to 0) without carrying over,

@@ -81,12 +81,13 @@ Read, in this order, and skim what is relevant to the task:
 - **Screens are drawn with the SDK's `ui` building blocks**, never with
   positions computed by hand: `ui::Stack` (parts one below the other),
   `ui::columns` (equal columns, e.g. two buttons), `ui::CellGrid` (cells
-  with taps and focus), `ui::draw_card` (a group on a card or in a
-  frame), `ui::Segments` (a few options or tabs), `ui::Dialog` (a box
-  with a title, text and buttons), `ui::ListView` and the row functions
-  (`draw_value_row`, `draw_switch_row`, `Slider`, ...), `ui::draw_button`,
-  `ui::draw_header`, `ui::draw_message`, `ui::draw_empty`, `ask::text`
-  and `ask::choice`. Sizes come from `UiStyle::new(env)` (`margin`,
+  with taps and focus), `ui::Segments` (a few options or tabs),
+  `ui::Dialog` (a box with a title, text and buttons), `ui::ListView`
+  with `ui::Row` (`Row::value`, `Row::switch`, `Row::number`) and
+  `Slider`, `ui::Label` for text, and what a `ui::Ui` (made in `draw`
+  with `Ui::new(canvas, env, &style)`) draws: `ui.card(..)`,
+  `ui.button(..)`, `ui.header(..)`, `ui.message(..)`, `ui.empty(..)`;
+  `ask::text` and `ask::choice`. Sizes come from `UiStyle::new(env)` (`margin`,
   `gap`, `row`, text sizes), so the screen follows the reader's text size
   and look and works by touch and with buttons alone. The table "Which
   building block for what" in `docs/plugins.md` says which for what;

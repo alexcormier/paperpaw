@@ -364,14 +364,14 @@ fn messages(ui: &mut ui::Ui<'_>, area: Rect) {
     let (env, style) = (ui.env(), ui.style());
     let width = area.width;
     let mut stack = ui::Stack::new(area, style.gap());
-    let heading = stack.take(ui.heading_height());
+    let heading = stack.take(ui::heading_height(ui.env(), ui.style()));
     ui.heading(heading, env.i18n().tr("ui-kit.heading"));
     // Each as high as all its words need.
     let text = env.i18n().tr("ui-kit.note");
-    let note = stack.take(ui.note_line_height(width, text));
+    let note = stack.take(ui::note_line_height(ui.env(), ui.style(), width, text));
     ui.note_line(note, text);
     let text = env.i18n().tr("ui-kit.message");
-    let message = stack.take(ui.message_height(width, text));
+    let message = stack.take(ui::message_height(ui.env(), ui.style(), width, text));
     ui.message(message, text);
 }
 

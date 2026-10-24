@@ -7,7 +7,7 @@
 use super::*;
 
 /// A black header bar with a title and an optional right-aligned note.
-pub fn draw_header(
+pub(crate) fn draw_header(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,

@@ -48,7 +48,7 @@ pub fn draw_number_note(
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
-pub fn draw_noted_row(
+pub(crate) fn draw_noted_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -205,7 +205,7 @@ pub(super) fn title_lines(
 /// [`draw_value_row`] draws it): a row ([`UiStyle::row`]), taller where
 /// the title takes more lines beside the value. Its title is never
 /// shortened in a row as high.
-pub fn value_row_height(
+pub(crate) fn value_row_height(
     env: &Env<'_>,
     style: &UiStyle,
     width: u16,
@@ -224,7 +224,7 @@ pub fn value_row_height(
 /// `note` (as [`draw_noted_row`] draws it): a noted row
 /// ([`UiStyle::noted_row`]), taller where the title takes more lines
 /// beside the value; without a note, [`value_row_height`].
-pub fn noted_row_height(
+pub(crate) fn noted_row_height(
     env: &Env<'_>,
     style: &UiStyle,
     width: u16,
@@ -248,7 +248,7 @@ pub fn noted_row_height(
 /// [`draw_switch_row`] draws it): a row ([`UiStyle::row`]) or a noted one
 /// ([`UiStyle::noted_row`]), taller where the title takes more lines
 /// beside the switch. Its title is never shortened in a row as high.
-pub fn switch_row_height(
+pub(crate) fn switch_row_height(
     env: &Env<'_>,
     style: &UiStyle,
     width: u16,
@@ -366,7 +366,7 @@ pub(super) fn draw_note_below(
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
-pub fn draw_value_row(
+pub(crate) fn draw_value_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -805,7 +805,7 @@ pub fn draw_setting_row(
     }
 }
 
-/// A setting's row with a switch: as [`draw_switch_row`], on
+/// A setting's row with a switch: as [`Row::switch`](super::Row::switch), on
 /// [`RowLines`] (the switch below the title, at the right, where the
 /// title would not fit beside it).
 #[allow(
@@ -861,9 +861,10 @@ pub fn draw_lines_note(
     draw_note_below(canvas, env, style, rect, lines.bottom(), focused, note);
 }
 
-/// The − and + of a number row showing `value`, exactly where
-/// [`draw_number`] and [`draw_stepper`] (and their `_lines` forms) draw
-/// them with `room`: for the hit areas of a screen of its own.
+/// The − and + of a number row showing `value`, exactly where a
+/// [`Row::number`](super::Row::number) and [`draw_stepper`] (and their
+/// `_lines` forms) draw them with `room`: for the hit areas of a screen of
+/// its own.
 pub fn value_stepper(
     env: &Env<'_>,
     style: &UiStyle,
@@ -930,29 +931,10 @@ pub fn number_room<'a>(
     widest.1
 }
 
-/// A number on a light row: its title, then `[−] value [+]` exactly as in
-/// menus, with `room` for the value (see [`stepper`]); `focus` frames the
-/// `−` (`Some(false)`) or the `+` (`Some(true)`).
-#[allow(
-    clippy::too_many_arguments,
-    reason = "its inputs are separate things; a struct of them would serve this call alone"
-)]
-pub fn draw_number(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    rect: Rect,
-    title: &str,
-    value: &str,
-    room: &str,
-    focus: Option<bool>,
-) {
-    let lines = RowLines::one(rect);
-    draw_number_lines(canvas, env, style, lines, title, value, room, focus);
-}
-
-/// [`draw_number`] on [`RowLines`]: the `−` value `+` below the title
-/// where they are stacked.
+/// A number on a light row on [`RowLines`]: its title, then `[−] value
+/// [+]` exactly as in menus, with `room` for the value (see [`stepper`]),
+/// below the title where they are stacked; `focus` frames the `−`
+/// (`Some(false)`) or the `+` (`Some(true)`).
 #[allow(
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"

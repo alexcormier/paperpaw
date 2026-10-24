@@ -475,7 +475,7 @@ impl PhoneScreen {
 fn draw_opening(ui: &mut ui::Ui<'_>, room: Rect) {
     let (env, style) = (ui.env(), ui.style());
     let text = env.i18n().tr("wifi.phone.opening");
-    if ui.message_height(room.width, text) <= room.height {
+    if ui::message_height(ui.env(), ui.style(), room.width, text) <= room.height {
         return ui.message(room, text);
     }
     let Some(font) = ui.font() else {

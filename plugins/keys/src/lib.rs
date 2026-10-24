@@ -633,8 +633,8 @@ impl Screen for ListScreen {
         let place = self.place().clone();
         let layers = place.layer_refs();
         let entries = &self.entries;
-        let room = ui.icon_room(true);
-        let shown = ui.focus_shown();
+        let room = ui::icon_room(ui.env(), ui.style(), true);
+        let shown = ui::focus_shown(ui.env());
         self.rows.draw(&mut ui, shown, |ui, index, rect, focused| {
             let ink = style.focus_ink(focused);
             match &entries[index] {
@@ -1072,8 +1072,8 @@ impl Screen for PickScreen {
             .draw(&mut ui, &self.title, None, Some(self.rows.paging()));
         let entries = &self.entries;
         let query = &self.query;
-        let room = ui.icon_room(true);
-        let shown = ui.focus_shown();
+        let room = ui::icon_room(ui.env(), ui.style(), true);
+        let shown = ui::focus_shown(ui.env());
         self.rows.draw(&mut ui, shown, |ui, index, rect, focused| {
             let ink = style.focus_ink(focused);
             match &entries[index] {

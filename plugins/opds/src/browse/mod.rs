@@ -358,8 +358,7 @@ impl BrowseScreen {
         let status = if empty {
             let s = self.status;
             let top = self.list.area().y;
-            let needed = ui
-                .note_line_height(s.width, &text)
+            let needed = ui::note_line_height(ui.env(), ui.style(), s.width, &text)
                 .clamp(s.height, s.bottom().saturating_sub(u32::from(top)) as u16);
             Rect::new(
                 s.x,

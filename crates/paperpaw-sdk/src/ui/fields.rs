@@ -112,7 +112,7 @@ fn title_lines(
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
-pub fn draw_text_field(
+pub(crate) fn draw_text_field(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,

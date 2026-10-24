@@ -341,7 +341,7 @@ impl Screen for ViewScreen {
         let job = self.job.as_ref();
         let queued = self.queued.as_slice();
         let jump = self.list.pages(self.len()) > 1;
-        let room = ui.icon_room(true);
+        let room = ui::icon_room(ui.env(), ui.style(), true);
         let top = &self.top;
         let order = self.order;
         let len = self.len();

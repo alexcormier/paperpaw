@@ -744,7 +744,7 @@ impl Screen for Popup {
                 .and(self.line_area(env, self.top + n))
             {
                 // With the buttons, the one confirm opens.
-                let focused = ui.focus_shown()
+                let focused = ui::focus_shown(ui.env())
                     && self.more_shown(env).map(|m| m.begins)
                         == self.more_at(self.top + n).map(|m| m.begins);
                 ui.canvas()

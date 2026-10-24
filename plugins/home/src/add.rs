@@ -353,7 +353,7 @@ impl AddScreen {
         let (env, style) = (ui.env(), self.style);
         let len = self.rows.len();
         let rows = &self.rows;
-        let room = ui.icon_room(true);
+        let room = ui::icon_room(ui.env(), ui.style(), true);
         self.list.draw(ui, len, |ui, index, rect, focused| {
             let ink = style.focus_ink(focused);
             let (icon, title, value) = match &rows[index] {

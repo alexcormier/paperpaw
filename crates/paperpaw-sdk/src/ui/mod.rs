@@ -52,7 +52,7 @@ pub use list::*;
 pub use number_edit::{NumberEdit, editing_hint};
 pub use paging::Paging;
 pub use picker::{DateOrder, DatePicker, PickerPart, TimePicker};
-pub use progress::*;
+pub(crate) use progress::*;
 pub use response::{Response, focus_shown};
 pub use row::{Row, RowKind, RowPart};
 pub use rows::Rows;

@@ -124,12 +124,12 @@ proptest! {
         let row = Rect { height: rect.height.max(style.row()), ..rect };
         let noted = Rect { height: rect.height.max(style.noted_row() as u16), ..rect };
         let draws: [(Rect, Draw<'_>); 6] = [
-            (row, &|c| ui::draw_value_row(c, &env, &style, row, focused, &title, &value)),
-            (noted, &|c| ui::draw_noted_row(c, &env, &style, noted, focused, &title, &value, &note)),
-            (noted, &|c| ui::draw_switch_row(c, &env, &style, noted, focused, &title, &note, on)),
-            (row, &|c| ui::draw_number(c, &env, &style, row, &title, &number, "", focused.then_some(on))),
+            (row, &|c| ui::Row::value(&title, &value).focused(focused).draw(&mut ui::Ui::new(c, &env, &style), row)),
+            (noted, &|c| ui::Row::value(&title, &value).note(&note).focused(focused).draw(&mut ui::Ui::new(c, &env, &style), noted)),
+            (noted, &|c| ui::Row::switch(&title, on).note(&note).focused(focused).draw(&mut ui::Ui::new(c, &env, &style), noted)),
+            (row, &|c| ui::Row::number(&title, &number, "").step_focus(focused.then_some(on)).draw(&mut ui::Ui::new(c, &env, &style), row)),
             (row, &|c| ui::draw_stepper(c, &env, &style, row, &title, &number, "", on)),
-            (row, &|c| ui::draw_heading(c, &env, &style, row, &title)),
+            (row, &|c| ui::Ui::new(c, &env, &style).heading(row, &title)),
         ];
         for (n, (bound, draw)) in draws.iter().enumerate() {
             let mut frame = frame(480, 800);
@@ -142,13 +142,14 @@ proptest! {
     #[test]
     fn the_focus_bar_stays_in_its_row(rect in row_strategy()) {
         let h = Harness::new(Device::TOUCH);
-        let style = UiStyle::new(&h.env());
+        let env = h.env();
+        let style = UiStyle::new(&env);
         let focus = ui::focus_rect(&style, rect);
         prop_assert!(focus.x >= rect.x && focus.right() <= rect.right());
         prop_assert!(focus.y >= rect.y && focus.bottom() <= rect.bottom());
         prop_assert!(!focus.is_empty());
         let mut frame = frame(480, 800);
-        ui::draw_focus(&mut frame.canvas(), &style, rect);
+        ui::Ui::new(&mut frame.canvas(), &env, &style).focus(rect);
         prop_assert_eq!(drawn_outside(&mut frame, focus), None);
     }
 }
@@ -169,13 +170,16 @@ fn the_switch_sits_at_the_rows_end_and_the_title_ends_before_it() {
     );
     let long = "A title much longer than the row could ever hold beside a switch";
     let (described, mut frame) = describe(480, 800, |c| {
-        ui::draw_switch_row(c, &env, &style, row, false, long, "", true);
+        ui::Row::switch(long, true)
+            .note("")
+            .focused(false)
+            .draw(&mut ui::Ui::new(c, &env, &style), row);
     });
     assert_eq!(drawn_outside(&mut frame, row), None);
     // From a gap before the switch on, nothing but the switch: the title
     // was shortened before it.
     let mut alone = support::frame(480, 800);
-    ui::draw_switch(&mut alone.canvas(), &style, row, true, false);
+    ui::Ui::new(&mut alone.canvas(), &env, &style).switch(row, true, false);
     let from = switch.x - style.gap();
     let (view, alone) = (frame.view(), alone.view());
     for y in row.y..row.bottom() as u16 {
@@ -207,16 +211,9 @@ fn steppers_of_rows_above_each_other_line_up() {
         assert_eq!(plus.right() + u32::from(style.margin()), row.right());
         assert!(minus.right() < u32::from(plus.x));
         let mut frame = frame(480, 800);
-        ui::draw_number(
-            &mut frame.canvas(),
-            &env,
-            &style,
-            row,
-            "Size",
-            value,
-            room,
-            Some(true),
-        );
+        ui::Row::number("Size", value, room)
+            .step_focus(Some(true))
+            .draw(&mut ui::Ui::new(&mut frame.canvas(), &env, &style), row);
         assert_eq!(drawn_outside(&mut frame, row), None, "{value}");
     }
     assert!(columns.windows(2).all(|w| w[0] == w[1]), "{columns:?}");
@@ -237,7 +234,7 @@ fn buttons_draw_inside_their_frame_and_tell_what_they_are() {
         for (on, focused) in [(false, false), (true, false), (false, true), (true, true)] {
             let rect = Rect::new(100, 100, 90, 50);
             let (described, mut frame) = describe(480, 300, |c| {
-                ui::draw_button(c, &env, &style, rect, label, on, focused);
+                ui::Ui::new(c, &env, &style).button(rect, label, on, focused);
             });
             // The focus frame goes round the button.
             let ring = if focused {
@@ -260,32 +257,21 @@ fn buttons_draw_inside_their_frame_and_tell_what_they_are() {
     }
 }
 
-/// A screen drawing through a `ui::Ui` draws and tells the same as with
-/// the parts' functions, also in a part of the canvas.
+/// A `ui::Ui` drawn in a part of the canvas draws nothing outside it, and
+/// tells what it draws.
 #[test]
-fn the_ui_context_draws_as_the_parts_do() {
+fn the_ui_context_keeps_to_its_part() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
     let style = UiStyle::new(&env);
-    let (rect, area) = (Rect::new(40, 40, 120, 50), Rect::new(0, 120, 480, 120));
-    let parts = describe(480, 300, |c| {
-        ui::draw_button(c, &env, &style, rect, "OK", false, true);
-        ui::draw_message(c, &env, &style, area, "A message of a few words");
-    });
-    let with_ui = describe(480, 300, |c| {
+    let rect = Rect::new(40, 40, 120, 50);
+    let part = Rect::new(0, 0, 100, 300);
+    let (told, mut clipped) = describe(480, 300, |c| {
         let mut ui = ui::Ui::new(c, &env, &style);
-        ui.button(rect, "OK", false, true);
-        ui.message(area, "A message of a few words");
+        ui.clipped(part).button(rect, "OK", true, false);
     });
-    assert_eq!(parts.0, with_ui.0);
-    assert!(parts.1.view().data == with_ui.1.view().data);
-    // Clipped: nothing outside the part.
-    let (_, mut clipped) = describe(480, 300, |c| {
-        let mut ui = ui::Ui::new(c, &env, &style);
-        ui.clipped(Rect::new(0, 0, 100, 300))
-            .button(rect, "OK", true, false);
-    });
-    assert_eq!(drawn_outside(&mut clipped, Rect::new(0, 0, 100, 300)), None);
+    assert_eq!(drawn_outside(&mut clipped, part), None);
+    assert_eq!(told[0].role, Role::Button);
 }
 
 /// A label on one line draws as `draw_label` does, keeps to its area
@@ -402,48 +388,31 @@ fn a_wrapped_label_takes_its_lines_and_cuts_the_last() {
     assert_eq!(drawn_outside(&mut frame, short), None);
 }
 
-/// A row as a value draws and measures as the rows' functions do, and
-/// tells what a point of it is on.
+/// A row as a value keeps within the height it says, and tells what a
+/// point of it is on.
 #[test]
-fn a_row_value_draws_measures_and_hits_as_its_parts() {
+fn a_row_value_keeps_to_its_height_and_hits_its_parts() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
     let style = UiStyle::new(&env);
     let width = 440;
-    let note = "A note of a few words below the title";
-    let same = |row: ui::Row<'_>, old: &dyn Fn(&mut paperpaw_sdk::Canvas<'_>, Rect)| {
-        let rect = Rect::new(20, 20, width, row.height(&env, &style, width));
-        let (told, before) = describe(480, 400, |c| old(c, rect));
-        let (said, after) = describe(480, 400, |c| {
-            row.draw(&mut ui::Ui::new(c, &env, &style), rect)
-        });
-        assert_eq!(told, said, "{row:?}");
-        assert!(before.view().data == after.view().data, "{row:?}");
-    };
+    let note = "A note of a few words below the title, long enough for two lines";
     for focused in [false, true] {
         for note in ["", note] {
-            let row = ui::Row::value("Title", "Value").note(note).focused(focused);
-            assert_eq!(
-                row.height(&env, &style, width),
-                ui::noted_row_height(&env, &style, width, "Title", "Value", note)
-            );
-            same(row, &|c, r| {
-                ui::draw_noted_row(c, &env, &style, r, focused, "Title", "Value", note)
-            });
-            let row = ui::Row::switch("Title", true).note(note).focused(focused);
-            assert_eq!(
-                row.height(&env, &style, width),
-                ui::switch_row_height(&env, &style, width, "Title", note)
-            );
-            same(row, &|c, r| {
-                ui::draw_switch_row(c, &env, &style, r, focused, "Title", note, true)
-            });
+            for row in [
+                ui::Row::value("Title", "Value"),
+                ui::Row::switch("Title", true),
+                ui::Row::number("Size", "12", "000"),
+            ] {
+                let row = row.note(note).focused(focused);
+                let rect = Rect::new(20, 20, width, row.height(&env, &style, width));
+                let (_, mut frame) = describe(480, 400, |c| {
+                    row.draw(&mut ui::Ui::new(c, &env, &style), rect);
+                });
+                assert_eq!(drawn_outside(&mut frame, rect), None, "{row:?}");
+            }
         }
     }
-    let row = ui::Row::number("Size", "12", "000").step_focus(Some(true));
-    same(row, &|c, r| {
-        ui::draw_number(c, &env, &style, r, "Size", "12", "000", Some(true))
-    });
     // What a point is on.
     let rect = Rect::new(
         20,
@@ -485,13 +454,7 @@ fn a_long_heading_ends_at_the_right_margin() {
         let style = UiStyle::new(&env);
         let row = Rect::new(0, 0, 413, style.row());
         let mut frame = frame(480, 800);
-        ui::draw_heading(
-            &mut frame.canvas(),
-            &env,
-            &style,
-            row,
-            "ßPö vßnäAAä üßääüWüßä Sßäük",
-        );
+        ui::Ui::new(&mut frame.canvas(), &env, &style).heading(row, "ßPö vßnäAAä üßääüWüßä Sßäük");
         assert_eq!(drawn_outside(&mut frame, row), None);
         let view = frame.view();
         let last = (0..480u16)
@@ -526,9 +489,7 @@ fn a_progress_bar_fills_inside_its_track() {
                 let shape = shape.view();
                 for permille in (0..=1000).step_by(7).chain([1, 2, 999, 1000]) {
                     let mut bar = frame(480, 200);
-                    ui::draw_progress(
-                        &mut bar.canvas(),
-                        &style,
+                    ui::Ui::new(&mut bar.canvas(), &env, &style).progress(
                         area,
                         permille,
                         paperpaw_sdk::Color::BLACK,
@@ -579,10 +540,7 @@ fn row_icons_are_centred_by_their_ink() {
             seen += 1;
             let row = Rect::new(0, 100, 480, style.row());
             let mut frame = frame(480, 800);
-            ui::draw_row_icon(
-                &mut frame.canvas(),
-                &env,
-                &style,
+            ui::Ui::new(&mut frame.canvas(), &env, &style).row_icon(
                 row,
                 room,
                 Some(icon),
@@ -732,10 +690,7 @@ fn the_header_keeps_to_the_content_margins() {
         let row = Rect::new(0, 100, 480, style.row());
         let mut icon = frame(480, 800);
         let room = ui::icon_room(&env, &style, true);
-        let label = ui::draw_row_icon(
-            &mut icon.canvas(),
-            &env,
-            &style,
+        let label = ui::Ui::new(&mut icon.canvas(), &env, &style).row_icon(
             row,
             room,
             Some("books"),
@@ -933,9 +888,9 @@ proptest! {
         let style = UiStyle::new(&env);
         let area = Rect::new(x, y, width, height);
         let draws: [Draw<'_>; 3] = [
-            &|c| ui::draw_message(c, &env, &style, area, &text),
-            &|c| ui::draw_note_line(c, &env, &style, area, &text),
-            &|c| ui::draw_empty(c, &env, &style, area, "books", &title, &text),
+            &|c| ui::Ui::new(c, &env, &style).message(area, &text),
+            &|c| ui::Ui::new(c, &env, &style).note_line(area, &text),
+            &|c| ui::Ui::new(c, &env, &style).empty(area, "books", &title, &text),
         ];
         for (n, draw) in draws.iter().enumerate() {
             let mut frame = frame(480, 800);
@@ -1043,10 +998,7 @@ fn an_empty_screen_shows_its_icon_when_there_is_room() {
     let style = UiStyle::new(&env);
     let area = Rect::new(0, 100, 480, 600);
     let (described, frame) = describe(480, 800, |c| {
-        ui::draw_empty(
-            c,
-            &env,
-            &style,
+        ui::Ui::new(c, &env, &style).empty(
             area,
             "books",
             "No books yet",
@@ -1148,17 +1100,9 @@ fn a_look_paints_the_parts_and_keeps_what_they_say() {
     let row = Rect::new(0, 100, 480, 80);
     let at = |style: &UiStyle| {
         let (described, frame) = describe(480, 300, |canvas| {
-            ui::draw_switch(canvas, style, row, true, false);
-            ui::draw_focus(canvas, style, Rect::new(0, 200, 480, 60));
-            ui::draw_button(
-                canvas,
-                &env,
-                style,
-                Rect::new(20, 20, 100, 50),
-                "OK",
-                false,
-                false,
-            );
+            ui::Ui::new(canvas, &env, style).switch(row, true, false);
+            ui::Ui::new(canvas, &env, style).focus(Rect::new(0, 200, 480, 60));
+            ui::Ui::new(canvas, &env, style).button(Rect::new(20, 20, 100, 50), "OK", false, false);
         });
         let view = frame.view();
         let switch = ui::switch_rect(style, row);
@@ -1206,7 +1150,7 @@ fn the_palette_sets_the_grays_the_parts_draw_in() {
         .with_palette(palette);
     let row = Rect::new(0, 0, 480, 80);
     let mut lined = frame(480, 100);
-    ui::draw_separator(&mut lined.canvas(), &style, row, 0);
+    ui::Ui::new(&mut lined.canvas(), &env, &style).separator(row, 0);
     let y = row.height - style.line();
     assert_eq!(lined.view().pixel(240, y), Color::gray(100));
     assert_eq!(style.ink(Ink::Muted), Color::gray(60));
@@ -1397,7 +1341,9 @@ fn a_numbers_steps_are_hit_where_they_are_drawn() {
     let rect = Rect::new(0, 100, 480, style.touch_row(u32::from(style.row())) as u16);
     for (room, value) in [("000 %", "• 20 %"), ("100 %", "• 9"), ("", "12345 px")] {
         let (described, _) = describe(480, 800, |c| {
-            ui::draw_number(c, &env, &style, rect, "Size", value, room, None);
+            ui::Row::number("Size", value, room)
+                .step_focus(None)
+                .draw(&mut ui::Ui::new(c, &env, &style), rect);
         });
         let drawn: Vec<Rect> = described
             .iter()
@@ -1451,14 +1397,6 @@ fn an_empty_screen_in_a_small_area_draws_inside_it() {
     let style = UiStyle::new(&env);
     let area = Rect::new(1, 0, 149, 60);
     let mut frame = frame(480, 800);
-    ui::draw_empty(
-        &mut frame.canvas(),
-        &env,
-        &style,
-        area,
-        "books",
-        "Ὕ\u{dd6}#🀰a\"",
-        "",
-    );
+    ui::Ui::new(&mut frame.canvas(), &env, &style).empty(area, "books", "Ὕ\u{dd6}#🀰a\"", "");
     assert_eq!(drawn_outside(&mut frame, area), None);
 }

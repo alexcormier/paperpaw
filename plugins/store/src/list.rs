@@ -348,7 +348,7 @@ impl Screen for ListScreen {
             ui.empty(self.area, icon, env.i18n().tr(title), text);
             return;
         }
-        let room = ui.icon_room(true);
+        let room = ui::icon_room(ui.env(), ui.style(), true);
         self.list
             .draw(&mut ui, self.keys, |ui, item, rect, focused| {
                 let entry = match item {

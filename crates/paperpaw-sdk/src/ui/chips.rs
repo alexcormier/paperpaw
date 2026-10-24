@@ -14,7 +14,7 @@ use crate::env::Env;
 use super::UiStyle;
 
 /// A row of chips, one of them chosen: each a button
-/// ([`draw_button`](super::draw_button)) as wide as its label needs with
+/// ([`Ui::button`](super::Ui::button)) as wide as its label needs with
 /// the room a button keeps at its sides
 /// ([`button_width`](super::button_width)), at least as wide as high, the
 /// style's gap apart, from the left of the area. A chip that does not fit
@@ -37,7 +37,7 @@ pub struct Chips {
 
 impl Chips {
     /// The chips of `labels` in `area`, measured in the UI font at the
-    /// size [`draw_button`](super::draw_button) sets them, centred in the
+    /// size [`Ui::button`](super::Ui::button) sets them, centred in the
     /// area's height.
     pub fn new<L: Into<Cow<'static, str>>>(
         env: &Env<'_>,

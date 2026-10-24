@@ -931,7 +931,7 @@ impl ListScreen {
         // A row, whose words are those drawn in it.
         ui.canvas().describe(Role::Row, "", rect).focused(focused);
         let ink = style.focus_ink(focused);
-        let room = ui.icon_room(true);
+        let room = ui::icon_room(ui.env(), ui.style(), true);
         let band = ui::title_area(style, rect);
         ui.row_icon(band, room, Some(row.icon), ink);
         let text = Rect::new(

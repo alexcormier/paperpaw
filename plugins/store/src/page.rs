@@ -679,7 +679,7 @@ impl Screen for PageScreen {
         );
         y += style.gap() as f32;
         // The facts each after its icon, their texts lined up.
-        let room = f32::from(ui.icon_room(true));
+        let room = f32::from(ui::icon_room(ui.env(), ui.style(), true));
         let icon_size = style.small() * ui::ICON_SCALE;
         let line = font.line_metrics(style.small()).line_height;
         for (icon, fact) in facts {

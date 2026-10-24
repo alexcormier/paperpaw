@@ -624,7 +624,7 @@ impl Screen for Browser {
             );
         }
         let decimal = env.i18n().tr("file-manager.decimal");
-        let room = ui.icon_room(true);
+        let room = ui::icon_room(ui.env(), ui.style(), true);
         let (page, first) = (&self.page, self.first);
         let active = self.focus == Focus::List;
         self.list.set_active(active);
