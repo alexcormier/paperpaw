@@ -21,7 +21,8 @@ folders and their entries for the plugin library:
 | `anywhere.sh <x4\|x4-pro> [<work-dir>]` | checks that a plugin's file is the same wherever it is built, as the plugin library's rebuild needs: the sample, with the SDK from a registry as an author's repository has it, built in two folders and compared (CI runs it) |
 | `sign.sh <dir> <paperpaw-sign> --key <file>` | signs the files apart from building them, so the key is on the disk only while it signs |
 | `catalogue.py <dist> <release> <base-url>` | makes each plugin's folder as a ZIP with its `plugin.ini` and its How it works, `how/<lang>.txt`, which the store shows. It also makes the entry `catalogue/<id>.toml` for the plugin library, and `SHA256SUMS`. It takes `--date YYYY-MM-DD` too, `--only <id>` for one plugin alone and `--tag <tag>` for the tag the files are at (`v<release>` where not given). `test_catalogue.py` tests it: `python3 -m unittest discover -s tools/plugin-files`. |
-| `versions.py [<since>]` | checks that each plugin that changed since the last release has a newer version (CI runs it; see below) |
+| `versions.py [<since>]` | checks that each plugin that changed since the last release, or its own, has a newer version (CI runs it; see below) |
+| `published.py files\|folders <dir> <releases.json>` | in a release, takes a plugin's file as published where its version and firmware were (`files`), and checks that a published version's folder is the same (`folders`) |
 
 A plugin added to `plugins.txt` gets a binary here (`src/bin/<id>.rs`),
 a dependency in `Cargo.toml`, and its place among the optional plugins
@@ -40,9 +41,12 @@ crate's (`version` in `plugins/<id>/Cargo.toml`, 1.0.0 to start), which
 its manifest says (`paperpaw_sdk::package_version!()`). Devices update a
 plugin only to a newer version. A release builds every plugin again for
 its firmware: one that did not change keeps its version, and the plugin
-library adds the new build to it. One that changed has a newer version:
-`versions.py` (CI) fails where a plugin's files (`plugins/<id>/`, its
-binary here) changed since the last release's tag and its version did
+library adds the new build to it, where the firmware's fingerprint
+changed; where it did not, the release takes the file as it was
+published (`published.py`), so a version never comes with other bytes.
+One that changed has a newer version: `versions.py` (CI) fails where a
+plugin's files (`plugins/<id>/`, its binary here) changed since the
+last release's tag, or since its own release, and its version did
 not. A change no reader sees keeps the version when each commit with it
 says so in its message, as a trailer:
 
