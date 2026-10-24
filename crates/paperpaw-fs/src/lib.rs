@@ -283,13 +283,17 @@ impl Storage for DirStorage {
             } else {
                 0
             };
-            entries.push((name, metadata.is_dir(), size));
+            entries.push((name, metadata.is_dir(), size, seconds(&metadata)));
         }
         entries.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-        for (name, is_dir, size) in &entries {
-            visit(DirEntry::new(name, *is_dir, *size));
+        for (name, is_dir, size, modified) in &entries {
+            visit(DirEntry::new(name, *is_dir, *size).with_modified(*modified));
         }
         Ok(())
+    }
+
+    fn modified(&self, path: &str) -> Option<i64> {
+        seconds(&fs::metadata(self.resolve(path).ok()?).ok()?)
     }
 
     fn remove(&self, path: &str) -> Result<(), StorageError> {
@@ -393,6 +397,16 @@ fn space(dir: &Path) -> Option<(u64, u64)> {
 #[cfg(not(any(unix, windows)))]
 fn space(_: &Path) -> Option<(u64, u64)> {
     None
+}
+
+/// When `metadata`'s file was last changed, in seconds since 1970.
+fn seconds(metadata: &fs::Metadata) -> Option<i64> {
+    let since = metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
+    i64::try_from(since.as_secs()).ok()
 }
 
 #[cfg(test)]

@@ -67,6 +67,11 @@ impl<B: Storage, P: Storage> Storage for Private<B, P> {
         storage.size(path)
     }
 
+    fn modified(&self, path: &str) -> Option<i64> {
+        let (storage, path) = self.route(path);
+        storage.modified(path)
+    }
+
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         let (storage, path) = self.route(path);
         storage.write(path, data)

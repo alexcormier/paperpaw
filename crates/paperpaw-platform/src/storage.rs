@@ -56,11 +56,26 @@ pub struct DirEntry<'a> {
     pub is_dir: bool,
     /// Size in bytes (0 for directories).
     pub size: u64,
+    /// When it was last changed, in seconds since 1970-01-01 as the
+    /// storage keeps it (a memory card's FAT: the device's local time,
+    /// read as UTC), where the storage tells.
+    pub modified: Option<i64>,
 }
 
 impl<'a> DirEntry<'a> {
     pub const fn new(name: &'a str, is_dir: bool, size: u64) -> Self {
-        Self { name, is_dir, size }
+        Self {
+            name,
+            is_dir,
+            size,
+            modified: None,
+        }
+    }
+
+    /// With the time it was last changed ([`DirEntry::modified`]).
+    pub const fn with_modified(mut self, modified: Option<i64>) -> Self {
+        self.modified = modified;
+        self
     }
 }
 
@@ -97,6 +112,13 @@ pub trait Storage {
 
     /// Deletes a file; deleting a missing file is not an error.
     fn remove(&self, path: &str) -> Result<(), StorageError>;
+
+    /// When the file or directory at `path` was last changed, in seconds
+    /// since 1970-01-01 as the storage keeps it ([`DirEntry::modified`]);
+    /// `None` where it is not there, or the storage does not tell.
+    fn modified(&self, _path: &str) -> Option<i64> {
+        None
+    }
 
     /// Whether a file exists.
     fn exists(&self, path: &str) -> bool {

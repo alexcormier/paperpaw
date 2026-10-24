@@ -173,6 +173,10 @@ impl Storage for Metered {
         self.inner.size(path)
     }
 
+    fn modified(&self, path: &str) -> Option<i64> {
+        self.inner.modified(path)
+    }
+
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         self.meter.io(0, data.len());
         self.inner.write(path, data)

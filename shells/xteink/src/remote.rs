@@ -62,7 +62,7 @@ impl Remote {
                     "PP:HEAP {} {} {left} {size} {} {}",
                     esp_alloc::HEAP.used(),
                     esp_alloc::HEAP.free(),
-                    largest_block(),
+                    crate::largest_block(),
                     esp_alloc::HEAP.stats().max_usage
                 );
             }
@@ -409,21 +409,6 @@ static PANIC: critical_section::Mutex<core::cell::RefCell<Option<String>>> =
 /// Keeps the last run's panic for `boot`.
 pub fn note_panic(message: Option<String>) {
     critical_section::with(|cs| PANIC.replace(cs, message));
-}
-
-/// The largest block of memory that could be had now (found by asking for
-/// blocks, given back at once).
-fn largest_block() -> usize {
-    let (mut can, mut cannot) = (0, esp_alloc::HEAP.free() + 1);
-    while cannot - can > 64 {
-        let size = (can + cannot) / 2;
-        if Vec::<u8>::new().try_reserve_exact(size).is_ok() {
-            can = size;
-        } else {
-            cannot = size;
-        }
-    }
-    can
 }
 
 /// Done.
