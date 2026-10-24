@@ -502,3 +502,47 @@ fn betas_are_updates_where_the_device_takes_them() {
     );
     assert!(!updates(&mut shopping), "{}", shopping.shown());
 }
+
+/// A plugin's page with a long summary and facts on several lines: what
+/// it says, its facts and its rows each below the other, nothing drawn
+/// over another part (each part's place, as told, apart).
+#[test]
+fn a_plugins_page_draws_its_parts_apart() {
+    let mut shopping = Shopping::new(&fruit());
+    shopping.choose("Reading");
+    shopping.choose("Apple");
+    let more = r#""source": "https://codeberg.org/someone/apple", "author_since": "2024-03-02", "author_plugins": 3,"#;
+    let long = "Reading aids for the words: bold starts of words, wider spacing of letters, words and lines, and a calmer type for those who read with dyslexia.";
+    let body = page("apple", "1.0.0", more).replace("Does apple.", long);
+    shopping.serve(&page_url("apple"), body.as_bytes());
+    shopping.kernel.render(&mut |_, _| {});
+    let parts = shopping.kernel.describe();
+    let heading = parts
+        .iter()
+        .position(|p| format!("{:?}", p.role) == "Heading");
+    let shown: Vec<_> = parts
+        .iter()
+        .enumerate()
+        .filter(|(i, p)| Some(*i) != heading && p.area.width > 0 && p.area.height > 0)
+        .map(|(_, p)| p)
+        .collect();
+    for (i, a) in shown.iter().enumerate() {
+        for b in &shown[i + 1..] {
+            // A part inside another (a row's own text) is no overlap.
+            let inside = |x: &paperpaw_sdk::Rect, y: &paperpaw_sdk::Rect| {
+                x.x >= y.x && x.y >= y.y && x.right() <= y.right() && x.bottom() <= y.bottom()
+            };
+            if inside(&a.area, &b.area) || inside(&b.area, &a.area) {
+                continue;
+            }
+            assert!(
+                a.area.intersection(&b.area).is_none(),
+                "{:?} {:?} over {:?} {:?}",
+                a.label,
+                a.area,
+                b.label,
+                b.area
+            );
+        }
+    }
+}

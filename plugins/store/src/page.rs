@@ -690,8 +690,11 @@ impl Screen for PageScreen {
             y += style.gap() as f32 / 3.0;
         }
         let gap = style.gap();
-        self.list.area().y = y as u16 + gap;
-        self.list.area().height = self.status.y.saturating_sub(self.list.area().y);
+        // The rows right below the facts (set, not a copy changed).
+        let mut area = self.list.area();
+        area.y = y as u16 + gap;
+        area.height = self.status.y.saturating_sub(area.y);
+        self.list.set_area(area);
         let texts: Vec<(String, String)> = rows
             .iter()
             .map(|&row| self.row_text(env, plugin, row))
