@@ -570,6 +570,11 @@ file to your report.
   `grid`.
 - SDK: `ui::choice::open` and `GridView::new` are gone (`ask::choice`,
   `GridView::asking`).
+- SDK: `ui::Ui`, what a screen draws with: the canvas, the environment
+  and the style together (`Ui::new(canvas, env, &style)`, read with
+  `canvas()`, `env()`, `style()`), the interface's parts its methods
+  (`ui.button(..)`, `ui.message(..)`, `ui.focus(..)` …). It borrows what
+  it is given and allocates nothing.
 - SDK: one input contract for the building blocks. Those that take the
   buttons' actions and gestures (`on_action`, `on_gesture`) answer with
   a `ui::Response`: `Ignored` (the screen's), `Same`, `Changed` (draw it

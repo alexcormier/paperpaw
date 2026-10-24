@@ -259,6 +259,33 @@ fn buttons_draw_inside_their_frame_and_tell_what_they_are() {
     }
 }
 
+/// A screen drawing through a `ui::Ui` draws and tells the same as with
+/// the parts' functions, also in a part of the canvas.
+#[test]
+fn the_ui_context_draws_as_the_parts_do() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let (rect, area) = (Rect::new(40, 40, 120, 50), Rect::new(0, 120, 480, 120));
+    let parts = describe(480, 300, |c| {
+        ui::draw_button(c, &env, &style, rect, "OK", false, true);
+        ui::draw_message(c, &env, &style, area, "A message of a few words");
+    });
+    let with_ui = describe(480, 300, |c| {
+        let mut ui = ui::Ui::new(c, &env, &style);
+        ui.button(rect, "OK", false, true);
+        ui.message(area, "A message of a few words");
+    });
+    assert_eq!(parts.0, with_ui.0);
+    assert!(parts.1.view().data == with_ui.1.view().data);
+    // Clipped: nothing outside the part.
+    let (_, mut clipped) = describe(480, 300, |c| {
+        let mut ui = ui::Ui::new(c, &env, &style);
+        ui.clipped(Rect::new(0, 0, 100, 300)).button(rect, "OK", true, false);
+    });
+    assert_eq!(drawn_outside(&mut clipped, Rect::new(0, 0, 100, 300)), None);
+}
+
 /// A section's heading too long for its row ends, shortened, at the
 /// right margin as the rows' values do: its last letter's ink stays in
 /// the row (it reached a pixel past it, 413 in a row 413 wide).

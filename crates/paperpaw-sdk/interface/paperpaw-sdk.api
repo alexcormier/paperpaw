@@ -3821,6 +3821,40 @@ pub fn paperpaw_sdk::ui::TimePicker::on_gesture(&mut self, &paperpaw_sdk::Gestur
 pub fn paperpaw_sdk::ui::TimePicker::set_focus(&mut self, usize)
 pub fn paperpaw_sdk::ui::TimePicker::twelve_hours(self, bool) -> Self
 pub fn paperpaw_sdk::ui::TimePicker::value(&self) -> paperpaw_sdk::time::Time
+pub struct paperpaw_sdk::ui::Ui<'c>
+impl<'c> paperpaw_sdk::ui::Ui<'c>
+pub fn paperpaw_sdk::ui::Ui<'c>::button(&mut self, paperpaw_platform::geometry::Rect, &str, bool, bool)
+pub fn paperpaw_sdk::ui::Ui<'c>::canvas(&mut self) -> &mut paperpaw_graphics::canvas::Canvas<'c>
+pub fn paperpaw_sdk::ui::Ui<'c>::card(&mut self, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Frame) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::Ui<'c>::clipped(&mut self, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::ui::Ui<'_>
+pub fn paperpaw_sdk::ui::Ui<'c>::disabling(&mut self, bool) -> paperpaw_sdk::ui::Ui<'_>
+pub fn paperpaw_sdk::ui::Ui<'c>::empty(&mut self, paperpaw_platform::geometry::Rect, &str, &str, &str)
+pub fn paperpaw_sdk::ui::Ui<'c>::empty_height(&self, u16, &str, &str) -> u16
+pub fn paperpaw_sdk::ui::Ui<'c>::env(&self) -> &'c paperpaw_sdk::Env<'c>
+pub fn paperpaw_sdk::ui::Ui<'c>::faint_button(&mut self, paperpaw_platform::geometry::Rect, &str, bool)
+pub fn paperpaw_sdk::ui::Ui<'c>::focus(&mut self, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_sdk::ui::Ui<'c>::focus_shown(&self) -> bool
+pub fn paperpaw_sdk::ui::Ui<'c>::font(&self) -> core::option::Option<paperpaw_sdk::FontHandle<'c>>
+pub fn paperpaw_sdk::ui::Ui<'c>::header(&mut self, paperpaw_platform::geometry::Rect, &str, core::option::Option<&str>)
+pub fn paperpaw_sdk::ui::Ui<'c>::heading(&mut self, paperpaw_platform::geometry::Rect, &str)
+pub fn paperpaw_sdk::ui::Ui<'c>::heading_height(&self) -> u16
+pub fn paperpaw_sdk::ui::Ui<'c>::icon(&mut self, &str, f32, f32, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color) -> f32
+pub fn paperpaw_sdk::ui::Ui<'c>::icon_button(&mut self, paperpaw_platform::geometry::Rect, &str, bool, bool) -> paperpaw_platform::pixel::Color
+pub fn paperpaw_sdk::ui::Ui<'c>::icon_room(&self, bool) -> u16
+pub fn paperpaw_sdk::ui::Ui<'c>::message(&mut self, paperpaw_platform::geometry::Rect, &str)
+pub fn paperpaw_sdk::ui::Ui<'c>::message_height(&self, u16, &str) -> u16
+pub fn paperpaw_sdk::ui::Ui<'c>::new(&'c mut paperpaw_graphics::canvas::Canvas<'_>, &'c paperpaw_sdk::Env<'_>, &'c paperpaw_sdk::ui::UiStyle) -> Self
+pub fn paperpaw_sdk::ui::Ui<'c>::note_line(&mut self, paperpaw_platform::geometry::Rect, &str)
+pub fn paperpaw_sdk::ui::Ui<'c>::note_line_height(&self, u16, &str) -> u16
+pub fn paperpaw_sdk::ui::Ui<'c>::progress(&mut self, paperpaw_platform::geometry::Rect, u16, paperpaw_platform::pixel::Color)
+pub fn paperpaw_sdk::ui::Ui<'c>::row_icon(&mut self, paperpaw_platform::geometry::Rect, u16, core::option::Option<&str>, paperpaw_platform::pixel::Color) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::Ui<'c>::separator(&mut self, paperpaw_platform::geometry::Rect, u16)
+pub fn paperpaw_sdk::ui::Ui<'c>::style(&self) -> &'c paperpaw_sdk::ui::UiStyle
+pub fn paperpaw_sdk::ui::Ui<'c>::switch(&mut self, paperpaw_platform::geometry::Rect, bool, bool)
+pub fn paperpaw_sdk::ui::Ui<'c>::text_field(&mut self, paperpaw_platform::geometry::Rect, bool, &str, &str, &str)
+pub fn paperpaw_sdk::ui::Ui<'c>::tr(&self, &'c str) -> &'c str
+impl core::fmt::Debug for paperpaw_sdk::ui::Ui<'_>
+pub fn paperpaw_sdk::ui::Ui<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::ui::UiStyle
 impl paperpaw_sdk::ui::UiStyle
 pub const paperpaw_sdk::ui::UiStyle::PLAIN: paperpaw_sdk::ui::UiStyle
