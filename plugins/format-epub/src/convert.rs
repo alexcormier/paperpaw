@@ -148,11 +148,16 @@ pub(crate) struct Entered {
     pub line_break: bool,
 }
 
-/// Paths of a chapter's cache files.
+/// Paths of a chapter's cache files, in a folder of the chapter's own:
+/// made beside those of hundreds of other chapters, each file would be
+/// looked for among all of theirs (on a FAT card, every name of the
+/// folder read again for each file made: seconds for a chapter).
 #[derive(Debug, Clone)]
 pub(crate) struct CachePaths {
     /// The book's cache directory.
     pub dir: String,
+    /// The chapter's folder in it.
+    pub folder: String,
     pub text: String,
     pub index: String,
     pub anchors: String,
@@ -166,7 +171,8 @@ pub(crate) struct CachePaths {
 impl CachePaths {
     /// The files of chapter `name` (`0`, `12`, …) in the cache `dir`.
     pub fn new(dir: &str, name: &str) -> Self {
-        let file = |extension: &str| alloc::format!("{dir}/{name}.{extension}");
+        let folder = alloc::format!("{dir}/sections/{name}");
+        let file = |extension: &str| alloc::format!("{folder}/{extension}");
         CachePaths {
             dir: String::from(dir),
             text: file("txt"),
@@ -177,6 +183,7 @@ impl CachePaths {
             xpointers: file("xpt"),
             pictures: file("pic"),
             end: file("end"),
+            folder,
         }
     }
 }
@@ -1430,7 +1437,11 @@ pub(crate) fn convert(
         Source::Zip { entry, .. } => u64::from(entry.size),
         Source::Html { path, .. } | Source::Fb2 { path, .. } => storage.size(path)?,
     };
+    // Not complete from here on; what an earlier try left goes whole,
+    // so the files are made anew, empty (not each written whole, which
+    // takes a FAT card several looks through the folder).
     let _ = storage.remove(&paths.end);
+    let _ = storage.remove_dir_all(&paths.folder);
     for path in [
         &paths.text,
         &paths.index,
@@ -1440,7 +1451,7 @@ pub(crate) fn convert(
         &paths.xpointers,
         &paths.pictures,
     ] {
-        storage.write(path, &[])?;
+        storage.append(path, &[])?;
     }
     // The buffers that take most, asked for so that a heap too short for
     // them is an error, not a stop.

@@ -15,6 +15,9 @@ change the plugin SDK.
   longer taken for a long press (which opened the quick panel).
 - Clicks made while the X4 was busy, up to about a second before it
   showed the next page, count; only a long tail of them is dropped.
+- Reading a long book on the X4 no longer stalls for seconds every few
+  pages while its pages are counted in the background: a new chapter's
+  cache took 4 to 8 seconds, now under one.
 
 ## [0.5.0-beta.1] - 2026-10-24
 
