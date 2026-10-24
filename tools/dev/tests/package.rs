@@ -209,7 +209,18 @@ fn ppn_files_are_checked_and_releases_must_be_versions() {
 /// device loads no code of another.
 #[test]
 fn a_code_plugins_folder_names_its_codes_version() {
-    let version = paperpaw_sdk::package_version!();
+    // The weather plugin's own version, as its crate names it: plugins
+    // have versions of their own, not PaperPaw's.
+    let manifest = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/weather/Cargo.toml"),
+    )
+    .unwrap();
+    let version = manifest
+        .lines()
+        .find_map(|l| l.strip_prefix("version = \""))
+        .and_then(|v| v.strip_suffix('"'))
+        .unwrap()
+        .to_string();
     let folder = |name: &str, version: &str| {
         let ini = format!(
             "[plugin]\nid = weather\nname = Weather\ndescription = The weather.\nversion = {version}\n"
@@ -223,7 +234,7 @@ fn a_code_plugins_folder_names_its_codes_version() {
         run(&context)
     };
     // As the release writes it: the whole version, a beta's too.
-    let report = folder("version-same", &version.to_string());
+    let report = folder("version-same", &version);
     assert!(
         !has(&report, "package.version", "plugin.ini", Level::Error),
         "{}",
@@ -231,8 +242,8 @@ fn a_code_plugins_folder_names_its_codes_version() {
     );
     // A beta's plugin.ini naming the release's numbers only is another
     // version: the store would not offer the next beta as an update.
-    if version.to_string().contains('-') {
-        let release = version.to_string();
+    if version.contains('-') {
+        let release = version.clone();
         let release = release.split('-').next().unwrap_or_default();
         let report = folder("version-release", release);
         assert!(has(&report, "package.version", "plugin.ini", Level::Error));
