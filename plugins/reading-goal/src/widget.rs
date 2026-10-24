@@ -50,15 +50,15 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 /// "12 / 20 min" ("12 min" without a goal), or what is missing for it.
 pub(crate) fn progress(env: &Env<'_>, today: &Today) -> String {
     if today.statistics != Statistics::Counting {
-        return env.i18n.tr("reading-goal.uncounted").into();
+        return env.i18n().tr("reading-goal.uncounted").into();
     }
     let read = ("read", Arg::Int(i64::from(today.minutes)));
     match today.goal {
-        Some(goal) => env.i18n.format(
+        Some(goal) => env.i18n().format(
             "reading-goal.progress",
             &[read, ("goal", Arg::Int(i64::from(goal)))],
         ),
-        None => env.i18n.format("reading-goal.read", &[read]),
+        None => env.i18n().format("reading-goal.read", &[read]),
     }
 }
 
@@ -73,7 +73,7 @@ pub(crate) fn tapped(env: &Env<'_>, today: &Today) -> Command {
         Statistics::Off => &["switch-on", "not-now"],
         Statistics::Missing => &["store", "not-now"],
     };
-    paperpaw_sdk::ask::choice(env.i18n.tr("reading-goal.offer"), &OFFERED)
+    paperpaw_sdk::ask::choice(env.i18n().tr("reading-goal.offer"), &OFFERED)
         .options("reading-goal.offer.", options)
         .command()
 }
@@ -81,7 +81,7 @@ pub(crate) fn tapped(env: &Env<'_>, today: &Today) -> Command {
 /// What the picture of `today`'s mood says, for screen readers.
 pub(crate) fn described(env: &Env<'_>, today: &Today) -> String {
     let key = alloc::format!("reading-goal.mood.{}", today.mood.name());
-    env.i18n.tr(&key).into()
+    env.i18n().tr(&key).into()
 }
 
 #[derive(Default)]
@@ -124,8 +124,8 @@ impl Cat {
         if w == 0 || h == 0 {
             return;
         }
-        let format = env.device.display.format;
-        if let Some(small) = Thumbnail::new(env.storage, &image, w, h, format) {
+        let format = env.device().display.format;
+        if let Some(small) = Thumbnail::new(env.storage(), &image, w, h, format) {
             let x = room.x + (room.width - small.width()) / 2;
             let y = room.y + (room.height - small.height()) / 2;
             self.picture = Some((small, x, y));
@@ -136,7 +136,7 @@ impl Cat {
 impl Widget for Cat {
     fn update(&mut self, env: &Env<'_>) -> bool {
         let today = Some(Today::now(env));
-        let folder = env.settings.text(PICTURES.as_str());
+        let folder = env.settings().text(PICTURES.as_str());
         if today == self.today && folder == self.folder {
             return false;
         }

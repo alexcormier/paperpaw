@@ -27,7 +27,7 @@ impl BrowseScreen {
         let pad = self.style.gap() / 2;
         let height = self.list.row_rect(0).height.saturating_sub(2 * pad);
         let (w, h) = ui::fit_image(image, cover_width(&self.style), height);
-        Thumbnail::new(env.storage, image, w, h, env.device.display.format)
+        Thumbnail::new(env.storage(), image, w, h, env.device().display.format)
     }
 
     /// The row of entry `i`, if it is on the page shown.
@@ -52,7 +52,7 @@ impl BrowseScreen {
                 continue;
             };
             let kept = cover_path(&url);
-            if let Some(file) = paperpaw_sdk::image::ImageFile::open(env.storage, &kept) {
+            if let Some(file) = paperpaw_sdk::image::ImageFile::open(env.storage(), &kept) {
                 let image = ImageRef {
                     path: file.path,
                     width: file.width,
@@ -64,7 +64,7 @@ impl BrowseScreen {
                 }
                 continue;
             }
-            if !env.caps.network {
+            if !env.caps().network {
                 return;
             }
             self.fetching = Some(i);
@@ -101,9 +101,9 @@ impl BrowseScreen {
         let image = (200..300)
             .contains(&reply.status)
             .then(|| {
-                let color = env.device.display.format.is_color();
+                let color = env.device().display.format.is_color();
                 paperpaw_sdk::image::picture_from_file(
-                    env.storage,
+                    env.storage(),
                     file,
                     &cover_path(&url),
                     paperpaw_sdk::image::Fit::side(side),

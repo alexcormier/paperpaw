@@ -131,7 +131,7 @@ pub(crate) fn folder(text: &str) -> String {
 }
 
 fn password<'a>(env: &Env<'a>) -> &'a str {
-    env.secrets.get(SECRET).unwrap_or_default()
+    env.secrets().get(SECRET).unwrap_or_default()
 }
 
 /// Keeps the password as typed (spaces too), or removes it if empty.
@@ -149,11 +149,11 @@ fn save_password(password: &str) -> Command {
 /// copy, e.g. where the secrets could not be saved.
 pub(crate) fn move_password(env: &Env<'_>, out: &mut Commands) {
     let path = file("webdav.ini");
-    let Ok(data) = paperpaw_sdk::read_file(env.storage, &path, 4096) else {
+    let Ok(data) = paperpaw_sdk::read_file(env.storage(), &path, 4096) else {
         return;
     };
     let old = old_password(core::str::from_utf8(&data).unwrap_or_default());
-    if !old.is_empty() && env.secrets.get(SECRET).is_none() {
+    if !old.is_empty() && env.secrets().get(SECRET).is_none() {
         out.push(save_password(&old));
         return;
     }
@@ -161,7 +161,7 @@ pub(crate) fn move_password(env: &Env<'_>, out: &mut Commands) {
         clippy::let_underscore_must_use,
         reason = "the password is in the secrets (or there was none); a file left behind is read once more and changes nothing"
     )]
-    let _ = env.storage.remove(&path);
+    let _ = env.storage().remove(&path);
 }
 
 /// The password in the `webdav.ini` of earlier versions.
@@ -195,8 +195,8 @@ fn done(out: &mut Commands, message: String) {
 fn last_upload(env: &Env<'_>) -> String {
     let target = format!(
         "{}\n{}",
-        folder(env.settings.read(&URL)),
-        env.settings.read(&USER)
+        folder(env.settings().read(&URL)),
+        env.settings().read(&USER)
     );
     let key = paperpaw_sdk::digest::fnv1a64(target);
     file(&format!("{FILE}.{key:016x}.sync"))
@@ -211,7 +211,7 @@ fn forget_other_uploads(env: &Env<'_>, keep: &str) {
         clippy::let_underscore_must_use,
         reason = "a folder that cannot be listed has no old uploads to forget"
     )]
-    let _ = env.storage.list(&dir(), &mut |entry| {
+    let _ = env.storage().list(&dir(), &mut |entry| {
         let path = file(entry.name);
         if entry.name.starts_with(FILE) && entry.name.ends_with(".sync") && path != keep {
             others.push(path);
@@ -222,24 +222,24 @@ fn forget_other_uploads(env: &Env<'_>, keep: &str) {
             clippy::let_underscore_must_use,
             reason = "an old upload left behind only takes room"
         )]
-        let _ = env.storage.remove(&path);
+        let _ = env.storage().remove(&path);
     }
 }
 
 impl Sync {
     /// Starts a sync, or says why it cannot.
     pub(crate) fn start(&mut self, env: &Env<'_>, out: &mut Commands) {
-        if !env.caps.network {
-            return done(out, env.i18n.tr("stats.sync.no-network").to_string());
+        if !env.caps().network {
+            return done(out, env.i18n().tr("stats.sync.no-network").to_string());
         }
-        if env.settings.read(&URL).trim().is_empty() {
-            return done(out, env.i18n.tr("stats.sync.no-folder").to_string());
+        if env.settings().read(&URL).trim().is_empty() {
+            return done(out, env.i18n().tr("stats.sync.no-folder").to_string());
         }
         self.running = true;
         self.attempt += 1;
         self.last_upload = last_upload(env);
-        self.url = format!("{}/{FILE}", folder(env.settings.read(&URL)));
-        self.user = env.settings.read(&USER).to_string();
+        self.url = format!("{}/{FILE}", folder(env.settings().read(&URL)));
+        self.user = env.settings().read(&USER).to_string();
         let mut get = self.request(env, "GET", &DOWNLOADED);
         get = get.save_to(file("incoming.sqlite3"));
         out.push(Command::http(get));
@@ -251,7 +251,7 @@ impl Sync {
             return;
         }
         let incoming = file("incoming.sqlite3");
-        let uploaded_before = env.storage.exists(&self.last_upload);
+        let uploaded_before = env.storage().exists(&self.last_upload);
         let income = match reply.status {
             200 => Some(incoming.as_str()),
             // Gone from where this device uploaded to (or a server's
@@ -262,15 +262,15 @@ impl Sync {
                     clippy::let_underscore_must_use,
                     reason = "a download left behind is written over by the next sync"
                 )]
-                let _ = env.storage.remove(&incoming);
+                let _ = env.storage().remove(&incoming);
                 #[expect(
                     clippy::let_underscore_must_use,
                     reason = "a last upload that cannot be removed only makes the next sync say the same"
                 )]
-                let _ = env.storage.remove(&self.last_upload);
+                let _ = env.storage().remove(&self.last_upload);
                 self.running = false;
                 self.attempt = 0;
-                return done(out, env.i18n.tr("stats.sync.missing").to_string());
+                return done(out, env.i18n().tr("stats.sync.missing").to_string());
             }
             // None yet: this is the first.
             404 => None,
@@ -279,7 +279,7 @@ impl Sync {
                     clippy::let_underscore_must_use,
                     reason = "a download left behind is written over by the next sync"
                 )]
-                let _ = env.storage.remove(&incoming);
+                let _ = env.storage().remove(&incoming);
                 return self.fail(env, &status.to_string(), out);
             }
         };
@@ -288,12 +288,19 @@ impl Sync {
         let cached = (uploaded_before && reply.etag.is_some()).then_some(self.last_upload.as_str());
         let upload = file(FILE);
         let decided = self.decided_for(reply.etag.as_deref());
-        let result = merge::merge_as(env.storage, income, cached, Some(&upload), &dir(), decided);
+        let result = merge::merge_as(
+            env.storage(),
+            income,
+            cached,
+            Some(&upload),
+            &dir(),
+            decided,
+        );
         #[expect(
             clippy::let_underscore_must_use,
             reason = "a download left behind is written over by the next sync"
         )]
-        let _ = env.storage.remove(&incoming);
+        let _ = env.storage().remove(&incoming);
         let outcome = match result {
             Ok(outcome) => outcome,
             Err(failure) => {
@@ -304,7 +311,10 @@ impl Sync {
                     Failure::Here(_) => "stats.sync.failed",
                 };
                 let reason = format!("{failure}");
-                return done(out, env.i18n.format(key, &[("reason", Arg::Str(&reason))]));
+                return done(
+                    out,
+                    env.i18n().format(key, &[("reason", Arg::Str(&reason))]),
+                );
             }
         };
         if outcome.unclear {
@@ -345,15 +355,15 @@ impl Sync {
             clippy::let_underscore_must_use,
             reason = "an upload left behind is written over by the next sync"
         )]
-        let _ = env.storage.remove(&file(FILE));
+        let _ = env.storage().remove(&file(FILE));
         self.running = false;
         self.attempt = 0;
-        done(out, env.i18n.tr("stats.sync.asked").to_string());
+        done(out, env.i18n().tr("stats.sync.asked").to_string());
         out.push(
-            paperpaw_sdk::ask::confirm(env.i18n.tr("stats.sync.ask"), &DECIDED)
-                .text(env.i18n.tr("stats.sync.ask.text"))
-                .yes(env.i18n.tr("stats.sync.remove"))
-                .no(env.i18n.tr("stats.sync.keep"))
+            paperpaw_sdk::ask::confirm(env.i18n().tr("stats.sync.ask"), &DECIDED)
+                .text(env.i18n().tr("stats.sync.ask.text"))
+                .yes(env.i18n().tr("stats.sync.remove"))
+                .no(env.i18n().tr("stats.sync.keep"))
                 .with(ETAG, etag)
                 .command(),
         );
@@ -382,12 +392,13 @@ impl Sync {
                 // What was uploaded is what the next sync compares with.
                 // Where it cannot be kept, the one before stays: it can
                 // only tell less, never more, as deleted there.
-                if paperpaw_sdk::files::move_to(env.storage, &upload, &self.last_upload).is_err() {
+                if paperpaw_sdk::files::move_to(env.storage(), &upload, &self.last_upload).is_err()
+                {
                     #[expect(
                         clippy::let_underscore_must_use,
                         reason = "an upload left behind is written over by the next sync"
                     )]
-                    let _ = env.storage.remove(&upload);
+                    let _ = env.storage().remove(&upload);
                 }
                 forget_other_uploads(env, &self.last_upload);
                 // The file there changed: a decision for it holds no more.
@@ -399,11 +410,14 @@ impl Sync {
                 } else {
                     "stats.sync.done"
                 };
-                let text = env.i18n.format(
+                let text = env.i18n().format(
                     key,
                     &[(
                         "books",
-                        Arg::Str(&env.i18n.plural("stats.books-count", self.books as i64, &[])),
+                        Arg::Str(
+                            &env.i18n()
+                                .plural("stats.books-count", self.books as i64, &[]),
+                        ),
                     )],
                 );
                 done(out, text);
@@ -414,7 +428,7 @@ impl Sync {
                     clippy::let_underscore_must_use,
                     reason = "an upload left behind is written over by the next sync"
                 )]
-                let _ = env.storage.remove(&upload);
+                let _ = env.storage().remove(&upload);
                 self.running = false;
                 self.start(env, out);
             }
@@ -423,7 +437,7 @@ impl Sync {
                     clippy::let_underscore_must_use,
                     reason = "an upload left behind is written over by the next sync"
                 )]
-                let _ = env.storage.remove(&upload);
+                let _ = env.storage().remove(&upload);
                 self.fail(env, &status, out);
             }
         }
@@ -438,33 +452,33 @@ impl Sync {
             "404" | "409" => "stats.sync.no-such-folder",
             _ => "stats.sync.server-error",
         };
-        done(out, env.i18n.format(key, &[("status", Arg::Str(status))]));
+        done(out, env.i18n().format(key, &[("status", Arg::Str(status))]));
     }
 }
 
 /// KOReader's statistics on this device, if any.
 pub(crate) fn koreader_file(env: &Env<'_>) -> Option<&'static str> {
-    KOREADER_FILES.into_iter().find(|f| env.storage.exists(f))
+    KOREADER_FILES.into_iter().find(|f| env.storage().exists(f))
 }
 
 /// Takes over KOReader's statistics on this device.
 fn import(env: &Env<'_>) -> String {
     let Some(path) = koreader_file(env) else {
-        return env.i18n.tr("stats.import.none").to_string();
+        return env.i18n().tr("stats.import.none").to_string();
     };
     // Written by KOReader while it runs: its newest pages may still be
     // in the log beside the file.
     let wal = format!("{path}-wal");
-    if env.storage.size(&wal).is_ok_and(|s| s > 0) {
-        return env.i18n.tr("stats.import.busy").to_string();
+    if env.storage().size(&wal).is_ok_and(|s| s > 0) {
+        return env.i18n().tr("stats.import.busy").to_string();
     }
-    match merge::merge(env.storage, Some(path), None, None, &dir()) {
-        Ok(Outcome { books, stays, .. }) => env.i18n.format(
+    match merge::merge(env.storage(), Some(path), None, None, &dir()) {
+        Ok(Outcome { books, stays, .. }) => env.i18n().format(
             "stats.import.done",
             &[
                 (
                     "books",
-                    Arg::Str(&env.i18n.plural("stats.books-count", books as i64, &[])),
+                    Arg::Str(&env.i18n().plural("stats.books-count", books as i64, &[])),
                 ),
                 ("stays", Arg::Int(stays as i64)),
             ],
@@ -475,7 +489,7 @@ fn import(env: &Env<'_>) -> String {
                 Failure::Here(_) => "stats.sync.failed",
             };
             let reason = format!("{failure}");
-            env.i18n.format(key, &[("reason", Arg::Str(&reason))])
+            env.i18n().format(key, &[("reason", Arg::Str(&reason))])
         }
     }
 }
@@ -536,7 +550,7 @@ impl SyncScreen {
     fn new(env: &Env<'_>, sync: SharedSync) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let mut rows = Vec::from([Row::Folder, Row::User, Row::Password, Row::SyncNow]);
         if koreader_file(env).is_some() {
             rows.push(Row::Import);
@@ -559,7 +573,7 @@ impl SyncScreen {
             ),
             rows,
             sync,
-            message: env.i18n.tr("stats.sync.help").to_string(),
+            message: env.i18n().tr("stats.sync.help").to_string(),
             style,
             header,
         }
@@ -574,7 +588,7 @@ impl SyncScreen {
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let keyboard = |title: &str, text: String, reply: &Event<Typed>, password: bool| {
-            let question = paperpaw_sdk::ask::text(env.i18n.tr(title), reply).initial(text);
+            let question = paperpaw_sdk::ask::text(env.i18n().tr(title), reply).initial(text);
             if password {
                 question.password().command()
             } else {
@@ -584,13 +598,13 @@ impl SyncScreen {
         match row {
             Row::Folder => cx.command(keyboard(
                 "stats.sync.folder",
-                env.settings.read(&URL).to_string(),
+                env.settings().read(&URL).to_string(),
                 &URL_ENTERED,
                 false,
             )),
             Row::User => cx.command(keyboard(
                 "stats.sync.user",
-                env.settings.read(&USER).to_string(),
+                env.settings().read(&USER).to_string(),
                 &USER_ENTERED,
                 false,
             )),
@@ -610,7 +624,7 @@ impl SyncScreen {
                     cx.command(command);
                 }
                 if self.sync.borrow().running {
-                    self.show(env.i18n.tr("stats.sync.running").to_string(), cx);
+                    self.show(env.i18n().tr("stats.sync.running").to_string(), cx);
                 }
             }
             Row::Import => {
@@ -624,7 +638,7 @@ impl SyncScreen {
 impl Screen for SyncScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("stats.sync.title");
+        let title = env.i18n().tr("stats.sync.title");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, None, None);
         let rows = &self.rows;
@@ -633,11 +647,11 @@ impl Screen for SyncScreen {
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value) = match rows[index] {
                     Row::Folder => {
-                        let url = folder(env.settings.read(&URL));
+                        let url = folder(env.settings().read(&URL));
                         let shown = url.strip_prefix("https://").unwrap_or(&url).to_string();
                         ("stats.sync.folder", shown)
                     }
-                    Row::User => ("stats.sync.user", env.settings.read(&USER).to_string()),
+                    Row::User => ("stats.sync.user", env.settings().read(&USER).to_string()),
                     Row::Password => (
                         "stats.sync.password",
                         String::from(if has_password {
@@ -649,7 +663,7 @@ impl Screen for SyncScreen {
                     Row::SyncNow => ("stats.sync.now", String::from("›")),
                     Row::Import => ("stats.import", String::from("›")),
                 };
-                ui::Row::value(env.i18n.tr(title), &value)
+                ui::Row::value(env.i18n().tr(title), &value)
                     .focused(focused)
                     .draw(ui, rect);
             });

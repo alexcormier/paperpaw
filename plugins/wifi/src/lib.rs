@@ -87,13 +87,13 @@ pub(crate) type Shared = Rc<RefCell<Policy>>;
 /// The radio stays on now: charging, and the user wants that.
 fn charging_keeps_it(env: &Env<'_>) -> bool {
     // Offline keeps the radio off also while charging.
-    env.settings.read(&WHILE_CHARGING)
-        && env.status.battery.is_some_and(|b| b.charging)
-        && env.power.online()
+    env.settings().read(&WHILE_CHARGING)
+        && env.status().battery.is_some_and(|b| b.charging)
+        && env.power().online()
 }
 
 fn idle_seconds(env: &Env<'_>) -> u64 {
-    let choice = env.settings.read(&IDLE_OFF);
+    let choice = env.settings().read(&IDLE_OFF);
     IDLE_OFF_CHOICES
         .iter()
         .find(|(id, _)| *id == choice)
@@ -106,11 +106,11 @@ fn wifi_commands(out: &mut Commands, commands: Vec<WifiCommand>) {
 
 /// Sets the timer to switch the radio off, if nothing keeps it on.
 fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
-    let Some(wifi) = env.wifi else {
+    let Some(wifi) = env.wifi() else {
         return;
     };
     if wifi.state.is_on() && policy.may_go_off(charging_keeps_it(env)) {
-        let at = env.now.add_millis(idle_seconds(env) * 1000);
+        let at = env.now().add_millis(idle_seconds(env) * 1000);
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
         out.push(Command::work(Work::at(IDLE_CHECK, at).with(params)));
     }
@@ -120,13 +120,13 @@ fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
 /// the network is still wanted (or charging keeps the radio on), or else
 /// the one to switch the radio off.
 fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Commands) {
-    let Some(wifi) = env.wifi else {
+    let Some(wifi) = env.wifi() else {
         return;
     };
-    if policy.still_wanted(wifi, env.now) || charging_keeps_it(env) {
+    if policy.still_wanted(wifi, env.now()) || charging_keeps_it(env) {
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
         out.push(Command::work(
-            Work::at(RETRY, env.now.add_millis(RETRY_MS)).with(params),
+            Work::at(RETRY, env.now().add_millis(RETRY_MS)).with(params),
         ));
     } else if !wifi.busy {
         schedule_off(env, policy, out);
@@ -149,24 +149,24 @@ pub(crate) fn failure_text(env: &Env<'_>, ssid: &str, reason: JoinFailure) -> St
         JoinFailure::Other => "wifi.failed.other",
         _ => "wifi.failed.other",
     };
-    env.i18n.format(key, &[("ssid", Arg::Str(ssid))])
+    env.i18n().format(key, &[("ssid", Arg::Str(ssid))])
 }
 
 /// The networks in [`WIFI_FILE`], to keep, and the file removed; nothing
 /// where there is none. A password goes with the `ssid` line before it.
 fn read_wifi_file(env: &Env<'_>) -> Vec<Command> {
-    let bytes = match paperpaw_sdk::read_file(env.storage, WIFI_FILE, WIFI_FILE_MOST) {
+    let bytes = match paperpaw_sdk::read_file(env.storage(), WIFI_FILE, WIFI_FILE_MOST) {
         Ok(bytes) => bytes,
         // No file has that many networks: gone, so that no password stays
         // on the card, and said.
         Err(paperpaw_sdk::StorageError::TooLarge) => {
-            let _ = env.storage.remove(WIFI_FILE);
-            return alloc::vec![Command::Notify(env.i18n.tr("wifi.file-too-large").into())];
+            let _ = env.storage().remove(WIFI_FILE);
+            return alloc::vec![Command::Notify(env.i18n().tr("wifi.file-too-large").into())];
         }
         Err(_) => return Vec::new(),
     };
     let networks = wifi_file_networks(&bytes);
-    let known = wifi::known(env.secrets.iter());
+    let known = wifi::known(env.secrets().iter());
     let mut out: Vec<Command> = networks
         .iter()
         // A network without a password does not take the password kept.
@@ -279,7 +279,7 @@ impl Plugin for Wifi {
                 STATUS,
                 "wifi.status.item",
                 Box::new(|env, _| {
-                    env.wifi
+                    env.wifi()
                         .is_some_and(|w| w.state.is_online())
                         .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
                 }),
@@ -310,25 +310,25 @@ impl Plugin for Wifi {
         ))?;
         // Networks put on the card: kept, the file removed once they are.
         r.on(events::STARTED, |env, (), out| {
-            if env.wifi.is_some() {
+            if env.wifi().is_some() {
                 out.extend(read_wifi_file(env));
             }
         })?;
         r.subscribe(
             WIFI_FILE_KEPT,
             Box::new(|env, _, _| {
-                let Ok(bytes) = paperpaw_sdk::read_file(env.storage, WIFI_FILE, WIFI_FILE_MOST)
+                let Ok(bytes) = paperpaw_sdk::read_file(env.storage(), WIFI_FILE, WIFI_FILE_MOST)
                 else {
                     return;
                 };
-                let known = wifi::known(env.secrets.iter());
+                let known = wifi::known(env.secrets().iter());
                 // Kept on the card, not only until the device restarts.
                 let kept = wifi_file_networks(&bytes).iter().all(|(ssid, _)| {
                     known.iter().any(|(k, _)| k == ssid)
-                        && env.secrets.saved(&wifi::secret_id(ssid))
+                        && env.secrets().saved(&wifi::secret_id(ssid))
                 });
                 if kept {
-                    let _ = env.storage.remove(WIFI_FILE);
+                    let _ = env.storage().remove(WIFI_FILE);
                 }
             }),
         )?;
@@ -336,17 +336,17 @@ impl Plugin for Wifi {
         // A plugin wants the network.
         let p = policy.clone();
         r.on(events::NETWORK_WANTED, move |env, _, out| {
-            let Some(wifi) = env.wifi else {
+            let Some(wifi) = env.wifi() else {
                 return;
             };
             let mut policy = p.borrow_mut();
             // Not during the setup with a phone, nor while the own network
             // is open (a transfer without a router).
-            if !env.settings.read(&ON_DEMAND) || policy.phone || wifi.state.is_hosting() {
+            if !env.settings().read(&ON_DEMAND) || policy.phone || wifi.state.is_hosting() {
                 return;
             }
-            policy.asked_at = Some(env.now);
-            let known = wifi::known(env.secrets.iter());
+            policy.asked_at = Some(env.now());
+            let known = wifi::known(env.secrets().iter());
             if known.is_empty() {
                 // Nothing to join: what waits fails now, and its screen
                 // says so (no notice over it besides).
@@ -358,7 +358,7 @@ impl Plugin for Wifi {
         // The radio's state changed.
         let p = policy.clone();
         r.on(events::WIFI_CHANGED, move |env, _, out| {
-            let Some(wifi) = env.wifi else {
+            let Some(wifi) = env.wifi() else {
                 return;
             };
             let mut policy = p.borrow_mut();
@@ -382,12 +382,12 @@ impl Plugin for Wifi {
             if wifi.state == WifiState::On
                 && policy.goal == Goal::Nothing
                 && charging_keeps_it(env)
-                && !wifi::known(env.secrets.iter()).is_empty()
+                && !wifi::known(env.secrets().iter()).is_empty()
             {
                 wifi_commands(out, policy.retry());
             }
             // On, with nothing to do (e.g. joined, nothing waits).
-            if !wifi.busy && !policy.still_wanted(wifi, env.now) {
+            if !wifi.busy && !policy.still_wanted(wifi, env.now()) {
                 schedule_off(env, &policy, out);
             }
         })?;
@@ -395,10 +395,10 @@ impl Plugin for Wifi {
         // Networks found.
         let p = policy.clone();
         r.on(events::WIFI_SCANNED, move |env, _, out| {
-            let Some(wifi) = env.wifi else {
+            let Some(wifi) = env.wifi() else {
                 return;
             };
-            let known = wifi::known(env.secrets.iter());
+            let known = wifi::known(env.secrets().iter());
             let mut policy = p.borrow_mut();
             if policy.phone {
                 return;
@@ -407,15 +407,15 @@ impl Plugin for Wifi {
                 Some(commands) => wifi_commands(out, commands),
                 None => {
                     policy.scans += 1;
-                    if policy.still_wanted(wifi, env.now) && policy.scans < policy::SCANS {
+                    if policy.still_wanted(wifi, env.now()) && policy.scans < policy::SCANS {
                         // The first scans after the radio came on may
                         // find nothing.
                         wifi_commands(out, alloc::vec![WifiCommand::Scan]);
                         return;
                     }
                     policy.goal = Goal::Nothing;
-                    if policy.still_wanted(wifi, env.now) {
-                        out.push(Command::Notify(env.i18n.tr("wifi.none-in-reach").into()));
+                    if policy.still_wanted(wifi, env.now()) {
+                        out.push(Command::Notify(env.i18n().tr("wifi.none-in-reach").into()));
                         no_network(&mut policy, out);
                     }
                     schedule_retry(env, &policy, out);
@@ -426,11 +426,11 @@ impl Plugin for Wifi {
         // Joining a network failed.
         let p = policy.clone();
         r.on(events::WIFI_FAILED, move |env, failed, out| {
-            let Some(wifi) = env.wifi else {
+            let Some(wifi) = env.wifi() else {
                 return;
             };
             let (ssid, reason) = (failed.ssid.as_str(), failed.reason);
-            let known = wifi::known(env.secrets.iter());
+            let known = wifi::known(env.secrets().iter());
             let mut policy = p.borrow_mut();
             // The setup with a phone says it, and opens its network again.
             if policy.phone {
@@ -451,7 +451,7 @@ impl Plugin for Wifi {
                     }
                     // Said when the user waits for it, not for tries
                     // in the background.
-                    if chosen || policy.still_wanted(wifi, env.now) {
+                    if chosen || policy.still_wanted(wifi, env.now()) {
                         out.push(Command::Notify(failure_text(env, ssid, reason)));
                     }
                 }
@@ -461,7 +461,7 @@ impl Plugin for Wifi {
         // The password typed for a network.
         let p = policy.clone();
         r.on(PASSWORD_ENTERED, move |env, typed, out| {
-            let (Some(wifi), Some(ssid)) = (env.wifi, typed.context.get(params::ID)) else {
+            let (Some(wifi), Some(ssid)) = (env.wifi(), typed.context.get(params::ID)) else {
                 return;
             };
             let password = typed.text.as_str();
@@ -479,7 +479,7 @@ impl Plugin for Wifi {
         // Another power mode: a radio only charging kept on may go off.
         let p = policy.clone();
         r.on(events::POWER_CHANGED, move |env, (), out| {
-            if env.wifi.is_some_and(|w| !w.busy) {
+            if env.wifi().is_some_and(|w| !w.busy) {
                 schedule_off(env, &p.borrow(), out);
             }
         })?;
@@ -487,7 +487,7 @@ impl Plugin for Wifi {
         r.subscribe(
             IDLE_CHECK,
             Box::new(move |env, params, out| {
-                let Some(wifi) = env.wifi else {
+                let Some(wifi) = env.wifi() else {
                     return;
                 };
                 let policy = p.borrow();
@@ -496,7 +496,7 @@ impl Plugin for Wifi {
                 if current
                     && wifi.state.is_on()
                     && !wifi.busy
-                    && !policy.still_wanted(wifi, env.now)
+                    && !policy.still_wanted(wifi, env.now())
                     && policy.may_go_off(charging_keeps_it(env))
                 {
                     out.push(Command::Wifi(WifiCommand::Off));
@@ -509,7 +509,7 @@ impl Plugin for Wifi {
         r.subscribe(
             RETRY,
             Box::new(move |env, params, out| {
-                let Some(wifi) = env.wifi else {
+                let Some(wifi) = env.wifi() else {
                     return;
                 };
                 let mut policy = p.borrow_mut();
@@ -522,8 +522,8 @@ impl Plugin for Wifi {
                 {
                     return;
                 }
-                if (policy.still_wanted(wifi, env.now) || charging_keeps_it(env))
-                    && !wifi::known(env.secrets.iter()).is_empty()
+                if (policy.still_wanted(wifi, env.now()) || charging_keeps_it(env))
+                    && !wifi::known(env.secrets().iter()).is_empty()
                 {
                     wifi_commands(out, policy.retry());
                 } else if !wifi.busy {
@@ -540,7 +540,7 @@ impl Plugin for Wifi {
             r.subscribe(
                 event,
                 Box::new(move |env, _, out| {
-                    let Some(wifi) = env.wifi else {
+                    let Some(wifi) = env.wifi() else {
                         return;
                     };
                     let mut policy = p.borrow_mut();
@@ -556,10 +556,10 @@ impl Plugin for Wifi {
                     policy.charging_kept = keeps;
                     if keeps {
                         if !wifi.state.is_on() {
-                            let known = wifi::known(env.secrets.iter());
+                            let known = wifi::known(env.secrets().iter());
                             wifi_commands(out, policy.wanted(&wifi.state, &known));
                         }
-                    } else if !wifi.busy && !policy.still_wanted(wifi, env.now) {
+                    } else if !wifi.busy && !policy.still_wanted(wifi, env.now()) {
                         schedule_off(env, &policy, out);
                     }
                 }),
@@ -576,7 +576,7 @@ impl Plugin for Wifi {
             )
             .help("wifi.setup.help")
             .order(50)
-            .applies(Box::new(|env: &Env<'_>| env.wifi.is_some())),
+            .applies(Box::new(|env: &Env<'_>| env.wifi().is_some())),
         )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

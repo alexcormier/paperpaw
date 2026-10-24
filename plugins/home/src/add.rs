@@ -45,7 +45,7 @@ fn kind_icon<'e>(env: &Env<'e>, kind: &str) -> &'e str {
     if kind == TOOLS_KIND {
         "apps"
     } else {
-        env.widgets.category_icon(kind)
+        env.widgets().category_icon(kind)
     }
 }
 
@@ -59,7 +59,7 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
         .map(|p| pages::expand(env, &p.items))
         .unwrap_or_default();
     let on_page = |what: &What| shown.iter().any(|i| i.what == *what);
-    env.widgets
+    env.widgets()
         .iter()
         .filter(|(id, _)| {
             let id = id.as_str();
@@ -67,11 +67,11 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
             // above it where shown.
             !widgets::repeatable(id)
                 && id != TOOLS
-                && !(id == STATUS && env.settings.read(&STATUS_BAR))
+                && !(id == STATUS && env.settings().read(&STATUS_BAR))
         })
         .map(|(id, title)| {
             let kind = env
-                .widgets
+                .widgets()
                 .category(id.as_str())
                 .unwrap_or(categories::OTHER);
             (
@@ -152,7 +152,7 @@ impl AddScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let page = params.get(PAGE).and_then(|p| p.parse().ok()).unwrap_or(0);
@@ -165,7 +165,7 @@ impl AddScreen {
                 .map(|(_, what, title)| Row::Add(what, title))
                 .collect(),
             None => {
-                let mut rows: Vec<Row> = kinds(&env.widgets.kinds().collect::<Vec<_>>(), &found)
+                let mut rows: Vec<Row> = kinds(&env.widgets().kinds().collect::<Vec<_>>(), &found)
                     .into_iter()
                     .map(|(kind, count)| Row::Kind(kind, count))
                     .collect();
@@ -210,7 +210,7 @@ impl AddScreen {
                 continue;
             };
             if preview.widget.is_none() {
-                preview.widget = env.widgets.make(id, env).map(|mut widget| {
+                preview.widget = env.widgets().make(id, env).map(|mut widget| {
                     widget.place(env, preview.area);
                     widget
                 });
@@ -304,7 +304,7 @@ impl AddScreen {
                 // The page as shown, every item with its place, and the new one.
                 let shown = pages::expand(&env, &page.items);
                 let Some(added) = grid::add(&env, &geometry, &shown, what) else {
-                    let message = env.i18n.tr("home.grid.no-room").to_string();
+                    let message = env.i18n().tr("home.grid.no-room").to_string();
                     cx.command(Command::Notify(message));
                     return;
                 };
@@ -325,7 +325,7 @@ impl AddScreen {
                     // What its widgets' placements set goes with them.
                     for item in all.remove(self.page).items {
                         if let What::Widget(id) = item.what {
-                            for value in env.settings.placement_values(&id) {
+                            for value in env.settings().placement_values(&id) {
                                 cx.command(Command::ResetSetting(value));
                             }
                         }
@@ -346,36 +346,36 @@ impl AddScreen {
 
     fn header_title(&self, env: &Env<'_>) -> String {
         let key = self.kind.as_deref().unwrap_or("home.edit.add");
-        env.i18n.tr(key).to_string()
+        env.i18n().tr(key).to_string()
     }
 
     fn draw_list(&mut self, ui: &mut ui::Ui<'_>) {
         let (env, style) = (ui.env(), self.style);
         let len = self.rows.len();
         let rows = &self.rows;
-        let room = ui.icon_room(true);
+        let room = ui::icon_room(ui.env(), ui.style(), true);
         self.list.draw(ui, len, |ui, index, rect, focused| {
             let ink = style.focus_ink(focused);
             let (icon, title, value) = match &rows[index] {
                 Row::Kind(kind, count) => (
                     Some(kind_icon(env, kind)),
-                    env.i18n.tr(kind).to_string(),
+                    env.i18n().tr(kind).to_string(),
                     count.to_string(),
                 ),
                 Row::Add(What::Tool(action), title) => (
-                    env.menus.icon(action.as_str()),
-                    env.i18n.tr(title).to_string(),
+                    env.menus().icon(action.as_str()),
+                    env.i18n().tr(title).to_string(),
                     String::from("+"),
                 ),
-                Row::Add(_, title) => (None, env.i18n.tr(title).to_string(), String::from("+")),
+                Row::Add(_, title) => (None, env.i18n().tr(title).to_string(), String::from("+")),
                 Row::AddPage => (
                     Some("plus"),
-                    env.i18n.tr("home.edit.add-page").to_string(),
+                    env.i18n().tr("home.edit.add-page").to_string(),
                     String::new(),
                 ),
                 Row::RemovePage => (
                     Some("trash"),
-                    env.i18n.tr("home.edit.remove-page").to_string(),
+                    env.i18n().tr("home.edit.remove-page").to_string(),
                     String::new(),
                 ),
             };
@@ -401,7 +401,7 @@ impl AddScreen {
                 continue;
             };
             let focused = shown && preview.row == focus;
-            let name = env.i18n.tr(title);
+            let name = env.i18n().tr(title);
             ui.canvas()
                 .describe(
                     paperpaw_sdk::semantics::Role::Row,

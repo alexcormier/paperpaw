@@ -247,7 +247,7 @@ impl Widget for Calendar {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, NAME, area);
         let Some(shown) = &self.shown else {
-            widgets::draw_message(canvas, env, &look, env.i18n.tr("stats.no-clock"));
+            widgets::draw_message(canvas, env, &look, env.i18n().tr("stats.no-clock"));
             return;
         };
         if shown.weeks == 0 {
@@ -285,7 +285,7 @@ fn footer(env: &Env<'_>, shown: &Shown) -> Vec<String> {
     let mut parts: Vec<String> = Vec::new();
     if widgets::shows(env, id, "streak") && shown.streak > 0 {
         parts.push(
-            env.i18n
+            env.i18n()
                 .plural("stats.goal.streak", i64::from(shown.streak), &[]),
         );
     }
@@ -293,12 +293,12 @@ fn footer(env: &Env<'_>, shown: &Shown) -> Vec<String> {
         let time = fmt::duration(env, shown.total);
         parts.push(if shown.weeks == 0 {
             let month = fmt::month(env, fmt::date_of(shown.today).month);
-            env.i18n.format(
+            env.i18n().format(
                 "stats.widget.calendar.month-total",
                 &[("time", Arg::Str(&time)), ("month", Arg::Str(month))],
             )
         } else {
-            env.i18n.format(
+            env.i18n().format(
                 "stats.widget.calendar.weeks-total",
                 &[
                     ("time", Arg::Str(&time)),
@@ -397,7 +397,7 @@ fn draw_day(
     // few grays, days with numbers get the lightest shade and a bar as
     // long as their level instead.
     let few = env
-        .device
+        .device()
         .display
         .format
         .gray_levels()
@@ -575,7 +575,7 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: 
         return;
     };
     let id = NAME;
-    let title = env.i18n.format(
+    let title = env.i18n().format(
         "stats.widget.calendar.weeks",
         &[("count", Arg::Int(i64::from(shown.weeks)))],
     );
@@ -603,7 +603,7 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: 
     };
     let room = area.height.saturating_sub(footer);
     // As many weeks as fit days at least 1.5 mm wide, the newest.
-    let least = env.metrics.tenth_mm(15).max(4) as u16;
+    let least = env.metrics().tenth_mm(15).max(4) as u16;
     let across = area.width.saturating_sub(label_w);
     let weeks = u16::from(shown.weeks).min(across / least).max(1);
     let cell = (across / weeks).min(room / 7);

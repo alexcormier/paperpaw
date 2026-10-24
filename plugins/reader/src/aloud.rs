@@ -20,7 +20,7 @@ pub(crate) const TIMER_CHOICES: [&str; 5] = [
 
 /// Minutes until reading aloud stops by itself, if a timer is set.
 pub(crate) fn timer_minutes(env: &Env<'_>) -> Option<u64> {
-    let choice = env.settings.read(&ALOUD_TIMER);
+    let choice = env.settings().read(&ALOUD_TIMER);
     choice
         .rsplit('.')
         .next()

@@ -68,9 +68,9 @@ impl SearchScreen {
             .to_string();
         let needle: Vec<char> = query.chars().map(lower).collect();
         let options = crate::screen::open_options(env);
-        let document = env.formats.open_with(env.storage, &path, &options).ok();
+        let document = env.formats().open_with(env.storage(), &path, &options).ok();
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = paperpaw_sdk::Rect::new(0, top, display.width, display.height - top);
@@ -106,7 +106,7 @@ impl SearchScreen {
         let filtered = paperpaw_sdk::reading::FilteredDocument::new(document.as_ref(), env)
             .in_book(&self.path, language);
         for _ in 0..BLOCKS_PER_STEP {
-            match filtered.block_at(env.storage, at) {
+            match filtered.block_at(env.storage(), at) {
                 Ok(Some(block)) => {
                     for (start, end) in find(&block.text, &self.needle) {
                         if self.hits.len() == MAX_HITS {
@@ -164,7 +164,7 @@ impl SearchScreen {
 
     fn header_note(&self, env: &Env<'_>) -> String {
         if self.next.is_some() {
-            return env.i18n.format(
+            return env.i18n().format(
                 "reader.search.searching",
                 &[("percent", Arg::Int(i64::from(self.shown_percent)))],
             );
@@ -172,9 +172,9 @@ impl SearchScreen {
         let count = self.hits.len() as i64;
         let args = [("count", Arg::Int(count))];
         if self.more {
-            env.i18n.format("reader.search.more-hits", &args)
+            env.i18n().format("reader.search.more-hits", &args)
         } else {
-            env.i18n.plural("reader.search.hits", count, &args)
+            env.i18n().plural("reader.search.hits", count, &args)
         }
     }
 
@@ -311,9 +311,9 @@ impl Screen for SearchScreen {
             .draw(&mut ui, &title, Some(&note), self.list.paging(len));
         if len == 0 {
             let message = if self.next.is_some() {
-                env.i18n.tr("reader.search.wait").to_string()
+                env.i18n().tr("reader.search.wait").to_string()
             } else {
-                env.i18n
+                env.i18n()
                     .format("reader.search.none", &[("query", Arg::Str(&self.query))])
             };
             ui.message(self.list.area(), &message);
@@ -322,7 +322,7 @@ impl Screen for SearchScreen {
         let hits = &self.hits;
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
             let hit = &hits[index];
-            let note = env.i18n.format(
+            let note = env.i18n().format(
                 "reader.percent",
                 &[("percent", Arg::Int(i64::from(hit.percent)))],
             );
@@ -335,7 +335,7 @@ impl Screen for SearchScreen {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.next.is_some() {
-            let now = cx.env().now;
+            let now = cx.env().now();
             cx.wake_at(now);
         }
     }
@@ -356,7 +356,7 @@ impl Screen for SearchScreen {
         }
         cx.request_refresh(RefreshMode::Fast);
         if self.next.is_some() {
-            cx.wake_at(env.now.add_millis(2));
+            cx.wake_at(env.now().add_millis(2));
         }
     }
 

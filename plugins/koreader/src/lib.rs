@@ -839,29 +839,29 @@ enum Exchanged {
 fn exchange_book(env: &Env<'_>, book: &str, removal: Removal) -> Exchanged {
     // KOReader's side first: most books have none, and then the book
     // need not be opened.
-    let limit = max_file(env.device.memory);
-    let Ok(Some(theirs)) = read_theirs(env.storage, book, limit) else {
+    let limit = max_file(env.device().memory);
+    let Ok(Some(theirs)) = read_theirs(env.storage(), book, limit) else {
         return Exchanged::Same;
     };
-    if removal == Removal::Ask && removed_there(env.storage, book, &theirs) == Ok(true) {
+    if removal == Removal::Ask && removed_there(env.storage(), book, &theirs) == Ok(true) {
         return Exchanged::Ask;
     }
     // As the reader opens it: the places of marks are those of its
     // conversion of the book.
     let options = paperpaw_sdk::reading::open_options(env);
-    let Ok(doc) = env.formats.open_with(env.storage, book, &options) else {
+    let Ok(doc) = env.formats().open_with(env.storage(), book, &options) else {
         return Exchanged::Same;
     };
     // Ours at their places in this conversion first, where KOReader's are
     // found: made in another (the book's own styles switched since, say),
     // they would be taken for others there, and ours for removed.
     let conversion = paperpaw_sdk::reading::conversion(env);
-    if annotations::relocate(env.storage, book, conversion, doc.as_ref()).is_err() {
+    if annotations::relocate(env.storage(), book, conversion, doc.as_ref()).is_err() {
         return Exchanged::Same;
     }
     let local = |unix| time::local_seconds(env, unix);
     let x = Exchange {
-        storage: env.storage,
+        storage: env.storage(),
         removal,
         doc: doc.as_ref(),
         now: time::unix_seconds(env).unwrap_or(0),
@@ -885,7 +885,7 @@ fn exchange_book(env: &Env<'_>, book: &str, removal: Removal) -> Exchanged {
             clippy::let_underscore_must_use,
             reason = "those taken over keep their XPointers; where that cannot be written now, the reader takes them as of its conversion when it shows them"
         )]
-        let _ = annotations::relocate(env.storage, book, conversion, x.doc);
+        let _ = annotations::relocate(env.storage(), book, conversion, x.doc);
         return Exchanged::Changed;
     }
     Exchanged::Same
@@ -914,7 +914,7 @@ fn exchange_or_ask(
         }
         Exchanged::Ask if !asked.borrow().iter().any(|b| b == book) => {
             asked.borrow_mut().push(String::from(book));
-            let i18n = env.i18n;
+            let i18n = env.i18n();
             out.push(
                 paperpaw_sdk::ask::confirm(i18n.tr("koreader.removed-there"), &REMOVAL_ANSWER)
                     .text(i18n.tr("koreader.removed-there.text"))
@@ -1052,11 +1052,11 @@ impl Plugin for KoReader {
             if announced.is_own(&changed.path) {
                 return;
             }
-            note_emptied(env.storage, &changed.path);
+            note_emptied(env.storage(), &changed.path);
             exchange_or_ask(env, &changed.path, Removal::Ask, &asked, &announced, out);
         })?;
         r.on(events::BOOK_MOVED, |env, moved, _| {
-            moved_book(env.storage, &moved.from, &moved.path);
+            moved_book(env.storage(), &moved.from, &moved.path);
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

@@ -52,7 +52,7 @@ impl ListScreen {
     pub(crate) fn new(env: &Env<'_>, sync: Rc<RefCell<Sync>>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         // The note below as high as its words need, at least a row and a half.
         let hint = ui::tr_input(env, "opds.hint");
@@ -96,7 +96,7 @@ impl ListScreen {
     /// Saves the list, unless it could not be read; `false` then.
     fn save(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) -> bool {
         if self.unreadable {
-            self.message = Some(env.i18n.tr("opds.unreadable").to_string());
+            self.message = Some(env.i18n().tr("opds.unreadable").to_string());
             self.redraw(cx);
             return false;
         }
@@ -116,9 +116,9 @@ impl ListScreen {
                 let mut out = paperpaw_sdk::Commands::new();
                 if sync.running() {
                     sync.stop(&mut out);
-                } else if !env.caps.network {
+                } else if !env.caps().network {
                     drop(sync);
-                    self.message = Some(env.i18n.tr("opds.no-network").to_string());
+                    self.message = Some(env.i18n().tr("opds.no-network").to_string());
                 } else {
                     sync.start(&env, crate::marked(&env), &mut out);
                 }
@@ -132,7 +132,7 @@ impl ListScreen {
                 Params::new().with(ID, i.to_string()),
             )),
             Some(Row::Add) => cx.command(
-                ask::text(env.i18n.tr("opds.address"), &ADDRESS)
+                ask::text(env.i18n().tr("opds.address"), &ADDRESS)
                     .initial("https://")
                     .command(),
             ),
@@ -169,8 +169,8 @@ impl ListScreen {
                 Params::new().with(ID, i.to_string()),
             )),
             "sync" => {
-                if !env.caps.network {
-                    self.message = Some(env.i18n.tr("opds.no-network").to_string());
+                if !env.caps().network {
+                    self.message = Some(env.i18n().tr("opds.no-network").to_string());
                     return self.redraw(cx);
                 }
                 let mut out = paperpaw_sdk::Commands::new();
@@ -208,7 +208,7 @@ impl ListScreen {
         }
         match &self.sync.borrow().report {
             Some(report) => report_text(env, report),
-            None if self.unreadable => env.i18n.tr("opds.unreadable").to_string(),
+            None if self.unreadable => env.i18n().tr("opds.unreadable").to_string(),
             None => ui::tr_input(env, "opds.hint").to_string(),
         }
     }
@@ -231,35 +231,38 @@ impl ListScreen {
 pub(crate) fn report_text(env: &Env<'_>, report: &Report) -> String {
     let catalog = Arg::Str(&report.catalog);
     let mut text = if report.running {
-        env.i18n.plural(
+        env.i18n().plural(
             "opds.syncing",
             report.loaded as i64,
             &[("catalog", catalog)],
         )
     } else {
-        env.i18n.plural("opds.synced", report.loaded as i64, &[])
+        env.i18n().plural("opds.synced", report.loaded as i64, &[])
     };
     if report.failed > 0 {
         text.push(' ');
-        text.push_str(&env.i18n.plural("opds.failed", report.failed as i64, &[]));
+        text.push_str(&env.i18n().plural("opds.failed", report.failed as i64, &[]));
     }
     if report.only_lists > 0 {
         text.push(' ');
         text.push_str(
-            &env.i18n
+            &env.i18n()
                 .plural("opds.only-lists", report.only_lists as i64, &[]),
         );
     }
     if report.unreachable > 0 {
         text.push(' ');
         text.push_str(
-            &env.i18n
+            &env.i18n()
                 .plural("opds.unreachable", report.unreachable as i64, &[]),
         );
     }
     if report.skipped > 0 {
         text.push(' ');
-        text.push_str(&env.i18n.plural("opds.skipped", report.skipped as i64, &[]));
+        text.push_str(
+            &env.i18n()
+                .plural("opds.skipped", report.skipped as i64, &[]),
+        );
     }
     text
 }
@@ -271,7 +274,7 @@ impl Screen for ListScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("opds.title"),
+            env.i18n().tr("opds.title"),
             None,
             self.list.paging(rows.len()),
         );
@@ -281,21 +284,21 @@ impl Screen for ListScreen {
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value, note) = match rows[index] {
                     Row::Sync if running => (
-                        env.i18n.tr("opds.stop").to_string(),
+                        env.i18n().tr("opds.stop").to_string(),
                         String::new(),
-                        env.i18n.tr("opds.stop.help").to_string(),
+                        env.i18n().tr("opds.stop.help").to_string(),
                     ),
                     Row::Sync => (
-                        env.i18n.tr("opds.sync-all").to_string(),
+                        env.i18n().tr("opds.sync-all").to_string(),
                         String::new(),
-                        env.i18n.tr("opds.sync-all.help").to_string(),
+                        env.i18n().tr("opds.sync-all.help").to_string(),
                     ),
                     Row::Catalog(i) => {
                         let catalog = &catalogs[i];
                         let mut note = host(&catalog.url).to_string();
                         if catalog.sync {
                             let folder = catalog.sync_folder(env);
-                            note = env.i18n.format(
+                            note = env.i18n().format(
                                 "opds.synced-to",
                                 &[("host", Arg::Str(&note)), ("folder", Arg::Str(&folder))],
                             );
@@ -303,7 +306,7 @@ impl Screen for ListScreen {
                         (catalog.name.clone(), String::from("›"), note)
                     }
                     Row::Add => (
-                        env.i18n.tr("opds.add").to_string(),
+                        env.i18n().tr("opds.add").to_string(),
                         String::from("+"),
                         String::new(),
                     ),

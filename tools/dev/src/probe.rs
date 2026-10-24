@@ -104,12 +104,12 @@ struct Measuring;
 impl Screen for Measuring {
     fn draw(&mut self, _: &mut Canvas<'_>, env: &Env<'_>) {
         let style = UiStyle::new(env);
-        let width = env.device.display.width;
+        let width = env.device().display.width;
         let cut: Vec<(String, String)> = env
-            .settings
+            .settings()
             .specs()
             .filter_map(|spec| {
-                let text = env.i18n.tr(spec.description.as_deref()?);
+                let text = env.i18n().tr(spec.description.as_deref()?);
                 (!ui::note_fits(env, &style, width, text))
                     .then(|| (spec.id.to_string(), text.to_string()))
             })

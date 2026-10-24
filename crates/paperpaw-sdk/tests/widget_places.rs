@@ -146,9 +146,9 @@ fn a_place_tells_whether_it_shows_a_widget() {
         )
         .unwrap();
     let env = h.env();
-    assert!(env.widgets.shown(&env, "t.one"));
-    assert!(env.widgets.shown(&env, "t.three"), "a placement of it");
-    let place = env.widgets.place("t.place").unwrap();
+    assert!(env.widgets().shown(&env, "t.one"));
+    assert!(env.widgets().shown(&env, "t.three"), "a placement of it");
+    let place = env.widgets().place("t.place").unwrap();
     assert_eq!(place.widgets(&env), ["t.three@2", "t.one"]);
 }
 
@@ -174,7 +174,7 @@ fn a_widget_takes_the_cells_it_says() {
     assert_eq!(size("t.round"), (2, 2));
     assert_eq!(size("t.wide"), (4, 1), "no more than the grid has");
     assert_eq!(size("t.one").0, 4, "without a hint the grid's width");
-    let hint = env.widgets.cells("t.round@2").unwrap();
+    let hint = env.widgets().cells("t.round@2").unwrap();
     assert_eq!(
         hint.keep(Cells::new(0, 0, 1, 2), true),
         Cells::new(0, 0, 2, 2)
@@ -195,7 +195,7 @@ fn areas_have_a_size_class() {
     use paperpaw_sdk::widgets::SizeClass;
     let h = harness();
     let env = h.env();
-    let mm = |n: u32| env.metrics.mm(n) as u16;
+    let mm = |n: u32| env.metrics().mm(n) as u16;
     assert_eq!(
         SizeClass::of(&env, Rect::new(0, 0, mm(80), mm(10))),
         SizeClass::Small
@@ -219,12 +219,12 @@ fn plugins_add_kinds_of_widgets_with_their_icons() {
     h.widgets
         .add_category(WidgetCategory::new(Id::new_static("t.games"), "dice"));
     let env = h.env();
-    let kinds: Vec<&str> = env.widgets.kinds().collect();
+    let kinds: Vec<&str> = env.widgets().kinds().collect();
     assert_eq!(kinds.first(), Some(&categories::TIME));
     assert_eq!(kinds.last(), Some(&"t.games"));
-    assert_eq!(env.widgets.category_icon("t.games"), "dice");
-    assert_eq!(env.widgets.category_icon(categories::BOOKS), "books");
-    assert_eq!(env.widgets.category_icon("t.unknown"), "puzzle");
+    assert_eq!(env.widgets().category_icon("t.games"), "dice");
+    assert_eq!(env.widgets().category_icon(categories::BOOKS), "books");
+    assert_eq!(env.widgets().category_icon("t.unknown"), "puzzle");
 }
 
 /// One frame for every widget whose own the reader did not choose, and

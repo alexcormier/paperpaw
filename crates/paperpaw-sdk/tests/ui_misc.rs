@@ -120,7 +120,9 @@ fn a_drawn_list_tells_its_rows_and_their_texts() {
             rows.len(),
             |ui, i, rect, focused| {
                 let canvas = ui.canvas();
-                ui::draw_value_row(canvas, &env, &style, rect, focused, rows[i].0, rows[i].1);
+                ui::Row::value(rows[i].0, rows[i].1)
+                    .focused(focused)
+                    .draw(&mut ui::Ui::new(canvas, &env, &style), rect);
             },
         );
     });
@@ -472,7 +474,7 @@ fn frames_and_sizes_read_from_settings_fall_back_when_unknown() {
 }
 
 fn shows_the_placement(env: &Env<'_>) -> String {
-    env.settings.text("t.clock.frame").to_string()
+    env.settings().text("t.clock.frame").to_string()
 }
 
 fn sixty(_: &Env<'_>, _: u16) -> u16 {
@@ -503,7 +505,7 @@ fn placements_read_their_own_settings_and_changes_are_told_once() {
         let env = h.env();
         assert_eq!(widgets::frame(&env, "t.clock"), Frame::Line);
         let placed = env
-            .settings
+            .settings()
             .with_placement(Some("t.clock@2"), || widgets::frame(&env, "t.clock"));
         assert_eq!(placed, Frame::Dark);
         assert!(h.widgets.make("t.unknown", &env).is_none());

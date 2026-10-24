@@ -42,7 +42,7 @@ fn path() -> String {
 
 /// The queue's lines, the one whose turn it is first and marked.
 fn lines(env: &Env<'_>) -> Vec<String> {
-    paperpaw_sdk::read_file(env.storage, &path(), 16 * 1024)
+    paperpaw_sdk::read_file(env.storage(), &path(), 16 * 1024)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .map(|text| text.lines().map(ToString::to_string).collect())
@@ -51,13 +51,13 @@ fn lines(env: &Env<'_>) -> Vec<String> {
 
 fn keep(env: &Env<'_>, lines: &[String]) {
     if lines.is_empty() {
-        let _ = env.storage.remove(&path());
+        let _ = env.storage().remove(&path());
         return;
     }
     let mut text = lines.join("\n");
     text.push('\n');
-    let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
-    let _ = env.storage.write(&path(), text.as_bytes());
+    let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+    let _ = env.storage().write(&path(), text.as_bytes());
 }
 
 /// A line's plugin, and whether it was put in quietly.
@@ -98,19 +98,19 @@ fn quiet_path() -> String {
 
 /// Keeps that the quiet plugin `name` was installed (`done`) or not.
 pub(crate) fn note(env: &Env<'_>, name: &str, done: bool) {
-    let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+    let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
     let line = format!(
         "{}{}\n",
         if done { '+' } else { '-' },
         name.replace('\n', " ")
     );
-    let _ = env.storage.append(&quiet_path(), line.as_bytes());
+    let _ = env.storage().append(&quiet_path(), line.as_bytes());
 }
 
 /// Plugin `id`'s name where its page did not come: the setup's own for
 /// the plugins it offers, else its id.
 fn name_of(env: &Env<'_>, id: &str) -> String {
-    env.i18n
+    env.i18n()
         .get(&format!("store.offer.{id}"))
         .map_or_else(|| id.to_string(), ToString::to_string)
 }
@@ -120,13 +120,13 @@ fn said(env: &Env<'_>, out: &mut Commands) {
     if has_quiet(env) {
         return;
     }
-    let Some(text) = paperpaw_sdk::read_file(env.storage, &quiet_path(), 16 * 1024)
+    let Some(text) = paperpaw_sdk::read_file(env.storage(), &quiet_path(), 16 * 1024)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
     else {
         return;
     };
-    let _ = env.storage.remove(&quiet_path());
+    let _ = env.storage().remove(&quiet_path());
     let names = |mark: char| {
         text.lines()
             .filter_map(|line| line.strip_prefix(mark))
@@ -136,13 +136,13 @@ fn said(env: &Env<'_>, out: &mut Commands) {
     let (done, not) = (names('+'), names('-'));
     if !done.is_empty() {
         out.push(Command::Notify(
-            env.i18n
+            env.i18n()
                 .format("store.offer.done", &[("names", Arg::Str(&done))]),
         ));
     }
     if !not.is_empty() {
         out.push(Command::Notify(
-            env.i18n
+            env.i18n()
                 .format("store.offer.not-done", &[("names", Arg::Str(&not))]),
         ));
     }
@@ -186,18 +186,18 @@ pub(crate) fn interrupted(env: &Env<'_>) {
 
 /// The address of plugin `id`'s page at the library.
 fn page_url(env: &Env<'_>, device: &Device<'_>, id: &str) -> String {
-    let list = env.settings.read(&CATALOG);
-    catalog::plugin_url(list.trim(), device.name, env.i18n.language(), id)
+    let list = env.settings().read(&CATALOG);
+    catalog::plugin_url(list.trim(), device.name, env.i18n().language(), id)
 }
 
 /// Gives the next plugin its turn (asks for its page), if nothing is
 /// being downloaded: the one before is done, stopped or set aside.
 pub(crate) fn next(env: &Env<'_>, out: &mut Commands) {
-    if INSTALLER.progress(env.storage).is_some() {
+    if INSTALLER.progress(env.storage()).is_some() {
         return;
     }
     // No connection: it waits for the next time the store is opened.
-    let Some(device) = Device::of(env).filter(|_| env.caps.network) else {
+    let Some(device) = Device::of(env).filter(|_| env.caps().network) else {
         return;
     };
     let mut all = lines(env);
@@ -234,17 +234,17 @@ pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
                 .final_url
                 .clone()
                 .unwrap_or_else(|| page_url(env, &device, &id));
-            catalog::plugin(env.storage, &fetched, &address, &device)
+            catalog::plugin(env.storage(), &fetched, &address, &device)
         })
         // Not installed yet (the setup's), or newer than the one installed.
         .filter(|plugin| {
             plugin.entry.id == id
                 && (plugin.entry.installed(env).is_none() || plugin.entry.newer(env))
         });
-    let _ = env.storage.remove(&fetched);
+    let _ = env.storage().remove(&fetched);
     match plugin {
         Some(plugin) => {
-            trust::expect(env.storage, &plugin.entry.id, plugin.author_key.as_ref());
+            trust::expect(env.storage(), &plugin.entry.id, plugin.author_key.as_ref());
             if !INSTALLER.start(env, &plugin.package, out) {
                 if quiet(env) {
                     note(env, &plugin.entry.name, false);

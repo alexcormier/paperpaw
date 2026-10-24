@@ -95,7 +95,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let month = super::month_name(env, t.month);
     let week = widgets::shows(env, ID.as_str(), "week").then(|| {
         let week = super::dates::iso_week(t.year, t.month, t.day);
-        env.i18n
+        env.i18n()
             .format("widgets.year.week", &[("week", Arg::Int(i64::from(week)))])
     });
     let width = f32::from(area.width);
@@ -189,7 +189,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                     false,
                 ));
             }
-            dates.push(env.i18n.format(
+            dates.push(env.i18n().format(
                 "widgets.date.short",
                 &[
                     ("day", Arg::Int(i64::from(t.day))),

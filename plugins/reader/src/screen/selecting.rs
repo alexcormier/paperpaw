@@ -108,7 +108,7 @@ impl ReaderScreen {
             if !crate::selection::translates(&env) {
                 hide.push(crate::actions::TRANSLATE.as_str().to_string());
             }
-            hide.push(if env.device.input.touch {
+            hide.push(if env.device().input.touch {
                 crate::actions::EXTEND.as_str().to_string()
             } else {
                 crate::actions::CANCEL.as_str().to_string()
@@ -144,7 +144,7 @@ impl ReaderScreen {
             let highlight = |m: &Mark| m.kind == Kind::Highlight && m.overlaps(start, end);
             // On highlighted text the item removes the highlight.
             if !matches!(
-                annotations::remove(env.storage, &book.path, highlight),
+                annotations::remove(env.storage(), &book.path, highlight),
                 Ok(true)
             ) {
                 let annotation = Annotation {
@@ -160,7 +160,7 @@ impl ReaderScreen {
                     text: annotations::snippet(&text),
                     note: String::new(),
                 };
-                if annotations::add(env.storage, &book.path, annotation).is_err() {
+                if annotations::add(env.storage(), &book.path, annotation).is_err() {
                     marks_not_saved(cx);
                 }
             }
@@ -190,7 +190,7 @@ impl ReaderScreen {
                         text: annotations::snippet(&text),
                         note: String::new(),
                     };
-                    if annotations::add(env.storage, &book.path, highlight).is_err() {
+                    if annotations::add(env.storage(), &book.path, highlight).is_err() {
                         marks_not_saved(cx);
                     }
                     start
@@ -198,9 +198,9 @@ impl ReaderScreen {
             };
             book.reload_marks(&env);
             cx.command(annotations::changed(&book.path));
-            let note = annotations::note_of(env.storage, &book.path, at);
+            let note = annotations::note_of(env.storage(), &book.path, at);
             cx.command(
-                ask::text(env.i18n.tr("reader.note.prompt"), &crate::NOTE_ENTERED)
+                ask::text(env.i18n().tr("reader.note.prompt"), &crate::NOTE_ENTERED)
                     .context(&crate::toc::locator_params(&book.path, at))
                     .initial(note)
                     .command(),
@@ -246,7 +246,7 @@ impl ReaderScreen {
         }
         // An action of the selection menu, e.g. chosen in its list.
         if env
-            .menus
+            .menus()
             .items(crate::SELECTION_MENU.as_str())
             .iter()
             .any(|item| item.id == a)

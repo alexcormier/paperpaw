@@ -52,13 +52,13 @@ pub fn icon_ink(env: &Env<'_>, name: &str, size: f32) -> Option<(i32, i32)> {
 /// plugin named for it, else its default.
 pub(super) fn icon<'f>(env: &Env<'f>, name: &str) -> Option<(FontHandle<'f>, char)> {
     let name = if name.starts_with("core.icon.") {
-        env.menus
+        env.menus()
             .icon(name)
             .or_else(|| crate::icons::default_of(name))?
     } else {
         name
     };
-    let font = env.fonts.bound(crate::builtin::fonts::ICONS.as_str())?;
+    let font = env.fonts().bound(crate::builtin::fonts::ICONS.as_str())?;
     let ch = crate::icons::char(name)?;
     font.has_char(ch).then_some((font, ch))
 }
@@ -106,7 +106,7 @@ pub fn heading_height(env: &Env<'_>, style: &UiStyle) -> u16 {
 /// Draws a section's heading in `rect`: small and gray, low in its room,
 /// so it reads as belonging to the entries below; between the margins, a
 /// long one shortened with "…" as the rows' titles are.
-pub fn draw_heading(
+pub(crate) fn draw_heading(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -163,7 +163,13 @@ pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
 /// Draws a switch at the right end of `row`: filled with the knob on the
 /// right when `on`, outlined with the knob on the left when off. `inverted`
 /// for a focused (black) row.
-pub fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool, inverted: bool) {
+pub(crate) fn draw_switch(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    row: Rect,
+    on: bool,
+    inverted: bool,
+) {
     let r = switch_rect(style, row);
     canvas.describe(Role::Switch, "", r).on(Some(on));
     let part = super::look::SwitchPart {
@@ -219,7 +225,7 @@ pub fn icon_room(env: &Env<'_>, style: &UiStyle, any: bool) -> u16 {
 /// Draws a list row's icon at the margin, centred on the row's first
 /// line (`rect`), and returns the rest of the row for its label: the
 /// label starts where it would after any icon, so rows line up.
-pub fn draw_row_icon(
+pub(crate) fn draw_row_icon(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -252,7 +258,7 @@ pub fn draw_row_icon(
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
-pub fn draw_switch_row(
+pub(crate) fn draw_switch_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -289,7 +295,7 @@ pub fn draw_switch_row(
 
 /// Whether icons can be drawn (an icon font is there).
 pub fn has_icons(env: &Env<'_>) -> bool {
-    env.fonts
+    env.fonts()
         .bound(crate::builtin::fonts::ICONS.as_str())
         .is_some()
 }
@@ -300,12 +306,12 @@ pub fn has_icons(env: &Env<'_>) -> bool {
 /// that tell what a tap or a hold does use it, so they never speak of
 /// taps on a device without a touch screen.
 pub fn tr_input<'a>(env: &Env<'a>, key: &'a str) -> &'a str {
-    if !env.device.input.touch
-        && let Some(text) = env.i18n.get(&format!("{key}.buttons"))
+    if !env.device().input.touch
+        && let Some(text) = env.i18n().get(&format!("{key}.buttons"))
     {
         return text;
     }
-    env.i18n.tr(key)
+    env.i18n().tr(key)
 }
 
 /// Draws `text` vertically centred in `area`, starting at `x`; text
@@ -412,7 +418,7 @@ pub fn fit_pair(
     (title, value, value_width)
 }
 
-/// The height [`draw_message`] needs for all of `text` in an area
+/// The height [`Ui::message`](super::Ui::message) needs for all of `text` in an area
 /// `width` wide.
 pub fn message_height(env: &Env<'_>, style: &UiStyle, width: u16, text: &str) -> u16 {
     let Some(font) = style.font(env) else {
@@ -425,7 +431,7 @@ pub fn message_height(env: &Env<'_>, style: &UiStyle, width: u16, text: &str) ->
 
 /// Draws wrapped, centred message text in `area` ([`message_height`]
 /// high holds all of it).
-pub fn draw_message(
+pub(crate) fn draw_message(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -477,7 +483,7 @@ fn as_shown<'a>(
     }
 }
 
-/// The height [`draw_note_line`] needs for all of `text` in an area
+/// The height [`Ui::note_line`](super::Ui::note_line) needs for all of `text` in an area
 /// `width` wide: its light line and the lines of the text.
 pub fn note_line_height(env: &Env<'_>, style: &UiStyle, width: u16, text: &str) -> u16 {
     let Some(font) = style.font(env) else {
@@ -493,7 +499,7 @@ pub fn note_line_height(env: &Env<'_>, style: &UiStyle, width: u16, text: &str) 
 /// what just happened): a light line above it, then `text` in small gray
 /// letters, wrapped on as many lines as `area` holds (the last one
 /// shortened if need be; [`note_line_height`] holds all of it).
-pub fn draw_note_line(
+pub(crate) fn draw_note_line(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -620,7 +626,7 @@ fn empty_title_height(font: &FontHandle<'_>, size: f32, count: usize) -> f32 {
     line + font.heading_line_height(size) * count.saturating_sub(1) as f32
 }
 
-/// The height [`draw_empty`] needs in an area `width` wide for all of
+/// The height [`Ui::empty`](super::Ui::empty) needs in an area `width` wide for all of
 /// `title` and `text` in their full sizes, without its icon (which it
 /// shows where there is room for it as well).
 pub fn empty_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str, text: &str) -> u16 {
@@ -652,7 +658,7 @@ pub fn empty_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str, tex
     clippy::too_many_lines,
     reason = "longer than the limit from before it was set; split it when it is next changed"
 )]
-pub fn draw_empty(
+pub(crate) fn draw_empty(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,

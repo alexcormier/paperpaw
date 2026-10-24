@@ -64,7 +64,7 @@ struct Lines;
 
 impl Screen for Lines {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let display = env.device.display;
+        let display = env.device().display;
         canvas.clear(Color::WHITE);
         for y in (0..i32::from(display.height)).step_by(8) {
             canvas.fill_rect(0, y, u32::from(display.width), 1, Color::BLACK);
@@ -168,7 +168,7 @@ impl Screen for Ask {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        MOON_SHOWN.with(|m| m.set(Some(env.widgets.shown(&env, "owls.moon"))));
+        MOON_SHOWN.with(|m| m.set(Some(env.widgets().shown(&env, "owls.moon"))));
     }
 }
 

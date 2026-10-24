@@ -57,12 +57,12 @@ enum Way {
 }
 
 fn way(env: &Env<'_>, id: &str) -> Way {
-    match env.plugins.get(id) {
+    match env.plugins().get(id) {
         Some(info) if info.enabled => Way::There,
         Some(info) if info.kind == PluginKind::BuiltIn => Way::SwitchOn,
         // A code plugin there but off is the plugin manager's.
         Some(_) => Way::There,
-        None if env.native.is_some() && env.caps.network => Way::Install,
+        None if env.native().is_some() && env.caps().network => Way::Install,
         None => Way::No,
     }
 }
@@ -86,7 +86,7 @@ struct OfferScreen {
 impl OfferScreen {
     fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         // A bar along the bottom: its button keeps the side margin from
@@ -132,7 +132,7 @@ impl OfferScreen {
             return None;
         }
         let font = self.style.font(env)?;
-        let label = env.i18n.tr("store.offer.add");
+        let label = env.i18n().tr("store.offer.add");
         let pad = self.style.margin();
         let width = font.measure(self.style.text(), label) as u16 + 2 * pad;
         let band = ui::edge_bar_band(&self.style, self.bar, false);
@@ -170,7 +170,7 @@ impl OfferScreen {
         if !fetch.is_empty() {
             // This page said what they are: no need to tell it again on
             // a plugin's page.
-            trust::tell(env.storage);
+            trust::tell(env.storage());
             let mut out = paperpaw_sdk::Commands::new();
             queue::add_quietly(&env, &fetch, &mut out);
             out.into_iter().for_each(|command| cx.command(command));
@@ -180,7 +180,7 @@ impl OfferScreen {
         } else {
             "store.offer.adding"
         };
-        cx.command(Command::Notify(env.i18n.tr(key).to_string()));
+        cx.command(Command::Notify(env.i18n().tr(key).to_string()));
         cx.command(Command::Back);
     }
 }
@@ -196,7 +196,7 @@ impl Screen for OfferScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("store.offer.title"),
+            env.i18n().tr("store.offer.title"),
             None,
             self.list.paging(len),
         );
@@ -207,7 +207,7 @@ impl Screen for OfferScreen {
                 alloc::format!("store.offer.{id}"),
                 alloc::format!("store.offer.{id}.help"),
             );
-            let (name, note) = (env.i18n.tr(&name), env.i18n.tr(&note));
+            let (name, note) = (env.i18n().tr(&name), env.i18n().tr(&note));
             ui::Row::switch(name, on)
                 .note(note)
                 .focused(focused)
@@ -216,7 +216,7 @@ impl Screen for OfferScreen {
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
         ui.canvas().fill(line, Color::gray(150));
         if let Some(button) = button {
-            let label = env.i18n.tr("store.offer.add");
+            let label = env.i18n().tr("store.offer.add");
             ui.button(button, label, true, self.on_button);
         }
         let right = button.map_or(self.bar.width, |b| b.x);

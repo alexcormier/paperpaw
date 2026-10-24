@@ -109,15 +109,15 @@ impl<'a> Device<'a> {
     /// This device, if plugin libraries know it.
     pub(crate) fn of(env: &Env<'a>) -> Option<Device<'a>> {
         Some(Device {
-            name: env.catalog_device?,
-            fingerprint: env.native.map(|native| native.fingerprint),
-            code_file: env.native.map_or("", |native| &native.file),
-            plugins: Some(env.plugins),
+            name: env.catalog_device()?,
+            fingerprint: env.native().map(|native| native.fingerprint),
+            code_file: env.native().map_or("", |native| &native.file),
+            plugins: Some(env.plugins()),
             sdk: env
-                .plugins
+                .plugins()
                 .kernel()
                 .map_or(paperpaw_sdk::SDK_VERSION, |kernel| kernel.manifest.version),
-            official: env.settings.read(&crate::CATALOG).trim() == OFFICIAL_LIST,
+            official: env.settings().read(&crate::CATALOG).trim() == OFFICIAL_LIST,
         })
     }
 }
@@ -167,7 +167,7 @@ impl Entry {
     /// The version installed, if it is (a code plugin's update waiting for
     /// the restart counts).
     pub(crate) fn installed(&self, env: &Env<'_>) -> Option<Version> {
-        env.plugins
+        env.plugins()
             .get(&self.id)
             .map(|info| info.update.unwrap_or(info.manifest.version))
     }

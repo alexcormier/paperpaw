@@ -54,8 +54,8 @@ fn headings_path(path: &str) -> String {
 
 /// The headings found before, if the book is still the same file.
 fn load_headings(env: &Env<'_>, path: &str) -> Option<Vec<TocEntry>> {
-    let size = env.storage.size(path).ok()?;
-    let data = paperpaw_sdk::read_file(env.storage, &headings_path(path), 256 * 1024).ok()?;
+    let size = env.storage().size(path).ok()?;
+    let data = paperpaw_sdk::read_file(env.storage(), &headings_path(path), 256 * 1024).ok()?;
     let text = core::str::from_utf8(&data).ok()?;
     let mut lines = text.lines();
     if lines.next()? != alloc::format!("size {size}") {
@@ -79,7 +79,7 @@ fn load_headings(env: &Env<'_>, path: &str) -> Option<Vec<TocEntry>> {
 }
 
 fn save_headings(env: &Env<'_>, path: &str, headings: &[TocEntry]) {
-    let size = env.storage.size(path).unwrap_or_default();
+    let size = env.storage().size(path).unwrap_or_default();
     let mut out = alloc::format!("size {size}\n");
     for h in headings {
         out.push_str(&alloc::format!(
@@ -94,7 +94,7 @@ fn save_headings(env: &Env<'_>, path: &str, headings: &[TocEntry]) {
         clippy::let_underscore_must_use,
         reason = "the headings kept as a cache, made again where missing"
     )]
-    let _ = env.storage.write(&headings_path(path), out.as_bytes());
+    let _ = env.storage().write(&headings_path(path), out.as_bytes());
 }
 
 /// Headings at their levels below the highest one found (0 for it).
@@ -128,12 +128,12 @@ impl TocScreen {
     pub(crate) fn open(env: &Env<'_>, params: &Params) -> Self {
         let path = params.get(params::PATH).unwrap_or_default().to_string();
         let options = crate::screen::open_options(env);
-        let document = env.formats.open_with(env.storage, &path, &options).ok();
+        let document = env.formats().open_with(env.storage(), &path, &options).ok();
         let len = document
             .as_ref()
-            .map_or(0, |d| d.toc_len(env.storage) as usize);
+            .map_or(0, |d| d.toc_len(env.storage()) as usize);
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -178,13 +178,13 @@ impl TocScreen {
         };
         let mut focus = 0;
         for index in 0..self.len {
-            let Some(entry) = document.toc_entry(env.storage, index as u32) else {
+            let Some(entry) = document.toc_entry(env.storage(), index as u32) else {
                 continue;
             };
             let before = match entry.at.section.cmp(&at.section) {
                 core::cmp::Ordering::Less => true,
                 core::cmp::Ordering::Equal => document
-                    .toc_target(env.storage, index as u32)
+                    .toc_target(env.storage(), index as u32)
                     .is_some_and(|target| target <= at),
                 core::cmp::Ordering::Greater => false,
             };
@@ -210,7 +210,7 @@ impl TocScreen {
             );
         } else if let Some(document) = &self.document {
             for index in self.first..end {
-                let entry = document.toc_entry(env.storage, index as u32);
+                let entry = document.toc_entry(env.storage(), index as u32);
                 self.visible.push(entry.unwrap_or(TocEntry {
                     title: String::from("?"),
                     level: 0,
@@ -226,7 +226,7 @@ impl TocScreen {
         };
         let target = match &self.headings {
             Some(headings) => headings.get(index).map(|h| h.at),
-            None => document.toc_target(cx.env().storage, index as u32),
+            None => document.toc_target(cx.env().storage(), index as u32),
         };
         if let Some(at) = target {
             cx.command(Command::Back);
@@ -254,7 +254,7 @@ impl TocScreen {
             if at.section >= document.sections() || found.len() >= MAX_HEADINGS {
                 return true;
             }
-            match document.block_at(env.storage, at) {
+            match document.block_at(env.storage(), at) {
                 Ok(Some(block)) => {
                     if let paperpaw_sdk::document::BlockKind::Heading(level) = block.kind {
                         let title: String =
@@ -281,7 +281,7 @@ impl TocScreen {
 impl Screen for TocScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.scan.is_some() {
-            let now = cx.env().now;
+            let now = cx.env().now();
             cx.wake_at(now);
         }
     }
@@ -289,7 +289,7 @@ impl Screen for TocScreen {
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if !self.scan_step(&env) {
-            cx.wake_at(env.now.add_millis(5));
+            cx.wake_at(env.now().add_millis(5));
             return;
         }
         let Some((_, found)) = self.scan.take() else {
@@ -313,7 +313,7 @@ impl Screen for TocScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("reader.toc"),
+            env.i18n().tr("reader.toc"),
             None,
             self.list.paging(len),
         );
@@ -323,7 +323,7 @@ impl Screen for TocScreen {
             } else {
                 "reader.no-toc"
             };
-            ui.message(self.list.area(), env.i18n.tr(message));
+            ui.message(self.list.area(), env.i18n().tr(message));
             return;
         }
         let Some(font) = style.font(env) else {

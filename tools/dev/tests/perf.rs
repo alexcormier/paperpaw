@@ -28,7 +28,7 @@ struct Reads;
 
 impl Screen for Reads {
     fn draw(&mut self, _: &mut Canvas<'_>, env: &Env<'_>) {
-        let _ = paperpaw_sdk::read_file(env.storage, "notes.txt", 1024);
+        let _ = paperpaw_sdk::read_file(env.storage(), "notes.txt", 1024);
     }
 
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
@@ -79,7 +79,7 @@ impl Widget for ReadsWidget {
     }
 
     fn draw(&self, _: &mut Canvas<'_>, env: &Env<'_>, _: Rect) {
-        let _ = paperpaw_sdk::read_file(env.storage, "notes.txt", 1024);
+        let _ = paperpaw_sdk::read_file(env.storage(), "notes.txt", 1024);
     }
 }
 

@@ -14,12 +14,12 @@ use super::UiStyle;
 /// them once and not with every part it draws.
 ///
 /// ```
-/// use paperpaw_sdk::ui::{Ui, UiStyle};
+/// use paperpaw_sdk::ui::{self, Ui, UiStyle};
 /// use paperpaw_sdk::{Canvas, Env, Rect};
 ///
 /// fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, focus: usize) {
 ///     let mut ui = Ui::new(canvas, env, style);
-///     let focused = ui.focus_shown() && focus == 0;
+///     let focused = ui::focus_shown(env) && focus == 0;
 ///     ui.button(Rect::new(20, 700, 200, 60), env.i18n().tr("hello.ok"), false, focused);
 ///     ui.message(Rect::new(0, 100, 480, 400), env.i18n().tr("hello.text"));
 /// }
@@ -72,11 +72,6 @@ impl<'c> Ui<'c> {
         self.font
     }
 
-    /// Whether a focus is shown ([`focus_shown`](super::focus_shown)).
-    pub fn focus_shown(&self) -> bool {
-        super::focus_shown(self.env)
-    }
-
     /// The translation of `key`.
     pub fn tr(&self, key: &'c str) -> &'c str {
         self.env.i18n().tr(key)
@@ -103,7 +98,7 @@ impl<'c> Ui<'c> {
         }
     }
 
-    /// A button ([`draw_button`](super::draw_button)).
+    /// A button.
     pub fn button(&mut self, rect: Rect, label: &str, on: bool, focused: bool) {
         super::draw_button(
             &mut self.canvas,
@@ -116,68 +111,47 @@ impl<'c> Ui<'c> {
         );
     }
 
-    /// A button that does nothing now
-    /// ([`draw_faint_button`](super::draw_faint_button)).
+    /// A button that does nothing now.
     pub fn faint_button(&mut self, rect: Rect, label: &str, focused: bool) {
         super::draw_faint_button(&mut self.canvas, self.env, self.style, rect, label, focused);
     }
 
-    /// A button with an icon; the ink of its icon
-    /// ([`draw_icon_button`](super::draw_icon_button)).
+    /// A button with an icon; the ink of its icon.
     pub fn icon_button(&mut self, rect: Rect, name: &str, on: bool, focused: bool) -> Color {
         super::draw_icon_button(&mut self.canvas, self.style, rect, name, on, focused)
     }
 
-    /// The focus round `rect` ([`draw_focus`](super::draw_focus)).
+    /// The focus round `rect`.
     pub fn focus(&mut self, rect: Rect) {
         super::draw_focus(&mut self.canvas, self.style, rect);
     }
 
-    /// The line below a row ([`draw_separator`](super::draw_separator)).
+    /// The line below a row.
     pub fn separator(&mut self, rect: Rect, indent: u16) {
         super::draw_separator(&mut self.canvas, self.style, rect, indent);
     }
 
-    /// A heading over a group of rows ([`draw_heading`](super::draw_heading)).
+    /// A heading over a group of rows.
     pub fn heading(&mut self, rect: Rect, text: &str) {
         super::draw_heading(&mut self.canvas, self.env, self.style, rect, text);
     }
 
-    /// How high a heading is ([`heading_height`](super::heading_height)).
-    pub fn heading_height(&self) -> u16 {
-        super::heading_height(self.env, self.style)
-    }
-
-    /// A switch in `row` ([`draw_switch`](super::draw_switch)).
+    /// A switch in `row`.
     pub fn switch(&mut self, row: Rect, on: bool, inverted: bool) {
         super::draw_switch(&mut self.canvas, self.style, row, on, inverted);
     }
 
-    /// Wrapped, centred text ([`draw_message`](super::draw_message)).
+    /// Wrapped, centred text.
     pub fn message(&mut self, area: Rect, text: &str) {
         super::draw_message(&mut self.canvas, self.env, self.style, area, text);
     }
 
-    /// How high a message is in an area `width` wide
-    /// ([`message_height`](super::message_height)).
-    pub fn message_height(&self, width: u16, text: &str) -> u16 {
-        super::message_height(self.env, self.style, width, text)
-    }
-
-    /// A note at the bottom of a screen
-    /// ([`draw_note_line`](super::draw_note_line)).
+    /// A note at the bottom of a screen.
     pub fn note_line(&mut self, area: Rect, text: &str) {
         super::draw_note_line(&mut self.canvas, self.env, self.style, area, text);
     }
 
-    /// How high a note line is in an area `width` wide
-    /// ([`note_line_height`](super::note_line_height)).
-    pub fn note_line_height(&self, width: u16, text: &str) -> u16 {
-        super::note_line_height(self.env, self.style, width, text)
-    }
-
-    /// What a screen with nothing to show says
-    /// ([`draw_empty`](super::draw_empty)).
+    /// What a screen with nothing to show says.
     pub fn empty(&mut self, area: Rect, icon: &str, title: &str, text: &str) {
         super::draw_empty(
             &mut self.canvas,
@@ -190,30 +164,22 @@ impl<'c> Ui<'c> {
         );
     }
 
-    /// How high that is in an area `width` wide
-    /// ([`empty_height`](super::empty_height)).
-    pub fn empty_height(&self, width: u16, title: &str, text: &str) -> u16 {
-        super::empty_height(self.env, self.style, width, title, text)
-    }
-
-    /// A card or frame round `area`; the room inside it
-    /// ([`draw_card`](super::draw_card)).
+    /// A card or frame round `area`; the room inside it.
     pub fn card(&mut self, area: Rect, frame: Frame) -> Rect {
         super::draw_card(&mut self.canvas, self.style, area, frame)
     }
 
-    /// A progress bar ([`draw_progress`](super::draw_progress)).
+    /// A progress bar.
     pub fn progress(&mut self, area: Rect, permille: u16, ink: Color) {
         super::draw_progress(&mut self.canvas, self.style, area, permille, ink);
     }
 
-    /// An icon; where it ends ([`draw_icon`](super::draw_icon)).
+    /// An icon; where it ends.
     pub fn icon(&mut self, name: &str, size: f32, x: f32, area: Rect, color: Color) -> f32 {
         super::draw_icon(&mut self.canvas, self.env, name, size, x, area, color)
     }
 
-    /// The icon at the start of a row; the room right of it
-    /// ([`draw_row_icon`](super::draw_row_icon)).
+    /// The icon at the start of a row; the room right of it.
     pub fn row_icon(&mut self, rect: Rect, room: u16, icon: Option<&str>, ink: Color) -> Rect {
         super::draw_row_icon(
             &mut self.canvas,
@@ -226,17 +192,12 @@ impl<'c> Ui<'c> {
         )
     }
 
-    /// The room rows keep for icons ([`icon_room`](super::icon_room)).
-    pub fn icon_room(&self, any: bool) -> u16 {
-        super::icon_room(self.env, self.style, any)
-    }
-
-    /// A screen's header ([`draw_header`](super::draw_header)).
+    /// A screen's header.
     pub fn header(&mut self, area: Rect, title: &str, note: Option<&str>) {
         super::draw_header(&mut self.canvas, self.env, self.style, area, title, note);
     }
 
-    /// A field of text in a row ([`draw_text_field`](super::draw_text_field)).
+    /// A field of text in a row.
     pub fn text_field(
         &mut self,
         row: Rect,

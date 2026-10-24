@@ -15,12 +15,12 @@ pub(super) fn typography(
     language: &str,
     whole_pages: bool,
 ) -> Typography {
-    let edge = env.settings.read(&status::EDGE).clamp(0, 150) as u32;
+    let edge = env.settings().read(&status::EDGE).clamp(0, 150) as u32;
     let room = StatusRoom::new(
         status::shown(env, true),
         status::shown(env, false),
         status::height(env),
-        env.metrics.tenth_mm(edge) as f32,
+        env.metrics().tenth_mm(edge) as f32,
     );
     Typography::new(env, font, language, whole_pages, room)
 }

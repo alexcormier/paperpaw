@@ -121,18 +121,18 @@ fn expected(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
 
 /// Whether the plugin downloaded into `folder` may be installed.
 pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
-    let storage = env.storage;
+    let storage = env.storage();
     let code = paperpaw_sdk::native::CODE_FILES
         .iter()
         .map(|name| format!("{folder}/{name}"))
         .find(|path| storage.exists(path));
-    if !crate::catalog::may_install(env.plugins, plugin, code.is_some()) {
+    if !crate::catalog::may_install(env.plugins(), plugin, code.is_some()) {
         return Verdict::Refused(Refusal::Taken);
     }
     let Some(code) = code else {
         return Verdict::Install { code: None };
     };
-    let Some(native) = env.native.filter(|native| code.ends_with(&*native.file)) else {
+    let Some(native) = env.native().filter(|native| code.ends_with(&*native.file)) else {
         return Verdict::Refused(Refusal::Unsupported);
     };
     let (header, signature) = match check_file(storage, &code) {
@@ -184,9 +184,9 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
 /// cannot be written (its code would not run): not installed, the job
 /// left for another try.
 pub(crate) fn install(env: &Env<'_>, code: Option<Code>, out: &mut Commands) -> Option<Progress> {
-    let folder = INSTALLER.folder(env.storage)?;
+    let folder = INSTALLER.folder(env.storage())?;
     install::adopt(env);
-    let from = match install::folder_version(env.storage, &folder) {
+    let from = match install::folder_version(env.storage(), &folder) {
         Some(version) => From::Store(version),
         None => From::Local,
     };
@@ -194,18 +194,18 @@ pub(crate) fn install(env: &Env<'_>, code: Option<Code>, out: &mut Commands) -> 
     if let Some(code) = code {
         marks = marks.code(code.sha256).author(code.author);
     }
-    if install::marks::write(env.storage, &folder, &marks).is_err() {
+    if install::marks::write(env.storage(), &folder, &marks).is_err() {
         return None;
     }
-    let _ = env.storage.remove(&expected_path());
+    let _ = env.storage().remove(&expected_path());
     INSTALLER.install(env, out)
 }
 
 /// Installs the plugin waiting for the reader's word, signed by another
 /// author than the one before: that author is remembered from now on.
 pub(crate) fn install_anyway(env: &Env<'_>, out: &mut Commands) -> Option<Progress> {
-    let progress = INSTALLER.progress(env.storage)?;
-    let folder = INSTALLER.folder(env.storage)?;
+    let progress = INSTALLER.progress(env.storage())?;
+    let folder = INSTALLER.folder(env.storage())?;
     match verdict(env, &progress.plugin, &folder) {
         Verdict::OtherAuthor { code } => install(env, Some(code), out),
         _ => None,

@@ -30,7 +30,7 @@ pub(crate) fn of(env: &Env<'_>, mood: Mood) -> Option<ImageRef> {
 }
 
 fn opened(env: &Env<'_>, file: &str) -> Option<ImageRef> {
-    ImageFile::open(env.storage, file).map(|f| ImageRef {
+    ImageFile::open(env.storage(), file).map(|f| ImageRef {
         path: f.path,
         width: f.width,
         height: f.height,
@@ -40,7 +40,7 @@ fn opened(env: &Env<'_>, file: &str) -> Option<ImageRef> {
 /// One's own picture of `mood`, if the folder has one PaperPaw reads.
 fn own(env: &Env<'_>, mood: Mood) -> Option<ImageRef> {
     let folder: String = env
-        .settings
+        .settings()
         .text(PICTURES.as_str())
         .trim_matches('/')
         .into();
@@ -49,7 +49,7 @@ fn own(env: &Env<'_>, mood: Mood) -> Option<ImageRef> {
     }
     for extension in ["png", "jpg", "jpeg", "PNG", "JPG", "JPEG"] {
         let path = format!("{folder}/{}.{extension}", mood.name());
-        let Ok(size) = env.storage.size(&path) else {
+        let Ok(size) = env.storage().size(&path) else {
             continue;
         };
         // Made again where the picture changed (another size, mostly).
@@ -59,7 +59,7 @@ fn own(env: &Env<'_>, mood: Mood) -> Option<ImageRef> {
         }
         let fit = Fit::side(MOST);
         if let Some(image) =
-            paperpaw_sdk::image::picture_from_file(env.storage, &path, &file, fit, false)
+            paperpaw_sdk::image::picture_from_file(env.storage(), &path, &file, fit, false)
         {
             return Some(image);
         }
@@ -73,6 +73,6 @@ fn cat(env: &Env<'_>, mood: Mood) -> Option<ImageRef> {
     // Named by its size: a cat drawn anew in an update is decoded anew.
     let file = data(&format!("cat-{}-{}.gray", mood.name(), bytes.len()));
     opened(env, &file).or_else(|| {
-        paperpaw_sdk::image::picture_from_bytes(env.storage, bytes, &file, Fit::side(MOST), false)
+        paperpaw_sdk::image::picture_from_bytes(env.storage(), bytes, &file, Fit::side(MOST), false)
     })
 }

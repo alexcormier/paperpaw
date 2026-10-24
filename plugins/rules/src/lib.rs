@@ -100,7 +100,7 @@ impl State {
         applies: impl Fn(&Trigger) -> bool,
     ) {
         let reading = self.reading.get();
-        self.store.with(env.storage, |rules| {
+        self.store.with(env.storage(), |rules| {
             for rule in rules {
                 if !rule.on || !applies(&rule.trigger) || !holds(env, &rule.condition, reading) {
                     continue;
@@ -117,7 +117,7 @@ impl State {
                     Effect::Switch(id, on) => (id, SettingValue::Bool(*on)),
                     Effect::Number(id, value) => (id, SettingValue::Int(*value)),
                 };
-                if env.settings.get(id.as_str()) != Some(&value) {
+                if env.settings().get(id.as_str()) != Some(&value) {
                     self.caused(id, depth.saturating_add(1));
                     out.push(Command::SetSetting(id.clone(), value));
                 }
@@ -143,8 +143,8 @@ impl State {
 
 /// Whether `condition` holds now.
 fn holds(env: &Env<'_>, condition: &Condition, reading: bool) -> bool {
-    let switch = |id: &Id| env.settings.get(id.as_str()) == Some(&SettingValue::Bool(true));
-    let charging = env.status.battery.map(|b| b.charging);
+    let switch = |id: &Id| env.settings().get(id.as_str()) == Some(&SettingValue::Bool(true));
+    let charging = env.status().battery.map(|b| b.charging);
     match condition {
         Condition::Always => true,
         Condition::Between { from, to } => time::local_time(env).is_some_and(|t| {
@@ -173,7 +173,7 @@ fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Commands) {
         return;
     };
     let minute_now = u16::from(now.hour) * 60 + u16::from(now.minute);
-    let next = store.with(env.storage, |rules| {
+    let next = store.with(env.storage(), |rules| {
         rules
             .iter()
             .filter(|r| r.on)
@@ -188,7 +188,7 @@ fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Commands) {
     if let Some((ahead, at)) = next {
         // The start of that minute.
         let at_minute = env
-            .now
+            .now()
             .add_millis(u64::from(ahead) * 60_000 - u64::from(now.second) * 1000);
         out.push(Command::work(
             Work::at(TIME, at_minute).with(Params::new().with(MINUTE, at.to_string())),
@@ -199,13 +199,13 @@ fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Commands) {
 /// Sets the timer to a minute from now while rules repeat: they count
 /// minutes from the start, so they need no clock.
 fn schedule_tick(env: &Env<'_>, store: &Store, out: &mut Commands) {
-    let repeats = store.with(env.storage, |rules| {
+    let repeats = store.with(env.storage(), |rules| {
         rules
             .iter()
             .any(|r| r.on && matches!(r.trigger, Trigger::Every(_)))
     });
     if repeats {
-        out.push(Command::work(Work::at(TICK, env.now.add_millis(60_000))));
+        out.push(Command::work(Work::at(TICK, env.now().add_millis(60_000))));
     }
 }
 
@@ -218,29 +218,29 @@ fn days_text(env: &Env<'_>, days: u8) -> String {
         _ => {
             let names: Vec<&str> = (0..7)
                 .filter(|d| days & (1 << d) != 0)
-                .map(|d| env.i18n.tr(DAY_NAMES[d]))
+                .map(|d| env.i18n().tr(DAY_NAMES[d]))
                 .collect();
             return names.join(", ");
         }
     };
-    env.i18n.tr(key).to_string()
+    env.i18n().tr(key).to_string()
 }
 
 /// The name of a setting.
 fn setting_title<'e>(env: &Env<'e>, id: &'e Id) -> &'e str {
     let title = env
-        .settings
+        .settings()
         .specs()
         .find(|s| s.id == *id)
         .map_or(id.as_str(), |s| s.title.as_ref());
-    env.i18n.tr(title)
+    env.i18n().tr(title)
 }
 
 /// When a rule applies, with its condition, in words.
 fn when_text(env: &Env<'_>, rule: &Rule) -> String {
     let when = trigger_text(env, &rule.trigger);
     match condition_text(env, &rule.condition) {
-        Some(condition) => env.i18n.format(
+        Some(condition) => env.i18n().format(
             "rules.when-if",
             &[
                 ("when", Arg::Str(&when)),
@@ -253,10 +253,10 @@ fn when_text(env: &Env<'_>, rule: &Rule) -> String {
 
 /// A condition in words; `None` for always.
 fn condition_text(env: &Env<'_>, condition: &Condition) -> Option<String> {
-    let tr = |key: &str| env.i18n.tr(key).to_string();
+    let tr = |key: &str| env.i18n().tr(key).to_string();
     Some(match condition {
         Condition::Always => return None,
-        Condition::Between { from, to } => env.i18n.format(
+        Condition::Between { from, to } => env.i18n().format(
             "rules.if.between",
             &[
                 ("from", Arg::Str(&rule::clock(*from))),
@@ -267,11 +267,11 @@ fn condition_text(env: &Env<'_>, condition: &Condition) -> Option<String> {
         Condition::NotReading => tr("rules.if.not-reading"),
         Condition::OnBattery => tr("rules.if.battery"),
         Condition::Charging => tr("rules.if.charging"),
-        Condition::SwitchOn(id) => env.i18n.format(
+        Condition::SwitchOn(id) => env.i18n().format(
             "rules.if.switch-on",
             &[("setting", Arg::Str(setting_title(env, id)))],
         ),
-        Condition::SwitchOff(id) => env.i18n.format(
+        Condition::SwitchOff(id) => env.i18n().format(
             "rules.if.switch-off",
             &[("setting", Arg::Str(setting_title(env, id)))],
         ),
@@ -280,18 +280,18 @@ fn condition_text(env: &Env<'_>, condition: &Condition) -> Option<String> {
 
 /// When a rule applies, in words.
 fn trigger_text(env: &Env<'_>, trigger: &Trigger) -> String {
-    let tr = |key: &str| env.i18n.tr(key).to_string();
+    let tr = |key: &str| env.i18n().tr(key).to_string();
     match trigger {
         Trigger::Start => tr("rules.when.start"),
         Trigger::Time { minute, days } => {
             let time = rule::clock(*minute);
             let days = days_text(env, *days);
-            env.i18n.format(
+            env.i18n().format(
                 "rules.when.time",
                 &[("time", Arg::Str(&time)), ("days", Arg::Str(&days))],
             )
         }
-        Trigger::Every(minutes) => env.i18n.plural(
+        Trigger::Every(minutes) => env.i18n().plural(
             "rules.when.every",
             i64::from(*minutes),
             &[("count", Arg::Int(i64::from(*minutes)))],
@@ -301,21 +301,21 @@ fn trigger_text(env: &Env<'_>, trigger: &Trigger) -> String {
         Trigger::BookFinished => tr("rules.when.book-finished"),
         Trigger::Resume => tr("rules.when.resume"),
         Trigger::Sleep => tr("rules.when.sleep"),
-        Trigger::BatteryBelow(percent) => env.i18n.format(
+        Trigger::BatteryBelow(percent) => env.i18n().format(
             "rules.when.battery",
             &[("percent", Arg::Int(i64::from(*percent)))],
         ),
-        Trigger::BatteryAtLeast(percent) => env.i18n.format(
+        Trigger::BatteryAtLeast(percent) => env.i18n().format(
             "rules.when.battery-at",
             &[("percent", Arg::Int(i64::from(*percent)))],
         ),
         Trigger::Charging => tr("rules.when.charging"),
         Trigger::Unplugged => tr("rules.when.unplugged"),
-        Trigger::SwitchOn(id) => env.i18n.format(
+        Trigger::SwitchOn(id) => env.i18n().format(
             "rules.when.switch-on",
             &[("setting", Arg::Str(setting_title(env, id)))],
         ),
-        Trigger::SwitchOff(id) => env.i18n.format(
+        Trigger::SwitchOff(id) => env.i18n().format(
             "rules.when.switch-off",
             &[("setting", Arg::Str(setting_title(env, id)))],
         ),
@@ -327,14 +327,14 @@ fn effect_text(env: &Env<'_>, effect: &Effect) -> String {
     match effect {
         Effect::Action(id) => {
             let title = env
-                .actions
+                .actions()
                 .get(id.as_str())
                 .map_or(id.as_str(), |a| a.title.as_ref());
-            env.i18n.tr(title).to_string()
+            env.i18n().tr(title).to_string()
         }
         Effect::Switch(id, on) => {
-            let state = env.i18n.tr(if *on { "rules.on" } else { "rules.off" });
-            env.i18n.format(
+            let state = env.i18n().tr(if *on { "rules.on" } else { "rules.off" });
+            env.i18n().format(
                 "rules.do.switch",
                 &[
                     ("setting", Arg::Str(setting_title(env, id))),
@@ -342,7 +342,7 @@ fn effect_text(env: &Env<'_>, effect: &Effect) -> String {
                 ],
             )
         }
-        Effect::Number(id, value) => env.i18n.format(
+        Effect::Number(id, value) => env.i18n().format(
             "rules.do.number",
             &[
                 ("setting", Arg::Str(setting_title(env, id))),
@@ -350,7 +350,7 @@ fn effect_text(env: &Env<'_>, effect: &Effect) -> String {
             ],
         ),
         Effect::Message(text) => env
-            .i18n
+            .i18n()
             .format("rules.do.message", &[("text", Arg::Str(text))]),
     }
 }
@@ -471,7 +471,7 @@ impl Plugin for Rules {
             // The clock became known, was set or moved to another zone:
             // the time of day waited for comes at another moment.
             schedule_time(env, &status.store, out);
-            let Some((percent, charging)) = env.status.battery.map(|b| (b.percent, b.charging))
+            let Some((percent, charging)) = env.status().battery.map(|b| (b.percent, b.charging))
             else {
                 return;
             };
@@ -496,7 +496,7 @@ impl Plugin for Rules {
                 schedule_time(env, &state.store, out);
                 return;
             }
-            let Some(SettingValue::Bool(on)) = env.settings.get(id) else {
+            let Some(SettingValue::Bool(on)) = env.settings().get(id) else {
                 return;
             };
             // Rules undoing each other's changes stop after a few.

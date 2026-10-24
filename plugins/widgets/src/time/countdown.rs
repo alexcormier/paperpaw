@@ -157,8 +157,8 @@ fn shows(env: &Env<'_>) -> String {
     format!(
         "{}|{}|{}",
         super::today_shows(env),
-        env.settings.read(&DATE),
-        env.settings.read(&TITLE)
+        env.settings().read(&DATE),
+        env.settings().read(&TITLE)
     )
 }
 
@@ -234,8 +234,13 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let Some(font) = font else {
         return;
     };
-    let Some(target) = parse(env.settings.read(&DATE)) else {
-        widgets::draw_message(canvas, env, &look, env.i18n.tr("widgets.countdown.no-date"));
+    let Some(target) = parse(env.settings().read(&DATE)) else {
+        widgets::draw_message(
+            canvas,
+            env,
+            &look,
+            env.i18n().tr("widgets.countdown.no-date"),
+        );
         return;
     };
     let (days, day) = days_until((now.year, now.month, now.day), target);
@@ -247,11 +252,11 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         day.2,
         matches!(target, Target::Once(..)) && day.0 != now.year,
     );
-    let title = env.settings.read(&TITLE).trim();
+    let title = env.settings().read(&TITLE).trim();
     let titled = !title.is_empty();
     // Without a title, the date in short: "24 December".
     let short = if day.0 == now.year {
-        env.i18n.format(
+        env.i18n().format(
             "widgets.date.short",
             &[
                 ("day", Arg::Int(i64::from(day.2))),
@@ -262,19 +267,19 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         date.clone()
     };
     let title = if titled { title } else { &short };
-    let shown = shown(env.i18n, days, title);
+    let shown = shown(env.i18n(), days, title);
     // Notes below: the date (where the title is not it already) and the
     // weeks.
     let mut notes = alloc::vec::Vec::new();
     if widgets::shows(env, ID.as_str(), "weeks") && days.abs() >= 7 {
         let weeks = env
-            .i18n
+            .i18n()
             .plural("widgets.countdown.weeks", days.abs() / 7, &[]);
         let rest = days.abs() % 7;
         notes.push(if rest == 0 {
             weeks
         } else {
-            let rest = env.i18n.plural("widgets.countdown.days", rest, &[]);
+            let rest = env.i18n().plural("widgets.countdown.days", rest, &[]);
             format!("{weeks}, {rest}")
         });
     }

@@ -25,11 +25,11 @@ pub(super) const FACES: [&str; 3] = [
 /// where there is none.
 pub(super) fn font<'a>(env: &Env<'a>, face: &str) -> Option<FontHandle<'a>> {
     let ui = || UiStyle::new(env).font(env);
-    let book = || env.fonts.bound(fonts::READING.as_str());
+    let book = || env.fonts().bound(fonts::READING.as_str());
     match FACES.iter().position(|f| *f == face) {
         Some(1) => book().or_else(ui),
         Some(2) => env
-            .fonts
+            .fonts()
             .bound(fonts::READING_ITALIC.as_str())
             .or_else(book)
             .or_else(ui),

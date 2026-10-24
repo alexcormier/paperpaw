@@ -114,12 +114,14 @@ impl ListScreen {
         paperpaw_sdk::install::adopt(env);
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
             area,
-            index: env.catalog_device.and_then(|_| Index::kept(env.storage)),
+            index: env
+                .catalog_device()
+                .and_then(|_| Index::kept(env.storage())),
             counts: Counts::default(),
             room: None,
             rows: Vec::new(),
@@ -145,8 +147,8 @@ impl ListScreen {
             for &(group, count) in index.runs() {
                 counts.groups[group] += count;
             }
-            let origins = paperpaw_sdk::install::Origins::read(env.storage);
-            index.scan(env.storage, &mut |_, entry: Entry| {
+            let origins = paperpaw_sdk::install::Origins::read(env.storage());
+            index.scan(env.storage(), &mut |_, entry: Entry| {
                 if entry.installed(env).is_some() {
                     counts.installed += 1;
                     counts.updates += usize::from(entry.newer_in(env, &origins));
@@ -166,7 +168,7 @@ impl ListScreen {
         self.rows.push(Row::New);
         self.first = self.rows.len();
         // The looks also without plugins of their own: *Fonts* is there.
-        let fonts = env.actions.contains(crate::FONTS.as_str());
+        let fonts = env.actions().contains(crate::FONTS.as_str());
         for (group, &count) in counts.groups.iter().enumerate() {
             if count > 0 || (fonts && GROUPS[group] == "look") {
                 self.rows.push(Row::Group(group));
@@ -197,15 +199,15 @@ impl ListScreen {
     /// Fetches the list anew.
     fn fetch(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(device) = env.catalog_device else {
+        let Some(device) = env.catalog_device() else {
             return;
         };
-        if !env.caps.network {
+        if !env.caps().network {
             self.trouble = Trouble::Offline;
             return self.redraw(cx);
         }
-        let list = env.settings.read(&CATALOG);
-        let url = catalog::list_url(list.trim(), device, env.i18n.language());
+        let list = env.settings().read(&CATALOG);
+        let url = catalog::list_url(list.trim(), device, env.i18n().language());
         let mut request = HttpRequest::new("GET", &url, LOADED);
         request = request.save_to(catalog::list_part());
         cx.command(Command::http(request));
@@ -220,7 +222,7 @@ impl ListScreen {
         let fetched = catalog::list_part();
         let index = catalog::Device::of(&env)
             .filter(|_| (200..300).contains(&reply.status))
-            .and_then(|device| catalog::take(env.storage, &fetched, &device));
+            .and_then(|device| catalog::take(env.storage(), &fetched, &device));
         match index {
             Some(index) => {
                 self.index = Some(index);
@@ -229,15 +231,15 @@ impl ListScreen {
             }
             // Another screen of the store took the same answer first (the
             // store opened twice): its index is the fresh one.
-            None if (200..300).contains(&reply.status) && !env.storage.exists(&fetched) => {
-                if let Some(index) = Index::kept(env.storage) {
+            None if (200..300).contains(&reply.status) && !env.storage().exists(&fetched) => {
+                if let Some(index) = Index::kept(env.storage()) {
                     self.index = Some(index);
                     self.trouble = Trouble::None;
                     self.count(&env);
                 }
             }
             None => {
-                let _ = env.storage.remove(&fetched);
+                let _ = env.storage().remove(&fetched);
                 // The list kept still serves; no answer at all is no
                 // connection.
                 if self.index.is_none() {
@@ -257,7 +259,7 @@ impl ListScreen {
         let open = |view: View| Command::OpenScreen(VIEW_SCREEN, view.params());
         match self.rows.get(entry).copied() {
             Some(Row::Search) => {
-                cx.command(ask::text(env.i18n.tr("store.search"), &SEARCHED).command());
+                cx.command(ask::text(env.i18n().tr("store.search"), &SEARCHED).command());
             }
             Some(Row::Installed) => cx.command(open(View::Installed)),
             Some(Row::New) => cx.command(open(View::New)),
@@ -312,13 +314,13 @@ pub(crate) fn open_page(n: usize, plugin: &Entry) -> Command {
 /// The name of group `group`.
 pub(crate) fn group_name(env: &Env<'_>, group: usize) -> alloc::string::String {
     let key = format!("store.group.{}", GROUPS[group]);
-    env.i18n.tr(&key).to_string()
+    env.i18n().tr(&key).to_string()
 }
 
 impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("store.title");
+        let title = env.i18n().tr("store.title");
         // The room left for plugins, beside the title.
         let note = self
             .room
@@ -331,7 +333,7 @@ impl Screen for ListScreen {
         }
         if self.list.is_empty() {
             let (icon, title, text) = match self.trouble {
-                _ if env.catalog_device.is_none() => {
+                _ if env.catalog_device().is_none() => {
                     ("cloud", "store.unsupported", "store.unsupported.help")
                 }
                 Trouble::Offline => ("wifi-off", "store.offline", "store.offline.help"),
@@ -343,10 +345,10 @@ impl Screen for ListScreen {
             } else {
                 ui::tr_input(env, text)
             };
-            ui.empty(self.area, icon, env.i18n.tr(title), text);
+            ui.empty(self.area, icon, env.i18n().tr(title), text);
             return;
         }
-        let room = ui.icon_room(true);
+        let room = ui::icon_room(ui.env(), ui.style(), true);
         self.list
             .draw(&mut ui, self.keys, |ui, item, rect, focused| {
                 let entry = match item {
@@ -359,15 +361,15 @@ impl Screen for ListScreen {
                 let ink = style.focus_ink(focused);
                 let rest = ui.row_icon(rect, room, Some(row.icon()), ink);
                 let name = match row {
-                    Row::Search => env.i18n.tr("store.search"),
-                    Row::Installed => env.i18n.tr("store.installed-list"),
-                    Row::New => env.i18n.tr("store.new"),
+                    Row::Search => env.i18n().tr("store.search"),
+                    Row::Installed => env.i18n().tr("store.installed-list"),
+                    Row::New => env.i18n().tr("store.new"),
                     Row::Group(group) => &group_name(env, group),
                 };
                 if row == Row::Installed && self.counts.updates > 0 {
                     // How many have an update, marked as in their rows.
                     let count = self.counts.updates as i64;
-                    let text = env.i18n.plural("store.updates-count", count, &[]);
+                    let text = env.i18n().plural("store.updates-count", count, &[]);
                     let right = f32::from(rect.x + rect.width) - style.margin() as f32;
                     let band = rest;
                     rows::draw_pill(ui, band, right, &text, focused);
@@ -381,7 +383,7 @@ impl Screen for ListScreen {
 
     fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
         if *action == actions::CONFIRM && self.retry() {
-            Hint::Text(env.i18n.tr("store.retry").to_string())
+            Hint::Text(env.i18n().tr("store.retry").to_string())
         } else {
             Hint::Default
         }

@@ -169,7 +169,7 @@ impl Run {
         if token.is_some() {
             self.refused = None;
         }
-        let waiting = waiting(env.storage);
+        let waiting = waiting(env.storage());
         if self.running {
             // Those exported meanwhile come along.
             for path in waiting {
@@ -183,16 +183,16 @@ impl Run {
             return;
         }
         let kept = env
-            .secrets
+            .secrets()
             .get(SECRET)
             .filter(|t| self.refused.as_deref() != Some(*t));
         let Some(token) = token.or(kept) else {
             if start == Start::Export {
                 out.push(Command::Notify(
-                    env.i18n.tr("readwise.needs-token").to_string(),
+                    env.i18n().tr("readwise.needs-token").to_string(),
                 ));
                 out.push(
-                    paperpaw_sdk::ask::text(env.i18n.tr("readwise.token"), &TOKEN_ENTERED)
+                    paperpaw_sdk::ask::text(env.i18n().tr("readwise.token"), &TOKEN_ENTERED)
                         .password()
                         .command(),
                 );
@@ -206,7 +206,7 @@ impl Run {
             queue: waiting,
             ..Run::default()
         };
-        if !env.caps.network {
+        if !env.caps().network {
             return self.end(env, "readwise.no-network", out);
         }
         self.next(env, out);
@@ -217,14 +217,14 @@ impl Run {
         let body = file(BODY);
         while !self.queue.is_empty() {
             let path = self.queue.remove(0);
-            if let Err(StorageError::NotFound) = env.storage.size(&path) {
+            if let Err(StorageError::NotFound) = env.storage().size(&path) {
                 // Its notes were deleted since.
-                let _ = remove_waiting(env.storage, &path);
+                let _ = remove_waiting(env.storage(), &path);
                 continue;
             }
-            match write_body(env.storage, &path, &body) {
+            match write_body(env.storage(), &path, &body) {
                 Ok(0) => {
-                    let _ = remove_waiting(env.storage, &path);
+                    let _ = remove_waiting(env.storage(), &path);
                 }
                 Ok(count) => {
                     out.push(Command::http(self.request(&body, count)));
@@ -260,10 +260,10 @@ impl Run {
         let Some(path) = self.current.take().filter(|_| self.running) else {
             return;
         };
-        let _ = env.storage.remove(&file(ANSWER));
+        let _ = env.storage().remove(&file(ANSWER));
         match reply.status {
             200..=299 => {
-                let _ = remove_waiting(env.storage, &path);
+                let _ = remove_waiting(env.storage(), &path);
                 let count = reply.context.get(COUNT).and_then(|c| c.parse().ok());
                 self.sent += count.unwrap_or(0);
                 self.next(env, out);
@@ -294,19 +294,19 @@ impl Run {
         self.quiet = false;
         let count = self.sent;
         let text = env
-            .i18n
+            .i18n()
             .plural("readwise.sent", count, &[("count", Arg::Int(count))]);
         self.end_with(env, text, out);
     }
 
     /// Ends the sending with message `key`.
     fn end(&mut self, env: &Env<'_>, key: &str, out: &mut Commands) {
-        self.end_with(env, env.i18n.tr(key).to_string(), out);
+        self.end_with(env, env.i18n().tr(key).to_string(), out);
     }
 
     fn end_with(&mut self, env: &Env<'_>, text: String, out: &mut Commands) {
         for name in [BODY, ANSWER] {
-            let _ = env.storage.remove(&file(name));
+            let _ = env.storage().remove(&file(name));
         }
         if !self.quiet {
             out.push(Command::Notify(text));

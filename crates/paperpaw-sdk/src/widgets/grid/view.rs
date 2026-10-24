@@ -220,7 +220,7 @@ impl GridView {
                 let area = geometry.rect(cells);
                 let host = self.host.as_ref().map(Id::as_str);
                 let widget = match &item.what {
-                    What::Widget(id) => env.widgets.make(id, env).map(|mut widget| {
+                    What::Widget(id) => env.widgets().make(id, env).map(|mut widget| {
                         widget.place(env, area);
                         let context = WidgetContext::new(SizeClass::of(env, area)).host(host);
                         widget.context(env, &context);
@@ -511,7 +511,7 @@ impl GridView {
     /// While editing, *Back* says it ends editing.
     pub fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
         if *action == actions::BACK && self.edit.is_some() {
-            return Hint::Text(env.i18n.tr("core.grid.done").to_string());
+            return Hint::Text(env.i18n().tr("core.grid.done").to_string());
         }
         Hint::Default
     }
@@ -566,7 +566,7 @@ impl GridView {
             .items
             .get(index)
             .and_then(|shown| match &shown.item.what {
-                What::Widget(id) => env.widgets.cells(id),
+                What::Widget(id) => env.widgets().cells(id),
                 What::Tool(_) => None,
             });
         match hint {
@@ -715,7 +715,7 @@ impl GridView {
             Target::Run(command, _) => {
                 // A tool shown faint by its plugin: nothing to do now.
                 let faint = matches!(&command, Command::RunAction(action, _)
-                    if !cx.env().menus.state(cx.env(), action.as_str()).enabled);
+                    if !cx.env().menus().state(cx.env(), action.as_str()).enabled);
                 if !faint {
                     cx.command(command);
                 }
@@ -866,7 +866,10 @@ impl GridView {
                 }
                 self.focus = index;
                 self.focus_shown = true;
-                let message = env.i18n.tr(&format!("{OPTIONS}{option}.help")).to_string();
+                let message = env
+                    .i18n()
+                    .tr(&format!("{OPTIONS}{option}.help"))
+                    .to_string();
                 cx.command(Command::Notify(message));
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
@@ -894,7 +897,7 @@ impl GridView {
                 if let What::Widget(id) = &self.items[index].item.what
                     && id.contains('@')
                 {
-                    for value in env.settings.placement_values(id) {
+                    for value in env.settings().placement_values(id) {
                         cx.command(Command::ResetSetting(value));
                     }
                 }
@@ -1083,7 +1086,7 @@ impl GridView {
                 // so the press does not seem lost.
                 let env = *cx.env();
                 cx.command(Command::Notify(
-                    env.i18n.tr("core.grid.in-the-way").to_string(),
+                    env.i18n().tr("core.grid.in-the-way").to_string(),
                 ));
             }
         }

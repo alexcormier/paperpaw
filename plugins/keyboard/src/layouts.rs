@@ -61,7 +61,7 @@ pub(crate) struct Added {
 pub(crate) fn added(env: &Env<'_>) -> Vec<Added> {
     let mut added: Vec<Added> = Vec::new();
     for mut layout in env
-        .services
+        .services()
         .contributions(POINT)
         .flat_map(|(_, text)| text.lines())
         .filter_map(parse)
@@ -311,13 +311,13 @@ pub(crate) fn chosen(env: &Env<'_>, value: &str, keys: bool) -> Vec<Chosen> {
 /// The UI language's layout: the built-in one for the language, or its
 /// translation's (`keyboard.letters`, which falls back to English).
 fn automatic(env: &Env<'_>, keys: bool) -> Chosen {
-    let language = env.i18n.language();
+    let language = env.i18n().language();
     let base = language.split('-').next().unwrap_or(language);
     let code = base.to_uppercase();
     let builtin = LAYOUTS
         .iter()
         .find(|l| l.id.rsplit('.').next() == Some(base));
-    match (builtin, env.i18n.get("keyboard.letters")) {
+    match (builtin, env.i18n().get("keyboard.letters")) {
         (Some(layout), _) => self::builtin(layout, code, keys),
         (None, Some(letters)) => (code, Cow::Owned(letters.to_string()), Vec::new()),
         (None, None) => (code, Cow::Borrowed(LAYOUTS[0].letters), Vec::new()),

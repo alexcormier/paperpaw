@@ -60,12 +60,12 @@ pub(crate) struct ConfirmScreen {
 impl ConfirmScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let percentage: Option<f64> = params.get(PERCENTAGE).and_then(|p| p.parse().ok());
         let (text, buttons, offer) = match (percentage, params.get(params::PATH)) {
             (Some(percentage), Some(path)) => {
                 let percent = format!("{:.0}", percentage * 100.0);
-                let text = env.i18n.format(
+                let text = env.i18n().format(
                     "kosync.further",
                     &[
                         ("device", Arg::Str(params.get(DEVICE).unwrap_or("?"))),
@@ -138,12 +138,12 @@ impl ConfirmScreen {
         };
         // As the reader opens it, so the place found is one of its.
         let options = paperpaw_sdk::reading::open_options(&env);
-        let Ok(document) = env.formats.open_with(env.storage, path, &options) else {
+        let Ok(document) = env.formats().open_with(env.storage(), path, &options) else {
             return;
         };
         let at = Some(xpointer)
             .filter(|x| !x.is_empty())
-            .and_then(|x| document.locate_xpointer(env.storage, x))
+            .and_then(|x| document.locate_xpointer(env.storage(), x))
             .unwrap_or_else(|| at_progress(&*document, *percentage));
         cx.command(
             paperpaw_sdk::builtin::events::GOTO
@@ -200,7 +200,7 @@ impl Screen for ConfirmScreen {
             // With buttons, the frame shows which one confirm takes.
             let focused = ui::focus_shown(env) && index == self.focus && self.buttons.len() > 1;
             let rect = self.button(index);
-            ui.button(rect, env.i18n.tr(key), index == 0, focused);
+            ui.button(rect, env.i18n().tr(key), index == 0, focused);
         }
     }
 

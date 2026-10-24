@@ -201,7 +201,7 @@ fn locked(
 
 /// How to unlock, where PaperPaw is the firmware (the power button) or not.
 fn how_to_unlock(env: &Env<'_>) -> &'static str {
-    if env.caps.firmware {
+    if env.caps().firmware {
         "lock.touch.locked.buttons"
     } else {
         "lock.touch.locked"
@@ -215,13 +215,13 @@ pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterE
     r.add_action(ActionSpec::new(TOGGLE, "lock.touch-toggle").handler(
         |env: &Env<'_>, _, out: &mut Commands| {
             // Said as the setting changes (below), as for any switch.
-            out.push(Command::set(&LOCKED, !env.settings.read(&LOCKED)));
+            out.push(Command::set(&LOCKED, !env.settings().read(&LOCKED)));
         },
     ))?;
     r.add_icon(TOGGLE, Cow::Borrowed("lock"))?;
     r.add_action(ActionSpec::new(HINT, "lock.touch-hint").handler(
         |env: &Env<'_>, _, out: &mut Commands| {
-            out.push(Command::Notify(env.i18n.tr(how_to_unlock(env)).into()));
+            out.push(Command::Notify(env.i18n().tr(how_to_unlock(env)).into()));
         },
     ))?;
     // However it was switched: the quick panel, the reader's menu,
@@ -230,12 +230,12 @@ pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterE
         if changed.id != *LOCKED.id() {
             return;
         }
-        let told = if env.settings.read(&LOCKED) {
+        let told = if env.settings().read(&LOCKED) {
             how_to_unlock(env)
         } else {
             "lock.touch.unlocked"
         };
-        out.push(Command::Notify(env.i18n.tr(told).into()));
+        out.push(Command::Notify(env.i18n().tr(told).into()));
     })?;
     let escape: Rc<RefCell<(Escape, Option<Instant>)>> = Rc::default();
     r.add_input_filter(InputFilterSpec::new(
@@ -243,12 +243,12 @@ pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterE
         "lock.touch",
         Box::new(move |env, event| {
             let (escape, hinted) = &mut *escape.borrow_mut();
-            if !env.settings.read(&LOCKED) || state.locked.get() {
+            if !env.settings().read(&LOCKED) || state.locked.get() {
                 *escape = Escape::default();
                 *hinted = None;
                 return InputVerdict::Pass;
             }
-            locked(env.now, event, escape, hinted)
+            locked(env.now(), event, escape, hinted)
         }),
     ))?;
     r.add_keymap_when(&LOCKED, Cow::Borrowed(ESCAPE))?;
@@ -256,7 +256,7 @@ pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterE
         STATUS,
         "lock.touch-status",
         Box::new(|env, _| {
-            env.settings
+            env.settings()
                 .read(&LOCKED)
                 .then_some(StatusValue::Icon(Cow::Borrowed("lock")))
         }),

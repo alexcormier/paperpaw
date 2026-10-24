@@ -854,10 +854,10 @@ impl<'a> FontHandle<'a> {
     /// How far the ink of one line of `text` reaches above and below its
     /// baseline, in pixels (above negative), counting pixels at least half
     /// covered, as panels of black and white show them: what centres it
-    /// by its ink rather than by its line ([`ui::draw_header`]). `None`
+    /// by its ink rather than by its line ([`Ui::header`]). `None`
     /// for text without ink (spaces).
     ///
-    /// [`ui::draw_header`]: crate::ui::draw_header
+    /// [`Ui::header`]: crate::ui::Ui::header
     pub fn ink(&self, size: f32, text: &str) -> Option<(i32, i32)> {
         // Only described: as a line would be, no glyph made.
         if self.describing.get() {

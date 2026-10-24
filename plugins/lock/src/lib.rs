@@ -190,17 +190,17 @@ impl Plugin for Lock {
         let start = state.clone();
         r.on(events::STARTED, move |env, _, out| {
             // A wait due when PaperPaw stopped is waited anew.
-            let tries = read_tries(env.storage);
+            let tries = read_tries(env.storage());
             start.failures.set(tries);
             if tries >= screen::TRIES {
                 start
                     .wait_until
-                    .set(Some(env.now.add_millis(screen::WAIT_MS)));
+                    .set(Some(env.now().add_millis(screen::WAIT_MS)));
             }
             lock(env, &start, out);
         })?;
         r.on(events::RESUME, move |env, _, out| {
-            if env.settings.read(&ON_WAKE) {
+            if env.settings().read(&ON_WAKE) {
                 lock(env, &state, out);
             }
         })?;
@@ -213,9 +213,9 @@ impl Plugin for Lock {
                 return;
             };
             let value = alloc::format!("{KIND_PREFIX}{kept}");
-            if env.settings.read(&KIND) != value {
+            if env.settings().read(&KIND) != value {
                 out.push(Command::set(&KIND, value.into()));
-                out.push(Command::Notify(env.i18n.tr("lock.on-its-page").into()));
+                out.push(Command::Notify(env.i18n().tr("lock.on-its-page").into()));
             }
         })?;
         // The first-run setup: a lock, off unless chosen.

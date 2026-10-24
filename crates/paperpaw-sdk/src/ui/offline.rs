@@ -57,7 +57,7 @@ impl Buttons {
         let fits = |width: u16| {
             BUTTONS
                 .iter()
-                .all(|key| button_height_for(env, style, width, env.i18n.tr(key)) <= height)
+                .all(|key| button_height_for(env, style, width, env.i18n().tr(key)) <= height)
         };
         let narrow = width.saturating_sub(4 * margin);
         let (inset, width) = if fits(narrow) {
@@ -66,7 +66,7 @@ impl Buttons {
             (margin, width.saturating_sub(2 * margin))
         };
         let extra = BUTTONS.map(|key| {
-            button_height_for(env, style, width, env.i18n.tr(key)).saturating_sub(height)
+            button_height_for(env, style, width, env.i18n().tr(key)).saturating_sub(height)
         });
         Buttons {
             row,
@@ -107,15 +107,15 @@ impl OfflineOffer {
     /// Whether to show it: the mode is Offline and the reader has not
     /// chosen on this screen yet.
     pub fn shows(&self, env: &Env<'_>) -> bool {
-        env.power.level == PowerLevel::Offline && !self.chosen
+        env.power().level == PowerLevel::Offline && !self.chosen
     }
 
     /// The height it needs in an area `width` wide for all its words:
     /// what it is about and its buttons (an area higher shows an icon as
     /// well).
     pub fn height(env: &Env<'_>, style: &UiStyle, width: u16) -> u16 {
-        let title = env.i18n.tr("core.offline.title");
-        let text = env.i18n.tr("core.offline.text");
+        let title = env.i18n().tr("core.offline.title");
+        let text = env.i18n().tr("core.offline.text");
         empty_height(env, style, width, title, text) + Buttons::new(env, style, width).room
     }
 
@@ -138,8 +138,8 @@ impl OfflineOffer {
             style,
             text,
             "wifi-off",
-            env.i18n.tr("core.offline.title"),
-            env.i18n.tr("core.offline.text"),
+            env.i18n().tr("core.offline.title"),
+            env.i18n().tr("core.offline.text"),
         );
         let mut top = text.y + text.height + gap;
         for (index, key) in BUTTONS.into_iter().enumerate() {
@@ -159,7 +159,7 @@ impl OfflineOffer {
                 env,
                 style,
                 rect,
-                env.i18n.tr(key),
+                env.i18n().tr(key),
                 index == 0,
                 focused,
             );

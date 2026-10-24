@@ -187,10 +187,10 @@ Some rules every screen should follow:
   switches, numbers with − and +, messages, icons. They follow the user's
   appearance settings and line up with the rest of PaperPaw. What a
   screen draws itself takes its look from `UiStyle`: the focus with
-  `ui::draw_focus`, what is on a focused row in `style.focus_ink(focused)`
+  `ui.focus(..)` (a `ui::Ui`), what is on a focused row in `style.focus_ink(focused)`
   (white on the dark bar, black on a frame or a light bar), small shapes
   with `style.radius(height)` (pills where corners are round), boxes and
-  cards with `style.corner()`, lines between rows with `ui::draw_separator`.
+  cards with `style.corner()`, lines between rows with `ui.separator(..)`.
   The style's sizes are read with its methods (`style.margin()`,
   `style.gap()`, `style.row()` in pixels, `style.text()` and
   `style.small()` for text).
@@ -224,7 +224,7 @@ shortened.
 
 | For | Use |
 |---|---|
-| The bar at the top, a title and a note (a page count) | `ui::draw_header`, `ui::Header` (with its arrows) |
+| The bar at the top, a title and a note (a page count) | `ui.header(..)`, `ui::Header` (with its arrows) |
 | Parts one below the other, from the top and the bottom | `ui::Stack` (`take`, `take_bottom`, `rest`) |
 | Equal columns side by side, e.g. two buttons | `ui::columns(area, count, gap)` |
 | A list that pages and holds the focus | `ui::ListView`, `ui::list_step` |
@@ -232,20 +232,20 @@ shortened.
 | Text, on a line or wrapped | `ui::Label` (`Label::new(text).role(TextRole::Small).align(..).wrap()`) |
 | Rows of a list | `ui::Row` (`Row::value`, `Row::switch`, `Row::number`, with `.note(..)`; `height`, `draw`, `hit`) |
 | Rows of settings | `ui::draw_setting_row`, `ui::draw_stepper`, `ui::slider::Slider` |
-| Sections with headings | `ui::sections::Sections`, `ui::draw_heading` |
+| Sections with headings | `ui::sections::Sections`, `ui.heading(..)` |
 | A grid of cells (covers, tiles) | `ui::CellGrid` (`cell`, `hit`, `step`) |
-| A group on a card or in a frame | `ui::draw_card(canvas, &style, area, Frame::Card)` returns where its parts go |
-| A button, on, focused, faint, with an icon | `ui::draw_button`, `ui::draw_faint_button`, `ui::draw_icon_button` |
+| A group on a card or in a frame | `ui.card(area, Frame::Card)` returns where its parts go |
+| A button, on, focused, faint, with an icon | `ui.button(..)`, `ui.faint_button(..)`, `ui.icon_button(..)` |
 | A few options to pick at a glance, or tabs | `ui::Segments` |
 | Filters or tags in a row, each as wide as its word | `ui::Chips` (the height of their rows: `Chips::height_for`) |
-| A one-line text in a row, typed on the keyboard | `ui::draw_text_field` (its row: `text_field_height`), `ui::edit_text` |
+| A one-line text in a row, typed on the keyboard | `ui.text_field(..)` (its row: `ui::text_field_height`), `ui::edit_text` |
 | A list where several may be ticked | `ui::draw_check_row` (its row: `check_row_height`; the box alone: `ui::draw_check`) |
 | Text longer than its room, scrolled by buttons and touch | `ui::TextView` |
 | A date or a time | `ui::DatePicker`, `ui::TimePicker` |
 | A box over the screen with a title, text and buttons | `ui::Dialog` |
 | Asking for text, a folder, one of several options or yes or no | `ask::text`, `ask::folder`, `ask::choice`, `ask::confirm` (screens of their own) |
-| A message where content would be, an empty list | `ui::draw_message`, `ui::draw_empty` |
-| Progress | `ui::draw_progress` |
+| A message where content would be, an empty list | `ui.message(..)`, `ui.empty(..)` (their heights: `ui::message_height`, `ui::empty_height`) |
+| Progress | `ui.progress(..)` |
 | An address to open on a phone, with its QR code | `ui::draw_address`, `ui::draw_qr` |
 | Offering to go online where something needs the network | `ui::offline::OfflineOffer` |
 | What the buttons do, at the bottom | the screen's `hint` (the kernel draws the row) |

@@ -106,11 +106,11 @@ impl Selection {
 pub(crate) fn items(env: &Env<'_>, highlight: Option<bool>) -> Vec<Item> {
     let translates = translates(env);
     let mut all: Vec<Item> = env
-        .menus
+        .menus()
         .items(SELECTION_MENU.as_str())
         .into_iter()
         .filter(|item| {
-            let touch = env.device.input.touch;
+            let touch = env.device().input.touch;
             !(*item.id == EXTEND && touch
                 || *item.id == CANCEL && !touch
                 || *item.id == TRANSLATE && !translates)
@@ -162,12 +162,12 @@ pub(crate) fn items(env: &Env<'_>, highlight: Option<bool>) -> Vec<Item> {
 /// Whether selected text can be translated: a translator is installed
 /// and there is a network.
 pub(crate) fn translates(env: &Env<'_>) -> bool {
-    env.caps.network && env.has_slot(&paperpaw_sdk::builtin::slots::TRANSLATE)
+    env.caps().network && env.has_slot(&paperpaw_sdk::builtin::slots::TRANSLATE)
 }
 
 /// Where the bar is: over the status line at the bottom.
 pub(crate) fn bar_area(env: &Env<'_>, style: &UiStyle) -> Rect {
-    let display = env.device.display;
+    let display = env.device().display;
     // Its buttons grow on touch screens, and keep the side margin from
     // the bottom edge too.
     let height = ui::edge_bar_height(style);
@@ -202,9 +202,9 @@ fn natural_widths(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<f32> {
     items
         .iter()
         .map(|item| {
-            let label = font
-                .as_ref()
-                .map_or(0.0, |f| f.measure(style.small(), env.i18n.tr(&item.title)));
+            let label = font.as_ref().map_or(0.0, |f| {
+                f.measure(style.small(), env.i18n().tr(&item.title))
+            });
             ui::button_width(style, label) + around
         })
         .collect()
@@ -255,7 +255,7 @@ pub(crate) fn draw_bar(ui: &mut ui::Ui<'_>, items: &[Item], focus: Option<usize>
             area.width.saturating_sub(2 * pad),
             band.height,
         );
-        let label = env.i18n.tr(&item.title);
+        let label = env.i18n().tr(&item.title);
         ui.button(button, label, false, focus == Some(index));
     }
 }

@@ -73,7 +73,7 @@ impl Calendar {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let row = style.row();
         let margin = style.margin();
         // The month's arrows grow on touch screens, and their row with them.
@@ -104,7 +104,7 @@ impl Calendar {
             display.height.saturating_sub(detail_top),
         );
         let today = fmt::today(env);
-        let days = store::days(env.storage, |unix| fmt::day_of(env, unix));
+        let days = store::days(env.storage(), |unix| fmt::day_of(env, unix));
         let day = today.or(days.last().map(|d| d.day)).unwrap_or(0);
         let mut calendar = Self {
             style,
@@ -113,7 +113,7 @@ impl Calendar {
             grid,
             detail,
             days,
-            books: store::books(env.storage),
+            books: store::books(env.storage()),
             today,
             day,
             day_books: Vec::new(),
@@ -137,7 +137,7 @@ impl Calendar {
         let mut per_book: Vec<(u16, u32)> = Vec::new();
         let mut pages: Vec<(u16, u32)> = Vec::new();
         if self.seconds_on(day) > 0 {
-            store::scan_range(env.storage, from, to, |stat| {
+            store::scan_range(env.storage(), from, to, |stat| {
                 if fmt::day_of(env, stat.start) != day {
                     return;
                 }
@@ -335,12 +335,12 @@ impl Calendar {
         let margin = style.margin() as f32;
         let seconds = self.seconds_on(self.day);
         let summary = if seconds == 0 {
-            env.i18n.tr("stats.not-read").to_string()
+            env.i18n().tr("stats.not-read").to_string()
         } else {
             format!(
                 "{} · {}",
                 fmt::duration(env, u64::from(seconds)),
-                env.i18n
+                env.i18n()
                     .plural("stats.pages", i64::from(self.day_pages), &[])
             )
         };
@@ -382,12 +382,14 @@ impl Screen for Calendar {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("stats.calendar");
+        let title = env.i18n().tr("stats.calendar");
         let streak = self
             .today
             .map_or(0, |today| totals::streak(&self.days, today));
-        let note =
-            (streak > 1).then(|| env.i18n.plural("stats.streak-note", i64::from(streak), &[]));
+        let note = (streak > 1).then(|| {
+            env.i18n()
+                .plural("stats.streak-note", i64::from(streak), &[])
+        });
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, note.as_deref(), None);
         if self.today.is_none() && self.days.is_empty() {
@@ -398,7 +400,7 @@ impl Screen for Calendar {
                 self.nav.width,
                 (self.detail.y + self.detail.height).saturating_sub(self.nav.y),
             );
-            ui.message(area, env.i18n.tr("stats.no-clock"));
+            ui.message(area, env.i18n().tr("stats.no-clock"));
             return;
         }
         let (left, right) = self.arrows();

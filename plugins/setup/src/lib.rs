@@ -46,7 +46,7 @@ fn done_file() -> alloc::string::String {
 /// Notes that the setup was done or skipped: it does not come again by
 /// itself.
 pub(crate) fn mark_done(env: &Env<'_>) {
-    let _ = env.storage.write(&done_file(), b"");
+    let _ = env.storage().write(&done_file(), b"");
 }
 
 /// The first-run setup.
@@ -84,10 +84,10 @@ impl Plugin for Setup {
         r.add_icon(OPEN, Cow::Borrowed("wand"))?;
         // The first start: the guide, once.
         r.on(events::STARTED, |env, _, out| {
-            if env.storage.exists(&done_file()) {
+            if env.storage().exists(&done_file()) {
                 return;
             }
-            if library::opened_books(env.storage).is_empty() {
+            if library::opened_books(env.storage()).is_empty() {
                 out.push(Command::OpenSlot(slots::SETUP, Params::new()));
             } else {
                 // Used before the guide came: not a first start.

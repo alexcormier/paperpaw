@@ -22,7 +22,7 @@ pub(crate) struct NoticeScreen {
 impl NoticeScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let margin = style.margin();
         let pad = style.gap() * 3 / 2;
         let width = display.width.saturating_sub(2 * margin);

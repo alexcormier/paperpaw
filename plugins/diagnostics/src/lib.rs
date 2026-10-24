@@ -177,10 +177,10 @@ struct DiagnosticsScreen {
 
 impl DiagnosticsScreen {
     fn new(env: &Env<'_>) -> Self {
-        let display = env.device.display;
+        let display = env.device().display;
         Self {
-            layout: Layout::new(display.width, display.height, env.metrics),
-            metrics: env.metrics,
+            layout: Layout::new(display.width, display.height, env.metrics()),
+            metrics: env.metrics(),
             page: 0,
             focus: 0,
             checked: [false; 4],
@@ -188,7 +188,7 @@ impl DiagnosticsScreen {
     }
 
     fn pages(env: &Env<'_>) -> u32 {
-        env.settings
+        env.settings()
             .int(PAGES.as_str())
             .clamp(1, i64::from(u32::MAX)) as u32
     }
@@ -244,7 +244,7 @@ impl DiagnosticsScreen {
             u32::from(r.height),
         );
         canvas.fill_rect(x, y, w, h, Color::BLACK);
-        let title = env.i18n.tr("diagnostics.title");
+        let title = env.i18n().tr("diagnostics.title");
         let padding = self.metrics.mm(2) as f32;
         draw_label(
             &mut canvas.clipped(r),
@@ -261,7 +261,7 @@ impl DiagnosticsScreen {
     fn draw_page_label(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, pages: u32) {
         let r = self.layout.label;
         canvas.fill(r, Color::WHITE);
-        let text = env.i18n.format(
+        let text = env.i18n().format(
             "diagnostics.page",
             &[
                 ("page", Arg::Int(i64::from(self.page(pages)) + 1)),
@@ -352,14 +352,14 @@ impl Screen for DiagnosticsScreen {
 
         // One stripe per gray level the panel can show (at most 16).
         let levels = env
-            .device
+            .device()
             .display
             .format
             .gray_levels()
             .unwrap_or(16)
             .clamp(2, 16) as u32;
         let (x, y, w, mut h) = rect(l.ramp);
-        if env.device.display.format.is_color() {
+        if env.device().display.format.is_color() {
             // Lower half: primary and secondary colours for colour panels.
             h /= 2;
             let hues = [
@@ -460,7 +460,7 @@ fn draw_label(
     color: Color,
     centered: bool,
 ) {
-    let Some(font) = env.fonts.role(fonts::UI.as_str()) else {
+    let Some(font) = env.fonts().role(fonts::UI.as_str()) else {
         return;
     };
     let size = f32::from(area.height) * 0.5;

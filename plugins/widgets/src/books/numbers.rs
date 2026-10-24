@@ -191,7 +191,7 @@ impl Library {
             });
         }
         let counted = kept.get_or_insert_with(Counted::default);
-        let opened = library::opened_books(env.storage);
+        let opened = library::opened_books(env.storage());
         let mut progress = Vec::with_capacity(opened.len());
         for (i, path) in opened.iter().enumerate() {
             let hash = path_hash(path);
@@ -199,9 +199,9 @@ impl Library {
             // The book being read anew, the others as known.
             let percent = match known {
                 Some((_, percent)) if i > 0 => Some(*percent),
-                _ => match library::book(env.storage, path) {
+                _ => match library::book(env.storage(), path) {
                     Some(book) => Some(book.progress),
-                    None if env.storage.exists(path) => Some(None),
+                    None if env.storage().exists(path) => Some(None),
                     None => None,
                 },
             };
@@ -247,7 +247,7 @@ impl Widget for Library {
         let Some(numbers) = &self.numbers else {
             return;
         };
-        let caption = env.i18n.tr("widgets.library.caption");
+        let caption = env.i18n().tr("widgets.library.caption");
         let rest = super::caption(canvas, env, WIDGET, &look, caption);
         // Laid out when placed; drawn elsewhere, laid out for that.
         let laid = match self.laid {
@@ -283,7 +283,7 @@ fn parts<'e>(env: &Env<'e>) -> Vec<(&'static str, &'e str)> {
         .iter()
         .zip(LABELS)
         .filter(|(p, _)| widgets::shows(env, WIDGET, p))
-        .map(|(p, label)| (*p, env.i18n.tr(label)))
+        .map(|(p, label)| (*p, env.i18n().tr(label)))
         .collect()
 }
 

@@ -123,7 +123,7 @@ impl PageScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
@@ -135,8 +135,8 @@ impl PageScreen {
         let plugin = params
             .get(ENTRY)
             .and_then(|n| n.parse().ok())
-            .zip(Index::kept(env.storage))
-            .and_then(|(n, index)| index.entry(env.storage, n))
+            .zip(Index::kept(env.storage()))
+            .and_then(|(n, index)| index.entry(env.storage(), n))
             .filter(|plugin| plugin.id == id);
         Self {
             list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
@@ -147,7 +147,7 @@ impl PageScreen {
             details: Details::None,
             waiting: false,
             notice: false,
-            job: INSTALLER.progress(env.storage),
+            job: INSTALLER.progress(env.storage()),
             room: Room::of(env, Some(&id_for_room)),
             style,
             header,
@@ -211,14 +211,14 @@ impl PageScreen {
         if self.own_job().is_some() {
             return alloc::vec![Row::Stop];
         }
-        let Some(info) = env.plugins.get(&plugin.id) else {
+        let Some(info) = env.plugins().get(&plugin.id) else {
             if !self.room.fits(plugin, self.image_len()) {
                 return alloc::vec![Row::NoRoom];
             }
             return alloc::vec![Row::Install];
         };
         // Not this one to install over, update or remove.
-        if !catalog::may_install(env.plugins, &plugin.id, plugin.code) {
+        if !catalog::may_install(env.plugins(), &plugin.id, plugin.code) {
             return Vec::new();
         }
         // A restart first where one is waited for; a code plugin removed
@@ -247,13 +247,13 @@ impl PageScreen {
     fn fetch(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let Some(device) =
-            Device::of(&env).filter(|_| env.caps.network && install::is_plugin_name(&self.id))
+            Device::of(&env).filter(|_| env.caps().network && install::is_plugin_name(&self.id))
         else {
             self.details = Details::Failed;
             return;
         };
-        let list = env.settings.read(&CATALOG);
-        let language = env.i18n.language();
+        let list = env.settings().read(&CATALOG);
+        let language = env.i18n().language();
         let url = catalog::plugin_url(list.trim(), device.name, language, &self.id);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
         request = request.save_to(catalog::plugin_part(&self.id));
@@ -271,14 +271,14 @@ impl PageScreen {
         let fetched = catalog::plugin_part(&self.id);
         let read = Device::of(&env)
             .filter(|_| (200..300).contains(&reply.status))
-            .and_then(|device| catalog::plugin(env.storage, &fetched, &address, &device))
+            .and_then(|device| catalog::plugin(env.storage(), &fetched, &address, &device))
             // The page asked for, not another one's.
             .filter(|plugin| plugin.entry.id == self.id);
-        let _ = env.storage.remove(&fetched);
+        let _ = env.storage().remove(&fetched);
         match read {
             Some(mut plugin) => {
                 // Only screenshots this device can decode well.
-                if env.device.memory == MemoryClass::Small {
+                if env.device().memory == MemoryClass::Small {
                     plugin.more.shots.retain(|shot| {
                         shot.width <= SMALL_SHOT_SIDE
                             && shot.height <= SMALL_SHOT_SIDE
@@ -308,19 +308,19 @@ impl PageScreen {
     fn install(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let name = self.plugin.as_ref().map_or("", |p| p.name.as_str());
-        if !env.caps.network {
-            let text = env.i18n.tr("store.offline").to_string();
+        if !env.caps().network {
+            let text = env.i18n().tr("store.offline").to_string();
             return cx.command(Command::Notify(text));
         }
         // One at a time: another one going on is said, not stopped.
         if let Some(other) = &self.job {
             let text = env
-                .i18n
+                .i18n()
                 .format("store.busy", &[("name", Arg::Str(&other.name))]);
             return cx.command(Command::Notify(text));
         }
         let code = self.plugin.as_ref().is_some_and(|p| p.code);
-        if code && !trust::told(env.storage) {
+        if code && !trust::told(env.storage()) {
             self.notice = true;
             self.list.set_focus(0);
             return self.redraw(cx);
@@ -328,14 +328,14 @@ impl PageScreen {
         match &self.details {
             Details::Here(plugin) => {
                 let mut out = paperpaw_sdk::Commands::new();
-                trust::expect(env.storage, &plugin.entry.id, plugin.author_key.as_ref());
+                trust::expect(env.storage(), &plugin.entry.id, plugin.author_key.as_ref());
                 if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
                 }
                 for command in out {
                     cx.command(command);
                 }
-                self.job = INSTALLER.progress(env.storage);
+                self.job = INSTALLER.progress(env.storage());
                 self.list.set_focus(0);
                 self.redraw(cx);
             }
@@ -363,13 +363,13 @@ impl PageScreen {
                 }
             }
             Some(Row::Understood) => {
-                trust::tell(env.storage);
+                trust::tell(env.storage());
                 self.notice = false;
                 self.install(cx);
             }
             Some(Row::Cancel) => {
                 if self.shown() == Shown::OtherAuthor {
-                    INSTALLER.cancel(env.storage);
+                    INSTALLER.cancel(env.storage());
                     self.job = None;
                     // The next update waiting has its turn.
                     let mut out = paperpaw_sdk::Commands::new();
@@ -377,7 +377,7 @@ impl PageScreen {
                     for command in out {
                         cx.command(command);
                     }
-                    self.job = INSTALLER.progress(env.storage);
+                    self.job = INSTALLER.progress(env.storage());
                 }
                 self.notice = false;
                 self.list.set_focus(0);
@@ -386,26 +386,26 @@ impl PageScreen {
             Some(Row::Anyway) => {
                 let mut out = paperpaw_sdk::Commands::new();
                 if trust::install_anyway(&env, &mut out).is_none() {
-                    INSTALLER.cancel(env.storage);
+                    INSTALLER.cancel(env.storage());
                     out.push(failed(&env, &plugin.name));
                 }
                 queue::next(&env, &mut out);
                 for command in out {
                     cx.command(command);
                 }
-                self.job = INSTALLER.progress(env.storage);
+                self.job = INSTALLER.progress(env.storage());
                 self.list.set_focus(0);
                 self.redraw(cx);
             }
             Some(Row::Stop) => {
-                INSTALLER.cancel(env.storage);
+                INSTALLER.cancel(env.storage());
                 // Only this one stops: the next update waiting goes on.
                 let mut out = paperpaw_sdk::Commands::new();
                 queue::next(&env, &mut out);
                 for command in out {
                     cx.command(command);
                 }
-                self.job = INSTALLER.progress(env.storage);
+                self.job = INSTALLER.progress(env.storage());
                 self.list.set_focus(0);
                 self.redraw(cx);
             }
@@ -424,17 +424,17 @@ impl PageScreen {
                 if let Details::Here(details) = &self.details {
                     let text = format!("{}\n\n{}\n", plugin.name, details.more.description);
                     let file = format!("{}/how.txt", Env::plugin_dir(crate::PLUGIN.as_str()));
-                    match paperpaw_sdk::readers::show_text(env.storage, &file, &text) {
+                    match paperpaw_sdk::readers::show_text(env.storage(), &file, &text) {
                         Ok(open) => cx.command(open),
                         Err(_) => {
-                            cx.command(Command::Notify(env.i18n.tr("store.how-failed").into()))
+                            cx.command(Command::Notify(env.i18n().tr("store.how-failed").into()))
                         }
                     }
                 }
             }
             Some(Row::Remove) => {
                 let title = env
-                    .i18n
+                    .i18n()
                     .format("store.remove-question", &[("name", Arg::Str(&plugin.name))]);
                 cx.command(
                     paperpaw_sdk::ask::choice(&title, &REMOVE)
@@ -449,7 +449,7 @@ impl PageScreen {
 
     /// A row's name and what it says at its end.
     fn row_text(&self, env: &Env<'_>, plugin: &Entry, row: Row) -> (String, String) {
-        let tr = |key: &str| env.i18n.tr(key).to_string();
+        let tr = |key: &str| env.i18n().tr(key).to_string();
         match row {
             Row::Install | Row::Update | Row::UseStore if self.waiting => {
                 let name = match row {
@@ -461,7 +461,7 @@ impl PageScreen {
             }
             Row::Install => (
                 tr("store.install"),
-                files::size(plugin.size, env.i18n.tr("store.decimal")),
+                files::size(plugin.size, env.i18n().tr("store.decimal")),
             ),
             Row::Stop => {
                 let job = self.job.clone().unwrap_or_default();
@@ -476,7 +476,7 @@ impl PageScreen {
             Row::Anyway => (tr("store.other-author.anyway"), String::new()),
             Row::NoRoom => (
                 tr("store.no-room"),
-                files::size(plugin.size, env.i18n.tr("store.decimal")),
+                files::size(plugin.size, env.i18n().tr("store.decimal")),
             ),
             Row::Shots => {
                 let count = match &self.details {
@@ -495,10 +495,10 @@ impl PageScreen {
     fn texts(&self, env: &Env<'_>, plugin: &Entry) -> (String, Vec<(&'static str, String)>) {
         let name = [("name", Arg::Str(&plugin.name))];
         match self.shown() {
-            Shown::Notice => (env.i18n.tr("store.code.notice").to_string(), Vec::new()),
+            Shown::Notice => (env.i18n().tr("store.code.notice").to_string(), Vec::new()),
             Shown::OtherAuthor => (
-                env.i18n.format("store.other-author", &name),
-                alloc::vec![("", env.i18n.tr("store.other-author.help").to_string())],
+                env.i18n().format("store.other-author", &name),
+                alloc::vec![("", env.i18n().tr("store.other-author.help").to_string())],
             ),
             Shown::Plugin => {
                 let more = match &self.details {
@@ -522,7 +522,7 @@ fn facts(
     more: Option<&More>,
     (room, image_len): (&Room, Option<u64>),
 ) -> Vec<(&'static str, String)> {
-    let i18n = env.i18n;
+    let i18n = env.i18n();
     let mut facts = Vec::new();
     if plugin.code {
         facts.push((
@@ -578,7 +578,7 @@ fn facts(
     }
     if let Some(heap) = more.and_then(|m| m.heap) {
         let size = files::size(heap, i18n.tr("store.decimal"));
-        let small = env.device.memory == MemoryClass::Small;
+        let small = env.device().memory == MemoryClass::Small;
         let key = if small && heap > TIGHT_HEAP {
             "store.heap.tight"
         } else {
@@ -624,9 +624,9 @@ impl Screen for PageScreen {
             let text = if text.is_empty() {
                 ""
             } else {
-                env.i18n.tr(text)
+                env.i18n().tr(text)
             };
-            ui.empty(area, icon, env.i18n.tr(title), text);
+            ui.empty(area, icon, env.i18n().tr(title), text);
             return;
         };
         let Some(font) = style.font(env) else {
@@ -679,7 +679,7 @@ impl Screen for PageScreen {
         );
         y += style.gap() as f32;
         // The facts each after its icon, their texts lined up.
-        let room = f32::from(ui.icon_room(true));
+        let room = f32::from(ui::icon_room(ui.env(), ui.style(), true));
         let icon_size = style.small() * ui::ICON_SCALE;
         let line = font.line_metrics(style.small()).line_height;
         for (icon, fact) in facts {
@@ -704,12 +704,12 @@ impl Screen for PageScreen {
         ui.canvas().fill(self.status, Color::WHITE);
         let note = match (&self.job, rows.first()) {
             (Some(job), Some(Row::Stop)) if job.plugin == plugin.id => {
-                env.i18n.tr("store.downloading").to_string()
+                env.i18n().tr("store.downloading").to_string()
             }
             (Some(job), _) if job.plugin != plugin.id => env
-                .i18n
+                .i18n()
                 .format("store.busy", &[("name", Arg::Str(&job.name))]),
-            (_, Some(Row::Restart)) => env.i18n.tr("store.restart.help").to_string(),
+            (_, Some(Row::Restart)) => env.i18n().tr("store.restart.help").to_string(),
             _ => String::new(),
         };
         if !note.is_empty() {
@@ -719,7 +719,7 @@ impl Screen for PageScreen {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        self.job = INSTALLER.progress(env.storage);
+        self.job = INSTALLER.progress(env.storage());
         self.room = Room::of(&env, Some(&self.id));
         if self.details == Details::None {
             self.fetch(cx);
@@ -777,18 +777,18 @@ impl Screen for PageScreen {
                 INSTALLER.remove(&env, &plugin, &mut out);
                 let name = self.plugin.as_ref().map_or("", |p| p.name.as_str());
                 out.push(Command::Notify(
-                    env.i18n
+                    env.i18n()
                         .format("store.removed", &[("name", Arg::Str(name))]),
                 ));
                 for command in out {
                     cx.command(command);
                 }
-                self.job = INSTALLER.progress(env.storage);
+                self.job = INSTALLER.progress(env.storage());
                 self.list.set_focus(0);
             }
         } else if DOWNLOADED.read(event, params).is_some() || *event == events::PLUGINS_CHANGED {
             let env = *cx.env();
-            self.job = INSTALLER.progress(env.storage);
+            self.job = INSTALLER.progress(env.storage());
             if *event == events::PLUGINS_CHANGED {
                 self.room = Room::of(&env, Some(&self.id));
             }

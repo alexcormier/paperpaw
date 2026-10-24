@@ -1,4 +1,4 @@
-//! What plugins add to PaperPaw: a [`Contribution`] each, collected by the
+//! What plugins add to PaperPaw: one contribution each, collected by the
 //! [`Registrar`] a plugin is given in [`Plugin::register`](crate::Plugin).
 //!
 //! The registrar only collects; the kernel applies the contributions once

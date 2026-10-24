@@ -102,7 +102,7 @@ impl Plugin for Margin {
                     }
                 }
             })
-            .reserve(move |env| Some((side, env.metrics.mm(8) as u16)))
+            .reserve(move |env| Some((side, env.metrics().mm(8) as u16)))
             .taps(),
         )?;
         // Line `n` of the page wiped out in white, across its column.

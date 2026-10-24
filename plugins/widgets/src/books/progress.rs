@@ -120,7 +120,7 @@ impl Progress {
 
 impl Widget for Progress {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let book = current(env.storage);
+        let book = current(env.storage());
         let changed = book != self.book;
         self.book = book;
         if changed {
@@ -233,7 +233,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, book: Option<&Book>,
         draw_message(canvas, env, &look, "widgets.books.nothing-read");
         return;
     };
-    let caption_text = env.i18n.tr("widgets.progress.caption");
+    let caption_text = env.i18n().tr("widgets.progress.caption");
     let area = caption(canvas, env, WIDGET, &look, caption_text);
     let gap = UiStyle::new(env).gap();
     let mut lines = texts(env, &look, book);

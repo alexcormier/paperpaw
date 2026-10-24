@@ -40,11 +40,13 @@ const TITLE_LINES: usize = 3;
 /// that are actions, such as the other ways to open a book).
 fn label(env: &Env<'_>, labels: &str, option: &str) -> String {
     if labels.is_empty()
-        && let Some(action) = env.actions.get(option)
+        && let Some(action) = env.actions().get(option)
     {
-        return env.i18n.tr(&action.title).to_string();
+        return env.i18n().tr(&action.title).to_string();
     }
-    env.i18n.tr(&alloc::format!("{labels}{option}")).to_string()
+    env.i18n()
+        .tr(&alloc::format!("{labels}{option}"))
+        .to_string()
 }
 
 /// The choice overlay; see the [module documentation](self).
@@ -66,7 +68,7 @@ pub struct Choice {
 impl Choice {
     pub fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let options: Vec<String> = params
             .get(OPTIONS)
             .unwrap_or_default()

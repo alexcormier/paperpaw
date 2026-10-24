@@ -85,7 +85,7 @@ fn offered_file() -> String {
 
 /// The plugin of the offer open over the cable (see [`offered_file`]).
 pub(crate) fn offered_plugin(env: &Env<'_>) -> Option<String> {
-    let bytes = paperpaw_sdk::read_file(env.storage, &offered_file(), 128).ok()?;
+    let bytes = paperpaw_sdk::read_file(env.storage(), &offered_file(), 128).ok()?;
     Some(String::from(core::str::from_utf8(&bytes).ok()?.trim()))
 }
 
@@ -287,7 +287,7 @@ impl CableScreen {
             permission: Permission::None,
             question: None,
             last: None,
-            active: env.now,
+            active: env.now(),
             started: false,
         }
     }
@@ -312,26 +312,26 @@ impl CableScreen {
         cx: &mut Cx<'_, '_>,
     ) {
         let env = *cx.env();
-        self.active = env.now;
-        cx.wake_at(env.now.add_millis(IDLE_MS));
+        self.active = env.now();
+        cx.wake_at(env.now().add_millis(IDLE_MS));
         // The question closed without an answer (Back): not allowed. Only
         // its closing counts, not a screen shown over it.
         if self.permission == Permission::Asking {
             if self.question.is_none() {
                 let mine = env
-                    .stack
+                    .stack()
                     .iter()
                     .rposition(|e| e.screen == crate::CABLE_SCREEN);
                 // The first question above it (another screen may have
                 // come between).
-                let above = mine.and_then(|at| env.stack.get(at + 1..));
+                let above = mine.and_then(|at| env.stack().get(at + 1..));
                 self.question = above
                     .and_then(|above| above.iter().find(|e| e.slot == Some(slots::CONFIRM)))
                     .map(|entry| entry.key);
             }
             let open = self
                 .question
-                .is_some_and(|key| env.stack.iter().any(|entry| entry.key == key));
+                .is_some_and(|key| env.stack().iter().any(|entry| entry.key == key));
             if !open {
                 self.forget_offer(&env);
                 self.permission = Permission::Refused;
@@ -397,7 +397,7 @@ impl CableScreen {
         // both in memory.
         self.forget_offer(env);
         self.permission = Permission::None;
-        let Some(offer) = body.and_then(|path| Offer::read(env.storage, path)) else {
+        let Some(offer) = body.and_then(|path| Offer::read(env.storage(), path)) else {
             return json(400, "{\"why\":\"not an offer\"}");
         };
         // The Wi-Fi transfer is sent this plugin now: not both at once.
@@ -405,7 +405,7 @@ impl CableScreen {
         if id.is_some_and(|id| crate::plugins::staged_over_wifi(env, id)) {
             return json(409, "{\"why\":\"being sent over Wi-Fi\"}");
         }
-        let room = env.storage.free_space();
+        let room = env.storage().free_space();
         match offer.size() {
             Some(size) if room.is_none_or(|free| size <= free) => {}
             _ => return json(507, "{\"why\":\"not enough room\"}"),
@@ -413,12 +413,12 @@ impl CableScreen {
         // Nothing sent before counts: a plugin's files are taken anew. Named
         // as offered: the Wi-Fi transfer leaves it alone meanwhile.
         if let Some(staging) = id.and_then(|id| Staging::apart(id, STAGING)) {
-            staging.abort(env.storage);
+            staging.abort(env.storage());
             let _ = env
-                .storage
+                .storage()
                 .create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
             let _ = env
-                .storage
+                .storage()
                 .write(&offered_file(), staging.plugin().as_bytes());
         }
         self.serial = self.serial.wrapping_add(1);
@@ -427,7 +427,7 @@ impl CableScreen {
         cx.command(
             paperpaw_sdk::ask::confirm(question, &ALLOWED)
                 .text(text)
-                .yes(env.i18n.tr("transfer.cable.allow"))
+                .yes(env.i18n().tr("transfer.cable.allow"))
                 .with(OFFER, format!("{}", self.serial))
                 .command(),
         );
@@ -444,8 +444,8 @@ impl CableScreen {
             .and_then(|offer| offer.plugin)
             .map(|(id, _)| id);
         if let Some(staging) = id.and_then(|id| Staging::apart(&id, STAGING)) {
-            staging.abort(env.storage);
-            let _ = env.storage.remove(&offered_file());
+            staging.abort(env.storage());
+            let _ = env.storage().remove(&offered_file());
         }
     }
 
@@ -470,13 +470,13 @@ impl CableScreen {
         let (Some((size, sha256)), Some(body), Some(staging)) = (offered, body, staging) else {
             return json(403, String::from("{\"why\":\"not offered\"}"));
         };
-        if env.storage.size(body).ok() != Some(size) || !same_digest(query, &sha256) {
+        if env.storage().size(body).ok() != Some(size) || !same_digest(query, &sha256) {
             return json(422, String::from("{\"why\":\"not as offered\"}"));
         }
-        match staging.put(env.storage, file, body, &sha256) {
+        match staging.put(env.storage(), file, body, &sha256) {
             Ok(()) => {
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("transfer.cable.receiving", &[("name", Arg::Str(id))]);
                 self.said(text, cx);
                 json(200, String::from("{\"ok\":true}"))
@@ -510,11 +510,11 @@ impl CableScreen {
         if !self
             .offer
             .as_ref()
-            .is_some_and(|offer| offer.staged_as_offered(env.storage, &staging))
+            .is_some_and(|offer| offer.staged_as_offered(env.storage(), &staging))
         {
             return json(422, String::from("{\"why\":\"not as offered\"}"));
         }
-        let code = staging.code(env.storage);
+        let code = staging.code(env.storage());
         let commit = match code {
             Some(sha256) if self.offer.as_ref().is_some_and(Offer::code) => {
                 Commit::approved(sha256)
@@ -531,7 +531,7 @@ impl CableScreen {
                 } else {
                     "transfer.plugin-installed"
                 };
-                self.said(env.i18n.format(key, &[("name", Arg::Str(id))]), cx);
+                self.said(env.i18n().format(key, &[("name", Arg::Str(id))]), cx);
                 let restart = done.code;
                 json(
                     200,
@@ -540,7 +540,7 @@ impl CableScreen {
             }
             Err(refusal) => {
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("transfer.cable.not-installed", &[("name", Arg::Str(id))]);
                 self.said(text, cx);
                 json(422, refused(refusal))
@@ -567,16 +567,16 @@ impl CableScreen {
         let (Some((size, sha256)), Some(body)) = (offered, body) else {
             return json(403, String::from("{\"why\":\"not offered\"}"));
         };
-        if env.storage.size(body).ok() != Some(size)
+        if env.storage().size(body).ok() != Some(size)
             || !same_digest(query, &sha256)
-            || file_sha256(env.storage, body) != Some(sha256)
+            || file_sha256(env.storage(), body) != Some(sha256)
         {
             return json(422, String::from("{\"why\":\"not as offered\"}"));
         }
         let folder = paperpaw_sdk::library::folder(env);
-        let _ = env.storage.create_dir(folder);
-        let at = files::free_path(env.storage, folder, &name);
-        match files::move_to(env.storage, body, &at) {
+        let _ = env.storage().create_dir(folder);
+        let at = files::free_path(env.storage(), folder, &name);
+        match files::move_to(env.storage(), body, &at) {
             Ok(()) => {
                 // Offered once, taken once.
                 if let Some(offer) = &mut self.offer {
@@ -585,7 +585,7 @@ impl CableScreen {
                 }
                 out.push(paperpaw_sdk::library::added(&at, "transfer"));
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("transfer.received", &[("name", Arg::Str(files::name(&at)))]);
                 self.said(text, cx);
                 json(200, format!("{{\"path\":{}}}", json_string(&at)))
@@ -598,7 +598,7 @@ impl CableScreen {
 /// What the device asks about `offer`: the question, and the names and
 /// sizes below it.
 fn question(env: &Env<'_>, offer: &Offer) -> (String, String) {
-    let i18n = env.i18n;
+    let i18n = env.i18n();
     let decimal = i18n.tr("transfer.cable.decimal");
     let key = match (offer.plugin.is_some(), offer.books.is_empty()) {
         (true, true) => "transfer.cable.ask-plugin",
@@ -633,13 +633,13 @@ fn question(env: &Env<'_>, offer: &Offer) -> (String, String) {
 
 /// The device, its PaperPaw and the code plugins it runs, as JSON.
 fn hello(env: &Env<'_>) -> String {
-    let fingerprint = env.native.map_or(String::from("null"), |native| {
+    let fingerprint = env.native().map_or(String::from("null"), |native| {
         json_string(&format!("{:016x}", native.fingerprint.0))
     });
     format!(
         "{{\"protocol\":1,\"device\":{},\"name\":{},\"version\":{},\"fingerprint\":{fingerprint}}}",
-        json_string(env.device.id),
-        json_string(env.device.name),
+        json_string(env.device().id),
+        json_string(env.device().name),
         json_string(&format!("{}", paperpaw_sdk::SDK_VERSION)),
     )
 }
@@ -668,9 +668,9 @@ impl Screen for CableScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let title = env.i18n.tr("transfer.cable.title");
+        let title = env.i18n().tr("transfer.cable.title");
         self.header.draw(&mut ui, title, None, None);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let state = match self.permission {
@@ -678,7 +678,7 @@ impl Screen for CableScreen {
             Permission::Refused => "transfer.cable.refused",
             _ => "transfer.cable.connected",
         };
-        let mut text = String::from(env.i18n.tr(state));
+        let mut text = String::from(env.i18n().tr(state));
         if let Some(last) = &self.last {
             text.push_str("\n\n");
             text.push_str(last);
@@ -690,12 +690,12 @@ impl Screen for CableScreen {
         if !self.started {
             self.started = true;
             cx.command(Command::serve(SERVER, CABLE_PORT, EVENTS.into()));
-            cx.wake_at(cx.env().now.add_millis(IDLE_MS));
+            cx.wake_at(cx.env().now().add_millis(IDLE_MS));
         }
     }
 
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
-        if cx.env().now >= self.active.add_millis(IDLE_MS) {
+        if cx.env().now() >= self.active.add_millis(IDLE_MS) {
             let env = *cx.env();
             self.forget_offer(&env);
             cx.command(Command::Back);

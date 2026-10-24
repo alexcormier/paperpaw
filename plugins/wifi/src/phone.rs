@@ -129,7 +129,7 @@ impl PhoneScreen {
     pub(crate) fn new(env: &Env<'_>, policy: Shared) -> Self {
         let style = UiStyle::new(env);
         // Named as the device is, for the phone to find it.
-        let own = env.random.readable(PASSWORD_LETTERS).map(|password| {
+        let own = env.random().readable(PASSWORD_LETTERS).map(|password| {
             let ssid = device_name::ssid(&env.device_name());
             let qr = QrCode::new(wifi::join_code(&ssid, &password).as_bytes());
             Own { ssid, password, qr }
@@ -144,8 +144,8 @@ impl PhoneScreen {
             problem: None,
             manual,
             started: false,
-            token: env.random.token(13).unwrap_or_default(),
-            active: env.now,
+            token: env.random().token(13).unwrap_or_default(),
+            active: env.now(),
             step: Step::Join,
             moved_on: false,
             button: core::cell::Cell::new(Rect::new(0, 0, 0, 0)),
@@ -155,7 +155,7 @@ impl PhoneScreen {
     /// The phone did something (or the own network opened): the idle
     /// time counts from now.
     fn touched(&mut self, cx: &mut Cx<'_, '_>) {
-        self.active = cx.env().now;
+        self.active = cx.env().now();
         cx.wake_at(self.active.add_millis(IDLE_MS));
     }
 
@@ -178,7 +178,7 @@ impl PhoneScreen {
 
     fn on_wifi(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(wifi) = env.wifi else {
+        let Some(wifi) = env.wifi() else {
             return;
         };
         match (&self.state, &wifi.state) {
@@ -202,7 +202,7 @@ impl PhoneScreen {
             }
             (State::Joining(ssid), WifiState::Online { ssid: joined, .. }) if ssid == joined => {
                 self.state = State::Joined(joined.clone());
-                cx.wake_at(env.now.add_millis(DONE_MS));
+                cx.wake_at(env.now().add_millis(DONE_MS));
             }
             _ => return,
         }
@@ -223,7 +223,7 @@ impl PhoneScreen {
             }
             ServerNotice::Failed { reason, .. } => {
                 self.state = State::Failed(
-                    env.i18n
+                    env.i18n()
                         .format("wifi.phone.failed", &[("reason", Arg::Str(&reason))]),
                 );
             }
@@ -238,7 +238,7 @@ impl PhoneScreen {
                 let path = target.split_once('?').map_or(target.as_str(), |(p, _)| p);
                 let form = body_file
                     .as_deref()
-                    .and_then(|file| paperpaw_sdk::read_file(env.storage, file, MAX_FORM).ok())
+                    .and_then(|file| paperpaw_sdk::read_file(env.storage(), file, MAX_FORM).ok())
                     .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
                 let token = self.token.as_str();
                 let (status, body, chosen) = match (method.as_str(), path) {
@@ -253,7 +253,7 @@ impl PhoneScreen {
                     ("POST", "/join") => match form.as_deref().and_then(chosen) {
                         Some((ssid, password)) => {
                             let text = env
-                                .i18n
+                                .i18n()
                                 .format("wifi.phone.joining-page", &[("ssid", Arg::Str(&ssid))]);
                             let body = format!("<h1>{}</h1>", escape(&text));
                             (200, page(&env, &body), Some((ssid, password)))
@@ -273,7 +273,7 @@ impl PhoneScreen {
                     return;
                 };
                 self.state = State::Leaving { ssid, password };
-                cx.wake_at(env.now.add_millis(LEAVE_MS));
+                cx.wake_at(env.now().add_millis(LEAVE_MS));
             }
             _ => return,
         }
@@ -291,7 +291,7 @@ impl PhoneScreen {
         if matches!(self.state, State::Opening)
             && self.own.as_ref().is_some_and(|own| own.ssid == ssid)
         {
-            self.state = State::Failed(env.i18n.tr("wifi.phone.not-opened").into());
+            self.state = State::Failed(env.i18n().tr("wifi.phone.not-opened").into());
             self.touched(cx);
             return Self::redraw(cx);
         }
@@ -307,7 +307,7 @@ impl PhoneScreen {
     /// closed, the radio as the user left it.
     fn close(&mut self, cx: &mut Cx<'_, '_>) {
         cx.command(Command::StopServing(SERVER));
-        if cx.env().wifi.is_some_and(|w| w.state.is_hosting()) {
+        if cx.env().wifi().is_some_and(|w| w.state.is_hosting()) {
             cx.command(Command::Wifi(WifiCommand::Leave));
         }
         let mut policy = self.policy.borrow_mut();
@@ -380,17 +380,17 @@ impl PhoneScreen {
             Step::Join => (1, "wifi.phone.join-title", "wifi.phone.join-note"),
             Step::Open => (2, "wifi.phone.open-title", "wifi.phone.open-note"),
         };
-        let title = format!("{number}. {}", env.i18n.tr(title));
+        let title = format!("{number}. {}", env.i18n().tr(title));
         lines(ui, &mut stack, &title, style.text(), line, Color::BLACK);
         lines(
             ui,
             &mut stack,
-            env.i18n.tr(note),
+            env.i18n().tr(note),
             style.small(),
             small,
             style.faint(ui::Ink::Note),
         );
-        let label = env.i18n.tr(self.step.button());
+        let label = env.i18n().tr(self.step.button());
         let button = stack.take_bottom(ui::button_height_for(env, &style, inner.width, label));
         ui.button(button, label, false, false);
         self.button.set(button);
@@ -424,7 +424,7 @@ impl PhoneScreen {
             ("wifi.phone.password", password.as_str()),
         ] {
             let row = Rect::new(inside.x, y, inside.width, small);
-            ui::Label::new(env.i18n.tr(key))
+            ui::Label::new(env.i18n().tr(key))
                 .px(style.small())
                 .color(style.faint(ui::Ink::Note))
                 .draw_from(ui, x, row);
@@ -462,7 +462,7 @@ impl PhoneScreen {
                 full,
                 url,
                 qr.as_ref(),
-                env.i18n.tr("wifi.phone.type-address"),
+                env.i18n().tr("wifi.phone.type-address"),
                 None,
             ),
             None => draw_opening(ui, full),
@@ -474,8 +474,8 @@ impl PhoneScreen {
 /// message, or in the small size where the room is too short for that.
 fn draw_opening(ui: &mut ui::Ui<'_>, room: Rect) {
     let (env, style) = (ui.env(), ui.style());
-    let text = env.i18n.tr("wifi.phone.opening");
-    if ui.message_height(room.width, text) <= room.height {
+    let text = env.i18n().tr("wifi.phone.opening");
+    if ui::message_height(ui.env(), ui.style(), room.width, text) <= room.height {
         return ui.message(room, text);
     }
     let Some(font) = ui.font() else {
@@ -530,8 +530,8 @@ fn escape(text: &str) -> String {
 
 /// A page with `body`.
 fn page(env: &Env<'_>, body: &str) -> String {
-    PAGE.replace("{lang}", env.i18n.language())
-        .replace("{title}", &escape(env.i18n.tr("wifi.phone.title")))
+    PAGE.replace("{lang}", env.i18n().language())
+        .replace("{title}", &escape(env.i18n().tr("wifi.phone.title")))
         .replace("{body}", body)
 }
 
@@ -539,7 +539,7 @@ fn page(env: &Env<'_>, body: &str) -> String {
 /// field for another one, the password. `again` after a form without a
 /// network.
 fn choose_page(env: &Env<'_>, again: bool, token: &str) -> String {
-    let tr = |key| escape(env.i18n.tr(key));
+    let tr = |key| escape(env.i18n().tr(key));
     let mut body = format!("<h1>{}</h1>", tr("wifi.phone.title"));
     if again {
         body.push_str(&format!(
@@ -551,7 +551,10 @@ fn choose_page(env: &Env<'_>, again: bool, token: &str) -> String {
         "<form method=\"post\" action=\"/join\"><input type=\"hidden\" name=\"t\" value=\"{}\">",
         escape(token)
     ));
-    let networks = env.wifi.map(|w| w.networks.as_slice()).unwrap_or_default();
+    let networks = env
+        .wifi()
+        .map(|w| w.networks.as_slice())
+        .unwrap_or_default();
     for network in networks {
         let lock = if network.secured { "" } else { " ·" };
         let open = if network.secured {
@@ -582,7 +585,7 @@ impl Screen for PhoneScreen {
         match self.step {
             _ if !steps => paperpaw_sdk::Hint::only_back(action),
             _ if *action == actions::CONFIRM => {
-                paperpaw_sdk::Hint::Text(env.i18n.tr(self.step.button()).into())
+                paperpaw_sdk::Hint::Text(env.i18n().tr(self.step.button()).into())
             }
             Step::Join if *action == actions::NEXT_PAGE => paperpaw_sdk::Hint::Default,
             Step::Open if *action == actions::PREV_PAGE => paperpaw_sdk::Hint::Default,
@@ -594,12 +597,12 @@ impl Screen for PhoneScreen {
         canvas.clear(Color::WHITE);
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let title = env.i18n.tr("wifi.phone.title");
+        let title = env.i18n().tr("wifi.phone.title");
         self.header.draw(&mut ui, title, None, None);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let message = |key| env.i18n.tr(key).to_string();
+        let message = |key| env.i18n().tr(key).to_string();
         let text = match (&self.state, &self.own) {
             (_, None) => message("wifi.phone.no-random"),
             (State::Searching, _) => message("wifi.state.searching"),
@@ -608,10 +611,10 @@ impl Screen for PhoneScreen {
                 return self.draw_step(&mut ui, area, own);
             }
             (State::Leaving { ssid, .. } | State::Joining(ssid), _) => env
-                .i18n
+                .i18n()
                 .format("wifi.state.joining", &[("ssid", Arg::Str(ssid))]),
             (State::Joined(ssid), _) => env
-                .i18n
+                .i18n()
                 .format("wifi.phone.joined", &[("ssid", Arg::Str(ssid))]),
             (State::Failed(text), _) => text.clone(),
         };
@@ -634,7 +637,7 @@ impl Screen for PhoneScreen {
         policy.phone = true;
         policy.goal = crate::policy::Goal::Nothing;
         drop(policy);
-        let on = cx.env().wifi.is_some_and(|w| w.state.is_on());
+        let on = cx.env().wifi().is_some_and(|w| w.state.is_on());
         if !on {
             cx.command(Command::Wifi(WifiCommand::On));
         }
@@ -648,13 +651,13 @@ impl Screen for PhoneScreen {
             self.state,
             State::Opening | State::Hosting { .. } | State::Failed(_)
         );
-        if waiting && env.now >= self.active.add_millis(IDLE_MS) {
+        if waiting && env.now() >= self.active.add_millis(IDLE_MS) {
             return self.close(cx);
         }
         match core::mem::replace(&mut self.state, State::Searching) {
             State::Leaving { ssid, password } => {
                 cx.command(Command::StopServing(SERVER));
-                let state = env.wifi.map(|w| w.state.clone()).unwrap_or_default();
+                let state = env.wifi().map(|w| w.state.clone()).unwrap_or_default();
                 let mut policy = self.policy.borrow_mut();
                 policy.pending = Some((ssid.clone(), password.clone()));
                 let commands = policy.choose(&state, &ssid, &password);

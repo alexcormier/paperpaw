@@ -92,8 +92,8 @@ impl<'a> Account<'a> {
     fn of(env: &Env<'a>) -> Option<Self> {
         let service = Service::of(env);
         let base = service.base(env);
-        let user = env.settings.read(&USER).trim();
-        let password = env.secrets.get(PASSWORD).unwrap_or_default();
+        let user = env.settings().read(&USER).trim();
+        let password = env.secrets().get(PASSWORD).unwrap_or_default();
         (!base.is_empty() && !user.is_empty() && !password.is_empty()).then_some(Account {
             service,
             base,
@@ -105,7 +105,7 @@ impl<'a> Account<'a> {
 
 /// The notebook's name, as set.
 pub fn notebook_name<'a>(env: &Env<'a>) -> &'a str {
-    match env.settings.read(&NOTEBOOK_SETTING).trim() {
+    match env.settings().read(&NOTEBOOK_SETTING).trim() {
         "" => DEFAULT_NOTEBOOK,
         name => name,
     }
@@ -113,7 +113,9 @@ pub fn notebook_name<'a>(env: &Env<'a>) -> &'a str {
 
 /// Milliseconds since 1970 now, if the device knows the time.
 fn now_ms(env: &Env<'_>) -> Option<i64> {
-    env.status.clock.map(|clock| clock.unix_millis_at(env.now))
+    env.status()
+        .clock
+        .map(|clock| clock.unix_millis_at(env.now()))
 }
 
 /// The book being sent.
@@ -174,7 +176,7 @@ impl Run {
 
     /// Sends the notes that wait, or says why it cannot.
     pub fn start(&mut self, env: &Env<'_>, start: Start, out: &mut Commands) {
-        let waiting = kept::waiting(env.storage);
+        let waiting = kept::waiting(env.storage());
         if self.running {
             // Those exported meanwhile come along.
             let current = self.book.as_ref().map(|b| b.path.as_str());
@@ -192,7 +194,7 @@ impl Run {
         if waiting.is_empty() {
             return self.end(env, "joplin.nothing", &[], End::Again, out);
         }
-        if !env.caps.network {
+        if !env.caps().network {
             return self.end(env, "joplin.no-network", &[], End::Again, out);
         }
         if Account::of(env).is_none() {
@@ -233,8 +235,8 @@ impl Run {
         match &self.session {
             Some(session) if Service::of(env).signs_in() => Auth::Session(session),
             _ => Auth::Basic {
-                user: env.settings.read(&USER).trim(),
-                password: env.secrets.get(PASSWORD).unwrap_or_default(),
+                user: env.settings().read(&USER).trim(),
+                password: env.secrets().get(PASSWORD).unwrap_or_default(),
             },
         }
     }
@@ -346,8 +348,8 @@ impl Run {
             200..=299 => {
                 let now = now_ms(env).unwrap_or_default();
                 let file = kept::file(LOCKS_FILE);
-                let upgrading = locks::upgrading(Service::of(env), env.storage, &file, now);
-                let _ = env.storage.remove(&file);
+                let upgrading = locks::upgrading(Service::of(env), env.storage(), &file, now);
+                let _ = env.storage().remove(&file);
                 if upgrading {
                     return self.end(env, "joplin.upgrading", &[], End::Again, out);
                 }
@@ -362,7 +364,7 @@ impl Run {
 
     /// The notebook made before, or a new one.
     fn find_notebook(&mut self, env: &Env<'_>, out: &mut Commands) {
-        match kept::notebook(env.storage) {
+        match kept::notebook(env.storage()) {
             Some((name, id)) if name == notebook_name(env) && item::is_id(&id) => {
                 let mut request = self.request(env, &item::file_name(&id), "GET", &NOTEBOOK_FOUND);
                 request = request.save_to(kept::file(FOUND));
@@ -379,8 +381,8 @@ impl Run {
         }
         match reply.status {
             200..=299 => {
-                let props = item::read_props(env.storage, &kept::file(FOUND)).unwrap_or_default();
-                let _ = env.storage.remove(&kept::file(FOUND));
+                let props = item::read_props(env.storage(), &kept::file(FOUND)).unwrap_or_default();
+                let _ = env.storage().remove(&kept::file(FOUND));
                 match reply.context.get(ID) {
                     Some(id) if props.kind == NOTEBOOK && !props.deleted => {
                         self.notebook = id.to_string();
@@ -397,7 +399,7 @@ impl Run {
     fn make_notebook(&mut self, env: &Env<'_>, out: &mut Commands) {
         let now = now_ms(env).unwrap_or_default();
         let name = notebook_name(env);
-        let old = kept::notebook(env.storage).map(|(_, id)| id);
+        let old = kept::notebook(env.storage()).map(|(_, id)| id);
         let id = item::new_id(&format!("paperpaw notebook {name} {now}"), old.as_deref());
         let mut request = self.put(env, &item::file_name(&id), &NOTEBOOK_MADE);
         request = request.body(item::notebook(
@@ -416,7 +418,7 @@ impl Run {
         let Some(id) = reply.context.get(ID).filter(|_| reply.ok()) else {
             return self.trouble(env, reply, out);
         };
-        let _ = kept::keep_notebook(env.storage, notebook_name(env), id);
+        let _ = kept::keep_notebook(env.storage(), notebook_name(env), id);
         self.notebook = id.to_string();
         self.next_book(env, out);
     }
@@ -425,15 +427,15 @@ impl Run {
     fn next_book(&mut self, env: &Env<'_>, out: &mut Commands) {
         while !self.queue.is_empty() {
             let path = self.queue.remove(0);
-            if let Err(StorageError::NotFound) = env.storage.size(&path) {
+            if let Err(StorageError::NotFound) = env.storage().size(&path) {
                 // Its notes were deleted since.
-                let _ = kept::remove_waiting(env.storage, &path);
-                let _ = kept::remove_sending(env.storage, &path);
+                let _ = kept::remove_waiting(env.storage(), &path);
+                let _ = kept::remove_sending(env.storage(), &path);
                 continue;
             }
             let book = Book {
-                note: kept::sent(env.storage, &path),
-                sending: kept::sending(env.storage, &path),
+                note: kept::sent(env.storage(), &path),
+                sending: kept::sending(env.storage(), &path),
                 path,
             };
             let found = book.last().map(|note| item::file_name(&note.id));
@@ -455,18 +457,18 @@ impl Run {
         match reply.status {
             200..=299 => {
                 let found = kept::file(FOUND);
-                let props = item::read_props(env.storage, &found).unwrap_or_default();
+                let props = item::read_props(env.storage(), &found).unwrap_or_default();
                 // Edited in Joplin since, if its text is not what PaperPaw
                 // wrote (its times tell less: moving it to another
                 // notebook changes them too, some edits do not).
-                let text = item::text_hash(env.storage, &found, props.text_end).ok();
-                let _ = env.storage.remove(&found);
+                let text = item::text_hash(env.storage(), &found, props.text_end).ok();
+                let _ = env.storage().remove(&found);
                 let written = text.and_then(|md5| book.written(&md5).cloned());
                 match written {
                     Some(note) if props.kind == NOTE && !props.deleted => {
                         // Joplin has it as sent, also if the answer was lost.
                         if book.note.as_ref() != Some(&note) {
-                            let _ = kept::keep_sent(env.storage, &book.path, &note);
+                            let _ = kept::keep_sent(env.storage(), &book.path, &note);
                             book.note = Some(note);
                         }
                         self.write_note(env, Some(props), out);
@@ -502,7 +504,7 @@ impl Run {
             (Some(_), Some(old)) => old.to_string(),
             _ => item::new_id(&format!("paperpaw note {} {now}", book.path), old),
         };
-        let head = markdown::head(env.storage, &book.path).unwrap_or_default();
+        let head = markdown::head(env.storage(), &book.path).unwrap_or_default();
         let title = match head.title.as_str() {
             "" => paperpaw_sdk::files::name(&book.path).trim_end_matches(".md"),
             title => title,
@@ -528,12 +530,12 @@ impl Run {
             order: found.as_ref().map_or(now, |p| p.order),
         };
         let file = kept::file(NOTE_FILE);
-        let Ok(text) = note.write(env.storage, &book.path, &file) else {
+        let Ok(text) = note.write(env.storage(), &book.path, &file) else {
             return self.book_failed(env, out);
         };
         let sending = Sent { id, text };
         // Kept before it goes, for when its answer is lost.
-        if kept::keep_sending(env.storage, &book.path, &sending).is_err() {
+        if kept::keep_sending(env.storage(), &book.path, &sending).is_err() {
             return self.book_failed(env, out);
         }
         let mut request = self.put(env, &item::file_name(&sending.id), &NOTE_SENT);
@@ -554,13 +556,13 @@ impl Run {
                 _ => self.book_failed(env, out),
             };
         }
-        let _ = env.storage.remove(&kept::file(NOTE_FILE));
+        let _ = env.storage().remove(&kept::file(NOTE_FILE));
         if let Some(note) = &book.sending
-            && kept::keep_sent(env.storage, &book.path, note).is_ok()
+            && kept::keep_sent(env.storage(), &book.path, note).is_ok()
         {
-            let _ = kept::remove_sending(env.storage, &book.path);
+            let _ = kept::remove_sending(env.storage(), &book.path);
         }
-        let _ = kept::remove_waiting(env.storage, &book.path);
+        let _ = kept::remove_waiting(env.storage(), &book.path);
         self.sent += 1;
         self.next_book(env, out);
     }
@@ -578,7 +580,7 @@ impl Run {
         if self.apart > 0 && !self.quiet {
             let count = self.apart as i64;
             let text = env
-                .i18n
+                .i18n()
                 .plural("joplin.apart", count, &[("count", Arg::Int(count))]);
             out.push(Command::Notify(text));
         }
@@ -592,7 +594,7 @@ impl Run {
         }
         self.quiet = false;
         let text = env
-            .i18n
+            .i18n()
             .plural("joplin.sent", sent, &[("count", Arg::Int(sent))]);
         self.end_with(env, text, End::Again, out);
     }
@@ -606,7 +608,7 @@ impl Run {
         end: End,
         out: &mut Commands,
     ) {
-        self.end_with(env, env.i18n.format(key, args), end, out);
+        self.end_with(env, env.i18n().format(key, args), end, out);
     }
 
     fn end_with(&mut self, env: &Env<'_>, text: String, end: End, out: &mut Commands) {
@@ -615,7 +617,7 @@ impl Run {
         self.queue.clear();
         self.book = None;
         for name in [INFO, LOCKS_FILE, FOUND, NOTE_FILE] {
-            let _ = env.storage.remove(&kept::file(name));
+            let _ = env.storage().remove(&kept::file(name));
         }
         if !self.quiet {
             out.push(Command::Notify(text.clone()));
@@ -629,7 +631,7 @@ impl Run {
 /// encrypted.
 fn target_info(env: &Env<'_>) -> (u32, bool) {
     let (mut version, mut encrypted) = (0, false);
-    stream::read_file(env.storage, &kept::file(INFO), &mut |event| {
+    stream::read_file(env.storage(), &kept::file(INFO), &mut |event| {
         let Json::Value(at, value) = event else {
             return;
         };

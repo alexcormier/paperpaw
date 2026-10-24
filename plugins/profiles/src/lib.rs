@@ -59,8 +59,8 @@ const NAME: &str = "name";
 /// Applies `profile` and says so.
 fn apply(env: &Env<'_>, profile: &Profile, out: &mut Commands) {
     out.extend(profile::apply(env, profile));
-    profile::set_last(env.storage, &profile.name);
-    out.push(Command::Notify(env.i18n.format(
+    profile::set_last(env.storage(), &profile.name);
+    out.push(Command::Notify(env.i18n().format(
         "profiles.applied",
         &[("name", Arg::Str(&profile.name))],
     )));
@@ -97,8 +97,8 @@ impl Plugin for Profiles {
         ))?;
         r.add_action(ActionSpec::new(NEXT, "profiles.next").handler(
             |env: &Env<'_>, _, out: &mut Commands| {
-                let profiles = profile::load(env.storage).unwrap_or_default();
-                let last = profile::last(env.storage);
+                let profiles = profile::load(env.storage()).unwrap_or_default();
+                let last = profile::last(env.storage());
                 let at = profiles.iter().position(|p| p.name == last);
                 let next = at.map_or(0, |at| (at + 1) % profiles.len().max(1));
                 if let Some(profile) = profiles.get(next) {
@@ -141,7 +141,7 @@ impl ListScreen {
     fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
@@ -151,7 +151,7 @@ impl ListScreen {
             display.width,
             display.height.saturating_sub(top + line),
         );
-        let loaded = profile::load(env.storage);
+        let loaded = profile::load(env.storage());
         let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             status,
@@ -187,7 +187,7 @@ impl ListScreen {
     fn ask_name(&self, cx: &mut Cx<'_, '_>, reply: &Event<Typed>, text: &str, context: &str) {
         let env = *cx.env();
         cx.command(
-            ask::text(env.i18n.tr("profiles.name"), reply)
+            ask::text(env.i18n().tr("profiles.name"), reply)
                 .initial(text)
                 .with(params::PATH, context.to_string())
                 .command(),
@@ -206,7 +206,7 @@ impl ListScreen {
                 self.redraw(cx);
             }
             Some(Row::Add) => {
-                let name = env.i18n.format(
+                let name = env.i18n().format(
                     "profiles.default-name",
                     &[("number", Arg::Int(self.profiles.len() as i64 + 1))],
                 );
@@ -239,7 +239,7 @@ impl ListScreen {
     /// has and a notice says why.
     fn save(&mut self, cx: &mut Cx<'_, '_>) -> bool {
         let env = *cx.env();
-        if self.readable && profile::save(env.storage, &self.profiles) {
+        if self.readable && profile::save(env.storage(), &self.profiles) {
             return true;
         }
         let key = if self.readable {
@@ -247,8 +247,8 @@ impl ListScreen {
         } else {
             "profiles.unreadable"
         };
-        cx.command(Command::Notify(env.i18n.tr(key).to_string()));
-        let loaded = profile::load(env.storage);
+        cx.command(Command::Notify(env.i18n().tr(key).to_string()));
+        let loaded = profile::load(env.storage());
         self.readable = loaded.is_some();
         self.profiles = loaded.unwrap_or_default();
         self.list
@@ -268,13 +268,13 @@ impl ListScreen {
         let arg = [("name", Arg::Str(name))];
         cx.command(
             ask::confirm(
-                env.i18n
+                env.i18n()
                     .format(&alloc::format!("profiles.{option}.question"), &arg),
                 &CONFIRMED,
             )
-            .text(env.i18n.tr(&alloc::format!("profiles.{option}.text")))
-            .yes(env.i18n.tr(yes))
-            .no(env.i18n.tr(no))
+            .text(env.i18n().tr(&alloc::format!("profiles.{option}.text")))
+            .yes(env.i18n().tr(yes))
+            .no(env.i18n().tr(no))
             .with(params::PATH, i.to_string())
             .with(OPTION, option)
             .with(NAME, name.clone())
@@ -289,7 +289,7 @@ impl ListScreen {
         let name = self.profiles[i].name.clone();
         if self.save(cx) {
             cx.command(Command::Notify(
-                env.i18n
+                env.i18n()
                     .format("profiles.saved", &[("name", Arg::Str(&name))]),
             ));
         }
@@ -307,7 +307,7 @@ impl ListScreen {
         if taken {
             let env = *cx.env();
             cx.command(Command::Notify(
-                env.i18n
+                env.i18n()
                     .format("profiles.taken", &[("name", Arg::Str(name))]),
             ));
         }
@@ -329,7 +329,7 @@ impl Screen for ListScreen {
         let rows = self.rows();
         self.header.draw(
             &mut ui,
-            env.i18n.tr("profiles.title"),
+            env.i18n().tr("profiles.title"),
             None,
             self.list.paging(rows.len()),
         );
@@ -340,21 +340,21 @@ impl Screen for ListScreen {
                     Row::Profile(i) => {
                         let p = &profiles[i];
                         let value = if in_use.get(i).copied().unwrap_or(false) {
-                            env.i18n.tr("profiles.in-use").to_string()
+                            env.i18n().tr("profiles.in-use").to_string()
                         } else {
                             String::new()
                         };
-                        let note = env
-                            .i18n
-                            .plural("profiles.settings", p.values.len() as i64, &[]);
+                        let note =
+                            env.i18n()
+                                .plural("profiles.settings", p.values.len() as i64, &[]);
                         ui::Row::value(&p.name, &value)
                             .note(&note)
                             .focused(focused)
                             .draw(ui, rect);
                     }
                     Row::Add => {
-                        let title = env.i18n.tr("profiles.add");
-                        let note = env.i18n.tr("profiles.add.help");
+                        let title = env.i18n().tr("profiles.add");
+                        let note = env.i18n().tr("profiles.add.help");
                         ui::Row::value(title, "+")
                             .note(note)
                             .focused(focused)
@@ -374,8 +374,8 @@ impl Screen for ListScreen {
             ui.empty(
                 area,
                 "stack-2",
-                env.i18n.tr("profiles.empty.title"),
-                env.i18n.tr("profiles.empty"),
+                env.i18n().tr("profiles.empty.title"),
+                env.i18n().tr("profiles.empty"),
             );
             return;
         }
@@ -442,10 +442,10 @@ impl Screen for ListScreen {
                 name: name.clone(),
             });
             if self.save(cx) {
-                profile::set_last(env.storage, &name);
+                profile::set_last(env.storage(), &name);
                 self.list.set_focus(self.profiles.len() - 1);
                 cx.command(Command::Notify(
-                    env.i18n
+                    env.i18n()
                         .format("profiles.saved", &[("name", Arg::Str(&name))]),
                 ));
             }
@@ -458,8 +458,8 @@ impl Screen for ListScreen {
                 }
                 let old = core::mem::replace(&mut self.profiles[i].name, name.clone());
                 // The profile applied last keeps being it, by its new name.
-                if self.save(cx) && profile::last(env.storage) == old {
-                    profile::set_last(env.storage, &name);
+                if self.save(cx) && profile::last(env.storage()) == old {
+                    profile::set_last(env.storage(), &name);
                 }
                 self.redraw(cx);
             }

@@ -86,7 +86,7 @@ pub(crate) struct Unreadable;
 
 /// The catalogs; until the user changes them, one to start with.
 pub(crate) fn load(env: &Env<'_>) -> Result<Vec<Catalog>, Unreadable> {
-    let Some(mut catalogs) = read(env.storage)? else {
+    let Some(mut catalogs) = read(env.storage())? else {
         return Ok(Vec::from([Catalog {
             name: String::from("Project Gutenberg"),
             url: String::from("https://www.gutenberg.org/ebooks.opds/"),
@@ -109,7 +109,7 @@ fn read(storage: &dyn Storage) -> Result<Option<Vec<Catalog>>, Unreadable> {
 fn fill_passwords(env: &Env<'_>, catalogs: &mut [Catalog]) {
     for c in catalogs.iter_mut().filter(|c| c.password.is_empty()) {
         c.password = env
-            .secrets
+            .secrets()
             .get(&secret_id(&c.url))
             .unwrap_or_default()
             .to_string();
@@ -121,13 +121,13 @@ fn fill_passwords(env: &Env<'_>, catalogs: &mut [Catalog]) {
 /// them, at a later start: where they could not be saved, the list still
 /// has them.
 pub(crate) fn move_passwords(env: &Env<'_>, out: &mut Commands) {
-    let Ok(Some(mut catalogs)) = read(env.storage) else {
+    let Ok(Some(mut catalogs)) = read(env.storage()) else {
         return;
     };
     if catalogs.iter().all(|c| c.password.is_empty()) {
         return;
     }
-    let kept = |c: &Catalog| env.secrets.get(&secret_id(&c.url)) == Some(c.password.as_str());
+    let kept = |c: &Catalog| env.secrets().get(&secret_id(&c.url)) == Some(c.password.as_str());
     if !catalogs.iter().all(|c| c.password.is_empty() || kept(c)) {
         return keep_passwords(env, &catalogs, out);
     }
@@ -182,12 +182,12 @@ pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Commands) {
     keep_passwords(env, catalogs, out);
     // Those of catalogs removed or moved to another address go.
     let ids: Vec<String> = catalogs.iter().map(|c| secret_id(&c.url)).collect();
-    for secret in env.secrets.iter() {
+    for secret in env.secrets().iter() {
         if secret.id.starts_with(SECRETS) && !ids.contains(&secret.id) {
             out.push(Command::set_secret(SecretChange::remove(&secret.id)));
         }
     }
-    let _ = env.storage.write(&path(), encode(catalogs).as_bytes());
+    let _ = env.storage().write(&path(), encode(catalogs).as_bytes());
 }
 
 /// The catalogs' passwords, kept with the other passwords and keys:
@@ -195,14 +195,14 @@ pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Commands) {
 fn keep_passwords(env: &Env<'_>, catalogs: &[Catalog], out: &mut Commands) {
     for c in catalogs {
         let id = secret_id(&c.url);
-        let kept = env.secrets.get(&id);
+        let kept = env.secrets().get(&id);
         if c.password.is_empty() {
             if kept.is_some() {
                 out.push(Command::set_secret(SecretChange::remove(&id)));
             }
         } else if kept != Some(c.password.as_str()) {
             let label = env
-                .i18n
+                .i18n()
                 .format("opds.secret", &[("name", Arg::Str(&c.name))]);
             out.push(Command::set_secret(SecretChange::keep(
                 &id,

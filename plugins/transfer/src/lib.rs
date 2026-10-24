@@ -163,7 +163,7 @@ impl TransferScreen {
             style,
             state: State::Starting,
             own: None,
-            active: env.now,
+            active: env.now(),
             guard: None,
             page: page(env),
             last: None,
@@ -195,7 +195,7 @@ impl TransferScreen {
     /// The *Without a router* button at the bottom: where PaperPaw runs
     /// Wi-Fi, before it was chosen.
     fn own_button(&self, env: &Env<'_>) -> Option<Rect> {
-        if env.wifi.is_none() || self.own.is_some() || !env.random.available() {
+        if env.wifi().is_none() || self.own.is_some() || !env.random().available() {
             return None;
         }
         let area = self.content(env);
@@ -204,7 +204,7 @@ impl TransferScreen {
         let margin = style.margin();
         let width = area.width.saturating_sub(2 * margin);
         // A touch row, higher where its words take more lines.
-        let label = env.i18n.tr("transfer.without-router");
+        let label = env.i18n().tr("transfer.without-router");
         let slot = ui::button_slot_height(env, style, width, label);
         let bottom = area.y + area.height - ui::edge_room(style, row);
         Some(ui::button_in_slot(
@@ -219,14 +219,14 @@ impl TransferScreen {
     fn without_router(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         // Letters not taken for one another: read off the screen, typed.
-        let Some(password) = env.random.readable(15) else {
+        let Some(password) = env.random().readable(15) else {
             return;
         };
         // Named as the device is, for the phone to find it.
         let ssid = paperpaw_sdk::device_name::ssid(&env.device_name());
         let qr = QrCode::new(paperpaw_sdk::wifi::join_code(&ssid, &password).as_bytes());
         cx.command(Command::StopServing(SERVER));
-        if !env.wifi.is_some_and(|w| w.state.is_on()) {
+        if !env.wifi().is_some_and(|w| w.state.is_on()) {
             cx.command(Command::Wifi(paperpaw_sdk::wifi::WifiCommand::On));
         }
         cx.command(Command::Wifi(paperpaw_sdk::wifi::WifiCommand::Host {
@@ -243,7 +243,7 @@ impl TransferScreen {
     /// A request came (or the own network opened): the idle time counts
     /// from now.
     fn touched(&mut self, cx: &mut Cx<'_, '_>) {
-        self.active = cx.env().now;
+        self.active = cx.env().now();
         if self.own.is_some() {
             cx.wake_at(self.active.add_millis(OWN_IDLE_MS));
         }
@@ -251,7 +251,7 @@ impl TransferScreen {
 
     /// Closes the screen, and the reader's own network if it is open.
     fn close(&mut self, cx: &mut Cx<'_, '_>) {
-        if self.own.is_some() && cx.env().wifi.is_some_and(|w| w.state.is_hosting()) {
+        if self.own.is_some() && cx.env().wifi().is_some_and(|w| w.state.is_hosting()) {
             cx.command(Command::Wifi(paperpaw_sdk::wifi::WifiCommand::Leave));
         }
         cx.command(Command::Back);
@@ -259,7 +259,7 @@ impl TransferScreen {
 
     /// The area below the header.
     fn content(&self, env: &Env<'_>) -> Rect {
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
@@ -269,7 +269,7 @@ impl TransferScreen {
         match notice {
             ServerNotice::Started { address, .. } => {
                 // Drawn now: on the X4, the radio makes it fully random.
-                self.state = match served::key(&env.random) {
+                self.state = match served::key(&env.random()) {
                     Some(key) => {
                         let url = format!("http://{address}/?k={key}");
                         self.guard = Some(Guard::new(key));
@@ -293,7 +293,7 @@ impl TransferScreen {
                 self.state = if reason == "no network" {
                     State::NoNetwork
                 } else {
-                    State::Failed(env.i18n.format(key, &[("reason", Arg::Str(&reason))]))
+                    State::Failed(env.i18n().format(key, &[("reason", Arg::Str(&reason))]))
                 };
                 self.redraw(cx);
             }
@@ -317,9 +317,9 @@ impl TransferScreen {
                     method: &method,
                     target: &target,
                     body_file: body_file.as_deref(),
-                    at: env.now,
+                    at: env.now(),
                 };
-                let (response, done) = web::answer(env.storage, guard, &self.page, request);
+                let (response, done) = web::answer(env.storage(), guard, &self.page, request);
                 cx.command(Command::respond(response));
                 if let Some(done) = done {
                     // The library follows: a book added, a book removed (what
@@ -352,7 +352,7 @@ impl TransferScreen {
                         }
                         web::Done::NotReceived(name) => ("transfer.not-received", name.as_str()),
                     };
-                    self.last = Some(env.i18n.format(key, &[("name", Arg::Str(name))]));
+                    self.last = Some(env.i18n().format(key, &[("name", Arg::Str(name))]));
                     let area = self.content(&env);
                     cx.request_redraw_area(area);
                     cx.request_refresh(RefreshMode::Fast);
@@ -380,7 +380,7 @@ impl TransferScreen {
         let text = |status, body: &str| {
             ServerResponse::new(number, status, "text/plain; charset=utf-8", body.into())
         };
-        let refused = match guard.check_target(target, env.now) {
+        let refused = match guard.check_target(target, env.now()) {
             served::Access::Granted => None,
             served::Access::Locked => {
                 Some(text(429, "Too many wrong keys: try again in a minute."))
@@ -392,7 +392,7 @@ impl TransferScreen {
         };
         if let Some(response) = refused {
             if let Some(body) = body_file {
-                let _ = env.storage.remove(&body);
+                let _ = env.storage().remove(&body);
             }
             return cx.command(Command::respond(response));
         }
@@ -406,14 +406,14 @@ impl TransferScreen {
         }
         match ask {
             Some(plugins::Ask::Code(id)) => {
-                let question = String::from(env.i18n.tr("transfer.code.question"));
+                let question = String::from(env.i18n().tr("transfer.code.question"));
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("transfer.code.text", &[("name", Arg::Str(&id))]);
                 cx.command(
                     paperpaw_sdk::ask::confirm(question, &CODE_APPROVED)
                         .text(text)
-                        .yes(env.i18n.tr("transfer.code.install"))
+                        .yes(env.i18n().tr("transfer.code.install"))
                         .with(paperpaw_sdk::builtin::params::ID, id)
                         .command(),
                 );
@@ -426,7 +426,7 @@ impl TransferScreen {
     /// Says on the device that plugin `id` was installed.
     fn installed(&mut self, env: &Env<'_>, id: &str, cx: &mut Cx<'_, '_>) {
         self.last = Some(
-            env.i18n
+            env.i18n()
                 .format("transfer.plugin-installed", &[("name", Arg::Str(id))]),
         );
         let area = self.content(env);
@@ -438,7 +438,7 @@ impl TransferScreen {
 /// What the screen says where no key can be drawn: the platform has no
 /// source of random numbers, and nothing is served.
 pub(crate) fn no_random(env: &Env<'_>) -> String {
-    env.i18n.tr("transfer.no-random").into()
+    env.i18n().tr("transfer.no-random").into()
 }
 
 /// The web page, with its texts in the device's language.
@@ -462,7 +462,10 @@ fn page(env: &Env<'_>) -> String {
         if i > 0 {
             json.push(',');
         }
-        json.push_str(&format!("{name}:{}", served::json_string(env.i18n.tr(key))));
+        json.push_str(&format!(
+            "{name}:{}",
+            served::json_string(env.i18n().tr(key))
+        ));
     }
     // The page's title: the device, as it is called.
     json.push_str(&format!(
@@ -484,7 +487,7 @@ fn draw_join(ui: &mut ui::Ui<'_>, area: Rect, own: &OwnNetwork) {
     let width = area.width.saturating_sub(2 * margin);
     let line = font.line_metrics(style.text()).line_height as u16;
     let small = font.line_metrics(style.small()).line_height as u16;
-    let title = env.i18n.tr("transfer.own.join");
+    let title = env.i18n().tr("transfer.own.join");
     ui::Label::new(title)
         .px(style.text())
         .color(Color::BLACK)
@@ -493,7 +496,7 @@ fn draw_join(ui: &mut ui::Ui<'_>, area: Rect, own: &OwnNetwork) {
             f32::from(margin),
             Rect::new(margin, area.y, width, line),
         );
-    let note = env.i18n.format(
+    let note = env.i18n().format(
         "transfer.own.network",
         &[
             ("ssid", Arg::Str(&own.ssid)),
@@ -527,7 +530,7 @@ impl Screen for TransferScreen {
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         // Back, and Select for the transfer without a router.
         if *action == actions::CONFIRM && self.own_button(env).is_some() {
-            return paperpaw_sdk::Hint::Text(env.i18n.tr("transfer.without-router").into());
+            return paperpaw_sdk::Hint::Text(env.i18n().tr("transfer.without-router").into());
         }
         paperpaw_sdk::Hint::only_back(action)
     }
@@ -535,7 +538,7 @@ impl Screen for TransferScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let title = env.i18n.tr("transfer.title");
+        let title = env.i18n().tr("transfer.title");
         self.header.draw(&mut ui, title, None, None);
         let area = self.content(env);
         let own_button = self.own_button(env);
@@ -547,9 +550,9 @@ impl Screen for TransferScreen {
                     Some(b) => Rect::new(area.x, area.y, area.width, b.y.saturating_sub(area.y)),
                     None => area,
                 };
-                ui.message(room, env.i18n.tr("transfer.starting"));
+                ui.message(room, env.i18n().tr("transfer.starting"));
                 if let Some(button) = button {
-                    let label = env.i18n.tr("transfer.without-router");
+                    let label = env.i18n().tr("transfer.without-router");
                     let focused = ui::focus_shown(env);
                     ui.button(button, label, false, focused);
                 }
@@ -561,7 +564,7 @@ impl Screen for TransferScreen {
             State::NoNetwork => {
                 // Where PaperPaw runs Wi-Fi, its settings join a network;
                 // elsewhere the system's.
-                let text = if env.wifi.is_some() {
+                let text = if env.wifi().is_some() {
                     "transfer.no-network"
                 } else {
                     "transfer.no-network.system"
@@ -575,11 +578,11 @@ impl Screen for TransferScreen {
                 ui.empty(
                     room,
                     "wifi-off",
-                    env.i18n.tr("transfer.no-network.title"),
-                    env.i18n.tr(text),
+                    env.i18n().tr("transfer.no-network.title"),
+                    env.i18n().tr(text),
                 );
                 if let Some(button) = button {
-                    let label = env.i18n.tr("transfer.without-router");
+                    let label = env.i18n().tr("transfer.without-router");
                     let focused = ui::focus_shown(env);
                     ui.button(button, label, false, focused);
                 }
@@ -609,7 +612,7 @@ impl Screen for TransferScreen {
             ),
             None => area,
         };
-        let hint = env.i18n.tr("transfer.hint");
+        let hint = env.i18n().tr("transfer.hint");
         ui::draw_address(
             ui.canvas(),
             env,
@@ -621,7 +624,7 @@ impl Screen for TransferScreen {
             self.last.as_deref(),
         );
         if let Some(button) = button {
-            let label = env.i18n.tr("transfer.without-router");
+            let label = env.i18n().tr("transfer.without-router");
             let focused = ui::focus_shown(env);
             ui.button(button, label, false, focused);
         }
@@ -630,7 +633,7 @@ impl Screen for TransferScreen {
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         // The own network left alone: closed.
         if self.own.is_some() {
-            if cx.env().now >= self.active.add_millis(OWN_IDLE_MS) {
+            if cx.env().now() >= self.active.add_millis(OWN_IDLE_MS) {
                 self.close(cx);
             } else {
                 cx.wake_at(self.active.add_millis(OWN_IDLE_MS));
@@ -641,7 +644,7 @@ impl Screen for TransferScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !self.started {
             self.started = true;
-            if !cx.env().random.available() {
+            if !cx.env().random().available() {
                 self.state = State::Failed(no_random(cx.env()));
                 self.redraw(cx);
                 return;
@@ -724,7 +727,7 @@ impl Screen for TransferScreen {
         } else if *event == events::WIFI_CHANGED
             && self.own.is_some()
             && matches!(self.state, State::Starting)
-            && cx.env().wifi.is_some_and(|w| w.state.is_hosting())
+            && cx.env().wifi().is_some_and(|w| w.state.is_hosting())
         {
             // The own network open: the page served there.
             cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));

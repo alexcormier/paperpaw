@@ -83,16 +83,20 @@ impl FolderChooser {
         // Start in the current folder if it still exists.
         let current = match (&setting, params.get(params::TEXT)) {
             (_, Some(text)) => text.trim_matches('/').to_string(),
-            (Some(id), None) => env.settings.text(id.as_str()).trim_matches('/').to_string(),
+            (Some(id), None) => env
+                .settings()
+                .text(id.as_str())
+                .trim_matches('/')
+                .to_string(),
             (None, None) => String::new(),
         };
-        let dir = if !current.is_empty() && paperpaw_sdk::files::is_dir(env.storage, &current) {
+        let dir = if !current.is_empty() && paperpaw_sdk::files::is_dir(env.storage(), &current) {
             current
         } else {
             String::new()
         };
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -119,14 +123,14 @@ impl FolderChooser {
         self.list.set_focus(0);
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
-        let now = cx.env().now;
+        let now = cx.env().now();
         cx.wake_at(now);
     }
 
     fn listing<'a>(&'a self, env: &'a Env<'_>) -> Listing<'a> {
         Listing {
-            storage: env.storage,
-            formats: env.formats,
+            storage: env.storage(),
+            formats: env.formats(),
             dir: &self.dir,
             folders_only: true,
             rank: None,
@@ -189,7 +193,7 @@ impl FolderChooser {
                 }
             }
             Some(Row::New) => {
-                cx.command(ask::text(env.i18n.tr("files.choose.new"), &NAMED).command());
+                cx.command(ask::text(env.i18n().tr("files.choose.new"), &NAMED).command());
             }
             Some(Row::Up) => {
                 self.up(cx);
@@ -253,7 +257,7 @@ impl Screen for FolderChooser {
         let style = self.style;
         let len = self.len();
         let title = if self.dir.is_empty() {
-            env.i18n.tr("files.choose.top").to_string()
+            env.i18n().tr("files.choose.top").to_string()
         } else {
             self.dir.clone()
         };
@@ -274,7 +278,7 @@ impl Screen for FolderChooser {
         let mut ui = ui::Ui::new(canvas, env, &style);
         if self.pending.is_some() {
             self.header.draw(&mut ui, &title, None, None);
-            let text = env.i18n.tr("files.choose.opening");
+            let text = env.i18n().tr("files.choose.opening");
             ui.message(self.list.area(), text);
             return;
         }
@@ -287,9 +291,9 @@ impl Screen for FolderChooser {
             .filter_map(|index| {
                 let row = this.row(index)?;
                 Some(match row {
-                    Row::Use => (index, env.i18n.tr("files.choose.use").to_string(), ""),
-                    Row::Up => (index, format!("‹ {}", env.i18n.tr("files.choose.up")), ""),
-                    Row::New => (index, env.i18n.tr("files.choose.new").to_string(), "+"),
+                    Row::Use => (index, env.i18n().tr("files.choose.use").to_string(), ""),
+                    Row::Up => (index, format!("‹ {}", env.i18n().tr("files.choose.up")), ""),
+                    Row::New => (index, env.i18n().tr("files.choose.new").to_string(), "+"),
                     Row::Folder(entry) => (index, format!("{}/", entry.name), "›"),
                 })
             })
@@ -303,7 +307,7 @@ impl Screen for FolderChooser {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.pending.is_some() {
-            let now = cx.env().now;
+            let now = cx.env().now();
             cx.wake_at(now);
         }
     }
@@ -327,7 +331,7 @@ impl Screen for FolderChooser {
             return;
         };
         let path = paperpaw_sdk::files::join(&self.dir, &name);
-        if env.storage.create_dir(&path).is_ok() {
+        if env.storage().create_dir(&path).is_ok() {
             self.dir = path;
             self.load(&env);
             cx.request_redraw();

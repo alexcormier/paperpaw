@@ -852,14 +852,14 @@ fn findings(run: &Run, report: &mut Report) {
                     "{sizes}Takes up to {} of heap opening and drawing, more than the {} the \
                      {device} has free beside the app: it would run out of memory there. Keep less in \
                      memory (lists in files, pieces read as needed) or check \
-                     `env.device.memory` to do less on small devices.",
+                     `env.device().memory` to do less on small devices.",
                     kib(m.peak as f64),
                     kib(run.free().unwrap_or(0) as f64)
                 ),
                 _ => format!(
                     "{sizes}Takes up to {} of heap opening and drawing, more than an eighth of \
                      the profile's heap ({}); with a book open or another screen below it may not \
-                     fit. Keep less in memory, or check `env.device.memory` to do less on small \
+                     fit. Keep less in memory, or check `env.device().memory` to do less on small \
                      devices.",
                     kib(m.peak as f64),
                     kib(run.share().unwrap_or(0) as f64)

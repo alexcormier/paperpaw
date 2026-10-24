@@ -308,7 +308,7 @@ enum DateField {
 ///   first), up and down change it by one, as do the page buttons (the
 ///   only ones up and down on devices such as the Xteink X4) and *next*
 ///   and *previous*. The focused field's value stands on the focus
-///   ([`draw_focus`](crate::ui::draw_focus)). On touch screens the focus shows
+///   ([`Ui::focus`](crate::ui::Ui::focus)). On touch screens the focus shows
 ///   from the first button pressed, which does nothing else.
 ///
 /// Minutes and hours go round (59 to 0, 23 to 0) without carrying over,
@@ -475,7 +475,7 @@ impl DatePicker {
                 DateField::Day => Digits::new(i32::from(self.day), 1),
                 DateField::Year => Digits::new(self.year, 4),
                 DateField::Month => {
-                    let name = env.i18n.tr(MONTHS[usize::from(self.month - 1)]);
+                    let name = env.i18n().tr(MONTHS[usize::from(self.month - 1)]);
                     self.wheels
                         .draw_field(canvas, env, style, font.as_ref(), i, name, "");
                     continue;
@@ -663,7 +663,7 @@ impl TimePicker {
 /// "AM" or "PM" from the translation `key` ("{time} PM"): what it adds
 /// to the time.
 fn meridiem<'a>(env: &'a Env<'_>, key: &'static str) -> &'a str {
-    env.i18n
+    env.i18n()
         .tr(key)
         .split("{time}")
         .map(str::trim)

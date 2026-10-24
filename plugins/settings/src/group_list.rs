@@ -56,14 +56,14 @@ const GROUP_ICON: &str = "puzzle";
 /// customising, by name; each with its icon, or a plugin's.
 fn groups(env: &Env<'_>) -> Vec<(i32, bool, Entry)> {
     let mut found: Vec<(i32, bool, Entry)> = env
-        .settings
+        .settings()
         .groups()
         // A widget's own settings are opened where it is edited.
-        .filter(|group| !env.widgets.has(group.id.as_str()))
+        .filter(|group| !env.widgets().has(group.id.as_str()))
         .filter(|group| {
-            env.settings
+            env.settings()
                 .specs()
-                .any(|spec| env.settings.group_of(spec) == group.id && visible(env, spec))
+                .any(|spec| env.settings().group_of(spec) == group.id && visible(env, spec))
         })
         .map(|group| {
             let order = if group.order == 0 {
@@ -71,13 +71,13 @@ fn groups(env: &Env<'_>) -> Vec<(i32, bool, Entry)> {
             } else {
                 group.order
             };
-            let icon = env.menus.icon(group.id.as_str()).unwrap_or(GROUP_ICON);
+            let icon = env.menus().icon(group.id.as_str()).unwrap_or(GROUP_ICON);
             (
                 order,
                 true,
                 Entry {
                     link: Some(Link::Group(group.id.clone())),
-                    title: env.i18n.tr(&group.title).to_string(),
+                    title: env.i18n().tr(&group.title).to_string(),
                     icon: Some(String::from(icon)),
                 },
             )
@@ -95,19 +95,19 @@ impl GroupList {
         let menu = settings_menu.as_str();
         // (order, headings before entries of the same order, entry)
         let mut placed: Vec<(i32, bool, Entry)> = env
-            .menus
+            .menus()
             .items(menu)
             .iter()
             // Passwords and keys only once there are some.
-            .filter(|item| *item.id != secrets::OPEN || env.secrets.listed().next().is_some())
+            .filter(|item| *item.id != secrets::OPEN || env.secrets().listed().next().is_some())
             .map(|item| {
-                let order = env.menus.order_of(menu, item.id.as_str());
+                let order = env.menus().order_of(menu, item.id.as_str());
                 (
                     order.map_or(i32::from(i16::MAX), i32::from),
                     !item.section,
                     Entry {
                         link: (!item.section).then(|| Link::Page(item.id.clone())),
-                        title: env.i18n.tr(item.title).to_string(),
+                        title: env.i18n().tr(item.title).to_string(),
                         icon: item.icon.map(String::from),
                     },
                 )
@@ -119,7 +119,7 @@ impl GroupList {
             true,
             Entry {
                 link: Some(Link::Search),
-                title: env.i18n.tr("settings.search").to_string(),
+                title: env.i18n().tr("settings.search").to_string(),
                 icon: Some(String::from("search")),
             },
         ));
@@ -128,7 +128,7 @@ impl GroupList {
             true,
             Entry {
                 link: Some(Link::Advanced),
-                title: env.i18n.tr("settings.advanced").to_string(),
+                title: env.i18n().tr("settings.advanced").to_string(),
                 icon: Some(String::from("eye")),
             },
         ));
@@ -137,7 +137,7 @@ impl GroupList {
             true,
             Entry {
                 link: Some(Link::Reset),
-                title: env.i18n.tr("settings.reset-all").to_string(),
+                title: env.i18n().tr("settings.reset-all").to_string(),
                 icon: Some(String::from("refresh")),
             },
         ));
@@ -198,7 +198,7 @@ impl GroupList {
                 // The group's own page, if its plugin brings one.
                 let page = cx
                     .env()
-                    .settings
+                    .settings()
                     .groups()
                     .find(|g| g.id == *id)
                     .and_then(|g| g.page.clone());
@@ -209,7 +209,7 @@ impl GroupList {
             }
             Some(Link::Page(action)) => cx.command(Command::run(action.clone())),
             Some(Link::Advanced) => {
-                let advanced = cx.env().settings.read(&ADVANCED);
+                let advanced = cx.env().settings().read(&ADVANCED);
                 cx.command(Command::set(&ADVANCED, !advanced));
             }
             Some(Link::Search) => cx.command(search::ask(cx.env())),
@@ -228,7 +228,7 @@ impl Screen for GroupList {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("settings.title"),
+            env.i18n().tr("settings.title"),
             None,
             paging(&self.rows),
         );
@@ -244,7 +244,7 @@ impl Screen for GroupList {
                 let icon = entry.icon.as_deref();
                 let rect = ui.row_icon(rect, room, icon, ink);
                 if *link == Link::Advanced {
-                    let on = env.settings.read(&ADVANCED);
+                    let on = env.settings().read(&ADVANCED);
                     ui::Row::switch(&entry.title, on)
                         .focused(focused)
                         .draw(ui, rect);

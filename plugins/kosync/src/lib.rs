@@ -95,7 +95,7 @@ const MOST_DISMISSED: usize = 4;
 /// Whether sending now keeps no radio on that would be off otherwise: the
 /// system runs Wi-Fi, or PaperPaw's radio is in a network already.
 fn radio_on_anyway(env: &Env<'_>) -> bool {
-    env.wifi.is_none_or(|w| w.state.is_online())
+    env.wifi().is_none_or(|w| w.state.is_online())
 }
 
 /// KOReader's public server.
@@ -194,7 +194,7 @@ fn dir() -> String {
 pub(crate) const SECRET: &str = "kosync.key";
 
 fn key<'a>(env: &Env<'a>) -> Option<&'a str> {
-    env.secrets.get(SECRET).filter(|k| !k.is_empty())
+    env.secrets().get(SECRET).filter(|k| !k.is_empty())
 }
 
 fn read_value(storage: &dyn paperpaw_sdk::Storage, file: &str, key: &str) -> Option<String> {
@@ -228,7 +228,7 @@ pub(crate) fn sign_out() -> [Command; 3] {
 /// other passwords and keys.
 fn move_key(env: &Env<'_>, out: &mut Commands) {
     let file = format!("{}/account.ini", dir());
-    let Some(old) = read_value(env.storage, &file, "key") else {
+    let Some(old) = read_value(env.storage(), &file, "key") else {
         return;
     };
     if !old.is_empty() && key(env).is_none() {
@@ -241,7 +241,7 @@ fn move_key(env: &Env<'_>, out: &mut Commands) {
         clippy::let_underscore_must_use,
         reason = "the file of an earlier version: where it stays, the key is moved again at the next start"
     )]
-    let _ = env.storage.remove(&file);
+    let _ = env.storage().remove(&file);
 }
 
 impl State {
@@ -255,20 +255,20 @@ impl State {
             return;
         }
         let device = format!("{}/device.ini", dir());
-        self.device_id = match read_value(env.storage, &device, "id") {
+        self.device_id = match read_value(env.storage(), &device, "id") {
             Some(id) => id,
             None => {
                 // Different on each installation: the time and where memory
                 // happened to be.
                 let probe = Box::new(0u8);
-                let seed = format!("{}{}{:p}", env.now.millis(), env.device.id, &*probe);
+                let seed = format!("{}{}{:p}", env.now().millis(), env.device().id, &*probe);
                 let id = md5::of(&seed).to_uppercase();
                 let text = format!("[device]\nid = {id}\n");
                 #[expect(
                     clippy::let_underscore_must_use,
                     reason = "not kept, another id is made at the next start, and the sync server sees another device"
                 )]
-                let _ = env.storage.write(&device, text.as_bytes());
+                let _ = env.storage().write(&device, text.as_bytes());
                 id
             }
         };
@@ -276,13 +276,13 @@ impl State {
 
     /// Whether to sync by itself now.
     fn active(&self, env: &Env<'_>) -> bool {
-        env.caps.network && env.settings.read(&AUTO) && self.signed_in(env)
+        env.caps().network && env.settings().read(&AUTO) && self.signed_in(env)
     }
 
     /// Whether to sync by itself now, and the power mode lets the network
     /// be used (not Offline): otherwise what is not sent waits, silently.
     fn may_send(&self, env: &Env<'_>) -> bool {
-        self.active(env) && env.power.online()
+        self.active(env) && env.power().online()
     }
 
     /// Sends what waited while Offline: the books switched from, the open
@@ -308,14 +308,14 @@ impl State {
     }
 
     fn signed_in(&self, env: &Env<'_>) -> bool {
-        !env.settings.read(&USER).is_empty() && key(env).is_some()
+        !env.settings().read(&USER).is_empty() && key(env).is_some()
     }
 
     fn digest(&mut self, env: &Env<'_>, path: &str) -> Option<String> {
         if let Some((_, digest)) = self.digests.iter().find(|(p, _)| p == path) {
             return Some(digest.clone());
         }
-        let digest = md5::partial(env.storage, path)?;
+        let digest = md5::partial(env.storage(), path)?;
         self.digests.push((path.to_string(), digest.clone()));
         Some(digest)
     }
@@ -330,7 +330,7 @@ impl State {
         reply: &Event<HttpReply>,
         params: Params,
     ) -> Option<Command> {
-        let user = env.settings.read(&USER);
+        let user = env.settings().read(&USER);
         let auth = Some((user, key(env)?));
         Some(Command::http(server_request(
             env, method, path, body, reply, params, auth,
@@ -394,12 +394,12 @@ impl State {
                 // is not converted a second time).
                 let options = paperpaw_sdk::reading::open_options(env);
                 let document = env
-                    .formats
-                    .open_with(env.storage, &position.path, &options)
+                    .formats()
+                    .open_with(env.storage(), &position.path, &options)
                     .ok();
                 let xpointer = document
                     .as_ref()
-                    .and_then(|d| d.xpointer(env.storage, position.at))
+                    .and_then(|d| d.xpointer(env.storage(), position.at))
                     .unwrap_or_default();
                 let progress =
                     document.map_or(position.progress, |d| f64::from(d.progress(position.at)));
@@ -420,7 +420,7 @@ impl State {
             out.push(command);
             if tracked {
                 self.sent = Some(position);
-                self.last_push = Some(env.now);
+                self.last_push = Some(env.now());
             }
         }
     }
@@ -436,7 +436,7 @@ impl State {
             .map_or(0.0, |c| c.progress);
         if let Some(command) = self.fetch(env, path, local, manual) {
             out.push(command);
-            self.last_pull = Some((path.to_string(), env.now));
+            self.last_pull = Some((path.to_string(), env.now()));
             let held = self.hold_for(path);
             self.hold = Some(Hold {
                 path: path.to_string(),
@@ -494,7 +494,7 @@ impl State {
     fn pulled_lately(&self, env: &Env<'_>, path: &str) -> bool {
         self.last_pull
             .as_ref()
-            .is_some_and(|(p, at)| p == path && env.now.since(*at) < PULL_EVERY_MS)
+            .is_some_and(|(p, at)| p == path && env.now().since(*at) < PULL_EVERY_MS)
     }
 
     /// The server's progress of the open book at `path` could not be read:
@@ -662,7 +662,7 @@ fn remote_progress(text: &str, body: &[(String, json::Value)]) -> Option<f64> {
 
 /// The server's base URL.
 pub(crate) fn server(env: &Env<'_>) -> String {
-    normalize_server(env.settings.read(&SERVER))
+    normalize_server(env.settings().read(&SERVER))
 }
 
 /// A server address as entered, as a base URL: `https://` unless another
@@ -736,7 +736,7 @@ pub(crate) fn failure(status: &str) -> &'static str {
 
 /// A message about a request in the confirmation overlay.
 fn message(env: &Env<'_>, key: &str, status: &str) -> Command {
-    let text = env.i18n.format(key, &[("status", Arg::Str(status))]);
+    let text = env.i18n().format(key, &[("status", Arg::Str(status))]);
     Command::OpenScreen(CONFIRM_SCREEN, Params::new().with(params::TEXT, text))
 }
 
@@ -858,10 +858,10 @@ impl Plugin for Kosync {
             state.current = Some(position(reading));
             let due = state
                 .last_push
-                .is_none_or(|at| env.now.since(at) >= PUSH_EVERY_MS);
+                .is_none_or(|at| env.now().since(at) >= PUSH_EVERY_MS);
             if due && state.may_send(env) && radio_on_anyway(env) {
                 state.push(env, out, false);
-            } else if state.active(env) && env.work.get(PUSH_DUE.id()).is_none() {
+            } else if state.active(env) && env.work().get(PUSH_DUE.id()).is_none() {
                 // When the radio is on anyway, at the latest in a while.
                 out.push(Command::work(
                     Work::network(PUSH_DUE.id().clone())
@@ -944,7 +944,7 @@ impl Plugin for Kosync {
             move |env: &Env<'_>, _, out: &mut Commands| {
                 let mut state = s.borrow_mut();
                 state.load(env);
-                if !env.caps.network || !state.signed_in(env) {
+                if !env.caps().network || !state.signed_in(env) {
                     out.push(Command::OpenScreen(ACCOUNT_SCREEN, Params::new()));
                     return;
                 }

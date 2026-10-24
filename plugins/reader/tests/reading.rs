@@ -1210,7 +1210,7 @@ impl Plugin for MenuLook {
             paperpaw_sdk::ActionSpec::new(Id::new_static("looker.look"), "look").handler(
                 move |env: &paperpaw_sdk::Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
                     *entries.borrow_mut() = env
-                        .menus
+                        .menus()
                         .items(paperpaw_plugin_reader::MORE_MENU.as_str())
                         .iter()
                         .map(|item| item.id.as_str().to_string())

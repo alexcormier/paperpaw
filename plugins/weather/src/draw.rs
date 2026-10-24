@@ -24,7 +24,7 @@ pub(crate) const fn style_spec(id: &'static str, widget: Id) -> SettingSpec {
 
 /// How `widget` draws its symbols.
 pub(crate) fn style(env: &Env<'_>, widget: &str) -> Style {
-    if env.settings.text(&format!("{widget}.style")) == STYLES[1] {
+    if env.settings().text(&format!("{widget}.style")) == STYLES[1] {
         Style::Solid
     } else {
         Style::Line
@@ -148,7 +148,7 @@ pub(crate) fn draw_symbol(
 pub(crate) fn clock(env: &Env<'_>, minutes: u16) -> String {
     let (hour, minute) = (minutes / 60, minutes % 60);
     let twelve = env
-        .settings
+        .settings()
         .read(&paperpaw_sdk::builtin::settings::CLOCK_FORMAT)
         == time::CLOCK_12H;
     if !twelve {
@@ -164,7 +164,7 @@ pub(crate) fn clock(env: &Env<'_>, minutes: u16) -> String {
         "core.clock.pm"
     };
     let text = format!("{shown}:{minute:02}");
-    env.i18n
+    env.i18n()
         .format(key, &[("time", paperpaw_sdk::Arg::Str(&text))])
 }
 
@@ -198,13 +198,13 @@ pub(crate) fn draw_waiting(
     let tall = (area.height + place.height) / 2;
     let long = match shown.waiting {
         // The place is set: its name with the message.
-        Waiting::NoNetwork if !shown.place.is_empty() => env.i18n.format(
+        Waiting::NoNetwork if !shown.place.is_empty() => env.i18n().format(
             "weather.no-network-for",
             &[("place", paperpaw_sdk::Arg::Str(&shown.place))],
         ),
-        waiting => String::from(env.i18n.tr(waiting.key())),
+        waiting => String::from(env.i18n().tr(waiting.key())),
     };
-    let short = env.i18n.tr(short_key(shown.waiting));
+    let short = env.i18n().tr(short_key(shown.waiting));
     let line = widgets::line_height(env, style.text());
     let gap = style.gap();
     // The symbol's ink at least this high, else none.

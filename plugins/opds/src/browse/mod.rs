@@ -95,7 +95,7 @@ impl BrowseScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params, temp: TempFiles) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
@@ -119,8 +119,8 @@ impl BrowseScreen {
             template: None,
             message: None,
             covers: Vec::new(),
-            with_covers: env.device.memory == MemoryClass::Large
-                && env.settings.read(&crate::COVERS),
+            with_covers: env.device().memory == MemoryClass::Large
+                && env.settings().read(&crate::COVERS),
             fetching: None,
             failed: Vec::new(),
             offer: ui::offline::OfflineOffer::new(),
@@ -172,7 +172,7 @@ impl BrowseScreen {
             ui::offline::Offer::Online => self.load(&url, back, cx),
             // Not now, and any answer to come: on without the network.
             _ => {
-                let message = cx.env().i18n.tr("opds.no-network").to_string();
+                let message = cx.env().i18n().tr("opds.no-network").to_string();
                 self.say(message, cx);
             }
         }
@@ -181,8 +181,8 @@ impl BrowseScreen {
     /// Loads feed `url`; `back` when returning to it.
     fn load(&mut self, url: &str, back: bool, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if !env.caps.network {
-            let message = env.i18n.tr("opds.no-network").to_string();
+        if !env.caps().network {
+            let message = env.i18n().tr("opds.no-network").to_string();
             return self.say(message, cx);
         }
         // Offline mode: asked first, once.
@@ -192,7 +192,7 @@ impl BrowseScreen {
         }
         self.loading = Some((url.to_string(), back));
         let message = env
-            .i18n
+            .i18n()
             .format("opds.loading", &[("host", Arg::Str(host(url)))]);
         self.say(message, cx);
         let params = Params::new().with(URL, url.to_string());
@@ -214,9 +214,9 @@ impl BrowseScreen {
         let host = Arg::Str(host(url));
         let message = match status {
             200..=299 => return true,
-            0 => env.i18n.format("opds.failed-host", &[("host", host)]),
+            0 => env.i18n().format("opds.failed-host", &[("host", host)]),
             401 | 403 => paperpaw_sdk::ui::tr_input(&env, "opds.unauthorized").to_string(),
-            status => env.i18n.format(
+            status => env.i18n().format(
                 "opds.error",
                 &[("host", host), ("status", Arg::Int(i64::from(status)))],
             ),
@@ -236,9 +236,9 @@ impl BrowseScreen {
             return;
         }
         let base = reply.final_url.as_deref().unwrap_or(&url).to_string();
-        let feed = crate::read_list(&self.catalog, env.storage, file, &base);
+        let feed = crate::read_list(&self.catalog, env.storage(), file, &base);
         if feed.entries.is_empty() && feed.title.is_empty() {
-            let message = env.i18n.tr("opds.not-a-catalog").to_string();
+            let message = env.i18n().tr("opds.not-a-catalog").to_string();
             return self.say(message, cx);
         }
         if back {
@@ -276,14 +276,14 @@ impl BrowseScreen {
                     Params::new().with(URL, url.clone()),
                 )));
                 let message = env
-                    .i18n
+                    .i18n()
                     .format("opds.loading", &[("host", Arg::Str(host(&url)))]);
                 return self.say(message, cx);
             }
             (None, None) => return,
         };
         self.template = Some(template);
-        cx.command(ask::text(env.i18n.tr("opds.search"), &TERMS).command());
+        cx.command(ask::text(env.i18n().tr("opds.search"), &TERMS).command());
     }
 
     fn described(&mut self, reply: &HttpReply, file: &str, cx: &mut Cx<'_, '_>) {
@@ -293,7 +293,7 @@ impl BrowseScreen {
             return;
         }
         let base = reply.final_url.as_deref().unwrap_or(&url).to_string();
-        let template = feed::search_template(env.storage, file, &base);
+        let template = feed::search_template(env.storage(), file, &base);
         match template {
             Some(template) => {
                 self.template = Some(template);
@@ -301,7 +301,7 @@ impl BrowseScreen {
                 self.search(cx);
             }
             None => {
-                let message = env.i18n.tr("opds.no-search").to_string();
+                let message = env.i18n().tr("opds.no-search").to_string();
                 self.say(message, cx);
             }
         }
@@ -351,15 +351,14 @@ impl BrowseScreen {
         let env = ui.env();
         let text = match &self.message {
             Some(message) => message.clone(),
-            None if empty && self.loading.is_none() => env.i18n.tr("opds.empty").to_string(),
+            None if empty && self.loading.is_none() => env.i18n().tr("opds.empty").to_string(),
             None => String::new(),
         };
         // Without rows the message takes the room it needs above its line.
         let status = if empty {
             let s = self.status;
             let top = self.list.area().y;
-            let needed = ui
-                .note_line_height(s.width, &text)
+            let needed = ui::note_line_height(ui.env(), ui.style(), s.width, &text)
                 .clamp(s.height, s.bottom().saturating_sub(u32::from(top)) as u16);
             Rect::new(
                 s.x,
@@ -399,17 +398,17 @@ impl Screen for BrowseScreen {
         } else {
             0
         };
-        let readable = |ext: &str| env.formats.supports(&format!("book.{ext}"));
+        let readable = |ext: &str| env.formats().supports(&format!("book.{ext}"));
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value, note) = match rows[index] {
                     Row::Search => (
-                        env.i18n.tr("opds.search").to_string(),
+                        env.i18n().tr("opds.search").to_string(),
                         String::from("›"),
                         String::new(),
                     ),
                     Row::More => (
-                        env.i18n.tr("opds.more").to_string(),
+                        env.i18n().tr("opds.more").to_string(),
                         String::from("›"),
                         String::new(),
                     ),
@@ -519,7 +518,7 @@ impl Screen for BrowseScreen {
                 // Answers come with the file they were written to.
                 if let Some(file) = temp::file(&reply) {
                     answer(self, &reply, file, cx);
-                    temp::discard(cx.env().storage, &reply);
+                    temp::discard(cx.env().storage(), &reply);
                 }
                 return;
             }

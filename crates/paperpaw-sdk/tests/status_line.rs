@@ -502,13 +502,13 @@ fn a_line_answers_to_its_old_id_and_is_listed_once() {
     );
     let env = h.env();
     let listed: Vec<&str> = env
-        .status_items
+        .status_items()
         .lines()
         .map(|(id, _)| id.as_str())
         .filter(|id| id.starts_with("t."))
         .collect();
     assert_eq!(listed, ["t.line"]);
-    assert_eq!(env.status_items.title("t.old-line"), Some("t.line.title"));
+    assert_eq!(env.status_items().title("t.old-line"), Some("t.line.title"));
     let context = Params::new();
     let frame = StatusFrame::new(
         Rect::new(0, 0, 480, 40),
@@ -519,7 +519,7 @@ fn a_line_answers_to_its_old_id_and_is_listed_once() {
     );
     let mut canvas = support::frame(480, 100);
     assert!(
-        env.status_items
+        env.status_items()
             .draw_line("t.old-line", &mut canvas.canvas(), &env, &frame)
     );
 }

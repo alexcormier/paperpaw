@@ -293,7 +293,7 @@ pub fn untranslated(
                 format!(
                     "Shows {} untranslated in the pseudo-language: text from the program \
                      rather than the catalogs; give it a key and translate it with \
-                     `env.i18n.tr`.",
+                     `env.i18n().tr`.",
                     listed(&texts)
                 ),
             )

@@ -137,7 +137,7 @@ pub(crate) fn keep_lowest(kept: &mut Vec<(u64, String)>, n: usize, score: u64, p
 /// An unread book by chance, another each day; not one opened lately.
 fn by_chance(env: &Env<'_>, day: i64) -> Option<String> {
     let opened: Vec<u64> = {
-        let mut hashes: Vec<u64> = library::opened_books(env.storage)
+        let mut hashes: Vec<u64> = library::opened_books(env.storage())
             .iter()
             .map(|p| path_hash(p))
             .collect();
@@ -157,7 +157,7 @@ fn by_chance(env: &Env<'_>, day: i64) -> Option<String> {
     });
     kept.into_iter()
         .map(|(_, path)| path)
-        .find(|path| unread(env.storage, path))
+        .find(|path| unread(env.storage(), path))
 }
 
 /// The next book in the series of `book`, if there is one not read.
@@ -165,7 +165,7 @@ fn in_series(env: &Env<'_>, book: &Book) -> Option<String> {
     if book.series.is_empty() {
         return None;
     }
-    let begun = |path: &str| !unread(env.storage, path);
+    let begun = |path: &str| !unread(env.storage(), path);
     let members = members(env, &book.series, Some(&book.number), &begun);
     next_in_series(&members.books, &book.path).map(|m| m.path.clone())
 }
@@ -250,7 +250,7 @@ pub(crate) fn new_books(unseen: Vec<String>, newest: Vec<String>) -> Vec<String>
 /// Brings the books seen and the newest up to date with the library;
 /// returns the newest, newest first.
 fn newest(env: &Env<'_>) -> Vec<String> {
-    let storage = env.storage;
+    let storage = env.storage();
     let seen = Seen::read(storage);
     let kept: Vec<String> = paperpaw_sdk::read_file(storage, &newest_file(), MAX_NEWEST * 512)
         .map(|data| {
@@ -290,7 +290,7 @@ fn newest(env: &Env<'_>) -> Vec<String> {
 fn newest_unread(env: &Env<'_>) -> Option<String> {
     newest(env)
         .into_iter()
-        .find(|path| unread(env.storage, path))
+        .find(|path| unread(env.storage(), path))
 }
 
 struct Next {
@@ -317,7 +317,7 @@ impl Next {
 
     fn choose(&self, env: &Env<'_>) -> Option<String> {
         let pick = chosen(env, WIDGET, "pick").to_string();
-        let current = current(env.storage);
+        let current = current(env.storage());
         let day = today(env);
         let key: Key = (
             pick.clone(),
@@ -345,7 +345,7 @@ impl Next {
 
 impl Widget for Next {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let book = self.choose(env).and_then(|p| Book::of(env.storage, &p));
+        let book = self.choose(env).and_then(|p| Book::of(env.storage(), &p));
         let changed = book != self.book;
         self.book = book;
         if changed {
@@ -395,7 +395,7 @@ fn series_text(env: &Env<'_>, book: &Book) -> String {
     match (book.series.is_empty(), book.number.is_empty()) {
         (true, _) => String::new(),
         (false, true) => book.series.clone(),
-        (false, false) => env.i18n.format(
+        (false, false) => env.i18n().format(
             "widgets.next.in-series",
             &[
                 ("series", Arg::Str(&book.series)),
@@ -430,7 +430,7 @@ fn layout<'b>(env: &Env<'b>, look: &WidgetLook, book: &'b Book) -> Layout<'b> {
         lines.add(
             Role::Caption,
             style.small(),
-            env.i18n.tr("widgets.next.caption"),
+            env.i18n().tr("widgets.next.caption"),
             look.faint,
         );
     }

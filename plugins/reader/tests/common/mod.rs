@@ -148,7 +148,7 @@ impl Screen for LinesProbe {
             paperpaw_sdk::StatusFrame::new(area, false, 20.0, paperpaw_sdk::Color::BLACK, &context)
                 .place("recorder.place");
         let targets = env
-            .status_items
+            .status_items()
             .line_targets("reader.status-line.items", &env, &frame)
             .len();
         let noted = Params::new().with("targets", targets.to_string());

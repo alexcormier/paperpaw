@@ -29,17 +29,17 @@ impl Room {
     /// The room as it is now, `plugin`'s own code left out (an update
     /// takes the place of the version before).
     pub(crate) fn of(env: &Env<'_>, plugin: Option<&str>) -> Room {
-        let code = env.native.and_then(|_| native::code_room(env.storage));
+        let code = env.native().and_then(|_| native::code_room(env.storage()));
         let (mut taken, mut plugins) = (0, 0);
-        if let (Some(room), Some(native)) = (&code, env.native) {
-            (taken, plugins) = native::installed_code_need(env.storage, room, &native.file);
+        if let (Some(room), Some(native)) = (&code, env.native()) {
+            (taken, plugins) = native::installed_code_need(env.storage(), room, &native.file);
             if let Some(own) = plugin.and_then(|id| own_need(env, room, id)) {
                 taken = taken.saturating_sub(own);
                 plugins = plugins.saturating_sub(1);
             }
         }
         Room {
-            free: env.storage.free_space(),
+            free: env.storage().free_space(),
             code,
             taken,
             plugins,
@@ -70,7 +70,10 @@ impl Room {
     /// (what is left for code does not fit beside the title on the X4).
     pub(crate) fn short(&self, env: &Env<'_>) -> Option<String> {
         let free = size(env, self.free?);
-        Some(env.i18n.format("store.room", &[("free", Arg::Str(&free))]))
+        Some(
+            env.i18n()
+                .format("store.room", &[("free", Arg::Str(&free))]),
+        )
     }
 
     /// The line under the installed plugins: the free space, and how
@@ -79,7 +82,10 @@ impl Room {
         let mut parts = alloc::vec::Vec::new();
         if let Some(free) = self.free {
             let free = size(env, free);
-            parts.push(env.i18n.format("store.room", &[("free", Arg::Str(&free))]));
+            parts.push(
+                env.i18n()
+                    .format("store.room", &[("free", Arg::Str(&free))]),
+            );
         }
         if let Some(room) = self.code {
             let (used, total) = (size(env, self.taken), size(env, room.total));
@@ -89,7 +95,7 @@ impl Room {
                 "store.room.code-used"
             };
             let args = [("used", Arg::Str(&used)), ("total", Arg::Str(&total))];
-            parts.push(env.i18n.format(key, &args));
+            parts.push(env.i18n().format(key, &args));
         }
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
@@ -111,7 +117,7 @@ impl Room {
                 "store.no-room.code"
             };
             let args = [("size", Arg::Str(&need)), ("left", Arg::Str(&left))];
-            return Some(env.i18n.format(key, &args));
+            return Some(env.i18n().format(key, &args));
         }
         let free = size(env, self.free?);
         let need = size(env, plugin.size);
@@ -121,19 +127,19 @@ impl Room {
             "store.no-room.files"
         };
         let args = [("size", Arg::Str(&need)), ("free", Arg::Str(&free))];
-        Some(env.i18n.format(key, &args))
+        Some(env.i18n().format(key, &args))
     }
 }
 
 /// The room the installed code of plugin `id` takes, by its header.
 fn own_need(env: &Env<'_>, room: &CodeRoom, id: &str) -> Option<u64> {
-    let native = env.native?;
+    let native = env.native()?;
     let dir = paperpaw_sdk::builtin::PLUGIN_DIR;
     let path = alloc::format!("{dir}/{id}/{}", native.file);
-    let header = native::read_header(env.storage, &path)?;
+    let header = native::read_header(env.storage(), &path)?;
     Some(room.needs(u64::from(header.image_len), header.align))
 }
 
 fn size(env: &Env<'_>, bytes: u64) -> String {
-    files::size(bytes, env.i18n.tr("store.decimal"))
+    files::size(bytes, env.i18n().tr("store.decimal"))
 }

@@ -70,11 +70,11 @@ impl Book {
     /// Asks the decorators for this page's marks if the page or what their
     /// marks depend on changed since they were asked.
     pub(super) fn update_decorations(&mut self, env: &Env<'_>) {
-        if env.decorators.is_empty() {
+        if env.decorators().is_empty() {
             self.decorated.clear();
             return;
         }
-        let key = (self.page.start, env.decorators.signature(env));
+        let key = (self.page.start, env.decorators().signature(env));
         if self.decorated_for == Some(key) {
             return;
         }
@@ -92,7 +92,7 @@ impl Book {
             .map(|(w, whole)| PageWord::new(whole.as_deref().unwrap_or(&w.text), w.start, w.end))
             .collect();
         let page = PageText::new(&self.path, &self.language, &page_words);
-        env.decorators.decorate(env, &page)
+        env.decorators().decorate(env, &page)
     }
 
     /// The decorator's mark that takes taps at word `index`, if any.

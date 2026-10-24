@@ -399,7 +399,7 @@ fn sentinels(h: &Harness) -> Vec<Color> {
 /// a target of it lies outside) as the problem.
 fn draw(h: &Harness, id: &str, area: Rect, sentinel: Color) -> Result<usize, String> {
     let env = h.env();
-    let mut widget = env.widgets.make(id, &env).ok_or("no such widget")?;
+    let mut widget = env.widgets().make(id, &env).ok_or("no such widget")?;
     let _ = widget.height(&env, area.width);
     let _ = widget.min_height(&env, area.width);
     widget.place(&env, area);

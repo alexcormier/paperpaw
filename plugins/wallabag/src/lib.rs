@@ -113,7 +113,7 @@ fn folder(env: &Env<'_>) -> String {
 /// The server as a base URL: `https://` unless another scheme is given,
 /// no `/` at the end.
 fn server(env: &Env<'_>) -> String {
-    paperpaw_sdk::web::base_url(env.settings.text(SERVER.as_str()))
+    paperpaw_sdk::web::base_url(env.settings().text(SERVER.as_str()))
 }
 
 /// An article fetched: its id in Wallabag and its book.
@@ -143,13 +143,13 @@ fn save_articles(env: &Env<'_>, list: &[Article]) -> Result<(), StorageError> {
         .iter()
         .map(|a| format!("{}\t{}\n", a.id, a.path))
         .collect();
-    env.storage.write(&data("articles.txt"), text.as_bytes())
+    env.storage().write(&data("articles.txt"), text.as_bytes())
 }
 
 /// Whose the articles fetched are: the server and the user name, one a
 /// line, in `account.txt` beside them.
 fn account(env: &Env<'_>) -> String {
-    format!("{}\n{}\n", server(env), env.settings.read(&USER))
+    format!("{}\n{}\n", server(env), env.settings().read(&USER))
 }
 
 /// The articles fetched and those read to the end, from this account.
@@ -157,9 +157,9 @@ fn account(env: &Env<'_>) -> String {
 /// first: their books stay in the library, never asked about at a server
 /// that does not know them.
 fn lists_of_account(env: &Env<'_>) -> Result<(Vec<Article>, Vec<String>), StorageError> {
-    let (fetched, finished) = (articles(env.storage)?, finished(env.storage)?);
+    let (fetched, finished) = (articles(env.storage())?, finished(env.storage())?);
     let account = account(env);
-    let kept = load_for_update(env.storage, "account.txt", 4 * 1024)?;
+    let kept = load_for_update(env.storage(), "account.txt", 4 * 1024)?;
     if kept == account {
         return Ok((fetched, finished));
     }
@@ -168,10 +168,10 @@ fn lists_of_account(env: &Env<'_>) -> Result<(Vec<Article>, Vec<String>), Storag
         (fetched, finished)
     } else {
         save_articles(env, &[])?;
-        env.storage.write(&data("finished.txt"), b"")?;
+        env.storage().write(&data("finished.txt"), b"")?;
         (Vec::new(), Vec::new())
     };
-    env.storage
+    env.storage()
         .write(&data("account.txt"), account.as_bytes())?;
     Ok((fetched, finished))
 }
@@ -188,7 +188,7 @@ fn finished(storage: &dyn Storage) -> Result<Vec<String>, StorageError> {
 
 fn save_finished(env: &Env<'_>, ids: &[String]) {
     let text: String = ids.iter().map(|id| format!("{id}\n")).collect();
-    let _ = env.storage.write(&data("finished.txt"), text.as_bytes());
+    let _ = env.storage().write(&data("finished.txt"), text.as_bytes());
 }
 
 /// Notes an article read to the end, from the reader's page turns.
@@ -202,13 +202,13 @@ fn page_turned(env: &Env<'_>, reading: &events::Reading) {
     if !read || !path.starts_with(&folder(env)) {
         return;
     }
-    let Ok(articles) = articles(env.storage) else {
+    let Ok(articles) = articles(env.storage()) else {
         return;
     };
     let Some(article) = articles.into_iter().find(|a| a.path == path) else {
         return;
     };
-    let Ok(mut ids) = finished(env.storage) else {
+    let Ok(mut ids) = finished(env.storage()) else {
         return;
     };
     if !ids.contains(&article.id) {
@@ -291,14 +291,15 @@ impl Fetch {
         if self.running {
             return;
         }
-        if !env.caps.network {
+        if !env.caps().network {
             return done(env, "wallabag.no-network", &[], out);
         }
-        let (Some(password), Some(secret)) = (env.secrets.get(PASSWORD), env.secrets.get(SECRET))
+        let (Some(password), Some(secret)) =
+            (env.secrets().get(PASSWORD), env.secrets().get(SECRET))
         else {
             return done(env, "wallabag.setup-needed", &[], out);
         };
-        let (user, client) = (env.settings.read(&USER), env.settings.read(&CLIENT));
+        let (user, client) = (env.settings().read(&USER), env.settings().read(&CLIENT));
         if server(env).is_empty() || user.is_empty() || client.is_empty() {
             return done(env, "wallabag.setup-needed", &[], out);
         }
@@ -320,7 +321,7 @@ impl Fetch {
             )
             .body(body);
         out.push(Command::Notify(
-            env.i18n.tr("wallabag.fetching").to_string(),
+            env.i18n().tr("wallabag.fetching").to_string(),
         ));
         out.push(Command::http(request));
     }
@@ -398,8 +399,8 @@ impl Fetch {
             return;
         }
         self.running = false;
-        let _ = env.storage.remove(&data("entries.json"));
-        let _ = env.storage.remove(&data("entry.json"));
+        let _ = env.storage().remove(&data("entries.json"));
+        let _ = env.storage().remove(&data("entry.json"));
         let key = if self.failed > 0 {
             "wallabag.done-failed"
         } else {
@@ -428,8 +429,8 @@ impl Fetch {
         self.listed = true;
         // Only a whole list counts: an answer that is not one (a page of
         // the server's own, an error, a list cut short) changes nothing.
-        let unread = Self::ok(reply).and_then(|_| unread(env.storage));
-        let (Some(unread), Ok(fetched)) = (unread, articles(env.storage)) else {
+        let unread = Self::ok(reply).and_then(|_| unread(env.storage()));
+        let (Some(unread), Ok(fetched)) = (unread, articles(env.storage())) else {
             self.failed += 1;
             return self.next(env, out);
         };
@@ -456,7 +457,7 @@ impl Fetch {
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         let gone = match reply.status {
             404 => Some(true),
-            _ if reply.ok() => is_archived(env.storage, id),
+            _ if reply.ok() => is_archived(env.storage(), id),
             _ => None,
         };
         match gone {
@@ -464,7 +465,7 @@ impl Fetch {
             Some(false) => {}
             None => self.failed += 1,
         }
-        let _ = env.storage.remove(&data("entry.json"));
+        let _ = env.storage().remove(&data("entry.json"));
         self.next(env, out);
     }
 
@@ -475,13 +476,13 @@ impl Fetch {
         // The id goes into a file's name: a number only.
         let list = Self::ok(reply)
             .filter(|_| is_id(id))
-            .and_then(|_| articles(env.storage).ok());
+            .and_then(|_| articles(env.storage()).ok());
         let saved = list.and_then(|mut list| {
             let dir = folder(env);
-            let _ = env.storage.create_dir(&dir);
+            let _ = env.storage().create_dir(&dir);
             let name = clean_name(title, 80).unwrap_or_else(|| id.to_string());
-            let path = book_path(env.storage, &dir, &name, id, &list)?;
-            env.storage.rename(&tmp, &path).ok()?;
+            let path = book_path(env.storage(), &dir, &name, id, &list)?;
+            env.storage().rename(&tmp, &path).ok()?;
             out.push(paperpaw_sdk::library::added(&path, PLUGIN.as_str()));
             list.push(Article {
                 id: id.to_string(),
@@ -494,7 +495,7 @@ impl Fetch {
             self.fetched += 1;
         } else {
             self.failed += 1;
-            let _ = env.storage.remove(&tmp);
+            let _ = env.storage().remove(&tmp);
         }
         self.next(env, out);
     }
@@ -561,20 +562,20 @@ fn is_id(id: &str) -> bool {
 /// is at too (an older version gave two articles one name): the article
 /// is only let go of.
 fn remove_article(env: &Env<'_>, id: &str, out: &mut Commands) {
-    if let Ok(mut list) = articles(env.storage)
+    if let Ok(mut list) = articles(env.storage())
         && let Some(at) = list.iter().position(|a| a.id == id)
     {
         let article = list.remove(at);
         let shared = list.iter().any(|a| a.path == article.path);
         if !shared
-            && !annotated(env.storage, &article.path)
-            && env.storage.remove(&article.path).is_ok()
+            && !annotated(env.storage(), &article.path)
+            && env.storage().remove(&article.path).is_ok()
         {
             out.push(events::BOOK_REMOVED.emit(events::BookRemoved::new(article.path)));
         }
         let _ = save_articles(env, &list);
     }
-    if let Ok(mut ids) = finished(env.storage)
+    if let Ok(mut ids) = finished(env.storage())
         && let Some(at) = ids.iter().position(|f| f == id)
     {
         ids.remove(at);
@@ -584,7 +585,7 @@ fn remove_article(env: &Env<'_>, id: &str, out: &mut Commands) {
 
 /// Ends a fetch with message `key`.
 fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Commands) {
-    let text = env.i18n.format(key, args);
+    let text = env.i18n().format(key, args);
     out.push(Command::Notify(text.clone()));
     out.push(DONE.emit(Finished { text }));
 }
@@ -647,7 +648,7 @@ impl Plugin for Wallabag {
         let s = state.clone();
         r.add_action(ActionSpec::new(FETCH, "wallabag.fetch").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
-                if env.reader {
+                if env.reader() {
                     s.borrow_mut().start(env, out);
                 } else {
                     let due = FETCH_DUE.id().clone();
@@ -775,7 +776,7 @@ impl SetupScreen {
     fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let height = style.row() * ROWS.len() as u16;
         let note_top = top + height + style.gap();
@@ -791,7 +792,7 @@ impl SetupScreen {
                 display.width,
                 display.height.saturating_sub(note_top),
             ),
-            message: env.i18n.tr("wallabag.help").to_string(),
+            message: env.i18n().tr("wallabag.help").to_string(),
             style,
             header,
         }
@@ -804,12 +805,12 @@ impl SetupScreen {
             return;
         }
         let (text, password) = match row {
-            Row::Server => (env.settings.read(&SERVER), false),
-            Row::User => (env.settings.read(&USER), false),
-            Row::Client => (env.settings.read(&CLIENT), false),
+            Row::Server => (env.settings().read(&SERVER), false),
+            Row::User => (env.settings().read(&USER), false),
+            Row::Client => (env.settings().read(&CLIENT), false),
             _ => ("", true),
         };
-        let question = paperpaw_sdk::ask::text(env.i18n.tr(row.title()), &ENTERED)
+        let question = paperpaw_sdk::ask::text(env.i18n().tr(row.title()), &ENTERED)
             .initial(text)
             .with(FIELD, row.field());
         let question = if password {
@@ -825,13 +826,13 @@ impl Screen for SetupScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let title = env.i18n.tr("wallabag.title");
+        let title = env.i18n().tr("wallabag.title");
         self.header.draw(&mut ui, title, None, None);
         self.list
             .draw(&mut ui, ROWS.len(), |ui, index, rect, focused| {
                 let row = ROWS[index];
                 let kept = |id: &str| {
-                    if env.secrets.get(id).is_some() {
+                    if env.secrets().get(id).is_some() {
                         "••••••"
                     } else {
                         ""
@@ -842,13 +843,13 @@ impl Screen for SetupScreen {
                         let url = server(env);
                         url.strip_prefix("https://").unwrap_or(&url).to_string()
                     }
-                    Row::User => env.settings.read(&USER).to_string(),
-                    Row::Client => env.settings.read(&CLIENT).to_string(),
+                    Row::User => env.settings().read(&USER).to_string(),
+                    Row::Client => env.settings().read(&CLIENT).to_string(),
                     Row::Password => kept(PASSWORD).to_string(),
                     Row::Secret => kept(SECRET).to_string(),
                     Row::Fetch => String::from("›"),
                 };
-                let title = env.i18n.tr(row.title());
+                let title = env.i18n().tr(row.title());
                 ui::Row::value(title, &value)
                     .focused(focused)
                     .draw(ui, rect);

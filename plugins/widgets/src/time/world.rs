@@ -174,16 +174,16 @@ fn places(env: &Env<'_>) -> Vec<Place> {
         && let Some(now) = time::local_time(env)
     {
         places.push(Place {
-            name: String::from(env.i18n.tr("widgets.world-clock.here")),
+            name: String::from(env.i18n().tr("widgets.world-clock.here")),
             time: now,
             days: 0,
             minutes: 0,
         });
     }
     for key in PLACES {
-        let id = env.settings.text(&format!("{ID}.{key}"));
+        let id = env.settings().text(&format!("{ID}.{key}"));
         if let Some((id, rule)) = TIME_ZONES.iter().find(|(z, _)| *z == id)
-            && let Some(place) = place(env.i18n.tr(id), rule, unix, here)
+            && let Some(place) = place(env.i18n().tr(id), rule, unix, here)
         {
             places.push(place);
         }
@@ -201,11 +201,11 @@ fn note(env: &Env<'_>, place: &Place) -> String {
             0 => None,
         };
         if let Some(key) = key {
-            parts.push(String::from(env.i18n.tr(key)));
+            parts.push(String::from(env.i18n().tr(key)));
         }
     }
     if widgets::shows(env, ID.as_str(), "offset")
-        && place.name != env.i18n.tr("widgets.world-clock.here")
+        && place.name != env.i18n().tr("widgets.world-clock.here")
     {
         parts.push(offset_text(env, place.minutes));
     }
@@ -225,7 +225,7 @@ pub(super) fn offset_text(env: &Env<'_>, minutes: i64) -> String {
     } else {
         format!("{sign}{h}:{m:02}")
     };
-    env.i18n.format(
+    env.i18n().format(
         "widgets.world-clock.offset",
         &[("offset", Arg::Str(&number))],
     )
@@ -255,7 +255,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     };
     let mut places = places(env);
     if places.is_empty() {
-        widgets::draw_message(canvas, env, &look, env.i18n.tr("widgets.world-clock.empty"));
+        widgets::draw_message(
+            canvas,
+            env,
+            &look,
+            env.i18n().tr("widgets.world-clock.empty"),
+        );
         return;
     }
     let area = look.area;

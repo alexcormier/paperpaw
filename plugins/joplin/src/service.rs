@@ -52,7 +52,7 @@ impl Service {
 
     /// The service chosen.
     pub fn of(env: &Env<'_>) -> Service {
-        let key = env.settings.read(&SERVICE);
+        let key = env.settings().read(&SERVICE);
         Self::ALL
             .into_iter()
             .find(|s| s.key() == key)
@@ -84,7 +84,7 @@ impl Service {
         if self == Service::Cloud {
             return String::from(CLOUD);
         }
-        paperpaw_sdk::web::base_url(env.settings.read(&ADDRESS))
+        paperpaw_sdk::web::base_url(env.settings().read(&ADDRESS))
     }
 
     /// The address of the file `name` (e.g. `info.json`) at `base`.

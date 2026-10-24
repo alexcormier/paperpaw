@@ -56,7 +56,7 @@ impl Holding {
     /// version asked about, crates still built in.
     pub(crate) fn still(&self, env: &Env<'_>, firmware: &Firmware) -> Self {
         self.kept(
-            |id, version| in_use(env.plugins.iter(), id, version),
+            |id, version| in_use(env.plugins().iter(), id, version),
             |name| firmware.plugins.iter().any(|c| c.name == name),
         )
     }
@@ -278,7 +278,7 @@ pub(crate) fn later(out: &mut Commands) {
 /// lost) is looked at once and kept so. Nothing waits any more where the
 /// update is gone or what it waits for is no longer in use.
 pub(crate) fn at_start(env: &Env<'_>, firmware: &Firmware, out: &mut Commands) -> bool {
-    let storage = env.storage;
+    let storage = env.storage();
     if !online::has_offer(storage) {
         clear(storage);
         return false;

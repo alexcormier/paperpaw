@@ -20,7 +20,7 @@ pub(crate) const ENTERED: Event<Typed> = Event::new("settings.search-entered");
 
 /// Asks for what to find.
 pub(crate) fn ask(env: &Env<'_>) -> Command {
-    paperpaw_sdk::ask::text(env.i18n.tr("settings.search"), &ENTERED).command()
+    paperpaw_sdk::ask::text(env.i18n().tr("settings.search"), &ENTERED).command()
 }
 
 /// Where a result leads.
@@ -80,18 +80,18 @@ fn find(env: &Env<'_>, query: &str) -> Vec<Hit> {
         return Vec::new();
     }
     let mut hits = Vec::new();
-    for spec in env.settings.specs().filter(|spec| visible(env, spec)) {
-        let title = env.i18n.tr(&spec.title);
-        let description = spec.description.as_deref().map_or("", |d| env.i18n.tr(d));
+    for spec in env.settings().specs().filter(|spec| visible(env, spec)) {
+        let title = env.i18n().tr(&spec.title);
+        let description = spec.description.as_deref().map_or("", |d| env.i18n().tr(d));
         if !matches(&alloc::format!("{title} {description}"), &words) {
             continue;
         }
-        let group = env.settings.group_of(spec).clone();
+        let group = env.settings().group_of(spec).clone();
         let note = env
-            .settings
+            .settings()
             .groups()
             .find(|g| g.id == group)
-            .map_or_else(String::new, |g| env.i18n.tr(&g.title).to_string());
+            .map_or_else(String::new, |g| env.i18n().tr(&g.title).to_string());
         hits.push(Hit {
             title: title.to_string(),
             note,
@@ -101,9 +101,9 @@ fn find(env: &Env<'_>, query: &str) -> Vec<Hit> {
             },
         });
     }
-    let settings_title = env.i18n.tr("settings.title");
-    for item in env.menus.items(menus::SETTINGS.as_str()) {
-        let title = env.i18n.tr(item.title);
+    let settings_title = env.i18n().tr("settings.title");
+    for item in env.menus().items(menus::SETTINGS.as_str()) {
+        let title = env.i18n().tr(item.title);
         if !item.section && matches(title, &words) {
             hits.push(Hit {
                 title: title.to_string(),
@@ -130,7 +130,7 @@ impl SearchScreen {
         let query = p.get(params::TEXT).unwrap_or_default().trim();
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
-            title: env.i18n.format(
+            title: env.i18n().format(
                 "settings.search.title",
                 &[("query", paperpaw_sdk::Arg::Str(query))],
             ),
@@ -162,7 +162,7 @@ impl Screen for SearchScreen {
         self.header
             .draw(&mut ui, &self.title, None, self.list.paging(len));
         if len == 0 {
-            let none = env.i18n.tr("settings.search.none");
+            let none = env.i18n().tr("settings.search.none");
             ui.message(self.list.area(), none);
             return;
         }

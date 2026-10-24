@@ -64,15 +64,15 @@ impl Chooser {
 
     fn covered(self, env: &Env<'_>) -> Vec<Id> {
         match self {
-            Chooser::Theme => presets::theme_settings(env.settings),
-            Chooser::Widgets => presets::widget_look_settings(env.settings, env.widgets),
+            Chooser::Theme => presets::theme_settings(env.settings()),
+            Chooser::Widgets => presets::widget_look_settings(env.settings(), env.widgets()),
         }
     }
 
     fn changes_of(self, env: &Env<'_>, preset: &Preset) -> Vec<(Id, Option<SettingValue>)> {
         match self {
-            Chooser::Theme => presets::theme_changes(env.settings, preset),
-            Chooser::Widgets => presets::widget_look_changes(env.settings, env.widgets, preset),
+            Chooser::Theme => presets::theme_changes(env.settings(), preset),
+            Chooser::Widgets => presets::widget_look_changes(env.settings(), env.widgets(), preset),
         }
     }
 }
@@ -89,14 +89,14 @@ fn changes(env: &Env<'_>, chooser: Chooser, id: &Id) -> Option<Vec<(Id, Option<S
 
 /// The presets there are, in the order of the plugins.
 pub(super) fn themes<'e>(env: &Env<'e>, chooser: Chooser) -> impl Iterator<Item = &'e Preset> + 'e {
-    env.settings.presets().of_kind(chooser.kind())
+    env.settings().presets().of_kind(chooser.kind())
 }
 
 /// The preset in use: the one whose values the settings have, [`NONE`]
 /// where they have their defaults.
 fn applied(env: &Env<'_>, chooser: Chooser) -> Option<Id> {
     let is =
-        |id: &Id| changes(env, chooser, id).is_some_and(|c| presets::applied(env.settings, &c));
+        |id: &Id| changes(env, chooser, id).is_some_and(|c| presets::applied(env.settings(), &c));
     if is(&NONE) {
         return Some(NONE);
     }
@@ -108,11 +108,11 @@ fn applied(env: &Env<'_>, chooser: Chooser) -> Option<Id> {
 /// What the row shows: the preset in use, none, or the user's own.
 pub(super) fn applied_name(env: &Env<'_>, chooser: Chooser) -> String {
     match applied(env, chooser) {
-        Some(id) if id == NONE => env.i18n.tr("settings.theme.none").to_string(),
+        Some(id) if id == NONE => env.i18n().tr("settings.theme.none").to_string(),
         Some(id) => themes(env, chooser)
             .find(|theme| theme.id == id)
-            .map_or_else(String::new, |theme| env.i18n.tr(&theme.title).to_string()),
-        None => env.i18n.tr("settings.theme.own").to_string(),
+            .map_or_else(String::new, |theme| env.i18n().tr(&theme.title).to_string()),
+        None => env.i18n().tr("settings.theme.own").to_string(),
     }
 }
 
@@ -132,15 +132,15 @@ impl Themes {
         let (style, header, mut list) = frame(env, true);
         let none = (
             NONE,
-            env.i18n.tr("settings.theme.none").to_string(),
-            env.i18n.tr("settings.theme.none.help").to_string(),
+            env.i18n().tr("settings.theme.none").to_string(),
+            env.i18n().tr("settings.theme.none.help").to_string(),
         );
         let themes: Vec<(Id, String, String)> = core::iter::once(none)
             .chain(themes(env, chooser).map(|theme| {
-                let about = env.i18n.tr(&theme.description).to_string();
+                let about = env.i18n().tr(&theme.description).to_string();
                 (
                     theme.id.clone(),
-                    env.i18n.tr(&theme.title).to_string(),
+                    env.i18n().tr(&theme.title).to_string(),
                     about,
                 )
             }))
@@ -171,7 +171,7 @@ impl Themes {
             return;
         };
         cx.command(Command::Back);
-        for command in presets::commands(env.settings, &changes) {
+        for command in presets::commands(env.settings(), &changes) {
             cx.command(command);
         }
     }
@@ -182,7 +182,7 @@ impl Screen for Themes {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.themes.len();
-        let title = env.i18n.tr(self.chooser.title());
+        let title = env.i18n().tr(self.chooser.title());
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
         let current = applied(env, self.chooser);

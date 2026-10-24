@@ -428,7 +428,7 @@ pub enum TextRole {
     Numeral,
 }
 
-/// How the focus of rows and items is drawn ([`draw_focus`]).
+/// How the focus of rows and items is drawn ([`Ui::focus`](super::Ui::focus)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Focus {
@@ -441,7 +441,7 @@ pub enum Focus {
     Soft,
 }
 
-/// The lines between rows ([`draw_separator`]).
+/// The lines between rows ([`Ui::separator`](super::Ui::separator)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Separators {
@@ -483,14 +483,14 @@ impl UiStyle {
     };
 
     pub fn new(env: &Env<'_>) -> Self {
-        let m = env.metrics;
-        let base = env.settings.read(&settings::UI_SIZE).clamp(6, 40) as f32;
+        let m = env.metrics();
+        let base = env.settings().read(&settings::UI_SIZE).clamp(6, 40) as f32;
         let text = m.pt(base);
-        let font = env.fonts.role(fonts::UI.as_str());
+        let font = env.fonts().role(fonts::UI.as_str());
         let line_height = font
             .as_ref()
             .map_or(text * 1.25, |f| f.line_metrics(text).line_height);
-        let s = env.settings;
+        let s = env.settings();
         let rows = s.read(&settings::UI_ROW).clamp(120, 300) as f32 / 100.0;
         let small = m.pt(base * 0.75);
         // A row holds a label on two lines in the smallest size rows set
@@ -541,9 +541,9 @@ impl UiStyle {
             },
             plain_header: s.text(settings::UI_HEADER.as_str()) == settings::HEADER_PLAIN,
             cards: s.text(settings::UI_GROUPS.as_str()) == settings::GROUPS_CARDS,
-            grays: env.device.display.format.gray_levels().unwrap_or(256),
-            finger: if env.device.input.touch { m.mm(7) } else { 0 },
-            look: env.look,
+            grays: env.device().display.format.gray_levels().unwrap_or(256),
+            finger: if env.device().input.touch { m.mm(7) } else { 0 },
+            look: env.look(),
             palette: Palette::parse(s.text(settings::UI_PALETTE.as_str())),
         }
     }
@@ -686,11 +686,11 @@ impl UiStyle {
 
     /// The UI font.
     pub fn font<'a>(&self, env: &Env<'a>) -> Option<FontHandle<'a>> {
-        env.fonts.role(fonts::UI.as_str())
+        env.fonts().role(fonts::UI.as_str())
     }
 
     /// Height of a row with a note: the title line, then up to
-    /// [`NOTE_LINES`] lines of small text (see [`draw_noted_row`]).
+    /// [`NOTE_LINES`] lines of small text (see [`Row::value`](super::Row::value)).
     pub fn noted_row(&self) -> u32 {
         self.noted_row_of(NOTE_LINES)
     }
@@ -720,7 +720,7 @@ pub fn focus_rect(style: &UiStyle, rect: Rect) -> Rect {
 /// Draws the focus of the row or item in `rect` (see [`focus_rect`]):
 /// black, for content drawn white on it. Every list draws its focus this
 /// way, so it looks the same everywhere.
-pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
+pub(crate) fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
     let r = focus_rect(style, rect);
     if style
         .look
@@ -750,7 +750,7 @@ pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
 /// Draws the line below the row in `rect` as the style's separators
 /// are: `indent` is where the row's text starts after the margin (e.g.
 /// right of an icon), where faint lines start.
-pub fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, indent: u16) {
+pub(crate) fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, indent: u16) {
     let part = super::look::SeparatorPart { row: rect, indent };
     if style.look.separator(canvas, style, part) {
         return;

@@ -67,7 +67,7 @@ impl PhoneScreen {
     }
 
     fn content(&self, env: &Env<'_>) -> Rect {
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
@@ -76,7 +76,7 @@ impl PhoneScreen {
         let env = *cx.env();
         match notice {
             ServerNotice::Started { address, .. } => {
-                self.state = match served::key(&env.random) {
+                self.state = match served::key(&env.random()) {
                     Some(key) => {
                         let url = format!("http://{address}/?k={key}");
                         self.guard = Some(Guard::new(key));
@@ -91,9 +91,9 @@ impl PhoneScreen {
             }
             ServerNotice::Failed { reason, .. } => {
                 self.state = State::Failed(if reason == "no network" {
-                    env.i18n.tr("transfer.no-network").to_string()
+                    env.i18n().tr("transfer.no-network").to_string()
                 } else {
-                    env.i18n
+                    env.i18n()
                         .format("transfer.failed", &[("reason", Arg::Str(&reason))])
                 });
             }
@@ -111,9 +111,9 @@ impl PhoneScreen {
                     method: &method,
                     target: &target,
                     body_file: body_file.as_deref(),
-                    at: env.now,
+                    at: env.now(),
                 };
-                let (response, text) = answer(number, guard, &self.page, env.storage, &request);
+                let (response, text) = answer(number, guard, &self.page, env.storage(), &request);
                 cx.command(Command::respond(response));
                 // The text to the keyboard, and done.
                 if let Some(text) = text
@@ -217,12 +217,12 @@ fn page(env: &Env<'_>, params: &Params) -> String {
     for (name, key) in texts {
         json.push_str(&format!(
             "{name}:{},",
-            served::json_string(env.i18n.tr(key))
+            served::json_string(env.i18n().tr(key))
         ));
     }
     let title = params.get(params::TITLE).unwrap_or_default();
     let title = if title.is_empty() {
-        env.i18n.tr("transfer.phone.title")
+        env.i18n().tr("transfer.phone.title")
     } else {
         title
     };
@@ -248,14 +248,14 @@ impl Screen for PhoneScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let title = env.i18n.tr("transfer.phone.title");
+        let title = env.i18n().tr("transfer.phone.title");
         self.header.draw(&mut ui, title, None, None);
         let area = self.content(env);
         match &self.state {
-            State::Starting => ui.message(area, env.i18n.tr("transfer.starting")),
+            State::Starting => ui.message(area, env.i18n().tr("transfer.starting")),
             State::Failed(message) => ui.message(area, message),
             State::Serving { url, qr } => {
-                let hint = env.i18n.tr("transfer.phone.hint");
+                let hint = env.i18n().tr("transfer.phone.hint");
                 ui::draw_address(ui.canvas(), env, &style, area, url, qr.as_ref(), hint, None);
             }
         }
@@ -264,7 +264,7 @@ impl Screen for PhoneScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !self.started {
             self.started = true;
-            if !cx.env().random.available() {
+            if !cx.env().random().available() {
                 self.state = State::Failed(no_random(cx.env()));
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);

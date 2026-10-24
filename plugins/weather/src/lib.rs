@@ -174,7 +174,7 @@ impl State {
             return;
         }
         self.loaded = true;
-        self.weather = paperpaw_sdk::read_file(env.storage, &weather_file(), 4 * 1024)
+        self.weather = paperpaw_sdk::read_file(env.storage(), &weather_file(), 4 * 1024)
             .ok()
             .and_then(|bytes| data::Weather::from_text(&String::from_utf8_lossy(&bytes)));
     }
@@ -182,7 +182,7 @@ impl State {
     /// The weather kept for the place set, if any.
     pub(crate) fn weather(&mut self, env: &Env<'_>) -> Option<&data::Weather> {
         self.load(env);
-        let coordinates = env.settings.read(&COORDINATES);
+        let coordinates = env.settings().read(&COORDINATES);
         self.weather
             .as_ref()
             .filter(|w| w.coordinates == coordinates.trim())
@@ -193,7 +193,9 @@ impl State {
         let fetched = self.weather(env).map_or(0, |w| w.fetched);
         match (time::unix_seconds(env), fetched) {
             (Some(now), fetched) if fetched > 0 => Some(now - fetched),
-            _ => self.fetched_at.map(|at| (env.now.since(at) / 1000) as i64),
+            _ => self
+                .fetched_at
+                .map(|at| (env.now().since(at) / 1000) as i64),
         }
     }
 }
@@ -240,11 +242,11 @@ impl Shown {
     /// What the widgets show now; the state notes that a widget is shown.
     pub(crate) fn read(env: &Env<'_>, state: &Shared) -> Self {
         let mut state = state.borrow_mut();
-        state.seen = Some(env.now);
+        state.seen = Some(env.now());
         let weather = state.weather(env).cloned();
         let age = state.age(env);
-        let place = env.settings.read(&PLACE).trim().to_string();
-        let waiting = if data::split_coordinates(env.settings.read(&COORDINATES)).is_none() {
+        let place = env.settings().read(&PLACE).trim().to_string();
+        let waiting = if data::split_coordinates(env.settings().read(&COORDINATES)).is_none() {
             Waiting::NoPlace
         } else if state.asked.is_some() {
             Waiting::Fetching
@@ -281,16 +283,16 @@ impl Shown {
         let age = self.old?;
         let hours = age / 3600;
         Some(if hours < 48 {
-            env.i18n.plural("weather.age.hours", hours, &[])
+            env.i18n().plural("weather.age.hours", hours, &[])
         } else {
-            env.i18n.plural("weather.age.days", hours / 24, &[])
+            env.i18n().plural("weather.age.days", hours / 24, &[])
         })
     }
 }
 
 /// The unit of temperatures chosen.
 pub(crate) fn temperature_unit(env: &Env<'_>) -> Temperature {
-    if env.settings.read(&TEMPERATURE) == TEMPERATURES[1] {
+    if env.settings().read(&TEMPERATURE) == TEMPERATURES[1] {
         Temperature::Fahrenheit
     } else {
         Temperature::Celsius
@@ -299,7 +301,7 @@ pub(crate) fn temperature_unit(env: &Env<'_>) -> Temperature {
 
 /// The unit of wind speeds chosen.
 pub(crate) fn wind_unit(env: &Env<'_>) -> Wind {
-    match WINDS.iter().position(|w| *w == env.settings.read(&WIND)) {
+    match WINDS.iter().position(|w| *w == env.settings().read(&WIND)) {
         Some(1) => Wind::Mph,
         Some(2) => Wind::Ms,
         Some(3) => Wind::Knots,
@@ -309,7 +311,7 @@ pub(crate) fn wind_unit(env: &Env<'_>) -> Wind {
 
 /// Seconds between fetches at most.
 fn every(env: &Env<'_>) -> i64 {
-    env.settings
+    env.settings()
         .read(&EVERY)
         .rsplit('.')
         .next()
@@ -323,16 +325,18 @@ fn every(env: &Env<'_>) -> i64 {
 /// only while it is in a network (the radio is not switched on for the
 /// weather).
 fn online(env: &Env<'_>) -> bool {
-    match env.wifi {
+    match env.wifi() {
         Some(wifi) => wifi.state.is_online(),
-        None => env.caps.network,
+        None => env.caps().network,
     }
 }
 
 /// Whether a weather widget shows in any place of widgets (the home
 /// screen's pages, the sleep screen).
 fn placed(env: &Env<'_>) -> bool {
-    WIDGETS.iter().any(|widget| env.widgets.shown(env, widget))
+    WIDGETS
+        .iter()
+        .any(|widget| env.widgets().shown(env, widget))
 }
 
 /// Why the weather is looked at.
@@ -347,14 +351,14 @@ enum Why {
 /// Fetches the weather if `why` calls for it, and sets the timer for the
 /// next look.
 fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
-    let coordinates = env.settings.read(&COORDINATES).trim().to_string();
+    let coordinates = env.settings().read(&COORDINATES).trim().to_string();
     let Some(url) = data::forecast_url(&coordinates) else {
         return;
     };
     let mut state = state.borrow_mut();
     // Longer while saving; in Offline nothing by itself.
     let base = every(env);
-    let every = match env.power.every(base as u64) {
+    let every = match env.power().every(base as u64) {
         Some(every) => every as i64,
         None if why == Why::Due => return,
         None => base,
@@ -369,14 +373,14 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
         .after(core::time::Duration::from_secs(next as u64))
         .at_moments(paperpaw_sdk::work::Moments::WAKE | paperpaw_sdk::work::Moments::ONLINE);
     out.push(Command::work(look));
-    if state.asked.is_some_and(|at| env.now.since(at) < PATIENCE) {
+    if state.asked.is_some_and(|at| env.now().since(at) < PATIENCE) {
         return;
     }
     if why == Why::Due {
-        let shown = state.seen.is_some_and(|at| env.now.since(at) < SEEN);
+        let shown = state.seen.is_some_and(|at| env.now().since(at) < SEEN);
         let failed_lately = state
             .failed
-            .is_some_and(|at| (env.now.since(at) / 1000) < RETRY as u64);
+            .is_some_and(|at| (env.now().since(at) / 1000) < RETRY as u64);
         if !(placed(env) || shown)
             || !online(env)
             || failed_lately
@@ -393,9 +397,11 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
         .with(Params::new().with(params::ID, coordinates));
     if why == Why::Asked {
         request = request.param(TOLD, "1");
-        out.push(Command::Notify(env.i18n.tr("weather.fetching").to_string()));
+        out.push(Command::Notify(
+            env.i18n().tr("weather.fetching").to_string(),
+        ));
     }
-    state.asked = Some(env.now);
+    state.asked = Some(env.now());
     state.generation = state.generation.wrapping_add(1);
     out.push(Command::http(request));
 }
@@ -417,19 +423,19 @@ fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Commands)
     out.push(widgets::changed(&forecast::ID));
     match weather {
         Some(weather) => {
-            let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+            let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
             let _ = env
-                .storage
+                .storage()
                 .write(&weather_file(), weather.to_text().as_bytes());
             state.weather = Some(weather);
             state.loaded = true;
             state.failed = None;
-            state.fetched_at = Some(env.now);
+            state.fetched_at = Some(env.now());
         }
         None => {
-            state.failed = Some(env.now);
+            state.failed = Some(env.now());
             if told {
-                out.push(Command::Notify(env.i18n.tr("weather.failed").to_string()));
+                out.push(Command::Notify(env.i18n().tr("weather.failed").to_string()));
             }
         }
     }
@@ -442,10 +448,10 @@ fn place_changed(env: &Env<'_>, state: &Shared, out: &mut Commands) {
         s.generation = s.generation.wrapping_add(1);
         s.failed = None;
         s.asked = None;
-        if data::split_coordinates(env.settings.read(&COORDINATES)).is_none() {
+        if data::split_coordinates(env.settings().read(&COORDINATES)).is_none() {
             s.weather = None;
             s.fetched_at = None;
-            let _ = env.storage.remove(&weather_file());
+            let _ = env.storage().remove(&weather_file());
             return;
         }
     }
@@ -495,7 +501,7 @@ impl Plugin for Weather {
         let s = state.clone();
         r.add_action(ActionSpec::new(REFRESH, "weather.refresh").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
-                if data::split_coordinates(env.settings.read(&COORDINATES)).is_none() {
+                if data::split_coordinates(env.settings().read(&COORDINATES)).is_none() {
                     out.push(Command::OpenScreen(PLACE_SCREEN, Params::new()));
                 } else {
                     check(env, &s, Why::Asked, out);
@@ -515,7 +521,7 @@ impl Plugin for Weather {
             let id = changed.id.as_str();
             if id == COORDINATES.as_str() {
                 place_changed(env, &s, out);
-            } else if id == EVERY.as_str() || env.settings.text(id).contains("weather.") {
+            } else if id == EVERY.as_str() || env.settings().text(id).contains("weather.") {
                 check(env, &s, Why::Due, out);
             }
         })?;

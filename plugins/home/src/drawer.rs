@@ -28,7 +28,7 @@ impl DrawerScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(
             style.margin(),
@@ -76,7 +76,7 @@ impl Screen for DrawerScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("home.drawer"),
+            env.i18n().tr("home.drawer"),
             None,
             self.list.paging(len),
         );

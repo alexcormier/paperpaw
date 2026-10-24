@@ -52,7 +52,7 @@ pub(crate) struct PlaceScreen {
 impl PlaceScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -67,7 +67,7 @@ impl PlaceScreen {
     }
 
     fn has_place(env: &Env<'_>) -> bool {
-        !env.settings.read(&COORDINATES).trim().is_empty()
+        !env.settings().read(&COORDINATES).trim().is_empty()
     }
 
     fn len(&self, env: &Env<'_>) -> usize {
@@ -85,7 +85,7 @@ impl PlaceScreen {
             _ => String::new(),
         };
         cx.command(
-            ask::text(env.i18n.tr("weather.place.name"), &TYPED)
+            ask::text(env.i18n().tr("weather.place.name"), &TYPED)
                 .initial(initial)
                 .command(),
         );
@@ -120,23 +120,24 @@ impl PlaceScreen {
     fn note(&self, env: &Env<'_>) -> String {
         match &self.search {
             Search::Idle => {
-                let place = env.settings.read(&PLACE).trim();
+                let place = env.settings().read(&PLACE).trim();
                 if place.is_empty() {
-                    env.i18n.tr("weather.place.help").to_string()
+                    env.i18n().tr("weather.place.help").to_string()
                 } else {
-                    env.i18n
+                    env.i18n()
                         .format("weather.place.now", &[("place", Arg::Str(place))])
                 }
             }
-            Search::Searching(_) => env.i18n.tr("weather.place.searching").to_string(),
-            Search::Found => env
-                .i18n
-                .plural("weather.place.found", self.places.len() as i64, &[]),
+            Search::Searching(_) => env.i18n().tr("weather.place.searching").to_string(),
+            Search::Found => {
+                env.i18n()
+                    .plural("weather.place.found", self.places.len() as i64, &[])
+            }
             Search::Nothing(name) => env
-                .i18n
+                .i18n()
                 .format("weather.place.nothing", &[("name", Arg::Str(name))]),
-            Search::Failed => env.i18n.tr("weather.place.failed").to_string(),
-            Search::NoNetwork => env.i18n.tr("weather.place.no-network").to_string(),
+            Search::Failed => env.i18n().tr("weather.place.failed").to_string(),
+            Search::NoNetwork => env.i18n().tr("weather.place.no-network").to_string(),
         }
     }
 
@@ -171,7 +172,7 @@ impl Screen for PlaceScreen {
         let len = self.len(env);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("weather.setting.place"),
+            env.i18n().tr("weather.setting.place"),
             None,
             self.list.paging(len),
         );
@@ -179,7 +180,7 @@ impl Screen for PlaceScreen {
         let note = self.note(env);
         self.list.draw(&mut ui, len, |ui, row, rect, focused| {
             if row == 0 {
-                let title = env.i18n.tr("weather.place.search");
+                let title = env.i18n().tr("weather.place.search");
                 ui::Row::value(title, "›")
                     .note(&note)
                     .focused(focused)
@@ -191,8 +192,8 @@ impl Screen for PlaceScreen {
                     .focused(focused)
                     .draw(ui, rect);
             } else {
-                let title = env.i18n.tr("weather.place.none");
-                let note = env.i18n.tr("weather.place.none.help");
+                let title = env.i18n().tr("weather.place.none");
+                let note = env.i18n().tr("weather.place.none.help");
                 ui::Row::value(title, "")
                     .note(note)
                     .focused(focused)
@@ -258,10 +259,10 @@ impl Screen for PlaceScreen {
             }
             self.places.clear();
             self.list.set_focus(0);
-            if !env.caps.network {
+            if !env.caps().network {
                 self.search = Search::NoNetwork;
             } else {
-                let url = data::search_url(&name, env.i18n.language());
+                let url = data::search_url(&name, env.i18n().language());
                 let request = HttpRequest::new("GET", &url, SEARCHED).header(
                     String::from("User-Agent"),
                     String::from("PaperPaw/0.1 (e-reader)"),

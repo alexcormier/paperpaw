@@ -33,7 +33,7 @@ const CACHE: usize = 4 * 1024;
 /// plugin cannot yet have a pack of its own read a glyph at a time), so
 /// where memory is small the fonts past it are named in the menus' font.
 fn budget(env: &Env<'_>) -> usize {
-    if env.device.memory == MemoryClass::Small {
+    if env.device().memory == MemoryClass::Small {
         48 * 1024
     } else {
         12 * MAX_SAMPLE
@@ -46,7 +46,7 @@ fn dir() -> String {
 
 /// The sentence a font is shown with, in the reader's language.
 pub(crate) fn sentence<'a>(env: &Env<'a>) -> &'a str {
-    env.i18n.tr("fonts-browser.sample")
+    env.i18n().tr("fonts-browser.sample")
 }
 
 /// Its characters and the font's name, each once, and `…` for a name
@@ -118,7 +118,7 @@ impl Samples {
             dir(),
             font.id,
             self.size,
-            env.i18n.language()
+            env.i18n().language()
         )
     }
 
@@ -146,8 +146,8 @@ impl Samples {
                 continue;
             }
             let path = self.path(env, font);
-            if env.storage.exists(&path) {
-                more |= self.hold(env.storage, font, &path, budget);
+            if env.storage().exists(&path) {
+                more |= self.hold(env.storage(), font, &path, budget);
             }
         }
         if self.fetching.is_none()
@@ -164,7 +164,7 @@ impl Samples {
                 paperpaw_sdk::web::encode(&characters(env, font))
             );
             let mut request = HttpRequest::new("GET", &url, SAMPLE);
-            let _ = env.storage.create_dir(&dir());
+            let _ = env.storage().create_dir(&dir());
             request = request.save_to(self.path(env, font));
             request = request.with(Params::new().with(FONT, font.id.clone()));
             out.push(Command::http(request));
@@ -213,7 +213,7 @@ impl Samples {
         if !(200..300).contains(&reply.status)
             && let Some(font) = fonts.iter().find(|f| f.id == id)
         {
-            let _ = env.storage.remove(&self.path(env, font));
+            let _ = env.storage().remove(&self.path(env, font));
             // Not asked for again while it is shown.
             self.held.push((font.id.clone(), None));
         }
@@ -225,14 +225,14 @@ pub(crate) fn prune(env: &Env<'_>, samples: &Samples, fonts: &[Font]) {
     let keep: Vec<String> = fonts.iter().map(|f| samples.path(env, f)).collect();
     let mut gone: Vec<String> = Vec::new();
     let dir = dir();
-    let _ = env.storage.list(&dir, &mut |entry| {
+    let _ = env.storage().list(&dir, &mut |entry| {
         let path = format!("{dir}/{}", entry.name);
         if !keep.contains(&path) {
             gone.push(path);
         }
     });
     for path in gone {
-        let _ = env.storage.remove(&path);
+        let _ = env.storage().remove(&path);
     }
 }
 

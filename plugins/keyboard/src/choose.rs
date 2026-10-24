@@ -44,7 +44,7 @@ fn ids(env: &Env<'_>) -> Vec<String> {
 }
 
 fn chosen<'e>(env: &Env<'e>) -> Vec<&'e str> {
-    env.settings
+    env.settings()
         .text(LAYOUTS_SETTING.as_str())
         .split(',')
         .map(str::trim)
@@ -55,7 +55,7 @@ fn chosen<'e>(env: &Env<'e>) -> Vec<&'e str> {
 impl ChooseScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height - top);
@@ -100,7 +100,7 @@ impl Screen for ChooseScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.rows.len();
-        let title = env.i18n.tr("keyboard.setting.layouts");
+        let title = env.i18n().tr("keyboard.setting.layouts");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
@@ -112,12 +112,12 @@ impl Screen for ChooseScreen {
             // Chosen layouts carry their place in switching: "On (2)".
             let value = match on {
                 Some(at) if chosen.len() > 1 => {
-                    format!("{} ({})", env.i18n.tr("keyboard.on"), at + 1)
+                    format!("{} ({})", env.i18n().tr("keyboard.on"), at + 1)
                 }
-                Some(_) => env.i18n.tr("keyboard.on").to_string(),
-                None => env.i18n.tr("keyboard.off").to_string(),
+                Some(_) => env.i18n().tr("keyboard.on").to_string(),
+                None => env.i18n().tr("keyboard.off").to_string(),
             };
-            ui::Row::value(env.i18n.tr(id), &value)
+            ui::Row::value(env.i18n().tr(id), &value)
                 .focused(focused)
                 .draw(ui, rect);
         });

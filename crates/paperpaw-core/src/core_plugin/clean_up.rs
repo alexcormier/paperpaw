@@ -52,7 +52,7 @@ pub(super) fn ask_clean_up(env: &Env<'_>, out: &mut paperpaw_sdk::Commands) {
     match library::unused_books(env.storage(), env.book_data(), library::folder(env), user) {
         Ok(count) if count > 0 => {
             let question = env
-                .i18n
+                .i18n()
                 .plural("core.clean-up.question", i64::from(count), &[]);
             out.push(
                 paperpaw_sdk::ask::confirm(question, &CLEAN_UP_ANSWERED)
@@ -81,7 +81,7 @@ fn clean_up(env: &Env<'_>, out: &mut paperpaw_sdk::Commands, kind: BookDataKind)
     };
     if let Some(now) = paperpaw_sdk::time::unix_seconds(env) {
         let _ = env
-            .storage
+            .storage()
             .write(CLEANED_UP, alloc::format!("{now}\n").as_bytes());
         declare_clean_up(env, out);
     }

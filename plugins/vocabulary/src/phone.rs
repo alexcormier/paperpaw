@@ -81,7 +81,7 @@ impl PhoneScreen {
         let style = UiStyle::new(env);
         // The decks as they are: the answers given in them, the words
         // looked up as cards.
-        let _ = cards::fold(env.storage);
+        let _ = cards::fold(env.storage());
         crate::take_lookups(env);
         Self {
             header: ui::Header::new(env, &style, true),
@@ -94,7 +94,7 @@ impl PhoneScreen {
     }
 
     fn content(&self, env: &Env<'_>) -> Rect {
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
@@ -103,7 +103,7 @@ impl PhoneScreen {
         let env = *cx.env();
         match notice {
             ServerNotice::Started { address, .. } => {
-                self.state = match served::key(&env.random) {
+                self.state = match served::key(&env.random()) {
                     Some(key) => {
                         let url = format!("http://{address}/?k={key}");
                         self.guard = Some(Guard::new(key));
@@ -112,15 +112,15 @@ impl PhoneScreen {
                     }
                     None => {
                         cx.command(Command::StopServing(SERVER));
-                        State::Failed(env.i18n.tr("vocabulary.phone.no-random").into())
+                        State::Failed(env.i18n().tr("vocabulary.phone.no-random").into())
                     }
                 };
             }
             ServerNotice::Failed { reason, .. } => {
                 self.state = State::Failed(if reason == "no network" {
-                    env.i18n.tr("vocabulary.phone.no-network").into()
+                    env.i18n().tr("vocabulary.phone.no-network").into()
                 } else {
-                    env.i18n
+                    env.i18n()
                         .format("vocabulary.phone.failed", &[("reason", Arg::Str(&reason))])
                 });
             }
@@ -138,10 +138,10 @@ impl PhoneScreen {
                     method: &method,
                     target: &target,
                     body_file: body_file.as_deref(),
-                    at: env.now,
+                    at: env.now(),
                 };
                 let page = || page(&env);
-                let (response, done) = answer(number, guard, page, env.storage, &request);
+                let (response, done) = answer(number, guard, page, env.storage(), &request);
                 cx.command(Command::respond(response));
                 let Some(done) = done else {
                     return;
@@ -177,13 +177,15 @@ impl Done {
     fn text(&self, env: &Env<'_>) -> String {
         match self {
             Done::Deck(name) => env
-                .i18n
+                .i18n()
                 .format("vocabulary.phone.deck-saved", &[("name", Arg::Str(name))]),
             Done::Card(front) => env
-                .i18n
+                .i18n()
                 .format("vocabulary.phone.card-saved", &[("front", Arg::Str(front))]),
-            Done::Deleted => env.i18n.tr("vocabulary.phone.deleted").into(),
-            Done::Imported(n) => env.i18n.plural("vocabulary.phone.imported", *n as i64, &[]),
+            Done::Deleted => env.i18n().tr("vocabulary.phone.deleted").into(),
+            Done::Imported(n) => env
+                .i18n()
+                .plural("vocabulary.phone.imported", *n as i64, &[]),
         }
     }
 }
@@ -409,7 +411,7 @@ fn page(env: &Env<'_>) -> Vec<u8> {
         if i > 0 {
             json.push(',');
         }
-        json.push_str(&format!("{name}:{}", json_string(env.i18n.tr(key))));
+        json.push_str(&format!("{name}:{}", json_string(env.i18n().tr(key))));
     }
     json.push('}');
     let filled = [
@@ -438,15 +440,15 @@ impl Screen for PhoneScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("vocabulary.phone.title");
+        let title = env.i18n().tr("vocabulary.phone.title");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, None, None);
         let area = self.content(env);
         match &self.state {
-            State::Starting => ui.message(area, env.i18n.tr("vocabulary.phone.starting")),
+            State::Starting => ui.message(area, env.i18n().tr("vocabulary.phone.starting")),
             State::Failed(message) => ui.message(area, message),
             State::Serving { url, qr } => {
-                let hint = env.i18n.tr("vocabulary.phone.hint");
+                let hint = env.i18n().tr("vocabulary.phone.hint");
                 ui::draw_address(
                     ui.canvas(),
                     env,
@@ -464,8 +466,8 @@ impl Screen for PhoneScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !self.started {
             self.started = true;
-            if !cx.env().random.available() {
-                self.state = State::Failed(cx.env().i18n.tr("vocabulary.phone.no-random").into());
+            if !cx.env().random().available() {
+                self.state = State::Failed(cx.env().i18n().tr("vocabulary.phone.no-random").into());
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
                 return;

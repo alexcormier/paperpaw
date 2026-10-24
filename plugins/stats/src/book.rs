@@ -29,9 +29,9 @@ impl BookView {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let id = params.get(params::ID).and_then(|id| id.parse::<u16>().ok());
-        let book = id.and_then(|id| store::books(env.storage).into_iter().find(|b| b.id == id));
+        let book = id.and_then(|id| store::books(env.storage()).into_iter().find(|b| b.id == id));
         let totals = book.as_ref().map_or_else(BookTotals::default, |book| {
-            totals::of_book(env.storage, book, |unix| fmt::day_of(env, unix))
+            totals::of_book(env.storage(), book, |unix| fmt::day_of(env, unix))
         });
         Self {
             style,
@@ -45,14 +45,14 @@ impl BookView {
     fn rows(&self, env: &Env<'_>, book: &Book) -> Vec<(String, String)> {
         let t = &self.totals;
         let mut rows = Vec::new();
-        let tr = |key: &str| env.i18n.tr(key).to_string();
+        let tr = |key: &str| env.i18n().tr(key).to_string();
         let authors = books::authors(&book.authors);
         if !authors.is_empty() {
             rows.push((tr("stats.authors"), authors));
         }
         rows.push((tr("stats.time-read"), fmt::duration(env, t.seconds)));
         let pages = if book.pages > 0 {
-            env.i18n.format(
+            env.i18n().format(
                 "stats.pages-of",
                 &[
                     ("read", Arg::Int(i64::from(t.pages_read))),
@@ -60,14 +60,15 @@ impl BookView {
                 ],
             )
         } else {
-            env.i18n.plural("stats.pages", i64::from(t.pages_read), &[])
+            env.i18n()
+                .plural("stats.pages", i64::from(t.pages_read), &[])
         };
         rows.push((tr("stats.pages-read"), pages));
         if t.pages_read > 0 {
             let per_page = t.seconds / u64::from(t.pages_read);
             rows.push((
                 tr("stats.pace"),
-                env.i18n
+                env.i18n()
                     .format("stats.per-page", &[("seconds", Arg::Int(per_page as i64))]),
             ));
             let left = book.pages.saturating_sub(t.pages_read);
@@ -80,7 +81,7 @@ impl BookView {
         }
         rows.push((
             tr("stats.reading-days-title"),
-            env.i18n.plural("stats.days", t.days.len() as i64, &[]),
+            env.i18n().plural("stats.days", t.days.len() as i64, &[]),
         ));
         if let (Some((first, _)), Some((last, _))) = (t.days.first(), t.days.last()) {
             rows.push((tr("stats.first-read"), fmt::date(env, *first)));
@@ -100,14 +101,14 @@ impl Screen for BookView {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let display = env.device.display;
+        let display = env.device().display;
         let title = self.book.as_ref().map_or("", |b| b.title.as_str());
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, None, None);
         let top = self.header.area().height + style.gap();
         let Some(book) = &self.book else {
             let area = Rect::new(0, top, display.width, display.height - top);
-            ui.message(area, env.i18n.tr("stats.no-books"));
+            ui.message(area, env.i18n().tr("stats.no-books"));
             return;
         };
         let row = style.row() * 4 / 5;
@@ -128,7 +129,7 @@ impl Screen for BookView {
         let margin = style.margin();
         let title_h = (style.small() * 1.6) as u16;
         let label_area = Rect::new(margin, chart_top, display.width - 2 * margin, title_h);
-        let label = env.i18n.tr("stats.by-day");
+        let label = env.i18n().tr("stats.by-day");
         ui::Label::new(label)
             .px(style.small())
             .color(style.faint(ui::Ink::Muted))
@@ -139,7 +140,7 @@ impl Screen for BookView {
             .iter()
             .map(|(d, _)| {
                 let date = fmt::date_of(*d);
-                env.i18n.format(
+                env.i18n().format(
                     "stats.day-month",
                     &[
                         ("day", Arg::Int(i64::from(date.day))),

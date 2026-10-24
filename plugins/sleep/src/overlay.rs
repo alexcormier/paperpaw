@@ -69,16 +69,16 @@ pub const PICK: Id = Id::new_static("sleep.pick-overlay");
 /// whether a book is read on the topmost full screen (with or without a
 /// menu over it); never where a screen guards the device.
 pub(crate) fn used(env: &Env<'_>) -> bool {
-    if env.stack.iter().any(|entry| entry.guards) {
+    if env.stack().iter().any(|entry| entry.guards) {
         return false;
     }
     let reading = env
-        .stack
+        .stack()
         .iter()
         .rev()
         .find(|entry| !entry.overlay)
         .is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
-    match env.settings.text(USED.as_str()) {
+    match env.settings().text(USED.as_str()) {
         w if w == WHEN[1] => reading,
         w if w == WHEN[2] => !reading,
         _ => true,
@@ -104,16 +104,16 @@ impl core::fmt::Debug for Over {
 /// language, where nothing can (a file PaperPaw does not read, an empty
 /// folder).
 pub(crate) fn over(env: &Env<'_>) -> Result<Over, String> {
-    let tr = |key: &str, name: &str| env.i18n.tr(key).replace("{name}", name);
-    let widget = env.settings.text(WIDGET.as_str()).trim();
+    let tr = |key: &str, name: &str| env.i18n().tr(key).replace("{name}", name);
+    let widget = env.settings().text(WIDGET.as_str()).trim();
     if !widget.is_empty() {
         return env
-            .widgets
+            .widgets()
             .make(widget, env)
             .map(Over::Widget)
             .ok_or_else(|| tr("sleep.overlay.no-widget", widget));
     }
-    let chosen = env.settings.text(PICTURE.as_str()).trim().to_string();
+    let chosen = env.settings().text(PICTURE.as_str()).trim().to_string();
     let path = if chosen.is_empty() {
         crate::next_from_folder(env).ok_or_else(|| tr("sleep.overlay.empty-folder", ""))?
     } else {
@@ -129,10 +129,15 @@ fn picture(env: &Env<'_>, path: &str) -> Result<ImageRef, String> {
     let side = u32::from(box_side(env));
     let decoded = crate::data("overlay.gray");
     let kept = crate::data("overlay.key");
-    let missing = || env.i18n.tr("sleep.overlay.missing").replace("{name}", path);
+    let missing = || {
+        env.i18n()
+            .tr("sleep.overlay.missing")
+            .replace("{name}", path)
+    };
     let key = key(env, path, side).ok_or_else(missing)?;
-    let same = paperpaw_sdk::read_file(env.storage, &kept, 1024).is_ok_and(|k| k == key.as_bytes());
-    if same && let Some(file) = paperpaw_sdk::image::AlphaFile::open(env.storage, &decoded) {
+    let same =
+        paperpaw_sdk::read_file(env.storage(), &kept, 1024).is_ok_and(|k| k == key.as_bytes());
+    if same && let Some(file) = paperpaw_sdk::image::AlphaFile::open(env.storage(), &decoded) {
         return Ok(ImageRef {
             path: file.path,
             width: file.width,
@@ -140,20 +145,20 @@ fn picture(env: &Env<'_>, path: &str) -> Result<ImageRef, String> {
         });
     }
     // The key names the decoded file only once it is decoded.
-    let _ = env.storage.remove(&kept);
+    let _ = env.storage().remove(&kept);
     let image = paperpaw_sdk::image::picture_with_alpha(
-        env.storage,
+        env.storage(),
         path,
         &decoded,
         paperpaw_sdk::image::Fit::side(side),
     )
     .map_err(|e| {
-        env.i18n
+        env.i18n()
             .tr("sleep.overlay.unreadable")
             .replace("{name}", path)
             .replace("{reason}", &format!("{e}"))
     })?;
-    let _ = env.storage.write(&kept, key.as_bytes());
+    let _ = env.storage().write(&kept, key.as_bytes());
     Ok(image)
 }
 
@@ -161,11 +166,11 @@ fn picture(env: &Env<'_>, path: &str) -> Result<ImageRef, String> {
 /// path, size, the size it is made and a fingerprint of its first and
 /// last bytes (the card keeps no times of change PaperPaw reads).
 fn key(env: &Env<'_>, path: &str, side: u32) -> Option<String> {
-    let size = env.storage.size(path).ok()?;
+    let size = env.storage().size(path).ok()?;
     let mut hash: u32 = 0x811c_9dc5;
     let mut buf = [0u8; 512];
     for at in [0, size.saturating_sub(buf.len() as u64)] {
-        let n = env.storage.read_at(path, at, &mut buf).ok()?;
+        let n = env.storage().read_at(path, at, &mut buf).ok()?;
         for &b in &buf[..n] {
             hash = (hash ^ u32::from(b)).wrapping_mul(0x0100_0193);
         }
@@ -175,8 +180,8 @@ fn key(env: &Env<'_>, path: &str, side: u32) -> Option<String> {
 
 /// The side of the square the picture fits in.
 fn box_side(env: &Env<'_>) -> u16 {
-    let display = env.device.display;
-    let percent = env.settings.read(&SIZE).clamp(10, 100) as u32;
+    let display = env.device().display;
+    let percent = env.settings().read(&SIZE).clamp(10, 100) as u32;
     (u32::from(display.width.min(display.height)) * percent / 100) as u16
 }
 
@@ -184,7 +189,7 @@ fn box_side(env: &Env<'_>) -> u16 {
 /// clear of the status lines above and below (the reader's, the time and
 /// battery), as [`POSITION`] says.
 fn placed(env: &Env<'_>, w: u16, h: u16) -> Rect {
-    let display = env.device.display;
+    let display = env.device().display;
     let style = UiStyle::new(env);
     let margin = style.margin();
     let status = paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap();
@@ -201,7 +206,7 @@ fn placed(env: &Env<'_>, w: u16, h: u16) -> Rect {
         display.width.saturating_sub(w) / 2,
         display.height.saturating_sub(h) / 2,
     );
-    let position = env.settings.text(POSITION.as_str());
+    let position = env.settings().text(POSITION.as_str());
     let (x, y) = match POSITIONS.iter().position(|p| *p == position) {
         Some(0) => (mid_x, mid_y),
         Some(1) => (mid_x, top),
@@ -252,7 +257,7 @@ pub(crate) fn place(env: &Env<'_>, over: &mut Over) -> Rect {
 /// showing through that.
 pub(crate) fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, over: &Over, area: Rect, opacity: u8) {
     match over {
-        Over::Picture(image) => ui::draw_image_over(canvas, env.storage, image, area, opacity),
+        Over::Picture(image) => ui::draw_image_over(canvas, env.storage(), image, area, opacity),
         Over::Widget(widget) => {
             let paper: Vec<u8> = [255u8, 255].repeat(usize::from(area.width));
             for y in area.y..area.bottom() as u16 {
@@ -265,7 +270,7 @@ pub(crate) fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, over: &Over, area: Re
 
 /// How opaque the picture is drawn (0 to 255).
 pub(crate) fn opacity(env: &Env<'_>) -> u8 {
-    let through = env.settings.read(&SEE_THROUGH).clamp(0, 100) as u32;
+    let through = env.settings().read(&SEE_THROUGH).clamp(0, 100) as u32;
     (255 * (100 - through) / 100) as u8
 }
 
@@ -274,13 +279,13 @@ pub(crate) fn opacity(env: &Env<'_>) -> u8 {
 /// it changed.
 pub(crate) fn remember_failure(env: &Env<'_>, why: Option<&str>) {
     let file = crate::data("overlay-failed.txt");
-    let before = paperpaw_sdk::read_file(env.storage, &file, 1024).ok();
+    let before = paperpaw_sdk::read_file(env.storage(), &file, 1024).ok();
     match why {
         Some(why) if before.as_deref() != Some(why.as_bytes()) => {
-            let _ = env.storage.write(&file, why.as_bytes());
+            let _ = env.storage().write(&file, why.as_bytes());
         }
         None if before.is_some() => {
-            let _ = env.storage.remove(&file);
+            let _ = env.storage().remove(&file);
         }
         _ => {}
     }
@@ -311,38 +316,40 @@ impl Picker {
     pub(crate) fn new(env: &Env<'_>, _: &Params) -> Self {
         let mut rows = Vec::from([(
             Source::Folder,
-            env.i18n.tr("sleep.overlay.folder").to_string(),
+            env.i18n().tr("sleep.overlay.folder").to_string(),
         )]);
-        rows.extend(env.settings.presets().of_kind(KIND).map(|p| {
+        rows.extend(env.settings().presets().of_kind(KIND).map(|p| {
             (
                 Source::Preset(p.id.clone()),
-                env.i18n.tr(&p.title).to_string(),
+                env.i18n().tr(&p.title).to_string(),
             )
         }));
-        let widget = env.i18n.tr("sleep.overlay.widget");
-        rows.extend(env.widgets.iter().map(|(id, title)| {
-            let name = env.i18n.tr(title);
+        let widget = env.i18n().tr("sleep.overlay.widget");
+        rows.extend(env.widgets().iter().map(|(id, title)| {
+            let name = env.i18n().tr(title);
             (
                 Source::Widget(id.to_string()),
                 widget.replace("{name}", name),
             )
         }));
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let note = style.noted_row() as u16;
-        let failed = paperpaw_sdk::read_file(env.storage, &crate::data("overlay-failed.txt"), 1024)
-            .ok()
-            .and_then(|b| String::from_utf8(b).ok())
-            .map(|why| {
-                let text = env
-                    .i18n
-                    .tr("sleep.overlay.failed")
-                    .replace("{reason}", &why);
-                let area = Rect::new(0, display.height.saturating_sub(note), display.width, note);
-                (text, area)
-            });
+        let failed =
+            paperpaw_sdk::read_file(env.storage(), &crate::data("overlay-failed.txt"), 1024)
+                .ok()
+                .and_then(|b| String::from_utf8(b).ok())
+                .map(|why| {
+                    let text = env
+                        .i18n()
+                        .tr("sleep.overlay.failed")
+                        .replace("{reason}", &why);
+                    let area =
+                        Rect::new(0, display.height.saturating_sub(note), display.width, note);
+                    (text, area)
+                });
         let bottom = failed.as_ref().map_or(display.height, |(_, area)| area.y);
         let area = Rect::new(0, top, display.width, bottom.saturating_sub(top));
         Self {
@@ -356,18 +363,18 @@ impl Picker {
 
     /// Whether row `row` is what is chosen now.
     fn chosen(&self, env: &Env<'_>, row: usize) -> bool {
-        let widget = env.settings.text(WIDGET.as_str()).trim();
+        let widget = env.settings().text(WIDGET.as_str()).trim();
         match &self.rows[row].0 {
             Source::Widget(id) => widget == id,
             _ if !widget.is_empty() => false,
-            Source::Folder => env.settings.text(PICTURE.as_str()).trim().is_empty(),
+            Source::Folder => env.settings().text(PICTURE.as_str()).trim().is_empty(),
             Source::Preset(id) => env
-                .settings
+                .settings()
                 .presets()
                 .get(id.as_str())
                 .is_some_and(|preset| {
-                    let changes = preset.changes(env.settings, &[]);
-                    paperpaw_sdk::presets::applied(env.settings, &changes)
+                    let changes = preset.changes(env.settings(), &[]);
+                    paperpaw_sdk::presets::applied(env.settings(), &changes)
                 }),
         }
     }
@@ -388,9 +395,9 @@ impl Picker {
             Some(Source::Widget(id)) => set(cx, &WIDGET, id),
             Some(Source::Preset(id)) => {
                 set(cx, &WIDGET, "");
-                if let Some(preset) = env.settings.presets().get(id.as_str()) {
-                    let changes = preset.changes(env.settings, &[]);
-                    for command in paperpaw_sdk::presets::commands(env.settings, &changes) {
+                if let Some(preset) = env.settings().presets().get(id.as_str()) {
+                    let changes = preset.changes(env.settings(), &[]);
+                    for command in paperpaw_sdk::presets::commands(env.settings(), &changes) {
                         cx.command(command);
                     }
                 }
@@ -406,10 +413,10 @@ impl Screen for Picker {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.rows.len();
-        let title = env.i18n.tr("sleep.setting.overlay-picture");
+        let title = env.i18n().tr("sleep.setting.overlay-picture");
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
-        let on = env.i18n.tr("core.state.on");
+        let on = env.i18n().tr("core.state.on");
         let chosen: Vec<bool> = (0..len).map(|row| self.chosen(env, row)).collect();
         let rows = &self.rows;
         self.list.draw(&mut ui, len, |ui, row, rect, focused| {

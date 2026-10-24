@@ -106,7 +106,7 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
     r.add_settings(&SETTINGS)?;
     let changed = changes.clone();
     r.on(NEXT, move |env, _, out| {
-        Turns::turn(env.storage, &turns_file(), today(env), daily(env));
+        Turns::turn(env.storage(), &turns_file(), today(env), daily(env));
         changed.changed(out, &ID);
     })?;
     let changes = changes.clone();
@@ -114,7 +114,7 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
     r.add_widget(
         WidgetSpec::new(ID, "widgets.picture", move |env| {
             // Another picture each time it shows: made as it shows.
-            let showing = if daily(env) { 0 } else { shown.show(env.now) };
+            let showing = if daily(env) { 0 } else { shown.show(env.now()) };
             Box::new(PictureWidget {
                 showing,
                 changes: changes.clone(),
@@ -127,12 +127,12 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
 
 /// Whether another picture shows each day (else each time it shows).
 fn daily(env: &Env<'_>) -> bool {
-    env.settings.read(&CHANGE) != CHANGES[1]
+    env.settings().read(&CHANGE) != CHANGES[1]
 }
 
 /// The folder of the pictures, as set.
 fn folder(env: &Env<'_>) -> String {
-    env.settings.read(&FOLDER).trim_matches('/').to_string()
+    env.settings().read(&FOLDER).trim_matches('/').to_string()
 }
 
 /// Whether `name` is a picture shown.
@@ -190,15 +190,15 @@ struct Shown {
 fn picture(env: &Env<'_>, day: i64, showing: u32) -> Option<Shown> {
     let folder = folder(env);
     let daily = daily(env);
-    let turns = Turns::load(env.storage, &turns_file())
+    let turns = Turns::load(env.storage(), &turns_file())
         .on(day, daily)
         .wrapping_add(showing);
-    let (name, size) = picture_at(env.storage, &folder, |count| {
+    let (name, size) = picture_at(env.storage(), &folder, |count| {
         let first = if daily { of_the_day(day, count) } else { 0 };
         first + turns as usize
     })?;
     let path = format!("{folder}/{name}");
-    let display = env.device.display;
+    let display = env.device().display;
     let color = display.format.is_color();
     // What it is decoded from and for: the same, and it is not again.
     let stamp = format!(
@@ -206,9 +206,9 @@ fn picture(env: &Env<'_>, day: i64, showing: u32) -> Option<Shown> {
         display.width, display.height
     );
     let pixels = pixels_file();
-    let kept = paperpaw_sdk::read_file(env.storage, &stamp_file(), 1024)
+    let kept = paperpaw_sdk::read_file(env.storage(), &stamp_file(), 1024)
         .is_ok_and(|kept| kept == stamp.as_bytes());
-    let image = match ImageFile::open(env.storage, &pixels).filter(|_| kept) {
+    let image = match ImageFile::open(env.storage(), &pixels).filter(|_| kept) {
         Some(file) => ImageRef {
             path: file.path,
             width: file.width,
@@ -217,8 +217,8 @@ fn picture(env: &Env<'_>, day: i64, showing: u32) -> Option<Shown> {
         None => {
             let fit = Fit::screen(display.width.into(), display.height.into());
             let image =
-                paperpaw_sdk::image::picture_from_file(env.storage, &path, &pixels, fit, color)?;
-            let _ = env.storage.write(&stamp_file(), stamp.as_bytes());
+                paperpaw_sdk::image::picture_from_file(env.storage(), &path, &pixels, fit, color)?;
+            let _ = env.storage().write(&stamp_file(), stamp.as_bytes());
             image
         }
     };
@@ -258,13 +258,13 @@ impl Widget for PictureWidget {
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
         // As high as wide, with the frame and the caption.
         let look = widgets::widget_look(env, ID.as_str(), Rect::new(0, 0, width, width));
-        width.min(env.device.display.height / 3) + caption_height(env) + (width - look.area.width)
+        width.min(env.device().display.height / 3) + caption_height(env) + (width - look.area.width)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
         let Some(shown) = &self.shown else {
-            let message = env.i18n.format(
+            let message = env.i18n().format(
                 "widgets.picture.none",
                 &[("folder", Arg::Str(&folder(env)))],
             );
@@ -277,7 +277,7 @@ impl Widget for PictureWidget {
             .filter(|&h| h * 3 <= area.height)
             .unwrap_or(0);
         let room = Rect::new(area.x, area.y, area.width, area.height - below);
-        let place = if env.settings.read(&FIT) == FITS[1] {
+        let place = if env.settings().read(&FIT) == FITS[1] {
             let (w, h) = ui::fit_image(&shown.image, room.width, room.height);
             let at = Rect::new(
                 room.x + (room.width - w) / 2,
@@ -285,10 +285,10 @@ impl Widget for PictureWidget {
                 w,
                 h,
             );
-            ui::draw_image(canvas, env.storage, &shown.image, at);
+            ui::draw_image(canvas, env.storage(), &shown.image, at);
             at
         } else {
-            draw_filled(canvas, env.storage, &shown.image, room);
+            draw_filled(canvas, env.storage(), &shown.image, room);
             room
         };
         if below == 0 {

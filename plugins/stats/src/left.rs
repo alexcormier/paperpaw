@@ -26,7 +26,7 @@ const RECOUNT: u32 = 50;
 fn speed(env: &Env<'_>) -> Option<f32> {
     let today = fmt::today(env)?;
     let (mut seconds, mut pages) = (0u64, 0u32);
-    for day in store::days(env.storage, |unix| fmt::day_of(env, unix)) {
+    for day in store::days(env.storage(), |unix| fmt::day_of(env, unix)) {
         if day.day > today - DAYS {
             seconds += u64::from(day.seconds);
             pages += day.stays;
@@ -127,7 +127,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 let seconds = (pages_left(context, chapter)? * speed) as u64;
                 let time = fmt::duration(env, seconds.max(60));
                 Some(StatusValue::Text(
-                    env.i18n.format(key, &[("time", Arg::Str(&time))]),
+                    env.i18n().format(key, &[("time", Arg::Str(&time))]),
                 ))
             }),
         ))?;

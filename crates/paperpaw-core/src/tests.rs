@@ -1916,7 +1916,7 @@ fn copied_text_reaches_plugins_and_the_shell() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    assert!(!kernel.shared.env(Instant(0)).clipboard);
+    assert!(!kernel.shared.env(Instant(0)).clipboard());
     let read = |id: &str| {
         Command::ReadClipboard(
             Id::new_static("ov.reply"),
@@ -1928,7 +1928,7 @@ fn copied_text_reaches_plugins_and_the_shell() {
         .commands
         .extend([Command::SetClipboard(String::from("Alice")), read("a")]);
     kernel.run_commands();
-    assert!(kernel.shared.env(Instant(0)).clipboard);
+    assert!(kernel.shared.env(Instant(0)).clipboard());
     assert_eq!(kernel.take_io(), [Io::Copy(String::from("Alice"))]);
     assert_eq!(kernel.take_io(), []);
     // Without the system's clipboard, the answer comes at once.
@@ -1946,7 +1946,7 @@ fn copied_text_reaches_plugins_and_the_shell() {
         .unwrap();
     kernel.start(Instant(0));
     kernel.set_clipboard_available(true);
-    assert!(kernel.shared.env(Instant(0)).clipboard);
+    assert!(kernel.shared.env(Instant(0)).clipboard());
     kernel.output.commands.push(read("b"));
     kernel.run_commands();
     // Asked once, however many wait.
@@ -1977,16 +1977,16 @@ fn secrets_are_kept_apart_and_read_at_start() {
         )));
     kernel.run_commands();
     // Its plugin sees it; another, or the kernel's own code, not.
-    assert_eq!(kernel.shared.env(Instant(0)).secrets.get("a.key"), None);
+    assert_eq!(kernel.shared.env(Instant(0)).secrets().get("a.key"), None);
     {
         let _other = kernel.shared.meter.enter("b");
-        assert_eq!(kernel.shared.env(Instant(0)).secrets.get("a.key"), None);
-        assert_eq!(kernel.shared.env(Instant(0)).secrets.listed().count(), 1);
+        assert_eq!(kernel.shared.env(Instant(0)).secrets().get("a.key"), None);
+        assert_eq!(kernel.shared.env(Instant(0)).secrets().listed().count(), 1);
     }
     {
         let _own = kernel.shared.meter.enter("a");
         assert_eq!(
-            kernel.shared.env(Instant(0)).secrets.get("a.key"),
+            kernel.shared.env(Instant(0)).secrets().get("a.key"),
             Some("hunter2")
         );
     }
@@ -2563,7 +2563,7 @@ fn turned_screens_are_made_anew_for_the_new_size() {
         Some(RefreshMode::Full)
     );
     assert_eq!(kernel.device().display.width, 120);
-    assert_eq!(kernel.shared.env(Instant(200)).device.display.height, 60);
+    assert_eq!(kernel.shared.env(Instant(200)).device().display.height, 60);
     let mut size = (0, 0);
     kernel.render(&mut |_, rows| size = (rows.width, size.1 + rows.height));
     assert_eq!(size, (120, 60));
@@ -2656,12 +2656,12 @@ fn the_power_button_puts_the_device_to_sleep_where_the_shell_can() {
     // Where the system sleeps on its own (Android), nothing happens.
     let mut kernel = Kernel::builder(DEVICE).build().unwrap();
     kernel.start(Instant(0));
-    assert!(!kernel.shared.env(Instant(0)).caps.sleep);
+    assert!(!kernel.shared.env(Instant(0)).caps().sleep);
     assert!(!press(&mut kernel, 100, "power").sleep());
     // Where the shell sleeps, it is told to.
     let mut kernel = Kernel::builder(DEVICE).sleep(true).build().unwrap();
     kernel.start(Instant(0));
-    assert!(kernel.shared.env(Instant(0)).caps.sleep);
+    assert!(kernel.shared.env(Instant(0)).caps().sleep);
     assert!(press(&mut kernel, 100, "power").sleep());
     assert!(!press(&mut kernel, 200, "confirm").sleep());
 }
@@ -2704,7 +2704,7 @@ fn speech_goes_to_the_shell_and_stops_with_its_screen() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    assert!(!kernel.shared.env(Instant(0)).caps.speech);
+    assert!(!kernel.shared.env(Instant(0)).caps().speech);
     kernel.output.commands.push(speech("a", false));
     kernel.run_commands();
     assert!(kernel.take_speech().is_empty());
@@ -2809,7 +2809,7 @@ impl Plugin for ServicePlugin {
             Box::new(
                 move |env: &Env<'_>, _: &paperpaw_sdk::Params, _: &mut paperpaw_sdk::Commands| {
                     let greeting = env
-                        .services
+                        .services()
                         .get::<Greeting>("provider.greeting", Version::new(1, 0, 0))
                         .map(|g| &g.0);
                     log.borrow_mut().push(alloc::format!("{greeting:?}"));
@@ -3159,9 +3159,9 @@ fn network_work_waits_for_wifi_and_goes_on_once_online() {
     use crate::{WifiCommand, WifiEvent, WifiState};
     let log = log();
     let mut kernel = wifi_kernel(&log);
-    assert!(kernel.shared.env(Instant(0)).caps.network);
+    assert!(kernel.shared.env(Instant(0)).caps().network);
     assert_eq!(
-        kernel.shared.env(Instant(0)).wifi.unwrap().state,
+        kernel.shared.env(Instant(0)).wifi().unwrap().state,
         WifiState::Off
     );
     get(&mut kernel);
@@ -3268,7 +3268,7 @@ fn scans_and_failures_reach_plugins() {
 fn wifi_commands_are_ignored_where_the_system_manages_it() {
     let mut kernel = Kernel::builder(DEVICE).network(true).build().unwrap();
     kernel.start(Instant(0));
-    assert!(kernel.shared.env(Instant(0)).wifi.is_none());
+    assert!(kernel.shared.env(Instant(0)).wifi().is_none());
     kernel
         .output
         .commands

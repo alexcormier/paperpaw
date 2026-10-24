@@ -289,7 +289,7 @@ pub const fn padding_spec(id: &'static str, widget: Id, default: Padding) -> Set
 /// How far `widget`'s content keeps from its frame, by its
 /// [`padding_setting`]; automatic without one.
 pub fn padding(env: &Env<'_>, widget: &str) -> Padding {
-    Padding::of(env.settings.text(&format!("{widget}.padding")))
+    Padding::of(env.settings().text(&format!("{widget}.padding")))
 }
 
 /// [`size_setting`] kept in the program (a `static` list): `id`
@@ -318,10 +318,10 @@ pub fn frame(env: &Env<'_>, widget: &str) -> Frame {
     let all = env
         .settings
         .text(crate::builtin::settings::WIDGET_FRAME.static_str());
-    if all != OWN_FRAME && FRAMES.contains(&all) && !env.settings.is_chosen(&own) {
+    if all != OWN_FRAME && FRAMES.contains(&all) && !env.settings().is_chosen(&own) {
         return Frame::of(all);
     }
-    Frame::of(env.settings.text(&own))
+    Frame::of(env.settings().text(&own))
 }
 
 /// The value of [`WIDGET_FRAME`](crate::builtin::settings::WIDGET_FRAME)
@@ -355,7 +355,7 @@ pub fn size_setting(widget: &Id, default: TextSize, fit: bool) -> SettingSpec {
 /// How large `widget`'s text is, by its [`size_setting`]; medium without
 /// one.
 pub fn size(env: &Env<'_>, widget: &str) -> TextSize {
-    TextSize::of(env.settings.text(&format!("{widget}.size")))
+    TextSize::of(env.settings().text(&format!("{widget}.size")))
 }
 
 /// A switch for a part of what `widget` shows, `<widget>.<part>`, in the
@@ -380,7 +380,7 @@ pub fn part_setting(
 
 /// Whether `widget` shows `part` ([`part_setting`]).
 pub fn shows(env: &Env<'_>, widget: &str, part: &str) -> bool {
-    env.settings.bool(&format!("{widget}.{part}"))
+    env.settings().bool(&format!("{widget}.{part}"))
 }
 
 /// A choice of `values` for `widget`, `<widget>.<key>`, in the widget's

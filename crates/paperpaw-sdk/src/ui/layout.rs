@@ -291,12 +291,17 @@ fn columns_of(area: Rect, count: u16, gap: u16) -> Vec<Rect> {
 /// paints frames ([`look::Painters::frame`](super::look::Painters)), and
 /// returns where its parts go: the style's margin in from its edges
 /// (nothing in for [`Frame::None`]). On a dark card, draw in white.
-pub fn draw_card(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, frame: Frame) -> Rect {
+pub(crate) fn draw_card(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    area: Rect,
+    frame: Frame,
+) -> Rect {
     paint_frame(canvas, style, area, frame);
     card_inside(style, area, frame)
 }
 
-/// Where the parts of a card round `area` go ([`draw_card`]).
+/// Where the parts of a card round `area` go ([`Ui::card`](super::Ui::card)).
 pub fn card_inside(style: &UiStyle, area: Rect, frame: Frame) -> Rect {
     if frame == Frame::None {
         return area;
@@ -342,7 +347,7 @@ pub(crate) fn paint_frame(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, 
 
 /// A row of segments side by side, one of them chosen: a few options to
 /// pick from at a glance, or tabs over a page. Each segment is a button
-/// ([`draw_button`](super::draw_button)), the chosen one on; with the
+/// ([`Ui::button`](super::Ui::button)), the chosen one on; with the
 /// buttons, left and right move the focus, *Select* chooses. They keep
 /// their labels, translation keys (or text that is none) translated where
 /// they are measured and drawn, as [`Chips`](super::Chips) do: drawing and
@@ -378,7 +383,7 @@ impl Segments {
         labels: impl IntoIterator<Item = L>,
     ) -> Self {
         let labels = keep(labels);
-        let shown: Vec<&str> = labels.iter().map(|l| env.i18n.tr(l)).collect();
+        let shown: Vec<&str> = labels.iter().map(|l| env.i18n().tr(l)).collect();
         Self {
             cells: button_cells(env, style, area, &shown, style.gap as u16),
             labels,
@@ -388,7 +393,7 @@ impl Segments {
     /// The height [`Segments::fitted`] takes for `labels` in an area
     /// `width` wide: [`Segments::height`] where they fit side by side.
     pub fn height_for(env: &Env<'_>, style: &UiStyle, width: u16, labels: &[&str]) -> u16 {
-        let shown: Vec<&str> = labels.iter().map(|l| env.i18n.tr(l)).collect();
+        let shown: Vec<&str> = labels.iter().map(|l| env.i18n().tr(l)).collect();
         button_cells_height(env, style, width, &shown, style.gap as u16)
     }
 
@@ -439,7 +444,7 @@ impl Segments {
                 env,
                 style,
                 *cell,
-                env.i18n.tr(label),
+                env.i18n().tr(label),
                 i == chosen,
                 focus == Some(i),
             );

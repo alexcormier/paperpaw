@@ -154,19 +154,19 @@ impl Today {
     pub(crate) fn now(env: &Env<'_>) -> Today {
         // `stats.goal.30`: 30; `stats.goal.off`: none.
         let goal = env
-            .settings
+            .settings()
             .text(GOAL)
             .rsplit('.')
             .next()
             .and_then(|m| m.parse::<u32>().ok())
             .filter(|&m| m > 0);
-        let seconds = match (told(env.storage), today(env)) {
+        let seconds = match (told(env.storage()), today(env)) {
             (Some((day, seconds)), Some(today)) if day == today => seconds,
             _ => 0,
         };
-        let content = env.settings.read(&CONTENT).clamp(1, 99) as u32;
-        let happy = env.settings.read(&HAPPY).clamp(1, 1000) as u32;
-        let statistics = match env.plugins.iter().find(|p| p.manifest.id == STATS) {
+        let content = env.settings().read(&CONTENT).clamp(1, 99) as u32;
+        let happy = env.settings().read(&HAPPY).clamp(1, 1000) as u32;
+        let statistics = match env.plugins().iter().find(|p| p.manifest.id == STATS) {
             Some(p) if p.enabled => Statistics::Counting,
             Some(_) => Statistics::Off,
             None => Statistics::Missing,
@@ -230,9 +230,9 @@ impl Plugin for ReadingGoal {
         })?;
         r.on(events::READ_TODAY, |env, read, _| {
             // Only when it changed: a write a page turn at most.
-            if told(env.storage) != Some((read.day, read.seconds)) {
+            if told(env.storage()) != Some((read.day, read.seconds)) {
                 let text = format!("{} {}\n", read.day, read.seconds);
-                let _ = env.storage.write(&data("today.txt"), text.as_bytes());
+                let _ = env.storage().write(&data("today.txt"), text.as_bytes());
             }
         })?;
         widget::register(r)?;

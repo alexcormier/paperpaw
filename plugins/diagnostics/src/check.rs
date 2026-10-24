@@ -171,7 +171,7 @@ impl Check {
             unsaved: None,
             started: false,
             flipped: false,
-            buttons: Buttons::new(env.device.input.keys),
+            buttons: Buttons::new(env.device().input.keys),
             tapped: [false; steps::TOUCH_TARGETS.len()],
             light: None,
             charging_seen: [false; 2],
@@ -180,13 +180,13 @@ impl Check {
             own_light: None,
             networks: None,
             radio: None,
-            scan_from: env.now,
+            scan_from: env.now(),
             sleep_asked: None,
         };
         // Asleep when last seen: how PaperPaw started tells whether it
         // woke or was started again.
         if check.results.get(Step::Sleep) == Some(&Mark::Asleep) {
-            let (outcome, note) = match env.started {
+            let (outcome, note) = match env.started() {
                 Start::PowerOn | Start::Wake => (Outcome::Pass, "woke"),
                 Start::Restart => (Outcome::Fail, "started again instead of waking"),
                 _ => (Outcome::Skip, "how it started is not known"),
@@ -205,17 +205,17 @@ impl Check {
     }
 
     fn save(&mut self, env: &Env<'_>) {
-        let when = env.status.clock.map(|c| {
-            paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now)).iso8601()
+        let when = env.status().clock.map(|c| {
+            paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now())).iso8601()
         });
         let about = About {
-            device: env.device,
+            device: env.device(),
             version: env!("CARGO_PKG_VERSION"),
             when: when.as_deref(),
         };
         let report = self.results.report(&about);
         self.unsaved = env
-            .storage
+            .storage()
             .write(steps::REPORT, report.as_bytes())
             .err()
             .map(|e| format!("{e:?}"));
@@ -228,14 +228,14 @@ impl Check {
         self.end_light(cx);
         self.end_radio(cx);
         while let Some(s) = step
-            && let Some(missing) = s.missing(env.device, &env.caps)
+            && let Some(missing) = s.missing(env.device(), &env.caps())
         {
             self.mark(&env, s, Outcome::Skip, String::from(missing));
             step = self.results.next_open();
         }
         self.step = step;
         self.flipped = false;
-        self.buttons = Buttons::new(env.device.input.keys);
+        self.buttons = Buttons::new(env.device().input.keys);
         self.tapped = [false; steps::TOUCH_TARGETS.len()];
         self.charging_seen = [false; 2];
         self.card = None;
@@ -244,11 +244,11 @@ impl Check {
             Some(Step::Light) => self.start_light(cx),
             Some(Step::Battery) => self.see_charging(&env),
             // The card is tried once the page shows it is.
-            Some(Step::Card) => cx.wake_at(env.now),
+            Some(Step::Card) => cx.wake_at(env.now()),
             Some(Step::Wifi) => {
                 // Until the radio is on, then while looking.
-                self.scan_from = env.now;
-                let on = env.wifi.is_some_and(|w| w.state.is_on());
+                self.scan_from = env.now();
+                let on = env.wifi().is_some_and(|w| w.state.is_on());
                 self.radio = Some(Radio {
                     was_off: !on,
                     scanned: on,
@@ -259,7 +259,7 @@ impl Check {
                 } else {
                     WifiCommand::On
                 }));
-                cx.wake_at(env.now.add_millis(SCAN_MS));
+                cx.wake_at(env.now().add_millis(SCAN_MS));
             }
             _ => {}
         }
@@ -299,29 +299,30 @@ impl Check {
                 Some(e) => (Outcome::Skip, format!("own light not kept: {e}")),
                 None => (Outcome::Pass, String::from("brightness and warmth")),
             },
-            Some(Step::Battery) => steps::battery(env.status.battery, self.charging_seen),
+            Some(Step::Battery) => steps::battery(env.status().battery, self.charging_seen),
             Some(Step::Card) => match &self.card {
                 Some(test) => test.verdict(),
                 None => return (None, String::new()),
             },
-            Some(Step::Clock) => match env.status.clock {
+            Some(Step::Clock) => match env.status().clock {
                 Some(c) => (
                     Outcome::Pass,
-                    paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now)).iso8601(),
+                    paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now()))
+                        .iso8601(),
                 ),
                 None => (Outcome::Skip, String::from("time of day not known")),
             },
             Some(Step::Wifi) => return self.wifi_measured(env),
             Some(Step::Sleep) => return (None, String::new()),
-            Some(Step::Memory) => steps::memory(env.memory.read()),
+            Some(Step::Memory) => steps::memory(env.memory().read()),
             None => return (None, String::new()),
         };
         (Some(outcome), note)
     }
 
     fn wifi_measured(&self, env: &Env<'_>) -> (Option<Outcome>, String) {
-        let online = env.wifi.is_some_and(|w| w.state.is_online());
-        let timed_out = env.now.since(self.scan_from) >= SCAN_MS;
+        let online = env.wifi().is_some_and(|w| w.state.is_online());
+        let timed_out = env.now().since(self.scan_from) >= SCAN_MS;
         let scanned = self.radio.is_none_or(|r| r.scanned);
         let fail = |note: String| (Some(Outcome::Fail), note);
         match self.networks {
@@ -367,9 +368,9 @@ impl Check {
             Control::WifiPage => cx.command(Command::run(Id::new_static(WIFI_PAGE))),
             Control::SleepNow => {
                 // Marked asleep when the device goes to sleep (SUSPEND).
-                self.sleep_asked = Some(env.now);
+                self.sleep_asked = Some(env.now());
                 cx.command(Command::Sleep);
-                cx.wake_at(env.now.add_millis(SLEEP_WAIT_MS));
+                cx.wake_at(env.now().add_millis(SLEEP_WAIT_MS));
             }
             Control::StartOver => {
                 self.results = Results::default();
@@ -384,13 +385,13 @@ impl Check {
         let env = *cx.env();
         let kept = self.own_light.take().unwrap_or_else(|| {
             (
-                env.settings.read(&settings::FRONTLIGHT),
-                env.settings.read(&settings::FRONTLIGHT_WARMTH),
+                env.settings().read(&settings::FRONTLIGHT),
+                env.settings().read(&settings::FRONTLIGHT_WARMTH),
             )
         });
         // Kept on the card first: nothing is changed unless it is.
         let line = format!("{} {}\n", kept.0, kept.1);
-        if let Err(e) = env.storage.write(LIGHT_FILE, line.as_bytes()) {
+        if let Err(e) = env.storage().write(LIGHT_FILE, line.as_bytes()) {
             self.light_unkept = Some(format!("{e:?}"));
             self.redraw_page(cx);
             return;
@@ -398,14 +399,14 @@ impl Check {
         self.light_unkept = None;
         self.light = Some(LightTest { level: 0, kept });
         set_light(cx, LIGHT_LEVELS[0]);
-        cx.wake_at(env.now.add_millis(LIGHT_MS));
+        cx.wake_at(env.now().add_millis(LIGHT_MS));
     }
 
     /// Sets the reader's own light again from the card, where a check that
     /// ended unforeseen left it while trying the light.
     fn restore_light(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Ok(text) = paperpaw_sdk::files::read_text(env.storage, LIGHT_FILE, 64) else {
+        let Ok(text) = paperpaw_sdk::files::read_text(env.storage(), LIGHT_FILE, 64) else {
             return;
         };
         let mut numbers = text.split_whitespace().map(str::parse::<i64>);
@@ -425,7 +426,7 @@ impl Check {
         match LIGHT_LEVELS.get(light.level) {
             Some(level) => {
                 set_light(cx, *level);
-                let now = cx.env().now;
+                let now = cx.env().now();
                 cx.wake_at(now.add_millis(LIGHT_MS));
             }
             None => self.end_light(cx),
@@ -444,14 +445,14 @@ impl Check {
     /// Switches the radio off again if the Wi-Fi step switched it on and
     /// nothing wants the network now.
     fn end_radio(&mut self, cx: &mut Cx<'_, '_>) {
-        let wanted = cx.env().wifi.is_some_and(|w| w.wanted || w.busy);
+        let wanted = cx.env().wifi().is_some_and(|w| w.wanted || w.busy);
         if self.radio.take().is_some_and(|r| r.was_off) && !wanted {
             cx.command(Command::Wifi(WifiCommand::Off));
         }
     }
 
     fn see_charging(&mut self, env: &Env<'_>) {
-        if let Some(battery) = env.status.battery {
+        if let Some(battery) = env.status().battery {
             self.charging_seen[usize::from(!battery.charging)] = true;
         }
     }
@@ -486,7 +487,7 @@ impl Check {
     /// A tap on a touch target of the touch page.
     fn tap_target(&mut self, point: Point, cx: &mut Cx<'_, '_>) -> bool {
         let env = *cx.env();
-        let radius = env.metrics.mm(TARGET_MM * 2) as i32;
+        let radius = env.metrics().mm(TARGET_MM * 2) as i32;
         let hit = targets(&env)
             .iter()
             .position(|t| (point.x - t.x).abs() <= radius && (point.y - t.y).abs() <= radius);
@@ -517,7 +518,7 @@ impl Screen for Check {
             let step = self
                 .step
                 .map(|s| format!("{} / {}", s.index() + 1, Step::ALL.len()));
-            let title = env.i18n.tr("diagnostics.check.title");
+            let title = env.i18n().tr("diagnostics.check.title");
             self.header.draw(&mut ui, title, step.as_deref(), None);
         }
         let l = &self.layout;
@@ -539,7 +540,7 @@ impl Screen for Check {
         // they choose nothing.
         let suggested = self.measured(env).0.map(Control::Answer);
         for (i, (control, rect)) in l.controls.iter().enumerate() {
-            let label = env.i18n.tr(control.label());
+            let label = env.i18n().tr(control.label());
             let focused = self.shown && i == self.focus && !self.takes_buttons();
             let on = Some(*control) == suggested || *control == Control::Done;
             ui.button(*rect, label, on, focused);
@@ -660,7 +661,7 @@ impl Screen for Check {
             Some(Step::Sleep)
                 if self
                     .sleep_asked
-                    .is_some_and(|at| cx.env().now.since(at) >= SLEEP_WAIT_MS) =>
+                    .is_some_and(|at| cx.env().now().since(at) >= SLEEP_WAIT_MS) =>
             {
                 let env = *cx.env();
                 self.sleep_asked = None;
@@ -683,19 +684,19 @@ impl Screen for Check {
                 self.redraw_page(cx);
             }
             Some(Step::Wifi) if event == events::WIFI_SCANNED.id() => {
-                self.networks = env.wifi.map(|w| w.networks.len());
+                self.networks = env.wifi().map(|w| w.networks.len());
                 self.redraw_page(cx);
             }
             Some(Step::Wifi) if event == events::WIFI_CHANGED.id() => {
                 if let Some(radio) = &mut self.radio
                     && !radio.scanned
-                    && env.wifi.is_some_and(|w| w.state.is_on())
+                    && env.wifi().is_some_and(|w| w.state.is_on())
                 {
                     radio.scanned = true;
                     cx.command(Command::Wifi(WifiCommand::Scan));
                     // The search has its time from now.
-                    self.scan_from = env.now;
-                    cx.wake_at(env.now.add_millis(SCAN_MS));
+                    self.scan_from = env.now();
+                    cx.wake_at(env.now().add_millis(SCAN_MS));
                 }
                 self.redraw_page(cx);
             }
@@ -719,7 +720,7 @@ impl Screen for Check {
 impl Check {
     fn layout(&self, env: &Env<'_>) -> Layout {
         let style = &self.style;
-        let display = env.device.display;
+        let display = env.device().display;
         // The header's margin, so that everything lines up with its title.
         let margin = style.margin();
         let gap = style.gap();
@@ -735,7 +736,7 @@ impl Check {
         // and its text begins below them.
         let touch = self.step == Some(Step::Touch);
         let mut y = if touch {
-            (env.metrics.mm(TARGET_MM * 2 + 2) + u32::from(style.gap())) as u16
+            (env.metrics().mm(TARGET_MM * 2 + 2) + u32::from(style.gap())) as u16
         } else {
             self.header.area().y + self.header.area().height + gap * 2
         };
@@ -798,7 +799,7 @@ impl Check {
         match self.step {
             Some(Step::Screen) => alloc::vec![Control::Flip, Control::FullRefresh],
             Some(Step::Light) if self.light.is_none() => alloc::vec![Control::LightAgain],
-            Some(Step::Wifi) if env.actions.contains(WIFI_PAGE) => alloc::vec![Control::WifiPage],
+            Some(Step::Wifi) if env.actions().contains(WIFI_PAGE) => alloc::vec![Control::WifiPage],
             Some(Step::Sleep) => alloc::vec![Control::SleepNow],
             _ => Vec::new(),
         }
@@ -806,7 +807,7 @@ impl Check {
 
     /// The lines of values a page shows: a name and its value each.
     fn lines(&self, env: &Env<'_>) -> Vec<(String, String)> {
-        let tr = |key: &str| env.i18n.tr(key).to_string();
+        let tr = |key: &str| env.i18n().tr(key).to_string();
         let mut lines = Vec::new();
         match self.step {
             Some(Step::Buttons) => {
@@ -852,7 +853,7 @@ impl Check {
     }
 
     fn card_lines(&self, env: &Env<'_>, lines: &mut Vec<(String, String)>) {
-        let tr = |key: &str| env.i18n.tr(key).to_string();
+        let tr = |key: &str| env.i18n().tr(key).to_string();
         let Some(test) = &self.card else {
             lines.push((tr("diagnostics.check.measuring"), String::new()));
             return;
@@ -872,13 +873,13 @@ impl Check {
     }
 
     fn wifi_lines(&self, env: &Env<'_>, lines: &mut Vec<(String, String)>) {
-        let tr = |key: &str| env.i18n.tr(key).to_string();
+        let tr = |key: &str| env.i18n().tr(key).to_string();
         let found = match self.networks {
             Some(n) => n.to_string(),
             None => tr("diagnostics.check.looking"),
         };
         lines.push((tr("diagnostics.check.networks"), found));
-        let online = env.wifi.is_some_and(|w| w.state.is_online());
+        let online = env.wifi().is_some_and(|w| w.state.is_online());
         lines.push((tr("diagnostics.check.joined"), yes_no(env, online)));
     }
 
@@ -887,22 +888,22 @@ impl Check {
             let outcome = self
                 .results
                 .outcome(step)
-                .map_or("", |o| env.i18n.tr(Control::Answer(o).label()));
+                .map_or("", |o| env.i18n().tr(Control::Answer(o).label()));
             lines.push((step_title(env, step), outcome.to_string()));
         }
         // Where the report is, the help says; here only that it is not.
         if let Some(error) = &self.unsaved {
-            let report = env.i18n.tr("diagnostics.check.report").to_string();
+            let report = env.i18n().tr("diagnostics.check.report").to_string();
             let unsaved = env
-                .i18n
+                .i18n()
                 .format("diagnostics.check.unsaved", &[("error", Arg::Str(error))]);
             lines.push((report, unsaved));
         }
     }
 
     fn draw_targets(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let radius = env.metrics.mm(TARGET_MM);
-        let line = env.metrics.tenth_mm(5);
+        let radius = env.metrics().mm(TARGET_MM);
+        let line = env.metrics().tenth_mm(5);
         for (target, tapped) in targets(env).iter().zip(self.tapped) {
             let (x, y) = (target.x - radius as i32, target.y - radius as i32);
             let d = radius * 2;
@@ -917,7 +918,7 @@ impl Check {
 
 /// The report written before, to go on from; empty where there is none.
 fn read_report(env: &Env<'_>) -> Results {
-    paperpaw_sdk::files::read_text(env.storage, steps::REPORT, REPORT_CAP)
+    paperpaw_sdk::files::read_text(env.storage(), steps::REPORT, REPORT_CAP)
         .map_or_else(|_| Results::default(), |text| Results::parse(&text))
 }
 
@@ -933,12 +934,12 @@ fn card_test(env: &Env<'_>) -> CardTest {
     };
     let path = CARD_FILE;
     let chunk: Vec<u8> = (0..CARD_CHUNK).map(|i| (i % 251) as u8).collect();
-    let storage = env.storage;
-    let started = env.clock.micros();
+    let storage = env.storage();
+    let started = env.clock().micros();
     let written = storage
         .write(path, &chunk)
         .and_then(|()| (1..CARD_CHUNKS).try_for_each(|_| storage.append(path, &chunk)));
-    let wrote = env.clock.micros();
+    let wrote = env.clock().micros();
     if let Err(e) = written {
         test.error = Some(format!("write: {e:?}"));
         let _removed = storage.remove(path);
@@ -956,7 +957,7 @@ fn card_test(env: &Env<'_>) -> CardTest {
             }
         }
     }
-    let read = env.clock.micros();
+    let read = env.clock().micros();
     if let Err(e) = storage.remove(path) {
         test.error.get_or_insert(format!("remove: {e:?}"));
     }
@@ -976,7 +977,7 @@ fn forget_light(env: &Env<'_>) {
         clippy::let_underscore_must_use,
         reason = "the file is gone or stays; kept, it only sets the reader's own light once more"
     )]
-    let _ = env.storage.remove(LIGHT_FILE);
+    let _ = env.storage().remove(LIGHT_FILE);
 }
 
 fn set_light(cx: &mut Cx<'_, '_>, (brightness, warmth): (i64, i64)) {
@@ -992,8 +993,8 @@ fn set_light(cx: &mut Cx<'_, '_>, (brightness, warmth): (i64, i64)) {
 
 /// The centres of the touch targets on the screen.
 fn targets(env: &Env<'_>) -> [Point; steps::TOUCH_TARGETS.len()] {
-    let display = env.device.display;
-    let inset = env.metrics.mm(TARGET_MM + 2) as i32;
+    let display = env.device().display;
+    let inset = env.metrics().mm(TARGET_MM + 2) as i32;
     let span =
         |size: u16, tenths: u8| inset + (i32::from(size) - 2 * inset) * i32::from(tenths) / 10;
     steps::TOUCH_TARGETS.map(|(x, y)| Point::new(span(display.width, x), span(display.height, y)))
@@ -1002,7 +1003,7 @@ fn targets(env: &Env<'_>) -> [Point; steps::TOUCH_TARGETS.len()] {
 /// The gray levels the screen page shows: a panel of black and white
 /// shows the page in four grays, as it shows pictures.
 fn gray_levels(env: &Env<'_>) -> u32 {
-    let format = match env.device.display.format {
+    let format = match env.device().display.format {
         PixelFormat::Mono1 => PixelFormat::Gray2,
         format => format,
     };
@@ -1013,10 +1014,10 @@ fn gray_levels(env: &Env<'_>) -> u32 {
 fn texts(env: &Env<'_>, step: Option<Step>) -> (String, String) {
     let key = step.map_or("end", Step::key);
     (
-        env.i18n
+        env.i18n()
             .tr(&format!("diagnostics.check.{key}.title"))
             .to_string(),
-        env.i18n
+        env.i18n()
             .tr(&format!("diagnostics.check.{key}.help"))
             .to_string(),
     )
@@ -1030,7 +1031,7 @@ fn step_title(env: &Env<'_>, step: Step) -> String {
 /// there is no translation.
 fn button_name(env: &Env<'_>, name: &str) -> String {
     let key = format!("diagnostics.button.{name}");
-    env.i18n.get(&key).unwrap_or(name).to_string()
+    env.i18n().get(&key).unwrap_or(name).to_string()
 }
 
 fn yes_no(env: &Env<'_>, yes: bool) -> String {
@@ -1039,12 +1040,12 @@ fn yes_no(env: &Env<'_>, yes: bool) -> String {
     } else {
         "diagnostics.check.no"
     };
-    env.i18n.tr(key).to_string()
+    env.i18n().tr(key).to_string()
 }
 
 fn battery_lines(env: &Env<'_>, lines: &mut Vec<(String, String)>) {
-    let tr = |key: &str| env.i18n.tr(key).to_string();
-    let Some(b) = env.status.battery else {
+    let tr = |key: &str| env.i18n().tr(key).to_string();
+    let Some(b) = env.status().battery else {
         lines.push((tr("diagnostics.check.no-battery"), String::new()));
         return;
     };
@@ -1056,13 +1057,13 @@ fn battery_lines(env: &Env<'_>, lines: &mut Vec<(String, String)>) {
 }
 
 fn memory_lines(env: &Env<'_>, lines: &mut Vec<(String, String)>) {
-    let tr = |key: &str| env.i18n.tr(key).to_string();
-    let Some(m) = env.memory.read() else {
+    let tr = |key: &str| env.i18n().tr(key).to_string();
+    let Some(m) = env.memory().read() else {
         lines.push((tr("diagnostics.check.unknown"), String::new()));
         return;
     };
     let of = |free: u32, size: u32| {
-        env.i18n.format(
+        env.i18n().format(
             "diagnostics.check.free-of",
             &[
                 ("free", Arg::Int(i64::from(free / 1024))),
@@ -1144,11 +1145,11 @@ fn draw_screen_test(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, flipped:
         let gray = (level * 255 / (levels - 1)) as u8;
         canvas.fill_rect(x0, y, (x1 - x0) as u32, ramp, Color::gray(gray));
     }
-    canvas.stroke_rect(x, y, w, ramp, env.metrics.tenth_mm(3), Color::BLACK);
+    canvas.stroke_rect(x, y, w, ramp, env.metrics().tenth_mm(3), Color::BLACK);
     // Squares of about 6 mm, as many as fill the width exactly.
-    let columns = (w / env.metrics.mm(6).max(4)).max(1);
+    let columns = (w / env.metrics().mm(6).max(4)).max(1);
     let cell = w / columns;
-    let top = y + ramp as i32 + env.metrics.mm(3) as i32;
+    let top = y + ramp as i32 + env.metrics().mm(3) as i32;
     let bottom = i32::from(area.y) + i32::from(area.height);
     let mut row = 0;
     let mut cy = top;

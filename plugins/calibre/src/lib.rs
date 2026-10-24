@@ -236,12 +236,12 @@ impl CalibreScreen {
             // Not now, and any answer to come: on without the network.
             Some(_) => {
                 let env = *cx.env();
-                let key = if env.wifi.is_some() {
+                let key = if env.wifi().is_some() {
                     "calibre.no-network"
                 } else {
                     "calibre.no-network.system"
                 };
-                self.state = State::Ended(env.i18n.tr(key).to_string());
+                self.state = State::Ended(env.i18n().tr(key).to_string());
                 self.redraw(cx);
             }
             None => {}
@@ -259,7 +259,7 @@ impl CalibreScreen {
         self.framing = framing(&env);
         self.coming = None;
         self.listing = None;
-        let address = env.settings.read(&ADDRESS).trim();
+        let address = env.settings().read(&ADDRESS).trim();
         if address.is_empty() {
             self.state = State::Finding;
             self.tries = 0;
@@ -309,7 +309,7 @@ impl CalibreScreen {
     fn connect_found(&mut self, cx: &mut Cx<'_, '_>) {
         if let State::Found { host, port } = &self.state {
             let (host, port) = (host.clone(), *port);
-            library::trust(cx.env().storage, &host);
+            library::trust(cx.env().storage(), &host);
             self.connect(&host, port, cx);
             self.redraw(cx);
         }
@@ -334,7 +334,7 @@ impl CalibreScreen {
     fn closed_by_calibre(&mut self, cx: &mut Cx<'_, '_>) {
         cx.command(Command::Disconnect(SOCKET));
         if !matches!(self.state, State::Ended(_)) {
-            let ended = cx.env().i18n.tr("calibre.closed").to_string();
+            let ended = cx.env().i18n().tr("calibre.closed").to_string();
             self.end(ended, cx);
         }
     }
@@ -348,7 +348,7 @@ impl CalibreScreen {
                 let Some(port) = protocol::port_of_answer(&text) else {
                     return;
                 };
-                let trusted = library::trusted(env.storage).as_deref() == Some(from.as_str());
+                let trusted = library::trusted(env.storage()).as_deref() == Some(from.as_str());
                 if trusted || self.state == State::Finding {
                     self.name = protocol::name_of_answer(&text).map(String::from);
                 }
@@ -368,12 +368,12 @@ impl CalibreScreen {
                 self.find(cx);
             }
             SocketNotice::Done { reason, .. } if self.state == State::Finding => {
-                let text = if reason == "no network" && env.wifi.is_some() {
-                    env.i18n.tr("calibre.no-network")
+                let text = if reason == "no network" && env.wifi().is_some() {
+                    env.i18n().tr("calibre.no-network")
                 } else if reason == "no network" {
-                    env.i18n.tr("calibre.no-network.system")
+                    env.i18n().tr("calibre.no-network.system")
                 } else {
-                    env.i18n.tr("calibre.not-found")
+                    env.i18n().tr("calibre.not-found")
                 };
                 self.end(text.to_string(), cx);
             }
@@ -391,7 +391,7 @@ impl CalibreScreen {
                     Ok(None) => self.read_on(cx),
                     Err(_) => {
                         cx.command(Command::Disconnect(SOCKET));
-                        let ended = env.i18n.tr("calibre.not-calibre").to_string();
+                        let ended = env.i18n().tr("calibre.not-calibre").to_string();
                         self.end(ended, cx);
                     }
                 }
@@ -401,14 +401,14 @@ impl CalibreScreen {
                     Some(coming) => {
                         // The book there stays until the new one is in place.
                         let placed = paperpaw_sdk::files::put_in_place(
-                            env.storage,
+                            env.storage(),
                             &coming.part,
                             &coming.path,
                         );
                         if placed.is_ok() {
-                            library::remember(env.storage, &coming.lpath, &coming.metadata);
+                            library::remember(env.storage(), &coming.lpath, &coming.metadata);
                             paperpaw_sdk::library::provide(
-                                env.storage,
+                                env.storage(),
                                 &coming.path,
                                 provided(&coming.metadata),
                             );
@@ -418,7 +418,7 @@ impl CalibreScreen {
                     }
                     // A book dropped (its path led out of the library).
                     None => {
-                        let _ = env.storage.remove(&path);
+                        let _ = env.storage().remove(&path);
                     }
                 }
                 self.state = State::Connected;
@@ -429,14 +429,14 @@ impl CalibreScreen {
                 if socket == SOCKET =>
             {
                 if let Some(coming) = self.coming.take() {
-                    let _ = env.storage.remove(&coming.part);
+                    let _ = env.storage().remove(&coming.part);
                 }
                 self.listing = None;
                 if !matches!(self.state, State::Ended(_) | State::Password) {
                     let text = if reason.is_empty() {
-                        env.i18n.tr("calibre.closed").to_string()
+                        env.i18n().tr("calibre.closed").to_string()
                     } else {
-                        env.i18n
+                        env.i18n()
                             .format("calibre.failed", &[("reason", Arg::Str(&reason))])
                     };
                     self.end(text, cx);
@@ -458,9 +458,9 @@ impl CalibreScreen {
         match message.op {
             op::GET_INITIALIZATION_INFO => {
                 let challenge = protocol::text(args, "passwordChallenge").unwrap_or_default();
-                let password = env.secrets.get(PASSWORD).map(String::from);
+                let password = env.secrets().get(PASSWORD).map(String::from);
                 let extensions: Vec<&str> = env
-                    .formats
+                    .formats()
                     .iter()
                     .flat_map(|f| f.extensions.iter().map(|e| e.as_ref()))
                     .collect();
@@ -476,7 +476,7 @@ impl CalibreScreen {
                 self.send(op::OK, &protocol::initialization(&device), cx);
             }
             op::SET_CALIBRE_DEVICE_INFO => {
-                library::set_device_info(env.storage, args);
+                library::set_device_info(env.storage(), args);
                 self.send(op::OK, "{}", cx);
             }
             op::SET_CALIBRE_DEVICE_NAME | op::SET_LIBRARY_INFO => {
@@ -487,24 +487,24 @@ impl CalibreScreen {
                 self.send(op::OK, "{}", cx);
             }
             op::GET_DEVICE_INFORMATION => {
-                let stored = library::device_info(env.storage);
+                let stored = library::device_info(env.storage());
                 let version = format!("{}", SDK_VERSION);
                 let name = env.device_name();
                 let info = protocol::device_information(stored.as_deref(), &name, &version);
                 self.send(op::OK, &info, cx);
             }
             op::TOTAL_SPACE => {
-                let (_, total) = space(env.storage);
+                let (_, total) = space(env.storage());
                 let reply = format!("{{\"total_space_on_device\": {total}}}");
                 self.send(op::OK, &reply, cx);
             }
             op::FREE_SPACE => {
-                let (free, _) = space(env.storage);
+                let (free, _) = space(env.storage());
                 let reply = format!("{{\"free_space_on_device\": {free}}}");
                 self.send(op::OK, &reply, cx);
             }
             op::GET_BOOK_COUNT => {
-                let books = library::books(env.storage, library_folder(&env));
+                let books = library::books(env.storage(), library_folder(&env));
                 let count = format!(
                     "{{\"count\": {}, \"willStream\": true, \"willScan\": true}}",
                     books.len()
@@ -513,7 +513,7 @@ impl CalibreScreen {
                 if !books.is_empty() {
                     // Their metadata in parts, then reading on.
                     self.listing = Some(Listing { books, next: 0 });
-                    cx.wake_at(env.now);
+                    cx.wake_at(env.now());
                     return;
                 }
             }
@@ -523,16 +523,16 @@ impl CalibreScreen {
                 let mut removed = false;
                 for lpath in protocol::strings(args, "lpaths") {
                     // Only books Calibre sent: never the reader's own.
-                    if library::sent(env.storage, &lpath)
+                    if library::sent(env.storage(), &lpath)
                         && let Some(path) = protocol::safe_path(&lpath)
                     {
                         let path = paperpaw_sdk::files::join(library_folder(&env), &path);
                         // Only the file: the reader's place and notes in it
                         // stay, and are there again when Calibre sends it
                         // again.
-                        removed |= env.storage.remove(&path).is_ok();
+                        removed |= env.storage().remove(&path).is_ok();
                     }
-                    let uuid = library::forget(env.storage, &lpath).unwrap_or_default();
+                    let uuid = library::forget(env.storage(), &lpath).unwrap_or_default();
                     let reply = format!("{{\"uuid\": {}}}", paperpaw_sdk::json::string(&uuid));
                     self.send(op::OK, &reply, cx);
                 }
@@ -548,7 +548,7 @@ impl CalibreScreen {
                     // first, the answer could be lost on the way.
                     self.send(op::OK, "{}", cx);
                     self.read_on(cx);
-                    let ended = env.i18n.tr("calibre.ejected").to_string();
+                    let ended = env.i18n().tr("calibre.ejected").to_string();
                     return self.end(ended, cx);
                 }
                 // Without cached metadata Calibre counts nothing; a plain
@@ -575,7 +575,7 @@ impl CalibreScreen {
             op::ERROR => {
                 let message = protocol::text(args, "message").unwrap_or_default();
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("calibre.failed", &[("reason", Arg::Str(&message))]);
                 cx.command(Command::Disconnect(SOCKET));
                 return self.end(text, cx);
@@ -593,7 +593,7 @@ impl CalibreScreen {
         // and an empty book would replace the one sent before.
         let Some(length) = protocol::number(args, "length") else {
             cx.command(Command::Disconnect(SOCKET));
-            let ended = env.i18n.tr("calibre.not-calibre").to_string();
+            let ended = env.i18n().tr("calibre.not-calibre").to_string();
             return self.end(ended, cx);
         };
         let lpath = protocol::text(args, "lpath").unwrap_or_default();
@@ -605,16 +605,16 @@ impl CalibreScreen {
         // there that Calibre did not send: the bytes are taken, then
         // dropped.
         let extensions: Vec<&str> = env
-            .formats
+            .formats()
             .iter()
             .flat_map(|f| f.extensions.iter().map(|e| e.as_ref()))
             .collect();
         let target = protocol::book_path(&lpath, &extensions)
             .map(|safe| paperpaw_sdk::files::join(library_folder(&env), &safe));
         let target = match target {
-            Some(path) if env.storage.exists(&path) && !library::sent(env.storage, &lpath) => {
+            Some(path) if env.storage().exists(&path) && !library::sent(env.storage(), &lpath) => {
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("calibre.not-replaced", &[("title", Arg::Str(&title))]);
                 cx.command(Command::Notify(text));
                 None
@@ -624,7 +624,7 @@ impl CalibreScreen {
         let (path, part) = match target {
             Some(path) => {
                 if let Some(dir) = path.rsplit_once('/').map(|(d, _)| d) {
-                    let _ = env.storage.create_dir(dir);
+                    let _ = env.storage().create_dir(dir);
                 }
                 (path.clone(), format!("{path}.part"))
             }
@@ -657,7 +657,7 @@ impl CalibreScreen {
     fn type_password(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         cx.command(
-            paperpaw_sdk::ask::text(env.i18n.tr("calibre.password"), &PASSWORD_TYPED)
+            paperpaw_sdk::ask::text(env.i18n().tr("calibre.password"), &PASSWORD_TYPED)
                 .password()
                 .command(),
         );
@@ -665,7 +665,7 @@ impl CalibreScreen {
 
     /// The area below the header.
     fn content(&self, env: &Env<'_>) -> Rect {
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
@@ -673,7 +673,7 @@ impl CalibreScreen {
 
 /// The framing of Calibre's messages, for the device's memory.
 fn framing(env: &Env<'_>) -> protocol::Framing {
-    protocol::Framing::new(protocol::max_message(env.device.memory))
+    protocol::Framing::new(protocol::max_message(env.device().memory))
 }
 
 /// The library folder, where Calibre's books go.
@@ -690,7 +690,7 @@ impl Screen for CalibreScreen {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(&mut ui, env.i18n.tr("calibre.title"), None, None);
+            .draw(&mut ui, env.i18n().tr("calibre.title"), None, None);
         if self.state == State::Offline {
             let area = self.content(env);
             return self.offer.draw(&mut ui, area);
@@ -716,23 +716,23 @@ impl Screen for CalibreScreen {
         };
         let name = self.name.clone().unwrap_or_else(|| String::from("Calibre"));
         let status = match &self.state {
-            State::Finding => env.i18n.tr("calibre.finding").to_string(),
+            State::Finding => env.i18n().tr("calibre.finding").to_string(),
             State::Found { host, .. } => {
                 let name = self.name.as_deref().unwrap_or(host);
-                env.i18n.format(
+                env.i18n().format(
                     "calibre.found",
                     &[("name", Arg::Str(name)), ("address", Arg::Str(host))],
                 )
             }
-            State::Connecting => env.i18n.tr("calibre.connecting").to_string(),
+            State::Connecting => env.i18n().tr("calibre.connecting").to_string(),
             State::Connected => env
-                .i18n
+                .i18n()
                 .format("calibre.connected", &[("name", Arg::Str(&name))]),
             State::Receiving {
                 title,
                 number,
                 total,
-            } => env.i18n.format(
+            } => env.i18n().format(
                 "calibre.receiving",
                 &[
                     ("title", Arg::Str(title)),
@@ -740,20 +740,20 @@ impl Screen for CalibreScreen {
                     ("total", Arg::Int(*total as i64)),
                 ],
             ),
-            State::Password => env.i18n.tr("calibre.password-needed").to_string(),
+            State::Password => env.i18n().tr("calibre.password-needed").to_string(),
             State::Ended(text) => text.clone(),
             State::Offline => String::new(),
         };
         line(&mut ui, style.title(), &status, Color::BLACK);
         if let Some(library) = &self.library {
             let text = env
-                .i18n
+                .i18n()
                 .format("calibre.library", &[("library", Arg::Str(library))]);
             line(&mut ui, style.text(), &text, style.faint(ui::Ink::Detail));
         }
         if self.received > 0 {
             let text = env
-                .i18n
+                .i18n()
                 .plural("calibre.received", i64::from(self.received), &[]);
             line(&mut ui, style.text(), &text, Color::BLACK);
         }
@@ -767,7 +767,7 @@ impl Screen for CalibreScreen {
             line(
                 &mut ui,
                 style.small(),
-                env.i18n.tr(hint),
+                env.i18n().tr(hint),
                 style.faint(ui::Ink::Detail),
             );
         }
@@ -779,21 +779,21 @@ impl Screen for CalibreScreen {
             _ => None,
         };
         if let Some((touch, buttons)) = keys {
-            let again = if env.device.input.touch {
+            let again = if env.device().input.touch {
                 Some(touch)
-            } else if !env.caps.button_row {
+            } else if !env.caps().button_row {
                 Some(buttons)
             } else {
                 None
             };
             if let Some(again) = again {
-                line(&mut ui, style.small(), env.i18n.tr(again), Color::BLACK);
+                line(&mut ui, style.small(), env.i18n().tr(again), Color::BLACK);
             }
         }
         self.password_row = None;
         if self.state == State::Password {
             let row = Rect::new(area.x, y, area.width, style.row());
-            ui::Row::value(env.i18n.tr("calibre.type-password"), "›").draw(&mut ui, row);
+            ui::Row::value(env.i18n().tr("calibre.type-password"), "›").draw(&mut ui, row);
             self.password_row = Some(row);
         }
     }
@@ -820,14 +820,14 @@ impl Screen for CalibreScreen {
             && let Some(book) = listing.books.get(listing.next)
         {
             listing.next += 1;
-            let metadata = library::metadata(env.storage, *book);
+            let metadata = library::metadata(env.storage(), *book);
             let metadata = metadata.as_deref().unwrap_or("{}");
             sent += metadata.len();
             self.send(op::OK, metadata, cx);
         }
         if listing.next < listing.books.len() {
             self.listing = Some(listing);
-            cx.wake_at(env.now);
+            cx.wake_at(env.now());
         } else {
             self.read_on(cx);
         }
@@ -853,9 +853,9 @@ impl Screen for CalibreScreen {
             return Hint::Default;
         }
         match self.state {
-            State::Password => Hint::Text(env.i18n.tr("calibre.type-password").to_string()),
-            State::Found { .. } => Hint::Text(env.i18n.tr("calibre.connect").to_string()),
-            State::Ended(_) => Hint::Text(env.i18n.tr("calibre.try-again").to_string()),
+            State::Password => Hint::Text(env.i18n().tr("calibre.type-password").to_string()),
+            State::Found { .. } => Hint::Text(env.i18n().tr("calibre.connect").to_string()),
+            State::Ended(_) => Hint::Text(env.i18n().tr("calibre.try-again").to_string()),
             _ => Hint::Hidden,
         }
     }

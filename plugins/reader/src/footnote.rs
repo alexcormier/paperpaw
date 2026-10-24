@@ -34,7 +34,7 @@ const BUTTONS: [&str; 2] = ["reader.footnote.close", "reader.footnote.go"];
 impl FootnoteScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let margin = style.margin();
         let gap = style.gap();
         let text = params.get(params::TEXT).unwrap_or_default();
@@ -66,7 +66,7 @@ impl FootnoteScreen {
         // Its buttons keep the side margin from the bottom edge too.
         let room = ui::edge_room(&style, button_row);
         // Side by side where their words fit, else one below the other.
-        let labels = BUTTONS.map(|key| env.i18n.tr(key));
+        let labels = BUTTONS.map(|key| env.i18n().tr(key));
         let half = display.width / 2;
         let half_width = half.saturating_sub(margin + gap / 2);
         let inner = display.width.saturating_sub(2 * margin);
@@ -153,7 +153,7 @@ impl Screen for FootnoteScreen {
             y += line_height;
         }
         for (i, (slot, label)) in self.buttons.iter().zip(BUTTONS).enumerate() {
-            let label = env.i18n.tr(label);
+            let label = env.i18n().tr(label);
             ui.button(
                 ui::button_in_slot(&style, *slot),
                 label,

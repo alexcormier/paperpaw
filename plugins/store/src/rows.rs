@@ -40,25 +40,25 @@ pub(crate) fn state(
 ) -> State {
     if let Some(job) = job.filter(|j| j.plugin == plugin.id) {
         if job.done >= job.total {
-            return State::Busy(env.i18n.tr("store.state.waiting").to_string());
+            return State::Busy(env.i18n().tr("store.state.waiting").to_string());
         }
         return State::Busy(format!("{} / {}", job.done, job.total));
     }
     if queued.contains(&plugin.id) {
-        return State::Busy(env.i18n.tr("store.state.queued").to_string());
+        return State::Busy(env.i18n().tr("store.state.queued").to_string());
     }
     let restart = env
-        .plugins
+        .plugins()
         .get(&plugin.id)
         .is_some_and(paperpaw_sdk::PluginInfo::restart_needed);
     if restart {
-        State::Busy(env.i18n.tr("store.state.restart").to_string())
+        State::Busy(env.i18n().tr("store.state.restart").to_string())
     } else if plugin.newer_in(env, origins) {
         State::Update
     } else if plugin.installed(env).is_some() {
         State::Installed
     } else {
-        State::Offered(files::size(plugin.size, env.i18n.tr("store.decimal")))
+        State::Offered(files::size(plugin.size, env.i18n().tr("store.decimal")))
     }
 }
 
@@ -92,7 +92,7 @@ pub(crate) fn draw(
             x
         }
         State::Installed => {
-            let text = env.i18n.tr("store.state.installed");
+            let text = env.i18n().tr("store.state.installed");
             let width = font.measure(style.small(), text);
             let icon = style.small() * ui::ICON_SCALE;
             let icon_width = ui::icon_width(env, "check", icon);
@@ -106,7 +106,7 @@ pub(crate) fn draw(
             icon_x
         }
         State::Update => {
-            let text = env.i18n.tr("store.state.update");
+            let text = env.i18n().tr("store.state.update");
             draw_pill(ui, band, right, text, focused)
         }
     };
@@ -123,7 +123,7 @@ pub(crate) fn draw(
     // What it does: one line, shortened where longer; PaperPaw's own
     // say so first.
     let summary = if plugin.official {
-        format!("{} · {}", env.i18n.tr("store.official"), plugin.summary)
+        format!("{} · {}", env.i18n().tr("store.official"), plugin.summary)
     } else {
         plugin.summary.clone()
     };

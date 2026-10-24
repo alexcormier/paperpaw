@@ -306,7 +306,7 @@ pub(crate) fn offer(storage: &dyn Storage, firmware: &Firmware) -> Option<Offer>
 
 /// The server's address, without a slash at the end.
 fn server(env: &Env<'_>) -> String {
-    let server = env.settings.read(&SERVER);
+    let server = env.settings().read(&SERVER);
     let server = server.trim().trim_end_matches('/');
     String::from(if server.is_empty() {
         DEFAULT_SERVER
@@ -368,7 +368,7 @@ fn question(
 /// Asks the server for an update; `quiet` from the action, which offers
 /// what it finds by opening the page and says nothing otherwise.
 pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
-    let Some(firmware) = env.firmware else {
+    let Some(firmware) = env.firmware() else {
         return;
     };
     let url = format!("{}/api/v1/updates", server(env));
@@ -377,15 +377,15 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
         String::from("application/json"),
     );
     let code: Vec<(&str, String)> = env
-        .plugins
+        .plugins()
         .iter()
         .filter(|p| p.kind == PluginKind::Code)
         .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))
         .collect();
-    let betas = env.settings.read(&BETAS);
-    let mut request = request.body(question(firmware, env.native, &code, betas));
+    let betas = env.settings().read(&BETAS);
+    let mut request = request.body(question(firmware, env.native(), &code, betas));
     // Asked: an update waiting is asked for again not before a day.
-    waiting::tried(env.storage, paperpaw_sdk::time::unix_seconds(env));
+    waiting::tried(env.storage(), paperpaw_sdk::time::unix_seconds(env));
     if quiet {
         request = request.param(QUIET, "1");
     }
@@ -395,10 +395,10 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
 /// The answer: the update it names kept (or the one kept before let go),
 /// and offered if the question was asked in the background.
 pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
-    let Some(firmware) = env.firmware else {
+    let Some(firmware) = env.firmware() else {
         return;
     };
-    let storage = env.storage;
+    let storage = env.storage();
     if !(200..300).contains(&reply.status) {
         // An update waiting: tried (see `check`), the next day again,
         // also where the device stays on that long.
@@ -408,7 +408,7 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         return;
     }
     let text = reply.text();
-    let Some(offer) = Offer::from_answer(&text, firmware, env.settings.read(&BETAS)) else {
+    let Some(offer) = Offer::from_answer(&text, firmware, env.settings().read(&BETAS)) else {
         let _ = storage.remove(&file(OFFER));
         waiting::clear(storage);
         return;
@@ -422,7 +422,7 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         waiting::answered(storage, &offer.version, holding, now);
         waiting::later(out);
         // Asked for by the reader (the action): shown where it waits.
-        if reply.context.get(QUIET).is_some() && env.reader {
+        if reply.context.get(QUIET).is_some() && env.reader() {
             out.push(Command::OpenScreen(PAGE, Params::new()));
         }
         return;
@@ -432,15 +432,15 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let key = (String::from("online"), offer.version.clone());
     if quiet && read_pair(storage, OFFERED) != Some(key.clone()) {
         write_pair(storage, OFFERED, &key.0, &key.1);
-        if env.reader {
+        if env.reader() {
             out.push(Command::OpenScreen(PAGE, Params::new()));
         } else {
             // Nothing over reading: the offer waits on the update's page.
-            let text = env.i18n.format(
+            let text = env.i18n().format(
                 "update.offer.title",
                 &[(
                     "version",
-                    Arg::Str(&crate::shown_version(env.i18n, &offer.version)),
+                    Arg::Str(&crate::shown_version(env.i18n(), &offer.version)),
                 )],
             );
             out.push(Command::Notify(text));
@@ -455,8 +455,8 @@ fn path_for(firmware: &Firmware, version: &str) -> String {
 
 /// Downloads `offer` into `updates`.
 pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Commands) {
-    let _ = env.storage.create_dir(UPDATE_DIR);
-    clear_download(env.storage);
+    let _ = env.storage().create_dir(UPDATE_DIR);
+    clear_download(env.storage());
     // A path on the server asked.
     let url = if offer.url.starts_with('/') {
         format!("{}{}", server(env), offer.url)
@@ -474,10 +474,10 @@ pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Commands) {
 /// offer is let go; otherwise it is removed. Either is said, also while
 /// the page is closed (downloads go on meanwhile).
 pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
-    let Some(firmware) = env.firmware else {
+    let Some(firmware) = env.firmware() else {
         return;
     };
-    let storage = env.storage;
+    let storage = env.storage();
     let version = reply.context.get("version").unwrap_or_default();
     let size: u64 = reply
         .context
@@ -501,11 +501,11 @@ pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
             let native = offer.and_then(|o| o.native);
             let _ = storage.remove(&file(OFFER));
             if !fetch::start(env, version, &builds, native, out) {
-                out.push(Command::Notify(env.i18n.format(
+                out.push(Command::Notify(env.i18n().format(
                     "update.downloaded",
                     &[(
                         "version",
-                        Arg::Str(&crate::shown_version(env.i18n, version)),
+                        Arg::Str(&crate::shown_version(env.i18n(), version)),
                     )],
                 )));
             }
@@ -514,7 +514,7 @@ pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     }
     clear_download(storage);
     out.push(Command::Notify(String::from(
-        env.i18n.tr("update.download-failed.title"),
+        env.i18n().tr("update.download-failed.title"),
     )));
 }
 

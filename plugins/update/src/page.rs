@@ -157,7 +157,7 @@ impl UpdatePage {
     fn look_noted(&self, env: &Env<'_>) -> View {
         let view = self.look(env);
         if matches!(view, View::Waiting { .. }) {
-            crate::waiting::seen(env.storage);
+            crate::waiting::seen(env.storage());
         }
         view
     }
@@ -165,10 +165,10 @@ impl UpdatePage {
     /// The names of the code plugins (ids) `ids`.
     fn code_names<'a>(env: &Env<'_>, ids: impl Iterator<Item = &'a str>) -> Vec<String> {
         ids.map(|id| {
-            env.plugins
+            env.plugins()
                 .iter()
                 .find(|p| p.manifest.id.as_str() == id)
-                .map_or_else(|| String::from(id), |p| String::from(p.name(env.i18n)))
+                .map_or_else(|| String::from(id), |p| String::from(p.name(env.i18n())))
         })
         .collect()
     }
@@ -210,14 +210,14 @@ impl UpdatePage {
             .map(|id| alloc::format!("{id}.plugin.name"));
         String::from(
             key.as_deref()
-                .and_then(|key| env.i18n.get(key))
+                .and_then(|key| env.i18n().get(key))
                 .unwrap_or(name),
         )
     }
 
     /// What there is now: an install going on, or the files on the card.
     fn look(&self, env: &Env<'_>) -> View {
-        let Some(firmware) = env.firmware else {
+        let Some(firmware) = env.firmware() else {
             return View::Nothing;
         };
         match &firmware.state {
@@ -232,11 +232,11 @@ impl UpdatePage {
             _ => {}
         }
         // Downloaded, its code plugins still coming.
-        if let Some(version) = crate::fetch::fetching(env.storage) {
+        if let Some(version) = crate::fetch::fetching(env.storage()) {
             return View::Downloading(version);
         }
-        let card = found::find(env.storage, firmware);
-        let offer = online::offer(env.storage, firmware);
+        let card = found::find(env.storage(), firmware);
+        let offer = online::offer(env.storage(), firmware);
         let age = |update: &Update| compare_versions(&update.info.version, &firmware.version);
         match (card, offer) {
             // A newer update online comes before going back or installing
@@ -246,7 +246,7 @@ impl UpdatePage {
                 let leaves = update
                     .leaves_out(firmware)
                     .into_iter()
-                    .filter(|c| !crate::fetch::comes_back(env.storage, &[], c))
+                    .filter(|c| !crate::fetch::comes_back(env.storage(), &[], c))
                     .map(String::from)
                     .collect();
                 View::Ready {
@@ -267,7 +267,7 @@ impl UpdatePage {
                 }
                 let wanted = crate::fetch::wanted(env, &offer.builds);
                 let leaves = offer
-                    .leaves_out(env.storage, firmware, &wanted)
+                    .leaves_out(env.storage(), firmware, &wanted)
                     .into_iter()
                     .map(String::from)
                     .collect();
@@ -313,7 +313,7 @@ impl UpdatePage {
                 match offer.and_then(|o| o.why_missing(name)) {
                     Some(why @ ("unknown" | "not-ready")) => alloc::format!(
                         "{shown} ({})",
-                        env.i18n.tr(&alloc::format!("update.missing.{why}"))
+                        env.i18n().tr(&alloc::format!("update.missing.{why}"))
                     ),
                     _ => shown,
                 }
@@ -337,7 +337,7 @@ impl UpdatePage {
         };
         alloc::format!(
             "{help} {}",
-            env.i18n.format(key, &[("plugins", Arg::Str(&names))])
+            env.i18n().format(key, &[("plugins", Arg::Str(&names))])
         )
     }
 
@@ -345,10 +345,10 @@ impl UpdatePage {
         match &self.view {
             View::Nothing => {
                 let mut buttons = Vec::new();
-                if env.caps.network {
+                if env.caps().network {
                     buttons.push(Button::Check);
                 }
-                if env.actions.get(TRANSFER.as_str()).is_some() {
+                if env.actions().get(TRANSFER.as_str()).is_some() {
                     buttons.push(Button::Transfer);
                 }
                 buttons
@@ -356,7 +356,7 @@ impl UpdatePage {
             // Before going back, the way to search for a newer one; not
             // beside one's own build, whose key needs the room to be said.
             View::Ready { age, signer, .. }
-                if !age.is_gt() && *signer == Signer::PaperPaw && env.caps.network =>
+                if !age.is_gt() && *signer == Signer::PaperPaw && env.caps().network =>
             {
                 alloc::vec![Button::Install, Button::Check, Button::Close]
             }
@@ -377,7 +377,7 @@ impl UpdatePage {
     }
 
     fn label<'a>(&self, env: &'a Env<'_>, button: Button) -> &'a str {
-        env.i18n.tr(match (button, &self.view) {
+        env.i18n().tr(match (button, &self.view) {
             (
                 Button::Install,
                 View::Ready {
@@ -426,10 +426,12 @@ impl UpdatePage {
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
     fn texts(&self, env: &Env<'_>) -> (String, String) {
-        let current =
-            &crate::shown_version(env.i18n, env.firmware.map_or("", |f| f.version.as_str()));
-        let tr = |key: &str| env.i18n.tr(key).to_string();
-        let with = |key: &str, args: &[(&str, Arg<'_>)]| env.i18n.format(key, args);
+        let current = &crate::shown_version(
+            env.i18n(),
+            env.firmware().map_or("", |f| f.version.as_str()),
+        );
+        let tr = |key: &str| env.i18n().tr(key).to_string();
+        let with = |key: &str, args: &[(&str, Arg<'_>)]| env.i18n().format(key, args);
         match &self.view {
             View::Nothing => (
                 tr("update.nothing.title"),
@@ -500,7 +502,7 @@ impl UpdatePage {
                 stopping,
                 anyway,
             } => {
-                let size = files::size(offer.size, env.i18n.tr("update.decimal"));
+                let size = files::size(offer.size, env.i18n().tr("update.decimal"));
                 let help = with(
                     if offer.size > 0 {
                         "update.offer.help"
@@ -523,7 +525,7 @@ impl UpdatePage {
                         "update.offer.title",
                         &[(
                             "version",
-                            Arg::Str(&crate::shown_version(env.i18n, &offer.version)),
+                            Arg::Str(&crate::shown_version(env.i18n(), &offer.version)),
                         )],
                     ),
                     help,
@@ -547,7 +549,7 @@ impl UpdatePage {
                         "update.waiting.title",
                         &[(
                             "version",
-                            Arg::Str(&crate::shown_version(env.i18n, &offer.version)),
+                            Arg::Str(&crate::shown_version(env.i18n(), &offer.version)),
                         )],
                     ),
                     help,
@@ -558,7 +560,7 @@ impl UpdatePage {
                     "update.downloading.title",
                     &[(
                         "version",
-                        Arg::Str(&crate::shown_version(env.i18n, version)),
+                        Arg::Str(&crate::shown_version(env.i18n(), version)),
                     )],
                 ),
                 tr("update.downloading.help"),
@@ -572,7 +574,7 @@ impl UpdatePage {
                 with(
                     "update.failed.help",
                     &[
-                        ("reason", Arg::Str(env.i18n.tr(reason(*why)))),
+                        ("reason", Arg::Str(env.i18n().tr(reason(*why)))),
                         ("current", Arg::Str(current)),
                     ],
                 ),
@@ -585,7 +587,7 @@ impl UpdatePage {
     /// the lowest keeping it from the bottom edge too.
     fn button_rects(&self, env: &Env<'_>, buttons: &[Button]) -> Vec<Rect> {
         let style = &self.style;
-        let display = env.device.display;
+        let display = env.device().display;
         let margin = style.margin();
         let width = display.width.saturating_sub(2 * margin);
         let row = style.touch_row(u32::from(style.control_row())) as u16;
@@ -653,7 +655,12 @@ impl UpdatePage {
                 else {
                     return;
                 };
-                write_pair(env.storage, INSTALLING, &update.path, &update.info.version);
+                write_pair(
+                    env.storage(),
+                    INSTALLING,
+                    &update.path,
+                    &update.info.version,
+                );
                 // What the reader saw and chose: the key shown, a version
                 // not newer said to be so.
                 cx.command(Command::Firmware(FirmwareCommand::install(
@@ -790,19 +797,19 @@ impl Screen for UpdatePage {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(&mut ui, env.i18n.tr("update.title"), None, None);
+            .draw(&mut ui, env.i18n().tr("update.title"), None, None);
         // Within the margins other pages keep, below the header as their
         // content.
         let margin = style.margin();
         let gap = style.gap();
-        let width = env.device.display.width.saturating_sub(2 * margin);
+        let width = env.device().display.width.saturating_sub(2 * margin);
         let (title, help) = self.texts(env);
         let mut y = self.header.area().height + gap;
         let area = Rect::new(
             margin,
             y,
             width,
-            env.device.display.height.saturating_sub(y),
+            env.device().display.height.saturating_sub(y),
         );
         y += paragraph(&mut ui, area, style.title(), &title, 3, Color::BLACK) + gap;
         let buttons = self.buttons(env);
@@ -810,7 +817,7 @@ impl Screen for UpdatePage {
         // The words keep clear of the buttons.
         let bottom = rects
             .first()
-            .map_or(env.device.display.height, |r| r.y.saturating_sub(gap));
+            .map_or(env.device().display.height, |r| r.y.saturating_sub(gap));
         let area = Rect::new(margin, y, width, bottom.saturating_sub(y));
         if paragraph_fits(env, &style, area, style.small(), &help, HELP_LINES) {
             self.help = None;
@@ -979,7 +986,7 @@ impl Screen for UpdatePage {
         if *event != events::FIRMWARE_CHANGED {
             return;
         }
-        let Some(firmware) = env.firmware else {
+        let Some(firmware) = env.firmware() else {
             return;
         };
         let (view, mode) = match &firmware.state {
@@ -994,7 +1001,7 @@ impl Screen for UpdatePage {
                 )
             }
             FirmwareState::Installed => {
-                cx.wake_at(env.now.add_millis(RESTART_MS));
+                cx.wake_at(env.now().add_millis(RESTART_MS));
                 (View::Installed, RefreshMode::Partial)
             }
             FirmwareState::Failed(why) => (View::Failed(*why), RefreshMode::Partial),

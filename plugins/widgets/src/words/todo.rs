@@ -126,9 +126,9 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
             return;
         };
         let today = today(env);
-        let Ok(mut list) = load(env.storage, today) else {
+        let Ok(mut list) = load(env.storage(), today) else {
             out.push(Command::Notify(
-                env.i18n.tr("widgets.todo.unreadable").into(),
+                env.i18n().tr("widgets.todo.unreadable").into(),
             ));
             return;
         };
@@ -139,9 +139,9 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
             .find(|i| i.text == text && i.done.is_some() == was_done)
         {
             item.done = if was_done { None } else { Some(today) };
-            if save(env.storage, &list).is_err() {
+            if save(env.storage(), &list).is_err() {
                 out.push(Command::Notify(
-                    env.i18n.tr("widgets.todo.not-saved").into(),
+                    env.i18n().tr("widgets.todo.not-saved").into(),
                 ));
             }
         }
@@ -345,8 +345,8 @@ impl Widget for TodoWidget {
             return false;
         }
         self.read = read;
-        let hide = env.settings.read(&DONE_SETTING) == DONE[1];
-        let loaded = load(env.storage, day);
+        let hide = env.settings().read(&DONE_SETTING) == DONE[1];
+        let loaded = load(env.storage(), day);
         let unreadable = loaded.is_err();
         let all: Vec<Item> = loaded
             .unwrap_or_default()
@@ -354,7 +354,7 @@ impl Widget for TodoWidget {
             .into_iter()
             .filter(|i| !(hide && i.done.is_some()))
             .collect();
-        let count = env.settings.read(&COUNT).clamp(1, 12) as usize;
+        let count = env.settings().read(&COUNT).clamp(1, 12) as usize;
         let open = all.iter().filter(|i| i.done.is_none()).count();
         let more = all.len().saturating_sub(count);
         let items: Vec<Item> = all.into_iter().take(count).collect();
@@ -386,18 +386,18 @@ impl Widget for TodoWidget {
         let mut ui = ui::Ui::new(canvas, env, &style);
         let align = widgets::align(env, ID.as_str());
         if self.unreadable {
-            let text = env.i18n.tr("widgets.todo.unreadable");
+            let text = env.i18n().tr("widgets.todo.unreadable");
             super::draw_empty(ui.canvas(), env, &look, text);
             return;
         }
         if self.items.is_empty() {
             // The whole place to say how to add some, small.
-            let key = if env.device.input.touch {
+            let key = if env.device().input.touch {
                 "widgets.todo.none.touch"
             } else {
                 "widgets.todo.none"
             };
-            let text = env.i18n.tr(key);
+            let text = env.i18n().tr(key);
             super::draw_empty(ui.canvas(), env, &look, text);
             return;
         }
@@ -406,14 +406,14 @@ impl Widget for TodoWidget {
             let text = caption_text(env, self.open);
             widgets::draw_caption(ui.canvas(), env, ID.as_str(), &look, &text);
         }
-        let boxes = env.settings.read(&BOX);
+        let boxes = env.settings().read(&BOX);
         let size = items_size(env, &font, &places.rows, &self.items, boxes);
         for (row, item) in places.rows.iter().zip(&self.items) {
             draw_item(&mut ui, size, *row, item, boxes, align, &look);
         }
         if let Some((row, more)) = places.more {
             let text = env
-                .i18n
+                .i18n()
                 .format("widgets.todo.more", &[("count", Arg::Int(more as i64))]);
             let text = ui::fit(&font, style.small(), &text, f32::from(row.width));
             let x = align.x(row, font.measure(style.small(), &text));
@@ -451,7 +451,7 @@ impl Widget for TodoWidget {
 
 /// "To do", or "To do · 3" with open items.
 fn caption_text(env: &Env<'_>, open: usize) -> String {
-    let title = env.i18n.tr("widgets.todo");
+    let title = env.i18n().tr("widgets.todo");
     if open == 0 {
         String::from(title)
     } else {
@@ -463,8 +463,8 @@ fn caption_text(env: &Env<'_>, open: usize) -> String {
 /// least as high as a finger needs on touch screens.
 fn row_height(env: &Env<'_>) -> u16 {
     let line = widgets::line_height(env, text_size(env));
-    let least = if env.device.input.touch {
-        env.metrics.mm(6) as u16
+    let least = if env.device().input.touch {
+        env.metrics().mm(6) as u16
     } else {
         0
     };
@@ -658,11 +658,11 @@ struct TodoScreen {
 impl TodoScreen {
     fn new(env: &Env<'_>, changes: Changes) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let loaded = load(env.storage, today(env));
+        let loaded = load(env.storage(), today(env));
         let unreadable = loaded.is_err();
         let List { items, rest } = loaded.unwrap_or_default();
         Self {
@@ -686,9 +686,9 @@ impl TodoScreen {
             items: core::mem::take(&mut self.items),
             rest: core::mem::take(&mut self.rest),
         };
-        if save(env.storage, &list).is_err() {
+        if save(env.storage(), &list).is_err() {
             cx.command(Command::Notify(
-                env.i18n.tr("widgets.todo.not-saved").into(),
+                env.i18n().tr("widgets.todo.not-saved").into(),
             ));
         }
         (self.items, self.rest) = (list.items, list.rest);
@@ -708,12 +708,12 @@ impl TodoScreen {
         let env = *cx.env();
         if self.unreadable {
             cx.command(Command::Notify(
-                env.i18n.tr("widgets.todo.unreadable").into(),
+                env.i18n().tr("widgets.todo.unreadable").into(),
             ));
             return;
         }
         if row == 0 {
-            cx.command(ask::text(env.i18n.tr("widgets.todo.add"), &ADDED).command());
+            cx.command(ask::text(env.i18n().tr("widgets.todo.add"), &ADDED).command());
             return;
         }
         let today = today(&env);
@@ -752,7 +752,7 @@ impl Screen for TodoScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("widgets.todo"),
+            env.i18n().tr("widgets.todo"),
             None,
             self.list.paging(len),
         );
@@ -789,7 +789,7 @@ impl Screen for TodoScreen {
                     } else {
                         0.0
                     };
-                let text = env.i18n.tr("widgets.todo.add");
+                let text = env.i18n().tr("widgets.todo.add");
                 ui::Label::new(text)
                     .px(style.text())
                     .color(ink)
@@ -821,7 +821,7 @@ impl Screen for TodoScreen {
                 Color::WHITE,
                 widgets::Frame::None,
             );
-            widgets::draw_message(ui.canvas(), env, &look, env.i18n.tr(key));
+            widgets::draw_message(ui.canvas(), env, &look, env.i18n().tr(key));
         }
     }
 
@@ -875,7 +875,7 @@ impl Screen for TodoScreen {
                 return;
             }
             if self.items.len() >= MAX_ITEMS {
-                let full = env.i18n.format(
+                let full = env.i18n().format(
                     "widgets.todo.full",
                     &[("count", Arg::Int(MAX_ITEMS as i64))],
                 );
@@ -910,7 +910,7 @@ impl Screen for TodoScreen {
             match picked.option.as_str() {
                 "tick" | "untick" => self.open(index + 1, cx),
                 "edit" => {
-                    let question = ask::text(env.i18n.tr("widgets.todo.edit"), &EDITED)
+                    let question = ask::text(env.i18n().tr("widgets.todo.edit"), &EDITED)
                         .initial(self.items[index].text.clone())
                         .with(INDEX, index.to_string());
                     cx.command(question.command());

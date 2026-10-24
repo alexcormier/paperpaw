@@ -91,7 +91,7 @@ impl Plugin for PluginManager {
         // Which plugin shows each place several offer a screen for.
         screens::register(r)?;
         r.on(events::STARTED, |env, _, out| {
-            let Some(native) = env.native else {
+            let Some(native) = env.native() else {
                 return;
             };
             // One notice shows at a time: safe mode's, the more
@@ -136,7 +136,7 @@ struct PluginList {
 impl PluginList {
     fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         // A bar along the bottom: its button keeps the side margin from
@@ -169,17 +169,17 @@ impl PluginList {
     /// open (e.g. installed from a store opened from it).
     fn read_rows(&mut self, env: &Env<'_>) {
         self.more = env
-            .menus
+            .menus()
             .items(MORE.as_str())
             .into_iter()
-            .filter(|item| !item.section && env.actions.contains(item.id.as_str()))
+            .filter(|item| !item.section && env.actions().contains(item.id.as_str()))
             .map(|item| item.id.clone())
             .collect();
-        let mut plugins: Vec<&PluginInfo> = env.plugins.iter().collect();
+        let mut plugins: Vec<&PluginInfo> = env.plugins().iter().collect();
         plugins.sort_by_cached_key(|p| {
             (
                 p.manifest.id != CORE_PLUGIN,
-                p.name(env.i18n).to_lowercase(),
+                p.name(env.i18n()).to_lowercase(),
             )
         });
         self.plugins = plugins.iter().map(|p| p.manifest.id.clone()).collect();
@@ -192,7 +192,7 @@ impl PluginList {
                 let id = &p.manifest.id;
                 (
                     id.clone(),
-                    install::origin(env.storage, id.as_str(), version),
+                    install::origin(env.storage(), id.as_str(), version),
                 )
             })
             .collect();
@@ -200,11 +200,11 @@ impl PluginList {
 
     /// The *Restart now* button, while a change waits for a restart.
     fn restart_button(&self, env: &Env<'_>) -> Option<Rect> {
-        if !env.plugins.restart_needed() {
+        if !env.plugins().restart_needed() {
             return None;
         }
         let font = self.style.font(env)?;
-        let label = env.i18n.tr("plugin-manager.restart");
+        let label = env.i18n().tr("plugin-manager.restart");
         let pad = self.style.margin();
         let width = font.measure(self.style.text(), label) as u16 + 2 * pad;
         let band = ui::edge_bar_band(&self.style, self.bar, false);
@@ -237,27 +237,27 @@ impl PluginList {
         let Some(info) = index
             .checked_sub(self.more.len())
             .and_then(|i| self.plugins.get(i))
-            .and_then(|id| env.plugins.get(id.as_str()))
+            .and_then(|id| env.plugins().get(id.as_str()))
         else {
             return;
         };
-        let Some(how) = info.how(env.i18n) else {
-            let text = env.i18n.tr("plugin-manager.no-how").to_string();
+        let Some(how) = info.how(env.i18n()) else {
+            let text = env.i18n().tr("plugin-manager.no-how").to_string();
             cx.command(Command::Notify(text));
             return;
         };
-        let text = alloc::format!("{}\n\n{how}\n", info.name(env.i18n));
-        match paperpaw_sdk::readers::show_text(env.storage, &how_file(), &text) {
+        let text = alloc::format!("{}\n\n{how}\n", info.name(env.i18n()));
+        match paperpaw_sdk::readers::show_text(env.storage(), &how_file(), &text) {
             Ok(open) => cx.command(open),
             Err(_) => cx.command(Command::Notify(
-                env.i18n.tr("plugin-manager.how-failed").into(),
+                env.i18n().tr("plugin-manager.how-failed").into(),
             )),
         }
     }
 
     /// Switches the plugin `id`.
     fn switch(&mut self, env: &Env<'_>, id: &Id, cx: &mut Cx<'_, '_>) {
-        let Some(info) = env.plugins.get(id.as_str()) else {
+        let Some(info) = env.plugins().get(id.as_str()) else {
             return;
         };
         if info.enabled && locked(info) {
@@ -294,7 +294,7 @@ fn state(info: &PluginInfo) -> &'static str {
 /// The note below a plugin's name: what happens to it, its description,
 /// version and where it came from (`origin`, for one not built in).
 fn details(env: &Env<'_>, info: &PluginInfo, origin: Option<Origin>) -> String {
-    let i18n = env.i18n;
+    let i18n = env.i18n();
     let version = i18n.format(
         "plugin-manager.version",
         &[("version", Arg::Str(&info.manifest.version.to_string()))],
@@ -366,9 +366,9 @@ fn details(env: &Env<'_>, info: &PluginInfo, origin: Option<Origin>) -> String {
 /// What a start in safe mode says: why, the plugin loaded last, what it
 /// switched off.
 fn safe_mode_notice(env: &Env<'_>, safe_mode: &SafeMode) -> String {
-    let i18n = env.i18n;
+    let i18n = env.i18n();
     let name = |id: &str| {
-        env.plugins
+        env.plugins()
             .get(id)
             .map_or_else(|| String::from(id), |p| String::from(p.name(i18n)))
     };
@@ -392,9 +392,9 @@ fn safe_mode_notice(env: &Env<'_>, safe_mode: &SafeMode) -> String {
 fn not_installed_notice(env: &Env<'_>, not_installed: &[NotInstalled]) -> Option<String> {
     let name = |n: &NotInstalled| {
         let id = n.plugin.as_str();
-        env.plugins
+        env.plugins()
             .get(id)
-            .map_or_else(|| String::from(id), |p| String::from(p.name(env.i18n)))
+            .map_or_else(|| String::from(id), |p| String::from(p.name(env.i18n())))
     };
     let (key, names) = match not_installed {
         [] => return None,
@@ -410,7 +410,7 @@ fn not_installed_notice(env: &Env<'_>, not_installed: &[NotInstalled]) -> Option
             several.iter().map(name).collect::<Vec<_>>().join(", "),
         ),
     };
-    Some(env.i18n.format(key, &[("name", Arg::Str(&names))]))
+    Some(env.i18n().format(key, &[("name", Arg::Str(&names))]))
 }
 
 /// Why a code plugin does not run, as said below its name.
@@ -459,7 +459,7 @@ impl Screen for PluginList {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,
-            env.i18n.tr("plugin-manager.title"),
+            env.i18n().tr("plugin-manager.title"),
             None,
             self.list.paging(len),
         );
@@ -467,19 +467,19 @@ impl Screen for PluginList {
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
             if let Some(action) = more.get(index) {
                 // Named by its action, told by the plugin that added it.
-                let name = env.actions.get(action.as_str()).map_or("", |a| &a.title);
+                let name = env.actions().get(action.as_str()).map_or("", |a| &a.title);
                 let note = env
-                    .plugins
+                    .plugins()
                     .owner(action)
-                    .map_or("", |p| p.description(env.i18n));
-                let name = env.i18n.tr(name);
+                    .map_or("", |p| p.description(env.i18n()));
+                let name = env.i18n().tr(name);
                 ui::Row::value(name, "›")
                     .note(note)
                     .focused(focused)
                     .draw(ui, rect);
-            } else if let Some(info) = env.plugins.get(plugins[index - more.len()].as_str()) {
-                let value = env.i18n.tr(state(info));
-                let name = info.name(env.i18n);
+            } else if let Some(info) = env.plugins().get(plugins[index - more.len()].as_str()) {
+                let value = env.i18n().tr(state(info));
+                let name = info.name(env.i18n());
                 let origin = origins
                     .iter()
                     .find(|(id, _)| *id == info.manifest.id)
@@ -497,7 +497,7 @@ impl Screen for PluginList {
         ui.canvas().fill(line, paperpaw_sdk::Color::gray(150));
         let button = self.restart_button(env);
         if let Some(button) = button {
-            let label = env.i18n.tr("plugin-manager.restart");
+            let label = env.i18n().tr("plugin-manager.restart");
             let focused = self.focus == Focus::Restart;
             ui.button(button, label, true, focused);
         }

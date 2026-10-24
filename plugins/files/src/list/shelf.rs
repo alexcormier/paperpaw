@@ -121,7 +121,7 @@ impl ShelfScreen {
         let style = UiStyle::new(env);
         let sizes = Sizes::new(env, &style);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let summary = Rect::new(
             0,
             header.area().height,
@@ -159,11 +159,11 @@ impl ShelfScreen {
     fn word(&mut self, env: &Env<'_>) {
         self.title_text = self.title(env);
         let len = self.entries.len();
-        let books = env.i18n.plural("files.books", len as i64, &[]);
+        let books = env.i18n().plural("files.books", len as i64, &[]);
         let finished = self.entries.iter().filter(|e| e.progress == 100).count();
         self.summary_text = if self.kind == Kind::Series && finished > 0 {
             let done = env
-                .i18n
+                .i18n()
                 .plural("files.list.finished.count", finished as i64, &[]);
             alloc::format!("{books} · {done}")
         } else {
@@ -243,15 +243,17 @@ impl ShelfScreen {
 
     fn title(&self, env: &Env<'_>) -> String {
         match self.kind {
-            Kind::Favourites => env.i18n.tr("files.favourites").to_string(),
+            Kind::Favourites => env.i18n().tr("files.favourites").to_string(),
             Kind::Search => env
-                .i18n
+                .i18n()
                 .format("files.search.title", &[("text", Arg::Str(&self.name))]),
             Kind::Letter => env
-                .i18n
+                .i18n()
                 .format("files.list.letter", &[("letter", Arg::Str(&self.name))]),
             Kind::Folder => paperpaw_sdk::files::name(&self.name).to_string(),
-            Kind::Author if self.name.is_empty() => env.i18n.tr("files.unknown-author").to_string(),
+            Kind::Author if self.name.is_empty() => {
+                env.i18n().tr("files.unknown-author").to_string()
+            }
             _ => self.name.clone(),
         }
     }
@@ -354,10 +356,10 @@ impl Screen for ShelfScreen {
             let (icon, title, text) = match self.kind {
                 Kind::Favourites => (
                     "star",
-                    env.i18n.tr("files.no-favourites.title"),
+                    env.i18n().tr("files.no-favourites.title"),
                     ui::tr_input(env, "files.no-favourites"),
                 ),
-                _ => ("books", "", env.i18n.tr("files.search.none")),
+                _ => ("books", "", env.i18n().tr("files.search.none")),
             };
             ui.empty(self.list.area(), icon, title, text);
             return;

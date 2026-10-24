@@ -63,7 +63,7 @@ pub fn button_border(style: &UiStyle) -> u32 {
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
-pub fn draw_button(
+pub(crate) fn draw_button(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -87,7 +87,7 @@ pub fn draw_button(
 
 /// A button that cannot be used now (e.g. a menu entry shown faint): its
 /// border and label faint; `focused` as [`draw_button`].
-pub fn draw_faint_button(
+pub(crate) fn draw_faint_button(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -110,7 +110,7 @@ pub fn draw_faint_button(
 /// A button with a drawing of its own instead of a word (an arrow, a
 /// sign), drawn empty for the caller to draw on with the ink it returns;
 /// `name` says what it does, for screen readers and remote control.
-pub fn draw_icon_button(
+pub(crate) fn draw_icon_button(
     canvas: &mut Canvas<'_>,
     style: &UiStyle,
     rect: Rect,
@@ -191,7 +191,7 @@ pub(super) fn label_pad(style: &UiStyle, width: f32) -> f32 {
 }
 
 /// How wide a button must be for its word, `label` wide, not to be
-/// shortened ([`draw_button`] keeps room at its sides): for laying out
+/// shortened ([`Ui::button`](super::Ui::button) keeps room at its sides): for laying out
 /// buttons as wide as their words.
 pub fn button_width(style: &UiStyle, label: f32) -> f32 {
     // A gap at each side, or a twelfth of the width where that is less.

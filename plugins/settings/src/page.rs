@@ -53,10 +53,10 @@ impl Preview {
     /// The preview of `group`, if a widget previews it, at the top of
     /// `area`; `area` is left with the room below it.
     fn of(env: &Env<'_>, style: &UiStyle, group: &Id, area: &mut Rect) -> Option<Self> {
-        let id = env.widgets.preview(group.as_str())?;
-        let widget = env.widgets.make(id.as_str(), env)?;
+        let id = env.widgets().preview(group.as_str())?;
+        let widget = env.widgets().make(id.as_str(), env)?;
         let heading = ui::heading_height(env, style);
-        let most = (env.device.display.height / PREVIEW_SHARE).saturating_sub(heading);
+        let most = (env.device().display.height / PREVIEW_SHARE).saturating_sub(heading);
         let height = widget.height(env, area.width).min(most);
         if height == 0 {
             return None;
@@ -84,7 +84,7 @@ impl Preview {
         if all.intersection(&ui.canvas().clip()).is_none() {
             return;
         }
-        ui.heading(self.heading, env.i18n.tr("settings.preview"));
+        ui.heading(self.heading, env.i18n().tr("settings.preview"));
         self.widget.draw(ui.canvas(), env, self.area);
         // As the lines between rows.
         let margin = style.margin();
@@ -160,14 +160,14 @@ impl GroupPage {
         let own = group.unplaced();
         let of = own.as_ref().unwrap_or(&group);
         let title = env
-            .settings
+            .settings()
             .groups()
             .find(|g| g.id == *of)
-            .map_or_else(String::new, |g| env.i18n.tr(&g.title).to_string());
+            .map_or_else(String::new, |g| env.i18n().tr(&g.title).to_string());
         let specs = env
-            .settings
+            .settings()
             .specs()
-            .filter(|spec| env.settings.group_of(spec) == *of && visible(env, spec))
+            .filter(|spec| env.settings().group_of(spec) == *of && visible(env, spec))
             .cloned()
             .map(|mut spec| {
                 if own.is_some() {
@@ -206,7 +206,7 @@ impl GroupPage {
         }
         for section in &sections {
             if let Some(key) = section.as_deref().filter(|_| headed) {
-                entries.push(Row::Heading(env.i18n.tr(key).to_string()));
+                entries.push(Row::Heading(env.i18n().tr(key).to_string()));
             }
             entries.extend(
                 specs
@@ -220,10 +220,10 @@ impl GroupPage {
         // storage in the device's).
         if own.is_none() {
             entries.extend(
-                env.menus
+                env.menus()
                     .items(of.as_str())
                     .into_iter()
-                    .filter(|item| !item.section && env.actions.contains(item.id.as_str()))
+                    .filter(|item| !item.section && env.actions().contains(item.id.as_str()))
                     .map(|item| Row::Action(item.id.clone())),
             );
         }
@@ -280,7 +280,7 @@ impl GroupPage {
                 (Row::Heading(_), _) => heading,
                 (Row::Setting(_), Some(lines)) => lines.height,
                 (Row::Setting(spec), None) => {
-                    let title = env.i18n.tr(&spec.title);
+                    let title = env.i18n().tr(&spec.title);
                     slider_row
                         + ui::slider::title_extra(env, &style, area.width, title, &number_room)
                 }
@@ -353,7 +353,7 @@ impl GroupPage {
         let Some(spec) = self.focused() else {
             return;
         };
-        let current = env.settings.get(spec.id.as_str());
+        let current = env.settings().get(spec.id.as_str());
         let Some(value) = ui::next_value(env, spec, step) else {
             return;
         };
@@ -373,7 +373,7 @@ impl GroupPage {
     /// How much lower a slider's band is in `rect` for its long title
     /// ([`ui::slider::title_extra`]), as its row was laid out.
     fn slider_extra(&self, env: &Env<'_>, spec: &SettingSpec, rect: Rect) -> u16 {
-        let title = env.i18n.tr(&spec.title);
+        let title = env.i18n().tr(&spec.title);
         ui::slider::title_extra(env, &self.style, rect.width, title, &self.number_room)
     }
 
@@ -453,7 +453,7 @@ impl Screen for GroupPage {
         let noted = self.noted;
         let room = self.number_room.as_str();
         let all_lines = &self.lines;
-        let touch = env.device.input.touch;
+        let touch = env.device().input.touch;
         self.rows
             .draw(&mut ui, self.keys, |ui, index, rect, focused| {
                 // The rows that are not settings: a row high.
@@ -461,24 +461,24 @@ impl Screen for GroupPage {
                 let spec = match &entries[index] {
                     Row::Heading(title) => return ui.heading(rect, title),
                     Row::Reset => {
-                        let title = env.i18n.tr("settings.reset-page");
+                        let title = env.i18n().tr("settings.reset-page");
                         return ui::Row::plain(title).focused(focused).draw(ui, row);
                     }
                     Row::Theme(chooser) => {
-                        let title = env.i18n.tr(chooser.title());
+                        let title = env.i18n().tr(chooser.title());
                         let name = super::themes::applied_name(env, *chooser);
                         return ui::Row::value(title, &name).focused(focused).draw(ui, row);
                     }
                     Row::Action(action) => {
-                        let title = env.actions.get(action.as_str()).map_or("", |a| &a.title);
-                        let title = env.i18n.tr(title);
+                        let title = env.actions().get(action.as_str()).map_or("", |a| &a.title);
+                        let title = env.i18n().tr(title);
                         return ui::Row::plain(title).focused(focused).draw(ui, row);
                     }
                     Row::Setting(spec) => spec,
                 };
                 let canvas = ui.canvas();
-                let title = env.i18n.tr(&spec.title);
-                let note = spec.description.as_deref().map_or("", |d| env.i18n.tr(d));
+                let title = env.i18n().tr(&spec.title);
+                let note = spec.description.as_deref().map_or("", |d| env.i18n().tr(d));
                 let note = if noted { note } else { "" };
                 let mut value = ui::setting_value(env, spec);
                 if let Some(slider) = Slider::of(spec).filter(|_| ui::slider::shows(env, spec)) {
@@ -487,7 +487,7 @@ impl Screen for GroupPage {
                         (true, false) => SliderFocus::Focused,
                         (true, true) => SliderFocus::Editing,
                     };
-                    let view = SliderView::new(rect, env.settings.int(spec.id.as_str()), &value)
+                    let view = SliderView::new(rect, env.settings().int(spec.id.as_str()), &value)
                         .title(title)
                         .note(note)
                         .focus(focus)
@@ -520,7 +520,7 @@ impl Screen for GroupPage {
                         return;
                     }
                     SettingKind::Bool if spec.extra().editor.is_none() => {
-                        let on = env.settings.bool(spec.id.as_str());
+                        let on = env.settings().bool(spec.id.as_str());
                         ui::draw_switch_lines(
                             canvas, env, &style, rect, lines, focused, title, note, on,
                         );
@@ -575,7 +575,7 @@ impl Screen for GroupPage {
             self.spec(index).map(|s| &s.kind),
             Some(SettingKind::Int { .. })
         );
-        if is_number && env.device.input.touch {
+        if is_number && env.device().input.touch {
             // − and + are always there: a tap on one changes the number,
             // elsewhere on the row nothing happens.
             self.rows.set_focus(index);
@@ -636,7 +636,7 @@ impl Screen for GroupPage {
 
     fn on_pointer(&mut self, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
-        if !env.device.input.touch {
+        if !env.device().input.touch {
             return Handled::No;
         }
         // The row of the knob taken, or of a finger coming down.
@@ -656,7 +656,7 @@ impl Screen for GroupPage {
             .spec(index)
             .map_or(0, |spec| self.slider_extra(&env, spec, rect));
         let band = ui::slider::band_below(&self.style, rect, extra);
-        let value = env.settings.int(id.as_str());
+        let value = env.settings().int(id.as_str());
         let Some(step) = self
             .drag
             .on_pointer(event, &self.style, &slider, band, value)
@@ -666,7 +666,7 @@ impl Screen for GroupPage {
         let before = match self.dragged {
             Some((_, before)) => before,
             None => {
-                let before = env.settings.int(id.as_str());
+                let before = env.settings().int(id.as_str());
                 self.dragged = Some((index, before));
                 // The focus hides, as after other taps.
                 self.rows.set_focus(index);
@@ -741,7 +741,7 @@ impl Screen for GroupPage {
             // A setting shown only while this one has a value.
             let shows_others = events::SETTING_CHANGED
                 .read(event, params)
-                .is_some_and(|changed| env.settings.governs(changed.id.as_str()));
+                .is_some_and(|changed| env.settings().governs(changed.id.as_str()));
             if covered || shows_others {
                 self.rebuild(&env);
                 cx.request_redraw();

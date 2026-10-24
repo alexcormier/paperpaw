@@ -13,7 +13,7 @@ use super::*;
 /// filled inside it as far as it has come. The fill follows the track's
 /// rounded ends at every value, a sliver at the start or all of it, so no
 /// pixel of it lies outside the track.
-pub fn draw_progress(
+pub(crate) fn draw_progress(
     canvas: &mut Canvas<'_>,
     style: &UiStyle,
     area: Rect,

@@ -95,7 +95,7 @@ impl Installs {
         // The cable is sent this plugin now: not both at once.
         if matches!(method, "PUT" | "POST") && staged_over_cable(env, id) {
             if let Some(body) = body_file {
-                let _ = env.storage.remove(body);
+                let _ = env.storage().remove(body);
             }
             return (
                 json(409, String::from("{\"why\":\"being sent over the cable\"}")),
@@ -106,12 +106,12 @@ impl Installs {
             ("PUT", file) if !file.is_empty() => {
                 let Some(sha256) = param(query, "sha256").and_then(|hex| digest(&hex)) else {
                     if let Some(body) = body_file {
-                        let _ = env.storage.remove(body);
+                        let _ = env.storage().remove(body);
                     }
                     return (json(400, String::from("{\"why\":\"sha256\"}")), None);
                 };
                 let put = match body_file {
-                    Some(body) => staging.put(env.storage, file, body, &sha256),
+                    Some(body) => staging.put(env.storage(), file, body, &sha256),
                     None => Err(Refusal::Damaged),
                 };
                 match put {
@@ -128,7 +128,7 @@ impl Installs {
                     ),
                     // Asked about this code: other code put in its place
                     // meanwhile is refused.
-                    Err(Refusal::NeedsApproval) => match staging.code(env.storage) {
+                    Err(Refusal::NeedsApproval) => match staging.code(env.storage()) {
                         Some(sha256) => (State::Asking(sha256), Some(Ask::Code(String::from(id)))),
                         None => (State::Refused(Refusal::BadCode), None),
                     },
@@ -142,7 +142,7 @@ impl Installs {
                 (json(200, state_json(state)), None)
             }
             ("DELETE", "") => {
-                staging.abort(env.storage);
+                staging.abort(env.storage());
                 self.states.retain(|(kept, _)| kept != id);
                 (json(200, String::from("{\"ok\":true}")), None)
             }
@@ -165,7 +165,7 @@ impl Installs {
             return false;
         };
         if !yes {
-            staging.abort(env.storage);
+            staging.abort(env.storage());
             self.set(plugin, State::Refused(Refusal::NeedsApproval));
             return false;
         }
@@ -180,14 +180,17 @@ impl Installs {
 
 /// Whether the Wi-Fi transfer, open, has files of plugin `id` staged.
 pub(crate) fn staged_over_wifi(env: &Env<'_>, id: &str) -> bool {
-    let open = env.stack.iter().any(|entry| entry.screen == crate::SCREEN);
-    open && Staging::new(id).is_some_and(|staging| !staging.files(env.storage).is_empty())
+    let open = env
+        .stack()
+        .iter()
+        .any(|entry| entry.screen == crate::SCREEN);
+    open && Staging::new(id).is_some_and(|staging| !staging.files(env.storage()).is_empty())
 }
 
 /// Whether the cable transfer, open, has an offer of plugin `id`.
 fn staged_over_cable(env: &Env<'_>, id: &str) -> bool {
     let open = env
-        .stack
+        .stack()
         .iter()
         .any(|entry| entry.screen == crate::CABLE_SCREEN);
     open && crate::cable::offered_plugin(env).as_deref() == Some(id)
@@ -243,12 +246,12 @@ fn digest(hex: &str) -> Option<[u8; 32]> {
 /// The plugins installed, as JSON.
 pub(crate) fn listing(env: &Env<'_>) -> String {
     let mut json = String::from("{\"plugins\":[");
-    for (i, info) in env.plugins.iter().enumerate() {
+    for (i, info) in env.plugins().iter().enumerate() {
         let version = info.update.unwrap_or(info.manifest.version);
         let id = info.manifest.id.as_str();
         let origin = match info.kind {
             PluginKind::BuiltIn => "built-in",
-            _ => match install::origin(env.storage, id, version) {
+            _ => match install::origin(env.storage(), id, version) {
                 Origin::Store => "store",
                 _ => "local",
             },

@@ -35,18 +35,18 @@ pub(crate) struct DecksScreen {
 pub(crate) fn due_now(env: &Env<'_>) -> usize {
     let now = cards::now(env);
     let day = Day::now(env, now);
-    let per_day = env.settings.read(&NEW_PER_DAY).clamp(0, 1000) as u32;
+    let per_day = env.settings().read(&NEW_PER_DAY).clamp(0, 1000) as u32;
     cards::due_count(
-        env.storage,
+        env.storage(),
         day.end,
-        cards::new_left(env.storage, day, per_day),
+        cards::new_left(env.storage(), day, per_day),
     )
 }
 
 impl DecksScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -63,8 +63,8 @@ impl DecksScreen {
 
     fn load(&mut self, env: &Env<'_>) {
         crate::take_lookups(env);
-        let sizes = cards::sizes(env.storage);
-        self.decks = cards::decks(env.storage)
+        let sizes = cards::sizes(env.storage());
+        self.decks = cards::decks(env.storage())
             .unwrap_or_default()
             .into_iter()
             .map(|d| {
@@ -115,18 +115,18 @@ impl Screen for DecksScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
-        let title = env.i18n.tr("vocabulary.cards.title");
+        let title = env.i18n().tr("vocabulary.cards.title");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
         let due = env
-            .i18n
+            .i18n()
             .plural("vocabulary.cards.due", self.due as i64, &[]);
         let empty = self.decks.is_empty();
         let decks = &self.decks;
         self.list.draw(&mut ui, len, |ui, row, rect, focused| {
             let (title, note): (&str, String) = match row {
-                REVIEW_ROW => (env.i18n.tr("vocabulary.cards.review"), due.clone()),
+                REVIEW_ROW => (env.i18n().tr("vocabulary.cards.review"), due.clone()),
                 PHONE_ROW => {
                     let key = if empty {
                         "vocabulary.cards.phone.first"
@@ -134,14 +134,14 @@ impl Screen for DecksScreen {
                         "vocabulary.cards.phone.help"
                     };
                     (
-                        env.i18n.tr("vocabulary.cards.phone"),
-                        env.i18n.tr(key).into(),
+                        env.i18n().tr("vocabulary.cards.phone"),
+                        env.i18n().tr(key).into(),
                     )
                 }
                 row => match decks.get(row - FIRST_DECK) {
                     Some((deck, n)) => (
                         deck.name.as_str(),
-                        env.i18n.plural("vocabulary.cards.count", *n as i64, &[]),
+                        env.i18n().plural("vocabulary.cards.count", *n as i64, &[]),
                     ),
                     None => return,
                 },

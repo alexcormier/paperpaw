@@ -40,7 +40,7 @@ pub(crate) fn start(env: &Env<'_>, font: &Font, out: &mut Commands) {
 
 fn failed(env: &Env<'_>, name: &str) -> Command {
     Command::Notify(
-        env.i18n
+        env.i18n()
             .format("fonts-browser.failed", &[("name", Arg::Str(name))]),
     )
 }
@@ -51,7 +51,7 @@ pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     match INSTALLER.received(env, reply, out) {
         Received::Complete(done) => {
             INSTALLER.install(env, out);
-            out.push(Command::Notify(env.i18n.format(
+            out.push(Command::Notify(env.i18n().format(
                 "fonts-browser.ready",
                 &[("name", Arg::Str(&done.name))],
             )));

@@ -156,7 +156,7 @@ pub(super) fn sentence(i18n: &Translator, hour: u8, minute: u8, next: bool) -> (
 /// in capitals or not.
 fn text(env: &Env<'_>, hour: u8, minute: u8) -> (Option<String>, String) {
     let next = chosen_name(env, ID.as_str(), "quarters") == "next";
-    let (lead, rest) = sentence(env.i18n, hour, minute, next);
+    let (lead, rest) = sentence(env.i18n(), hour, minute, next);
     let capitals = widgets::shows(env, ID.as_str(), "capitals");
     let case = |s: String| if capitals { upper(&s) } else { s };
     match chosen_name(env, ID.as_str(), "lead") {
@@ -170,7 +170,7 @@ fn text(env: &Env<'_>, hour: u8, minute: u8) -> (Option<String>, String) {
 /// where the whole sentence has no room.
 fn time_alone(env: &Env<'_>, hour: u8, minute: u8) -> String {
     let next = chosen_name(env, ID.as_str(), "quarters") == "next";
-    let (_, rest) = sentence(env.i18n, hour, minute, next);
+    let (_, rest) = sentence(env.i18n(), hour, minute, next);
     let rest = capitalised(&rest);
     if widgets::shows(env, ID.as_str(), "capitals") {
         upper(&rest)
@@ -463,8 +463,8 @@ fn draw_grid(
     past: Option<u8>,
 ) -> bool {
     let next = chosen_name(env, ID.as_str(), "quarters") == "next";
-    let (lead, rest) = sentence(env.i18n, hour, minute, next);
-    let rows = grid(env.i18n);
+    let (lead, rest) = sentence(env.i18n(), hour, minute, next);
+    let rows = grid(env.i18n());
     let Some(cells) = lit(&rows, &format!("{lead} {rest}")) else {
         return false;
     };
@@ -491,7 +491,7 @@ fn draw_grid(
         return false;
     }
     let bolder = (size / 20.0) as u16;
-    let one_bit = env.caps.black_and_white;
+    let one_bit = env.caps().black_and_white;
     let unlit = if one_bit {
         look.ink
     } else {
@@ -587,7 +587,7 @@ pub(super) fn drawn_outside(id: &str) -> Option<Rect> {
     for area in places {
         let all = fb.bounds();
         fb.canvas().fill(all, Color::WHITE);
-        let mut widget = env.widgets.make(id, &env).unwrap();
+        let mut widget = env.widgets().make(id, &env).unwrap();
         widget.place(&env, area);
         widget.draw(&mut fb.canvas(), &env, area);
         let view = fb.view();

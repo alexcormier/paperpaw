@@ -69,8 +69,8 @@ pub(crate) fn plugins_path() -> String {
 /// Writes `text` to `path` for the reader and opens it there; nothing
 /// where it cannot be written.
 pub(crate) fn read(env: &Env<'_>, path: String, text: &str) -> Option<Command> {
-    let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
-    env.storage
+    let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+    env.storage()
         .write(&path, text.as_bytes())
         .ok()
         .map(|()| paperpaw_sdk::readers::open(path))
@@ -79,18 +79,18 @@ pub(crate) fn read(env: &Env<'_>, path: String, text: &str) -> Option<Command> {
 /// The licences' text, the logo first: the picture set, or PaperPaw's
 /// own written beside it; a chapter each.
 pub(crate) fn licences(env: &Env<'_>) -> String {
-    let intro = env.i18n.tr("about.intro");
-    let set = env.settings.read(&logo::LOGO).trim().trim_matches('/');
-    let picture = if !set.is_empty() && env.storage.exists(set) {
+    let intro = env.i18n().tr("about.intro");
+    let set = env.settings().read(&logo::LOGO).trim().trim_matches('/');
+    let picture = if !set.is_empty() && env.storage().exists(set) {
         format!("/{set}")
     } else {
         let path = format!("{}/logo.png", Env::plugin_dir(PLUGIN.as_str()));
-        if env.storage.size(&path).ok() != Some(LOGO.len() as u64) {
-            let _ = env.storage.write(&path, LOGO);
+        if env.storage().size(&path).ok() != Some(LOGO.len() as u64) {
+            let _ = env.storage().write(&path, LOGO);
         }
         String::from("logo.png")
     };
-    let version = shown_version(env.i18n, VERSION);
+    let version = shown_version(env.i18n(), VERSION);
     format!(
         "![PaperPaw]({picture})\n\n# PaperPaw {version}\n\n{intro}\n\n{SOURCE}\n\n{}{LICENCES}",
         lines(env),
@@ -114,7 +114,7 @@ fn shown_version(i18n: &paperpaw_sdk::Translator, version: &str) -> String {
 fn lines(env: &Env<'_>) -> String {
     let mut text = String::new();
     let mut used: Vec<(&Id, usize)> = Vec::new();
-    for (plugin, contribution) in env.services.contributions(LINES) {
+    for (plugin, contribution) in env.services().contributions(LINES) {
         for line in contribution
             .lines()
             .map(str::trim)
@@ -137,9 +137,9 @@ fn lines(env: &Env<'_>) -> String {
             }
             used[at].1 += end;
             let name = env
-                .plugins
+                .plugins()
                 .get(plugin.as_str())
-                .map_or(plugin.as_str(), |info| info.name(env.i18n));
+                .map_or(plugin.as_str(), |info| info.name(env.i18n()));
             text.push('*');
             plain(name, &mut text);
             text.push_str(":* ");
@@ -163,13 +163,13 @@ fn plain(text: &str, out: &mut String) {
 /// The plugins built into the firmware, where PaperPaw is it, as a text
 /// to read.
 pub(crate) fn built_in(env: &Env<'_>) -> String {
-    let Some(firmware) = env.firmware.filter(|f| !f.plugins.is_empty()) else {
+    let Some(firmware) = env.firmware().filter(|f| !f.plugins.is_empty()) else {
         return String::new();
     };
     let mut text = format!(
         "# {}\n\n{}\n\n",
-        env.i18n.tr("about.plugins.title"),
-        env.i18n.tr("about.plugins.help")
+        env.i18n().tr("about.plugins.title"),
+        env.i18n().tr("about.plugins.help")
     );
     for plugin in firmware.plugins.iter() {
         text.push_str(&format!("- {} {}\n", plugin.name, plugin.version));
@@ -181,8 +181,8 @@ pub(crate) fn built_in(env: &Env<'_>) -> String {
 /// What native code plugins must be built with, where PaperPaw loads
 /// them: its fingerprint, and the note that says so.
 pub(crate) fn native(env: &Env<'_>) -> Option<(String, String)> {
-    let native = env.native?;
-    let note = env.i18n.format(
+    let native = env.native()?;
+    let note = env.i18n().format(
         "about.native.help",
         &[("toolchain", Arg::Str(&native.toolchain))],
     );

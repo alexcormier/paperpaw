@@ -93,7 +93,7 @@ fn summary_request(language: &str, word: &str, reply: Id) -> HttpRequest {
 /// The summary in `reply`, with the article's title; else why there is
 /// none, to show.
 fn summary(env: &Env<'_>, reply: &HttpReply) -> Result<(Option<String>, String), String> {
-    let why = |key: &str| env.i18n.tr(key).to_string();
+    let why = |key: &str| env.i18n().tr(key).to_string();
     match reply.status {
         200..=299 => {
             let text = reply.text();
@@ -117,7 +117,7 @@ fn provide(env: &Env<'_>, query: &LookupQuery) -> LookupAnswer {
     let language = query
         .language
         .clone()
-        .unwrap_or_else(|| env.i18n.language().to_string());
+        .unwrap_or_else(|| env.i18n().language().to_string());
     let context = Params::new()
         .with(params::WORD, query.word.clone())
         .with(params::LANGUAGE, language.clone())
@@ -140,7 +140,7 @@ fn provided(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     };
     let language = context.get(params::LANGUAGE).map(ToString::to_string);
     let query = LookupQuery::new(word, language).reply(to);
-    let source = env.i18n.tr("wikipedia.title");
+    let source = env.i18n().tr("wikipedia.title");
     let entry = match summary(env, reply) {
         Ok((_, text)) => LookupEntry::new(source, text).more(SCREEN),
         Err(why) => LookupEntry::new(source, why),
@@ -198,11 +198,11 @@ struct Summary {
 impl Summary {
     fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = display.height * 9 / 20;
         let language = params
             .get(params::LANGUAGE)
-            .map_or_else(|| env.i18n.language().to_string(), ToString::to_string);
+            .map_or_else(|| env.i18n().language().to_string(), ToString::to_string);
         let mut summary = Self {
             style,
             region: Rect::new(0, top, display.width, display.height - top),
@@ -221,7 +221,7 @@ impl Summary {
                 summary.set_text(env, text.to_string());
             }
             None => {
-                let loading = env.i18n.tr("wikipedia.loading").to_string();
+                let loading = env.i18n().tr("wikipedia.loading").to_string();
                 summary.set_text(env, loading);
             }
         }
@@ -305,7 +305,7 @@ impl Screen for Summary {
     /// *Select* closes it; the arrows scroll.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM {
-            paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n().tr("core.hint.close").to_string())
         } else {
             paperpaw_sdk::Hint::Default
         }
@@ -332,7 +332,7 @@ impl Screen for Summary {
         };
         let header = self.header();
         let margin = style.margin() as f32;
-        let source = env.i18n.tr("wikipedia.title");
+        let source = env.i18n().tr("wikipedia.title");
         let source_width = font.measure(style.small(), source);
         let right = f32::from(header.width) - margin - source_width;
         ui::Label::new(source)
@@ -367,8 +367,8 @@ impl Screen for Summary {
         }
         self.asked = true;
         let env = *cx.env();
-        if !env.caps.network {
-            let text = env.i18n.tr("wikipedia.no-network").to_string();
+        if !env.caps().network {
+            let text = env.i18n().tr("wikipedia.no-network").to_string();
             self.set_text(&env, text);
             cx.request_redraw();
             return;

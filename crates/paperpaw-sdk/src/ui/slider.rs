@@ -64,7 +64,7 @@ pub enum SliderFocus {
     /// Not focused: black on white.
     #[default]
     None,
-    /// Focused, on the focus bar ([`draw_focus`](crate::ui::draw_focus)):
+    /// Focused, on the focus bar ([`Ui::focus`](crate::ui::Ui::focus)):
     /// white on black.
     Focused,
     /// Focused and moved by the buttons: its `−` and `+` filled.
@@ -370,7 +370,7 @@ impl Slider {
 /// ([`SettingExtra::slider`](crate::SettingExtra::slider)), on a touch
 /// screen. With buttons alone it keeps its compact row with `−` and `+`.
 pub fn shows(env: &Env<'_>, spec: &SettingSpec) -> bool {
-    env.device.input.touch && marked(spec)
+    env.device().input.touch && marked(spec)
 }
 
 /// Whether `spec` is a number marked to be set with a slider, wherever

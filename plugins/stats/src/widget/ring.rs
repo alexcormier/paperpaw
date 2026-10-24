@@ -139,7 +139,7 @@ impl Widget for Ring {
         let look = widgets::draw_frame(canvas, env, NAME, area);
         match self.numbers {
             Some(numbers) => draw(canvas, env, &look, numbers),
-            None => widgets::draw_message(canvas, env, &look, env.i18n.tr("stats.no-clock")),
+            None => widgets::draw_message(canvas, env, &look, env.i18n().tr("stats.no-clock")),
         }
     }
 
@@ -182,19 +182,19 @@ fn note_height(env: &Env<'_>, font: &paperpaw_sdk::FontHandle<'_>, style: &UiSty
 /// a goal, the request for one.
 fn note(env: &Env<'_>, numbers: Numbers) -> Option<String> {
     let Some(goal) = goal(env) else {
-        return Some(env.i18n.tr("stats.widget.goal.set").to_string());
+        return Some(env.i18n().tr("stats.widget.goal.set").to_string());
     };
     if !widgets::shows(env, NAME, "note") {
         return None;
     }
     Some(if numbers.streak > 0 {
-        env.i18n
+        env.i18n()
             .plural("stats.goal.streak", i64::from(numbers.streak), &[])
     } else if numbers.today >= goal {
-        env.i18n.tr("stats.goal.reached").to_string()
+        env.i18n().tr("stats.goal.reached").to_string()
     } else {
         let left = fmt::duration(env, (goal - numbers.today).max(60));
-        env.i18n
+        env.i18n()
             .format("stats.goal.to-go", &[("time", Arg::Str(&left))])
     })
 }
@@ -209,7 +209,7 @@ fn least_ring(font: &paperpaw_sdk::FontHandle<'_>, style: &UiStyle) -> u16 {
 fn time_text(env: &Env<'_>, numbers: Numbers) -> String {
     let time = fmt::duration(env, numbers.today);
     match goal(env) {
-        Some(goal) => env.i18n.format(
+        Some(goal) => env.i18n().format(
             "stats.widget.goal.of",
             &[
                 ("time", Arg::Str(&time)),
@@ -227,7 +227,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, numbers: Numb
         return;
     };
     let id = NAME;
-    let title = env.i18n.tr("stats.widget.goal.caption");
+    let title = env.i18n().tr("stats.widget.goal.caption");
     let caption = super::caption(env, id, look.area, &[title]);
     let area = super::below_caption(env, caption, look.area);
     let note = note(env, numbers);
@@ -478,7 +478,7 @@ fn draw_ring(
         .color(look.ink)
         .draw_from(ui, cx - w / 2.0, row);
     if unit_h > 0 {
-        let text = env.i18n.tr("stats.unit.minutes");
+        let text = env.i18n().tr("stats.unit.minutes");
         let w = font.measure(style.small(), text);
         let row = Rect::new(at.x, shown.y + big, at.width, unit_h);
         ui::Label::new(text)

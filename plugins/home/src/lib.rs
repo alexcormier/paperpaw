@@ -211,7 +211,7 @@ use widgets::next_minute;
 fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
     let style = UiStyle::new(env);
     let footer_height = style.row();
-    let display = env.device.display;
+    let display = env.device().display;
     let margin = style.margin();
     let gap = style.gap();
     let footer = Rect::new(
@@ -221,7 +221,7 @@ fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
         footer_height,
     );
     let mut top = gap / 2;
-    let status = env.settings.read(&pages::STATUS_BAR).then(|| {
+    let status = env.settings().read(&pages::STATUS_BAR).then(|| {
         let height = blocks::status_height(env, display.width);
         let r = Rect::new(
             margin,
@@ -243,11 +243,11 @@ fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
         footer.y.saturating_sub(top),
     );
     let columns = env
-        .settings
+        .settings()
         .read(&pages::COLUMNS)
         .clamp(2, i64::from(grid::MAX_COLUMNS)) as u8;
     let rows = env
-        .settings
+        .settings()
         .read(&pages::ROWS)
         .clamp(0, i64::from(grid::MAX_ROWS)) as u8;
     (status, Geometry::new(env, area, columns, rows), footer)
@@ -290,7 +290,7 @@ impl Dashboard {
     /// Places the page's items in the grid, and the buttons below.
     fn layout(&mut self, env: &Env<'_>) {
         let style = UiStyle::new(env);
-        let display = env.device.display;
+        let display = env.device().display;
         let (status, geometry, footer) = frame(env);
         let pages = pages::pages(env);
         self.pages = pages.len();
@@ -315,14 +315,14 @@ impl Dashboard {
         // as leave the dots of the pages their room in the middle.
         self.actions.clear();
         if !editing {
-            let pencil = env.settings.read(&pages::FOOTER_PENCIL);
+            let pencil = env.settings().read(&pages::FOOTER_PENCIL);
             let mut right = if pencil {
                 self.pencil.x
             } else {
                 self.pencil.x + side
             };
             let least = display.width / 2 + side;
-            for item in env.menus.shown_items(env, FOOTER.as_str()) {
+            for item in env.menus().shown_items(env, FOOTER.as_str()) {
                 if item.section || right < least + side {
                     continue;
                 }
@@ -337,11 +337,11 @@ impl Dashboard {
         if editing {
             buttons.push((self.plus, ADD));
         }
-        if editing || env.settings.read(&pages::FOOTER_PENCIL) {
+        if editing || env.settings().read(&pages::FOOTER_PENCIL) {
             buttons.push((self.pencil, PENCIL));
         }
         self.grid
-            .set_tool_labels(env.settings.read(&blocks::TOOL_LABELS));
+            .set_tool_labels(env.settings().read(&blocks::TOOL_LABELS));
         self.grid.layout(env, geometry, &items, &buttons);
         self.books = blocks::books_shown(env, &items);
         self.status = status;
@@ -424,7 +424,7 @@ impl Dashboard {
                 let width = (f.width / 2).saturating_sub(margin + style.gap() * 3);
                 let line = paperpaw_sdk::status::StatusLine::new(
                     Rect::new(margin, f.y, width, f.height),
-                    [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
+                    [env.settings().read(&pages::FOOTER_ITEMS), "", ""],
                     style.small(),
                     style.faint(ui::Ink::Note),
                 );
@@ -432,7 +432,7 @@ impl Dashboard {
             }
         }
         // A dot a page, the current one filled.
-        if self.pages > 1 && (editing || env.settings.read(&pages::FOOTER_DOTS)) {
+        if self.pages > 1 && (editing || env.settings().read(&pages::FOOTER_DOTS)) {
             let dot = (u32::from(style.gap()) * 2 / 3).max(6);
             let spacing = dot * 2;
             let total = dot * self.pages as u32 + (spacing - dot) * (self.pages as u32 - 1);
@@ -452,19 +452,19 @@ impl Dashboard {
         if editing {
             icon("plus", self.plus, Color::BLACK);
             icon("check", self.pencil, Color::BLACK);
-        } else if env.settings.read(&pages::FOOTER_PENCIL) {
+        } else if env.settings().read(&pages::FOOTER_PENCIL) {
             icon("pencil", self.pencil, style.faint(ui::Ink::Note));
         }
         if !editing {
             for (area, action) in &self.actions {
-                let name = env.menus.icon(action.as_str()).unwrap_or("puzzle");
+                let name = env.menus().icon(action.as_str()).unwrap_or("puzzle");
                 let w = ui::icon_width(env, name, size);
                 let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
                 ui.icon(name, size, x, *area, style.faint(ui::Ink::Note));
                 let title = env
-                    .menus
+                    .menus()
                     .title(action.as_str())
-                    .map_or(action.as_str(), |t| env.i18n.tr(t));
+                    .map_or(action.as_str(), |t| env.i18n().tr(t));
                 ui.canvas()
                     .describe(paperpaw_sdk::semantics::Role::Button, title, *area);
             }
@@ -501,7 +501,7 @@ impl Screen for Dashboard {
         // hidden (its widgets went) or changed, else what they show read
         // again. The focus where wanted.
         self.grid
-            .set_focus_shown(ui::focus_shown(&env) && env.settings.read(&blocks::FOCUS_AT_ONCE));
+            .set_focus_shown(ui::focus_shown(&env) && env.settings().read(&blocks::FOCUS_AT_ONCE));
         if self.stale {
             self.layout(&env);
         } else {
@@ -514,7 +514,7 @@ impl Screen for Dashboard {
         if self.missing.is_empty() {
             cx.wake_at(next_minute(&env));
         } else {
-            cx.wake_at(env.now);
+            cx.wake_at(env.now());
         }
     }
 
@@ -531,7 +531,7 @@ impl Screen for Dashboard {
             if self.missing.is_empty() {
                 cx.wake_at(next_minute(&env));
             } else {
-                cx.wake_at(env.now.add_millis(20));
+                cx.wake_at(env.now().add_millis(20));
             }
         } else {
             if let Some(status) = self.status {

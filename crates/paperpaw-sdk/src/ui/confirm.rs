@@ -60,7 +60,7 @@ impl Confirm {
         let label = |key: &str, fallback: &str| -> String {
             match params.get(key) {
                 Some(label) if !label.is_empty() => String::from(label),
-                _ => String::from(env.i18n.tr(fallback)),
+                _ => String::from(env.i18n().tr(fallback)),
             }
         };
         let only_yes = params.get(ONLY_YES).is_some();
@@ -88,7 +88,7 @@ impl Confirm {
         };
         let mut dialog = Dialog::new(env, &style, title, &text, buttons);
         // In the middle of the screen; at the top when it is taller.
-        let room = env.device.display.height.saturating_sub(dialog.height());
+        let room = env.device().display.height.saturating_sub(dialog.height());
         dialog.place(room / 2);
         Self {
             style,
@@ -120,7 +120,7 @@ impl Confirm {
 
 impl Screen for Confirm {
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
-        let display = env.device.display;
+        let display = env.device().display;
         let whole = Rect::new(0, 0, display.width, display.height);
         Some(self.dialog.panel().intersection(&whole).unwrap_or(whole))
     }

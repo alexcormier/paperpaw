@@ -64,7 +64,7 @@ impl ShotsScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = header.area().height + style.gap();
         let margin = style.margin();
         let area = Rect::new(
@@ -117,7 +117,7 @@ impl ShotsScreen {
 impl Screen for ShotsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("store.shots");
+        let title = env.i18n().tr("store.shots");
         let paging = Some(ui::Paging::new(self.at, self.urls.len()));
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, None, paging);
@@ -125,7 +125,7 @@ impl Screen for ShotsScreen {
             Picture::Here(image) => {
                 let (w, h) = ui::fit_image(image, self.area.width, self.area.height);
                 let at = Rect::new(self.area.x + (self.area.width - w) / 2, self.area.y, w, h);
-                ui::draw_image(ui.canvas(), env.storage, image, at);
+                ui::draw_image(ui.canvas(), env.storage(), image, at);
                 // A thin frame: the screenshot's own paper apart from ours.
                 ui.canvas().stroke_round(
                     at,
@@ -137,10 +137,10 @@ impl Screen for ShotsScreen {
             Picture::Loading => ui.empty(
                 self.area,
                 "cloud-download",
-                env.i18n.tr("store.loading-plugin"),
+                env.i18n().tr("store.loading-plugin"),
                 "",
             ),
-            Picture::Failed => ui.empty(self.area, "cloud", env.i18n.tr("store.shot-failed"), ""),
+            Picture::Failed => ui.empty(self.area, "cloud", env.i18n().tr("store.shot-failed"), ""),
         }
     }
 
@@ -189,7 +189,7 @@ impl Screen for ShotsScreen {
             return Handled::Yes;
         }
         // Left half back, right half on, as in a book.
-        let half = i32::from(cx.env().device.display.width) / 2;
+        let half = i32::from(cx.env().device().display.width) / 2;
         self.turn(if gesture.start.x < half { -1 } else { 1 }, cx);
         Handled::Yes
     }
@@ -209,15 +209,15 @@ impl Screen for ShotsScreen {
         let part = part(at);
         if at != self.at {
             // Turned past meanwhile: not this one's picture.
-            let _ = env.storage.remove(&part);
+            let _ = env.storage().remove(&part);
             return;
         }
         let fit = Fit::screen(u32::from(self.area.width), u32::from(self.area.height));
         let image = (200..300)
             .contains(&reply.status)
-            .then(|| gray_from_file(env.storage, &part, &file("shot.gray"), fit))
+            .then(|| gray_from_file(env.storage(), &part, &file("shot.gray"), fit))
             .flatten();
-        let _ = env.storage.remove(&part);
+        let _ = env.storage().remove(&part);
         self.picture = image.map_or(Picture::Failed, Picture::Here);
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Full);

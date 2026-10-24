@@ -189,13 +189,13 @@ fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
 /// `widget`'s caption: "Word of the day" (or "Newest word"), "Vocabulary".
 fn caption_text<'e>(env: &Env<'e>, widget: &str) -> &'e str {
     if widget == SAVED_NAME {
-        env.i18n.tr("vocabulary.title")
+        env.i18n().tr("vocabulary.title")
     } else if widget == DUE_NAME {
-        env.i18n.tr("vocabulary.cards.title")
-    } else if env.settings.text(&format!("{WORD_NAME}.pick")) == PICKS[1] {
-        env.i18n.tr("vocabulary.widget.newest")
+        env.i18n().tr("vocabulary.cards.title")
+    } else if env.settings().text(&format!("{WORD_NAME}.pick")) == PICKS[1] {
+        env.i18n().tr("vocabulary.widget.newest")
     } else {
-        env.i18n.tr("vocabulary.widget.word")
+        env.i18n().tr("vocabulary.widget.word")
     }
 }
 
@@ -300,12 +300,12 @@ fn empty(env: &Env<'_>, widget: &str, area: Rect) -> Wrapped {
     } else {
         ("vocabulary.widget.empty", "vocabulary.widget.empty.short")
     };
-    let long = env.i18n.tr(long);
+    let long = env.i18n().tr(long);
     let wrapped = Wrapped::fitting(env, long, style.text(), style.small(), width, inner.height);
     if wrapped.whole() {
         return wrapped;
     }
-    let short = env.i18n.tr(short);
+    let short = env.i18n().tr(short);
     Wrapped::fitting(env, short, style.text(), style.small(), width, height)
 }
 
@@ -341,10 +341,10 @@ fn today(env: &Env<'_>) -> Option<i64> {
 /// device does not know the day, one drawn at random each time the words
 /// are read (at start, and when they change), else the newest.
 fn pick(env: &Env<'_>) -> Option<Word> {
-    if env.settings.text(&format!("{WORD_NAME}.pick")) == PICKS[1] {
-        return store::summary(env.storage).newest;
+    if env.settings().text(&format!("{WORD_NAME}.pick")) == PICKS[1] {
+        return store::summary(env.storage()).newest;
     }
-    let count = store::count(env.storage);
+    let count = store::count(env.storage());
     if count == 0 {
         return None;
     }
@@ -352,14 +352,14 @@ fn pick(env: &Env<'_>) -> Option<Word> {
         Some(day) => day.rem_euclid(count as i64) as usize,
         None => {
             let mut drawn = [0u8; 4];
-            if env.random.fill(&mut drawn) {
+            if env.random().fill(&mut drawn) {
                 u32::from_le_bytes(drawn) as usize % count
             } else {
                 count - 1
             }
         }
     };
-    store::range(env.storage, n, n + 1)
+    store::range(env.storage(), n, n + 1)
         .into_iter()
         .next()
         .map(|(_, word)| word)
@@ -442,7 +442,7 @@ fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
     let sentence_h = sentence.as_ref().map_or(0, |s| s.height(env));
     let (block, caption) = captioned_block(env, id, area, big + sentence_h + book);
     let from = (book > 0).then(|| {
-        let text = env.i18n.format(
+        let text = env.i18n().format(
             "vocabulary.widget.from",
             &[("title", Arg::Str(&word.title))],
         );
@@ -464,8 +464,8 @@ impl Widget for WordWidget {
     fn update(&mut self, env: &Env<'_>) -> bool {
         // Read again only when the day, the words or the choice changed:
         // it is asked each minute, for the day.
-        let size = env.storage.size(&store::file()).unwrap_or(0);
-        let newest = env.settings.text(&format!("{WORD_NAME}.pick")) == PICKS[1];
+        let size = env.storage().size(&store::file()).unwrap_or(0);
+        let newest = env.settings().text(&format!("{WORD_NAME}.pick")) == PICKS[1];
         let read_for = Some((today(env), size, newest));
         if read_for == self.read_for {
             return false;
@@ -595,7 +595,7 @@ impl Saved {
 
 impl Widget for Saved {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let summary = store::summary(env.storage);
+        let summary = store::summary(env.storage());
         let changed = summary != self.summary;
         self.summary = summary;
         if changed {
@@ -654,7 +654,7 @@ fn notes(env: &Env<'_>, summary: &Summary, fits: impl Fn(&str) -> bool) -> Vec<S
         .as_ref()
         .filter(|_| widgets::shows(env, id, "newest"))
     {
-        notes.push(env.i18n.format(
+        notes.push(env.i18n().format(
             "vocabulary.widget.latest",
             &[("word", Arg::Str(&newest.word))],
         ));
@@ -662,13 +662,13 @@ fn notes(env: &Env<'_>, summary: &Summary, fits: impl Fn(&str) -> bool) -> Vec<S
     let mut from: Vec<String> = Vec::new();
     if widgets::shows(env, id, "books") && summary.books > 0 {
         from.push(
-            env.i18n
+            env.i18n()
                 .plural("vocabulary.widget.books", summary.books as i64, &[]),
         );
     }
     if widgets::shows(env, id, "languages") && summary.languages > 0 {
         from.push(
-            env.i18n
+            env.i18n()
                 .plural("vocabulary.widget.languages", summary.languages as i64, &[]),
         );
     }
@@ -692,7 +692,7 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, summary
     let area = look.area;
     let room = area.height.saturating_sub(caption_in(env, id, area));
     let headline = env
-        .i18n
+        .i18n()
         .plural("vocabulary.widget.words", summary.count as i64, &[]);
     let width = f32::from(area.width);
     let fits = |text: &str| text.is_empty() || font.measure(style.small(), text) <= width;
@@ -754,7 +754,7 @@ impl Due {
 
 impl Widget for Due {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let count = (!crate::cards::decks(env.storage)
+        let count = (!crate::cards::decks(env.storage())
             .unwrap_or_default()
             .is_empty())
         .then(|| crate::decks::due_now(env));
@@ -802,7 +802,7 @@ impl Widget for Due {
             .height
             .saturating_sub(caption_in(env, DUE_NAME, inner));
         let headline = env
-            .i18n
+            .i18n()
             .plural("vocabulary.widget.due.count", count as i64, &[]);
         let width = f32::from(inner.width);
         // Too wide: the number alone.

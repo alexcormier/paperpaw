@@ -45,7 +45,7 @@ impl FindScreen {
     pub(crate) fn new(env: &Env<'_>, _: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
+        let display = env.device().display;
         let margin = style.margin();
         let gap = style.gap();
         let row = style.touch_row(u32::from(style.row())) as u16;
@@ -69,7 +69,7 @@ impl FindScreen {
             .collect();
         // Cells about 11 mm wide, whole columns within the margins.
         let width = display.width.saturating_sub(2 * margin);
-        let columns = (u32::from(width) / env.metrics.mm(11).max(1)).clamp(5, 8) as u16;
+        let columns = (u32::from(width) / env.metrics().mm(11).max(1)).clamp(5, 8) as u16;
         let cell = width / columns;
         let top = search.y + search.height + gap;
         let cells: Vec<Rect> = (0..letters.len() as u16)
@@ -123,7 +123,7 @@ impl FindScreen {
 impl Screen for FindScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("files.list.find.title");
+        let title = env.i18n().tr("files.list.find.title");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, None, None);
         let Some(font) = style.font(env) else {
@@ -144,7 +144,7 @@ impl Screen for FindScreen {
         let size = style.text() * ui::ICON_SCALE;
         let w = ui.icon("search", size, margin, self.search, ink);
         let x = margin + w + style.gap() as f32;
-        let hint = env.i18n.tr("files.list.find.search");
+        let hint = env.i18n().tr("files.list.find.search");
         let faint = style.focus_faint(focused, ui::Ink::Detail);
         ui::Label::new(hint)
             .px(style.text())

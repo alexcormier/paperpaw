@@ -449,14 +449,14 @@ impl Plugin for Reader {
             Box::new(
                 move |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
                     // Within the sizes the reading font has (see the setting).
-                    let (min, max) = match env.settings.spec(settings::FONT_SIZE.as_str()) {
+                    let (min, max) = match env.settings().spec(settings::FONT_SIZE.as_str()) {
                         Some(paperpaw_sdk::SettingSpec {
                             kind: paperpaw_sdk::SettingKind::Int { min, max },
                             ..
                         }) => (*min, *max),
                         _ => (6, 40),
                     };
-                    let size = env.settings.read(&settings::FONT_SIZE) + step;
+                    let size = env.settings().read(&settings::FONT_SIZE) + step;
                     out.push(Command::set(&settings::FONT_SIZE, size.clamp(min, max)));
                 },
             )
@@ -477,7 +477,7 @@ impl Plugin for Reader {
                 "reader.action.toggle-justify",
                 Box::new(
                     |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
-                        let justify = env.settings.read(&settings::JUSTIFY);
+                        let justify = env.settings().read(&settings::JUSTIFY);
                         out.push(Command::set(&settings::JUSTIFY, !justify));
                     },
                 ),
@@ -620,13 +620,13 @@ fn state_path() -> String {
 fn book_moved(env: &Env<'_>, moved: &events::BookMoved) {
     let (from, to) = (moved.from.as_str(), moved.path.as_str());
     if last_book(env).as_deref() == Some(from) {
-        screen::remember_last(env.storage, to);
+        screen::remember_last(env.storage(), to);
     }
 }
 
 /// The book read last, as remembered.
 fn last_book(env: &Env<'_>) -> Option<String> {
-    let data = paperpaw_sdk::read_file(env.storage, &state_path(), 4096).ok()?;
+    let data = paperpaw_sdk::read_file(env.storage(), &state_path(), 4096).ok()?;
     last_in(core::str::from_utf8(&data).ok()?)
 }
 
@@ -640,11 +640,11 @@ fn last_in(text: &str) -> Option<String> {
 }
 
 fn reopen_last_book(env: &Env<'_>, out: &mut Commands) {
-    if !env.settings.read(&settings::OPEN_LAST) {
+    if !env.settings().read(&settings::OPEN_LAST) {
         return;
     }
     if let Some(path) = last_book(env)
-        && env.storage.size(&path).is_ok()
+        && env.storage().size(&path).is_ok()
     {
         // In the reading app chosen for it.
         out.push(paperpaw_sdk::readers::open(path));

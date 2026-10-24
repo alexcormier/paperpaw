@@ -185,7 +185,7 @@ fn lines(env: &Env<'_>, moon: &Moon, today: &LocalTime) -> Vec<String> {
     let mut lines = Vec::new();
     if widgets::shows(env, ID.as_str(), "name") {
         let key = format!("widgets.moon.phase.{}", phase(moon.degrees));
-        lines.push(String::from(env.i18n.tr(&key)));
+        lines.push(String::from(env.i18n().tr(&key)));
     }
     if widgets::shows(env, ID.as_str(), "full") {
         let local = time::local_seconds(env, moon.next_full.div_euclid(1000));
@@ -193,18 +193,18 @@ fn lines(env: &Env<'_>, moon: &Moon, today: &LocalTime) -> Vec<String> {
         let days = dates::days_from_civil(day.year, day.month, day.day)
             - dates::days_from_civil(today.year, today.month, today.day);
         let text = match days {
-            0 => String::from(env.i18n.tr("widgets.moon.full-today")),
-            1 => String::from(env.i18n.tr("widgets.moon.full-tomorrow")),
+            0 => String::from(env.i18n().tr("widgets.moon.full-today")),
+            1 => String::from(env.i18n().tr("widgets.moon.full-tomorrow")),
             _ => {
                 let date = super::date_text(env, ID.as_str(), day.year, day.month, day.day, false);
-                env.i18n
+                env.i18n()
                     .format("widgets.moon.full-on", &[("date", Arg::Str(&date))])
             }
         };
         lines.push(text);
     }
     if widgets::shows(env, ID.as_str(), "lit") {
-        lines.push(env.i18n.format(
+        lines.push(env.i18n().format(
             "widgets.moon.lit",
             &[("percent", Arg::Int(i64::from(lit(moon.degrees))))],
         ));

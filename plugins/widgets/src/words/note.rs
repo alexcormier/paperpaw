@@ -101,17 +101,17 @@ struct Laid {
 /// The note laid out in widget area `area`, as large as its size setting
 /// says (or as fits); `None` while it says nothing.
 fn lay_out(env: &Env<'_>, area: Rect) -> Option<Laid> {
-    let note = env.settings.read(&TEXT).trim();
+    let note = env.settings().read(&TEXT).trim();
     if note.is_empty() {
         return None;
     }
     let look = widgets::widget_look(env, ID.as_str(), area);
     let mut area = look.area;
     let style = UiStyle::new(env);
-    let font = text::font(env, env.settings.read(&FACE))?;
+    let font = text::font(env, env.settings().read(&FACE))?;
     // The heading where a line of the note fits below it.
     let least = text::line_height(&font, style.small()) as u16;
-    let heading = !env.settings.read(&HEADING).trim().is_empty()
+    let heading = !env.settings().read(&HEADING).trim().is_empty()
         && area.height >= heading_height(env) + least;
     if heading {
         let height = widgets::caption_height(env).min(area.height);
@@ -169,9 +169,9 @@ impl Widget for Note {
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
         let style = UiStyle::new(env);
         let size = widgets::size(env, ID.as_str()).text(&style);
-        let lines = text::font(env, env.settings.read(&FACE)).map_or(1, |font| {
+        let lines = text::font(env, env.settings().read(&FACE)).map_or(1, |font| {
             let width = f32::from(width.saturating_sub(frame_height(env, ID.as_str())));
-            text::count_lines(&font, size, env.settings.read(&TEXT), width)
+            text::count_lines(&font, size, env.settings().read(&TEXT), width)
                 .0
                 .clamp(1, 4)
         });
@@ -181,17 +181,17 @@ impl Widget for Note {
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
-        let note = env.settings.read(&TEXT).trim();
+        let note = env.settings().read(&TEXT).trim();
         if note.is_empty() {
-            let key = if env.device.input.touch {
+            let key = if env.device().input.touch {
                 "widgets.note.none.touch"
             } else {
                 "widgets.note.none"
             };
-            super::draw_empty(canvas, env, &look, env.i18n.tr(key));
+            super::draw_empty(canvas, env, &look, env.i18n().tr(key));
             return;
         }
-        let Some(font) = text::font(env, env.settings.read(&FACE)) else {
+        let Some(font) = text::font(env, env.settings().read(&FACE)) else {
             return;
         };
         // Laid out when placed; drawn elsewhere, laid out for that.
@@ -203,7 +203,7 @@ impl Widget for Note {
             },
         };
         if laid.heading {
-            let heading = env.settings.read(&HEADING).trim();
+            let heading = env.settings().read(&HEADING).trim();
             widgets::draw_caption(canvas, env, ID.as_str(), &look, heading);
         }
         let align = widgets::align(env, ID.as_str());
@@ -214,15 +214,15 @@ impl Widget for Note {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let question = ask::text(env.i18n.tr("widgets.note.setting.text"), &TYPED)
-            .initial(env.settings.read(&TEXT));
+        let question = ask::text(env.i18n().tr("widgets.note.setting.text"), &TYPED)
+            .initial(env.settings().read(&TEXT));
         alloc::vec![WidgetTarget::new(area, question.command())]
     }
 }
 
 /// The height of the heading with its gap; 0 without one.
 fn heading_height(env: &Env<'_>) -> u16 {
-    if env.settings.read(&HEADING).trim().is_empty() {
+    if env.settings().read(&HEADING).trim().is_empty() {
         0
     } else {
         widgets::caption_height(env)

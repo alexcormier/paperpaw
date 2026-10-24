@@ -66,10 +66,10 @@ impl ReviewScreen {
         let deck = params.get(DECK).and_then(|d| d.parse().ok());
         let now = cards::now(env);
         let day = Day::now(env, now);
-        let per_day = env.settings.read(&NEW_PER_DAY).clamp(0, 1000) as u32;
+        let per_day = env.settings().read(&NEW_PER_DAY).clamp(0, 1000) as u32;
         crate::take_lookups(env);
-        let new = cards::new_left(env.storage, day, per_day);
-        let mut queue: VecDeque<Due> = cards::due(env.storage, day.end, new, MOST, deck).into();
+        let new = cards::new_left(env.storage(), day, per_day);
+        let mut queue: VecDeque<Due> = cards::due(env.storage(), day.end, new, MOST, deck).into();
         // The card shown asleep first, if it is among them.
         let first = params.get(FIRST).and_then(|f| {
             let (deck, id) = f.split_once(' ')?;
@@ -81,7 +81,7 @@ impl ReviewScreen {
         {
             queue.push_front(card);
         }
-        let retention = env.settings.read(&RETENTION).clamp(70, 99);
+        let retention = env.settings().read(&RETENTION).clamp(70, 99);
         let mut screen = Self {
             header: ui::Header::new(env, &style, true),
             style,
@@ -105,7 +105,7 @@ impl ReviewScreen {
         self.current = None;
         while let Some(due) = self.queue.pop_front() {
             // A card deleted or changed since is left out.
-            if let Some(card) = cards::card_at(env.storage, due.deck, due.offset)
+            if let Some(card) = cards::card_at(env.storage(), due.deck, due.offset)
                 && card.state.id == due.state.id
             {
                 self.current = Some((due, card));
@@ -113,22 +113,22 @@ impl ReviewScreen {
             }
         }
         self.message = if self.answered > 0 {
-            env.i18n
+            env.i18n()
                 .plural("vocabulary.review.done", self.answered as i64, &[])
         } else {
             let now = cards::now(env);
-            match cards::next_due(env.storage, now) {
-                Some(at) => env.i18n.format(
+            match cards::next_due(env.storage(), now) {
+                Some(at) => env.i18n().format(
                     "vocabulary.review.nothing-until",
                     &[("wait", Arg::Str(&wait_text(env, at - now)))],
                 ),
-                None => env.i18n.tr("vocabulary.review.nothing").into(),
+                None => env.i18n().tr("vocabulary.review.nothing").into(),
             }
         };
     }
 
     fn content(&self, env: &Env<'_>) -> Rect {
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height + self.style.gap();
         let bar = ui::edge_bar_height(&self.style);
         Rect::new(
@@ -140,7 +140,7 @@ impl ReviewScreen {
     }
 
     fn bar(&self, env: &Env<'_>) -> Rect {
-        let display = env.device.display;
+        let display = env.device().display;
         let bar = ui::edge_bar_height(&self.style);
         let band = Rect::new(0, display.height.saturating_sub(bar), display.width, bar);
         ui::edge_bar_band(&self.style, band, false)
@@ -176,12 +176,12 @@ impl ReviewScreen {
         let after = due
             .state
             .answered(grade, now, same_day(&env, &due, now), self.retention);
-        if cards::record(env.storage, due.deck, due.state.due, &after).is_err() {
-            let message = env.i18n.tr("vocabulary.save-failed").into();
+        if cards::record(env.storage(), due.deck, due.state.due, &after).is_err() {
+            let message = env.i18n().tr("vocabulary.save-failed").into();
             cx.command(Command::Notify(message));
         }
         if due.state.is_new() {
-            cards::new_shown(env.storage, Day::now(&env, now), now);
+            cards::new_shown(env.storage(), Day::now(&env, now), now);
         }
         self.answered += 1;
         if grade == Grade::Again {
@@ -276,7 +276,7 @@ fn wait_text(env: &Env<'_>, seconds: i64) -> String {
         d if d < 365 => ("vocabulary.wait.months", d / 30),
         d => ("vocabulary.wait.years", d / 365),
     };
-    env.i18n.format(key, &[("n", Arg::Int(n))])
+    env.i18n().format(key, &[("n", Arg::Int(n))])
 }
 
 impl Screen for ReviewScreen {
@@ -289,7 +289,7 @@ impl Screen for ReviewScreen {
             } else {
                 "vocabulary.review.show"
             };
-            Hint::Text(env.i18n.tr(key).into())
+            Hint::Text(env.i18n().tr(key).into())
         } else if (*action == actions::LEFT || *action == actions::RIGHT) && self.revealed {
             Hint::Default
         } else {
@@ -299,9 +299,11 @@ impl Screen for ReviewScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n.tr("vocabulary.review.title");
+        let title = env.i18n().tr("vocabulary.review.title");
         let count = self.queue.len() + usize::from(self.current.is_some());
-        let left = env.i18n.plural("vocabulary.review.left", count as i64, &[]);
+        let left = env
+            .i18n()
+            .plural("vocabulary.review.left", count as i64, &[]);
         let note = self.current.is_some().then_some(left.as_str());
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, note, None);
@@ -313,7 +315,7 @@ impl Screen for ReviewScreen {
         self.draw_card(&mut ui, area, card);
         let buttons = self.buttons(env);
         if !self.revealed {
-            let label = env.i18n.tr("vocabulary.review.show");
+            let label = env.i18n().tr("vocabulary.review.show");
             ui.button(buttons[0], label, false, true);
             return;
         }
@@ -323,7 +325,7 @@ impl Screen for ReviewScreen {
         };
         let small = font.line_metrics(style.small()).line_height as u16;
         for (i, rect) in buttons.iter().enumerate() {
-            let label = env.i18n.tr(ANSWER_KEYS[i]);
+            let label = env.i18n().tr(ANSWER_KEYS[i]);
             ui.button(*rect, label, false, i == self.focus);
             // When it would come again, above its button.
             let wait = ui::fit(&font, style.small(), &waits[i], f32::from(rect.width));
@@ -406,7 +408,7 @@ impl Screen for ReviewScreen {
 
     fn on_close_request(&mut self, _: CloseCause, cx: &mut Cx<'_, '_>) -> Handled {
         // The answers into the decks, once, as the review ends.
-        let _ = cards::fold(cx.env().storage);
+        let _ = cards::fold(cx.env().storage());
         Handled::No
     }
 }

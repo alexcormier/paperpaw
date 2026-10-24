@@ -503,8 +503,7 @@ file to your report.
   the X4 the reading flow's heap peak is 9.5 KiB lower.
 - SDK: `Env`'s parts are read through methods (`env.settings()`,
   `env.i18n()`, `env.now()`, one for each part), so what it carries can
-  change without a change to plugins. The docs and samples use them; the
-  fields stay public until every plugin reads through the methods.
+  change without a change to plugins. Its fields are private.
 - The SDK's design rules ([Designing the plugin SDK](docs/sdk-design.md)):
   how it grows without breaking plugins. Tests check four of them over
   the crates whose types cross: growing types are `#[non_exhaustive]`,
@@ -672,6 +671,18 @@ file to your report.
   of canvas, environment and style, and the rows `ListView`, `Rows` and
   `sections::Sections` draw are given the `Ui` (`|ui, index, rect,
   focused|`; its canvas is `ui.canvas()`).
+- SDK: what `ui::Ui`, `ui::Label` and `ui::Row` draw is drawn only
+  through them: `draw_button`, `draw_faint_button`, `draw_icon_button`,
+  `draw_focus`, `draw_separator`, `draw_heading`, `draw_switch`,
+  `draw_message`, `draw_note_line`, `draw_empty`, `draw_card`,
+  `draw_progress`, `draw_row_icon`, `draw_header`, `draw_text_field`,
+  `draw_value_row`, `draw_noted_row`, `draw_switch_row` and the rows'
+  heights are the SDK's own (`ui.button(..)`, `Row::value(..)` …);
+  `draw_number` is gone (`Row::number`). Measuring without a `Ui` stays
+  with the functions (`ui::message_height`, `heading_height`,
+  `icon_room` …), and the `Ui` lost its copies of them and of
+  `focus_shown`. `draw_label` stays for drawing without a style (the
+  widgets).
 - SDK: `ui::Row`, a row of a list as a value: `Row::value(title, v)`,
   `Row::plain(title)`, `Row::switch(title, on)`, `Row::number(title, v,
   room)` (or `Row::of(title, RowKind::..)`), with `.note(..)`,

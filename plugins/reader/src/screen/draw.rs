@@ -113,7 +113,7 @@ impl Book {
         }
         let style = UiStyle::new(env);
         let font = style.font(env)?;
-        let label = env.i18n.tr("reader.link-back");
+        let label = env.i18n().tr("reader.link-back");
         let pad = style.gap() as f32;
         let width = ui::button_width(&style, font.measure(style.small(), label));
         // Within the top margin where it is wide enough, so it covers no
@@ -136,19 +136,19 @@ impl Book {
             return;
         };
         // A button as the interface's others.
-        let label = env.i18n.tr("reader.link-back");
+        let label = env.i18n().tr("reader.link-back");
         ui.button(area, label, false, false);
     }
 
     /// Where a tap sets or removes a bookmark: the top right corner.
     pub(super) fn corner_area(&self, env: &Env<'_>) -> Rect {
-        let display = env.device.display;
-        let size = (env.metrics.mm(12) as u16).min(display.width / 4);
+        let display = env.device().display;
+        let size = (env.metrics().mm(12) as u16).min(display.width / 4);
         Rect::new(display.width - size, 0, size, size)
     }
 
     pub(super) fn ribbon_area(&self, env: &Env<'_>) -> Rect {
-        let width = env.metrics.mm(3) as u16;
+        let width = env.metrics().mm(3) as u16;
         let height = (self.content_top() * 0.8) as u16;
         let x = self.right_edge() as u16 - width;
         Rect::new(x, 0, width, height.max(width))
@@ -236,7 +236,7 @@ impl Book {
         if let Some(icon) = self.hands_free {
             context.set(status::ALOUD_CONTEXT, icon);
         }
-        if let Some(page) = self.document.page_label(env.storage, self.page.start) {
+        if let Some(page) = self.document.page_label(env.storage(), self.page.start) {
             context.set(status::PRINTED_CONTEXT, page);
         }
         context
@@ -245,7 +245,7 @@ impl Book {
     /// Where the chapters begin, as thousandths of the book (see
     /// [`chapter_ticks`]).
     pub(super) fn chapter_marks(&self, env: &Env<'_>) -> String {
-        let (document, storage) = (&self.document, env.storage);
+        let (document, storage) = (&self.document, env.storage());
         let entries: Vec<(u8, u32)> = (0..document.toc_len(storage).min(500))
             .filter_map(|index| document.toc_entry(storage, index))
             .map(|entry| (entry.level, (document.progress(entry.at) * 1000.0) as u32))
@@ -260,12 +260,12 @@ impl Book {
     /// The status line at the top (or bottom) that `point` is on: its
     /// place reaches to the edge of the screen.
     pub(super) fn status_hit(&self, env: &Env<'_>, point: Point) -> Option<bool> {
-        let height = env.device.display.height;
+        let height = env.device().display.height;
         self.status_areas().find_map(|(area, top)| {
             let zone = if top {
-                Rect::new(0, 0, env.device.display.width, area.y + area.height)
+                Rect::new(0, 0, env.device().display.width, area.y + area.height)
             } else {
-                Rect::new(0, area.y, env.device.display.width, height - area.y)
+                Rect::new(0, area.y, env.device().display.width, height - area.y)
             };
             zone.contains(point).then_some(top)
         })
@@ -316,7 +316,7 @@ impl Book {
             canvas.fill(area, Color::WHITE);
             let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
             let frame = status::frame(env, area, top, &context);
-            env.status_items.draw_line(id, canvas, env, &frame);
+            env.status_items().draw_line(id, canvas, env, &frame);
         }
     }
 }

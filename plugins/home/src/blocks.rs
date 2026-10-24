@@ -481,13 +481,13 @@ impl ClockLayout {
         let (digits, rest) = split_time(&clock);
         let display = font.display();
         let gap = style.gap() as i32;
-        let wants_date = env.settings.read(&CLOCK_DATE) && time::local_time(env).is_some();
+        let wants_date = env.settings().read(&CLOCK_DATE) && time::local_time(env).is_some();
         // The most it may be: as set, or (as large as fits) up to the
         // width's, its height checked as it is laid out.
         let size_for = |wide: f32| 100.0 * wide / display.measure(100.0, digits).max(1.0);
         let most = match widgets::size(env, CLOCK) {
             TextSize::Fit => size_for(width),
-            size => size_for(set_share(size) * f32::from(env.device.display.width)),
+            size => size_for(set_share(size) * f32::from(env.device().display.width)),
         };
         let lay = |size: f32, with_date: bool| {
             // In proportion to the size the digits are drawn at (a pack's
@@ -636,7 +636,7 @@ struct Book {
 impl Book {
     fn of(env: &Env<'_>, book: recent::Recent) -> Self {
         Self {
-            cover: book.cover.clone().filter(|i| env.storage.exists(&i.path)),
+            cover: book.cover.clone().filter(|i| env.storage().exists(&i.path)),
             book,
         }
     }
@@ -658,8 +658,8 @@ fn fitted(image: &ImageRef, place: Rect, x: f32, y: f32) -> Rect {
 /// `image` made small to `at`, as the panel shows it: read once, then
 /// drawn from memory.
 fn small_cover(env: &Env<'_>, image: &ImageRef, at: Rect) -> Option<Thumbnail> {
-    let format = env.device.display.format;
-    Thumbnail::new(env.storage, image, at.width, at.height, format)
+    let format = env.device().display.format;
+    Thumbnail::new(env.storage(), image, at.width, at.height, format)
 }
 
 /// Draws `image` at `at`: from `small` where it was made for that size,
@@ -675,7 +675,7 @@ fn draw_cover(
         Some(small) if (small.width(), small.height()) == (at.width, at.height) => {
             small.draw(canvas, at.x, at.y);
         }
-        _ => ui::draw_image(canvas, env.storage, image, at),
+        _ => ui::draw_image(canvas, env.storage(), image, at),
     }
 }
 
@@ -727,7 +727,7 @@ impl CardParts {
         let image = book
             .cover
             .as_ref()
-            .filter(|_| env.settings.read(&CARD_COVER));
+            .filter(|_| env.settings().read(&CARD_COVER));
         let mut text = r;
         if let Some(image) = image {
             let place = Rect::new(r.x, r.y, r.width / 3, r.height);
@@ -744,7 +744,7 @@ impl CardParts {
         }
         let small = line_height(env, style.small());
         let line = line_height(env, style.text());
-        let caption = env.i18n.tr("home.continue");
+        let caption = env.i18n().tr("home.continue");
         let caption_fits = style
             .font(env)
             .is_some_and(|font| font.measure(style.small(), caption) <= f32::from(text.width));
@@ -754,7 +754,7 @@ impl CardParts {
         let half = if all(gap / 2) || !all(0) { gap / 2 } else { 0 };
         parts.gap = half;
         let mut room = text.height;
-        parts.progress = env.settings.read(&CARD_PROGRESS) && room >= line + half + small;
+        parts.progress = env.settings().read(&CARD_PROGRESS) && room >= line + half + small;
         if parts.progress {
             room -= half + small;
         }
@@ -807,7 +807,7 @@ impl Card {
 
 impl Widget for Card {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let book = recent::load(env.storage, 1)
+        let book = recent::load(env.storage(), 1)
             .into_iter()
             .next()
             .map(|book| Book::of(env, book));
@@ -875,8 +875,8 @@ fn draw_card(
         ui.empty(
             look.area,
             "books",
-            env.i18n.tr("home.start.title"),
-            env.i18n.tr("home.start.text"),
+            env.i18n().tr("home.start.title"),
+            env.i18n().tr("home.start.text"),
         );
         return;
     };
@@ -894,7 +894,7 @@ fn draw_card(
     let align = widgets::align(env, CONTINUE);
     let row = |y: u16, h: u16| Rect::new(r.x, y, r.width, h);
     if parts.caption {
-        let label = env.i18n.tr("home.continue");
+        let label = env.i18n().tr("home.continue");
         ui::Label::new(label)
             .px(style.small())
             .color(look.faint)
@@ -913,7 +913,7 @@ fn draw_card(
     if !parts.progress {
         return;
     }
-    let percent = env.i18n.format(
+    let percent = env.i18n().format(
         "home.percent",
         &[("percent", Arg::Int((book.progress + 0.5) as i64))],
     );
@@ -981,7 +981,7 @@ impl ShelfParts {
         let gap = style.gap();
         let label = line_height(env, style.small());
         let heading_fits =
-            font.measure(style.small(), env.i18n.tr("home.recent")) <= f32::from(area.width);
+            font.measure(style.small(), env.i18n().tr("home.recent")) <= f32::from(area.width);
         let (mut heading, mut title) = shelf_labels(env);
         if !heading_fits {
             heading = 0;
@@ -1051,7 +1051,7 @@ impl Shelf {
 impl Widget for Shelf {
     fn update(&mut self, env: &Env<'_>) -> bool {
         let count = shelf_count(env);
-        let books: Vec<Book> = recent::load(env.storage, count + 1)
+        let books: Vec<Book> = recent::load(env.storage(), count + 1)
             .into_iter()
             .skip(1)
             .take(count)
@@ -1129,13 +1129,16 @@ impl Widget for Shelf {
 /// How many books the row shows at most: as many as set, but no more
 /// than fit across the screen (looking each up takes time).
 fn shelf_count(env: &Env<'_>) -> usize {
-    shelf_columns(env, env.device.display.width).0
+    shelf_columns(env, env.device().display.width).0
 }
 
 /// The covers a row holds at `width`, and how wide each one's place is.
 fn shelf_columns(env: &Env<'_>, width: u16) -> (usize, u16) {
-    let count = env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as u32;
-    let columns = (u32::from(width) / env.metrics.mm(18).max(1)).clamp(1, count);
+    let count = env
+        .settings()
+        .read(&RECENT_COUNT)
+        .clamp(1, MAX_COVERS as i64) as u32;
+    let columns = (u32::from(width) / env.metrics().mm(18).max(1)).clamp(1, count);
     (columns as usize, width / columns as u16)
 }
 
@@ -1144,12 +1147,12 @@ fn shelf_columns(env: &Env<'_>, width: u16) -> (usize, u16) {
 fn shelf_labels(env: &Env<'_>) -> (u16, u16) {
     let style = UiStyle::new(env);
     let label = line_height(env, style.small());
-    let heading = if env.settings.read(&RECENT_HEADING) {
+    let heading = if env.settings().read(&RECENT_HEADING) {
         label + style.gap() / 2
     } else {
         0
     };
-    let title = if env.settings.read(&RECENT_TITLES) {
+    let title = if env.settings().read(&RECENT_TITLES) {
         label
     } else {
         0
@@ -1182,7 +1185,7 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shelf: &Shelf)
     let look = widgets::draw_frame(ui.canvas(), env, RECENT, area);
     let align = widgets::align(env, RECENT);
     if let Some(row) = shelf.parts.heading {
-        let text = env.i18n.tr("home.recent");
+        let text = env.i18n().tr("home.recent");
         let x = align.x(row, font.measure(style.small(), text));
         ui::Label::new(text)
             .px(style.small())
@@ -1296,13 +1299,13 @@ pub(crate) fn draw_tool_lines(
     action: &Id,
     lines: usize,
 ) -> Rect {
-    let labels = env.settings.read(&TOOL_LABELS);
+    let labels = env.settings().read(&TOOL_LABELS);
     paperpaw_sdk::widgets::grid::draw_tool_lines(canvas, env, area, action, labels, lines)
 }
 
 /// How many lines the name of the tool of `action` takes in `area`.
 pub(crate) fn tool_name_lines(env: &Env<'_>, area: Rect, action: &Id) -> usize {
-    let labels = env.settings.read(&TOOL_LABELS);
+    let labels = env.settings().read(&TOOL_LABELS);
     paperpaw_sdk::widgets::grid::tool_name_lines(env, area, action, labels)
 }
 
@@ -1314,7 +1317,7 @@ pub(crate) fn books_shown(env: &Env<'_>, items: &[grid::Item]) -> usize {
         .map(|item| match &item.what {
             // Each shelf as many as its placement shows.
             grid::What::Widget(id) if widgets::base(id) == RECENT => {
-                env.settings.with_placement(Some(id), || shelf_count(env)) + 1
+                env.settings().with_placement(Some(id), || shelf_count(env)) + 1
             }
             grid::What::Widget(id) if widgets::base(id) == CONTINUE => 1,
             _ => 0,
@@ -1325,7 +1328,7 @@ pub(crate) fn books_shown(env: &Env<'_>, items: &[grid::Item]) -> usize {
 
 /// The first `books` recent books whose covers were not looked up yet.
 pub(crate) fn missing_covers(env: &Env<'_>, books: usize) -> Vec<String> {
-    recent::load(env.storage, books)
+    recent::load(env.storage(), books)
         .into_iter()
         .filter(|b| !b.indexed)
         .map(|b| b.path)
