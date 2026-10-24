@@ -362,7 +362,7 @@ impl CableScreen {
             _ => json(404, String::from("{\"why\":\"not found\"}")),
         };
         // A body not taken goes (the kernel removes it once answered).
-        out.push(Command::Respond(response));
+        out.push(Command::respond(response));
         for command in out {
             cx.command(command);
         }

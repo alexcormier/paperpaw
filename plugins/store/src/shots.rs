@@ -96,9 +96,9 @@ impl ShotsScreen {
         // Each in a file of its own, its answer known by its number: one
         // turned past while it came is not shown for another.
         let mut request = HttpRequest::new("GET", url, FETCHED);
-        request.save_to = Some(part(self.at));
-        request.params = Params::new().with(SHOT, self.at.to_string());
-        cx.command(Command::Http(request));
+        request = request.save_to(part(self.at));
+        request = request.with(Params::new().with(SHOT, self.at.to_string()));
+        cx.command(Command::http(request));
         self.picture = Picture::Loading;
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);

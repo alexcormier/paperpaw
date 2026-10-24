@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: commands stay small, 88 bytes in place of 216 (a test keeps
+  them so): `Command::Http`, `Speak`, `Respond`, `Broadcast`, `Work`
+  and `SetSecret` hold their payload boxed, made with `Command::http`,
+  `speak`, `respond`, `broadcast`, `work` and `set_secret`. `HttpRequest`,
+  `Speech`, `ServerResponse` and the new `Broadcast` keep their fields
+  to themselves: they are made with their builders
+  (`HttpRequest::param` is new; `Speech::in_language`, `at_rate`,
+  `with` and `queued` take the place of `language`, `rate`, `params`
+  and `queue`) and read with methods.
 - The X4 keeps less in memory from the start: ids take two words
   instead of three, translations index their messages in two bytes
   where they fit, and actions are not kept twice. Reading an EPUB peaks

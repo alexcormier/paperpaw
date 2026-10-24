@@ -34,7 +34,7 @@ fn ask(
     };
     let mut guard = Guard::new(KEY.to_string());
     let (response, done) = answer(storage, &mut guard, "<page>", request);
-    (response.status, done)
+    (response.status(), done)
 }
 
 /// Uploads `data` to `path` (as the page sends it, encoded or not).
@@ -298,7 +298,7 @@ fn lists_escape_names_for_json() {
     let mut guard = Guard::new(KEY.to_string());
     let (response, _) = answer(&storage, &mut guard, "", request);
     assert_eq!(
-        String::from_utf8(response.body).unwrap(),
+        String::from_utf8(response.body().to_vec()).unwrap(),
         r#"{"entries":[{"name":"a\"b\u003c\\c.epub","dir":false,"size":0}]}"#
     );
 }

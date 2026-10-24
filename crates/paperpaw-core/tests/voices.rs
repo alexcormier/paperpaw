@@ -38,7 +38,7 @@ impl Plugin for Echo {
             VoiceSpec::new(
                 Id::new_static("echo.voice"),
                 move |_, speech, out| {
-                    said.borrow_mut().push(format!("say {}", speech.text));
+                    said.borrow_mut().push(format!("say {}", speech.text()));
                     out.push(speech.answer(true));
                 },
                 move |_, _| stopped.borrow_mut().push(String::from("stop")),
@@ -61,7 +61,7 @@ impl Plugin for Deutsch {
         r.add_voice(
             VoiceSpec::new(
                 Id::new_static("deutsch.voice"),
-                move |_, speech, _| said.borrow_mut().push(format!("sage {}", speech.text)),
+                move |_, speech, _| said.borrow_mut().push(format!("sage {}", speech.text())),
                 move |_, _| stopped.borrow_mut().push(String::from("halt")),
             )
             .languages(&["de"]),
@@ -86,9 +86,9 @@ fn kernel(harness: &Harness, heard: &Heard, config: &str, system: bool) -> Kerne
 
 fn say(text: &str, language: &str) -> Command {
     let speech = Speech::new(text, REPLY)
-        .language(language)
-        .params(Params::new().with("n", String::from(text)));
-    Command::Speak(speech)
+        .in_language(language)
+        .with(Params::new().with("n", String::from(text)));
+    Command::speak(speech)
 }
 
 fn system_said(kernel: &mut Kernel) -> Vec<String> {

@@ -38,7 +38,7 @@ proptest! {
     #[test]
     fn any_text_goes_whole_up_to_its_limit(text in ".{0,3500}", key in "[a-z0-9:]{1,12}") {
         let request = request(&key, &text, "DE");
-        let body = request.body.unwrap();
+        let body = request.body_text().unwrap();
         let (field, rest) = body.split_once("&target_lang=").unwrap();
         prop_assert_eq!(rest, "DE");
         let sent = field.strip_prefix("text=").unwrap();

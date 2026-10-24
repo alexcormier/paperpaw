@@ -215,9 +215,9 @@ pub(crate) fn next(env: &Env<'_>, out: &mut Commands) {
     said(env, out);
     let url = page_url(env, &device, &id);
     let mut request = HttpRequest::new("GET", &url, FETCHED);
-    request.save_to = Some(catalog::plugin_part(&id));
-    request.params = Params::new().with(params::ID, id);
-    out.push(Command::Http(request));
+    request = request.save_to(catalog::plugin_part(&id));
+    request = request.with(Params::new().with(params::ID, id));
+    out.push(Command::http(request));
 }
 
 /// The page of the plugin whose turn it is came: its download starts, or

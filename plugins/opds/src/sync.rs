@@ -232,7 +232,7 @@ impl Sync {
             let params = Params::new()
                 .with(RUN, run.number.to_string())
                 .with(crate::URL, url.to_string());
-            out.push(Command::Http(crate::list_request(
+            out.push(Command::http(crate::list_request(
                 &run.agent,
                 &run.catalog,
                 url,
@@ -344,9 +344,8 @@ impl Sync {
         if let Some(item) = run.queue.front() {
             let (url, id) = (item.url.clone(), item.id.clone());
             let file = self.temp.next("tmp");
-            if let Some(mut request) = self.request(&url, file, &BOOK_LOADED) {
-                request.params = request.params.with(crate::ID, id);
-                out.push(Command::Http(request));
+            if let Some(request) = self.request(&url, file, &BOOK_LOADED) {
+                out.push(Command::http(request.param(crate::ID, id)));
             }
             return;
         }

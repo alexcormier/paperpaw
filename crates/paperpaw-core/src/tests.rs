@@ -25,7 +25,7 @@ use crate::{HttpCall, Io, Kernel, ServerCall, SpeechCall, WarningSource};
 impl Kernel {
     /// A plugin's request, as [`Command::Http`] makes it.
     fn request(&mut self, request: paperpaw_sdk::HttpRequest) {
-        self.output.commands.push(Command::Http(request));
+        self.output.commands.push(Command::http(request));
         self.run_commands();
     }
 
@@ -1181,11 +1181,11 @@ fn scheduled_events_come_at_their_time() {
     kernel.start(Instant(0));
     let event = Id::new_static("ov.later");
     let params = paperpaw_sdk::Params::new().with("id", "x");
-    kernel.apply(Command::Work(
+    kernel.apply(Command::work(
         paperpaw_sdk::work::Work::at(event.clone(), Instant(9000)).with(params.clone()),
     ));
     // Scheduled again: moved, not doubled.
-    kernel.apply(Command::Work(
+    kernel.apply(Command::work(
         paperpaw_sdk::work::Work::at(event, Instant(5000)).with(params),
     ));
     assert_eq!(kernel.finish().wake_at(), Some(Instant(5000)));
@@ -1774,7 +1774,7 @@ fn plugins_serve_through_the_shell() {
     kernel
         .output
         .commands
-        .push(Command::Respond(paperpaw_sdk::ServerResponse::new(
+        .push(Command::respond(paperpaw_sdk::ServerResponse::new(
             7,
             200,
             "text/plain",
@@ -1782,13 +1782,13 @@ fn plugins_serve_through_the_shell() {
         )));
     // A file goes in parts, read by the shell.
     let mut response = paperpaw_sdk::ServerResponse::new(8, 200, "text/plain", Vec::new());
-    response.body_from = Some(String::from("served.txt"));
+    response = response.body_from(String::from("served.txt"));
     kernel
         .shared
         .storage
         .write("served.txt", b"0123456789")
         .unwrap();
-    kernel.output.commands.push(Command::Respond(response));
+    kernel.output.commands.push(Command::respond(response));
     kernel.run_commands();
     let calls = kernel.take_server_calls();
     assert!(
@@ -1972,7 +1972,7 @@ fn secrets_are_kept_apart_and_read_at_start() {
     kernel
         .output
         .commands
-        .push(Command::SetSecret(SecretChange::keep(
+        .push(Command::set_secret(SecretChange::keep(
             "a.key", "a.label", "hunter2",
         )));
     kernel.run_commands();
@@ -2003,7 +2003,7 @@ fn secrets_are_kept_apart_and_read_at_start() {
     kernel
         .output
         .commands
-        .push(Command::SetSecret(SecretChange::remove("a.key")));
+        .push(Command::set_secret(SecretChange::remove("a.key")));
     kernel.run_commands();
     assert!(kernel.shared.secrets.is_empty());
     assert!(!kernel.shared.storage.exists(FILE));
@@ -2692,10 +2692,10 @@ fn the_device_sleeps_by_itself_after_a_while_unused() {
 
 #[test]
 fn speech_goes_to_the_shell_and_stops_with_its_screen() {
-    let speech = |id: &str| {
-        let mut speech = paperpaw_sdk::Speech::new("Hello", Id::new_static("ov.reply"));
-        speech.params = paperpaw_sdk::Params::new().with("id", String::from(id));
-        Command::Speak(speech)
+    let speech = |id: &str, queued: bool| {
+        let params = paperpaw_sdk::Params::new().with("id", String::from(id));
+        let speech = paperpaw_sdk::Speech::new("Hello", Id::new_static("ov.reply"));
+        Command::speak(speech.with(params).queued(queued))
     };
     // Without speech, the reply comes at once.
     let log = log();
@@ -2705,7 +2705,7 @@ fn speech_goes_to_the_shell_and_stops_with_its_screen() {
         .unwrap();
     kernel.start(Instant(0));
     assert!(!kernel.shared.env(Instant(0)).caps.speech);
-    kernel.output.commands.push(speech("a"));
+    kernel.output.commands.push(speech("a", false));
     kernel.run_commands();
     assert!(kernel.take_speech().is_empty());
     assert!(log.borrow().contains(&String::from("event ov.reply a")));
@@ -2718,7 +2718,7 @@ fn speech_goes_to_the_shell_and_stops_with_its_screen() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    kernel.output.commands.push(speech("b"));
+    kernel.output.commands.push(speech("b", false));
     kernel.run_commands();
     let calls = kernel.take_speech();
     let [SpeechCall::Say { id, text, rate, .. }] = calls.as_slice() else {
@@ -2732,14 +2732,10 @@ fn speech_goes_to_the_shell_and_stops_with_its_screen() {
     assert!(log.borrow().contains(&String::from("event ov.reply b")));
 
     // Queued texts follow; each is answered when done.
-    let queued = |id: &str| {
-        let Command::Speak(mut speech) = speech(id) else {
-            unreachable!()
-        };
-        speech.queue = true;
-        Command::Speak(speech)
-    };
-    kernel.output.commands.extend([speech("q1"), queued("q2")]);
+    kernel
+        .output
+        .commands
+        .extend([speech("q1", false), speech("q2", true)]);
     kernel.run_commands();
     let calls = kernel.take_speech();
     let ids: Vec<(u32, bool)> = calls
@@ -2760,7 +2756,7 @@ fn speech_goes_to_the_shell_and_stops_with_its_screen() {
     // Started over the menu, it stops when the menu closes.
     kernel.output.commands.push(Command::open_slot(slots::MENU));
     kernel.run_commands();
-    kernel.output.commands.push(speech("c"));
+    kernel.output.commands.push(speech("c", false));
     kernel.run_commands();
     let Some(SpeechCall::Say { id, .. }) = kernel.take_speech().pop() else {
         panic!("no speech");

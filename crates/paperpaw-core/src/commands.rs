@@ -642,7 +642,7 @@ impl Kernel {
             Command::PreviewSettings(values) => self.preview_settings(values),
             Command::SetScope(path) => self.set_scope(path),
             Command::SetPluginEnabled(id, enabled) => self.set_plugin_enabled(&id, enabled),
-            Command::SetSecret(change) => self.set_secret(change),
+            Command::SetSecret(change) => self.set_secret(*change),
             Command::SetMenu(menu, entries) => self.set_menu(menu, entries),
             Command::Bind {
                 layer,
@@ -685,10 +685,10 @@ impl Kernel {
         let screens = self.stack.len();
         let env = self.shared.env(self.now);
         let system = self.io.speech.system;
-        if let Some(voice) = self.shared.voices.chosen(&env, &speech.language, system) {
+        if let Some(voice) = self.shared.voices.chosen(&env, speech.language(), system) {
             // In place of what the system or another voice says now,
             // unless after it.
-            if !speech.queue {
+            if !speech.is_queued() {
                 self.io.speech.stop();
                 let other = self
                     .io
@@ -710,7 +710,7 @@ impl Kernel {
             return;
         }
         // In place of what a plugin's voice says, unless after it.
-        if !speech.queue {
+        if !speech.is_queued() {
             self.stop_voice();
         }
         self.io
@@ -770,7 +770,7 @@ impl Kernel {
             }
             Command::ReadClipboard(reply, params) => self.reply_clipboard(reply, params),
             Command::Speak(speech) => {
-                self.speak(speech);
+                self.speak(*speech);
                 self.io.focus_spoken = false;
             }
             Command::StopSpeaking => {
@@ -787,12 +787,14 @@ impl Kernel {
                 .servers
                 .serve(server, port, events, network, screens, out),
             Command::StopServing(server) => self.io.servers.stop(&server, out),
-            Command::Respond(response) => self.io.servers.respond(response, &*self.shared.storage),
+            Command::Respond(response) => {
+                self.io.servers.respond(*response, &*self.shared.storage);
+            }
             command @ (Command::Connect { .. }
             | Command::SocketSend { .. }
             | Command::SocketRead { .. }
             | Command::Disconnect(_)
-            | Command::Broadcast { .. }) => {
+            | Command::Broadcast(_)) => {
                 self.io
                     .sockets
                     .command(command, network, screens, &*self.shared.storage, out);
@@ -801,7 +803,7 @@ impl Kernel {
                 let reader = self.shared.reader;
                 self.io
                     .http
-                    .request(request, network, reader, &*self.shared.storage, out)
+                    .request(*request, network, reader, &*self.shared.storage, out)
             }
             _ => {}
         }
@@ -901,15 +903,12 @@ fn typed_for(command: &Command) -> Option<Option<&Params>> {
         {
             Some(Some(params))
         }
-        Command::Http(request) if typed(&request.reply) => Some(Some(&request.params)),
-        Command::Speak(speech) if typed(&speech.reply) => Some(Some(&speech.params)),
-        Command::Serve { events, .. }
-        | Command::Connect { events, .. }
-        | Command::Broadcast { events, .. }
-            if typed(events) =>
-        {
+        Command::Http(request) if typed(request.reply()) => Some(Some(request.params())),
+        Command::Speak(speech) if typed(speech.reply()) => Some(Some(speech.params())),
+        Command::Serve { events, .. } | Command::Connect { events, .. } if typed(events) => {
             Some(None)
         }
+        Command::Broadcast(broadcast) if typed(broadcast.events()) => Some(None),
         _ => None,
     }
 }

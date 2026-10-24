@@ -39,7 +39,7 @@ pub(crate) fn entered(env: &Env<'_>, typed: &Typed, out: &mut Commands) {
     };
     let text = typed.text.trim();
     if !text.is_empty() && env.secrets.has(id) {
-        out.push(Command::SetSecret(SecretChange::keep(id, "", text)));
+        out.push(Command::set_secret(SecretChange::keep(id, "", text)));
     }
 }
 
@@ -206,7 +206,7 @@ impl SecretPage {
     }
 
     fn remove(&self, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::SetSecret(SecretChange::remove(&self.id)));
+        cx.command(Command::set_secret(SecretChange::remove(&self.id)));
         cx.command(Command::Back);
     }
 }

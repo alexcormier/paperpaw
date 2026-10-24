@@ -181,6 +181,7 @@ impl Http {
         storage: &dyn Storage,
         out: &mut Vec<Command>,
     ) {
+        let request = request.into_parts();
         if !network {
             return reply(
                 request.reply,
@@ -216,7 +217,7 @@ impl Http {
             want_headers,
             max_body,
             ..
-        } = request.options().clone();
+        } = request.options;
         let body = match request.body_from {
             Some(_) => None,
             None => request.body.map(String::into_bytes),
@@ -377,9 +378,11 @@ mod tests {
     const REPLY: Id = Id::new_static("test.reply");
 
     fn get(url: &str, save_to: Option<&str>) -> HttpRequest {
-        let mut request = HttpRequest::new("GET", url, REPLY);
-        request.save_to = save_to.map(String::from);
-        request
+        let request = HttpRequest::new("GET", url, REPLY);
+        match save_to {
+            Some(path) => request.save_to(path),
+            None => request,
+        }
     }
 
     /// The reply, as its hearer gets it.

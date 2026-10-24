@@ -124,25 +124,21 @@ fn request(key: &str, text: &str, target: &str) -> HttpRequest {
         "api.deepl.com"
     };
     let text: String = text.chars().take(MAX_CHARS).collect();
-    let mut request = HttpRequest::new("POST", &format!("https://{host}/v2/translate"), ANSWERED);
-    request.headers.push((
-        String::from("Authorization"),
-        format!("DeepL-Auth-Key {key}"),
-    ));
-    request.headers.push((
-        String::from("Content-Type"),
-        String::from("application/x-www-form-urlencoded"),
-    ));
-    request.headers.push((
-        String::from("User-Agent"),
-        String::from("PaperPaw/0.1 (e-reader)"),
-    ));
-    request.body = Some(format!(
-        "text={}&target_lang={}",
-        encode(&text),
-        encode(target)
-    ));
-    request
+    let body = format!("text={}&target_lang={}", encode(&text), encode(target));
+    HttpRequest::new("POST", &format!("https://{host}/v2/translate"), ANSWERED)
+        .header(
+            String::from("Authorization"),
+            format!("DeepL-Auth-Key {key}"),
+        )
+        .header(
+            String::from("Content-Type"),
+            String::from("application/x-www-form-urlencoded"),
+        )
+        .header(
+            String::from("User-Agent"),
+            String::from("PaperPaw/0.1 (e-reader)"),
+        )
+        .body(body)
 }
 
 /// The translation in DeepL's answer
@@ -310,7 +306,7 @@ impl Panel {
             return;
         }
         let to = target(env.settings.read(&TO), env.i18n.language());
-        cx.command(Command::Http(request(key, &self.original, &to)));
+        cx.command(Command::http(request(key, &self.original, &to)));
     }
 
     /// Asks for the key on the keyboard.
@@ -478,7 +474,7 @@ impl Screen for Panel {
             if key.is_empty() {
                 return;
             }
-            cx.command(Command::SetSecret(SecretChange::keep(
+            cx.command(Command::set_secret(SecretChange::keep(
                 KEY.as_str(),
                 "translate.key",
                 &key,
@@ -559,17 +555,14 @@ mod tests {
     #[test]
     fn requests_and_answers() {
         let free = request("abc:fx", "Hello world", "DE");
-        assert_eq!(free.url, "https://api-free.deepl.com/v2/translate");
-        assert_eq!(
-            free.body.as_deref(),
-            Some("text=Hello+world&target_lang=DE")
-        );
-        assert!(free.headers.contains(&(
+        assert_eq!(free.url(), "https://api-free.deepl.com/v2/translate");
+        assert_eq!(free.body_text(), Some("text=Hello+world&target_lang=DE"));
+        assert!(free.headers().contains(&(
             String::from("Authorization"),
             String::from("DeepL-Auth-Key abc:fx")
         )));
         assert_eq!(
-            request("abc", "x", "DE").url,
+            request("abc", "x", "DE").url(),
             "https://api.deepl.com/v2/translate"
         );
         let body =

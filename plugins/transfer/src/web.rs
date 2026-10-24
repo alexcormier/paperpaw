@@ -145,7 +145,7 @@ pub fn answer(
             };
             let mut response =
                 ServerResponse::new(number, 200, "application/octet-stream", Vec::new());
-            response.body_from = Some(file.clone());
+            response = response.body_from(file.clone());
             (response, Some(Done::Sent(files::name(&file).to_string())))
         }
         ("PUT", "/api/file") => {

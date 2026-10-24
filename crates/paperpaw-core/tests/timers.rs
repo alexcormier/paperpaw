@@ -20,7 +20,7 @@ use proptest::prelude::*;
 use proptest::test_runner::Config;
 
 fn schedule(event: &paperpaw_core::sdk::Id, at: u64) -> Command {
-    Command::Work(Work::at(event.clone(), Instant(at)))
+    Command::work(Work::at(event.clone(), Instant(at)))
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn a_repeating_event_comes_once_per_period_even_after_a_jump() {
     harness.run(
         &mut kernel,
         0,
-        [Command::Work(Work::at(LATER, Instant(1000)).with(params))],
+        [Command::work(Work::at(LATER, Instant(1000)).with(params))],
     );
     for at in [1000, 1500, 2000, 2999, 3000] {
         kernel.tick(Instant(at));
@@ -115,7 +115,7 @@ fn times_at_the_end_of_the_clock_do_not_overflow() {
     let effects = harness.run(
         &mut kernel,
         end - 10,
-        [Command::Work(Work::at(LATER, Instant(end)).with(params))],
+        [Command::work(Work::at(LATER, Instant(end)).with(params))],
     );
     assert_eq!(effects.wake_at(), Some(Instant(end)));
     kernel.tick(Instant(end));

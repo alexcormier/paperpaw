@@ -125,7 +125,7 @@ fn provide(env: &Env<'_>, query: &LookupQuery) -> LookupAnswer {
     let request = summary_request(&language, &query.word, PROVIDED.id().clone())
         .with(context)
         .timeout(core::time::Duration::from_secs(PROVIDER_TIMEOUT_S));
-    LookupAnswer::Pending(alloc::vec![Command::Http(request)])
+    LookupAnswer::Pending(alloc::vec![Command::http(request)])
 }
 
 /// The summary arrived: the query answered with it, the whole screen
@@ -383,7 +383,7 @@ impl Screen for Summary {
             return;
         }
         let request = summary_request(&self.language, &self.word, ANSWERED.id().clone());
-        cx.command(Command::Http(request));
+        cx.command(Command::http(request));
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {

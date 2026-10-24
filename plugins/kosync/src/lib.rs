@@ -209,7 +209,7 @@ fn read_value(storage: &dyn paperpaw_sdk::Storage, file: &str, key: &str) -> Opt
 /// Keeps the key of a signed-in account; `None` signs out. It cannot be
 /// typed anew in the list of passwords and keys: it is no password.
 pub(crate) fn save_key(key: Option<&str>) -> Command {
-    Command::SetSecret(match key {
+    Command::set_secret(match key {
         Some(key) => SecretChange::keep(SECRET, "kosync.secret", key).changeable(false),
         None => SecretChange::remove(SECRET),
     })
@@ -332,7 +332,7 @@ impl State {
     ) -> Option<Command> {
         let user = env.settings.read(&USER);
         let auth = Some((user, key(env)?));
-        Some(Command::Http(server_request(
+        Some(Command::http(server_request(
             env, method, path, body, reply, params, auth,
         )))
     }
@@ -706,9 +706,13 @@ pub(crate) fn server_request(
     }
     let mut request =
         HttpRequest::new(method, &format!("{}{path}", server(env)), reply).with(params);
-    request.headers = headers;
-    request.body = body;
-    request
+    for (name, value) in headers {
+        request = request.header(name, value);
+    }
+    match body {
+        Some(body) => request.body(body),
+        None => request,
+    }
 }
 
 /// The position in the parameters of a reading event.
@@ -855,7 +859,7 @@ impl Plugin for Kosync {
                 state.push(env, out, false);
             } else if state.active(env) && env.work.get(PUSH_DUE.id()).is_none() {
                 // When the radio is on anyway, at the latest in a while.
-                out.push(Command::Work(
+                out.push(Command::work(
                     Work::network(PUSH_DUE.id().clone())
                         .within(PUSH_WITHIN)
                         .at_moments(Moments::ONLINE),

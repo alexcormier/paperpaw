@@ -256,9 +256,9 @@ impl PageScreen {
         let language = env.i18n.language();
         let url = catalog::plugin_url(list.trim(), device.name, language, &self.id);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
-        request.save_to = Some(catalog::plugin_part(&self.id));
-        request.params = Params::new().with(params::ID, self.id.clone());
-        cx.command(Command::Http(request));
+        request = request.save_to(catalog::plugin_part(&self.id));
+        request = request.with(Params::new().with(params::ID, self.id.clone()));
+        cx.command(Command::http(request));
         self.details = Details::Asked(url);
     }
 

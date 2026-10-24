@@ -292,7 +292,7 @@ fn a_download_onto_a_full_card_fails_and_keeps_the_old_file() {
     harness.run(
         &mut kernel,
         10,
-        [Command::Http(
+        [Command::http(
             HttpRequest::get("http://example.org/a.epub", REPLY).save_to("books/a.epub"),
         )],
     );

@@ -368,7 +368,7 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
         .optional()
         .after(core::time::Duration::from_secs(next as u64))
         .at_moments(paperpaw_sdk::work::Moments::WAKE | paperpaw_sdk::work::Moments::ONLINE);
-    out.push(Command::Work(look));
+    out.push(Command::work(look));
     if state.asked.is_some_and(|at| env.now.since(at) < PATIENCE) {
         return;
     }
@@ -385,19 +385,19 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Commands) {
             return;
         }
     }
-    let mut request = HttpRequest::new("GET", &url, FETCHED);
-    request.headers.push((
-        String::from("User-Agent"),
-        String::from("PaperPaw/0.1 (e-reader)"),
-    ));
-    request.params = Params::new().with(params::ID, coordinates);
+    let mut request = HttpRequest::new("GET", &url, FETCHED)
+        .header(
+            String::from("User-Agent"),
+            String::from("PaperPaw/0.1 (e-reader)"),
+        )
+        .with(Params::new().with(params::ID, coordinates));
     if why == Why::Asked {
-        request.params.set(TOLD, "1");
+        request = request.param(TOLD, "1");
         out.push(Command::Notify(env.i18n.tr("weather.fetching").to_string()));
     }
     state.asked = Some(env.now);
     state.generation = state.generation.wrapping_add(1);
-    out.push(Command::Http(request));
+    out.push(Command::http(request));
 }
 
 /// The forecast answered: kept, and shown by the widgets.

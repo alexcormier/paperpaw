@@ -165,9 +165,9 @@ impl Samples {
             );
             let mut request = HttpRequest::new("GET", &url, SAMPLE);
             let _ = env.storage.create_dir(&dir());
-            request.save_to = Some(self.path(env, font));
-            request.params = Params::new().with(FONT, font.id.clone());
-            out.push(Command::Http(request));
+            request = request.save_to(self.path(env, font));
+            request = request.with(Params::new().with(FONT, font.id.clone()));
+            out.push(Command::http(request));
             self.fetching = Some(font.id.clone());
         }
         more

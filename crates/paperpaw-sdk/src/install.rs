@@ -524,12 +524,14 @@ impl Installer {
             dir.push_str(part);
             let _ = storage.create_dir(&dir);
         }
-        let mut request = HttpRequest::new("GET", &file.url, self.reply.clone());
-        request.save_to = Some(format!("{staging}/{}", file.path));
-        request.params = Params::new()
+        let save_to = format!("{staging}/{}", file.path);
+        let params = Params::new()
             .with(JOB, job.id.to_string())
             .with(FILE, file.path);
-        out.push(Command::Http(request));
+        let request = HttpRequest::new("GET", &file.url, self.reply.clone())
+            .save_to(save_to)
+            .with(params);
+        out.push(Command::http(request));
     }
 
     /// Stops the installation going on and forgets what it downloaded;

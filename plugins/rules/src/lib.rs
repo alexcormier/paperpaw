@@ -190,7 +190,7 @@ fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Commands) {
         let at_minute = env
             .now
             .add_millis(u64::from(ahead) * 60_000 - u64::from(now.second) * 1000);
-        out.push(Command::Work(
+        out.push(Command::work(
             Work::at(TIME, at_minute).with(Params::new().with(MINUTE, at.to_string())),
         ));
     }
@@ -205,7 +205,7 @@ fn schedule_tick(env: &Env<'_>, store: &Store, out: &mut Commands) {
             .any(|r| r.on && matches!(r.trigger, Trigger::Every(_)))
     });
     if repeats {
-        out.push(Command::Work(Work::at(TICK, env.now.add_millis(60_000))));
+        out.push(Command::work(Work::at(TICK, env.now.add_millis(60_000))));
     }
 }
 

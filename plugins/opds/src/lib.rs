@@ -79,16 +79,29 @@ fn request(
     reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
-    let mut request = HttpRequest::get(url, reply)
+    request_by("GET", agent, catalog, url, save_to, reply, params)
+}
+
+/// The same with `method`.
+fn request_by(
+    method: &str,
+    agent: &(String, String),
+    catalog: &Catalog,
+    url: &str,
+    save_to: String,
+    reply: &Event<HttpReply>,
+    params: Params,
+) -> HttpRequest {
+    let request = HttpRequest::new(method, url, reply)
         .with(params.with(temp::FILE, save_to.clone()))
-        .save_to(save_to);
-    request.headers.push(agent.clone());
-    if let Some(auth) = catalog.authorization()
-        && same_origin(url, &catalog.url)
-    {
-        request.headers.push((String::from("Authorization"), auth));
+        .save_to(save_to)
+        .header(agent.0.clone(), agent.1.clone());
+    match catalog.authorization() {
+        Some(auth) if same_origin(url, &catalog.url) => {
+            request.header(String::from("Authorization"), auth)
+        }
+        _ => request,
     }
-    request
 }
 
 /// The scheme, host and port of `url` (the port filled in for `http` and
@@ -132,19 +145,16 @@ fn list_request(
     reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
-    let mut request = request(agent, catalog, url, save_to, reply, params);
-    if catalog.webdav {
-        request.method = String::from("PROPFIND");
-        request
-            .headers
-            .push((String::from("Depth"), String::from("1")));
-        request.headers.push((
+    if !catalog.webdav {
+        return request(agent, catalog, url, save_to, reply, params);
+    }
+    request_by("PROPFIND", agent, catalog, url, save_to, reply, params)
+        .header(String::from("Depth"), String::from("1"))
+        .header(
             String::from("Content-Type"),
             String::from("application/xml; charset=utf-8"),
-        ));
-        request.body = Some(String::from(feed::PROPFIND));
-    }
-    request
+        )
+        .body(String::from(feed::PROPFIND))
 }
 
 /// Reads a list of a catalog from `path`, which came from `base`.
@@ -251,7 +261,7 @@ impl Plugin for Opds {
                     shared.borrow_mut().start(env, marked(env), out);
                 } else {
                     let due = SYNC_DUE.id().clone();
-                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
                         due,
                         core::time::Duration::from_secs(3600),
                     )));
@@ -329,7 +339,7 @@ mod tests {
                 Params::new(),
             );
             request
-                .headers
+                .headers()
                 .iter()
                 .any(|(name, _)| name == "Authorization")
         };

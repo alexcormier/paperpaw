@@ -126,7 +126,7 @@ pub(crate) fn entered(typed: &Typed, out: &mut Commands) -> bool {
     if text.is_empty() {
         return false;
     }
-    out.push(Command::SetSecret(SecretChange::keep(
+    out.push(Command::set_secret(SecretChange::keep(
         PASSWORD,
         "joplin.secret",
         text,

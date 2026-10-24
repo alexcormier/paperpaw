@@ -19,7 +19,7 @@
 //!     .expected()
 //!     .within(Duration::from_secs(30 * 60))
 //!     .at_moments(Moments::BOOK_CLOSED | Moments::SLEEP | Moments::ONLINE);
-//! let command = Command::Work(push);
+//! let command = Command::work(push);
 //! # let _ = command;
 //! ```
 //!

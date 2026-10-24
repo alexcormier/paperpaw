@@ -4700,12 +4700,7 @@ pub paperpaw_sdk::Command::Bind::action: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::Command::Bind::input: alloc::string::String
 pub paperpaw_sdk::Command::Bind::layer: alloc::string::String
 pub paperpaw_sdk::Command::BindSlot(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::Id>)
-#[non_exhaustive] pub paperpaw_sdk::Command::Broadcast
-pub paperpaw_sdk::Command::Broadcast::data: alloc::vec::Vec<u8>
-pub paperpaw_sdk::Command::Broadcast::events: paperpaw_sdk::Id
-pub paperpaw_sdk::Command::Broadcast::id: paperpaw_sdk::Id
-pub paperpaw_sdk::Command::Broadcast::ports: alloc::vec::Vec<u16>
-pub paperpaw_sdk::Command::Broadcast::wait_ms: u32
+pub paperpaw_sdk::Command::Broadcast(alloc::boxed::Box<paperpaw_sdk::Broadcast>)
 pub paperpaw_sdk::Command::CancelHttp(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::CancelWork(paperpaw_sdk::Id, core::option::Option<alloc::string::String>)
 pub paperpaw_sdk::Command::Close(paperpaw_sdk::ScreenKey)
@@ -4718,7 +4713,7 @@ pub paperpaw_sdk::Command::Disconnect(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Emit(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::Firmware(paperpaw_sdk::firmware::FirmwareCommand)
 pub paperpaw_sdk::Command::GoOnline
-pub paperpaw_sdk::Command::Http(paperpaw_sdk::HttpRequest)
+pub paperpaw_sdk::Command::Http(alloc::boxed::Box<paperpaw_sdk::HttpRequest>)
 pub paperpaw_sdk::Command::Input(alloc::string::String)
 pub paperpaw_sdk::Command::InstallPlugin(paperpaw_sdk::Id, alloc::string::String)
 pub paperpaw_sdk::Command::LoadPlugin(alloc::string::String)
@@ -4734,7 +4729,7 @@ pub paperpaw_sdk::Command::Redraw(paperpaw_platform::display::RefreshMode)
 pub paperpaw_sdk::Command::RemovePlugin(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Replace(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::ResetSetting(paperpaw_sdk::Id)
-pub paperpaw_sdk::Command::Respond(paperpaw_sdk::ServerResponse)
+pub paperpaw_sdk::Command::Respond(alloc::boxed::Box<paperpaw_sdk::ServerResponse>)
 pub paperpaw_sdk::Command::Restart
 pub paperpaw_sdk::Command::RunAction(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::RunOriginal(paperpaw_sdk::Id, paperpaw_sdk::Params)
@@ -4748,7 +4743,7 @@ pub paperpaw_sdk::Command::SetKeyLayer(paperpaw_sdk::ScreenKey, core::option::Op
 pub paperpaw_sdk::Command::SetMenu(paperpaw_sdk::Id, core::option::Option<alloc::vec::Vec<paperpaw_sdk::Id>>)
 pub paperpaw_sdk::Command::SetPluginEnabled(paperpaw_sdk::Id, bool)
 pub paperpaw_sdk::Command::SetScope(core::option::Option<alloc::string::String>)
-pub paperpaw_sdk::Command::SetSecret(paperpaw_sdk::secrets::SecretChange)
+pub paperpaw_sdk::Command::SetSecret(alloc::boxed::Box<paperpaw_sdk::secrets::SecretChange>)
 pub paperpaw_sdk::Command::SetSetting(paperpaw_sdk::Id, paperpaw_sdk::SettingValue)
 pub paperpaw_sdk::Command::ShowHints
 pub paperpaw_sdk::Command::Sleep
@@ -4758,20 +4753,25 @@ pub paperpaw_sdk::Command::SocketRead::socket: paperpaw_sdk::Id
 #[non_exhaustive] pub paperpaw_sdk::Command::SocketSend
 pub paperpaw_sdk::Command::SocketSend::data: alloc::vec::Vec<u8>
 pub paperpaw_sdk::Command::SocketSend::socket: paperpaw_sdk::Id
-pub paperpaw_sdk::Command::Speak(paperpaw_sdk::Speech)
+pub paperpaw_sdk::Command::Speak(alloc::boxed::Box<paperpaw_sdk::Speech>)
 pub paperpaw_sdk::Command::StopServing(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::StopSpeaking
 pub paperpaw_sdk::Command::SwitchTask(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Wear(paperpaw_sdk::power::Wear)
 pub paperpaw_sdk::Command::Wifi(paperpaw_sdk::wifi::WifiCommand)
-pub paperpaw_sdk::Command::Work(paperpaw_sdk::work::Work)
+pub paperpaw_sdk::Command::Work(alloc::boxed::Box<paperpaw_sdk::work::Work>)
 impl paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::bind(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, core::option::Option<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::Command::broadcast(paperpaw_sdk::Id, alloc::vec::Vec<u16>, alloc::vec::Vec<u8>, u32, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::Command::connect(paperpaw_sdk::Id, impl core::convert::Into<alloc::string::String>, u16, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::Command::http(paperpaw_sdk::HttpRequest) -> Self
+pub fn paperpaw_sdk::Command::respond(paperpaw_sdk::ServerResponse) -> Self
 pub fn paperpaw_sdk::Command::serve(paperpaw_sdk::Id, u16, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::Command::set_secret(paperpaw_sdk::secrets::SecretChange) -> Self
 pub fn paperpaw_sdk::Command::socket_read(paperpaw_sdk::Id, paperpaw_sdk::SocketRead) -> Self
 pub fn paperpaw_sdk::Command::socket_send(paperpaw_sdk::Id, alloc::vec::Vec<u8>) -> Self
+pub fn paperpaw_sdk::Command::speak(paperpaw_sdk::Speech) -> Self
+pub fn paperpaw_sdk::Command::work(paperpaw_sdk::work::Work) -> Self
 impl paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::open_slot(paperpaw_sdk::Id) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::run(impl core::convert::Into<paperpaw_sdk::Id>) -> paperpaw_sdk::Command
@@ -5130,6 +5130,14 @@ pub fn paperpaw_sdk::Actions::new() -> Self
 pub fn paperpaw_sdk::Actions::runnable(&self, &str) -> bool
 impl core::fmt::Debug for paperpaw_sdk::Actions
 pub fn paperpaw_sdk::Actions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_sdk::Broadcast
+impl paperpaw_sdk::Broadcast
+pub fn paperpaw_sdk::Broadcast::data(&self) -> &[u8]
+pub fn paperpaw_sdk::Broadcast::events(&self) -> &paperpaw_sdk::Id
+pub fn paperpaw_sdk::Broadcast::id(&self) -> &paperpaw_sdk::Id
+pub fn paperpaw_sdk::Broadcast::new(paperpaw_sdk::Id, alloc::vec::Vec<u16>, alloc::vec::Vec<u8>, u32, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::Broadcast::ports(&self) -> &[u16]
+pub fn paperpaw_sdk::Broadcast::wait_ms(&self) -> u32
 #[non_exhaustive] pub struct paperpaw_sdk::Capabilities
 pub paperpaw_sdk::Capabilities::black_and_white: bool
 pub paperpaw_sdk::Capabilities::button_row: bool
@@ -5461,24 +5469,25 @@ pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> c
 pub fn paperpaw_sdk::replies::HttpReply::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::replies::HttpReply::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::HttpRequest
-pub paperpaw_sdk::HttpRequest::body: core::option::Option<alloc::string::String>
-pub paperpaw_sdk::HttpRequest::body_from: core::option::Option<alloc::string::String>
-pub paperpaw_sdk::HttpRequest::headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
-pub paperpaw_sdk::HttpRequest::method: alloc::string::String
-pub paperpaw_sdk::HttpRequest::params: paperpaw_sdk::Params
-pub paperpaw_sdk::HttpRequest::reply: paperpaw_sdk::Id
-pub paperpaw_sdk::HttpRequest::save_to: core::option::Option<alloc::string::String>
-pub paperpaw_sdk::HttpRequest::url: alloc::string::String
 impl paperpaw_sdk::HttpRequest
 pub fn paperpaw_sdk::HttpRequest::body(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::HttpRequest::body_file(&self) -> core::option::Option<&str>
 pub fn paperpaw_sdk::HttpRequest::body_from(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::HttpRequest::body_text(&self) -> core::option::Option<&str>
 pub fn paperpaw_sdk::HttpRequest::get(&str, impl core::convert::Into<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::HttpRequest::header(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::HttpRequest::headers(&self) -> &[(alloc::string::String, alloc::string::String)]
 pub fn paperpaw_sdk::HttpRequest::max_body(self, usize) -> Self
+pub fn paperpaw_sdk::HttpRequest::method(&self) -> &str
 pub fn paperpaw_sdk::HttpRequest::new(&str, &str, impl core::convert::Into<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::HttpRequest::options(&self) -> &paperpaw_sdk::HttpOptions
+pub fn paperpaw_sdk::HttpRequest::param(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::HttpRequest::params(&self) -> &paperpaw_sdk::Params
+pub fn paperpaw_sdk::HttpRequest::reply(&self) -> &paperpaw_sdk::Id
+pub fn paperpaw_sdk::HttpRequest::save_path(&self) -> core::option::Option<&str>
 pub fn paperpaw_sdk::HttpRequest::save_to(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::HttpRequest::timeout(self, core::time::Duration) -> Self
+pub fn paperpaw_sdk::HttpRequest::url(&self) -> &str
 pub fn paperpaw_sdk::HttpRequest::want_headers(self, &[&str]) -> Self
 pub fn paperpaw_sdk::HttpRequest::with(self, paperpaw_sdk::Params) -> Self
 pub struct paperpaw_sdk::Hyphenation
@@ -5807,14 +5816,16 @@ pub fn paperpaw_sdk::ScreenSpec::refresh_on_open(self, paperpaw_platform::displa
 impl core::fmt::Debug for paperpaw_sdk::ScreenSpec
 pub fn paperpaw_sdk::ScreenSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::ServerResponse
-pub paperpaw_sdk::ServerResponse::body: alloc::vec::Vec<u8>
-pub paperpaw_sdk::ServerResponse::body_from: core::option::Option<alloc::string::String>
-pub paperpaw_sdk::ServerResponse::content_type: alloc::string::String
-pub paperpaw_sdk::ServerResponse::headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
-pub paperpaw_sdk::ServerResponse::request: u32
-pub paperpaw_sdk::ServerResponse::status: u16
 impl paperpaw_sdk::ServerResponse
+pub fn paperpaw_sdk::ServerResponse::body(&self) -> &[u8]
+pub fn paperpaw_sdk::ServerResponse::body_file(&self) -> core::option::Option<&str>
+pub fn paperpaw_sdk::ServerResponse::body_from(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ServerResponse::content_type(&self) -> &str
+pub fn paperpaw_sdk::ServerResponse::header(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ServerResponse::headers(&self) -> &[(alloc::string::String, alloc::string::String)]
 pub fn paperpaw_sdk::ServerResponse::new(u32, u16, &str, alloc::vec::Vec<u8>) -> Self
+pub fn paperpaw_sdk::ServerResponse::request(&self) -> u32
+pub fn paperpaw_sdk::ServerResponse::status(&self) -> u16
 pub struct paperpaw_sdk::Setting<T: paperpaw_sdk::setting::SettingType>
 impl<T: paperpaw_sdk::setting::SettingType> paperpaw_sdk::setting::Setting<T>
 pub fn paperpaw_sdk::setting::Setting<T>::as_str(&self) -> &str
@@ -5948,19 +5959,19 @@ pub paperpaw_sdk::SlotSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::SlotSpec
 pub fn paperpaw_sdk::SlotSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::Speech
-pub paperpaw_sdk::Speech::language: alloc::string::String
-pub paperpaw_sdk::Speech::params: paperpaw_sdk::Params
-pub paperpaw_sdk::Speech::queue: bool
-pub paperpaw_sdk::Speech::rate: u16
-pub paperpaw_sdk::Speech::reply: paperpaw_sdk::Id
-pub paperpaw_sdk::Speech::text: alloc::string::String
 impl paperpaw_sdk::Speech
 pub fn paperpaw_sdk::Speech::answer(&self, bool) -> paperpaw_sdk::Command
-pub fn paperpaw_sdk::Speech::language(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::Speech::at_rate(self, u16) -> Self
+pub fn paperpaw_sdk::Speech::in_language(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::Speech::is_queued(&self) -> bool
+pub fn paperpaw_sdk::Speech::language(&self) -> &str
 pub fn paperpaw_sdk::Speech::new(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Id) -> Self
-pub fn paperpaw_sdk::Speech::params(self, paperpaw_sdk::Params) -> Self
-pub fn paperpaw_sdk::Speech::queue(self, bool) -> Self
-pub fn paperpaw_sdk::Speech::rate(self, u16) -> Self
+pub fn paperpaw_sdk::Speech::params(&self) -> &paperpaw_sdk::Params
+pub fn paperpaw_sdk::Speech::queued(self, bool) -> Self
+pub fn paperpaw_sdk::Speech::rate(&self) -> u16
+pub fn paperpaw_sdk::Speech::reply(&self) -> &paperpaw_sdk::Id
+pub fn paperpaw_sdk::Speech::text(&self) -> &str
+pub fn paperpaw_sdk::Speech::with(self, paperpaw_sdk::Params) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::StackEntry
 pub paperpaw_sdk::StackEntry::guards: bool
 pub paperpaw_sdk::StackEntry::key: paperpaw_sdk::ScreenKey

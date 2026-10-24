@@ -216,7 +216,7 @@ impl Plugin for Driver {
                     // A timer that comes again every `repeat` milliseconds.
                     if let Some(every) = params.get(REPEAT).and_then(|r| r.parse().ok()) {
                         let at = env.now.add_millis(every);
-                        out.push(Command::Work(
+                        out.push(Command::work(
                             paperpaw_core::sdk::work::Work::at(event.clone(), at)
                                 .with(params.clone()),
                         ));

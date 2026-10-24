@@ -244,7 +244,7 @@ impl Plugin for Readwise {
             if token.is_empty() {
                 return;
             }
-            out.push(Command::SetSecret(SecretChange::keep(
+            out.push(Command::set_secret(SecretChange::keep(
                 SECRET,
                 "readwise.token",
                 token,
@@ -273,7 +273,7 @@ fn retry_later(env: &paperpaw_sdk::Env<'_>, out: &mut Commands) {
         let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
             .within(core::time::Duration::from_secs(30 * 60))
             .at_moments(paperpaw_sdk::work::Moments::ONLINE);
-        out.push(Command::Work(work));
+        out.push(Command::work(work));
     }
 }
 
