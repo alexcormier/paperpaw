@@ -8,6 +8,10 @@ same one would never reach them.
 
 <since> is the release's tag compared with, the newest `v<version>` tag
 before HEAD where not given (CI runs it with the history and the tags).
+A plugin updated alone (a tag `<id>-v<version>`, store-plugin.yml) is
+compared with those releases too: a change none of them had, under a
+version no newer than the newest of them, fails, and so does a version
+older than one published.
 A plugin's files are `plugins/<id>/` and its binary here
 (`src/bin/<id>.rs`). A change no reader sees (a comment, a test, a
 rename inside) keeps the version when each commit with it says so in a
@@ -27,6 +31,7 @@ import tomllib
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
+VERSION = re.compile(r"\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?")
 TRAILER = re.compile(r"^Plugin-unchanged:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 
@@ -92,21 +97,46 @@ def problem(plugin, before, now, changes):
     return None
 
 
+def own_tags(plugin, tags):
+    """Of `tags`, the plugin's own releases (`<id>-v<version>`)."""
+    prefix = f"{plugin}-v"
+    return [t for t in tags if t.startswith(prefix) and VERSION.fullmatch(t[len(prefix):])]
+
+
+def version_at(tag, manifest):
+    """The plugin's version at `tag`; None where it was not there yet."""
+    try:
+        return version_in(git("show", f"{tag}:{manifest}"), git("show", f"{tag}:Cargo.toml"))
+    except subprocess.CalledProcessError:
+        return None
+
+
+def is_ancestor(tag):
+    """Whether `tag` is in HEAD's history."""
+    done = subprocess.run(["git", "merge-base", "--is-ancestor", tag, "HEAD"], cwd=ROOT,
+                          capture_output=True)
+    return done.returncode == 0
+
+
 def main():
     since = sys.argv[1] if len(sys.argv) > 1 else git(
         "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD").strip()
-    workspace_then = git("show", f"{since}:Cargo.toml")
+    tags = git("tag", "--list").split()
     workspace_now = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
     failed = False
     for plugin in plugins():
         manifest = f"plugins/{plugin}/Cargo.toml"
-        try:
-            then = git("show", f"{since}:{manifest}")
-        except subprocess.CalledProcessError:
+        # The release's build and the plugin's own releases: the newest
+        # version of them, and the commits none of those in HEAD's
+        # history had.
+        versions = {tag: version_at(tag, manifest) for tag in [since, *own_tags(plugin, tags)]}
+        versions = {tag: v for tag, v in versions.items() if v is not None}
+        if not versions:
             continue  # new since the release
-        before = version_in(then, workspace_then)
+        before = max(versions.values(), key=semver)
         now = version_in((ROOT / manifest).read_text(encoding="utf-8"), workspace_now)
-        log = git("log", "--no-merges", "--format=%B%x00", f"{since}..HEAD", "--",
+        had = [f"^{tag}" for tag in versions if is_ancestor(tag)]
+        log = git("log", "--no-merges", "--format=%B%x00", "HEAD", *had, "--",
                   f"plugins/{plugin}", f"tools/plugin-files/src/bin/{plugin}.rs")
         changes = [m.strip() for m in log.split("\0") if m.strip()]
         found = problem(plugin, before, now, changes)
@@ -115,7 +145,7 @@ def main():
             failed = True
     if failed:
         sys.exit(1)
-    print(f"every plugin that changed since {since} has a newer version")
+    print(f"every plugin that changed since {since} or its own release has a newer version")
 
 
 if __name__ == "__main__":
