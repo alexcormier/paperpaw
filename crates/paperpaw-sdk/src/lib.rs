@@ -5,6 +5,13 @@
 //! contributed by a plugin through this SDK. Anything a built-in plugin does,
 //! a community plugin can do too, and replace it.
 //!
+//! # Status
+//!
+//! This is a beta (0.5.0-beta.1). The SDK may still change before 1.0;
+//! the CHANGELOG lists every breaking change with what replaces it.
+//! A plugin with code is built for a plugin interface
+//! ([`native::INTERFACE`]) and rebuilt when a release raises it.
+//!
 //! # Concepts
 //!
 //! - **Ids** ([`Id`]): every contribution has a namespaced id such as
@@ -20,9 +27,11 @@
 //!   may bind a screen to any slot; the user's configuration has the final
 //!   word.
 //! - **Commands** ([`Command`]): plugins never mutate kernel state directly.
-//!   They read through [`Env`] and request changes with commands, which the
-//!   kernel applies after the plugin returns. Plugins loaded from files are
-//!   native code too, without a sandbox (ADR 0024).
+//!   They read through [`Env`] (its parts are methods: `env.settings()`,
+//!   `env.device()` and so on) and queue changes as commands in
+//!   [`Commands`], which the kernel applies after the plugin returns.
+//!   Plugins loaded from files are native code too, without a sandbox
+//!   (ADR 0024).
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 // Without the `kernel` feature (as plugins build it) what only the

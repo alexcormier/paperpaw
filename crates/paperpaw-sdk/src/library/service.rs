@@ -9,7 +9,7 @@
 //! favourites and the catalog ([`catalog`], [`index`](mod@super::index)). A replacement
 //! publishes itself as the service [`SERVICE`]
 //! ([`Registrar::provide`](crate::Registrar::provide), a
-//! `Box<dyn Library>`) and answers the same questions its own way; views
+//! [`LibraryService`] holding a `Box<dyn Library>`) and answers the same questions its own way; views
 //! that ask [`service`] show its books.
 
 use alloc::borrow::Cow;

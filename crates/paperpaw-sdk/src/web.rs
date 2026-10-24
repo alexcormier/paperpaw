@@ -1,6 +1,6 @@
 //! Web addresses and HTTP helpers shared by plugins that fetch things:
-//! resolving links, file names for downloads, query encoding, HTTP dates
-//! and `Basic` authorisation.
+//! resolving links, file names for downloads, query encoding and `Basic`
+//! authorisation. HTTP dates are [`UnixTime`](crate::time::UnixTime)'s.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -10,7 +10,7 @@ use crate::document::is_external;
 
 /// What PaperPaw calls itself to servers, with the version of the SDK
 /// this is built with: the `User-Agent` header's value, e.g.
-/// `PaperPaw/0.4.0 (e-reader)`. A plugin sends [`user_agent_of`], with
+/// `PaperPaw/0.5.0-beta.1 (e-reader)`. A plugin sends [`user_agent_of`], with
 /// the version of the PaperPaw it runs in.
 pub const USER_AGENT: &str = concat!("PaperPaw/", env!("CARGO_PKG_VERSION"), " (e-reader)");
 

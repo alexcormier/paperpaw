@@ -72,14 +72,14 @@ const MAX_LINE: usize = 2048;
 const JOB: &str = "install-job";
 const FILE: &str = "install-file";
 
-/// Whether a data plugin made for the SDK `sdk` (e.g. `0.4`) and the data
+/// Whether a data plugin made for the SDK `sdk` (e.g. `0.5`) and the data
 /// formats `formats` is read by a PaperPaw of the SDK this is built with
 /// ([`SDK_VERSION`]); [`fits_in`] asks the PaperPaw that runs.
 pub fn fits(sdk: &str, formats: u32) -> bool {
     fits_sdk(SDK_VERSION, sdk, formats)
 }
 
-/// Whether a data plugin made for the SDK `sdk` (e.g. `0.4`) and the data
+/// Whether a data plugin made for the SDK `sdk` (e.g. `0.5`) and the data
 /// formats `formats` is read by the PaperPaw that runs: its SDK not later
 /// than the kernel's ([`Plugins::kernel`](crate::Plugins::kernel)), not
 /// the one the asking plugin was built with; its formats not later than

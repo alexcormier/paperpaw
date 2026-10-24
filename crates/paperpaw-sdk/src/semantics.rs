@@ -4,7 +4,7 @@
 //! Nothing has to be written for it: the drawing helpers of [`ui`](crate::ui)
 //! tell what they draw ([`Canvas::describe`](crate::Canvas::describe)), list
 //! rows with their focus, the text in them, buttons, switches and
-//! headers. `parts` puts that together: the text drawn inside a row
+//! headers. The kernel puts that together: the text drawn inside a row
 //! becomes the row's. Screens that draw in their own way describe their
 //! parts themselves.
 
