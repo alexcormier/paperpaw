@@ -3618,6 +3618,18 @@ pub fn paperpaw_sdk::ui::Response<T>::handled(&self) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::Response<T>::map<U>(self, impl core::ops::function::FnOnce(T) -> U) -> paperpaw_sdk::ui::Response<U>
 pub fn paperpaw_sdk::ui::Response<T>::request(&self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::Response<T>::taken(&self) -> bool
+#[non_exhaustive] pub enum paperpaw_sdk::ui::RowKind<'r>
+pub paperpaw_sdk::ui::RowKind::Number
+pub paperpaw_sdk::ui::RowKind::Number::focus: core::option::Option<bool>
+pub paperpaw_sdk::ui::RowKind::Number::room: &'r str
+pub paperpaw_sdk::ui::RowKind::Number::value: &'r str
+pub paperpaw_sdk::ui::RowKind::Switch(bool)
+pub paperpaw_sdk::ui::RowKind::Value(&'r str)
+#[non_exhaustive] pub enum paperpaw_sdk::ui::RowPart
+pub paperpaw_sdk::ui::RowPart::Minus
+pub paperpaw_sdk::ui::RowPart::Plus
+pub paperpaw_sdk::ui::RowPart::Row
+pub paperpaw_sdk::ui::RowPart::Switch
 #[non_exhaustive] pub enum paperpaw_sdk::ui::Separators
 pub paperpaw_sdk::ui::Separators::Inset
 pub paperpaw_sdk::ui::Separators::Line
@@ -3760,6 +3772,20 @@ pub fn paperpaw_sdk::ui::Palette::color(&self, paperpaw_sdk::ui::Ink) -> paperpa
 pub fn paperpaw_sdk::ui::Palette::parse(&str) -> paperpaw_sdk::ui::Palette
 impl core::default::Default for paperpaw_sdk::ui::Palette
 pub fn paperpaw_sdk::ui::Palette::default() -> Self
+pub struct paperpaw_sdk::ui::Row<'r>
+impl<'r> paperpaw_sdk::ui::Row<'r>
+pub fn paperpaw_sdk::ui::Row<'r>::draw(&self, &mut paperpaw_sdk::ui::Ui<'_>, paperpaw_platform::geometry::Rect)
+pub const fn paperpaw_sdk::ui::Row<'r>::focused(self, bool) -> Self
+pub fn paperpaw_sdk::ui::Row<'r>::height(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16) -> u16
+pub fn paperpaw_sdk::ui::Row<'r>::hit(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Point) -> core::option::Option<paperpaw_sdk::ui::RowPart>
+pub const fn paperpaw_sdk::ui::Row<'r>::kind(&self) -> paperpaw_sdk::ui::RowKind<'r>
+pub const fn paperpaw_sdk::ui::Row<'r>::note(self, &'r str) -> Self
+pub const fn paperpaw_sdk::ui::Row<'r>::number(&'r str, &'r str, &'r str) -> Self
+pub const fn paperpaw_sdk::ui::Row<'r>::of(&'r str, paperpaw_sdk::ui::RowKind<'r>) -> Self
+pub const fn paperpaw_sdk::ui::Row<'r>::plain(&'r str) -> Self
+pub const fn paperpaw_sdk::ui::Row<'r>::step_focus(self, core::option::Option<bool>) -> Self
+pub const fn paperpaw_sdk::ui::Row<'r>::switch(&'r str, bool) -> Self
+pub const fn paperpaw_sdk::ui::Row<'r>::value(&'r str, &'r str) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::ui::RowLines
 pub paperpaw_sdk::ui::RowLines::control: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::RowLines::height: u16

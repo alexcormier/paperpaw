@@ -590,6 +590,13 @@ file to your report.
   before shortened), `.lines(n)` or `.wrap()`; `width`, `height` and
   `draw(&mut ui, area)`. It borrows its text and allocates only the words
   of a line it shortens.
+- SDK: `ui::Row`, a row of a list as a value: `Row::value(title, v)`,
+  `Row::plain(title)`, `Row::switch(title, on)`, `Row::number(title, v,
+  room)` (or `Row::of(title, RowKind::..)`), with `.note(..)`,
+  `.focused(..)` and for numbers `.step_focus(..)`. The one value gives
+  `height(env, style, width)`, `draw(&mut ui, rect)` and `hit(..)` (a
+  `RowPart`: the row, its switch, its `−` or `+`), so that they cannot
+  disagree. `RowKind` and `RowPart` may grow.
 - SDK: one input contract for the building blocks. Those that take the
   buttons' actions and gestures (`on_action`, `on_gesture`) answer with
   a `ui::Response`: `Ignored` (the screen's), `Same`, `Changed` (draw it

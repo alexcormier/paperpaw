@@ -387,6 +387,78 @@ fn a_wrapped_label_takes_its_lines_and_cuts_the_last() {
     assert_eq!(drawn_outside(&mut frame, short), None);
 }
 
+/// A row as a value draws and measures as the rows' functions do, and
+/// tells what a point of it is on.
+#[test]
+fn a_row_value_draws_measures_and_hits_as_its_parts() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let width = 440;
+    let note = "A note of a few words below the title";
+    let same = |row: ui::Row<'_>, old: &dyn Fn(&mut paperpaw_sdk::Canvas<'_>, Rect)| {
+        let rect = Rect::new(20, 20, width, row.height(&env, &style, width));
+        let (told, before) = describe(480, 400, |c| old(c, rect));
+        let (said, after) = describe(480, 400, |c| {
+            row.draw(&mut ui::Ui::new(c, &env, &style), rect)
+        });
+        assert_eq!(told, said, "{row:?}");
+        assert!(before.view().data == after.view().data, "{row:?}");
+    };
+    for focused in [false, true] {
+        for note in ["", note] {
+            let row = ui::Row::value("Title", "Value").note(note).focused(focused);
+            assert_eq!(
+                row.height(&env, &style, width),
+                ui::noted_row_height(&env, &style, width, "Title", "Value", note)
+            );
+            same(row, &|c, r| {
+                ui::draw_noted_row(c, &env, &style, r, focused, "Title", "Value", note)
+            });
+            let row = ui::Row::switch("Title", true).note(note).focused(focused);
+            assert_eq!(
+                row.height(&env, &style, width),
+                ui::switch_row_height(&env, &style, width, "Title", note)
+            );
+            same(row, &|c, r| {
+                ui::draw_switch_row(c, &env, &style, r, focused, "Title", note, true)
+            });
+        }
+    }
+    let row = ui::Row::number("Size", "12", "000").step_focus(Some(true));
+    same(row, &|c, r| {
+        ui::draw_number(c, &env, &style, r, "Size", "12", "000", Some(true))
+    });
+    // What a point is on.
+    let rect = Rect::new(
+        20,
+        20,
+        width,
+        ui::Row::switch("Wi-Fi", true).height(&env, &style, width),
+    );
+    let switch = ui::switch_rect(&style, rect);
+    let on = ui::Row::switch("Wi-Fi", true);
+    assert_eq!(
+        on.hit(&env, &style, rect, middle(switch)),
+        Some(ui::RowPart::Switch)
+    );
+    assert_eq!(
+        on.hit(&env, &style, rect, Point::new(30, 30)),
+        Some(ui::RowPart::Row)
+    );
+    assert_eq!(on.hit(&env, &style, rect, Point::new(5, 5)), None);
+    let (minus, plus) = ui::value_stepper(&env, &style, rect, "000", "12").unwrap();
+    let number = ui::Row::number("Size", "12", "000");
+    assert_eq!(
+        number.hit(&env, &style, rect, middle(minus)),
+        Some(ui::RowPart::Minus)
+    );
+    assert_eq!(
+        number.hit(&env, &style, rect, middle(plus)),
+        Some(ui::RowPart::Plus)
+    );
+}
+
 /// A section's heading too long for its row ends, shortened, at the
 /// right margin as the rows' values do: its last letter's ink stays in
 /// the row (it reached a pixel past it, 413 in a row 413 wide).
