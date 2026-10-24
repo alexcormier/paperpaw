@@ -9,7 +9,8 @@
 //!   and key maps see it, on every screen; not while the screen lock asks
 //!   for its code.
 //! - A way out that needs no menu and that a resting hand does not make
-//!   (`Escape`): one finger taps twice and then stays down; or, where
+//!   (`Escape`): one finger taps twice and stays down on the second tap
+//!   (a third touch held after two taps counts too); or, where
 //!   PaperPaw is the firmware, the power button held, or the home key (the
 //!   X4 Pro's, below the screen) held. A small lock in the status lines
 //!   says it is on. Its times allow for a slow screen: a refresh may hold
@@ -50,11 +51,12 @@ pub const HINT_MS: u64 = 10_000;
 const FILTER: Id = Id::new_static("lock.touch-filter");
 
 /// The way out by touch, which a hand resting on the screen does not do:
-/// one finger taps twice, then stays down for [`HOLD_MS`] at the same
-/// spot, each tap shorter than [`TAP_MS`] and the next touch within
-/// [`GAP_MS`]. A second finger on the screen starts it over. It unlocks
-/// when the finger is lifted, or before, as it moves a little once held
-/// long enough.
+/// one finger taps, then comes down again at the same spot and stays
+/// there for [`HOLD_MS`] (as it says: tap twice and hold the second
+/// tap), the tap shorter than [`TAP_MS`] and the next touch within
+/// [`GAP_MS`]; after two taps the third touch held counts too. A second
+/// finger on the screen starts it over. It unlocks when the finger is
+/// lifted, or before, as it moves a little once held long enough.
 pub const TAP_MS: u64 = 500;
 pub const GAP_MS: u64 = 1_000;
 pub const HOLD_MS: u64 = 1_500;
@@ -69,7 +71,8 @@ struct Escape {
     /// The finger that may go on with it: its id, when and where it came
     /// down.
     finger: Option<(u8, Instant, Point)>,
-    /// Taps so far, where the first was, when the last ended.
+    /// Taps so far (two at most), where the first was, when the last
+    /// ended.
     taps: u8,
     first: Option<Point>,
     last_up: Option<Instant>,
@@ -115,7 +118,7 @@ impl Escape {
                 }
                 if !self.near(pointer.point) {
                     self.over();
-                } else if self.taps == 2 && now.since(at) >= HOLD_MS {
+                } else if self.taps > 0 && now.since(at) >= HOLD_MS {
                     // Held long enough, still down: no need to lift.
                     self.down.clear();
                     self.over();
@@ -135,7 +138,7 @@ impl Escape {
                 if held < TAP_MS && self.taps < 2 {
                     self.taps += 1;
                     self.last_up = Some(now);
-                } else if held >= HOLD_MS && self.taps == 2 {
+                } else if held >= HOLD_MS && self.taps > 0 {
                     self.down.clear();
                     self.over();
                     return true;
@@ -332,6 +335,27 @@ mod tests {
         assert!(verdicts[..5].iter().all(|v| *v == InputVerdict::Take));
     }
 
+    /// As the notice says: tap twice, and hold the second tap.
+    #[test]
+    fn a_tap_then_a_held_tap_unlock() {
+        let verdicts = run(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, (205, 302)),
+            (400 + HOLD_MS, 0, Up, (205, 302)),
+        ]);
+        assert_eq!(verdicts.last(), Some(&InputVerdict::Run(TOGGLE)));
+        assert!(verdicts[..3].iter().all(|v| *v == InputVerdict::Take));
+        // Still down, once held long enough: a little movement unlocks.
+        let held = run(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, AT),
+            (400 + HOLD_MS + 10, 0, Move, (201, 301)),
+        ]);
+        assert_eq!(held.last(), Some(&InputVerdict::Run(TOGGLE)));
+    }
+
     #[test]
     fn a_resting_hand_does_not_unlock() {
         // A palm still for a long while, then lifted.
@@ -357,22 +381,20 @@ mod tests {
 
     #[test]
     fn taps_too_slow_or_too_far_apart_do_not_unlock() {
+        // The held tap coming too late after the tap: a hand resting.
         let slow = run(&[
             (0, 0, Down, AT),
             (100, 0, Up, AT),
             (100 + GAP_MS + 1, 0, Down, AT),
-            (200 + GAP_MS, 0, Up, AT),
-            (500 + GAP_MS, 0, Down, AT),
-            (500 + GAP_MS + HOLD_MS, 0, Up, AT),
+            (100 + GAP_MS + 1 + HOLD_MS, 0, Up, AT),
         ]);
         assert!(!slow.contains(&InputVerdict::Run(TOGGLE)));
+        // The held tap far from the tap.
         let far = run(&[
             (0, 0, Down, AT),
             (100, 0, Up, AT),
             (400, 0, Down, (400, 700)),
-            (500, 0, Up, (400, 700)),
-            (800, 0, Down, (400, 700)),
-            (800 + HOLD_MS, 0, Up, (400, 700)),
+            (400 + HOLD_MS, 0, Up, (400, 700)),
         ]);
         assert!(!far.contains(&InputVerdict::Run(TOGGLE)));
         let moved = run(&[

@@ -12,6 +12,9 @@ change the plugin SDK.
   online only once the router gave their address again. Before, they
   were online at once with the old one, which the router's answer then
   took back, so a request made in between failed.
+- Touch lock: the way out it explains (tap twice, hold the second tap)
+  unlocks; it wanted a third touch held after two taps, which still
+  works too.
 
 ## [0.5.0-beta.4] - 2026-10-24
 
