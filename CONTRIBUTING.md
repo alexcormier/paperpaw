@@ -3,6 +3,9 @@
 Thank you for helping! This guide explains how to get started and what we
 expect from contributions.
 
+PaperPaw is in beta (0.5.0-beta.1). The plugin SDK may still change
+before 1.0.
+
 ## Ground rules
 
 - Be kind and constructive; see the [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -82,19 +85,19 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
 6. **No panics on bad input.** Configuration, books and plugins can be
    broken; report a warning and carry on with defaults.
 7. **The SDK is shared as native code** ([ADR 0024](docs/adr/0024-native-code-plugins.md)):
-   until 1.0 a plugin file is built by the same compiler from the same
-   SDK as the firmware, its fingerprint says so, and Rust types cross
-   unchanged. From 1.0 only plain values are to cross (numbers, text,
-   slices, handles), so new APIs take such arguments and keep no
-   borrowed host state across calls.
+   until 1.0 a plugin file is built for a plugin interface and by the
+   compiler that built the firmware ([ADR 0026](docs/adr/0026-plugin-interface-version.md)),
+   its fingerprint says so, and Rust types cross unchanged. From 1.0
+   only plain values are to cross (numbers, text, slices, handles), so
+   new APIs take such arguments and keep no borrowed host state across
+   calls.
 8. **The SDK changes visibly and compatibly** ([ADR 0020](docs/adr/0020-sdk-compatibility.md)):
    a change to its public API, or to a crate whose types cross with it
    (`crates/paperpaw-sdk/interface/crates.txt`), comes with that crate's
    `api.txt` and `shape.txt` brought up to date
    (`python3 tools/interface.py`, with the nightly it names and
    cargo-public-api). What goes is `#[deprecated]` first and gone before
-   the next release, whose plugins are built anew until 1.0. What code
-   plugins see is the plugin interface
+   the next release. What code plugins see is the plugin interface
    ([ADR 0026](docs/adr/0026-plugin-interface-version.md)): any change
    to a type that crosses raises `native::INTERFACE`, a new item alone
    does not, and `cargo test -p paperpaw-sdk --test interface` says which
