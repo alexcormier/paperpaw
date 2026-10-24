@@ -2020,6 +2020,7 @@ version = "0.5.0-beta.6"
 dependencies = [
  "paperpaw-core",
  "paperpaw-plugin-about",
+ "paperpaw-plugin-bluetooth",
  "paperpaw-plugin-diagnostics",
  "paperpaw-plugin-dictionary",
  "paperpaw-plugin-file-manager",
@@ -2149,6 +2150,13 @@ version = "0.5.0-beta.6"
 
 [[package]]
 name = "paperpaw-plugin-about"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-bluetooth"
 version = "1.0.0"
 dependencies = [
  "paperpaw-sdk",

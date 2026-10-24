@@ -50,6 +50,7 @@ members = [
     "plugins/help",
     "plugins/reading-goal",
     "plugins/wifi",
+    "plugins/bluetooth",
     "plugins/power",
     "plugins/file-manager",
     "plugins/transfer",
@@ -137,6 +138,7 @@ paperpaw-plugin-battery = { path = "plugins/battery", version = "1.0.0" }
 paperpaw-plugin-help = { path = "plugins/help", version = "1.0.0" }
 paperpaw-plugin-reading-goal = { path = "plugins/reading-goal", version = "1.0.0" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "1.0.0" }
+paperpaw-plugin-bluetooth = { path = "plugins/bluetooth", version = "1.0.0" }
 paperpaw-plugin-power = { path = "plugins/power", version = "1.0.0" }
 paperpaw-plugin-file-manager = { path = "plugins/file-manager", version = "1.0.0" }
 paperpaw-plugin-transfer = { path = "plugins/transfer", version = "1.0.0" }

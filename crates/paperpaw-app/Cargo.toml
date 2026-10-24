@@ -70,6 +70,7 @@ paperpaw-plugin-battery = { workspace = true, optional = true }
 paperpaw-plugin-reading-goal = { workspace = true, optional = true }
 paperpaw-plugin-widgets = { workspace = true, optional = true }
 paperpaw-plugin-wifi.workspace = true
+paperpaw-plugin-bluetooth.workspace = true
 paperpaw-plugin-power.workspace = true
 paperpaw-plugin-file-manager.workspace = true
 paperpaw-plugin-transfer.workspace = true

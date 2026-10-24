@@ -1301,6 +1301,7 @@ dependencies = [
  "paperpaw-plugin-about",
  "paperpaw-plugin-aids",
  "paperpaw-plugin-battery",
+ "paperpaw-plugin-bluetooth",
  "paperpaw-plugin-browser",
  "paperpaw-plugin-calibre",
  "paperpaw-plugin-diagnostics",
@@ -1561,6 +1562,16 @@ dependencies = [
  "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
  "proptest",
+]
+
+[[package]]
+name = "paperpaw-plugin-bluetooth"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-sdk",
 ]
 
 [[package]]

@@ -531,6 +531,8 @@ impl Kernel {
         if let Some(radio) = &mut self.io.bluetooth {
             radio.start();
         }
+        // The bonds read with the secrets, for every plugin to see.
+        self.sync_bluetooth();
         if mem::take(&mut self.config_unreadable) {
             let text = self.config_notice();
             self.output.commands.push(Command::Notify(text));

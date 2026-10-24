@@ -144,7 +144,7 @@ impl Kernel {
     }
 
     /// What every plugin sees, the bonds kept, a pairing question asked.
-    fn sync_bluetooth(&mut self) {
+    pub(crate) fn sync_bluetooth(&mut self) {
         let Some(radio) = &mut self.io.bluetooth else {
             return;
         };

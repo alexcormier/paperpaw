@@ -20,6 +20,11 @@ change the plugin SDK.
   pages turned by default). The emulator has made-up devices for the X4
   Pro's profile: a page-turner (`ble-key:right` in scripts) and a
   heart-rate belt.
+- Bluetooth page (Settings, where there is Bluetooth): the devices bonded
+  with the reader, Add a device (a search, then pairing confirmed on the
+  reader), forgetting one (the menu button or a long press), which
+  plugins may use a sensor, and Remotes: when a remote's or a keyboard's
+  keys work (when switched on, while reading, or always).
 - Plugin interface 3: code plugins are built again for it (`Command`,
   `Env`, `Capabilities`, `MenuNeed` and `Work` changed for Bluetooth).
 
