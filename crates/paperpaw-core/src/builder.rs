@@ -487,7 +487,6 @@ impl BuilderParts {
                 stack: Vec::new(),
                 content: Rect::new(0, 0, display.width, display.height),
                 slots: Vec::new(),
-                screens: Vec::new(),
                 font_dirs: Vec::new(),
                 data_folders: Vec::new(),
                 plugin_dirs: Vec::new(),
@@ -977,13 +976,6 @@ impl Kernel {
     fn settle(&mut self) {
         self.shrink_to_fit();
         self.shared.slots = self.shared.registry.bound_slots();
-        self.shared.screens = self
-            .shared
-            .registry
-            .screens
-            .iter()
-            .map(|(id, spec)| (id.clone(), spec.title.clone()))
-            .collect();
         self.hint.height = self.wanted_hint_height();
     }
 }

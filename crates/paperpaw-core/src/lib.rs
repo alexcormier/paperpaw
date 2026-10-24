@@ -1086,7 +1086,7 @@ impl Kernel {
 
     /// The ids of every screen plugins added, whether open or not.
     pub fn known_screens(&self) -> impl Iterator<Item = &Id> {
-        self.shared.screens.iter().map(|(id, _)| id)
+        self.shared.registry.screens.titles().iter().map(|(id, _)| id)
     }
 
     /// What the device did since start (see [`paperpaw_sdk::usage`]).
@@ -1360,8 +1360,6 @@ struct Shared {
     content: Rect,
     /// Slots some screen is bound to.
     slots: Vec<Id>,
-    /// Every screen, with the translation key of its name.
-    screens: Vec<(Id, Cow<'static, str>)>,
     /// Folders fonts are read from.
     font_dirs: Vec<String>,
     /// The folders of data plugins, by plugin, for removing them.
@@ -1438,7 +1436,7 @@ impl Shared {
             content: self.content,
             stack: &self.stack,
             slots: &self.slots,
-            screens: &self.screens,
+            screens: self.registry.screens.titles(),
             font_dirs: &self.font_dirs,
             catalog_device: self.catalog_device,
             secrets: &self.secrets,

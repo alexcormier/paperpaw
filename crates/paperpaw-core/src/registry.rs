@@ -20,11 +20,90 @@ struct SlotCandidate {
     priority: Priority,
 }
 
+/// The screens plugins added, sorted by id: each id with the translation
+/// key of its name, as [`Env::screens`](paperpaw_sdk::Env) hands them out
+/// (not copied for it), and apart from them what makes the screen.
+#[derive(Default)]
+pub(crate) struct Screens {
+    titles: Vec<(Id, Cow<'static, str>)>,
+    made: Vec<Made>,
+}
+
+/// What makes a screen, of its [`ScreenSpec`].
+pub(crate) struct Made {
+    pub(crate) factory: paperpaw_sdk::ScreenFactory,
+    pub(crate) refresh_on_open: Option<paperpaw_sdk::RefreshMode>,
+}
+
+impl core::fmt::Debug for Screens {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_list()
+            .entries(self.titles.iter().map(|(id, _)| id))
+            .finish()
+    }
+}
+
+impl Screens {
+    fn find(&self, id: &str) -> Result<usize, usize> {
+        self.titles
+            .binary_search_by(|(other, _)| other.as_str().cmp(id))
+    }
+
+    pub(crate) fn contains_key<Q: core::borrow::Borrow<str> + ?Sized>(&self, id: &Q) -> bool {
+        self.find(id.borrow()).is_ok()
+    }
+
+    pub(crate) fn get<Q: core::borrow::Borrow<str> + ?Sized>(&self, id: &Q) -> Option<&Made> {
+        self.find(id.borrow()).ok().map(|at| &self.made[at])
+    }
+
+    fn title(&self, id: &str) -> Option<&str> {
+        self.find(id).ok().map(|at| self.titles[at].1.as_ref())
+    }
+
+    /// Adds `spec`, in place of one of its id.
+    fn insert(&mut self, spec: ScreenSpec) {
+        // Each part kept: a part added to `ScreenSpec` must be kept here
+        // too.
+        let ScreenSpec {
+            id,
+            title,
+            factory,
+            refresh_on_open,
+            ..
+        } = spec;
+        let made = Made {
+            factory,
+            refresh_on_open,
+        };
+        match self.find(id.as_str()) {
+            Ok(at) => {
+                self.titles[at].1 = title;
+                self.made[at] = made;
+            }
+            Err(at) => {
+                self.titles.insert(at, (id, title));
+                self.made.insert(at, made);
+            }
+        }
+    }
+
+    /// Every screen with the translation key of its name, by id.
+    pub(crate) fn titles(&self) -> &[(Id, Cow<'static, str>)] {
+        &self.titles
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.titles.shrink_to_fit();
+        self.made.shrink_to_fit();
+    }
+}
+
 /// All active contributions except settings, key maps and translations,
 /// which live in their own stores.
 #[derive(Debug, Default)]
 pub(crate) struct Registry {
-    pub(crate) screens: VecMap<Id, ScreenSpec>,
+    pub(crate) screens: Screens,
     pub(crate) slots: VecMap<Id, SlotSpec>,
     /// When screens show the row of hints, where they said.
     pub(crate) hints: VecMap<Id, paperpaw_sdk::HintVisibility>,
@@ -109,7 +188,7 @@ impl paperpaw_sdk::ScreenMaker for Registry {
         env: &paperpaw_sdk::Env<'_>,
         params: &paperpaw_sdk::Params,
     ) -> Option<alloc::boxed::Box<dyn paperpaw_sdk::Screen>> {
-        let spec = self.screens.get(id)?;
+        let spec = self.screens.get(id.as_str())?;
         Some((spec.factory)(env, params))
     }
 
@@ -120,7 +199,7 @@ impl paperpaw_sdk::ScreenMaker for Registry {
     fn slot_choice(&self, slot: &str) -> Option<&Id> {
         self.user_bindings
             .get(slot)
-            .filter(|screen| self.screens.contains_key(*screen))
+            .filter(|screen| self.screens.contains_key(screen.as_str()))
     }
 
     fn slot_title(&self, slot: &str) -> Option<&str> {
@@ -128,13 +207,14 @@ impl paperpaw_sdk::ScreenMaker for Registry {
     }
 
     fn screen_title(&self, screen: &Id) -> Option<&str> {
-        self.screens.get(screen).map(|spec| spec.title.as_ref())
+        self.screens.title(screen.as_str())
     }
 
     fn slot_screens(&self, slot: &str) -> Vec<&Id> {
         let mut screens: Vec<&Id> = Vec::new();
         for candidate in self.candidates.iter().filter(|c| c.slot.as_str() == slot) {
-            if self.screens.contains_key(&candidate.screen) && !screens.contains(&&candidate.screen)
+            if self.screens.contains_key(candidate.screen.as_str())
+                && !screens.contains(&&candidate.screen)
             {
                 screens.push(&candidate.screen);
             }
@@ -249,7 +329,7 @@ impl Staging {
                 self.screens
                     .iter()
                     .map(|s| &s.id)
-                    .find(|id| registry.screens.contains_key(*id))
+                    .find(|id| registry.screens.contains_key(id.as_str()))
             })
             .or_else(|| {
                 self.slots
@@ -264,7 +344,7 @@ impl Staging {
             actions.insert(action);
         }
         for screen in self.screens.drain(..) {
-            registry.screens.insert(screen.id.clone(), screen);
+            registry.screens.insert(screen);
         }
         for slot in self.slots.drain(..) {
             registry.slots.insert(slot.id.clone(), slot);
