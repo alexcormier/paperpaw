@@ -1464,6 +1464,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-hid"
+version = "0.5.0-beta.6"
+
+[[package]]
 name = "paperpaw-http"
 version = "0.5.0-beta.6"
 dependencies = [
