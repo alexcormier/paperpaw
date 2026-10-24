@@ -863,7 +863,9 @@ fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String>
         .filter(|id| id.as_str() == id.namespace())
         .ok_or_else(|| format!("invalid id `{id}`"))?;
     let version = match version {
-        Some(text) => Version::parse(&text).ok_or_else(|| format!("invalid version `{text}`"))?,
+        Some(text) => {
+            Version::try_parse(&text).map_err(|why| format!("invalid version `{text}`: {why}"))?
+        }
         None => Version::new(0, 1, 0),
     };
     let name = name.unwrap_or_else(|| id.as_str().to_string());
@@ -938,6 +940,36 @@ mod tests {
             Some("p { line-height: 1.6 }")
         );
         assert_eq!(warnings.len(), 2, "{warnings:?}");
+    }
+
+    #[test]
+    fn a_pre_release_a_version_does_not_hold_is_refused_saying_so() {
+        let storage = MemoryStorage::new()
+            .with(
+                "plugins/a/plugin.ini",
+                "[plugin]
+name = A
+version = 1.0.0-beta.2
+",
+            )
+            .with(
+                "plugins/b/plugin.ini",
+                "[plugin]
+name = B
+version = 1.0.0-gamma
+",
+            );
+        let mut warnings = Vec::new();
+        let storage = shared(storage);
+        let plugins = discover(&storage, "plugins", &mut |w| warnings.push(w));
+        assert_eq!(plugins.len(), 1, "{warnings:?}");
+        assert_eq!(plugins[0].manifest.version.pre_name(), Some("beta"));
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].contains("invalid version `1.0.0-gamma`")
+                && warnings[0].contains("alpha, beta, dev, pre or rc"),
+            "{warnings:?}"
+        );
     }
 
     #[test]

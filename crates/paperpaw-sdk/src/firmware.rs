@@ -332,6 +332,11 @@ pub fn beta(version: &str) -> Option<(&str, &str)> {
 /// pre-releases are ordered as SemVer orders them (`rc.9` before
 /// `rc.10`, `beta.2` before `beta.10`).
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
+    // Versions a `Version` holds are ordered as it orders them; for those
+    // it does not (a firmware's tag with another pre-release), by text.
+    if let (Some(a), Some(b)) = (crate::Version::parse(a), crate::Version::parse(b)) {
+        return a.cmp(&b);
+    }
     /// The numbers, and the pre-release if there is one; build metadata
     /// left out.
     fn parts(v: &str) -> (Vec<u64>, Option<&str>) {

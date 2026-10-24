@@ -569,13 +569,17 @@ fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Findin
             place,
             "plugin.ini names no version: the device takes 0.1.0, but the plugin library needs `version = 1.0.0` (or so) in [plugin], the same as its catalogue entry.",
         )),
-        Some(text) if Version::parse(text).is_none() => add(Finding::error(
-            "package.version",
-            place,
-            format!(
-                "`version = {text}` is no version, so PaperPaw refuses the plugin; write it like 1.0.0."
-            ),
-        )),
+        Some(text) if Version::try_parse(text).is_err() => {
+            let why = Version::try_parse(text).err().map(|why| why.to_string());
+            add(Finding::error(
+                "package.version",
+                place,
+                format!(
+                    "`version = {text}` is no version, so PaperPaw refuses the plugin: {}; write it like 1.0.0.",
+                    why.unwrap_or_default()
+                ),
+            ));
+        }
         Some(text) if text.split('.').count() != 3 => add(Finding::error(
             "package.version",
             place,
@@ -1296,6 +1300,39 @@ mod tests {
         );
         let found = findings(&plugin);
         assert!(found.iter().all(|f| f.0 == Level::Info), "{found:#?}");
+    }
+
+    #[test]
+    fn a_pre_release_a_version_does_not_hold_is_refused_saying_so() {
+        let with = |version: &str| {
+            let ini = format!(
+                "[plugin]
+id = pre
+name = Pre
+description = A test.
+version = {version}
+"
+            );
+            let plugin = folder("pre", &[("plugin.ini", ini.as_bytes())]);
+            findings(&plugin)
+        };
+        let refused = with("1.0.0-gamma");
+        let found = refused
+            .iter()
+            .find(|f| f.1 == "package.version" && f.0 == Level::Error)
+            .unwrap_or_else(|| panic!("{refused:#?}"));
+        assert!(
+            found.3.contains("alpha, beta, dev, pre or rc"),
+            "{}",
+            found.3
+        );
+        // A pre-release it holds is no refusal of PaperPaw's: the plugin
+        // library takes versions like 1.2.0 only (a separate finding).
+        assert!(
+            !with("1.0.0-beta.2")
+                .iter()
+                .any(|f| f.3.contains("is no version"))
+        );
     }
 
     #[test]

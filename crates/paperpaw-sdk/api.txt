@@ -5986,14 +5986,22 @@ pub const fn paperpaw_sdk::Uses::from_bits(u8) -> paperpaw_sdk::Uses
 impl core::ops::bit::BitOr for paperpaw_sdk::Uses
 pub type paperpaw_sdk::Uses::Output = paperpaw_sdk::Uses
 pub fn paperpaw_sdk::Uses::bitor(self, paperpaw_sdk::Uses) -> paperpaw_sdk::Uses
-pub struct paperpaw_sdk::Version
+#[non_exhaustive] pub struct paperpaw_sdk::Version
 pub paperpaw_sdk::Version::major: u16
 pub paperpaw_sdk::Version::minor: u16
 pub paperpaw_sdk::Version::patch: u16
 impl paperpaw_sdk::Version
+pub const fn paperpaw_sdk::Version::is_pre_release(&self) -> bool
 pub const fn paperpaw_sdk::Version::new(u16, u16, u16) -> Self
 pub fn paperpaw_sdk::Version::parse(&str) -> core::option::Option<paperpaw_sdk::Version>
+pub fn paperpaw_sdk::Version::pre_name(&self) -> core::option::Option<&'static str>
+pub fn paperpaw_sdk::Version::pre_number(&self) -> core::option::Option<u16>
+pub const fn paperpaw_sdk::Version::release(self) -> Self
 pub fn paperpaw_sdk::Version::satisfies(&self, &paperpaw_sdk::Version) -> bool
+pub fn paperpaw_sdk::Version::try_parse(&str) -> core::result::Result<paperpaw_sdk::Version, paperpaw_sdk::version::VersionError>
+pub const fn paperpaw_sdk::Version::with_pre(self, &str) -> core::option::Option<Self>
+impl core::fmt::Debug for paperpaw_sdk::Version
+pub fn paperpaw_sdk::Version::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for paperpaw_sdk::Version
 pub fn paperpaw_sdk::Version::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const paperpaw_sdk::COVER_FIT: paperpaw_image::Fit
