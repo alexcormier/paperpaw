@@ -18,18 +18,22 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, events, settings};
 use paperpaw_sdk::power::Start;
+use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::wifi::WifiCommand;
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Instant, Params,
-    PixelFormat, Point, Rect, RefreshMode, Screen, SettingValue,
+    Arg, Canvas, Color, Command, Cx, Env, Event, Gesture, GestureKind, Handled, Id, Instant,
+    Params, PixelFormat, Point, Rect, RefreshMode, Screen, SettingValue,
 };
 
 use crate::steps::{self, About, Buttons, CardTest, Mark, Outcome, Results, Step};
 
+/// The step's help read in a dialog (nothing to do then).
+const HELP_READ: Event<Confirmed> = Event::new("diagnostics.check.help-read");
 /// The Wi-Fi plugin's action that opens its page, to join a network.
 const WIFI_PAGE: &str = "wifi.open";
 /// How long a search for networks may take.
@@ -58,6 +62,9 @@ const TARGET_MM: u32 = 5;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Control {
     Answer(Outcome),
+    /// The step's title, where the page has no room for its help (the
+    /// largest text on a small screen): the help whole, in a dialog.
+    Help,
     /// The screen page: the pattern turned black for white, with a fast
     /// refresh, which shows ghosting.
     Flip,
@@ -81,6 +88,7 @@ impl Control {
             Control::Answer(Outcome::Pass) => "diagnostics.check.pass",
             Control::Answer(Outcome::Fail) => "diagnostics.check.fail",
             Control::Answer(Outcome::Skip) => "diagnostics.check.skip",
+            Control::Help => "diagnostics.check.title",
             Control::Flip => "diagnostics.check.flip",
             Control::FullRefresh => "diagnostics.check.full-refresh",
             Control::LightAgain => "diagnostics.check.light-again",
@@ -113,6 +121,10 @@ struct Radio {
 struct Layout {
     title: Rect,
     help: Rect,
+    /// The help's text size: the small one, or smaller where the help
+    /// would else run under the controls (the largest text on a small
+    /// screen).
+    help_size: f32,
     /// What the step shows: lines of values, the gray ramp.
     body: Rect,
     /// The controls with their places, tools first.
@@ -350,7 +362,8 @@ impl Check {
             (None, _) => Control::Done,
             (_, Some(outcome)) => Control::Answer(outcome),
             (_, None) => controls
-                .first()
+                .iter()
+                .find(|c| c.0 != Control::Help)
                 .map_or(Control::Answer(Outcome::Pass), |c| c.0),
         };
         controls.iter().position(|c| c.0 == wanted).unwrap_or(0)
@@ -361,6 +374,15 @@ impl Check {
         let env = *cx.env();
         match control {
             Control::Answer(outcome) => self.answer(outcome, cx),
+            Control::Help => {
+                let (title, help) = texts(&env, self.step);
+                cx.command(
+                    ask::confirm(title, &HELP_READ)
+                        .text(help)
+                        .only_yes()
+                        .command(),
+                );
+            }
             Control::Flip => {
                 self.flipped = !self.flipped;
                 cx.request_redraw_area(self.layout.body);
@@ -529,14 +551,18 @@ impl Screen for Check {
         }
         let l = &self.layout;
         let (title, help) = texts(env, self.step);
-        paragraph(&mut ui, l.title, style.title(), &title, Color::BLACK);
-        paragraph(
-            &mut ui,
-            l.help,
-            style.small(),
-            &help,
-            style.faint(ui::Ink::Note),
-        );
+        if !l.controls.iter().any(|c| c.0 == Control::Help) {
+            paragraph(&mut ui, l.title, style.title(), &title, Color::BLACK);
+        }
+        if l.help.height > 0 {
+            paragraph(
+                &mut ui,
+                l.help,
+                l.help_size,
+                &help,
+                style.faint(ui::Ink::Note),
+            );
+        }
         match self.step {
             Some(Step::Screen) => draw_screen_test(ui.canvas(), env, l.body, self.flipped),
             Some(Step::Touch) => self.draw_targets(ui.canvas(), env),
@@ -546,8 +572,23 @@ impl Screen for Check {
         // they choose nothing.
         let suggested = self.measured(env).0.map(Control::Answer);
         for (i, (control, rect)) in l.controls.iter().enumerate() {
-            let label = env.i18n().tr(control.label());
             let focused = self.shown && i == self.focus && !self.takes_buttons();
+            if *control == Control::Help {
+                // A row, widened by its margin inside: its title lines up
+                // with the text below.
+                let inside = style.margin();
+                let row = Rect::new(
+                    rect.x.saturating_sub(inside),
+                    rect.y,
+                    rect.width + 2 * inside,
+                    rect.height,
+                );
+                ui::Row::value(&title, "›")
+                    .focused(focused)
+                    .draw(&mut ui, row);
+                continue;
+            }
+            let label = env.i18n().tr(control.label());
             let on = Some(*control) == suggested || *control == Control::Done;
             ui.button(*rect, label, on, focused);
         }
@@ -733,9 +774,9 @@ impl Check {
         let width = display.width.saturating_sub(2 * margin);
         let (title_text, help_text) = texts(env, self.step);
         let lines = |size: f32, text: &str| -> u16 {
-            let count = style.font(env).map_or(1, |f| {
-                f.wrap(size, text, f32::from(width)).len().clamp(1, 6)
-            });
+            let count = style
+                .font(env)
+                .map_or(1, |f| f.wrap(size, text, f32::from(width)).len().max(1));
             line_height(env, style, size) * count as u16
         };
         // The touch page has no header: its corners are for the targets,
@@ -748,8 +789,6 @@ impl Check {
         };
         let title = Rect::new(margin, y, width, lines(style.title(), &title_text));
         y += title.height + gap;
-        let help = Rect::new(margin, y, width, lines(style.small(), &help_text));
-        y += help.height + gap * 2;
 
         let button = style.row();
         let answers = self.answers();
@@ -779,8 +818,28 @@ impl Check {
         } else {
             above.y.saturating_sub(gap * 2)
         };
+        // The help whole, with a row's room at least left for the body.
+        let room = body_bottom.saturating_sub(y + gap * 2 + button);
+        let small = style.small();
+        let help_size = paperpaw_sdk::widgets::largest_size(small, small * 0.6, |at| {
+            lines(at, &help_text) <= room
+        });
+        // Where it does not fit so, the title opens it.
+        let help = match help_size {
+            Some(size) => Rect::new(margin, y, width, lines(size, &help_text)),
+            None => Rect::new(margin, y, width, 0),
+        };
+        if help.height > 0 {
+            y += help.height + gap * 2;
+        } else {
+            y += gap;
+        }
+        let help_size = help_size.unwrap_or(small);
         let body = Rect::new(margin, y, width, body_bottom.saturating_sub(y));
         let mut controls = Vec::new();
+        if help.height == 0 {
+            controls.push((Control::Help, title));
+        }
         for (row, list) in [(tool_row, &tools), (answer_row, &answers)] {
             for (control, rect) in list.iter().zip(ui::columns(row, list.len(), gap)) {
                 controls.push((*control, rect));
@@ -789,6 +848,7 @@ impl Check {
         Layout {
             title,
             help,
+            help_size,
             body,
             controls,
         }

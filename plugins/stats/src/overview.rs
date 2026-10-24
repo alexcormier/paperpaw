@@ -112,7 +112,11 @@ impl Overview {
             value_size: style.title(),
         };
         overview.value_size = overview.value_size(env);
-        if overview.today.is_some() && !overview.tiles_fit(env) {
+        // One column also where the chart has too little room between the
+        // tiles and the rows (the largest text): its title, the days'
+        // names and bars to see.
+        let least = (style.small() * 6.0) as u16;
+        if overview.today.is_some() && (!overview.tiles_fit(env) || overview.chart.height < least) {
             overview.stack(env);
         }
         overview

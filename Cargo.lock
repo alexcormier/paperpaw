@@ -1573,7 +1573,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-calibre"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1586,7 +1586,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-diagnostics"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1879,7 +1879,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-profiles"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1977,7 +1977,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-stats"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",

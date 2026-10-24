@@ -382,17 +382,41 @@ impl PhoneScreen {
         };
         let title = format!("{number}. {}", env.i18n().tr(title));
         lines(ui, &mut stack, &title, style.text(), line, Color::BLACK);
-        lines(
-            ui,
-            &mut stack,
-            env.i18n().tr(note),
-            style.small(),
-            small,
-            style.faint(ui::Ink::Note),
-        );
         let label = env.i18n().tr(self.step.button());
-        let button = stack.take_bottom(ui::button_height_for(env, &style, inner.width, label));
-        ui.button(button, label, false, false);
+        let card = match self.step {
+            Step::Join => join_card_height(env, &style) + gap,
+            Step::Open => 0,
+        };
+        // Without touch, where the button leaves the card too little room
+        // (the largest text on a small screen), none: the row of hints
+        // under the screen names the button that goes on.
+        let mut button_height = ui::button_height_for(env, &style, inner.width, label);
+        let crowded = stack.rest().height < button_height + card + 2 * gap;
+        if crowded && !env.device().input.touch && env.caps().button_row {
+            button_height = 0;
+        }
+        // The note as large as the room above the button (and the card)
+        // holds it, the small size at most; none where it does not fit
+        // (the largest text on a small screen): there is no room for the
+        // code it speaks of either.
+        let below = button_height + gap + card;
+        let room = stack.rest().height.saturating_sub(below + gap);
+        let note = env.i18n().tr(note);
+        let fits = |size: f32| {
+            let high = widgets::line_height(env, size);
+            high * font.wrap(size, note, width).len() as u16 <= room
+        };
+        if let Some(size) = widgets::largest_size(style.small(), style.small() * 0.6, fits) {
+            let high = widgets::line_height(env, size);
+            lines(ui, &mut stack, note, size, high, style.faint(ui::Ink::Note));
+        }
+        let button = if button_height > 0 {
+            let button = stack.take_bottom(button_height);
+            ui.button(button, label, false, false);
+            button
+        } else {
+            Rect::default()
+        };
         self.button.set(button);
         match self.step {
             Step::Join => self.draw_join(ui, &mut stack, own),
@@ -409,12 +433,12 @@ impl PhoneScreen {
         let Some(font) = ui.font() else {
             return;
         };
-        let (margin, gap) = (style.margin(), style.gap());
+        let gap = style.gap();
         let small = widgets::line_height(env, style.small());
         // The name and the password large, to be read and typed.
         let big = style.text() * 1.2;
         let tall = widgets::line_height(env, big);
-        let card = stack.take_bottom(2 * margin + 2 * (small + tall) + gap);
+        let card = stack.take_bottom(join_card_height(env, &style));
         let inside = ui.card(card, widgets::Frame::Line);
         let password = random::grouped(&own.password);
         let x = f32::from(inside.x);
@@ -428,8 +452,15 @@ impl PhoneScreen {
                 .px(style.small())
                 .color(style.faint(ui::Ink::Note))
                 .draw_from(ui, x, row);
-            let (size, value) =
-                widgets::fit_line(&font, big, style.small(), value, f32::from(inside.width));
+            // Smaller than the small size where only that fits it whole
+            // (the largest text): it is to be typed.
+            let (size, value) = widgets::fit_line(
+                &font,
+                big,
+                style.small() * 0.7,
+                value,
+                f32::from(inside.width),
+            );
             let row = Rect::new(inside.x, y + small, inside.width, tall);
             ui::Label::new(&value)
                 .px(size)
@@ -468,6 +499,13 @@ impl PhoneScreen {
             None => draw_opening(ui, full),
         }
     }
+}
+
+/// The height of the card with the reader's network and its password.
+fn join_card_height(env: &Env<'_>, style: &UiStyle) -> u16 {
+    let small = widgets::line_height(env, style.small());
+    let tall = widgets::line_height(env, style.text() * 1.2);
+    2 * style.margin() + 2 * (small + tall) + style.gap()
 }
 
 /// That the reader's own network is opening, in `room` below a step: as a

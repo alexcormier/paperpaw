@@ -29,7 +29,14 @@ pub(crate) struct Calendar {
     /// The row with the month's name and its arrows.
     nav: Rect,
     grid: Rect,
+    /// The height of the weekdays' names above the days.
+    names: u16,
     detail: Rect,
+    /// The height of a line of the chosen day's below the days.
+    detail_row: u16,
+    /// Laid out close (the largest text on a small screen): the month's
+    /// row as high as its arrows, these as wide as high.
+    close: bool,
     days: Vec<Day>,
     books: Vec<Book>,
     /// Today, if the device knows the time.
@@ -76,9 +83,10 @@ impl Calendar {
         let display = env.device().display;
         let row = style.row();
         let margin = style.margin();
-        // The month's arrows grow on touch screens, and their row with them.
+        // The month's arrows grow on touch screens, and their row with them
+        // (as high as the arrows alone where the days need the room, below).
         let nav_row = style.touch_row(u32::from(row)) as u16;
-        let nav = Rect::new(
+        let mut nav = Rect::new(
             0,
             header.area().height + style.gap(),
             display.width,
@@ -86,15 +94,43 @@ impl Calendar {
         );
         let width = display.width - 2 * margin;
         // Square days across the width, unless that leaves too little room
-        // for the chosen day below: the weekdays' names (half a day high)
-        // and up to six weeks.
-        let room = display.height.saturating_sub(nav.y + nav.height + row * 4);
-        let cell = (width / 7).min(room * 2 / 13);
+        // for the chosen day below (its date, how long, its books): the
+        // weekdays' names (half a day high) and up to six weeks. Where the
+        // days would be smaller than their numbers in the small size (the
+        // largest text on a small screen), the chosen day's lines are a
+        // line of text high and show fewer books; the days are never more
+        // than the room there is, their numbers drawn smaller to fit.
+        let font = style.font(env);
+        let line_of = |size: f32| {
+            font.as_ref()
+                .map_or(size * 1.3, |f| f.line_metrics(size).line_height) as u16
+        };
+        let small = line_of(style.small());
+        let least = (small * 6 / 5).min(width / 7);
+        let cell_for = |nav: Rect, detail_row: u16, lines: u16| {
+            let below = style.gap() + detail_row * lines;
+            let room = display.height.saturating_sub(nav.y + nav.height + below);
+            (width / 7).min(room * 2 / 13)
+        };
+        let mut detail_row = row * 3 / 4;
+        let all = DAY_BOOKS as u16 + 2;
+        let close = cell_for(nav, detail_row, all) < least;
+        if close {
+            detail_row = detail_row.min(line_of(style.text()));
+            nav.height = ui::button_height(&style, nav) + style.gap();
+        }
+        // Its date and how long at least; its books as far as they fit.
+        let lines = (2..=all)
+            .rev()
+            .find(|&lines| cell_for(nav, detail_row, lines) >= least)
+            .unwrap_or(2);
+        let cell = cell_for(nav, detail_row, lines);
+        let names = cell / 2;
         let grid = Rect::new(
             (display.width - cell * 7) / 2,
             nav.y + nav.height,
             cell * 7,
-            cell / 2 + cell * 6,
+            names + cell * 6,
         );
         let detail_top = grid.y + grid.height + style.gap();
         let detail = Rect::new(
@@ -111,7 +147,10 @@ impl Calendar {
             header,
             nav,
             grid,
+            names,
             detail,
+            detail_row,
+            close,
             days,
             books: store::books(env.storage()),
             today,
@@ -175,11 +214,11 @@ impl Calendar {
 
     fn cell(&self, index: i32) -> Rect {
         let size = self.grid.width / 7;
-        // Below the weekdays' names, half a day high.
+        // Below the weekdays' names.
         let (row, col) = (index / 7, index % 7);
         Rect::new(
             self.grid.x + size * col as u16,
-            self.grid.y + size / 2 + size * row as u16,
+            self.grid.y + self.names + size * row as u16,
             size,
             size,
         )
@@ -191,9 +230,10 @@ impl Calendar {
         let size = ui::button_height(&self.style, n);
         let margin = self.style.margin();
         let y = n.y + (n.height - size) / 2;
+        let wide = if self.close { size } else { size * 3 / 2 };
         (
-            Rect::new(margin, y, size * 3 / 2, size),
-            Rect::new(n.width - margin - size * 3 / 2, y, size * 3 / 2, size),
+            Rect::new(margin, y, wide, size),
+            Rect::new(n.width - margin - wide, y, wide, size),
         )
     }
 
@@ -219,31 +259,52 @@ impl Calendar {
         }
     }
 
+    /// The weekdays' names above the days, as large as their room holds
+    /// them (the small size at most); and the size the days' numbers are
+    /// in, so.
+    fn draw_names(&self, ui: &mut ui::Ui<'_>, font: &paperpaw_sdk::FontHandle<'_>) -> f32 {
+        let style = self.style;
+        let env = ui.env();
+        let size = self.grid.width / 7;
+        let from = fmt::week_start(env);
+        let fit = |high: u16, wide: f32, widest: &dyn Fn(f32) -> f32| {
+            paperpaw_sdk::widgets::largest_size(style.small(), style.small() * 0.4, |at| {
+                font.line_metrics(at).line_height <= f32::from(high) && widest(at) <= wide
+            })
+            .unwrap_or(style.small() * 0.4)
+        };
+        let names: Vec<&str> = (0..7u8)
+            .map(|col| fmt::weekday_short(env, (from + col) % 7))
+            .collect();
+        let name_size = fit(self.names, f32::from(size) * 0.9, &|at| {
+            names
+                .iter()
+                .map(|n| font.measure(at, n))
+                .fold(0.0, f32::max)
+        });
+        for (col, name) in (0u16..).zip(&names) {
+            let area = Rect::new(self.grid.x + size * col, self.grid.y, size, self.names);
+            let x = f32::from(area.x) + (f32::from(size) - font.measure(name_size, name)) / 2.0;
+            ui::Label::new(name)
+                .px(name_size)
+                .color(style.faint(ui::Ink::Muted))
+                .draw_from(ui, x, area);
+        }
+        let pad = (u32::from(style.line()) * 2).max(2) as u16;
+        let inner = size.saturating_sub(2 * pad);
+        fit(inner, f32::from(inner), &|at| font.measure(at, "28"))
+    }
+
     fn draw_grid(&self, ui: &mut ui::Ui<'_>) {
         let style = self.style;
         let env = ui.env();
         let Some(font) = ui.font() else {
             return;
         };
-        let size = self.grid.width / 7;
-        let from = fmt::week_start(env);
-        for col in 0..7u8 {
-            let name = fmt::weekday_short(env, (from + col) % 7);
-            let area = Rect::new(
-                self.grid.x + size * u16::from(col),
-                self.grid.y,
-                size,
-                size / 2,
-            );
-            let x = f32::from(area.x) + (f32::from(size) - font.measure(style.small(), name)) / 2.0;
-            ui::Label::new(name)
-                .px(style.small())
-                .color(style.faint(ui::Ink::Muted))
-                .draw_from(ui, x, area);
-        }
+        let number_size = self.draw_names(ui, &font);
+        let pad = (u32::from(style.line()) * 2).max(2) as u16;
         let first = self.first_shown(env);
         let (year, month) = month_of(self.day);
-        let pad = (u32::from(style.line()) * 2).max(2) as u16;
         for index in 0..42 {
             let day = first + index;
             if month_of(day) != (year, month) {
@@ -296,7 +357,7 @@ impl Calendar {
                 .describe(paperpaw_sdk::semantics::Role::Button, &number, r)
                 .focused(day == self.day);
             let x = f32::from(inner.x)
-                + (f32::from(inner.width) - font.measure(style.small(), &number)) / 2.0;
+                + (f32::from(inner.width) - font.measure(number_size, &number)) / 2.0;
             // Above the bar of reading time, if there is one.
             let bar_room = if shade.is_some() {
                 (u32::from(style.line()) * 2).max(2) as u16 * 4
@@ -310,7 +371,7 @@ impl Calendar {
                 inner.height.saturating_sub(bar_room),
             );
             ui::Label::new(&number)
-                .px(style.small())
+                .px(number_size)
                 .color(ink)
                 .draw_from(ui, x, text);
             let border = ui::button_border(&style);
@@ -330,8 +391,12 @@ impl Calendar {
             return;
         };
         let d = self.detail;
-        let row = style.row() * 3 / 4;
-        let line = |n: u16| Rect::new(d.x, d.y + row * n, d.width, row);
+        let row = self.detail_row;
+        // Its texts end a margin before the edge.
+        let inside = d.width.saturating_sub(style.margin());
+        let line = |n: u16| Rect::new(d.x, d.y + row * n, inside, row);
+        // The lines the area holds (the books last).
+        let fits = |n: u16| row * (n + 1) <= d.height;
         let margin = style.margin() as f32;
         let seconds = self.seconds_on(self.day);
         let summary = if seconds == 0 {
@@ -344,16 +409,33 @@ impl Calendar {
                     .plural("stats.pages", i64::from(self.day_pages), &[])
             )
         };
-        let title = fmt::long_date(env, self.day);
+        // The date whole: smaller, down to the small size, where needed;
+        // then with the weekday and month short.
+        let room = f32::from(inside) - margin;
+        let month = fmt::month(env, fmt::date_of(self.day).month);
+        let dates = [
+            fmt::long_date(env, self.day),
+            fmt::short_date(env, self.day, &short_month(month)),
+        ];
+        let fitted = |date: &String| {
+            paperpaw_sdk::widgets::fit_line(&font, style.text(), style.small(), date, room)
+        };
+        let (size, title) = dates
+            .iter()
+            .map(fitted)
+            .zip(&dates)
+            .find(|((_, shown), date)| shown == *date)
+            .map_or_else(|| fitted(&dates[1]), |(fit, _)| fit);
         ui::Label::new(&title)
-            .px(style.text())
+            .px(size)
             .color(Color::BLACK)
             .draw_from(ui, margin, line(0));
         ui::Label::new(&summary)
             .px(style.small())
             .color(style.faint(ui::Ink::Note))
             .draw_from(ui, margin, line(1));
-        for (n, (book, s)) in self.day_books.iter().take(DAY_BOOKS).enumerate() {
+        let shown = (0..DAY_BOOKS as u16).take_while(|n| fits(n + 2)).count();
+        for (n, (book, s)) in self.day_books.iter().take(shown).enumerate() {
             let value = fmt::duration(env, u64::from(*s));
             let width = f32::from(d.width) - 2.0 * margin;
             let (book, value, vw) = ui::fit_pair(&font, style.small(), book, &value, width, margin);
@@ -409,9 +491,9 @@ impl Screen for Calendar {
         if let Some(font) = ui.font() {
             let (year, month) = month_of(self.day);
             let name = format!("{} {year}", fmt::month(env, month));
-            // Between the arrows, a gap from each: smaller where it does
-            // not fit there.
-            let gap = style.gap() as f32;
+            // Between the arrows, a gap from each (a word's space at least,
+            // at large sizes): smaller where it does not fit there.
+            let gap = (style.gap() as f32).max(style.title() * 0.4);
             let from = f32::from(left.x + left.width) + gap;
             let room = (f32::from(right.x) - gap - from).max(1.0);
             // On one line, smaller where needed; else month and year on

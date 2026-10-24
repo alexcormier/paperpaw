@@ -69,17 +69,27 @@ impl Screen for SourceScreen {
             .color(Color::BLACK)
             .draw_from(&mut ui, f32::from(margin), name);
         y += line + style.gap();
+        let shown = self.url.strip_prefix("https://").unwrap_or(&self.url);
+        let small = font.line_metrics(style.small()).line_height;
+        let texts = [shown, env.i18n().tr("store.source.help")];
+        let below: u16 = texts
+            .iter()
+            .map(|text| {
+                let lines = font.wrap(style.small(), text, f32::from(width)).len();
+                (small * lines as f32) as u16 + style.gap()
+            })
+            .sum();
         if let Some(qr) = &self.qr {
-            // Three quarters of the width, at most half the height.
-            let side = (width * 3 / 4).min(display.height / 2);
+            // Three quarters of the width, at most half the height, and the
+            // texts below whole (the largest text).
+            let room = display.height.saturating_sub(y + style.gap() + below);
+            let side = (width * 3 / 4).min(display.height / 2).min(room);
             let area = Rect::new((display.width - side) / 2, y, side, side);
             if let Some(drawn) = ui::draw_qr(ui.canvas(), qr, area) {
                 y = drawn.y + drawn.height + style.gap();
             }
         }
-        let shown = self.url.strip_prefix("https://").unwrap_or(&self.url);
-        let small = font.line_metrics(style.small()).line_height;
-        for text in [shown, env.i18n().tr("store.source.help")] {
+        for text in texts {
             for range in font.wrap(style.small(), text, f32::from(width)) {
                 let part = text[range].trim_end();
                 let x = f32::from(margin)

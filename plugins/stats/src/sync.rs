@@ -63,6 +63,8 @@ const URL_ENTERED: Event<Typed> = Event::new("stats.url-entered");
 /// Whether to remove here what was removed there; with the file's ETag
 /// as [`ETAG`].
 const DECIDED: Event<Confirmed> = Event::new("stats.removed-there");
+/// The message read in a dialog (nothing to do then).
+const READ: Event<Confirmed> = Event::new("stats.sync-message-read");
 const ETAG: &str = "etag";
 
 /// The WebDAV folder and its user, both set on the sync page.
@@ -532,6 +534,8 @@ enum Row {
     Password,
     SyncNow,
     Import,
+    /// The message whole, in a dialog, where it does not fit below.
+    More,
 }
 
 /// The sync's screen: folder, user and password, *Sync now*, and
@@ -556,31 +560,63 @@ impl SyncScreen {
             rows.push(Row::Import);
         }
         let top = header.area().height + style.gap();
-        // No longer than the screen: the list pages where its rows are tall.
-        let height = (style.row() * rows.len() as u16).min(display.height.saturating_sub(top));
-        let note_top = top + height + style.gap();
-        Self {
+        let mut screen = Self {
             list: ListView::new(
-                Rect::new(0, top, display.width, height),
+                Rect::new(0, top, display.width, style.row()),
                 u32::from(style.row()),
             )
             .focus_on_keys(env),
-            note: Rect::new(
-                0,
-                note_top,
-                display.width,
-                display.height.saturating_sub(note_top),
-            ),
+            note: Rect::default(),
             rows,
             sync,
             message: env.i18n().tr("stats.sync.help").to_string(),
             style,
             header,
+        };
+        screen.place(env);
+        screen
+    }
+
+    /// The list and the message below it: the message whole, the list
+    /// paging where the rest does not hold its rows (the largest text),
+    /// two rows high at least; where the message does not fit even so, a
+    /// last row shows it.
+    fn place(&mut self, env: &Env<'_>) {
+        let (style, display) = (&self.style, env.device().display);
+        let top = self.list.area().y;
+        let row = style.row();
+        let note = ui::message_height(env, style, display.width, &self.message);
+        let rest = display.height.saturating_sub(top + style.gap());
+        self.rows.retain(|r| *r != Row::More);
+        if note > rest.saturating_sub(row * 2) {
+            self.rows.push(Row::More);
         }
+        if self.list.focus() >= self.rows.len() {
+            self.list.set_focus(self.rows.len() - 1);
+        }
+        let note = if self.more() { 0 } else { note };
+        let room = rest.saturating_sub(note);
+        let height = (row * self.rows.len() as u16)
+            .min(room.max(row * 2))
+            .min(display.height.saturating_sub(top));
+        self.list.set_area(Rect::new(0, top, display.width, height));
+        let note_top = top + height + style.gap();
+        self.note = Rect::new(
+            0,
+            note_top,
+            display.width,
+            display.height.saturating_sub(note_top),
+        );
+    }
+
+    /// Whether the message shows in a row's dialog, not below.
+    fn more(&self) -> bool {
+        self.rows.last() == Some(&Row::More)
     }
 
     fn show(&mut self, message: String, cx: &mut Cx<'_, '_>) {
         self.message = message;
+        self.place(cx.env());
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
     }
@@ -631,6 +667,12 @@ impl SyncScreen {
                 let message = import(&env);
                 self.show(message, cx);
             }
+            Row::More => cx.command(
+                paperpaw_sdk::ask::confirm(env.i18n().tr("stats.sync.title"), &READ)
+                    .text(self.message.clone())
+                    .only_yes()
+                    .command(),
+            ),
         }
     }
 }
@@ -662,12 +704,15 @@ impl Screen for SyncScreen {
                     ),
                     Row::SyncNow => ("stats.sync.now", String::from("›")),
                     Row::Import => ("stats.import", String::from("›")),
+                    Row::More => ("stats.sync.more", String::from("›")),
                 };
                 ui::Row::value(env.i18n().tr(title), &value)
                     .focused(focused)
                     .draw(ui, rect);
             });
-        ui.message(self.note, &self.message);
+        if !self.more() {
+            ui.message(self.note, &self.message);
+        }
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
