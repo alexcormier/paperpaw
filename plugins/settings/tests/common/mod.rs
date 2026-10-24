@@ -245,6 +245,8 @@ pub struct App {
     pub now: u64,
     /// The screen as last drawn: whether each pixel is black, row by row.
     ink: Vec<bool>,
+    /// The kernel asked for a restart (`Effects::restart`).
+    pub restarted: bool,
 }
 
 impl App {
@@ -285,6 +287,7 @@ impl App {
             storage,
             now,
             ink: vec![false; usize::from(display.width) * usize::from(display.height)],
+            restarted: false,
         };
         app.settle(effects);
         app
@@ -302,6 +305,7 @@ impl App {
     /// Lets timers run until nothing is due within a second.
     pub fn settle(&mut self, mut effects: Effects) {
         for _ in 0..10_000 {
+            self.restarted |= effects.restart();
             let Some(at) = effects.wake_at() else {
                 return;
             };

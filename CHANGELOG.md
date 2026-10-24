@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- Restart now, last in the settings: asked once, it saves what is open
+  as when the device goes off and restarts PaperPaw.
+- The first-run setup's pages fit at the largest interface text on the
+  X4: laid out closer there, with the buttons side by side where needed.
+
 - A book downloaded from a catalog (OPDS) shows how far it came: its
   percent and a bar where the size is known, the bytes so far where not.
   Back stops the download, and nothing of it is left in the library.

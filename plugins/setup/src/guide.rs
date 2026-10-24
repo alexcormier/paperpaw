@@ -58,6 +58,9 @@ struct Layout {
     segments: Option<(Rect, Rect)>,
     next: Rect,
     other: Rect,
+    /// Laid out close, where the page did not fit with its roomy margins
+    /// (the largest text on a small screen): *Skip* says it short.
+    tight: bool,
 }
 
 pub(crate) struct Guide {
@@ -299,14 +302,53 @@ impl Guide {
         (title.to_string(), help.to_string())
     }
 
+    /// The card's height, `width` wide, for buttons `button` high: a
+    /// number's − value + and a sample below it (the whole text at that
+    /// size, in the reading font, as far as there is room: then it ends
+    /// in "…"), else a row; none on the last page.
+    fn card_height(&self, env: &Env<'_>, width: u16, button: u16) -> Option<u16> {
+        let style = &self.style;
+        let gap = style.gap();
+        self.step(env)?;
+        if !self.is_number(env) {
+            return Some(button + gap * 2);
+        }
+        let below = match self.sample_size(env) {
+            Some(size) => {
+                let inner = width.saturating_sub(2 * style.margin());
+                sample_height(env, style, size, inner, env.i18n().tr("setup.sample"))
+            }
+            None => line(env, style, style.text()) * 2,
+        };
+        Some(button + gap * 2 + below + gap * 2)
+    }
+
+    /// Where things are on the page: roomy, or close where it would not
+    /// fit so (the largest text on a small screen).
     fn layout(&self, env: &Env<'_>) -> Layout {
+        match self.layout_with(env, false) {
+            (roomy, true) => roomy,
+            _ => self.layout_with(env, true).0,
+        }
+    }
+
+    /// The page laid out roomy, or `tight`: the margins menus have, less
+    /// room between its parts, buttons as high as elsewhere, side by
+    /// side where one above the other does not fit. And whether all of
+    /// it fits.
+    fn layout_with(&self, env: &Env<'_>, tight: bool) -> (Layout, bool) {
         let style = &self.style;
         let display = env.device().display;
         let (w, h) = (display.width, display.height);
         // A little more room than menus have, but not twice theirs, which
         // left wide margins too little width.
-        let margin = (u32::from(style.margin()) + u32::from(style.gap())) as u16;
         let gap = style.gap();
+        let margin = if tight {
+            style.margin()
+        } else {
+            style.margin() + gap
+        };
+        let (after_dots, after_help) = if tight { (2, 1) } else { (4, 3) };
         let width = w.saturating_sub(2 * margin);
         // The text flows: the question, its explanation right below, the
         // card below that; the buttons at the bottom.
@@ -319,7 +361,7 @@ impl Guide {
         let (title_text, help_text) = self.texts(env);
         let mut y = margin;
         let dots = Rect::new(margin, y, width, gap);
-        y += dots.height + gap * 4;
+        y += dots.height + gap * after_dots;
         let title = Rect::new(margin, y, width, lines(style.title() * 1.3, &title_text, 2));
         y += title.height + gap;
         let help = Rect::new(
@@ -328,34 +370,41 @@ impl Guide {
             width,
             lines(style.small(), &help_text, self.help_lines()),
         );
-        y += help.height + gap * 3;
-        let button = style.row();
-        let other = Rect::new(margin, h.saturating_sub(margin + button), width, button);
-        let next = Rect::new(
-            margin,
-            other.y.saturating_sub(gap * 2 + button),
-            width,
-            button,
-        );
-        let (card, stepper, segments) = match self.step(env).map(|s| &s.page) {
+        y += help.height + gap * after_help;
+        let wanted = |button: u16| self.card_height(env, width, button);
+        // The buttons a row high, one above the other at the bottom; close,
+        // as high as buttons are elsewhere, and side by side (*Next* on the
+        // right) where one above the other does not fit.
+        let fits = |button: u16, beside: bool| {
+            let rows = if beside { 1 } else { 2 };
+            let top = h.saturating_sub(margin + rows * button + (rows - 1) * gap * 2);
+            y + wanted(button).unwrap_or(0) + gap <= top
+        };
+        let small = ui::button_height(style, Rect::new(0, 0, width, style.control_row()));
+        let (button, beside) = match tight {
+            false => (style.row(), false),
+            true => (small, !fits(small, false)),
+        };
+        let fit = fits(button, beside);
+        let bottom = h.saturating_sub(margin + button);
+        let (next, other) = if beside {
+            let half = width.saturating_sub(gap) / 2;
+            (
+                Rect::new(margin + half + gap, bottom, width - half - gap, button),
+                Rect::new(margin, bottom, half, button),
+            )
+        } else {
+            let above = bottom.saturating_sub(gap * 2 + button);
+            (
+                Rect::new(margin, above, width, button),
+                Rect::new(margin, bottom, width, button),
+            )
+        };
+        let wanted = wanted(button);
+        let (card, stepper, segments) = match wanted {
             None => (None, None, None),
-            Some(_) => {
+            Some(height) => {
                 let number = self.is_number(env);
-                // A number: − value + on a row, a sample below it: the
-                // whole text at that size, in the reading font, as far as
-                // there is room (then it ends in "…").
-                let below = match self.sample_size(env) {
-                    Some(size) => {
-                        let inner = width.saturating_sub(2 * style.margin());
-                        sample_height(env, style, size, inner, env.i18n().tr("setup.sample"))
-                    }
-                    None => line(env, style, style.text()) * 2,
-                };
-                let height = if number {
-                    button + gap * 2 + below + gap * 2
-                } else {
-                    button + gap * 2
-                };
                 let card = Rect::new(margin, y, width, height.min(next.y.saturating_sub(y + gap)));
                 let stepper = number.then(|| {
                     let size = button;
@@ -367,7 +416,8 @@ impl Guide {
                     )
                 });
                 let segments = self.two(env).map(|_| {
-                    let inset = style.margin() / 2;
+                    // Close, the two use the card's whole width.
+                    let inset = if tight { 0 } else { style.margin() / 2 };
                     // Wide margins and a short card leave the buttons
                     // their height.
                     let above = inset.min(gap).min(card.height / 6);
@@ -377,13 +427,13 @@ impl Guide {
                         card.width.saturating_sub(2 * inset),
                         card.height.saturating_sub(2 * above),
                     );
-                    let cells = ui::columns(row, 2, inset);
+                    let cells = ui::columns(row, 2, inset.max(gap / 2));
                     (cells[0], cells[1])
                 });
                 (Some(card), stepper, segments)
             }
         };
-        Layout {
+        let layout = Layout {
             dots,
             title,
             help,
@@ -392,7 +442,9 @@ impl Guide {
             segments,
             next,
             other,
-        }
+            tight,
+        };
+        (layout, fit)
     }
 
     fn redraw(&mut self, cx: &mut Cx<'_, '_>, mode: RefreshMode) {
@@ -661,7 +713,9 @@ impl Screen for Guide {
         }
         let end = self.page >= self.steps.len();
         let next = env.i18n().tr(if end { "setup.done" } else { "setup.next" });
-        let other = env.i18n().tr(if self.page == 0 {
+        let other = env.i18n().tr(if self.page == 0 && l.tight {
+            "setup.skip-short"
+        } else if self.page == 0 {
             "setup.skip"
         } else {
             "setup.back"
