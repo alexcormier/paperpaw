@@ -553,6 +553,8 @@ enum paperpaw_sdk::settings::SettingValue { Bool(0: bool), Int(0: i64), Text(0: 
 enum paperpaw_sdk::setup::SetupPage { Setting(0: paperpaw_sdk::id::Id), Screen(0: paperpaw_sdk::id::Id) }
 enum paperpaw_sdk::status::StatusValue { Text(0: alloc::string::String), Level { percent: u8, charging: bool }, Icon(0: alloc::borrow::Cow<'static, str>), Bar { permille: u16 }, Labelled { icon: alloc::borrow::Cow<'static, str>, text: alloc::string::String } }
 enum paperpaw_sdk::time::Day { Weekday { month: u8, week: u8, weekday: u8 }, Julian(0: u16), Ordinal(0: u16) }
+enum paperpaw_sdk::ui::label::Paint { Ink(0: paperpaw_sdk::ui::style::Ink), Color(0: paperpaw_platform::pixel::Color) }
+enum paperpaw_sdk::ui::label::Size { Role(0: paperpaw_sdk::ui::style::TextRole), Px(0: f32) }
 enum paperpaw_sdk::ui::list::ListChange { None, Focus, Page }
 enum paperpaw_sdk::ui::offline::Offer { Online, NotNow }
 enum paperpaw_sdk::ui::picker::DateOrder { DayMonthYear, MonthDayYear, YearMonthDay }
@@ -825,6 +827,7 @@ struct paperpaw_sdk::ui::fields::TextView { area: paperpaw_platform::geometry::R
 struct paperpaw_sdk::ui::header::Header { area: paperpaw_platform::geometry::Rect, note_focused: bool, note_button: bool, back: bool, arrows: bool }
 struct paperpaw_sdk::ui::header::Pager { area: paperpaw_platform::geometry::Rect, arrows: bool }
 struct paperpaw_sdk::ui::items::ItemsScreen { setting: core::option::Option<paperpaw_sdk::id::Id>, items: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::string::String)>, style: paperpaw_sdk::ui::style::UiStyle, header: paperpaw_sdk::ui::header::Header, list: paperpaw_sdk::ui::list::ListView, reorder: paperpaw_sdk::ui::reorder::Reorder, moving: bool }
+struct paperpaw_sdk::ui::label::Label<'t> { text: &'t str, size: paperpaw_sdk::ui::label::Size, min: core::option::Option<f32>, ink: paperpaw_sdk::ui::label::Paint, align: paperpaw_sdk::widgets::Align, lines: usize }
 struct paperpaw_sdk::ui::layout::CellGrid { area: paperpaw_platform::geometry::Rect, columns: u16, cell_height: u16, gap: u16 }
 struct paperpaw_sdk::ui::layout::Segments { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::borrow::Cow<'static, str>> }
 struct paperpaw_sdk::ui::layout::Stack { area: paperpaw_platform::geometry::Rect, gap: u16, top: u16, bottom: u16, taken_top: bool, taken_bottom: bool }

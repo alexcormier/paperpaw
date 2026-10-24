@@ -16,6 +16,7 @@ mod support;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::{self, Role};
 use paperpaw_sdk::ui::{self, Header, Pager, Paging, UiStyle};
+use paperpaw_sdk::widgets;
 use paperpaw_sdk::{Color, Hint, Point, Rect};
 use proptest::prelude::*;
 
@@ -281,9 +282,109 @@ fn the_ui_context_draws_as_the_parts_do() {
     // Clipped: nothing outside the part.
     let (_, mut clipped) = describe(480, 300, |c| {
         let mut ui = ui::Ui::new(c, &env, &style);
-        ui.clipped(Rect::new(0, 0, 100, 300)).button(rect, "OK", true, false);
+        ui.clipped(Rect::new(0, 0, 100, 300))
+            .button(rect, "OK", true, false);
     });
     assert_eq!(drawn_outside(&mut clipped, Rect::new(0, 0, 100, 300)), None);
+}
+
+/// A label on one line draws as `draw_label` does, keeps to its area
+/// when too long, and sits where it is aligned.
+#[test]
+fn a_label_on_one_line_keeps_to_its_area_and_alignment() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let font = style.font(&env).unwrap();
+    let area = Rect::new(40, 40, 200, 40);
+    let size = style.text();
+    let text = "Words";
+    // As the parts' function draws it.
+    let (told, old) = describe(480, 200, |c| {
+        ui::draw_label(c, &font, size, f32::from(area.x), area, text, Color::BLACK);
+    });
+    let (said, new) = describe(480, 200, |c| {
+        ui::Label::new(text)
+            .px(size)
+            .color(Color::BLACK)
+            .draw(&mut ui::Ui::new(c, &env, &style), area);
+    });
+    assert_eq!(told, said);
+    assert!(old.view().data == new.view().data);
+    // Too long: shortened within its area.
+    let long = "A label far too long for the room it is given here";
+    let (_, mut frame) = describe(480, 200, |c| {
+        let end = ui::Label::new(long).draw(&mut ui::Ui::new(c, &env, &style), area);
+        assert!(end <= f32::from(area.x + area.width) + 1.0, "{end}");
+    });
+    assert_eq!(drawn_outside(&mut frame, area), None);
+    // Centred and at the right.
+    let width = ui::Label::new(text).width(&env, &style);
+    for (align, start) in [
+        (
+            widgets::Align::Center,
+            f32::from(area.x) + (f32::from(area.width) - width) / 2.0,
+        ),
+        (
+            widgets::Align::Right,
+            f32::from(area.x + area.width) - width,
+        ),
+    ] {
+        let (_, frame) = describe(480, 200, |c| {
+            ui::Label::new(text)
+                .align(align)
+                .draw(&mut ui::Ui::new(c, &env, &style), area);
+        });
+        let left = Rect::new(
+            area.x,
+            area.y,
+            (start as u16).saturating_sub(area.x + 2),
+            area.height,
+        );
+        assert!(!drawn_in(&frame, left), "{align:?}");
+    }
+    // Smaller down to its least size rather than shortened.
+    let wide = ui::Label::new(long).width(&env, &style);
+    let (_, frame) = describe(480, 200, |c| {
+        let end = ui::Label::new(long)
+            .min(1.0)
+            .draw(&mut ui::Ui::new(c, &env, &style), area);
+        assert!(end <= f32::from(area.x + area.width) + 1.0);
+    });
+    assert!(wide > f32::from(area.width) && drawn_in(&frame, area));
+}
+
+/// A wrapped label takes the lines its height says, and where its area
+/// holds fewer its last line says there is more.
+#[test]
+fn a_wrapped_label_takes_its_lines_and_cuts_the_last() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let text = "Many words that need a few lines in a narrow area to be read whole";
+    let label = ui::Label::new(text).wrap();
+    let width = 160;
+    let height = label.height(&env, &style, width);
+    let one = ui::Label::new(text).height(&env, &style, width);
+    assert!(height > 2 * one - 2, "{height} {one}");
+    assert_eq!(
+        label.lines(2).height(&env, &style, width),
+        2 * (one - 1) + 1
+    );
+    // All of it in the height it says.
+    let area = Rect::new(10, 10, width, height);
+    let (said, mut frame) = describe(480, 400, |c| {
+        label.draw(&mut ui::Ui::new(c, &env, &style), area);
+    });
+    assert_eq!(said[0].label, text);
+    assert_eq!(drawn_outside(&mut frame, area), None);
+    // Two lines' room: the second ends in "…".
+    let short = Rect::new(10, 10, width, 2 * one);
+    let (said, mut frame) = describe(480, 400, |c| {
+        label.draw(&mut ui::Ui::new(c, &env, &style), short);
+    });
+    assert!(said[0].label.ends_with('…'), "{:?}", said[0].label);
+    assert_eq!(drawn_outside(&mut frame, short), None);
 }
 
 /// A section's heading too long for its row ends, shortened, at the

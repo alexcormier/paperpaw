@@ -584,6 +584,12 @@ file to your report.
   `canvas()`, `env()`, `style()`), the interface's parts its methods
   (`ui.button(..)`, `ui.message(..)`, `ui.focus(..)` …). It borrows what
   it is given and allocates nothing.
+- SDK: `ui::Label`, one builder for the interface's text:
+  `Label::new(text).role(TextRole::Small)` (or `.px(size)`), `.ink(..)`
+  or `.color(..)`, `.align(widgets::Align::Center)`, `.min(size)` (smaller
+  before shortened), `.lines(n)` or `.wrap()`; `width`, `height` and
+  `draw(&mut ui, area)`. It borrows its text and allocates only the words
+  of a line it shortens.
 - SDK: one input contract for the building blocks. Those that take the
   buttons' actions and gestures (`on_action`, `on_gesture`) answer with
   a `ui::Response`: `Ignored` (the screen's), `Same`, `Changed` (draw it
