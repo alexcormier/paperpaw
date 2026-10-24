@@ -54,11 +54,11 @@ esp32s3 = [
     "esp-rtos/esp32s3",
 ]
 # Remote control over USB for testing on the device (`src/remote.rs`):
-# files in and out, presses, the screen, profiling, the heap's peak (the
-# allocator counts it). Not in released firmware: it costs flash and
-# memory, and anyone with a cable could use it.
+# files in and out, presses, the screen, profiling, the heap's peak
+# (counted in esp-alloc's hooks, `src/peak.rs`). Not in released firmware:
+# it costs flash and memory, and anyone with a cable could use it.
 remote = [
-    "esp-alloc/internal-heap-stats",
+    "esp-alloc/alloc-hooks",
     # The diagnostics screen, for bringing up devices.
     "paperpaw-app/diagnostics",
 ]

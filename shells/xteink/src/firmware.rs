@@ -938,7 +938,7 @@ impl Firmware {
         info!(
             "heap {} used, peak {}",
             esp_alloc::HEAP.used(),
-            esp_alloc::HEAP.stats().max_usage
+            crate::peak::peak()
         );
     }
 }
