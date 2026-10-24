@@ -6,6 +6,28 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.3] - 2026-10-24
+
+A beta with fixes from testing beta.2: a press made while a new screen
+still refreshes is no longer lost, and more screens fit at the largest
+interface text. Code plugins built for earlier betas run unchanged: the
+plugin interface stays 2.
+
+### Fixed
+
+- A press made while a new screen was still being refreshed (opening
+  Settings on the X4 takes a full refresh) was dropped, so the first
+  press after opening a screen sometimes did nothing. The X4s now count
+  a screen as shown when its refresh begins.
+- At the largest interface text more screens fit: the statistics'
+  calendar (its days no longer shrink to dots) and overview, the device
+  check, the store's plugin page and source, the Calibre hint, the file
+  finder and catalogs, the phone step of Wi-Fi, the statistics' sync
+  and the profiles. Store plugins changed so carry version 1.0.1.
+- Vocabulary 1.0.1: a card answered Again waits its ten minutes before
+  it comes back (also published on its own, between betas).
+- A store plugin released on its own is built for the X4 Classic too.
+
 ## [0.5.0-beta.2] - 2026-10-24
 
 The second beta: the fixes from testing beta.1, as a new user would use

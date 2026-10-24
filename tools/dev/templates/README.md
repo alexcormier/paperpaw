@@ -28,13 +28,13 @@ the plugin itself never sees it):
 
 ```toml
 [dependencies]
-paperpaw-sdk = "0.5.0-beta.2"
+paperpaw-sdk = "0.5.0-beta.3"
 
 [dev-dependencies]
-paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.2" }
+paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.3" }
 
 [patch.crates-io]
-paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.2" }
+paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.3" }
 ```
 
 The patch matters. Your plugin builds on `paperpaw-sdk` from crates.io;
@@ -95,9 +95,9 @@ A plugin without code needs no harness: install the command once and give
 it the folder.
 
 ```sh
-cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.2 paperpaw-dev
+cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.3 paperpaw-dev
 paperpaw-dev check path/to/my-theme --quick
-paperpaw-dev package path/to/my-theme --release 0.5.0-beta.2
+paperpaw-dev package path/to/my-theme --release 0.5.0-beta.3
 ```
 
 Or take `paperpaw-dev` ready built from a release. It is in
