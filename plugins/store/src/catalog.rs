@@ -116,7 +116,7 @@ impl<'a> Device<'a> {
             sdk: env
                 .plugins
                 .kernel()
-                .map_or(paperpaw_sdk::SDK_VERSION, |kernel| kernel.manifest.sdk),
+                .map_or(paperpaw_sdk::SDK_VERSION, |kernel| kernel.manifest.version),
             official: env.settings.read(&crate::CATALOG).trim() == OFFICIAL_LIST,
         })
     }

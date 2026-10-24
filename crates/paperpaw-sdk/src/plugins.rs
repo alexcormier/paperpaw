@@ -272,7 +272,7 @@ mod tests {
     use alloc::vec::Vec;
 
     use super::*;
-    use crate::{SDK_VERSION, Version};
+    use crate::Version;
 
     fn info(id: &'static str, state: PluginState, enabled: bool) -> PluginInfo {
         PluginInfo {
@@ -281,7 +281,6 @@ mod tests {
                 name: Cow::Borrowed("Name"),
                 description: Cow::Borrowed("Does things."),
                 version: Version::new(1, 0, 0),
-                sdk: SDK_VERSION,
                 uses: crate::Uses::NOTHING,
                 how: &[],
             },

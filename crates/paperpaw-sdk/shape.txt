@@ -382,7 +382,7 @@ const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "cod
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = CROSSING
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 2u16
-const paperpaw_sdk::native::LAYOUT: u64 = 9_529_769_984_825_922_701u64
+const paperpaw_sdk::native::LAYOUT: u64 = 17_573_422_408_093_561_997u64
 const paperpaw_sdk::native::TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") { "rustc 1.99.0, riscv32imc-unknown-none-elf" } else if cfg!(target_arch = "xtensa") { "esp 1.97.0.0, xtensa-esp32s3-none-elf" } else { "the compiler of PaperPaw's release, for this computer" }
 const paperpaw_sdk::numbers::DECIMAL_MARK: &str = "core.decimal"
 const paperpaw_sdk::pattern::MAX_PATTERN: usize = 256usize
@@ -742,7 +742,7 @@ struct paperpaw_sdk::params::Params { values: alloc::vec::Vec<(alloc::borrow::Co
 struct paperpaw_sdk::pattern::Class { negated: bool, items: alloc::vec::Vec<paperpaw_sdk::pattern::Item> }
 struct paperpaw_sdk::pattern::Matches<'p, 't> { pattern: &'p paperpaw_sdk::pattern::Pattern, text: &'t str, at: usize, budget: u32 }
 struct paperpaw_sdk::pattern::Pattern { alternatives: alloc::vec::Vec<alloc::vec::Vec<paperpaw_sdk::pattern::Node>>, fold: bool, source: alloc::string::String }
-struct paperpaw_sdk::plugin::Manifest { id: paperpaw_sdk::id::Id, name: alloc::borrow::Cow<'static, str>, description: alloc::borrow::Cow<'static, str>, version: paperpaw_sdk::version::Version, sdk: paperpaw_sdk::version::Version, uses: paperpaw_sdk::plugin::Uses, how: &'static [(&'static str, &'static str)] }
+struct paperpaw_sdk::plugin::Manifest { id: paperpaw_sdk::id::Id, name: alloc::borrow::Cow<'static, str>, description: alloc::borrow::Cow<'static, str>, version: paperpaw_sdk::version::Version, uses: paperpaw_sdk::plugin::Uses, how: &'static [(&'static str, &'static str)] }
 struct paperpaw_sdk::plugin::Priority(0: i16)
 struct paperpaw_sdk::plugin::SlotSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str> }
 struct paperpaw_sdk::plugin::Uses(0: u8)

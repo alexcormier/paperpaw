@@ -5486,14 +5486,12 @@ pub paperpaw_sdk::Manifest::description: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Manifest::how: &'static [(&'static str, &'static str)]
 pub paperpaw_sdk::Manifest::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Manifest::name: alloc::borrow::Cow<'static, str>
-pub paperpaw_sdk::Manifest::sdk: paperpaw_sdk::Version
 pub paperpaw_sdk::Manifest::uses: paperpaw_sdk::Uses
 pub paperpaw_sdk::Manifest::version: paperpaw_sdk::Version
 impl paperpaw_sdk::Manifest
 pub fn paperpaw_sdk::Manifest::description(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::Manifest::how(self, &'static [(&'static str, &'static str)]) -> Self
 pub fn paperpaw_sdk::Manifest::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::Version) -> Self
-pub fn paperpaw_sdk::Manifest::sdk(self, paperpaw_sdk::Version) -> Self
 pub fn paperpaw_sdk::Manifest::uses(self, paperpaw_sdk::Uses) -> Self
 pub struct paperpaw_sdk::MemoryStorage
 impl paperpaw_sdk::MemoryStorage

@@ -85,7 +85,10 @@ pub fn fits(sdk: &str, formats: u32) -> bool {
 /// the one the asking plugin was built with; its formats not later than
 /// [`DATA_FORMATS`]. A missing SDK (an empty text) passes.
 pub fn fits_in(env: &Env<'_>, sdk: &str, formats: u32) -> bool {
-    let kernel = env.plugins.kernel().map_or(SDK_VERSION, |k| k.manifest.sdk);
+    let kernel = env
+        .plugins
+        .kernel()
+        .map_or(SDK_VERSION, |k| k.manifest.version);
     fits_sdk(kernel, sdk, formats)
 }
 

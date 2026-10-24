@@ -15,7 +15,7 @@ use paperpaw_platform::{
 use paperpaw_sdk::builtin::{actions, screens, settings, slots};
 use paperpaw_sdk::{
     ActionSpec, Canvas, Command, Cx, Env, Handled, Id, Manifest, Plugin, Priority, RegisterError,
-    Registrar, SDK_VERSION, Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    Registrar, Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
 };
 
 use crate::{HttpCall, Io, Kernel, ServerCall, SpeechCall, WarningSource};
@@ -81,7 +81,6 @@ struct TestPlugin {
     id: &'static str,
     priority: Priority,
     log: Log,
-    sdk: Version,
     /// Registers an id outside its namespace after its other contributions.
     misbehave: bool,
     keymap: Option<&'static str>,
@@ -93,7 +92,6 @@ impl TestPlugin {
             id,
             priority: Priority::DEFAULT,
             log: log.clone(),
-            sdk: SDK_VERSION,
             misbehave: false,
             keymap: None,
         }
@@ -107,7 +105,6 @@ impl TestPlugin {
 impl Plugin for TestPlugin {
     fn manifest(&self) -> Manifest {
         Manifest::new(Id::parse(self.id).unwrap(), "Test", Version::new(1, 0, 0))
-            .sdk(self.sdk)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
@@ -439,22 +436,16 @@ fn failing_plugin_leaves_no_traces() {
 }
 
 #[test]
-fn incompatible_and_disabled_plugins_are_skipped() {
+fn disabled_plugins_are_skipped() {
     let log = log();
-    let mut old = TestPlugin::new("old", &log);
-    old.sdk = Version::new(9, 0, 0);
-
     let mut kernel = Kernel::builder(DEVICE)
-        .plugin(old)
         .plugin(TestPlugin::new("off", &log))
         .user_config("[plugins]\noff = no\n")
         .build()
         .unwrap();
     kernel.start(Instant(0));
     assert_eq!(kernel.active_screen(), Some(&screens::PLACEHOLDER));
-    let warnings = kernel.take_warnings();
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].message.contains("requires SDK"));
+    assert!(kernel.take_warnings().is_empty());
 }
 
 #[test]
