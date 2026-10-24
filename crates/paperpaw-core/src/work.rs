@@ -130,6 +130,79 @@ pub(crate) const SAVING_CHOICES: [&str; 3] = [
     "core.saving.manual",
 ];
 
+/// A networked plugin's two settings: whether it may use the network
+/// ([`network_setting`]), and how its work saves energy
+/// ([`saving_setting`]).
+const fn network_specs(network: Id, saving: Id) -> [paperpaw_sdk::SettingSpec; 2] {
+    [
+        paperpaw_sdk::SettingSpec::new(
+            network,
+            "core.network.allowed",
+            paperpaw_sdk::SettingKind::Bool,
+            paperpaw_sdk::SettingValue::Bool(true),
+            NETWORK_GROUP,
+        )
+        .description("core.network.allowed.help")
+        .with_extra(&NETWORK_EXTRA),
+        paperpaw_sdk::SettingSpec::new(
+            saving,
+            "core.saving.title",
+            paperpaw_sdk::SettingKind::Choice(paperpaw_sdk::Choices::Fixed(&SAVING_CHOICES)),
+            paperpaw_sdk::SettingValue::Text(alloc::borrow::Cow::Borrowed(SAVING_CHOICES[0])),
+            NETWORK_GROUP,
+        )
+        .description("core.saving.help")
+        .with_extra(&NETWORK_EXTRA),
+    ]
+}
+
+/// [`network_specs`] of `plugin`s, kept in the program.
+macro_rules! fixed_network_specs {
+    ($($plugin:literal),* $(,)?) => {
+        &[$((
+            $plugin,
+            network_specs(
+                Id::new_static(concat!("core.network.", $plugin)),
+                Id::new_static(concat!("core.saving.", $plugin)),
+            ),
+        )),*]
+    };
+}
+
+/// The network settings of the networked plugins PaperPaw comes with,
+/// kept in the program rather than made on the heap at every start (two
+/// settings a plugin, some hundred and fifty bytes each): the same as
+/// those made for any other plugin. A plugin missing here only costs
+/// memory (`fixed_network_settings_cover_the_plugins` in the app's
+/// tests says so).
+static FIXED_NETWORK: &[(&str, [paperpaw_sdk::SettingSpec; 2])] = fixed_network_specs!(
+    "browser",
+    "calibre",
+    "fonts-browser",
+    "joplin",
+    "kosync",
+    "news",
+    "opds",
+    "readwise",
+    "stats",
+    "store",
+    "transfer",
+    "translate",
+    "update",
+    "vocabulary",
+    "wallabag",
+    "weather",
+    "wifi",
+    "wikipedia",
+);
+
+/// The plugins whose network settings are kept in the program
+/// ([`FIXED_NETWORK`]), for the app's tests.
+#[doc(hidden)]
+pub fn fixed_network_plugins() -> impl Iterator<Item = &'static str> {
+    FIXED_NETWORK.iter().map(|(plugin, _)| *plugin)
+}
+
 /// The work plugins declared, and the jobs' steps.
 #[derive(Debug, Default)]
 pub(crate) struct Queue {
@@ -823,39 +896,24 @@ impl Kernel {
             .map(|p| String::from(p.manifest.id.as_str()))
             .collect();
         for plugin in networked {
-            let (Ok(network), Ok(saving)) = (
-                Id::parse(&network_setting(&plugin)),
-                Id::parse(&saving_setting(&plugin)),
-            ) else {
-                continue;
-            };
-            let specs = [
-                paperpaw_sdk::SettingSpec::new(
-                    network,
-                    "core.network.allowed",
-                    paperpaw_sdk::SettingKind::Bool,
-                    paperpaw_sdk::SettingValue::Bool(true),
-                    NETWORK_GROUP,
-                )
-                .description("core.network.allowed.help"),
-                paperpaw_sdk::SettingSpec::new(
-                    saving,
-                    "core.saving.title",
-                    paperpaw_sdk::SettingKind::Choice(paperpaw_sdk::Choices::Fixed(
-                        &SAVING_CHOICES,
-                    )),
-                    paperpaw_sdk::SettingValue::Text(alloc::borrow::Cow::Borrowed(
-                        SAVING_CHOICES[0],
-                    )),
-                    NETWORK_GROUP,
-                )
-                .description("core.saving.help"),
-            ];
-            for spec in specs {
-                let spec = spec.with_extra(&NETWORK_EXTRA);
-                if let Err(e) = self.shared.settings.define(spec) {
-                    self.warn_runtime(alloc::format!("{plugin}: {e:?}"));
+            let defined = match FIXED_NETWORK.iter().find(|(p, _)| *p == plugin) {
+                Some((_, specs)) => {
+                    (0..specs.len()).try_for_each(|at| self.shared.settings.define_fixed(specs, at))
                 }
+                None => {
+                    let (Ok(network), Ok(saving)) = (
+                        Id::parse(&network_setting(&plugin)),
+                        Id::parse(&saving_setting(&plugin)),
+                    ) else {
+                        continue;
+                    };
+                    network_specs(network, saving)
+                        .into_iter()
+                        .try_for_each(|spec| self.shared.settings.define(spec))
+                }
+            };
+            if let Err(e) = defined {
+                self.warn_runtime(alloc::format!("{plugin}: {e:?}"));
             }
         }
         self.works.stale = true;
