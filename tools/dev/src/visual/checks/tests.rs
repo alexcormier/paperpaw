@@ -163,6 +163,33 @@ fn parts_off_screen_and_overlapping() {
 }
 
 #[test]
+fn text_over_a_row_is_found() {
+    let image = paper();
+    let row = Rect::new(0, 100, 480, 60);
+    // A row's own label lies within it.
+    let fine = vec![
+        d(Role::Row, "", row),
+        d(Role::Text, "Install", Rect::new(26, 100, 330, 60)),
+    ];
+    assert!(overlap(&scene(&image, fine)).is_empty());
+    // A description drawn where the rows are.
+    let over = vec![
+        d(Role::Row, "", row),
+        d(
+            Role::Text,
+            "A long description",
+            Rect::new(26, 130, 428, 90),
+        ),
+    ];
+    let issues = overlap(&scene(&image, over));
+    assert_eq!(checks(&issues), [OVERLAP]);
+    assert!(
+        issues[0].message.contains("\"A long description\""),
+        "{issues:?}"
+    );
+}
+
+#[test]
 fn text_running_into_a_switch_is_found() {
     let mut image = paper();
     let row = Rect::new(0, 100, 480, 60);

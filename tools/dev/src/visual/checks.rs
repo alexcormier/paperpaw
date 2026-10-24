@@ -455,7 +455,7 @@ pub fn outside_cell(scene: &Scene<'_>, baseline: &Image, own: &[Described]) -> V
 }
 
 /// Buttons, switches and sliders over each other, rows over each other,
-/// text running into a switch or button.
+/// text over a row, text running into a switch or button.
 pub fn overlap(scene: &Scene<'_>) -> Vec<Issue> {
     let mut issues = Vec::new();
     let partly = |a: Rect, b: Rect| {
@@ -480,6 +480,17 @@ pub fn overlap(scene: &Scene<'_>) -> Vec<Issue> {
     for t in scene.parts(&[Role::Text]) {
         if !says_something(&t.label) {
             continue;
+        }
+        // A text lying partly over a row: drawn where the rows are, or
+        // the rows placed where the text is.
+        for r in scene.parts(&[Role::Row]) {
+            if let Some(common) = partly(t.area, r.area) {
+                issues.push(Issue::error(
+                    OVERLAP,
+                    common,
+                    format!("{} and {} overlap", quote(&t.label), named(r)),
+                ));
+            }
         }
         let Some(visible) = scene.visible(t) else {
             continue;
