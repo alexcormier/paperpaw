@@ -47,6 +47,9 @@ jobs:
       # the screen and the other errors of `visual` fail the run.
       - name: Every screen drawn without faults
         run: target/release/paperpaw-dev visual --quick --network fixtures
+      # The same at the largest text, where small screens are tightest.
+      - name: Every screen drawn without faults at the largest text
+        run: target/release/paperpaw-dev visual --quick --network fixtures --set core.ui-size=24
       # Every screen reached with the buttons alone; one that waits for
       # data the fixtures do not give fails the run.
       - name: Every screen reached with the buttons alone
