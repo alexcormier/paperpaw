@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::collections::VecMap;
-use crate::id::Id;
+use crate::id::{Id, Text};
 
 /// Where an entry goes in its menu, beside others (see
 /// [`MenuEntry::place`]).
@@ -285,10 +285,11 @@ pub struct Menus {
     hidden: Vec<(Id, Id, Id)>,
     /// What entries show now, where it changes.
     states: VecMap<Id, StateFn>,
-    /// A line under an entry (translation keys).
-    descriptions: VecMap<Id, Cow<'static, str>>,
-    titles: VecMap<Id, Cow<'static, str>>,
-    icons: VecMap<Id, Cow<'static, str>>,
+    /// A line under an entry (translation keys). Names of a hundred
+    /// entries each, so in two words a name rather than three.
+    descriptions: VecMap<Id, Text>,
+    titles: VecMap<Id, Text>,
+    icons: VecMap<Id, Text>,
     sections: Vec<Id>,
     needs: VecMap<Id, MenuNeed>,
     /// The device has a touch screen; it cannot speak; PaperPaw shows
@@ -429,7 +430,7 @@ impl Menus {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_description(&mut self, item: Id, key: Cow<'static, str>) {
-        self.descriptions.insert(item, key);
+        self.descriptions.insert(item, Text::new(key));
     }
 
     /// What `item` shows now: as it is unless its plugin says otherwise.
@@ -609,7 +610,7 @@ impl Menus {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_title(&mut self, item: Id, title: Cow<'static, str>) {
-        self.titles.insert(item, title);
+        self.titles.insert(item, Text::new(title));
     }
 
     /// The label of an action or setting (a translation key), if it has
@@ -623,7 +624,7 @@ impl Menus {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_icon(&mut self, item: Id, icon: Cow<'static, str>) {
-        self.icons.insert(item, icon);
+        self.icons.insert(item, Text::new(icon));
     }
 
     /// The icon of an action or setting, if it has one.
@@ -635,7 +636,7 @@ impl Menus {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add_section(&mut self, section: MenuSection) {
-        self.titles.insert(section.id.clone(), section.title);
+        self.titles.insert(section.id.clone(), Text::new(section.title));
         self.sections.push(section.id.clone());
         self.entries.push(MenuEntry {
             menu: section.menu,

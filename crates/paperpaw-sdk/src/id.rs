@@ -19,8 +19,9 @@ pub struct Id(Text);
 
 /// Text kept in the program or owned, in two words (a `Cow<str>` takes
 /// three): where it starts, and its length, whose top bit says it is
-/// owned (a `Box<str>`, freed with it). Ids are kept by the thousand.
-struct Text {
+/// owned (a `Box<str>`, freed with it). Ids are kept by the thousand,
+/// and so are the names menus give them.
+pub(crate) struct Text {
     start: NonNull<u8>,
     len: usize,
 }
@@ -49,6 +50,14 @@ impl Text {
         }
     }
 
+    /// `text` as it came: in the program, or owned.
+    pub(crate) fn new(text: alloc::borrow::Cow<'static, str>) -> Self {
+        match text {
+            alloc::borrow::Cow::Borrowed(text) => Self::borrowed(text),
+            alloc::borrow::Cow::Owned(text) => Self::owned(text),
+        }
+    }
+
     const fn is_owned(&self) -> bool {
         self.len & OWNED != 0
     }
@@ -60,6 +69,18 @@ impl Text {
             let bytes = core::slice::from_raw_parts(self.start.as_ptr(), self.len & !OWNED);
             core::str::from_utf8_unchecked(bytes)
         }
+    }
+}
+
+impl AsRef<str> for Text {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Debug for Text {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.as_str(), f)
     }
 }
 
