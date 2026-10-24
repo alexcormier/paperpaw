@@ -363,6 +363,11 @@ fn presses_while_a_screen_comes_up_are_dropped() {
         *log.borrow(),
         ["a:core.next-page", "a:core.next-page", "a:core.next-page"]
     );
+    // Two frames behind but less than a second before the last: made
+    // while the device was busy, it counts.
+    kernel.shown(Instant(3500));
+    press(&mut kernel, 2900, "page-forward");
+    assert_eq!(log.borrow().len(), 4);
 }
 
 #[test]

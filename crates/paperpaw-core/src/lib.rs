@@ -744,11 +744,11 @@ impl Kernel {
     /// After a screen was opened or closed, presses made before it showed
     /// are dropped: pressing again while nothing seems to happen means
     /// "nothing happened", not "do it once more". On the same screen
-    /// (turning pages, moving a focus quickly) presses wait at most a
-    /// frame: one made before the frame before the last showed is
-    /// dropped, so that pressing on while the device is slow does not
-    /// line up a long tail of steps. Shells that never call it keep every
-    /// press.
+    /// (turning pages, moving a focus quickly) a press made before the
+    /// frame before the last showed, and more than a second before the
+    /// last, is dropped: a click made while the device was busy counts,
+    /// but pressing on while it is slow does not line up a long tail of
+    /// steps. Shells that never call it keep every press.
     pub fn shown(&mut self, now: Instant) {
         self.input.shown_at = [self.input.shown_at[1], Some(now)];
         if mem::take(&mut self.input.settling) {

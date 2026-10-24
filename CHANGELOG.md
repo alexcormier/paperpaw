@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- On the X4 and X4 Pro on battery, clicks made while the screen refreshes
+  are no longer lost, and a quick click is no longer taken as a long
+  press (which opened the quick panel while turning pages).
+- On the X4 and X4 Pro, a click of Right while a page is shown is no
+  longer taken for a long press (which opened the quick panel).
+- Clicks made while the X4 was busy, up to about a second before it
+  showed the next page, count; only a long tail of them is dropped.
+- Reading a long book on the X4 no longer stalls for seconds every few
+  pages while its pages are counted in the background: a new chapter's
+  cache took 4 to 8 seconds, now under one.
+
 ## [0.5.0-beta.1] - 2026-10-24
 
 This is a beta, for testers and developers. It is the first release of

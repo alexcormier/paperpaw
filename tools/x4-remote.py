@@ -64,6 +64,8 @@ STEPS, separated by commas:
   tap:240:400        a tap there
   swipe:240:700:240:100   a finger from one point to the other (also :ms)
   drag:240:700:240:100:40:15  the same as the touch controller reads it
+  clicks:right:30:800:100  a button clicked 30 times 800 ms apart, held
+                     100 ms each, read as its own readings are
                      (40 moves 15 ms apart, also while PaperPaw is busy)
   tap-label:Search online  a tap in the middle of what shows that text
 
@@ -158,9 +160,23 @@ class X4:
         line, self.buffer = self.buffer.split(b"\n", 1)
         return line.decode("utf-8", "replace").rstrip("\r")
 
+    def pass_time(self, seconds):
+        """Lets `seconds` go by; with `verbose`, the X4's log meanwhile is
+        printed, not dropped by the next command."""
+        if not self.verbose:
+            time.sleep(seconds)
+            return
+        deadline = time.monotonic() + seconds
+        while (line := self.line(deadline)) is not None:
+            if not line.startswith("PP:"):
+                print(line)
+
     def ask(self, command, until, timeout=TIMEOUT_S):
         """Sends a command and returns the X4's answers (lines with "PP:")
         up to the one starting with `until`."""
+        if self.verbose:
+            # What the log said since the last command, before it goes.
+            self.pass_time(0)
         self.port.reset_input_buffer()
         self.buffer = b""
         self.port.write(command.encode() + b"\n")
@@ -492,7 +508,7 @@ def run(x4, step):
     rest = step.split(":", 1)[1] if ":" in step else ""
     match parts:
         case ["wait", ms]:
-            time.sleep(int(ms) / 1000)
+            x4.pass_time(int(ms) / 1000)
         case ["until", *_]:
             text, ms = rest, 30000
             if ":" in rest and rest.rsplit(":", 1)[1].isdigit():
@@ -530,6 +546,10 @@ def run(x4, step):
             # beat (5 ms) once due, and a little more.
             beat = max(5, -(-int(ms) // 5) * 5)
             time.sleep(((int(steps) + 1) * beat + 100) / 1000)
+        case ["clicks", button, count, every, held]:
+            x4.ask(f"clicks {button} {count} {every} {held}", "OK")
+            # They go on in the X4's interrupt: wait for the last.
+            x4.pass_time((int(count) * int(every) + 200) / 1000)
         case ["tap-label", *_]:
             found = [p for p in x4.parts() if rest in p[6]]
             if not found:

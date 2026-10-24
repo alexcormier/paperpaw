@@ -41,6 +41,9 @@ const IDLE_FAST_MS: u64 = 10;
 /// How often the buttons are read while awake (`input`'s timer): the
 /// rest while a press settles.
 const SAMPLE_MS: u64 = 5;
+/// How long the kernel's time waits at most for a press or release that
+/// settles (`buttons::DEBOUNCE_MS` and a reading more).
+const SETTLE_MS: u64 = 25;
 /// How long after the last refresh the panel's power goes off: soon
 /// where powering up again costs nothing; where it makes the next
 /// refresh slower, once refreshes do not follow each other (menus,
@@ -425,6 +428,21 @@ impl Firmware {
         if !self.state.wake_at.is_some_and(|due| due <= now()) {
             return;
         }
+        // The presses and releases that came meanwhile (while a frame
+        // refreshed) first, also those that come while their frames
+        // refresh, and one settling (a little while at most): a release
+        // still waiting would leave its button held at this time, a click
+        // taken for a long press.
+        let settled_by = now().0 + SETTLE_MS;
+        loop {
+            if input::waiting() {
+                self.buttons();
+            } else if input::settling() && now().0 < settled_by {
+                self.delay.delay_millis(SAMPLE_MS as u32);
+            } else {
+                break;
+            }
+        }
         power::mark(power::at::TICK);
         let started = now();
         self.state.kernel_time = started.0;
@@ -739,11 +757,15 @@ impl Firmware {
         };
         let started = now();
         self.panel.start_refresh(refresh, false)?;
-        // A little early: the rest is watched.
+        // A little early: the rest is watched. In naps no longer than the
+        // idle ones, the buttons read after each: the readings stop in a
+        // light sleep, and a click within a refresh would be missed, a
+        // release seen only after it (a press that looks long). None
+        // while a press or a release settles.
         let expected = self.state.refresh_ms[kind].saturating_sub(20);
-        if expected > 0 {
-            power::nap_until(started.0 + expected);
-        }
+        let idle = if self.faster() { IDLE_FAST_MS } else { IDLE_MS };
+        let until = started.0 + expected;
+        while expected > 0 && !input::settling() && power::nap_until(until.min(now().0 + idle)) {}
         let woke = now();
         let waited = self.panel.wait();
         let took = now().since(started);
@@ -1067,6 +1089,15 @@ impl Firmware {
                 ms,
             } => {
                 input::drag(from, to, steps, ms);
+                remote::ok();
+            }
+            Command::Clicks {
+                button,
+                count,
+                every,
+                held,
+            } => {
+                input::clicks(button, count, every, held);
                 remote::ok();
             }
             Command::Touch { phase, x, y } => {

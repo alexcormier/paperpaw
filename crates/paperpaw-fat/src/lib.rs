@@ -800,16 +800,28 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         if self.read.is_none() || dir.is_empty() {
             return 0;
         }
+        // From the deepest up: a folder there has its parents (a kept
+        // one is there), so a file's folders are not each looked for in
+        // theirs again, some with hundreds of names.
         let mut made = 0;
-        let mut at = 0;
-        for part in dir.split('/') {
-            at += part.len();
-            if !self.is_there(&dir[..at]) {
-                made += 1;
+        let mut path = dir;
+        while !self.is_kept(path) && !self.is_there(path) {
+            made += 1;
+            match path.rfind('/') {
+                Some(at) => path = &path[..at],
+                None => break,
             }
-            at += 1;
         }
         made * self.cluster()
+    }
+
+    /// Whether folder `path` is kept (see [`FOLDERS`]): it is there.
+    fn is_kept(&self, path: &str) -> bool {
+        let path = path.trim_matches('/');
+        self.folders
+            .borrow()
+            .iter()
+            .any(|(p, _)| same_path(p, path))
     }
 
     /// Bytes of a cluster, where known.
@@ -1112,8 +1124,17 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             return Ok(());
         }
         check(path)?;
-        let mut dir = self.root();
-        for part in path.split('/').filter(|p| !p.is_empty()) {
+        // From the deepest kept folder on (see [`FOLDERS`]), not from the
+        // root: its parents are there, some with hundreds of names.
+        let mut kept = Some(path);
+        while let Some(at) = kept.filter(|at| !self.is_kept(at)) {
+            kept = at.rfind('/').map(|end| &at[..end]);
+        }
+        let (mut dir, rest) = match kept {
+            Some(at) => (self.dir(at)?, &path[at.len()..]),
+            None => (self.root(), path),
+        };
+        for part in rest.split('/').filter(|p| !p.is_empty()) {
             dir = create_dir_in(&dir, part)?;
         }
         Ok(())

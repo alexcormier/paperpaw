@@ -510,14 +510,14 @@ fn the_contents_of_a_long_fictionbook_are_found_in_few_reads() {
     assert_eq!(doc.toc_len(&card), 1000);
     doc.block_at(&card, Locator::START).unwrap();
     // As the reader goes through them: entries, then their places.
-    let before = card.reads_of(".anc");
+    let before = card.reads_of("/anc");
     let mut starts = Vec::new();
     for i in 0..1000 {
         let entry = doc.toc_entry(&card, i).unwrap();
         starts.push(doc.toc_target(&card, i).unwrap());
         assert_eq!(entry.at, starts[i as usize]);
     }
-    let reads = card.reads_of(".anc") - before;
+    let reads = card.reads_of("/anc") - before;
     assert!(reads < 5000, "{reads} reads");
     assert!(starts.windows(2).all(|w| w[0] < w[1]));
     let last = doc.block_at(&card, starts[999]).unwrap().unwrap();
@@ -562,7 +562,7 @@ fn printed_pages_are_resolved_in_few_reads_and_little_memory() {
     let card = Card::new("book.epub", epub_with_pages(&chapter, &nav));
     let doc = EpubDocument::open(&card, "book.epub").unwrap();
     doc.block_at(&card, Locator::START).unwrap();
-    let before = card.reads_of(".anc") + card.reads_of("pages.txt");
+    let before = card.reads_of("/anc") + card.reads_of("pages.txt");
     let (labels, heap) = peak(|| {
         let mut at = Locator::START;
         let mut labels = 0;
@@ -576,7 +576,7 @@ fn printed_pages_are_resolved_in_few_reads_and_little_memory() {
     });
     assert_eq!(labels, 2000);
     assert!(heap < 64 * 1024, "{heap} bytes at once");
-    let reads = card.reads_of(".anc") + card.reads_of("pages.txt") - before;
+    let reads = card.reads_of("/anc") + card.reads_of("pages.txt") - before;
     assert!(reads < 4 * 2000, "{reads} reads");
 }
 
@@ -816,7 +816,7 @@ fn the_first_pages_of_a_long_comic_are_kept_and_not_held_in_memory() {
 /// The converted text of the book `book.epub`'s first chapter.
 fn chapter_text() -> String {
     format!(
-        ".paperpaw/plugins/format-epub/{}/0.txt",
+        ".paperpaw/plugins/format-epub/{}/sections/0/txt",
         paperpaw_sdk::library::key("book.epub")
     )
 }
