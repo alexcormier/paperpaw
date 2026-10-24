@@ -386,8 +386,8 @@ To ask the reader, `ask::text("Server", &ENTERED).initial(url).command()`
 opens the keyboard and brings back a `Typed`. `ask::folder` brings back
 a `FolderChosen`, `ask::choice` a `Picked` and `ask::confirm` a `Confirmed`.
 A value passed with `.with(key, value)` comes back in the answer's
-`context`, so a plugin tells its questions apart. On `ask::choice`,
-`.about(text)` comes back as the answer's `path`.
+`context`, so a plugin tells its questions apart. A `Picked` has no
+`context`: on `ask::choice`, `.about(text)` comes back as its `path`.
 
 What is known of books is a service, not a screen's: `library` has a
 book's details (title, author, series, tags, cover, progress, and
@@ -670,7 +670,7 @@ as the run's artifact, also when a check failed.
 | A look | `set_ui_look` | Another look for switches, the focus, separators, buttons, headers, button hints, progress bars, sliders and widgets' frames on every screen (`ui::look`) |
 | Widgets and their places | `add_widget`, `add_widget_place`, `add_widget_category` | Blocks for the home screen and the sleep screen; places that show widgets (`widgets::WidgetPlace`), in a grid or above each other (`widgets::WidgetStack`), which plugins ask whether they show theirs (`Widgets::shown`); kinds of widgets of one's own, with their icon |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
-| Services | `publish` | Anything one plugin offers others, found with `env.services().get` |
+| Services | `provide` | Anything one plugin offers others, found with `env.services().get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
 | Book data | `add_book_data`, `add_book_cache` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book. What `add_book_cache` names (made again from the book when needed) is cleaned up by itself when the book is gone; what `add_book_data` names (the reader's own: notes, places) only when the reader agrees, in *Clean up storage* |
@@ -1156,7 +1156,7 @@ const ID: Id = Id::new_static("my.card");
 static SETTINGS: [SettingSpec; 4] = [
     widgets::align_spec("my.card.align", ID, Align::Left),
     widgets::frame_spec("my.card.frame", ID, Frame::None), // none, line, light or dark card
-    widgets::size_spec("my.card.size", ID, Size::Medium, true), // true: also "as large as it fits"
+    widgets::size_spec("my.card.size", ID, TextSize::Medium, true), // true: also "as large as it fits"
     widgets::part_spec("my.card.author", ID, "my.show-author", true),
 ];
 r.add_setting_group(widgets::settings_group(&ID, "my.card"))?;
@@ -1289,7 +1289,7 @@ not readable at a glance, but not encrypted: the devices have no safe
 place for a key. A plugin sees its own alone: name them in its
 namespace (`myplugin.token`); `env.secrets().get` gives another plugin's
 none, and `env.secrets().listed()` names every secret without its value.
-A setting marked `secret()` is kept the same way. Native code is not
+A setting whose extra is `SettingExtra::secret()` is kept the same way. Native code is not
 sandboxed and could go past this; the SDK hands no plugin another's
 secret.
 
@@ -1302,7 +1302,7 @@ saved to a file (`.save_to(path)`) for large ones. A request may set a
 `timeout`, the answer's headers it wants back (`want_headers`) and the
 longest body kept in memory (`max_body`, by default 64 KiB on small
 devices). Every request is answered once, also when it is refused
-(`HttpReply::refused` says why and when to try again). The manifest says
+(its `refused` says why and when to try again). The manifest says
 that the plugin uses the network (`.uses(Uses::NETWORK)` in its manifest); without it,
 requests are refused. In Offline (`env.power()`), only what the reader went
 online for goes out: a screen that needs the network says so on itself
