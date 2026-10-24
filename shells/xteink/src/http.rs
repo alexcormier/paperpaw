@@ -71,7 +71,7 @@ pub const MAX_CALLS: usize = 2;
 /// card take (about 190 KB/s), with memory left while a book is open; the
 /// X4 Pro and Classic, with memory to spare, take 16.
 const BUFFERS: net::Buffers = net::Buffers {
-    receive: if cfg!(feature = "x4") { 8 } else { 16 } * 1024,
+    receive: if cfg!(feature = "esp32c3") { 8 } else { 16 } * 1024,
     send: 1024,
 };
 

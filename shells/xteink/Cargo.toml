@@ -21,11 +21,16 @@ bench = false
 
 [features]
 default = ["x4", "remote"]
-# Which device: the X4 (ESP32-C3, built with the Rust of
-# `rust-toolchain.toml`), the X4 Pro or the X4 Classic (ESP32-S3, Xtensa:
-# espup's `esp` toolchain of `versions.env`, `cargo +esp x4pro`,
-# `cargo +esp x4classic`). Exactly one.
-x4 = [
+# Which device: the X4 or the X3 (ESP32-C3, built with the Rust of
+# `rust-toolchain.toml`; the X3 experimental, `cargo x3`), the X4 Pro or
+# the X4 Classic (ESP32-S3, Xtensa: espup's `esp` toolchain of
+# `versions.env`, `cargo +esp x4pro`, `cargo +esp x4classic`). Exactly
+# one.
+x4 = ["esp32c3"]
+x3 = ["esp32c3"]
+# What both ESP32-C3 devices build with; chosen by `x4` or `x3`, not by
+# hand.
+esp32c3 = [
     "esp-hal/esp32c3",
     "esp-alloc/esp32c3",
     "esp-backtrace/esp32c3",

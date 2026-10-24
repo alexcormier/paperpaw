@@ -51,7 +51,7 @@ const KEYS: &[[u8; 32]] = &[
 ];
 /// The chip id in this device's images: the X4's ESP32-C3, the ESP32-S3
 /// of the X4 Pro and the X4 Classic.
-#[cfg(feature = "x4")]
+#[cfg(feature = "esp32c3")]
 const CHIP: u16 = paperpaw_sdk::firmware::CHIP_ESP32_C3;
 #[cfg(feature = "esp32s3")]
 const CHIP: u16 = paperpaw_sdk::firmware::CHIP_ESP32_S3;
@@ -60,6 +60,8 @@ const CHIP: u16 = paperpaw_sdk::firmware::CHIP_ESP32_S3;
 /// boards.
 #[cfg(feature = "x4")]
 pub const PROJECT: &str = "paperpaw-xteink";
+#[cfg(feature = "x3")]
+pub const PROJECT: &str = "paperpaw-xteink-x3";
 #[cfg(feature = "x4-pro")]
 pub const PROJECT: &str = "paperpaw-xteink-pro";
 #[cfg(feature = "x4-classic")]

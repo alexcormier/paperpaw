@@ -1,7 +1,7 @@
 //! PaperPaw on the Xteink X4 (ESP32-C3), the X4 Pro (ESP32-S3, with a
 //! touch screen) and the X4 Classic (ESP32-S3, the X4's buttons): the
 //! kernel with the standard app, its screen, buttons, battery and SD card.
-//! The feature `x4`, `x4-pro` or `x4-classic` says which.
+//! The feature `x4`, `x4-pro`, `x4-classic` or `x3` says which.
 //!
 //! - **Board**: which pin does what, in one place (`board`, for the X4 Pro
 //!   `board_pro`, for the X4 Classic `board_classic`; the card of both
@@ -26,13 +26,16 @@ extern crate alloc;
 
 #[cfg(feature = "x4")]
 mod board;
+#[cfg(feature = "x3")]
+#[path = "board_x3.rs"]
+mod board;
 #[cfg(feature = "x4-pro")]
 #[path = "board_pro.rs"]
 mod board;
 #[cfg(feature = "x4-classic")]
 #[path = "board_classic.rs"]
 mod board;
-#[cfg(feature = "x4")]
+#[cfg(feature = "esp32c3")]
 mod card;
 #[cfg(feature = "esp32s3")]
 #[path = "card_pro.rs"]
@@ -68,20 +71,22 @@ mod tls;
 #[cfg(feature = "remote")]
 mod traced;
 mod usb_lines;
-#[cfg(feature = "esp32s3")]
+#[cfg(any(feature = "esp32s3", feature = "x3"))]
 mod usb_power;
 mod volume;
 mod wifi;
 
 #[cfg(any(
-    all(feature = "x4", feature = "esp32s3"),
+    all(feature = "esp32c3", feature = "esp32s3"),
+    all(feature = "x4", feature = "x3"),
     all(feature = "x4-pro", feature = "x4-classic"),
+    all(feature = "esp32c3", not(any(feature = "x4", feature = "x3"))),
     all(
         feature = "esp32s3",
         not(any(feature = "x4-pro", feature = "x4-classic"))
     ),
 ))]
-compile_error!("build for one device: the feature `x4`, `x4-pro` or `x4-classic`");
+compile_error!("build for one device: the feature `x4`, `x4-pro`, `x4-classic` or `x3`");
 
 use alloc::boxed::Box;
 
@@ -148,6 +153,30 @@ const DEVICE: DeviceInfo = DeviceInfo {
         dpi: 220,
         // What the panel shows until its four grays come: drawing in gray
         // only to send black and white costs time and memory.
+        format: PixelFormat::Mono1,
+        rotation: Rotation::Deg90,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &buttons::ALL,
+    },
+    memory: MemoryClass::Small,
+};
+
+/// The X3 (experimental, not yet tried on one): the X4's buttons and
+/// memory, a 3.68" panel of 528 × 792 upright (about 260 dpi). Uncertain
+/// without a device: whether it lies turned as the X4's does.
+#[cfg(feature = "x3")]
+const DEVICE: DeviceInfo = DeviceInfo {
+    id: "xteink-x3",
+    name: "Xteink X3",
+    display: DisplayInfo {
+        width: 528,
+        height: 792,
+        dpi: 260,
         format: PixelFormat::Mono1,
         rotation: Rotation::Deg90,
         color: None,
@@ -420,9 +449,9 @@ fn prepare() -> Ready {
         board.keys,
         board.power_button,
     ));
-    // The clock chip of the ESP32-S3 devices kept the time while it was
-    // off.
-    #[cfg(feature = "esp32s3")]
+    // The clock chip of the ESP32-S3 devices and the X3 kept the time
+    // while it was off.
+    #[cfg(any(feature = "esp32s3", feature = "x3"))]
     if let Some(unix_ms) = board.clock_ms {
         clock::set(now(), unix_ms);
     }
@@ -502,7 +531,7 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
         let _ = flash;
         native::Place::default()
     };
-    #[cfg(feature = "x4")]
+    #[cfg(feature = "esp32c3")]
     let place = native::Place::new(flash.clone());
     CodePlugins::Load(native::Loader::new(place))
 }
@@ -567,6 +596,10 @@ fn kernel(
     let builder = builder
         .button_row(&buttons::ROW)
         .catalog_device("x4-classic");
+    // The X3 has the X4's buttons, and runs the X4's code plugins (the
+    // same chip and fingerprint): the plugin library's X4 builds.
+    #[cfg(feature = "x3")]
+    let builder = builder.button_row(&buttons::ROW).catalog_device("x4");
     let builder = builder
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default(&settings::FLASH_SCREENS, false)

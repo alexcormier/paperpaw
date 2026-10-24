@@ -21,6 +21,10 @@ x4pro-clippy = "clippy --release --target xtensa-esp32s3-none-elf --no-default-f
 x4classic = "build --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-classic,remote -Zbuild-std=core,alloc"
 x4classic-run = "run --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-classic,remote -Zbuild-std=core,alloc"
 x4classic-clippy = "clippy --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-classic,remote -Zbuild-std=core,alloc"
+# The X3 (experimental): the X4's chip, built as the X4 is.
+x3 = "build --release --no-default-features --features x3,remote"
+x3-run = "run --release --no-default-features --features x3,remote"
+x3-clippy = "clippy --release --no-default-features --features x3,remote"
 
 [target.xtensa-esp32s3-none-elf]
 runner = "espflash flash --monitor --chip esp32s3 --erase-parts otadata"

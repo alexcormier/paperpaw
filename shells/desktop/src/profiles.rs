@@ -465,7 +465,49 @@ pub const PROFILES: &[Profile] = &[
         button_row: &X4_ROW,
         light: None,
         body: X4_BODY,
-        summary: "not supported yet: ESP32-S3 with 8 MB PSRAM, 4.3\" 800x480, buttons only, 10 MiB heap budget",
+        summary: "experimental: ESP32-S3 with 8 MB PSRAM, 4.3\" 800x480, buttons only, 10 MiB heap budget",
+    },
+    // The X3 (experimental, not yet tried on one): the X4's chip, buttons
+    // and memory, a 3.68" panel of 792 x 528 (528 x 792 upright). Its
+    // firmware takes the plugin library's X4 builds (the same chip and
+    // fingerprint).
+    Profile {
+        device: DeviceInfo {
+            id: "xteink-x3",
+            name: "Xteink X3",
+            display: DisplayInfo {
+                width: 528,
+                height: 792,
+                dpi: 260,
+                format: PixelFormat::Mono1,
+                rotation: Rotation::Deg90,
+                color: None,
+            },
+            input: InputCaps {
+                buttons: true,
+                touch: false,
+                pen: false,
+                keys: &[],
+            },
+            memory: MemoryClass::Small,
+        },
+        buttons: &X4_BUTTONS,
+        heap_budget: Some(256 * KIB),
+        glyph_cache: X4_GLYPH_CACHE,
+        busy_mark: true,
+        colors: false,
+        font_packs: true,
+        frame_rows: Some(192),
+        row_align: 8,
+        settings: &X4_SETTINGS,
+        speech: false,
+        wifi: true,
+        catalog_device: Some("x4"),
+        sleep: true,
+        button_row: &X4_ROW,
+        light: None,
+        body: X4_BODY,
+        summary: "experimental: ESP32-C3, 3.7\" 792x528, buttons only, 256 KiB heap budget",
     },
     Profile {
         device: DeviceInfo {

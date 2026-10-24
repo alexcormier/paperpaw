@@ -148,3 +148,37 @@ cargo +esp x4classic-clippy   # lints
 It answers on USB (through its pogo adapter) as the X4 Pro does, so
 check which one is connected before flashing. Its pins come from the
 FreeInk SDK's and Papyrix's notes; not yet tried on one.
+
+## The X3
+
+Experimental: built (`cargo x3`), but not yet tried on one, and not
+part of a release.
+
+The X3 has the X4's chip (ESP32-C3), bus, card and buttons, a 3.68"
+panel of 792 × 528 with a UC8253 controller, and on I²C (data GPIO 20,
+clock GPIO 0) a BQ27220 fuel gauge and a DS3231 clock. It is a build of
+its own (the feature `x3`, `board_x3.rs`), not found at start:
+
+```sh
+cargo x3          # build
+cargo x3-run      # flash and show the log
+cargo x3-clippy   # lints
+```
+
+Its facts come from the FreeInk SDK (MIT); the UC8253's start and its
+waveform tables derive from the OpenX4 E-Paper Community SDK (MIT), with
+their notice in `crates/paperpaw-x4/src/uc8253.rs`. It takes the plugin
+library's X4 builds (the same chip and fingerprint). Not yet known
+without a device, and marked so in the code:
+
+- whether GPIO 13 holds the battery's power (as on the X4) or the card's
+  power rail; it is held high and let go in sleep, which fits either;
+- which way the panel lies and whether it is mirrored (taken as the
+  X4's), and whether partial windows and its 10 MHz bus behave as the
+  SDK's;
+- whether its buttons' levels and order are the X4's;
+- whether a charger alone counts as USB power: it has no pin for it
+  (the gauge's current says it, but is not read for that yet);
+- units with the newer UC8279d controller are not driven (the log says
+  so), and grays fall back to black and white;
+- the tilt sensor (QMI8658) is left out.

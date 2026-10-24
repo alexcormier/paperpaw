@@ -16,7 +16,7 @@
 
 mod api;
 pub mod bundle;
-#[cfg(feature = "x4")]
+#[cfg(feature = "esp32c3")]
 mod flash;
 mod partition;
 #[cfg(feature = "esp32s3")]
@@ -55,7 +55,7 @@ pub fn this_firmware() -> paperpaw_sdk::native::Native {
 }
 
 /// The chip plugin files must be made for.
-#[cfg(feature = "x4")]
+#[cfg(feature = "esp32c3")]
 const CHIP: Chip = Chip::Esp32C3;
 #[cfg(feature = "esp32s3")]
 const CHIP: Chip = Chip::Esp32S3;
@@ -93,10 +93,10 @@ pub enum Room {
     #[cfg(feature = "esp32s3")]
     Psram,
     /// Flash from `start` to `end`, mapped at `base` (the X4).
-    #[cfg(feature = "x4")]
+    #[cfg(feature = "esp32c3")]
     Flash { start: u32, end: u32, base: u32 },
     /// None, and why.
-    #[cfg(feature = "x4")]
+    #[cfg(feature = "esp32c3")]
     None(&'static str),
 }
 
@@ -122,11 +122,11 @@ pub fn describe(line: &mut dyn FnMut(&str)) {
         Room::Unknown => String::from("room unknown"),
         #[cfg(feature = "esp32s3")]
         Room::Psram => String::from("room psram"),
-        #[cfg(feature = "x4")]
+        #[cfg(feature = "esp32c3")]
         Room::Flash { start, end, base } => {
             alloc::format!("room flash {start:#x}..{end:#x} at {base:#x}")
         }
-        #[cfg(feature = "x4")]
+        #[cfg(feature = "esp32c3")]
         Room::None(why) => alloc::format!("room none: {why}"),
     });
     critical_section::with(|cs| {
@@ -171,7 +171,7 @@ pub fn attribute(pc: u32, found: &mut dyn FnMut(&str, u32)) {
 /// Where images go: PSRAM on the ESP32-S3 devices, flash on the X4.
 #[cfg(feature = "esp32s3")]
 pub type Place = psram::Psram;
-#[cfg(feature = "x4")]
+#[cfg(feature = "esp32c3")]
 pub type Place = flash::Flash;
 
 /// Loads code plugins for the kernel (see the [module documentation](self)).

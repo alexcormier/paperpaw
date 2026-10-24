@@ -1,5 +1,5 @@
-//! The device's own plugin: what only the X4, the X4 Pro or the X4
-//! Classic has to set.
+//! The device's own plugin: what only the X4, the X4 Pro, the X4
+//! Classic or the X3 has to set.
 //! All sleep lightly between readings of their buttons (for developers,
 //! in their group of settings); the X4 Pro's front light has its
 //! brightness and warmth, in the quick panel and the reader's panel too.
@@ -106,6 +106,8 @@ impl Plugin for X4 {
             "Xteink X4 Classic",
             "What only the Xteink X4 Classic has to set.",
         );
+        #[cfg(feature = "x3")]
+        let (name, description) = ("Xteink X3", "What only the Xteink X3 has to set.");
         Manifest::new(PLUGIN, name, Version::new(0, 1, 0))
             .description(description)
             .uses(paperpaw_sdk::Uses::NOTHING)

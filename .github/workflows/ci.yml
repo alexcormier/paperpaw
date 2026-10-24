@@ -145,8 +145,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The X4 (ESP32-C3), the X4 Pro and the X4 Classic (ESP32-S3).
-        device: [x4, x4-pro, x4-classic]
+        # The X4 and the X3 (ESP32-C3; the X3 experimental), the X4 Pro and
+        # the X4 Classic (ESP32-S3).
+        device: [x4, x3, x4-pro, x4-classic]
     env:
       DEVICE: ${{ matrix.device }}
     steps:
@@ -166,7 +167,7 @@ jobs:
       # as the release publishes them; installed first, as the release
       # does, so that everything after builds beside them.
       - uses: ./.github/actions/xtensa-std
-        if: matrix.device != 'x4'
+        if: matrix.device != 'x4' && matrix.device != 'x3'
       - name: Lint and build
         working-directory: shells/xteink
         # Linted with remote control over USB, as for testing, and
@@ -194,7 +195,9 @@ jobs:
       # firmware's fingerprint.
       # Signed with a key made for this run, and their catalogue entries
       # made, as the release does.
+      # The X3 takes the X4's builds (the same chip and fingerprint).
       - name: The store's first-party plugins fit the firmware
+        if: matrix.device != 'x3'
         env:
           FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
         run: |
@@ -209,7 +212,7 @@ jobs:
       # libraries installed into it go again, so that no run finds those
       # of another commit.
       - name: The core libraries out of the cached toolchain
-        if: always() && matrix.device != 'x4'
+        if: always() && matrix.device != 'x4' && matrix.device != 'x3'
         run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
 
   native:
