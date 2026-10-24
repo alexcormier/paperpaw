@@ -254,8 +254,8 @@ jobs:
         with:
           archive: ${{ runner.temp }}/xtensa-std/paperpaw-xtensa-std-${{ env.VERSION }}.tar.gz
       # One image for the whole flash (with the partitions of
-      # `partitions.csv`, from `espflash.toml`), and the app alone for
-      # updates.
+      # `partitions.csv`, the X4 Classic's of `partitions-classic.csv`),
+      # and the app alone for updates.
       - name: Build the firmware
         working-directory: shells/xteink
         # Without remote control over USB, which is for testing.
@@ -263,9 +263,14 @@ jobs:
           cargo +"$FIRMWARE_TOOLCHAIN" build $FIRMWARE_CARGO --features "$DEVICE"
           mkdir -p "$GITHUB_WORKSPACE/dist"
           elf="target/$FIRMWARE_TARGET/release/paperpaw-xteink"
+          table=partitions.csv
+          if [[ "$DEVICE" == x4-classic ]]; then
+            table=partitions-classic.csv
+          fi
           espflash save-image --chip "$FIRMWARE_CHIP" --merge --skip-padding --flash-size 16mb \
-            "$elf" "$GITHUB_WORKSPACE/dist/paperpaw-$DEVICE-$VERSION.bin"
-          espflash save-image --chip "$FIRMWARE_CHIP" --flash-size 16mb "$elf" "$RUNNER_TEMP/app.bin"
+            --partition-table "$table" "$elf" "$GITHUB_WORKSPACE/dist/paperpaw-$DEVICE-$VERSION.bin"
+          espflash save-image --chip "$FIRMWARE_CHIP" --flash-size 16mb \
+            --partition-table "$table" "$elf" "$RUNNER_TEMP/app.bin"
       # Which code plugins run on it, for the plugin library and authors:
       # the fingerprint alone, 16 hexadecimal digits.
       - name: The sample code plugin fits the firmware

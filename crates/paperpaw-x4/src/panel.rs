@@ -19,9 +19,13 @@ pub enum Device {
     /// side ([`Rotation::Deg90`], its buttons on the left).
     X4,
     /// The X4 Pro: a frame kept in its PSRAM; turned the other way on
-    /// [`Rotation::Deg90`] (see [`uc8179::turned`]). The X4 Classic too,
-    /// which has its glass and PSRAM (its turning not yet seen on one).
+    /// [`Rotation::Deg90`] (see [`uc8179::turned`]).
     X4Pro,
+    /// The X4 Classic: the X4 Pro's glass and PSRAM, driven as the X4
+    /// Pro's (its turning not yet seen on one), but a UC8279 keeps its
+    /// factory frame rate, as its stock firmware does (FreeInk SDK's
+    /// `Uc8279X4Driver`, Papyrix's notes, MIT).
+    X4Classic,
     /// The X3: a UC8253 at 792 × 528, whichever controller was found (see
     /// [`uc8253`]); no frame of its own, as the X4.
     X3,
@@ -79,7 +83,7 @@ where
             Controller::Ssd1677 => {
                 return Panel::Ssd1677 {
                     display: display::Display::new(spi, dc, reset, busy, delay),
-                    sides_swapped: device == Device::X4Pro,
+                    sides_swapped: matches!(device, Device::X4Pro | Device::X4Classic),
                 };
             }
             Controller::Uc8179 => Chip::Uc8179,
@@ -87,11 +91,14 @@ where
         };
         let frame = match device {
             Device::X4 | Device::X3 => Frame::InController,
-            Device::X4Pro => Frame::Kept,
+            Device::X4Pro | Device::X4Classic => Frame::Kept,
         };
-        Panel::UltraChip(uc8179::Display::new(
-            chip, frame, spi, dc, reset, busy, delay,
-        ))
+        let display = uc8179::Display::new(chip, frame, spi, dc, reset, busy, delay);
+        Panel::UltraChip(if device == Device::X4Classic {
+            display.with_factory_pll()
+        } else {
+            display
+        })
     }
 
     /// The controller driven.
@@ -258,7 +265,7 @@ mod tests {
 
     #[test]
     fn each_controller_its_driver() {
-        for device in [Device::X4, Device::X4Pro] {
+        for device in [Device::X4, Device::X4Pro, Device::X4Classic] {
             for controller in [Controller::Ssd1677, Controller::Uc8179, Controller::Uc8279] {
                 let panel = panel(device, controller);
                 assert_eq!(panel.controller(), controller);
@@ -282,14 +289,16 @@ mod tests {
 
     #[test]
     fn an_x4_pro_turns_its_way_whichever_its_controller() {
-        let mut ssd = panel(Device::X4Pro, Controller::Ssd1677);
-        ssd.set_rotation(Rotation::Deg90);
-        assert_eq!(ssd.rotation(), Rotation::Deg90);
-        assert_eq!(ssd.size(), (800, 480));
-        let Panel::Ssd1677 { display, .. } = &ssd else {
-            unreachable!()
-        };
-        assert_eq!(display.rotation(), Rotation::Deg270);
+        for device in [Device::X4Pro, Device::X4Classic] {
+            let mut ssd = panel(device, Controller::Ssd1677);
+            ssd.set_rotation(Rotation::Deg90);
+            assert_eq!(ssd.rotation(), Rotation::Deg90);
+            assert_eq!(ssd.size(), (800, 480));
+            let Panel::Ssd1677 { display, .. } = &ssd else {
+                unreachable!()
+            };
+            assert_eq!(display.rotation(), Rotation::Deg270);
+        }
         let mut x4 = panel(Device::X4, Controller::Ssd1677);
         x4.set_rotation(Rotation::Deg90);
         let Panel::Ssd1677 { display, .. } = &x4 else {

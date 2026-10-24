@@ -408,7 +408,14 @@ fn prepare() -> Ready {
     if let Some(message) = &panicked {
         warn!("the last run panicked: {message}");
     }
+    #[cfg(not(feature = "x4-classic"))]
     let board = Board::take(p);
+    // The X4 Classic's panel as the factory wrote it down, as its stock
+    // firmware reads it.
+    #[cfg(feature = "x4-classic")]
+    let board = Board::take(p, probe::factory_controller(&flash));
+    #[cfg(feature = "x3")]
+    let ota = x3_panel_or_back(ota, &board.display);
 
     let storage = card::mount(board.card);
     // What the card keeps under PaperPaw's old name, moved before anything
@@ -466,7 +473,12 @@ fn prepare() -> Ready {
         panel,
         network,
         ota,
+        #[cfg(not(feature = "x3"))]
         power_latch: board.power_latch,
+        // The X3's GPIO 13 is its card's power, let go before deep sleep
+        // as the others' latch.
+        #[cfg(feature = "x3")]
+        power_latch: board.card_power,
         usb_power: board.usb_power,
         delay: board.delay,
         // Lines from a computer on USB; the log goes out the same way.
@@ -477,6 +489,24 @@ fn prepare() -> Ready {
         code,
         staged,
     }
+}
+
+/// An X3 with the newer UC8279d, which this build does not drive (its
+/// waveforms are not taken over): its screen would stay as it was. Said
+/// in the log, and an update on trial that brought it goes back at once
+/// to the firmware before it.
+#[cfg(feature = "x3")]
+fn x3_panel_or_back(
+    mut ota: Option<ota::Ota>,
+    probe: &paperpaw_x4::probe::Probe,
+) -> Option<ota::Ota> {
+    if probe.x3_uc8279d() {
+        log::error!("display: a UC8279d ({probe}), which this build does not drive: nothing shows");
+        if let Some(ota) = ota.as_mut() {
+            ota.give_up("this X3's display is not driven");
+        }
+    }
+    ota
 }
 
 /// How this start treats code plugins (ADR 0024).

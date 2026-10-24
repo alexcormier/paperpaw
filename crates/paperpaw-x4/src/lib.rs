@@ -35,6 +35,7 @@ pub mod dhcp;
 pub mod display;
 pub mod ds3231;
 pub mod gt911;
+pub mod nvs;
 pub mod ota;
 pub mod panel;
 pub mod probe;

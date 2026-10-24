@@ -1,4 +1,11 @@
 # espflash reads this for `cargo run`, `espflash flash` and `save-image`
-# in this folder.
+# in this folder. The X4 Classic's partitions are its own
+# (`partitions-classic.csv`, given where it is flashed or its image made).
 [idf]
 partition_table = "partitions.csv"
+
+# The flash's mode in the image's header, named rather than left to
+# espflash: two data lines, as the stock firmware's (the FreeInk SDK's
+# and CrossPoint's builds).
+[flash]
+mode = "dio"

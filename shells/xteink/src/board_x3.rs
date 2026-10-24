@@ -12,13 +12,17 @@
 //! | The side buttons (up, down) | resistor ladder on ADC GPIO 2 |
 //! | Power button | GPIO 3, low while pressed |
 //! | Fuel gauge BQ27220 (0x55), clock DS3231 (0x68) | I²C: data GPIO 20, clock GPIO 0 |
-//! | GPIO 13 | high from the start, low in sleep (see below) |
+//! | The card's power | GPIO 13, on while high |
 //!
-//! Uncertain without a device: whether GPIO 13 holds the battery's power
-//! (as on the X4) or the card's power rail (as the SDK names it); held
-//! high at start and let go in sleep, it does what either needs. Whether
-//! the ladders' levels and the up/down order are the X4's (the SDK has
-//! the same ranges). The tilt sensor (QMI8658, 0x6B) is left out.
+//! GPIO 13 is the card's power rail, not a battery latch as on the X4
+//! (Papyrix's `BoardProfiles.cpp` and `PowerPolicy.cpp`, MIT): on from the
+//! start and while the card is used, off only before the deep sleep that
+//! is the X3's off (the firmware's sleep sets it low, nothing else does).
+//! Uncertain without a device: whether the ladders' levels and the
+//! up/down order are the X4's (the SDK has the same ranges). The tilt
+//! sensor (QMI8658, 0x6B) is left out, and NFC, which the maker mentions,
+//! is not used. Newer X3s have a UC8279d, driven
+//! at 20 MHz elsewhere; this build does not drive it (see `main`).
 
 use alloc::boxed::Box;
 use core::cell::RefCell;
@@ -91,6 +95,8 @@ impl Keys {
     /// The battery's charge (percent) and voltage (millivolts), from the
     /// fuel gauge.
     pub fn battery(&mut self) -> Option<(u8, u16)> {
+        // Whether it charges, for USB power (`usb_power`), read with it.
+        crate::usb_power::gauge_says(bq27220::charging(&mut self.i2c));
         bq27220::read(&mut self.i2c).map(|r| (r.percent, r.millivolts))
     }
 
@@ -121,8 +127,9 @@ impl Keys {
 
 /// The X3's parts, each once.
 pub struct Board {
-    /// GPIO 13: held high, let go in sleep (see the module).
-    pub power_latch: Output<'static>,
+    /// The card's power rail (GPIO 13): on, off only before deep sleep
+    /// (see the module).
+    pub card_power: Output<'static>,
     /// The panel, still to be started.
     pub panel: Panel,
     /// What its controller answered at start.
@@ -148,9 +155,7 @@ pub struct Board {
 }
 
 impl Board {
-    /// Takes the chip's parts apart. GPIO 13 goes high at once, as the
-    /// X4's latch does: it stays on only while the power button is down
-    /// otherwise, if it is the battery's.
+    /// Takes the chip's parts apart, the card's power on at once.
     #[expect(
         clippy::expect_used,
         reason = "without its bus the X3 can do nothing; a panic shows why"
@@ -158,7 +163,7 @@ impl Board {
     // A frame of its own, off the stack before the kernel is built.
     #[inline(never)]
     pub fn take(mut p: Peripherals) -> Self {
-        let power_latch = Output::new(p.GPIO13, Level::High, OutputConfig::default());
+        let card_power = Output::new(p.GPIO13, Level::High, OutputConfig::default());
         let delay = Delay::new();
         // The controller's answers, for the log: an X3 is driven as a
         // UC8253 whatever they say; one with the newer UC8279d is not
@@ -172,10 +177,9 @@ impl Board {
             p.GPIO5.reborrow(),
             p.GPIO6.reborrow(),
             delay,
+            // Held as its stock firmware holds it (the FreeInk SDK's).
+            paperpaw_x4::probe::STOCK_RESET_MS,
         );
-        if display.x3_uc8279d() {
-            log::warn!("display: a UC8279d, which this build does not drive yet ({display})");
-        }
         let spi = SpiConfig::default()
             .with_frequency(Rate::from_khz(CARD_START_KHZ))
             .with_mode(Mode::_0)
@@ -214,9 +218,23 @@ impl Board {
         .with_sda(p.GPIO20)
         .with_scl(p.GPIO0);
         let clock_ms = ds3231::read(&mut i2c).map(|t| t.unix_ms());
+        // The gauge forgets the cell's capacity when it loses power: given
+        // back here (once, some seconds) where it says TI's default.
+        let mut waits = delay;
+        match bq27220::load_capacity(&mut i2c, &mut waits, bq27220::X3_CAPACITY_MAH) {
+            bq27220::Capacity::Kept => {}
+            bq27220::Capacity::Written => {
+                log::info!("battery: the gauge has the cell's capacity again")
+            }
+            bq27220::Capacity::Failed => {
+                log::warn!(
+                    "battery: the gauge's capacity could not be set (tried again next start)"
+                );
+            }
+        }
 
         Self {
-            power_latch,
+            card_power,
             panel,
             display,
             card: CardParts {
@@ -233,7 +251,7 @@ impl Board {
             },
             power_button: Input::new(p.GPIO3, InputConfig::default().with_pull(Pull::Up)),
             clock_ms,
-            usb_power: UsbPower::without_charging(),
+            usb_power: UsbPower::from_gauge(),
             timers: TimerGroup::new(p.TIMG0),
             timers1: TimerGroup::new(p.TIMG1),
             rtc: p.RTC_TIMER,

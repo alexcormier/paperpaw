@@ -214,6 +214,22 @@ impl Ota {
         })
     }
 
+    /// An update on trial that cannot work on this device (an X3 whose
+    /// display it does not drive, see `main`): marked bad, and the device
+    /// starts again into the firmware before it, as after a failed trial.
+    /// Nothing where none is on trial.
+    #[cfg_attr(not(feature = "x3"), expect(dead_code, reason = "the X3's"))]
+    pub fn give_up(&mut self, why: &str) {
+        if self.trial.take().is_none() {
+            return;
+        }
+        warn!("OTA: {why}: back to the firmware before");
+        if self.mark(State::Invalid, 0).is_err() {
+            warn!("OTA: could not mark the update as bad");
+        }
+        esp_hal::system::software_reset();
+    }
+
     /// Whether the running firmware is on trial (an update not yet run
     /// [`TRIAL_MS`]).
     pub fn on_trial(&self) -> bool {

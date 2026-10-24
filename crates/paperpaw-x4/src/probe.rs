@@ -65,6 +65,11 @@ const REV: u8 = 0x70;
 
 /// How long after the reset the controller is asked.
 const AFTER_RESET_MS: u32 = 30;
+/// How long the reset is held: as tried on the X4 and the X4 Pro, and as
+/// the stock firmware of the X4 Classic and the X3 holds it (the FreeInk
+/// SDK's `XteinkDetect`, Papyrix's `X4ClassicDisplayProbe`).
+pub const RESET_MS: u32 = 10;
+pub const STOCK_RESET_MS: u32 = 50;
 /// The longest an UltraChip that answered takes to come to rest (it loads
 /// its settings after a reset): the stock firmware's limit.
 const SETTLE_MS: u32 = 300;
@@ -127,6 +132,20 @@ impl Probe {
     }
 }
 
+/// The controller the factory wrote down for the panel (the factory NVS's
+/// `hw_calib`, `screenType`, see [`nvs`](crate::nvs)), as the X4
+/// Classic's stock firmware reads it: 1 and 0x0B a UC8179, 2 and 0x0C a
+/// UC8279, 3 an SSD1677 (the FreeInk SDK's `XteinkDetect`, Papyrix's
+/// `X4ClassicPanelPolicy`, MIT); other values name none.
+pub fn factory_controller(screen_type: i64) -> Option<Controller> {
+    match screen_type {
+        1 | 0x0B => Some(Controller::Uc8179),
+        2 | 0x0C => Some(Controller::Uc8279),
+        3 => Some(Controller::Ssd1677),
+        _ => None,
+    }
+}
+
 impl fmt::Display for Probe {
     /// For the log, all a bug report needs: e.g. `UC8179 (FLG 13, REV 00
     /// 00 01 FF FF, BUSY high at rest)`.
@@ -144,12 +163,14 @@ impl fmt::Display for Probe {
     }
 }
 
-/// Resets the controller and asks which it is; the lines are left as
-/// they were set up (the data line driven, the chip not selected).
-/// Takes some 30 ms, or up to 300 ms more for an UltraChip still starting.
+/// Resets the controller (held `reset_ms`, [`RESET_MS`] or
+/// [`STOCK_RESET_MS`]) and asks which it is; the lines are left as they
+/// were set up (the data line driven, the chip not selected). Takes some
+/// 30 ms more, or up to 300 ms more for an UltraChip still starting.
 pub fn probe<CLK, SDA, CS, DC, RST, BUSY, D>(
     lines: &mut Lines<CLK, SDA, CS, DC, RST, BUSY>,
     delay: &mut D,
+    reset_ms: u32,
 ) -> Probe
 where
     CLK: OutputPin,
@@ -164,7 +185,7 @@ where
     let _ = lines.clock.set_low();
     let _ = lines.dc.set_low();
     let _ = lines.data.set_low();
-    for (high, ms) in [(true, 10), (false, 10), (true, AFTER_RESET_MS)] {
+    for (high, ms) in [(true, 10), (false, reset_ms), (true, AFTER_RESET_MS)] {
         let _ = if high {
             lines.reset.set_high()
         } else {
@@ -429,6 +450,10 @@ mod tests {
     }
 
     fn run(panel: Panel) -> (Probe, Shared) {
+        run_held(panel, RESET_MS)
+    }
+
+    fn run_held(panel: Panel, reset_ms: u32) -> (Probe, Shared) {
         let shared = Rc::new(RefCell::new(panel));
         let pin = |line| Pin(shared.clone(), line);
         let mut lines = Lines {
@@ -439,7 +464,7 @@ mod tests {
             reset: pin(Line::Reset),
             busy: pin(Line::Busy),
         };
-        let probe = probe(&mut lines, &mut Delay(shared.clone()));
+        let probe = probe(&mut lines, &mut Delay(shared.clone()), reset_ms);
         (probe, shared)
     }
 
@@ -532,6 +557,22 @@ mod tests {
             rev: [0xFF; 5],
         };
         assert_eq!(one.controller(), None);
+    }
+
+    #[test]
+    fn the_stock_reset_is_held_longer() {
+        let (probe, panel) = run_held(ssd1677(), STOCK_RESET_MS);
+        assert_eq!(probe.controller(), Some(Controller::Ssd1677));
+        assert!(panel.borrow().now_us >= 90_000);
+    }
+
+    #[test]
+    fn the_factory_names_its_controller() {
+        assert_eq!(factory_controller(1), Some(Controller::Uc8179));
+        assert_eq!(factory_controller(0x0C), Some(Controller::Uc8279));
+        assert_eq!(factory_controller(3), Some(Controller::Ssd1677));
+        assert_eq!(factory_controller(0), None);
+        assert_eq!(factory_controller(-1), None);
     }
 
     #[test]

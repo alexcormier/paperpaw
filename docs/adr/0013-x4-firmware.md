@@ -170,3 +170,19 @@ all, which the sources name differently), the screen's turning, the card,
 the battery's charge (the gauge may need its battery profile, which the
 stock firmware writes), whether the charging pin reads as on the X4 Pro,
 sleep and waking by the power button.
+
+Update (2026-10-25), after a cross-check of the board with the FreeInk
+SDK (44427f8d) and Papyrix (fb09e50f): where both agree, the board now
+does as they say, since it cannot be tried. The panel is driven at
+10 MHz as `Device::X4Classic` (the X4 Pro's, but a UC8279 keeps its
+factory frame rate: no PLL command); its controller is the one the
+factory's NVS names (`hw_calib`, `screenType`), else the one that
+answers (its reset held 50 ms, as the stock firmware does), else a
+UC8279, never a blank screen. The charging pin (GPIO 21, no pull) is
+high while charging. The card's power goes off 80 ms and on 120 ms
+before each of up to four starts. In the deep sleep GPIO 1 stays high,
+the panel's reset high and the card's power off, each held; the X4
+Classic has no other off. Its partition table (`partitions-classic.csv`)
+keeps the factory's NVS (0x9000 to 0xE000) whole, the OTA data after it
+at 0xE000. The side buttons stay the FreeInk SDK's (GPIO 0 up); key
+settings swap them if they turn the wrong way.
