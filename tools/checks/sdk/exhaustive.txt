@@ -82,7 +82,6 @@ paperpaw_sdk::PluginInfo
 paperpaw_sdk::Priority
 paperpaw_sdk::SettingCheck
 paperpaw_sdk::Text
-paperpaw_sdk::Version
 paperpaw_sdk::annotations::Annotation
 paperpaw_sdk::annotations::Mark
 paperpaw_sdk::data::Format
