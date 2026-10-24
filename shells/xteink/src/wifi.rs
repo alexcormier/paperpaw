@@ -281,11 +281,17 @@ impl Radio {
         }
     }
 
-    fn start(&mut self) {
-        mark(at::RADIO_SCHEDULER);
+    /// The scheduler the radio's tasks run on, started once (for Wi-Fi,
+    /// or for Bluetooth with the feature `bluetooth`).
+    pub fn start_scheduler(&mut self) {
         if let Some((timer, interrupt)) = self.scheduler.take() {
             esp_rtos::start(timer, interrupt);
         }
+    }
+
+    fn start(&mut self) {
+        mark(at::RADIO_SCHEDULER);
+        self.start_scheduler();
         mark(at::RADIO_DRIVER);
         let peripheral = self.peripheral.take().unwrap_or_else(|| {
             // SAFETY: the radio was on before and is off: its controller,

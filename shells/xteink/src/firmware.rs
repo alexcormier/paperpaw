@@ -279,10 +279,13 @@ impl Firmware {
                     let effects = self.kernel.speech_done(now(), id, false);
                     self.apply(effects);
                 }
-                // Bluetooth comes with the X4 Pro's `bluetooth` feature
-                // (ADR 0027); until then no radio is offered, so none is
-                // asked for.
-                Io::Speech(SpeechCall::Stop) | Io::Copy(_) | Io::Bluetooth(_) => {}
+                #[cfg(feature = "bluetooth")]
+                Io::Bluetooth(call) => self.network.bluetooth(call),
+                // Without the X4 Pro's `bluetooth` feature (ADR 0027) no
+                // radio is offered, so none is asked for.
+                #[cfg(not(feature = "bluetooth"))]
+                Io::Bluetooth(_) => {}
+                Io::Speech(SpeechCall::Stop) | Io::Copy(_) => {}
                 Io::ReadClipboard => {
                     let effects = self.kernel.clipboard_text(now(), None);
                     self.apply(effects);

@@ -210,10 +210,12 @@ constructor (rule 1), errors are typed (rule 2), and builders take
   default): trouble-host on esp-radio's `BleConnector`, polled by the
   main loop as the radio's futures are. Its memory is a budget, not a
   guess:
-  - static: the controller's IRAM (21.6 KB measured) taken from the
-    internal heap at build time, with a check in the firmware's build
-    (from the linker map) that the main stack keeps its size, so the
-    spike's boot loop cannot come back unseen;
+  - static: the controller's IRAM (21.6 KB measured) and the host's
+    static pools taken from the internal heap at build time (160 KB
+    instead of 192 KB with the feature: the main stack has 43.7 KB, 41.3
+    KB without), with a check in the firmware's build (a linker
+    assertion, 36 KB at least) that the main stack keeps its size, so
+    the spike's boot loop cannot come back unseen;
   - while up: the controller's 35.4 KB of internal RAM (measured), and
     the host's pools sized for two links (a remote and one more), an ATT
     MTU of 247 and the discovered services, put in PSRAM where the host
@@ -379,9 +381,14 @@ heart-rate sensor answers it; on the X4 Pro a real belt does.
   given, and pairing is always confirmed on the device.
 - The plugin interface is raised once; code plugins are rebuilt with the
   release that brings it.
-- The X4 Pro pays about 75 KB of flash and, while the radio is up, about
-  35 KB of internal RAM plus the host's pools; the firmware's build
-  checks the stack budget that the spike broke. The plain X4 waits for
+- The X4 Pro pays about 390 KB of flash with the host stack (measured:
+  trouble-host 126 KB, the controller's libraries 83 KB, the shell's
+  Bluetooth code 66 KB, the rest pairing's cryptography and the kernel's
+  part; the spike's raw HCI took 75 KB), 32 KB of internal heap, and,
+  while the radio is up, about 35 KB of internal RAM plus the host's
+  pools; the firmware's build checks the stack budget that the spike
+  broke. In the emulator a connected remote adds nothing measurable to
+  reading's peak (a test keeps it under 8 KiB). The plain X4 waits for
   measurements.
 - Battery is the open risk: the default policy stays manual until light
   sleep with the radio on works and a remote's current is measured.

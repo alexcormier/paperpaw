@@ -151,6 +151,16 @@ the front light (brightness and warmth, in the quick panel), sleep, the
 network as on the X4, the UC8279 of other X4 Pros. To come: battery life
 measured.
 
+Bluetooth (ADR 0027) is built with the feature `bluetooth`, not yet by
+default: scanning, connecting, GATT reads, writes and notifications,
+pairing confirmed on the reader, and a remote's keys. Advertising and
+the GATT server come later.
+
+```sh
+cargo +esp x4pro-bt       # build
+cargo +esp x4pro-bt-run   # flash and show the log
+```
+
 ## The X4 Classic
 
 Experimental: released with the others (`paperpaw-x4-classic-<version>.bin`),

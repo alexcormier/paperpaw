@@ -99,6 +99,8 @@ pub struct Network {
     /// A try to set the clock failed since the radio came online: secure
     /// requests no longer wait for it.
     sync_failed: bool,
+    #[cfg(feature = "bluetooth")]
+    bluetooth: crate::bluetooth::Bluetooth,
 }
 
 impl Network {
@@ -115,12 +117,26 @@ impl Network {
             sync: Sync::Idle { not_before: 0 },
             synced: None,
             sync_failed: false,
+            #[cfg(feature = "bluetooth")]
+            bluetooth: crate::bluetooth::Bluetooth::new(),
         }
     }
 
-    /// The radio is on: its tasks need the processor (no light sleep).
+    /// A radio is on: its tasks need the processor (no light sleep).
     pub fn radio_on(&self) -> bool {
+        #[cfg(feature = "bluetooth")]
+        if self.bluetooth.is_on() {
+            return true;
+        }
         self.radio.is_on()
+    }
+
+    /// What the kernel asks of Bluetooth (`Io::Bluetooth`), on the
+    /// scheduler Wi-Fi shares.
+    #[cfg(feature = "bluetooth")]
+    pub fn bluetooth(&mut self, call: paperpaw_core::BtCall) {
+        let radio = &mut self.radio;
+        self.bluetooth.apply(call, || radio.start_scheduler());
     }
 
     /// The host name the router lists the device by, from the next time
@@ -156,6 +172,10 @@ impl Network {
             #[cfg(feature = "remote")]
             self.answer_asked(kernel, &event);
             effects.push(kernel.wifi_event(now, event));
+        }
+        #[cfg(feature = "bluetooth")]
+        for report in self.bluetooth.poll() {
+            effects.push(kernel.bluetooth_event(now, report));
         }
         self.serve(kernel, now, &mut effects);
         self.sync_clock(now);
