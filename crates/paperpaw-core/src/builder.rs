@@ -400,6 +400,11 @@ impl BuilderParts {
         kernel.apply_status_font();
         kernel.validate();
         kernel.rebuild_keymap();
+        // Memory given back before the language is read in: its catalogs
+        // are the largest allocations of a start, and a registry that
+        // shrinks needs the new and the old room at once, so each is
+        // done while the other is not there.
+        kernel.shrink_to_fit();
         kernel.apply_display_settings();
         kernel.settle();
         kernel

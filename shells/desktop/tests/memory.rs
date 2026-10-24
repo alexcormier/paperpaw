@@ -182,6 +182,29 @@ fn stays_within_budget(name: &str, profile: &str, book: &str) -> Heap {
     budgeted
 }
 
+/// The language catalogs are read in once the registries have given back
+/// what they reserved, not before: German (longer texts than English)
+/// starts within the peak of English, so a budget that fits English fits
+/// it.
+#[test]
+fn starting_in_german_peaks_no_higher_than_in_english() {
+    let peak = |language: &str| {
+        let language = format!("core.language={language}");
+        heap(&emulator(
+            "x4-start",
+            "xteink-x4",
+            None,
+            &["--set", &language, "--script", "wait:300"],
+        ))
+        .peak
+    };
+    let (english, german) = (peak("en"), peak("de"));
+    assert!(
+        german <= english + 0.05,
+        "start: peak {german} KiB in German, {english} KiB in English"
+    );
+}
+
 #[test]
 fn reading_an_epub_stays_within_the_x4_budget() {
     let heap = stays_within_budget("x4-epub", "xteink-x4", "books/alice-in-wonderland.epub");
