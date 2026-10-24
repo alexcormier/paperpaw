@@ -32,7 +32,8 @@ pub trait ScreenMaker {
         None
     }
 
-    /// Every screen offered for slot `slot`, in the order offered.
+    /// Every screen offered for slot `slot`: the highest priority first,
+    /// those of one priority in the order offered.
     fn slot_screens(&self, slot: &str) -> Vec<&Id> {
         let _ = slot;
         Vec::new()

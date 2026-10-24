@@ -1,5 +1,5 @@
 //! The diagnostics screen with the real kernel, judged by what it draws:
-//! it is the home screen until another plugin binds one, a page turned
+//! it is the home screen only where the user binds it, a page turned
 //! moves the progress bar and stops at the last page and the first,
 //! confirm and a tap check a box and check it off again, a long confirm
 //! (its own key binding) resets it all, and the number of pages comes
@@ -57,8 +57,12 @@ struct Device {
 }
 
 impl Device {
+    /// With its screen as the home screen, chosen as a user would.
     fn new(config: &str) -> Self {
-        Self::with(config, None)
+        Self::with(
+            &format!("[slots]\ncore.home = diagnostics.screen\n{config}"),
+            None,
+        )
     }
 
     fn with(config: &str, home: Option<OtherHome>) -> Self {
@@ -183,10 +187,12 @@ fn bottom() -> std::ops::Range<usize> {
     usize::from(HEIGHT) * 9 / 10..usize::from(HEIGHT)
 }
 
+/// It binds no slot: a firmware that brings it along never offers it as
+/// the home screen.
 #[test]
-fn it_is_the_home_screen_until_another_is_bound() {
-    let device = Device::new("");
-    assert_eq!(
+fn it_is_the_home_screen_only_where_the_user_binds_it() {
+    let device = Device::with("", None);
+    assert_ne!(
         device.kernel.active_screen().map(Id::as_str),
         Some("diagnostics.screen")
     );

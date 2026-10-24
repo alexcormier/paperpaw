@@ -113,8 +113,8 @@ fn slots_and_bindings_are_readable() {
         .into_iter()
         .map(Id::as_str)
         .collect();
-    // The kernel's own placeholder first, then the plugins' in order.
-    assert_eq!(offered, ["core.placeholder", "a.screen", "b.screen"]);
+    // The highest priority first: the kernel's own placeholder last.
+    assert_eq!(offered, ["b.screen", "a.screen", "core.placeholder"]);
     let mut bindings = kernel.shared.keymap.bindings("weather.screen");
     bindings.sort_by(|a, b| a.0.cmp(&b.0));
     assert_eq!(

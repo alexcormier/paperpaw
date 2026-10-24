@@ -15,6 +15,11 @@ change the plugin SDK.
 
 ### Fixed
 
+- After an update the device no longer asks whether to make Diagnostics
+  (or any screen bound only as a fallback) the home screen: Diagnostics
+  binds no slot, and a newly offered screen is asked about only where it
+  binds the slot as high as the one in use. `Env::slot_screens` lists
+  the highest priority first.
 - At the largest interface text on small screens the notes of About,
   Keys, News, a catalog's fields, Plugins, Profiles, Cards and Wi-Fi
   show whole.

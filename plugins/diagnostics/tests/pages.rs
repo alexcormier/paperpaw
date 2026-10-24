@@ -46,8 +46,10 @@ struct Test {
 
 impl Test {
     fn new(touch: bool) -> Self {
+        // Its screen as the home screen, chosen as a user would.
         let mut kernel = Kernel::builder(device(touch))
             .storage(MemoryStorage::new())
+            .user_config("[slots]\ncore.home = diagnostics.screen\n")
             .plugin(paperpaw_plugin_fonts_default::DefaultFonts)
             .plugin(Diagnostics)
             .build()

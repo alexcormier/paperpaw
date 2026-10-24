@@ -1,6 +1,7 @@
 //! *Screens* with the real kernel: a slot two plugins offer a screen for
 //! is listed, a plugin chosen for it is used and kept in `[slots]`, and
-//! *Automatic* goes back to the plugins' order.
+//! *Automatic* goes back to the plugins' order; a screen newly offered
+//! is asked about only where it binds the slot as high as the one used.
 
 #![allow(
     clippy::unwrap_used,
@@ -8,7 +9,7 @@
     reason = "tests panic on purpose when something is wrong"
 )]
 
-use paperpaw_core::Kernel;
+use paperpaw_core::{Kernel, KernelBuilder};
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_plugin_manager::PluginManager;
 use paperpaw_sdk::builtin::{CONFIG_FILE, actions, slots};
@@ -58,14 +59,66 @@ impl Plugin for Home {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        let screen = Id::parse(&format!("{}.home", self.0)).unwrap();
-        r.add_screen(ScreenSpec::new(
-            screen.clone(),
-            "home",
-            Box::new(|_, _| Box::new(Blank)),
-        ))?;
-        r.bind_slot(slots::HOME, screen, Priority::DEFAULT)
+        bind_home(r, self.0, Priority::DEFAULT)
     }
+}
+
+/// A plugin offering a home screen only where there is no other.
+struct Fallback(&'static str, &'static str);
+
+impl Plugin for Fallback {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static(self.0), self.1, Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        bind_home(r, self.0, Priority::FALLBACK)
+    }
+}
+
+fn bind_home(r: &mut Registrar, plugin: &str, priority: Priority) -> Result<(), RegisterError> {
+    let screen = Id::parse(&format!("{plugin}.home")).unwrap();
+    r.add_screen(ScreenSpec::new(
+        screen.clone(),
+        "home",
+        Box::new(|_, _| Box::new(Blank)),
+    ))?;
+    r.bind_slot(slots::HOME, screen, priority)
+}
+
+/// A kernel started with `plugins` beside the manager, its last start
+/// having seen no slot with several screens (as after an update that
+/// brings a plugin along).
+fn started(plugins: impl FnOnce(KernelBuilder) -> KernelBuilder) -> Kernel {
+    let known = format!("{}/screens.txt", Env::plugin_dir("plugin-manager"));
+    let builder = Kernel::builder(DEVICE)
+        .storage(MemoryStorage::new().with(&known, ""))
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(PluginManager);
+    let mut kernel = plugins(builder).build().unwrap();
+    kernel.start(Instant(0));
+    kernel
+}
+
+#[test]
+fn a_new_fallback_is_not_offered_for_the_slot() {
+    let mut kernel = started(|b| {
+        b.plugin(Home("first", "First"))
+            .plugin(Fallback("low", "Low"))
+    });
+    let shown = shown(&mut kernel);
+    assert!(!shown.contains("now?"), "{shown}");
+}
+
+#[test]
+fn a_new_screen_bound_as_high_is_offered_once() {
+    let mut kernel = started(|b| {
+        b.plugin(Home("first", "First"))
+            .plugin(Home("second", "Second"))
+    });
+    let shown = shown(&mut kernel);
+    assert!(shown.contains("now?"), "{shown}");
 }
 
 fn shown(kernel: &mut Kernel) -> String {

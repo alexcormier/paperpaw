@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-diagnostics"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -210,7 +210,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-profiles"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
