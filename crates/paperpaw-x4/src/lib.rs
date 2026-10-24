@@ -40,4 +40,5 @@ pub mod provision;
 pub mod remote;
 pub mod sent;
 pub mod sntp;
+pub mod stall;
 pub mod uc8179;

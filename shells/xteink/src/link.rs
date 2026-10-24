@@ -17,6 +17,8 @@ const READ_PART: usize = 1024;
 pub struct Link {
     pub socket: SocketHandle,
     tls: Option<Box<tls::Session>>,
+    /// Some bytes came over the connection (see `paperpaw_x4::stall`).
+    received: bool,
 }
 
 /// What receiving brought.
@@ -39,7 +41,16 @@ impl Link {
     /// Over the open socket `socket`, with TLS if given a session (made
     /// first: it takes the most memory).
     pub fn new(socket: SocketHandle, tls: Option<Box<tls::Session>>) -> Self {
-        Self { socket, tls }
+        Self {
+            socket,
+            tls,
+            received: false,
+        }
+    }
+
+    /// Whether any byte came over the connection.
+    pub fn received(&self) -> bool {
+        self.received
     }
 
     /// Moves the encrypted bytes between the socket and TLS, and TLS's
@@ -62,6 +73,7 @@ impl Link {
             if got == 0 {
                 break;
             }
+            self.received = true;
         }
         if tcp_ended(socket) {
             session.ended();
@@ -90,11 +102,17 @@ impl Link {
         let socket = net.socket(self.socket);
         let state = socket.state();
         let (rx, tx) = (socket.recv_queue(), socket.send_queue());
+        let to = socket
+            .remote_endpoint()
+            .map(|to| alloc::format!("{to}"))
+            .unwrap_or_default();
+        let received = self.received;
         match &self.tls {
-            None => alloc::format!("tcp {state} rx {rx} tx {tx}"),
-            Some(session) => {
-                alloc::format!("tcp {state} rx {rx} tx {tx}, tls {}", session.describe())
-            }
+            None => alloc::format!("tcp {state} to {to} rx {rx} tx {tx} received {received}"),
+            Some(session) => alloc::format!(
+                "tcp {state} to {to} rx {rx} tx {tx} received {received}, tls {}",
+                session.describe()
+            ),
         }
     }
 
@@ -144,6 +162,7 @@ impl Link {
                         })
                         .map_err(|_| "connection lost")?;
                     moved = true;
+                    self.received = true;
                 }
                 if more() && tcp_ended(socket) {
                     return Ok(Received::Closed);

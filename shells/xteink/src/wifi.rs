@@ -103,6 +103,8 @@ pub struct Radio {
     on: Option<On>,
     /// Switch off once the task going on is done.
     stopping: bool,
+    /// Start anew once the task going on is done ([`Radio::restart`]).
+    restarting: bool,
     /// The state last reported.
     reported: WifiState,
     /// What to report.
@@ -153,6 +155,7 @@ impl Radio {
             peripheral: Some(parts.wifi),
             on: None,
             stopping: false,
+            restarting: false,
             reported: WifiState::Off,
             events: Vec::new(),
             host: None,
@@ -290,8 +293,14 @@ impl Radio {
                 on.ssid = None;
             }
         }
-        if self.stopping && matches!(self.on.as_ref().map(|on| &on.work), Some(Work::Idle(_))) {
+        let idle = matches!(self.on.as_ref().map(|on| &on.work), Some(Work::Idle(_)));
+        if self.stopping && idle {
             self.stop();
+        } else if self.restarting && idle {
+            self.restarting = false;
+            log::info!("wifi: starting anew");
+            self.stop();
+            self.start();
         }
         self.next_task();
         self.report();
@@ -475,6 +484,16 @@ impl Radio {
             // On and Off, and a command to come: nothing to do here.
             _ => Box::pin(async move { (Outcome::Left, controller) }),
         });
+    }
+
+    /// Starts the radio anew, once the task going on is done: the driver
+    /// dropped and made again, with what was stuck in it (a connection
+    /// that got no answer at all, `paperpaw_x4::stall`). Reported as on and
+    /// not joined, the network is joined again as after a link lost.
+    pub fn restart(&mut self) {
+        if self.on.is_some() && !self.stopping {
+            self.restarting = true;
+        }
     }
 
     /// Switches the radio off: the driver dropped, the radio powered down.

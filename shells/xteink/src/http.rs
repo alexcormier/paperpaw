@@ -34,6 +34,9 @@ const MAX_REDIRECTS: u32 = 10;
 const FILE_BUF: usize = 4096;
 /// Bytes of an error's body kept (its reason) where a file was asked for.
 const ERROR_BODY: usize = 4096;
+/// A connection that stalled without a byte of the answer
+/// (`paperpaw_x4::stall`).
+const SILENT: &str = "no answer";
 
 fn now_ms() -> u64 {
     esp_hal::time::Instant::now()
@@ -111,12 +114,17 @@ struct Call {
     deadline: u64,
     /// A later call saves to the same file: this one ends unanswered.
     replaced: bool,
+    /// Made once more after its connection stalled without an answer.
+    again: bool,
 }
 
 /// The requests going on.
 #[derive(Default)]
 pub struct Calls {
     calls: Vec<Call>,
+    /// A connection stalled without an answer: the radio starts anew
+    /// before its request is made once more ([`Calls::take_restart`]).
+    restart: bool,
 }
 
 impl Calls {
@@ -156,7 +164,14 @@ impl Calls {
             until: now_ms() + OFFLINE_MS,
             deadline,
             replaced: false,
+            again: false,
         });
+    }
+
+    /// Whether the radio is to start anew (once taken, until a connection
+    /// stalls again without an answer).
+    pub fn take_restart(&mut self) -> bool {
+        core::mem::take(&mut self.restart)
     }
 
     /// How far the successful answers of requests that ask for it
@@ -221,6 +236,24 @@ impl Calls {
                 None => Some(Err("no network")),
                 Some(net) => call.step(net, storage, may_open),
             };
+            if let Some(Err(SILENT)) = outcome
+                && paperpaw_x4::stall::stalled(false, call.again)
+                    == paperpaw_x4::stall::Stalled::Again
+            {
+                // Once more, on the radio started anew (nothing of the
+                // answer came, so nothing is to be let go of the body).
+                log::warn!("http: no answer at all; the radio starts anew, then once more");
+                if let Some(net) = net.as_deref_mut() {
+                    call.stop(net);
+                }
+                call.again = true;
+                let now = now_ms();
+                call.until = now + OFFLINE_MS;
+                call.deadline = now + u64::from(call.call.timeout_ms);
+                self.restart = true;
+                at += 1;
+                continue;
+            }
             match outcome {
                 None => at += 1,
                 Some(result) => {
@@ -373,12 +406,13 @@ impl Call {
             None
         } else if now > self.until {
             log::warn!(
-                "http: stalled, {} sent {}/{}",
+                "http: stalled, {} sent {}/{}, heap {}",
                 link.describe(net),
                 sent,
-                request.len() + body.len()
+                request.len() + body.len(),
+                heap()
             );
-            Some(Err("timed out"))
+            Some(Err(if link.received() { "timed out" } else { SILENT }))
         } else {
             None
         }
@@ -524,13 +558,34 @@ impl Call {
     }
 }
 
+/// The heap's free bytes by region (internal RAM, PSRAM), for the log.
+fn heap() -> String {
+    let stats = esp_alloc::HEAP.stats();
+    let mut text = String::new();
+    for region in stats.region_stats.iter().flatten() {
+        let external = region
+            .capabilities
+            .contains(esp_alloc::MemoryCapability::External);
+        text.push_str(&alloc::format!(
+            "{}{} free of {}",
+            if text.is_empty() { "" } else { ", " },
+            region.free,
+            region.size
+        ));
+        if external {
+            text.push_str(" (PSRAM)");
+        }
+    }
+    text
+}
+
 /// What kind of failure `reason` is: of this module's texts, the
 /// connection's ([`Link`]) and the secure session's.
 fn error_of(reason: &str) -> HttpError {
     match reason {
         "no network" => HttpError::NoNetwork,
         "no such host" | "not an address" => HttpError::Dns,
-        "timed out" => HttpError::Timeout,
+        "timed out" | SILENT => HttpError::Timeout,
         "could not connect" | "too many redirects" | "too large" => HttpError::Refused,
         _ if reason.contains("certificate") || reason.contains("secure") => HttpError::Tls,
         _ => HttpError::Io,

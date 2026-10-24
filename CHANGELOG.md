@@ -28,6 +28,11 @@ change the plugin SDK.
   update ran its 30 seconds of trial, which go without them, the X4s
   start again, at once or once the book open is left. Before, an update
   that kept the plugins' builds left them off until the next start.
+- A download that gets no answer at all (seen with updates on the X4
+  and the X4 Pro: connected, then nothing until a restart) is made once
+  more after the X4s start their radio anew, instead of failing with
+  "The update could not be downloaded". Its log line says where it was
+  connected and how much memory was free.
 
 ## [0.5.0-beta.3] - 2026-10-24
 
