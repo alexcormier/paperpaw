@@ -407,8 +407,12 @@ impl Screen for Calendar {
             .map_or(0, |today| totals::streak(&self.days, today));
         let note =
             (streak > 1).then(|| env.i18n.plural("stats.streak-note", i64::from(streak), &[]));
-        self.header
-            .draw(canvas, env, &style, title, note.as_deref(), None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            note.as_deref(),
+            None,
+        );
         if self.today.is_none() && self.days.is_empty() {
             // No day to show: neither today nor one read.
             let area = Rect::new(

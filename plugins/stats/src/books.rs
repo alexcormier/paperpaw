@@ -57,8 +57,12 @@ impl Screen for BookList {
         let style = self.style;
         let len = self.books.len();
         let title = env.i18n.tr("stats.books");
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
         if len == 0 {
             ui::draw_message(
                 canvas,
@@ -70,8 +74,11 @@ impl Screen for BookList {
             return;
         }
         let books = &self.books;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (book, seconds) = &books[index];
                 let mut note = authors(&book.authors);
                 if book.last_open > 0 {
@@ -96,7 +103,8 @@ impl Screen for BookList {
                     &value,
                     &note,
                 );
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

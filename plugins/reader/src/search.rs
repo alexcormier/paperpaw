@@ -307,9 +307,7 @@ impl Screen for SearchScreen {
         let title = format!("„{}“", self.query);
         let note = self.header_note(env);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             &title,
             Some(&note),
             self.list.paging(len),
@@ -325,15 +323,19 @@ impl Screen for SearchScreen {
             return;
         }
         let hits = &self.hits;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let hit = &hits[index];
                 let note = env.i18n.format(
                     "reader.percent",
                     &[("percent", Arg::Int(i64::from(hit.percent)))],
                 );
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &hit.snippet, "", &note);
-            });
+            },
+        );
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

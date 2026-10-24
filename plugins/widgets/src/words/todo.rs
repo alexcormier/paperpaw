@@ -739,9 +739,7 @@ impl Screen for TodoScreen {
         let style = self.style;
         let len = self.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("widgets.todo"),
             None,
             self.list.paging(len),
@@ -750,8 +748,11 @@ impl Screen for TodoScreen {
             return;
         };
         let items = &self.items;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, row, rect, focused| {
+                let canvas = ui.canvas();
                 let (ink, paper) = (style.focus_ink(focused), style.focus_paper(focused));
                 let margin = style.margin();
                 let inner = Rect::new(
@@ -799,7 +800,8 @@ impl Screen for TodoScreen {
                         &look,
                     );
                 }
-            });
+            },
+        );
         if self.items.is_empty() {
             let key = if self.unreadable {
                 "widgets.todo.unreadable"

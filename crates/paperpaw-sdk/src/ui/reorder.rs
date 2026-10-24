@@ -142,7 +142,9 @@ impl Reorder {
 
     /// Draws, while a row is moved, a frame around it and a bar where it
     /// would land.
-    pub fn draw(&self, canvas: &mut Canvas<'_>, style: &UiStyle, list: &ListView) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>, list: &ListView) {
+        let style = ui.style();
+        let canvas = ui.canvas();
         let Some(Drag { from, to, .. }) = self.drag else {
             return;
         };
@@ -256,6 +258,8 @@ mod tests {
         reorder.on_pointer(&event(PointerPhase::Move, 150, 150), &list, 4);
         assert_eq!(reorder.dragging(), Some((2, 1)));
         list.set_focus(2);
+        let kit = crate::test_kit::Kit::new(false);
+        let env = kit.env();
         let mut fb = Framebuffer::new(200, 200, PixelFormat::Gray8).unwrap();
         let mut canvas = fb.canvas();
         let style = crate::ui::UiStyle {
@@ -264,6 +268,6 @@ mod tests {
             ..crate::ui::tests::STYLE
         };
         // Row 1 is on the page before: no underflow, no bar.
-        reorder.draw(&mut canvas, &style, &list);
+        reorder.draw(&mut crate::ui::Ui::new(&mut canvas, &env, &style), &list);
     }
 }

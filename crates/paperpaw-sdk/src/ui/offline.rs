@@ -21,11 +21,13 @@
 //! ```
 
 use crate::builtin::actions;
-use crate::power::PowerLevel;
 use crate::gesture::{Gesture, GestureKind};
-use crate::{Canvas, Command, Cx, Env, Id, Rect};
+use crate::power::PowerLevel;
+use crate::{Command, Cx, Env, Id, Rect};
 
-use super::{Response, UiStyle, button_height, button_height_for, draw_button, draw_empty, empty_height};
+use super::{
+    Response, UiStyle, button_height, button_height_for, draw_button, draw_empty, empty_height,
+};
 
 /// The keys of its buttons' words, *Go online* first.
 const BUTTONS: [&str; 2] = ["core.offline.go-online", "core.offline.not-now"];
@@ -119,7 +121,9 @@ impl OfflineOffer {
 
     /// Draws it in `area`: what it is about, as an empty screen says it,
     /// and the two buttons below, *Go online* first.
-    pub fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    pub fn draw(&mut self, ui: &mut super::Ui<'_>, area: Rect) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         let buttons = Buttons::new(env, style, area.width);
         let gap = style.gap as u16 * 2;
         let text = Rect::new(

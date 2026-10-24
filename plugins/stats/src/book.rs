@@ -102,7 +102,12 @@ impl Screen for BookView {
         let style = self.style;
         let display = env.device.display;
         let title = self.book.as_ref().map_or("", |b| b.title.as_str());
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            None,
+        );
         let top = self.header.area().height + style.gap();
         let Some(book) = &self.book else {
             let area = Rect::new(0, top, display.width, display.height - top);

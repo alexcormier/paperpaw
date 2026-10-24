@@ -289,13 +289,13 @@ impl Header {
     /// page shown and the number of pages).
     pub fn draw(
         &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        style: &UiStyle,
+        ui: &mut super::Ui<'_>,
         title: &str,
         note: Option<&str>,
         page: Option<Paging>,
     ) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         // Without arrows to page with, the page number gives way where the
         // title is not whole beside it.
         let page = page.filter(|_| self.arrows || self.title_whole(env, style, title, page));
@@ -485,7 +485,9 @@ impl Pager {
     }
 
     /// Draws `page` of its pages.
-    pub fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, page: Paging) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>, page: Paging) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         let a = self.area;
         canvas.fill(a, Color::WHITE);
         if style.separators != Separators::None {

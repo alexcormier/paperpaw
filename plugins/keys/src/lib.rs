@@ -621,9 +621,7 @@ impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("keys.title"),
             None,
             Some(self.rows.paging()),
@@ -633,8 +631,11 @@ impl Screen for ListScreen {
         let entries = &self.entries;
         let room = ui::icon_room(env, &style, true);
         let shown = ui::focus_shown(env);
-        self.rows
-            .draw(canvas, &style, shown, |canvas, index, rect, focused| {
+        self.rows.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            shown,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let ink = style.focus_ink(focused);
                 match &entries[index] {
                     Row::Heading(key) => {
@@ -694,7 +695,8 @@ impl Screen for ListScreen {
                         ui::draw_noted_row(canvas, env, &style, rect, focused, title, "", note);
                     }
                 }
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -837,18 +839,20 @@ impl Screen for PlaceScreen {
         let style = self.style;
         let len = self.places.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("keys.place"),
             None,
             self.list.paging(len),
         );
         let places = &self.places;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 ui::draw_value_row(canvas, env, &style, rect, focused, &places[index].title, "");
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -1066,9 +1070,7 @@ impl Screen for PickScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             &self.title,
             None,
             Some(self.rows.paging()),
@@ -1077,8 +1079,11 @@ impl Screen for PickScreen {
         let query = &self.query;
         let room = ui::icon_room(env, &style, true);
         let shown = ui::focus_shown(env);
-        self.rows
-            .draw(canvas, &style, shown, |canvas, index, rect, focused| {
+        self.rows.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            shown,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let ink = style.focus_ink(focused);
                 match &entries[index] {
                     Pick::Heading(key) => {
@@ -1105,7 +1110,8 @@ impl Screen for PickScreen {
                         ui::draw_value_row(canvas, env, &style, rect, focused, name, "");
                     }
                 }
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

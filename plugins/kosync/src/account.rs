@@ -264,13 +264,18 @@ impl Screen for AccountScreen {
         let rows = self.rows(env);
         self.list.set_len(rows.len());
         let title = env.i18n.tr("kosync.group");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            None,
+        );
         let i18n = env.i18n;
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let url = server(env);
                 let (title, value) = match rows[index] {
                     Row::Server => (i18n.tr("kosync.server"), server_label(&url).to_string()),

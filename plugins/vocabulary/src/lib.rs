@@ -519,9 +519,7 @@ impl Screen for WordsScreen {
         let style = self.style;
         let len = self.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("vocabulary.title"),
             None,
             self.list.paging(len),
@@ -540,8 +538,11 @@ impl Screen for WordsScreen {
         }
         let count = self.count;
         let visible = &self.visible;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, row, rect, focused| {
+                let canvas = ui.canvas();
                 if row == count {
                     let title = env.i18n.tr("vocabulary.export");
                     let note = env.i18n.tr("vocabulary.export.help");
@@ -557,7 +558,8 @@ impl Screen for WordsScreen {
                     word.sentence.as_str()
                 };
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &word.word, "", note);
-            });
+            },
+        );
     }
 
     /// Back from a book or a lookup: with the words looked up meanwhile.

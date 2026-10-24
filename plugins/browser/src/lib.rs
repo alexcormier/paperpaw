@@ -487,19 +487,17 @@ impl Screen for BrowserScreen {
         let style = self.style;
         let rows = self.rows();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("browser.title"),
             None,
             self.list.paging(rows.len()),
         );
         let (bookmarks, history) = (&self.bookmarks, &self.history);
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (title, value) = match rows[index] {
                     Row::Address => (
                         env.i18n.tr("browser.address").to_string(),

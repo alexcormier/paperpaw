@@ -62,6 +62,8 @@ mod formats;
 mod gesture;
 pub mod help;
 pub mod host;
+#[cfg(test)]
+mod test_kit;
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use screen::ScreenMaker;

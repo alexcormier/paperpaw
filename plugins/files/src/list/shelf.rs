@@ -342,9 +342,7 @@ impl Screen for ShelfScreen {
         let style = self.style;
         let len = self.entries.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             &self.title_text,
             None,
             self.list.paging(len),

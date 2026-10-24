@@ -52,7 +52,12 @@ impl Screen for SourceScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("store.source");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            None,
+        );
         let Some(font) = style.font(env) else {
             return;
         };

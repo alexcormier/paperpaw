@@ -668,7 +668,12 @@ impl Screen for CableScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("transfer.cable.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            None,
+        );
         let display = env.device.display;
         let top = self.header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));

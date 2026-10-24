@@ -439,7 +439,12 @@ impl Screen for PhoneScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("vocabulary.phone.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            None,
+        );
         let area = self.content(env);
         match &self.state {
             State::Starting => {

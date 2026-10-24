@@ -116,15 +116,22 @@ impl Screen for DecksScreen {
         let style = self.style;
         let len = self.len();
         let title = env.i18n.tr("vocabulary.cards.title");
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
         let due = env
             .i18n
             .plural("vocabulary.cards.due", self.due as i64, &[]);
         let empty = self.decks.is_empty();
         let decks = &self.decks;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, row, rect, focused| {
+                let canvas = ui.canvas();
                 let (title, note): (&str, String) = match row {
                     REVIEW_ROW => (env.i18n.tr("vocabulary.cards.review"), due.clone()),
                     PHONE_ROW => {
@@ -147,7 +154,8 @@ impl Screen for DecksScreen {
                     },
                 };
                 ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", &note);
-            });
+            },
+        );
     }
 
     /// Back from a review or the phone: the counts as they are now.

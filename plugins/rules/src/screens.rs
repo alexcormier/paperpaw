@@ -290,28 +290,34 @@ impl Screen for RulesScreen {
         let style = self.style;
         let rows = self.rows();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("rules.title"),
             None,
             self.list.paging(rows.len()),
         );
         let rules = &self.rules;
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| match rows[index] {
+            |ui, index, rect, focused| match rows[index] {
                 Row::Rule(i) => {
                     let rule = &rules[i];
                     let title = when_text(env, rule);
                     let note = effect_text(env, &rule.effect);
-                    ui::draw_switch_row(canvas, env, &style, rect, focused, &title, &note, rule.on);
+                    ui::draw_switch_row(
+                        ui.canvas(),
+                        env,
+                        &style,
+                        rect,
+                        focused,
+                        &title,
+                        &note,
+                        rule.on,
+                    );
                 }
                 Row::Add => {
                     let title = env.i18n.tr("rules.add");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "+", "");
+                    ui::draw_noted_row(ui.canvas(), env, &style, rect, focused, title, "+", "");
                 }
             },
         );
@@ -816,18 +822,20 @@ impl Screen for PickScreen {
         let style = self.style;
         let len = self.entries.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             &self.title,
             None,
             self.list.paging(len),
         );
         let entries = &self.entries;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 ui::draw_value_row(canvas, env, &style, rect, focused, &entries[index].1, "");
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

@@ -237,9 +237,7 @@ impl Screen for FontScreen {
         let rows = self.rows(env);
         let title = self.font.as_ref().map_or("", |f| f.name.as_str());
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             title,
             None,
             self.list.paging(rows.len()),
@@ -311,10 +309,10 @@ impl Screen for FontScreen {
         }
         let job = self.job.as_ref();
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (name, value) = FontScreen::row_text(env, job, font, rows[index]);
                 ui::draw_value_row(canvas, env, &style, rect, focused, &name, &value);
             },

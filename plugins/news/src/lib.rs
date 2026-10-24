@@ -547,16 +547,17 @@ impl Screen for FeedsScreen {
         let style = self.style;
         let len = self.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("news.title"),
             None,
             self.list.paging(len),
         );
         let feeds = &self.feeds;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, row, rect, focused| {
+                let canvas = ui.canvas();
                 let (title, value, note) = if row + 1 == len {
                     let note = env.i18n.tr("news.add.help").to_string();
                     (env.i18n.tr("news.add").to_string(), "›", note)
@@ -570,7 +571,8 @@ impl Screen for FeedsScreen {
                     (feed.shown(), "", feed.url.clone())
                 };
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, value, &note);
-            });
+            },
+        );
         if feeds.is_empty() {
             let area = self.list.area();
             let top = area.y + self.list.row() as u16;

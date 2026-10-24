@@ -655,7 +655,12 @@ impl Screen for LockScreen {
             self.draw_clock(canvas, env);
             ui::draw_message(canvas, env, &style, self.layout.title, title);
         } else {
-            self.header.draw(canvas, env, &style, title, None, None);
+            self.header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+                title,
+                None,
+                None,
+            );
         }
         let message = if self.waiting(env) {
             let seconds = self.state.wait_until.get().map_or(0, |until| {
@@ -681,8 +686,11 @@ impl Screen for LockScreen {
         if self.step == Step::Choose {
             let current = code::active(env).unwrap_or_else(|| String::from("off"));
             let kinds = Self::kinds(env);
-            self.kind_list()
-                .draw(canvas, &style, kinds.len(), |canvas, i, row, focused| {
+            self.kind_list().draw(
+                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+                kinds.len(),
+                |ui, i, row, focused| {
+                    let canvas = ui.canvas();
                     let kind = kinds[i];
                     let key = alloc::format!("{KIND_PREFIX}{kind}");
                     let name = env.i18n.tr(&key);
@@ -696,7 +704,8 @@ impl Screen for LockScreen {
                         let ink = style.focus_ink(focused);
                         ui::draw_icon(canvas, env, "check", size, x, row, ink);
                     }
-                });
+                },
+            );
             return;
         }
         match self.kind.as_str() {

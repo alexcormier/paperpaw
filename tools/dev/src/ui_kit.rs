@@ -516,10 +516,18 @@ fn segments(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect)
     // Side by side where every word fits, else in more rows: never cut.
     let tabs = ["ui-kit.tab.books", "ui-kit.tab.shelves", "ui-kit.tab.notes"];
     let row = stack.take(ui::Segments::height_for(env, style, width, &tabs));
-    ui::Segments::fitted(env, style, row, tabs).draw(canvas, env, style, 0, None);
+    ui::Segments::fitted(env, style, row, tabs).draw(
+        &mut paperpaw_sdk::ui::Ui::new(canvas, env, style),
+        0,
+        None,
+    );
     let sizes = ["S", "M", "L", "XL"];
     let row = stack.take(ui::Segments::height_for(env, style, width, &sizes));
-    ui::Segments::fitted(env, style, row, sizes).draw(canvas, env, style, 1, Some(3));
+    ui::Segments::fitted(env, style, row, sizes).draw(
+        &mut paperpaw_sdk::ui::Ui::new(canvas, env, style),
+        1,
+        Some(3),
+    );
 }
 
 /// Cards in each frame, and a grid with the focus on one cell.
@@ -596,7 +604,7 @@ fn share(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
 
 /// The offer to go online, as a screen for the network shows it.
 fn offer(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    ui::offline::OfflineOffer::new().draw(canvas, env, style, area);
+    ui::offline::OfflineOffer::new().draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, style), area);
 }
 
 /// A dialog in the middle of the screen, its first button focused.
@@ -616,7 +624,7 @@ fn dialog(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
     );
     let room = env.device.display.height.saturating_sub(dialog.height());
     dialog.place(room / 2);
-    dialog.draw(canvas, env, style, Some(0));
+    dialog.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, style), Some(0));
 }
 
 /// Text fields and ticked rows.
@@ -669,7 +677,11 @@ fn chips(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let chips_height = ui::Chips::height_for(env, style, inner, &labels);
     let chips_row = stack.take(chips_height + 2 * margin);
     let inside = Rect::new(margin, chips_row.y + margin, inner, chips_height);
-    ui::Chips::new(env, style, inside, labels).draw(canvas, env, style, 1, Some(2));
+    ui::Chips::new(env, style, inside, labels).draw(
+        &mut paperpaw_sdk::ui::Ui::new(canvas, env, style),
+        1,
+        Some(2),
+    );
     let rest = stack.rest();
     let text_area = Rect::new(
         margin,
@@ -680,7 +692,7 @@ fn chips(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let text = env.i18n.tr("ui-kit.long-text");
     let mut view = ui::TextView::new(env, style, text_area, text);
     view.scroll(1);
-    view.draw(canvas, env, style, text);
+    view.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, style), text);
 }
 
 /// A date and a time, the day and the minutes focused.
@@ -689,9 +701,9 @@ fn pickers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) 
     let date = stack.take(ui::DatePicker::height(style));
     let mut picker = ui::DatePicker::new(style, date, paperpaw_sdk::time::Date::new(2026, 10, 22));
     picker.set_focus(0);
-    picker.draw(canvas, env, style);
+    picker.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, style));
     let time = stack.take(ui::TimePicker::height(style));
     let mut picker = ui::TimePicker::new(style, time, paperpaw_sdk::time::Time::new(22, 30));
     picker.set_focus(1);
-    picker.draw(canvas, env, style);
+    picker.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, style));
 }

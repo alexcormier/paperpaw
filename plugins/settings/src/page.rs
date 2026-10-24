@@ -447,10 +447,11 @@ impl GroupPage {
 impl Screen for GroupPage {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
-            .draw(canvas, env, &style, &self.title, None, paging(&self.rows));
+            .draw(&mut ui, &self.title, None, paging(&self.rows));
         if let Some(preview) = &self.preview {
-            preview.draw(canvas, env, &style);
+            preview.draw(ui.canvas(), env, &style);
         }
         let entries = &self.entries;
         let editing = self.edit.active();
@@ -459,34 +460,28 @@ impl Screen for GroupPage {
         let all_lines = &self.lines;
         let touch = env.device.input.touch;
         self.rows
-            .draw(canvas, &style, self.keys, |canvas, index, rect, focused| {
+            .draw(&mut ui, self.keys, |ui, index, rect, focused| {
+                // The rows that are not settings: a row high.
+                let row = Rect::new(rect.x, rect.y, rect.width, style.row());
                 let spec = match &entries[index] {
-                    Row::Heading(title) => {
-                        ui::draw_heading(canvas, env, &style, rect, title);
-                        return;
-                    }
+                    Row::Heading(title) => return ui.heading(rect, title),
                     Row::Reset => {
                         let title = env.i18n.tr("settings.reset-page");
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row());
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
-                        return;
+                        return ui::Row::plain(title).focused(focused).draw(ui, row);
                     }
                     Row::Theme(chooser) => {
                         let title = env.i18n.tr(chooser.title());
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row());
                         let name = super::themes::applied_name(env, *chooser);
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, &name);
-                        return;
+                        return ui::Row::value(title, &name).focused(focused).draw(ui, row);
                     }
                     Row::Action(action) => {
                         let title = env.actions.get(action.as_str()).map_or("", |a| &a.title);
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row());
                         let title = env.i18n.tr(title);
-                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
-                        return;
+                        return ui::Row::plain(title).focused(focused).draw(ui, row);
                     }
                     Row::Setting(spec) => spec,
                 };
+                let canvas = ui.canvas();
                 let title = env.i18n.tr(&spec.title);
                 let note = spec.description.as_deref().map_or("", |d| env.i18n.tr(d));
                 let note = if noted { note } else { "" };
@@ -551,7 +546,10 @@ impl Screen for GroupPage {
         let env = *cx.env();
         if self.edit.active() {
             let spec = self.focused().cloned();
-            return self.edit.on_action(&env, spec.as_ref(), action, cx).handled();
+            return self
+                .edit
+                .on_action(&env, spec.as_ref(), action, cx)
+                .handled();
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
             change.request(cx);

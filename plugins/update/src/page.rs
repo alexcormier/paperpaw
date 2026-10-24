@@ -791,8 +791,12 @@ impl Screen for UpdatePage {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
         let style = self.style;
-        self.header
-            .draw(canvas, env, &style, env.i18n.tr("update.title"), None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            env.i18n.tr("update.title"),
+            None,
+            None,
+        );
         // Within the margins other pages keep, below the header as their
         // content.
         let margin = style.margin();
@@ -842,7 +846,7 @@ impl Screen for UpdatePage {
                 self.help = Some((ui::TextView::new(env, &style, area, &help), area));
             }
             if let Some((view, _)) = &self.help {
-                view.draw(canvas, env, &style, &help);
+                view.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), &help);
             }
             y += area.height + gap * 2;
         }

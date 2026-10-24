@@ -230,7 +230,12 @@ fn the_bar_where_a_row_lands_is_drawn_in_the_list() {
         reorder.on_pointer(&pointer(PointerPhase::Move, x, target.y), &list, 8);
         assert_eq!(reorder.dragging(), Some((from, to)));
         let mut frame = frame(400, 600);
-        reorder.draw(&mut frame.canvas(), &style(), &list);
+        let harness = support::Harness::new(support::Device::BUTTONS);
+        let env = harness.env();
+        reorder.draw(
+            &mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style()),
+            &list,
+        );
         let a = list.area();
         let bound = Rect::new(a.x, a.y - half, a.width, a.height + 2 * half);
         assert_eq!(

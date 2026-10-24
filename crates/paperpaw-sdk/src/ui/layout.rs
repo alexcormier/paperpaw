@@ -430,14 +430,9 @@ impl Segments {
 
     /// Draws the segments, `chosen` on and `focus` (where the focus is on
     /// them) focused.
-    pub fn draw(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        style: &UiStyle,
-        chosen: usize,
-        focus: Option<usize>,
-    ) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>, chosen: usize, focus: Option<usize>) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         for (i, (cell, label)) in self.cells.iter().zip(&self.labels).enumerate() {
             super::draw_button(
                 canvas,

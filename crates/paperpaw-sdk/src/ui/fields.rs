@@ -474,7 +474,9 @@ impl TextView {
     /// Draws the lines shown of `text` (the text it was made of), and on
     /// the right a thin bar where they are in the whole, where there is
     /// more than a page.
-    pub fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, text: &str) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>, text: &str) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         let Some(font) = style.font(env) else {
             return;
         };
@@ -554,7 +556,10 @@ mod tests {
     #[test]
     fn a_text_view_scrolls_by_touch() {
         let mut v = view(25);
-        assert!(v.on_gesture(&gesture(GestureKind::Swipe(Direction::Up), 150)).changed());
+        assert!(
+            v.on_gesture(&gesture(GestureKind::Swipe(Direction::Up), 150))
+                .changed()
+        );
         assert_eq!(v.top(), 10);
         assert!(v.on_gesture(&gesture(GestureKind::Tap, 120)).changed());
         assert_eq!(v.top(), 0);

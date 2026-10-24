@@ -324,10 +324,17 @@ impl Screen for ListScreen {
             .room
             .as_deref()
             .filter(|_| self.index.is_some() && self.paging().is_none());
-        self.header
-            .draw(canvas, env, &style, title, note, self.paging());
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            note,
+            self.paging(),
+        );
         if self.offering(env) {
-            return self.offer.draw(canvas, env, &style, self.area);
+            return self.offer.draw(
+                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+                self.area,
+            );
         }
         if self.list.is_empty() {
             let (icon, title, text) = match self.trouble {
@@ -355,8 +362,11 @@ impl Screen for ListScreen {
             return;
         }
         let room = ui::icon_room(env, &style, true);
-        self.list
-            .draw(canvas, &style, self.keys, |canvas, item, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            self.keys,
+            |ui, item, rect, focused| {
+                let canvas = ui.canvas();
                 let entry = match item {
                     Item::Heading(_) => return,
                     Item::Entry(entry) => entry,
@@ -385,7 +395,8 @@ impl Screen for ListScreen {
                 }
                 let value = self.value(row);
                 ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
-            });
+            },
+        );
     }
 
     fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {

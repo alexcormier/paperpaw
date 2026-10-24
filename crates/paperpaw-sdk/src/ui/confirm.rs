@@ -140,7 +140,10 @@ impl Screen for Confirm {
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        self.dialog.draw(canvas, env, &self.style, Some(self.focus));
+        self.dialog.draw(
+            &mut crate::ui::Ui::new(canvas, env, &self.style),
+            Some(self.focus),
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
