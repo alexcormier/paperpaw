@@ -890,7 +890,7 @@ every view of it.
 
 | What | Standard | |
 |---|---|---|
-| The library to ask | `library::service(env)`, a `trait Library` | A book's details, the catalog's state, queries, the index of all books, finished and favourite. Deleting books: `delete`, `can_delete`. A library of one's own publishes one as `library::service::SERVICE`, with at least `each`, `records` and `version`. |
+| The library to ask | `library::service(env)`, a `trait Library` | A book's details, the catalog's state, queries, the index of all books, finished and favourite. Deleting books: `delete`, `can_delete`. A library of one's own provides a `LibraryService` as `library::service::SERVICE` in `library::service::VERSION`, with at least `each`, `records` and `version`. |
 | Every book, without reading each | `library::catalog` | One line a book: author, title, series, number, tags, how far read, favourite, opened, added, fields. Read in pieces with `each`, `each_at` and `read_at`. |
 | Books found, a page at a time | `catalog::Query`, `query`, `found` | by how far read, words, author, series, tag, folder, added since; sorted by title, author, series or added |
 | All books to sort and filter in memory | `library::index::Index` | 24 bytes a book, at most 2000 on the X4 (48 KB). Kept in a file while a book is open with `save` and `load`. Status changes are taken with `refresh`. |
@@ -917,30 +917,30 @@ library's version (`Library::version`: keys hold only for it,
 ### Services and points of your own
 
 A plugin can offer others more than the kernel knows of. A service is
-any value published under an id in its namespace, usually a trait
-object whose trait the plugin's crate exports; others use it when it is
-there and do without it when not:
+a value provided under an id in its namespace, in a version, usually a
+struct holding a trait object whose trait the plugin's crate exports.
+Its type names its contract in a key, such as `"weather.forecast/1"`,
+written with `service_type!`; the key changes (`/2`) when the type's
+fields do. Others use the service when it is there and do without it
+when not:
 
 ```rust
-// The publishing plugin.
-r.publish(WEATHER, Box::new(Forecast::new()) as Box<dyn Weather>)?;
+// In the providing plugin's crate.
+pub struct Weather(pub Box<dyn Forecast>);
+paperpaw_sdk::service_type!(Weather, "weather.forecast/1");
 
-// Any other plugin, wherever it has an `Env`.
-if let Some(weather) = env.services().get::<Box<dyn Weather>>(WEATHER.as_str()) {
-    let today = weather.today();
+// The providing plugin's `register`.
+r.provide(WEATHER, Weather(Box::new(Today::new())), Version::new(1, 0, 0))?;
+
+// Any other plugin, wherever it has an `Env`: version 1.0 or later.
+if let Some(weather) = env.services().get::<Weather>(WEATHER.as_str(), Version::new(1, 0, 0)) {
+    let today = weather.0.today();
 }
 ```
 
-A service is found by its type's name too, so native code plugins built
-apart from the firmware find it (see *Plugins as files* below), but only
-where the type is made of the SDK's crates, `core` and `alloc` alone
-(`native::CROSSING_CRATES`), whose types the plugin interface keeps as
-they are. A type of a plugin's own crate may be another type of the
-same name in another build, so a service of one implements
-`services::ServiceType`, a key like `"weather.forecast/1"`, raised when
-the type changes. Publish it with `r.provide(id, service, version)`, and
-find it with `env.services().get_typed` or `get_versioned`; its size and
-alignment are then checked.
+A service is found by its key, so native code plugins built apart from
+the firmware find it too (see *Plugins as files* below); its size and
+alignment are checked.
 
 A point is an id a plugin names, with what a contribution there is in
 its documentation (for example one line per entry); others add to it

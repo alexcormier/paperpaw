@@ -1268,7 +1268,7 @@ fn handle(area: Rect, style: &UiStyle) -> Rect {
 mod tests {
     use super::*;
     use crate::test_kit::Kit;
-    use crate::{Output, PointerTool, Setting, SettingSpec, SettingValue};
+    use crate::{Output, PointerTool, SettingSpec, SettingValue};
 
     const CHOSEN: Event<Picked> = Event::new("test.chosen");
 

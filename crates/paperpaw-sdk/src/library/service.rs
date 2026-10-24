@@ -192,11 +192,25 @@ impl Library for Kept {}
 
 static KEPT: Kept = Kept;
 
-/// The library to ask: one a plugin published as [`SERVICE`], else the
+/// A library of a plugin's own, provided as [`SERVICE`] in [`VERSION`]:
+/// `r.provide(Id::new_static(SERVICE), LibraryService(Box::new(mine)), VERSION)`.
+pub struct LibraryService(pub alloc::boxed::Box<dyn Library>);
+crate::service_type!(LibraryService, "core.library/1");
+
+impl core::fmt::Debug for LibraryService {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("LibraryService")
+    }
+}
+
+/// The version of [`Library`] that [`LibraryService`] carries.
+pub const VERSION: crate::Version = crate::Version::new(1, 0, 0);
+
+/// The library to ask: one a plugin provided as [`SERVICE`], else the
 /// kernel's.
 pub fn service<'e>(env: &Env<'e>) -> &'e dyn Library {
-    match env.services.get::<Box<dyn Library>>(SERVICE) {
-        Some(library) => library.as_ref(),
+    match env.services.get::<LibraryService>(SERVICE, VERSION) {
+        Some(library) => library.0.as_ref(),
         None => &KEPT,
     }
 }

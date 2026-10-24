@@ -369,7 +369,9 @@ const paperpaw_sdk::library::index::NO_SERIES: u16 = 65_535u16
 const paperpaw_sdk::library::index::OPENED: u8 = 2u8
 const paperpaw_sdk::library::index::REMOVED: u8 = 4u8
 const paperpaw_sdk::library::listing::UNRANKED: u32 = 4_294_967_295u32
+const paperpaw_sdk::library::service::LibraryService::KEY (paperpaw_sdk::services::ServiceType): &'static str = "core.library/1"
 const paperpaw_sdk::library::service::SERVICE: &str = "core.library"
+const paperpaw_sdk::library::service::VERSION: paperpaw_sdk::version::Version = crate::Version::new(1, 0, 0)
 const paperpaw_sdk::library::what::COVER: u32 = 4u32
 const paperpaw_sdk::library::what::DETAILS: u32 = 1u32
 const paperpaw_sdk::library::what::FAVOURITE: u32 = 8u32
@@ -729,6 +731,7 @@ struct paperpaw_sdk::library::service::BookBadge { id: paperpaw_sdk::id::Id, tit
 struct paperpaw_sdk::library::service::BookField { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, in_catalog: bool }
 struct paperpaw_sdk::library::service::Deleted { commands: alloc::vec::Vec<paperpaw_sdk::command::Command>, failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>, refused: alloc::vec::Vec<alloc::string::String> }
 struct paperpaw_sdk::library::service::Kept
+struct paperpaw_sdk::library::service::LibraryService(0: alloc::boxed::Box<dyn paperpaw_sdk::library::service::Library>)
 struct paperpaw_sdk::lookup::Asked { entries: alloc::vec::Vec<paperpaw_sdk::lookup::LookupEntry>, pending: alloc::vec::Vec<paperpaw_sdk::id::Id>, commands: alloc::vec::Vec<paperpaw_sdk::command::Command> }
 struct paperpaw_sdk::lookup::LookupEntry { source: alloc::string::String, text: alloc::string::String, more: core::option::Option<paperpaw_sdk::id::Id> }
 struct paperpaw_sdk::lookup::LookupProviderSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, languages: alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, online: bool, lookup: paperpaw_sdk::lookup::LookupFn }
@@ -799,9 +802,8 @@ struct paperpaw_sdk::semantics::Part { role: paperpaw_graphics::canvas::Role, la
 struct paperpaw_sdk::served::Guard { key: alloc::string::String, wrong: u32, locked_until: core::option::Option<paperpaw_platform::input::Instant> }
 struct paperpaw_sdk::services::Contract { key: &'static str, size: usize, align: usize, version: paperpaw_sdk::version::Version }
 struct paperpaw_sdk::services::EventSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, params: &'static [&'static str] }
-struct paperpaw_sdk::services::Named { name: &'static str, size: usize, align: usize }
 struct paperpaw_sdk::services::PointSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, doc: alloc::borrow::Cow<'static, str> }
-struct paperpaw_sdk::services::Service { value: alloc::boxed::Box<dyn core::any::Any>, type_name: core::option::Option<paperpaw_sdk::services::Named>, contract: core::option::Option<alloc::boxed::Box<paperpaw_sdk::services::Contract>> }
+struct paperpaw_sdk::services::Service { value: alloc::boxed::Box<dyn core::any::Any>, contract: paperpaw_sdk::services::Contract }
 struct paperpaw_sdk::services::Services { services: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::services::Service)>, contributions: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::id::Id, alloc::borrow::Cow<'static, str>)>, points: alloc::vec::Vec<paperpaw_sdk::services::PointSpec>, events: alloc::vec::Vec<paperpaw_sdk::services::EventSpec> }
 struct paperpaw_sdk::setting::Setting<T> { id: paperpaw_sdk::id::Id, value: core::marker::PhantomData<fn() -> T> }
 struct paperpaw_sdk::settings::SettingCheck(0: fn(&paperpaw_sdk::settings::Settings, &paperpaw_sdk::settings::SettingValue) -> core::result::Result<(), &'static str>)

@@ -29,8 +29,17 @@ impl Plugin for Second {
                 )));
             }),
         )?;
-        r.publish(Id::new_static("second.version"), Version::new(0, 1, 0))
+        r.provide(
+            Id::new_static("second.version"),
+            SecondVersion(Version::new(0, 1, 0)),
+            Version::new(1, 0, 0),
+        )
     }
 }
 
 paperpaw_sdk::plugin!(Second);
+
+/// Its version, offered to other plugins.
+#[repr(C)]
+pub struct SecondVersion(pub Version);
+paperpaw_sdk::service_type!(SecondVersion, "second.version/1");

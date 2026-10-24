@@ -961,7 +961,10 @@ fn a_library_of_ones_own_gives_the_widgets_its_books() {
     let remote: alloc::boxed::Box<dyn library::Library> = alloc::boxed::Box::new(Remote);
     h.services.insert(
         Id::new_static(library::service::SERVICE),
-        paperpaw_sdk::services::Service::new(remote),
+        paperpaw_sdk::services::Service::new(
+            library::service::LibraryService(remote),
+            library::service::VERSION,
+        ),
     );
     let env = h.env();
     let mut paths = Vec::new();

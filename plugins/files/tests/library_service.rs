@@ -71,7 +71,11 @@ impl Plugin for RemotePlugin {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let library: Box<dyn Library> = Box::new(Remote);
-        r.publish(Id::new_static(library::service::SERVICE), library)
+        r.provide(
+            Id::new_static(library::service::SERVICE),
+            library::service::LibraryService(library),
+            library::service::VERSION,
+        )
     }
 }
 

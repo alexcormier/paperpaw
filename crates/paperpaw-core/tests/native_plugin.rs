@@ -143,7 +143,11 @@ impl Plugin for Looks {
             events::STARTED,
             move |env: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
                 let services = env.services;
-                found.set(services.get::<Version>("hello.version").copied());
+                found.set(
+                    services
+                        .get::<HelloVersion>("hello.version", Version::new(1, 0, 0))
+                        .map(|v| v.0),
+                );
             },
         )
     }
@@ -203,3 +207,9 @@ fn a_plugin_built_apart_runs_in_the_kernel() {
     drop(kernel);
     drop(library);
 }
+
+/// The loaded plugin's version service, as it names it: the same key,
+/// another build.
+#[repr(C)]
+struct HelloVersion(Version);
+paperpaw_sdk::service_type!(HelloVersion, "hello.version/1");
