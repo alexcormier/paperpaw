@@ -445,7 +445,7 @@ impl Installer {
     /// ([`Command::InstallPlugin`]) and forgets the job; `None` if there is
     /// no complete job.
     pub fn install(&self, env: &Env<'_>, out: &mut crate::Commands) -> Option<Progress> {
-        let storage = env.storage;
+        let storage = env.storage();
         let job = self.job(storage)?;
         let progress = self.progress(storage)?;
         if progress.done < progress.total {
@@ -475,7 +475,7 @@ impl Installer {
         if !package.is_valid() {
             return false;
         }
-        let storage = env.storage;
+        let storage = env.storage();
         self.cancel(storage);
         let _ = storage.create_dir(crate::data::DIR);
         let _ = storage.create_dir(&format!("{}/plugins", crate::data::DIR));
@@ -548,10 +548,10 @@ impl Installer {
     /// stopping its installation if one is going on.
     pub fn remove(&self, env: &Env<'_>, plugin: &Id, out: &mut crate::Commands) {
         if self
-            .job(env.storage)
+            .job(env.storage())
             .is_some_and(|job| job.plugin == plugin.as_str())
         {
-            self.cancel(env.storage);
+            self.cancel(env.storage());
         }
         out.push(Command::RemovePlugin(plugin.clone()));
     }
@@ -564,7 +564,7 @@ impl Installer {
         reply: &HttpReply,
         out: &mut crate::Commands,
     ) -> Received {
-        let storage = env.storage;
+        let storage = env.storage();
         let Some(job) = self.job(storage) else {
             return Received::Other;
         };

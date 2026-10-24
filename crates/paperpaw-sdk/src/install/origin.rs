@@ -117,7 +117,7 @@ pub fn forget_store_install(storage: &dyn Storage, plugin: &str) -> bool {
 /// look at origins call it first; once kept, it does nothing. `false` if
 /// it could not be kept.
 pub fn adopt(env: &Env<'_>) -> bool {
-    if env.storage.exists(STORE_INSTALLS) {
+    if env.storage().exists(STORE_INSTALLS) {
         return true;
     }
     let text: String = env
@@ -129,8 +129,8 @@ pub fn adopt(env: &Env<'_>) -> bool {
             format!("{}\t{version}\n", info.manifest.id)
         })
         .collect();
-    let _ = env.storage.create_dir(crate::data::DIR);
-    env.storage.write(STORE_INSTALLS, text.as_bytes()).is_ok()
+    let _ = env.storage().create_dir(crate::data::DIR);
+    env.storage().write(STORE_INSTALLS, text.as_bytes()).is_ok()
 }
 
 /// The version `plugin.ini` in `folder` says, e.g. of a plugin about to be

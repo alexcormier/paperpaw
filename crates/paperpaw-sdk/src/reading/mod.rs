@@ -206,10 +206,10 @@ pub fn open_options(env: &crate::Env<'_>) -> crate::OpenOptions {
     let styles = env
         .settings
         .read(&crate::builtin::settings::PUBLISHER_STYLES);
-    env.formats
+    env.formats()
         .options()
         .publisher_styles(styles)
-        .css(env.stylesheets.join("\n"))
+        .css(env.stylesheets().join("\n"))
         .settings(format_settings(env))
 }
 
@@ -223,7 +223,7 @@ fn format_settings(env: &crate::Env<'_>) -> Vec<(String, String)> {
         .collect();
     owners.sort_unstable();
     owners.dedup();
-    env.settings
+    env.settings()
         .specs()
         .filter(|spec| {
             let id = spec.id.as_str();
@@ -233,7 +233,7 @@ fn format_settings(env: &crate::Env<'_>) -> Vec<(String, String)> {
         })
         .filter_map(|spec| {
             let id = spec.id.as_str();
-            let value = env.settings.get(id)?.to_config_text();
+            let value = env.settings().get(id)?.to_config_text();
             Some((id.to_string(), value))
         })
         .collect()
@@ -249,7 +249,7 @@ pub fn conversion(env: &crate::Env<'_>) -> u64 {
     let styles = env
         .settings
         .read(&crate::builtin::settings::PUBLISHER_STYLES);
-    env.stylesheets.iter().fold(
+    env.stylesheets().iter().fold(
         paperpaw_digest::fnv1a64([u8::from(styles)]),
         |hash, sheet| hash.rotate_left(5) ^ paperpaw_digest::fnv1a64(sheet.as_bytes()),
     )

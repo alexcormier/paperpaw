@@ -122,7 +122,7 @@ impl Readers {
 
     /// The readers of the book at `path`, by its format.
     pub fn for_book<'s>(&'s self, env: &'s Env<'_>, path: &str) -> Vec<&'s ReaderSpec> {
-        let format = env.formats.for_file(env.storage, path).map(|f| &f.id);
+        let format = env.formats().for_file(env.storage(), path).map(|f| &f.id);
         self.reading(format).collect()
     }
 }
@@ -303,18 +303,18 @@ fn chosen_past<'e>(env: &'e Env<'_>, path: &str, past: &[&str]) -> Option<&'e Re
     let path = plain(path);
     let format = env
         .formats
-        .for_file(env.storage, path)
+        .for_file(env.storage(), path)
         .map(|f| f.id.clone());
     let fits = |id: &str| {
-        env.readers
+        env.readers()
             .get(id)
             .filter(|r| r.reads(format.as_ref()) && !past.contains(&r.id.as_str()))
     };
-    if let Some(reader) = remembered(env.storage, Choice::Book(path)).and_then(|id| fits(&id)) {
+    if let Some(reader) = remembered(env.storage(), Choice::Book(path)).and_then(|id| fits(&id)) {
         return Some(reader);
     }
     // The nearest folder with a choice.
-    let mut kept = folders(env.storage).unwrap_or_default();
+    let mut kept = folders(env.storage()).unwrap_or_default();
     kept.sort_by_key(|(_, folder)| core::cmp::Reverse(folder.len()));
     let in_folder = kept.iter().find(|(_, folder)| {
         path.strip_prefix(folder.as_str())
@@ -325,12 +325,12 @@ fn chosen_past<'e>(env: &'e Env<'_>, path: &str, past: &[&str]) -> Option<&'e Re
     }
     let by_format = format
         .as_ref()
-        .and_then(|f| env.settings.get(&format_setting(f)))
+        .and_then(|f| env.settings().get(&format_setting(f)))
         .map(crate::SettingValue::to_config_text);
     if let Some(reader) = by_format.as_deref().and_then(fits) {
         return Some(reader);
     }
-    fits(env.settings.read(&settings::READING_APP))
+    fits(env.settings().read(&settings::READING_APP))
 }
 
 /// Opens the book at `path` with the reader chosen for it (see
@@ -446,7 +446,7 @@ pub fn open_with(path: &str, reader: &ReaderSpec) -> Command {
 /// The names to show for readers: their ids, which are their names'
 /// translation keys.
 pub fn name<'e>(env: &'e Env<'_>, reader: &'e ReaderSpec) -> Cow<'e, str> {
-    Cow::Borrowed(env.i18n.tr(reader.id.as_str()))
+    Cow::Borrowed(env.i18n().tr(reader.id.as_str()))
 }
 
 #[cfg(test)]

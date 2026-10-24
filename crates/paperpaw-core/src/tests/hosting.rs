@@ -18,7 +18,7 @@ struct Page(Log);
 impl Screen for Page {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.fill_rect(0, 0, 10, 10, Color::BLACK);
-        let display = env.device.display;
+        let display = env.device().display;
         self.0.borrow_mut().push(alloc::format!(
             "page drawn {}x{}",
             display.width,

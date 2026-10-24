@@ -1006,7 +1006,7 @@ struct Making {
 #[cfg(any(test, feature = "kernel"))]
 impl Making {
     fn start(env: &Env<'_>) -> Result<Making, StorageError> {
-        let storage = env.storage;
+        let storage = env.storage();
         let log_from = match storage.size(&log_path()) {
             Ok(size) => size,
             Err(StorageError::NotFound) => 0,
@@ -1055,7 +1055,7 @@ impl Making {
     /// opened, where there are none of this file): favourite and opened
     /// as the lists say; `true` where the book was opened.
     fn of_details(&self, env: &Env<'_>, path: &str, size: u64) -> (Record, bool) {
-        let cached = super::book_sized(env.storage, path, size).filter(|b| b.indexed);
+        let cached = super::book_sized(env.storage(), path, size).filter(|b| b.indexed);
         let opened = cached.is_none();
         let book = cached.unwrap_or_else(|| super::index(env, path));
         let fields: Vec<&str> = self.fields.iter().map(String::as_str).collect();
@@ -1330,7 +1330,7 @@ impl Walk {
     /// `fresh` taken from their details; an error where what it needs
     /// cannot be read (nothing is changed then).
     pub fn start(env: &Env<'_>, fresh: Vec<String>) -> Result<Walk, StorageError> {
-        let old = OldCatalog::open(env.storage)?;
+        let old = OldCatalog::open(env.storage())?;
         let making = Making::start(env)?;
         Ok(Walk {
             making,
@@ -1357,7 +1357,7 @@ impl Walk {
     pub fn step(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
         let result = self.go_on(env);
         if result.is_err() {
-            Making::abort(env.storage);
+            Making::abort(env.storage());
         }
         result
     }
@@ -1375,7 +1375,7 @@ impl Walk {
     }
 
     fn go_on(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
-        let storage = env.storage;
+        let storage = env.storage();
         self.making.go_on(storage)?;
         let Some(dir) = self.dir.clone() else {
             let Some(dir) = self.dirs.pop() else {
@@ -1455,11 +1455,11 @@ impl Walk {
     /// out.
     fn list(env: &Env<'_>, dir: &str, listed: usize) -> Result<Option<usize>, StorageError> {
         use core::fmt::Write as _;
-        let storage = env.storage;
+        let storage = env.storage();
         let mut piece = String::with_capacity(LISTED_PIECE);
         let (mut at, mut more) = (0, false);
         let result = storage.list(dir, &mut |entry| {
-            if more || !super::listing::shown(env.formats, entry.name, entry.is_dir) {
+            if more || !super::listing::shown(env.formats(), entry.name, entry.is_dir) {
                 return;
             }
             if at < listed {
@@ -1562,7 +1562,7 @@ impl Rewrite {
     pub fn step(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
         let result = self.go_on(env);
         if result.is_err() {
-            Making::abort(env.storage);
+            Making::abort(env.storage());
         }
         result
     }
@@ -1578,7 +1578,7 @@ impl Rewrite {
     }
 
     fn go_on(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
-        let storage = env.storage;
+        let storage = env.storage();
         self.making.go_on(storage)?;
         if let Some(at) = self.at {
             let mut piece = String::with_capacity(WRITTEN_PIECE);

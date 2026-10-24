@@ -58,13 +58,11 @@ pub const INTERFACE: u16 = 2;
 /// depends on. The plugin interface keeps their types as they are
 /// (`crates/paperpaw-sdk/interface/crates.txt`, which a test keeps the
 /// same), so a type made of theirs alone is the same in every build of
-/// one interface.
+/// one interface. The interface's test checks this list against that
+/// file.
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub const CROSSING_CRATES: &[&str] = CROSSING;
-
-/// [`CROSSING_CRATES`], for the services' type names.
-pub(crate) const CROSSING: &[&str] = &[
+pub const CROSSING_CRATES: &[&str] = &[
     "paperpaw_sdk",
     "paperpaw_platform",
     "paperpaw_graphics",

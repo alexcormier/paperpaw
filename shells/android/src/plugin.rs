@@ -106,7 +106,7 @@ impl Screen for VoiceSettings {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !crate::speech::open_settings(&self.app) {
-            let text = cx.env().i18n.tr("android.voice.unavailable").to_string();
+            let text = cx.env().i18n().tr("android.voice.unavailable").to_string();
             cx.command(Command::Notify(text));
         }
         cx.command(Command::Back);
@@ -195,7 +195,7 @@ impl AndroidPlugin {
             Box::new(
                 move |env: &Env<'_>, params: &Params, _: &mut paperpaw_sdk::Commands| {
                     let id = params.get(params::ID).unwrap_or_default();
-                    let level = env.settings.int(id) as i32;
+                    let level = env.settings().int(id) as i32;
                     // Only real changes reach the device: taking over its
                     // own levels on start never writes back.
                     if id == FRONTLIGHT.as_str() && lights.brightness(&app) != level {
@@ -217,17 +217,17 @@ impl AndroidPlugin {
             Box::new(
                 move |env: &Env<'_>, _: &Params, _: &mut paperpaw_sdk::Commands| {
                     let shown = |id: &Setting<i64>| {
-                        env.settings.get(id.as_str()) != env.settings.global(id.as_str())
+                        env.settings().get(id.as_str()) != env.settings().global(id.as_str())
                     };
                     let light = shown(&FRONTLIGHT) || shown(&WARMTH);
                     if !following.replace(light) && !light {
                         return;
                     }
-                    let level = env.settings.read(&FRONTLIGHT) as i32;
+                    let level = env.settings().read(&FRONTLIGHT) as i32;
                     if lights.brightness(&app) != level {
                         lights.set_brightness(&app, level);
                     }
-                    let warmth = env.settings.read(&WARMTH) as i32;
+                    let warmth = env.settings().read(&WARMTH) as i32;
                     if lights.has_warmth() && lights.warmth(&app) != warmth {
                         lights.set_warmth(&app, warmth);
                     }
@@ -247,8 +247,8 @@ impl AndroidPlugin {
                     ];
                     for (id, level) in levels {
                         let level = i64::from(level);
-                        let known = env.settings.get(id.as_str()).is_some();
-                        if known && env.settings.read(&id) != level {
+                        let known = env.settings().get(id.as_str()).is_some();
+                        if known && env.settings().read(&id) != level {
                             out.push(Command::set(&id, level));
                         }
                     }

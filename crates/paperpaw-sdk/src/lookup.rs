@@ -261,7 +261,7 @@ impl LookupProviders {
         query: &'s LookupQuery,
         online: bool,
     ) -> impl Iterator<Item = &'s LookupProviderSpec> {
-        let network = env.caps.network;
+        let network = env.caps().network;
         self.list
             .iter()
             .filter(move |p| p.online == online && (!online || network) && query.fits(&p.languages))

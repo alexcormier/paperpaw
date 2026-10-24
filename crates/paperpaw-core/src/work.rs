@@ -363,17 +363,19 @@ impl Queue {
     /// looked at now.
     fn take_moments(&mut self, env: &Env<'_>, last_activity: Instant) -> Moments {
         let mut moments = mem::take(&mut self.moments);
-        let online = env.wifi.map_or(env.caps.network, |w| w.state.is_online());
+        let online = env
+            .wifi()
+            .map_or(env.caps().network, |w| w.state.is_online());
         if online && (!self.online || moments.contains(Moments::WAKE)) {
             moments = moments | Moments::ONLINE;
         }
         self.online = online;
-        let charging = env.status.battery.is_some_and(|b| b.charging);
+        let charging = env.status().battery.is_some_and(|b| b.charging);
         if charging && !self.charging {
             moments = moments | Moments::CHARGING;
         }
         self.charging = charging;
-        if env.now.since(last_activity) >= IDLE_MS && self.idle_since != Some(last_activity) {
+        if env.now().since(last_activity) >= IDLE_MS && self.idle_since != Some(last_activity) {
             self.idle_since = Some(last_activity);
             moments = moments | Moments::IDLE;
         }
@@ -387,9 +389,9 @@ impl Queue {
             return None;
         }
         if let Some(at) = entry.work.at {
-            return (self.ticking && at <= env.now).then_some(Why::Time);
+            return (self.ticking && at <= env.now()).then_some(Why::Time);
         }
-        if entry.after() > env.now || (entry.work.charging && !self.charging) {
+        if entry.after() > env.now() || (entry.work.charging && !self.charging) {
             return None;
         }
         // Work only nice to have never brings the radio on.
@@ -402,7 +404,7 @@ impl Queue {
             return Some(Why::Moment(hit));
         }
         let optional_now = entry.work.importance == Importance::Optional && cheap;
-        let due = self.ticking && entry.deadline(power).is_some_and(|due| due <= env.now);
+        let due = self.ticking && entry.deadline(power).is_some_and(|due| due <= env.now());
         (due && (entry.work.importance == Importance::Expected || optional_now))
             .then_some(Why::Deadline)
     }
@@ -869,7 +871,7 @@ fn step_job(
     out: &mut Vec<Command>,
     notes: &mut Vec<(Id, paperpaw_sdk::work::Note)>,
 ) -> bool {
-    let now = env.now;
+    let now = env.now();
     for entry in &mut works.entries {
         if let Some(Job::Until(at)) = entry.job
             && at <= now
@@ -932,7 +934,7 @@ fn step_job(
             entry.attempt = entry.attempt.saturating_add(1);
             entry.declared = now;
             let mut jitter = [0u8];
-            env.random.fill(&mut jitter);
+            env.random().fill(&mut jitter);
             let jitter = jitter[0];
             let wait = paperpaw_sdk::work::backoff(entry.attempt, jitter);
             // A timed job tries again at a new time, others after the wait.

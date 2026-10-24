@@ -121,7 +121,7 @@ impl Voices {
     /// where the system cannot speak (`system` false), else the first that
     /// does. `None`: the system's.
     pub fn chosen(&self, env: &Env<'_>, language: &str, system: bool) -> Option<&VoiceSpec> {
-        let chosen = env.settings.read(&crate::builtin::settings::VOICE);
+        let chosen = env.settings().read(&crate::builtin::settings::VOICE);
         let fitting = |v: &&VoiceSpec| v.speaks(language);
         self.get(chosen)
             .filter(fitting)

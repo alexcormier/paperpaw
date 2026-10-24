@@ -36,7 +36,7 @@ impl Screen for ReaderScreen {
             self.log.borrow_mut().push(String::from("closed said"));
         }
         if *event == events::SETTING_CHANGED {
-            let at = cx.env().now.add_millis(10);
+            let at = cx.env().now().add_millis(10);
             cx.wake_at(at);
         }
     }

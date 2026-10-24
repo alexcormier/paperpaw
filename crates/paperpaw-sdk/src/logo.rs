@@ -31,7 +31,7 @@ impl Logo {
     /// [`LOGO`] names, decoded unless it was already for that size, or
     /// the drawn one (also when the picture cannot be read).
     pub fn read(env: &Env<'_>, width: u16, height: u16) -> Logo {
-        let path = String::from(env.settings.read(&LOGO).trim().trim_matches('/'));
+        let path = String::from(env.settings().read(&LOGO).trim().trim_matches('/'));
         if path.is_empty() {
             return Logo::Drawn;
         }
@@ -70,14 +70,14 @@ impl Logo {
 /// the logo's own, again only when the picture or the size changed.
 fn picture(env: &Env<'_>, path: &str, width: u16, height: u16) -> Option<ImageRef> {
     use crate::image::{Fit, ImageFile};
-    let size = env.storage.size(path).ok()?;
-    let color = env.device.display.format.is_color();
+    let size = env.storage().size(path).ok()?;
+    let color = env.device().display.format.is_color();
     let stamp = format!("{path}\t{size}\t{width}x{height}\t{color}");
     let dir = crate::data::DIR;
     let (pixels, stamp_path) = (format!("{dir}/logo.pixels"), format!("{dir}/logo.stamp"));
-    let kept =
-        crate::read_file(env.storage, &stamp_path, 1024).is_ok_and(|kept| kept == stamp.as_bytes());
-    if kept && let Some(file) = ImageFile::open(env.storage, &pixels) {
+    let kept = crate::read_file(env.storage(), &stamp_path, 1024)
+        .is_ok_and(|kept| kept == stamp.as_bytes());
+    if kept && let Some(file) = ImageFile::open(env.storage(), &pixels) {
         return Some(ImageRef {
             path: file.path,
             width: file.width,
@@ -85,8 +85,8 @@ fn picture(env: &Env<'_>, path: &str, width: u16, height: u16) -> Option<ImageRe
         });
     }
     let fit = Fit::screen(width.into(), height.into());
-    let image = crate::image::picture_from_file(env.storage, path, &pixels, fit, color)?;
-    let _ = env.storage.write(&stamp_path, stamp.as_bytes());
+    let image = crate::image::picture_from_file(env.storage(), path, &pixels, fit, color)?;
+    let _ = env.storage().write(&stamp_path, stamp.as_bytes());
     Some(image)
 }
 

@@ -12,7 +12,7 @@ pub const DECIMAL_MARK: &str = "core.decimal";
 /// The decimal mark of the language shown: `.` in English, `,` in
 /// German; `.` where the language names none.
 pub fn decimal_mark<'e>(env: &Env<'e>) -> &'e str {
-    env.i18n.get(DECIMAL_MARK).unwrap_or(".")
+    env.i18n().get(DECIMAL_MARK).unwrap_or(".")
 }
 
 /// `units` hundredths, tenths or other parts (`decimals` digits after the

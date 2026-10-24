@@ -32,8 +32,8 @@ const SMALL_CAPS: f32 = 0.78;
 /// devices: they take hundreds of kilobytes).
 pub fn uses_book_fonts(env: &Env<'_>) -> bool {
     crate::text::OUTLINES
-        && env.device.memory != crate::MemoryClass::Small
-        && env.settings.read(&settings::READING_FONT) == settings::DEFAULT_FONT
+        && env.device().memory != crate::MemoryClass::Small
+        && env.settings().read(&settings::READING_FONT) == settings::DEFAULT_FONT
 }
 
 /// The fonts a book embeds, loaded with the book.
@@ -58,7 +58,7 @@ impl EmbeddedFonts {
         if !uses_book_fonts(env) {
             return None;
         }
-        let fonts = document.fonts(env.storage);
+        let fonts = document.fonts(env.storage());
         if fonts.is_empty() {
             return None;
         }
@@ -66,7 +66,7 @@ impl EmbeddedFonts {
         let mut faces = Vec::new();
         let mut total = 0;
         for (index, font) in fonts.iter().enumerate() {
-            let Ok(data) = document.font_data(env.storage, index) else {
+            let Ok(data) = document.font_data(env.storage(), index) else {
                 continue;
             };
             total += data.len();
@@ -184,8 +184,8 @@ impl PageType {
         whole_pages: bool,
         status: StatusRoom,
     ) -> Self {
-        let s = env.settings;
-        let m = env.metrics;
+        let s = env.settings();
+        let m = env.metrics();
         let size = m.pt(s.read(&settings::FONT_SIZE) as f32);
         let weight = s.read(&settings::FONT_WEIGHT).clamp(0, 4) as u8;
         let word_spacing = s.read(&settings::WORD_SPACING).clamp(50, 200) as f32 / 100.0;
@@ -208,7 +208,7 @@ impl PageType {
         )
         .lines_kept(widows, orphans);
 
-        let display = env.device.display;
+        let display = env.device().display;
         let millimetres = |setting: &crate::setting::Setting<i64>| match whole_pages {
             true => 0.0,
             false => m.mm(s.read(setting).max(0) as u32) as f32,
@@ -246,19 +246,19 @@ impl PageType {
         let content = Rect::new(x as u16, y as u16, width as u16, height as u16);
         // Asked only where there are layers or frames: nothing is made
         // for each book's type otherwise (the X4's heap).
-        let (rooms, columns, layers) = match whole_pages || env.page_layers.is_idle() {
+        let (rooms, columns, layers) = match whole_pages || env.page_layers().is_idle() {
             true => (Vec::new(), alloc::vec![content], None),
             false => {
-                let (rooms, text) = env.page_layers.rooms(env, content);
+                let (rooms, text) = env.page_layers().rooms(env, content);
                 if !rooms.is_empty() {
                     (x, y) = (f32::from(text.x), f32::from(text.y));
                     (width, height) = (f32::from(text.width), f32::from(text.height));
                 }
-                let columns = env.page_layers.columns(env, text);
+                let columns = env.page_layers().columns(env, text);
                 // Laid out as before, with the key as before, where they
                 // change nothing.
                 let changed = !rooms.is_empty() || columns != [text];
-                let key = changed.then(|| env.page_layers.key(env, content));
+                let key = changed.then(|| env.page_layers().key(env, content));
                 (rooms, columns, key)
             }
         };
@@ -267,10 +267,11 @@ impl PageType {
         let bottom_status = status
             .bottom
             .then(|| line(screen - status.edge - status.height));
-        let hyphenation = (s.read(&settings::HYPHENATE) && env.hyphenation.get(language).is_some())
-            .then(|| language.to_string());
+        let hyphenation = (s.read(&settings::HYPHENATE)
+            && env.hyphenation().get(language).is_some())
+        .then(|| language.to_string());
         // The plugins' stylesheets change what the book's text looks like.
-        let stylesheets = env.stylesheets.iter().fold(0u64, |hash, sheet| {
+        let stylesheets = env.stylesheets().iter().fold(0u64, |hash, sheet| {
             hash.rotate_left(5) ^ paperpaw_digest::fnv1a64(sheet.as_bytes())
         });
         let key = format!(
@@ -287,7 +288,7 @@ impl PageType {
                 hyphenation.as_deref().unwrap_or("-"),
                 s.read(&settings::PUBLISHER_STYLES),
                 uses_book_fonts(env),
-                env.text_filters.signature(env),
+                env.text_filters().signature(env),
             ))
         );
         // Pages without layers' rooms or a frame keep their key (and their
@@ -312,7 +313,7 @@ impl PageType {
             rooms,
             columns,
             hyphenation,
-            filters: env.text_filters.signature(env),
+            filters: env.text_filters().signature(env),
             key,
         }
     }
@@ -331,8 +332,8 @@ impl PageType {
         let height = (height - 2.0 * pad).max(1.0);
         let text = Rect::new(page.x as u16, pad as u16, page.width as u16, height as u16);
         // In the frame chosen, as book pages are.
-        let columns = match env.page_layers.has_frames() {
-            true => env.page_layers.columns(env, text),
+        let columns = match env.page_layers().has_frames() {
+            true => env.page_layers().columns(env, text),
             false => alloc::vec![text],
         };
         Self {
@@ -414,7 +415,7 @@ impl PageType {
 
 /// The font bound to an optional reading face, for the layout key.
 fn face_id(env: &Env<'_>, role: &Id) -> String {
-    env.fonts
+    env.fonts()
         .bound(role.as_str())
         .map_or_else(String::new, |font| font.id().to_string())
 }
@@ -450,7 +451,7 @@ impl<'a> ReadingFaces<'a> {
         page: &PageType,
         embedded: Option<&'a EmbeddedFonts>,
     ) -> Option<Self> {
-        let all = env.fonts;
+        let all = env.fonts();
         let regular = all.role(fonts::READING.as_str())?;
         let custom = all.user_bound(fonts::READING.as_str());
         let face = |role: &Id| {
@@ -750,7 +751,7 @@ pub fn draw_image(canvas: &mut Canvas<'_>, env: &Env<'_>, page_type: &PageType, 
     let (w, h) = ((image.width + 0.5) as i32, (image.height + 0.5) as i32);
     crate::ui::draw_image(
         canvas,
-        env.storage,
+        env.storage(),
         &image.image,
         Rect::new(left as u16, top as u16, w as u16, h as u16),
     );
