@@ -159,9 +159,7 @@ static HOW: [(&str, &str); 2] = [
 impl Plugin for Battery {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Battery use", paperpaw_sdk::package_version!())
-            .description(
-                "Records the battery while the device is awake and shows how long it lasts.",
-            )
+            .description("Records the battery and shows how long it lasts.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
