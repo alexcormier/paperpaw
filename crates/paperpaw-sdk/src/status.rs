@@ -333,8 +333,8 @@ impl Place {
         let Some(setting) = &self.line else {
             return items;
         };
-        item_ids(env.settings.text(setting.as_str()))
-            .find(|id| env.status_items.title(id).is_some())
+        item_ids(env.settings().text(setting.as_str()))
+            .find(|id| env.status_items().title(id).is_some())
             .unwrap_or(items)
     }
 
@@ -344,7 +344,7 @@ impl Place {
             place: Some(self.id.as_str()),
             ..*frame
         };
-        env.status_items
+        env.status_items()
             .draw_line(self.current_line(env), canvas, env, &framed);
     }
 
@@ -354,7 +354,7 @@ impl Place {
             place: Some(self.id.as_str()),
             ..*frame
         };
-        env.status_items
+        env.status_items()
             .line_targets(self.current_line(env), env, &framed)
     }
 
@@ -362,7 +362,7 @@ impl Place {
     pub fn lists<'e>(&self, env: &Env<'e>) -> [&'e str; 3] {
         self.parts
             .each_ref()
-            .map(|part| env.settings.text(part.as_str()))
+            .map(|part| env.settings().text(part.as_str()))
     }
 
     /// Its items as a line in `area`, with text of `size` in `color`.
@@ -380,7 +380,7 @@ impl Place {
         let mut hash = crate::digest::Fnv1a64::new();
         hash.feed(line.as_bytes());
         hash.feed(
-            &env.status_items
+            &env.status_items()
                 .line_signature(line, env, context)
                 .to_le_bytes(),
         );
@@ -395,7 +395,7 @@ pub fn signature(env: &Env<'_>, lists: &[&str], context: &Params) -> u64 {
     let mut hash = crate::digest::Fnv1a64::new();
     for list in lists {
         for id in item_ids(list) {
-            if let Some(value) = env.status_items.value(id, env, context) {
+            if let Some(value) = env.status_items().value(id, env, context) {
                 let _ = write!(hash, "{value:?}|");
             }
         }
@@ -680,7 +680,7 @@ impl<'a> StatusLine<'a> {
         laid.sort_by(|a, b| a.x.total_cmp(&b.x));
         laid.iter()
             .filter_map(|item| {
-                let command = env.status_items.tap(item.id, context)?;
+                let command = env.status_items().tap(item.id, context)?;
                 let x0 = (item.x - reach).max(f32::from(area.x));
                 let x1 =
                     (item.x + item.width + reach).min(f32::from(area.x) + f32::from(area.width));
@@ -759,7 +759,7 @@ fn listed<'a>(
     id: &'a str,
     context: &Params,
 ) -> Option<Listed<'a>> {
-    let item = env.status_items.item(id)?;
+    let item = env.status_items().item(id)?;
     let value = (item.value)(env, context)?;
     let least = item.min_width * size;
     let width = |percent| value_width(env, font, size, &value, percent).max(least);

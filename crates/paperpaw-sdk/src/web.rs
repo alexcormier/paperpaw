@@ -25,7 +25,7 @@ pub fn user_agent() -> (String, String) {
 /// not that of the SDK the plugin was built with ([`USER_AGENT`] where
 /// the kernel is not listed).
 pub fn user_agent_of(env: &crate::Env<'_>) -> (String, String) {
-    let value = match env.plugins.kernel() {
+    let value = match env.plugins().kernel() {
         Some(kernel) => format!("PaperPaw/{} (e-reader)", kernel.manifest.version),
         None => String::from(USER_AGENT),
     };

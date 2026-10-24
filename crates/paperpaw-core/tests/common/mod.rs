@@ -210,12 +210,12 @@ impl Plugin for Driver {
                 Box::new(move |env, params, out| {
                     log.borrow_mut().push(format!(
                         "event {event} at {} {}",
-                        env.now.millis(),
+                        env.now().millis(),
                         describe(params)
                     ));
                     // A timer that comes again every `repeat` milliseconds.
                     if let Some(every) = params.get(REPEAT).and_then(|r| r.parse().ok()) {
-                        let at = env.now.add_millis(every);
+                        let at = env.now().add_millis(every);
                         out.push(Command::work(
                             paperpaw_core::sdk::work::Work::at(event.clone(), at)
                                 .with(params.clone()),
@@ -332,7 +332,7 @@ impl Screen for LogScreen {
     }
 
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
-        self.note(format!("timer at {}", cx.env().now.millis()));
+        self.note(format!("timer at {}", cx.env().now().millis()));
     }
 
     fn on_close(&mut self, _: &mut Cx<'_, '_>) {

@@ -124,7 +124,7 @@ impl<'d, 'e> FilteredDocument<'d, 'e> {
     /// starts.
     fn filter(&self, section: u32, block: &mut Block) -> Verdict {
         let cx = FilterContext::new(self.path, self.language, Locator::new(section, block.start));
-        self.env.text_filters.apply_in(self.env, &cx, block)
+        self.env.text_filters().apply_in(self.env, &cx, block)
     }
 }
 

@@ -109,7 +109,7 @@ impl ScreenHost {
         }
         self.close(cx);
         let env = *cx.env();
-        let place = on_screen(area, env.content);
+        let place = on_screen(area, env.content());
         let device = env.device_within(place);
         let made = env.within(&device, place).make_screen(&id, &params);
         let Some(screen) = made else {
@@ -146,7 +146,7 @@ impl ScreenHost {
             return Handled::No;
         };
         let env = *cx.env();
-        let place = on_screen(hosted.area, env.content);
+        let place = on_screen(hosted.area, env.content());
         let device = env.device_within(place);
         let own = env.within(&device, place);
         let mut output = Output::default();
@@ -174,7 +174,7 @@ impl ScreenHost {
         let Some(hosted) = &mut self.hosted else {
             return;
         };
-        let place = on_screen(hosted.area, env.content);
+        let place = on_screen(hosted.area, env.content());
         let device = env.device_within(place);
         let own = env.within(&device, place);
         let (x, y) = (i32::from(hosted.area.x), i32::from(hosted.area.y));

@@ -271,7 +271,7 @@ impl Decoration {
     /// The look of `role`, as its settings say (see [`add_role`]); no mark
     /// for a role nobody added.
     pub fn of_role(env: &Env<'_>, role: &Id) -> Decoration {
-        let settings = env.settings;
+        let settings = env.settings();
         let tone = |aspect: &str| Tone::from_id(settings.text(&format!("{role}.{aspect}")));
         Decoration {
             background: tone("background"),
@@ -601,7 +601,7 @@ pub fn draw_behind(
     };
     // A little wider than the words, so a marked word does not touch the
     // edge of its mark.
-    let pad = env.metrics.tenth_mm(5).max(1) as i32;
+    let pad = env.metrics().tenth_mm(5).max(1) as i32;
     for b in boxes {
         canvas.fill_shaded(padded(*b, pad), tone.color());
     }
@@ -626,7 +626,7 @@ pub fn draw_over(canvas: &mut Canvas<'_>, env: &Env<'_>, boxes: &[Rect], decorat
     } else {
         decoration.thickness
     };
-    let t = env.metrics.tenth_mm(u32::from(tenths)).max(1);
+    let t = env.metrics().tenth_mm(u32::from(tenths)).max(1);
     let color = decoration.stroke_color();
     for b in boxes {
         let (x, w) = (i32::from(b.x), u32::from(b.width));
@@ -635,7 +635,7 @@ pub fn draw_over(canvas: &mut Canvas<'_>, env: &Env<'_>, boxes: &[Rect], decorat
             draw_line(canvas, kind, x, w, bottom, t, color);
         }
         if decoration.frame {
-            let pad = env.metrics.tenth_mm(5).max(1) as i32;
+            let pad = env.metrics().tenth_mm(5).max(1) as i32;
             canvas.stroke_rect(
                 x - pad,
                 i32::from(b.y),
@@ -1095,7 +1095,7 @@ impl Decorators {
         self.list.iter().filter(move |d| {
             d.switch
                 .as_ref()
-                .is_none_or(|s| env.settings.bool(s.as_str()))
+                .is_none_or(|s| env.settings().bool(s.as_str()))
         })
     }
 
@@ -1116,7 +1116,7 @@ impl Decorators {
             let on = decorator
                 .switch
                 .as_ref()
-                .is_none_or(|s| env.settings.bool(s.as_str()));
+                .is_none_or(|s| env.settings().bool(s.as_str()));
             let hash = feed(hash, decorator.id.as_str().as_bytes());
             let hash = feed(hash, &[u8::from(on)]);
             if on {

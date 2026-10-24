@@ -142,7 +142,7 @@ impl Plugin for Looks {
         r.on(
             events::STARTED,
             move |env: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
-                let services = env.services;
+                let services = env.services();
                 found.set(
                     services
                         .get::<HelloVersion>("hello.version", Version::new(1, 0, 0))

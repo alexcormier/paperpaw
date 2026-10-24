@@ -432,7 +432,7 @@ impl PageLayers {
     /// [`MAX_COLUMNS`]; `content` alone without a frame (or where it
     /// gives none).
     pub fn columns(&self, env: &Env<'_>, content: Rect) -> Vec<Rect> {
-        let chosen = env.settings.read(&crate::builtin::settings::PAGE_FRAME);
+        let chosen = env.settings().read(&crate::builtin::settings::PAGE_FRAME);
         let mut columns: Vec<Rect> = self
             .frames
             .iter()
@@ -515,7 +515,7 @@ fn is_on(env: &Env<'_>, layer: &PageLayerSpec) -> bool {
     layer
         .switch
         .as_ref()
-        .is_none_or(|s| env.settings.bool(s.as_str()))
+        .is_none_or(|s| env.settings().bool(s.as_str()))
 }
 
 #[cfg(test)]

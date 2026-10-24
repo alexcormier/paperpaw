@@ -573,7 +573,7 @@ impl<'a, 'e> Cx<'a, 'e> {
     /// This screen as the stack lists it ([`Env::stack`](crate::Env::stack)).
     pub fn entry(&self) -> Option<&StackEntry> {
         let key = self.key?;
-        self.env.stack.iter().find(|entry| entry.key == key)
+        self.env.stack().iter().find(|entry| entry.key == key)
     }
 
     /// Which screen this is.

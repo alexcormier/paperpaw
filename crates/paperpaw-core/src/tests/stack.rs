@@ -153,7 +153,7 @@ fn stack_kernel(log: &Log) -> Kernel {
 
 fn names(kernel: &Kernel) -> Vec<String> {
     let env = kernel.shared.env(Instant(0));
-    env.stack
+    env.stack()
         .iter()
         .map(|entry| {
             let overlay = if entry.overlay { " (overlay)" } else { "" };

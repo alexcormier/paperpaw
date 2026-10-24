@@ -73,12 +73,12 @@ impl Step {
         use paperpaw_sdk::{Command, Params};
         Some(match self {
             Step::Set(id, text) => {
-                let value = env.settings.spec(id.as_str())?.kind.parse(text)?;
+                let value = env.settings().spec(id.as_str())?.kind.parse(text)?;
                 Command::SetSetting(id.clone(), value)
             }
             Step::Run(action) => Command::run(action.clone()),
             Step::Open(slot) => Command::OpenSlot(slot.clone(), Params::new()),
-            Step::Notify(key) => Command::Notify(env.i18n.tr(key).to_string()),
+            Step::Notify(key) => Command::Notify(env.i18n().tr(key).to_string()),
             Step::Emit(event) => Command::Emit(event.clone(), Params::new()),
         })
     }

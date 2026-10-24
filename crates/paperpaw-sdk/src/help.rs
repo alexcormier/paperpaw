@@ -73,8 +73,8 @@ impl Input {
     pub fn fits(self, env: &Env<'_>) -> bool {
         match self {
             Input::Any => true,
-            Input::Touch => env.device.input.touch,
-            Input::Buttons => !env.device.input.touch,
+            Input::Touch => env.device().input.touch,
+            Input::Buttons => !env.device().input.touch,
         }
     }
 }
@@ -199,7 +199,7 @@ pub fn wait(r: &mut Registrar, screen: &str) -> Result<(), RegisterError> {
 
 /// Whether the hints of `screen` wait until it is ready ([`wait`]).
 pub fn waits(env: &Env<'_>, screen: &str) -> bool {
-    env.services
+    env.services()
         .contributions(POINT)
         .flat_map(|(_, text)| text.lines())
         .any(|line| line.split_once(' ') == Some((screen, "wait")))
@@ -213,7 +213,7 @@ pub fn ready(screen: &Id) -> Command {
 
 /// The hints of `screen` for `env`'s device, in the order they came.
 pub fn hints(env: &Env<'_>, screen: &str) -> Vec<Hint> {
-    env.services
+    env.services()
         .contributions(POINT)
         .flat_map(|(_, text)| text.lines())
         .filter_map(Hint::parse)
