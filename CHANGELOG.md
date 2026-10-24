@@ -21,6 +21,11 @@ change the plugin SDK.
   (WPA and mixed WPA/WPA2 ones too), and a password that was not taken
   for another reason than being wrong is offered again, not typed anew.
 
+- News: articles with a long body in a CDATA section (WordPress feeds, The
+  Verge) show their whole text; the reader dropped any section over 4 KiB
+  and fell back to the summary. The XML reader now passes a long CDATA
+  section on in pieces, in the same small memory. Dates, Atom
+  and RSS, show short as the language writes them (Sat 24 Oct 2026).
 ### Added
 
 - The plugin store has five more groups, so every kind of plugin has a
