@@ -664,6 +664,42 @@ impl CalibreScreen {
     }
 
     /// The area below the header.
+    /// The size of the hint below `status`: the small one, or smaller
+    /// where the screen holds it whole so (the largest text on a small
+    /// screen).
+    fn hint_size(&self, env: &Env<'_>, status: &str, hint: &str, again: Option<&str>) -> f32 {
+        let style = &self.style;
+        let small = style.small();
+        let Some(font) = style.font(env) else {
+            return small;
+        };
+        let area = self.content(env);
+        let width = f32::from(area.width) - 2.0 * style.margin() as f32;
+        let high = |size: f32, text: &str| {
+            font.line_metrics(size).line_height * font.wrap(size, text, width).len() as f32
+                + f32::from(style.gap() / 2)
+        };
+        let mut above = f32::from(style.gap()) + high(style.title(), status);
+        if let Some(library) = &self.library {
+            let text = env
+                .i18n()
+                .format("calibre.library", &[("library", Arg::Str(library))]);
+            above += high(style.text(), &text);
+        }
+        if self.received > 0 {
+            let text = env
+                .i18n()
+                .plural("calibre.received", i64::from(self.received), &[]);
+            above += high(style.text(), &text);
+        }
+        if let Some(again) = again {
+            above += high(small, env.i18n().tr(again));
+        }
+        let room = f32::from(area.height) - above;
+        paperpaw_sdk::widgets::largest_size(small, small * 0.6, |size| high(size, hint) <= room)
+            .unwrap_or(small * 0.6)
+    }
+
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device().display;
         let top = self.header.area().height + self.style.gap();
@@ -763,14 +799,6 @@ impl Screen for CalibreScreen {
             State::Connected => Some("calibre.connected-hint"),
             _ => None,
         };
-        if let Some(hint) = hint {
-            line(
-                &mut ui,
-                style.small(),
-                env.i18n().tr(hint),
-                style.faint(ui::Ink::Detail),
-            );
-        }
         // How to connect or try again: by touch, or the button (named in
         // the row of hints under the screen, where there is one).
         let keys = match self.state {
@@ -778,17 +806,22 @@ impl Screen for CalibreScreen {
             State::Ended(_) => Some(("calibre.again.touch", "calibre.again.buttons")),
             _ => None,
         };
-        if let Some((touch, buttons)) = keys {
-            let again = if env.device().input.touch {
+        let again = keys.and_then(|(touch, buttons)| {
+            if env.device().input.touch {
                 Some(touch)
             } else if !env.caps().button_row {
                 Some(buttons)
             } else {
                 None
-            };
-            if let Some(again) = again {
-                line(&mut ui, style.small(), env.i18n().tr(again), Color::BLACK);
             }
+        });
+        if let Some(hint) = hint {
+            let hint = env.i18n().tr(hint);
+            let size = self.hint_size(env, &status, hint, again);
+            line(&mut ui, size, hint, style.faint(ui::Ink::Detail));
+        }
+        if let Some(again) = again {
+            line(&mut ui, style.small(), env.i18n().tr(again), Color::BLACK);
         }
         self.password_row = None;
         if self.state == State::Password {
