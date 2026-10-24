@@ -818,7 +818,10 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     /// Whether folder `path` is kept (see [`FOLDERS`]): it is there.
     fn is_kept(&self, path: &str) -> bool {
         let path = path.trim_matches('/');
-        self.folders.borrow().iter().any(|(p, _)| same_path(p, path))
+        self.folders
+            .borrow()
+            .iter()
+            .any(|(p, _)| same_path(p, path))
     }
 
     /// Bytes of a cluster, where known.

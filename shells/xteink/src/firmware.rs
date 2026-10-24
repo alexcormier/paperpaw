@@ -765,10 +765,7 @@ impl Firmware {
         let expected = self.state.refresh_ms[kind].saturating_sub(20);
         let idle = if self.faster() { IDLE_FAST_MS } else { IDLE_MS };
         let until = started.0 + expected;
-        while expected > 0
-            && !input::settling()
-            && power::nap_until(until.min(now().0 + idle))
-        {}
+        while expected > 0 && !input::settling() && power::nap_until(until.min(now().0 + idle)) {}
         let woke = now();
         let waited = self.panel.wait();
         let took = now().since(started);

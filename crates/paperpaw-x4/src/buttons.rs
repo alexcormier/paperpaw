@@ -204,14 +204,23 @@ mod tests {
         let mut changes = Vec::new();
         let right = State::read(0, 4095, false);
         // Read every 30 ms, as between light sleeps: down at 60, up at 150.
-        for (now, reading) in [(0, State(0)), (30, State(0)), (60, right), (90, right), (120, right)]
-            .into_iter()
-            .chain([(150, State(0)), (180, State(0)), (210, State(0))])
+        for (now, reading) in [
+            (0, State(0)),
+            (30, State(0)),
+            (60, right),
+            (90, right),
+            (120, right),
+        ]
+        .into_iter()
+        .chain([(150, State(0)), (180, State(0)), (210, State(0))])
         {
             debouncer.update(reading, now, &mut |b, d, at| changes.push((b, d, at)));
         }
         // Held 90 ms, not 120: no long press made of a click.
-        assert_eq!(changes, [(buttons::RIGHT, true, 60), (buttons::RIGHT, false, 150)]);
+        assert_eq!(
+            changes,
+            [(buttons::RIGHT, true, 60), (buttons::RIGHT, false, 150)]
+        );
     }
 
     #[test]
