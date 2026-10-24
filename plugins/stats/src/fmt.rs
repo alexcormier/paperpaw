@@ -92,6 +92,20 @@ pub(crate) fn long_date(env: &Env<'_>, day: i32) -> String {
     )
 }
 
+/// `Di, 14. Okt.`: [`long_date`] with the weekday and month short, for
+/// where the long one does not fit.
+pub(crate) fn short_date(env: &Env<'_>, day: i32, short_month: &str) -> String {
+    let d = date_of(day);
+    env.i18n().format(
+        "stats.long-date",
+        &[
+            ("weekday", Arg::Str(weekday_short(env, d.weekday))),
+            ("day", Arg::Int(i64::from(d.day))),
+            ("month", Arg::Str(short_month)),
+        ],
+    )
+}
+
 /// The name of a weekday, 0 being Sunday.
 pub(crate) fn weekday<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
     const KEYS: [&str; 7] = [
