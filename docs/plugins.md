@@ -263,7 +263,7 @@ let screen = Rect::new(margin, 0, display.width - 2 * margin, display.height - m
 let row = Stack::new(screen, margin).take_bottom(ui::Segments::height(&style));
 let [ok, cancel] = ui::columns(row, 2, margin)[..] else { return };
 let mut ui = ui::Ui::new(canvas, env, &style);
-let shown = ui.focus_shown();
+let shown = ui::focus_shown(env);
 ui.button(ok, "OK", false, shown && focus == 0);
 ui.button(cancel, "Cancel", false, shown && focus == 1);
 ```
