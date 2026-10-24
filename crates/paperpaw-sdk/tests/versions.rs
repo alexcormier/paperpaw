@@ -95,9 +95,13 @@ proptest! {
 fn short_and_odd_forms_parse_as_documented() {
     assert_eq!(Version::parse("1"), Some(Version::new(1, 0, 0)));
     assert_eq!(Version::parse("1.2"), Some(Version::new(1, 2, 0)));
-    // A pre-release or build after three numbers: the release's numbers.
-    assert_eq!(Version::parse("1.2.3-dev"), Some(Version::new(1, 2, 3)));
+    // A pre-release after three numbers is kept, build metadata is left out.
+    assert_eq!(
+        Version::parse("1.2.3-dev"),
+        Version::new(1, 2, 3).with_pre("dev")
+    );
     assert_eq!(Version::parse("1.2.3+x4"), Some(Version::new(1, 2, 3)));
+    assert_eq!(Version::parse("1.2.3-dev+x4"), Version::parse("1.2.3-dev"));
     for invalid in [
         "",
         " ",
@@ -108,6 +112,10 @@ fn short_and_odd_forms_parse_as_documented() {
         "1.2.3.",
         "1.2-dev",
         "1.2.3-",
+        // A pre-release a version does not hold.
+        "1.2.3-gamma",
+        "1.2.3-beta.01",
+        "1.2.3-7",
         "v1.2.3",
         "-1.0.0",
         "65536.0.0",

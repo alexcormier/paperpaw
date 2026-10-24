@@ -86,7 +86,7 @@ use paperpaw_sdk::{
     Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
     Fonts, Formats, Gesture, GestureKind, Handled, Hints, Hyphenation, Id, Manifest, Menus,
     Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor,
-    SDK_VERSION, Screen, Settings, ShowsThrough, StatusItems,
+    Screen, Settings, ShowsThrough, StatusItems,
 };
 
 pub use crate::builder::KernelBuilder;

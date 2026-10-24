@@ -483,6 +483,22 @@ file to your report.
   (`largest_free`) and the heap's regions (`MemoryRegion`: the X4 Pro's
   internal RAM and PSRAM). `read_file` takes its buffer fallibly: a file
   the heap cannot take now is `StorageError::TooLarge`, not the end.
+- SDK: `Version` keeps a pre-release (`0.5.0-beta.2`) and orders versions
+  as SemVer does (`Version::pre_name`, `pre_number`, `with_pre`,
+  `release`, `try_parse`), in 8 bytes: a pre-release is `alpha`, `beta`,
+  `dev`, `pre` or `rc` with an optional number up to 8190. Any other
+  is refused, saying so: by `Version::try_parse` (`VersionError`), by
+  the data plugin loader's warning, by `paperpaw-dev`'s package check
+  and, for a code plugin's `package_version!`, by the build. So a plugin
+  of a beta loads and a later beta is an update; `satisfies` goes by the
+  numbers. `SDK_VERSION` is the crate's version, a pre-release between
+  releases (`0.4.0-dev`); `firmware::compare_versions` orders by
+  `Version` where it can.
+- SDK: `Manifest` no longer names the SDK it was built against
+  (`Manifest::sdk` and the field are gone), and the kernel no longer
+  refuses a plugin for it: a plugin with code is loaded by its file's
+  fingerprint and the plugin interface, a data plugin by its `formats`.
+  `install::fits_in` asks the kernel's version.
 - SDK, cleaned up before its first release (installers): what only the
   kernel and the plugins that install do comes with the `kernel`
   feature, the reading parts staying for every plugin. `native`:

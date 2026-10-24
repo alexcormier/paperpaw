@@ -15,10 +15,9 @@ use paperpaw_sdk::web::{user_agent, user_agent_of};
 use paperpaw_sdk::{DATA_FORMATS, Manifest, SDK_VERSION, Version, install};
 use paperpaw_sdk::{PluginInfo, PluginKind, PluginState, RequiredFor};
 
-/// A kernel of PaperPaw `version` with the SDK `sdk`.
-fn kernel(version: Version, sdk: Version) -> PluginInfo {
-    let mut manifest = Manifest::new(CORE_PLUGIN, "PaperPaw kernel", version);
-    manifest.sdk = sdk;
+/// A kernel of PaperPaw `version`, which is also its SDK's.
+fn kernel(version: Version) -> PluginInfo {
+    let manifest = Manifest::new(CORE_PLUGIN, "PaperPaw kernel", version);
     PluginInfo {
         manifest,
         state: PluginState::Running,
@@ -35,8 +34,7 @@ fn the_user_agent_names_the_paperpaw_that_runs() {
     let mut h = common::Harness::new();
     // No kernel listed: as this SDK says.
     assert_eq!(user_agent_of(&h.env()), user_agent());
-    h.plugins
-        .push(kernel(Version::new(0, 9, 2), Version::new(0, 9, 0)));
+    h.plugins.push(kernel(Version::new(0, 9, 2)));
     let (name, value) = user_agent_of(&h.env());
     assert_eq!(name, "User-Agent");
     assert_eq!(value, "PaperPaw/0.9.2 (e-reader)");
@@ -48,7 +46,7 @@ fn a_data_plugin_fits_the_kernel_that_runs() {
     let later = format!("{}.{}", SDK_VERSION.major, SDK_VERSION.minor + 1);
     assert!(!install::fits_in(&h.env(), &later, 1));
     let newer = Version::new(SDK_VERSION.major, SDK_VERSION.minor + 1, 0);
-    h.plugins.push(kernel(newer, newer));
+    h.plugins.push(kernel(newer));
     assert!(install::fits_in(&h.env(), &later, 1));
     assert!(!install::fits_in(&h.env(), &later, DATA_FORMATS + 1));
 }

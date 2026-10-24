@@ -71,12 +71,6 @@ impl Kernel {
             self.warn(source(), None, message);
             return self.add_plugin_info(manifest, PluginState::Failed, true);
         }
-        if !SDK_VERSION.satisfies(&manifest.sdk) {
-            let message = format!("requires SDK {}, this is {}", manifest.sdk, SDK_VERSION);
-            self.warn(source(), None, message);
-            return self.add_plugin_info(manifest, PluginState::Failed, true);
-        }
-
         let mut staging = Staging::default();
         let mut registrar = Registrar::new(id.clone());
         let result = plugin
@@ -108,7 +102,7 @@ impl Kernel {
             return self.register_plugin(plugin, manifest);
         }
         let mut registrar = Registrar::new(id);
-        if SDK_VERSION.satisfies(&manifest.sdk) && plugin.register(&mut registrar).is_ok() {
+        if plugin.register(&mut registrar).is_ok() {
             for contribution in registrar.into_contributions() {
                 if let Contribution::Translations(source) = contribution
                     && let Ok(catalog) = registry::catalog(source)
