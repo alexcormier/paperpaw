@@ -136,6 +136,27 @@ fn text_run(scene: &Scene<'_>, d: &Described, threshold: u8) -> Option<(Rect, u1
     ))
 }
 
+/// Where the words of text `d` are drawn: all ink in its box from where
+/// it starts, up to a gap wider than a word's space, whatever else drew
+/// there (unlike [`text_run`], which leaves out what other parts drew, so
+/// words drawn over each other would hide each other); `None` without
+/// ink.
+fn words(scene: &Scene<'_>, d: &Described) -> Option<Rect> {
+    let area = scene.visible(d).and_then(|v| d.area.intersection(&v))?;
+    let ink = scene.ink(area, scene.background(area));
+    let lines = ink.lines(2);
+    let height = lines.iter().map(|l| l.1).max()?;
+    let (first, last) = ink.run_from(0, (height * 2 / 5).max(3))?;
+    let top = lines.iter().map(|l| l.0).min().unwrap_or(0);
+    let bottom = lines.iter().map(|l| l.0 + l.1).max().unwrap_or(0);
+    Some(Rect::new(
+        area.x + first as u16,
+        area.y + top as u16,
+        (last - first + 1) as u16,
+        (bottom - top) as u16,
+    ))
+}
+
 /// Whether `d` lies in a focused part (drawn on the focus bar).
 fn on_focus(scene: &Scene<'_>, d: &Described) -> bool {
     scene
@@ -473,11 +494,21 @@ pub fn overlap(scene: &Scene<'_>) -> Vec<Issue> {
             }
         }
     }
+    // Where each text's words are drawn: its box may reach further, to
+    // the end of the room it was given (a label beside a value, a day of
+    // a calendar), where nothing of it is.
+    let drawn: Vec<(&Described, Rect)> = scene
+        .parts(&[Role::Text])
+        .filter(|t| says_something(&t.label))
+        .map(|t| (t, words(scene, t).unwrap_or(t.area)))
+        .collect();
+    for (i, &(t, own)) in drawn.iter().enumerate() {
+        issues.extend(covered(scene, t, own, &drawn[i + 1..]));
+    }
     for t in scene.parts(&[Role::Text]) {
         if !says_something(&t.label) {
             continue;
         }
-        issues.extend(covered(scene, t));
         let Some(visible) = scene.visible(t) else {
             continue;
         };
@@ -550,11 +581,17 @@ fn belongs(text: Rect, part: Rect) -> bool {
         .is_some_and(|common| size(common) * 2 >= size(text))
 }
 
-/// A text with words that lies partly under a part it is not of: a row,
-/// a control starting where the text starts or before it (one starting
-/// within the text is looked at by its ink, in `overlap`), or another
-/// text. Drawn where the rows are, or the rows placed where it is.
-fn covered(scene: &Scene<'_>, t: &Described) -> Vec<Issue> {
+/// A text with words, drawn at `own`, that lies partly under a part it is
+/// not of: a row, a control starting where the text starts or before it
+/// (one starting within the text is looked at by its ink, in `overlap`),
+/// or one of the texts `later` (each drawn where it says). Drawn where the
+/// rows are, or the rows placed where it is.
+fn covered(
+    scene: &Scene<'_>,
+    t: &Described,
+    own: Rect,
+    later: &[(&Described, Rect)],
+) -> Vec<Issue> {
     let mut issues = Vec::new();
     let mut under = |part: &Described, common: Rect| {
         issues.push(Issue::error(
@@ -568,31 +605,22 @@ fn covered(scene: &Scene<'_>, t: &Described) -> Vec<Issue> {
         ));
     };
     for r in scene.parts(&[Role::Row]) {
-        if let Some(common) = partly(t.area, r.area).filter(|_| !belongs(t.area, r.area)) {
+        if let Some(common) = partly(own, r.area).filter(|_| !belongs(own, r.area)) {
             under(r, common);
         }
     }
     for c in scene.parts(CONTROLS) {
-        if c.area.x > t.area.x + 2 {
+        if c.area.x > own.x + 2 {
             continue;
         }
-        if let Some(common) = partly(t.area, c.area).filter(|_| !belongs(t.area, c.area)) {
+        if let Some(common) = partly(own, c.area).filter(|_| !belongs(own, c.area)) {
             under(c, common);
         }
     }
-    // Each pair once: only the texts after this one.
-    let texts: Vec<&Described> = scene.parts(&[Role::Text]).collect();
-    let after = texts
-        .iter()
-        .position(|other| core::ptr::eq(*other, t))
-        .map_or(texts.len(), |i| i + 1);
-    for other in &texts[after..] {
-        if !says_something(&other.label) {
-            continue;
-        }
+    for &(other, theirs) in later {
         // Lines a few pixels into each other's room are no overlap.
-        let lower = t.area.height.min(other.area.height);
-        if let Some(common) = partly(t.area, other.area).filter(|c| c.height * 3 >= lower) {
+        let lower = own.height.min(theirs.height);
+        if let Some(common) = partly(own, theirs).filter(|c| c.height * 3 >= lower) {
             under(other, common);
         }
     }
