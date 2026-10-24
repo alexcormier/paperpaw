@@ -15,6 +15,11 @@ change the plugin SDK.
 - Touch lock: the way out it explains (tap twice, hold the second tap)
   unlocks; it wanted a third touch held after two taps, which still
   works too.
+- News: articles with a long body in a CDATA section (WordPress feeds, The
+  Verge) show their whole text; the reader dropped any section over 4 KiB
+  and fell back to the summary. The XML reader now passes a long CDATA
+  section on in pieces, in the same small memory. Dates, Atom
+  and RSS, show short as the language writes them (Sat 24 Oct 2026).
 ### Added
 
 - The plugin store has five more groups, so every kind of plugin has a
