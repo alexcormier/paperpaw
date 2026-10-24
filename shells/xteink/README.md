@@ -19,7 +19,10 @@ The Rust release pinned in this folder's `rust-toolchain.toml` builds
 it (rustup fetches it, with the target `riscv32imc-unknown-none-elf`):
 native code plugins run only on firmware built by the same compiler
 (ADR 0026), so each release names its toolchains; `versions.env` names
-the X4 Pro's.
+the X4 Pro's. mbedTLS is built with the firmware (only what its HTTPS
+client uses, see `Cargo.toml`): that takes CMake, Ninja and, for the X4,
+clang (`versions.env` names the version CI uses), found on the `PATH`
+or by `CLANG_PATH`, with `CMAKE_GENERATOR=Ninja` set.
 
 ```sh
 cd shells/xteink
