@@ -444,7 +444,7 @@ impl Segments {
                 env,
                 style,
                 *cell,
-                label,
+                env.i18n.tr(label),
                 i == chosen,
                 focus == Some(i),
             );
