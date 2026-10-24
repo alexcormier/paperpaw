@@ -2,11 +2,15 @@
 """The plugin library's entries for PaperPaw's own plugins the store offers
 (plugins.txt), from the files build.sh made for every reader of a release:
 
-    python3 tools/plugin-files/catalogue.py <dist> <version> <base-url> [--date YYYY-MM-DD]
-        [--only <id>]
+    python3 tools/plugin-files/catalogue.py <dist> <release> <base-url> [--date YYYY-MM-DD]
+        [--only <id>] [--tag <tag>]
 
-<dist> holds <id>-<version>-<device>.ppn for each reader built. Writes into
-<dist>:
+<release> is the PaperPaw release whose firmware the files are built for
+(their SDK is its), <tag> the tag they are published at (`v<release>`
+where not given; a plugin's update between releases has its own,
+`<id>-v<version>`). Each plugin has a version of its own, its crate's
+(`plugins/<id>/Cargo.toml`), which its manifest says. <dist> holds
+<id>-<version>-<device>.ppn for each reader built. Writes into <dist>:
 
 - <id>-<version>.zip: the plugin's folder (its plugin.ini, and its How it
   works, `how/<lang>.txt`, which the store's page of it and readers'
@@ -35,6 +39,7 @@ import pathlib
 import re
 import struct
 import sys
+import tomllib
 import zipfile
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -57,6 +62,15 @@ def plugins():
         if line:
             out.append((line[0], line[1]))
     return out
+
+
+def plugin_version(plugin, plugins=ROOT / "plugins"):
+    """The plugin's own version, as its crate says it (never PaperPaw's)."""
+    path = plugins / plugin / "Cargo.toml"
+    version = tomllib.loads(path.read_text(encoding="utf-8"))["package"].get("version")
+    if not isinstance(version, str):
+        fail(f"{path}: no version of its own")
+    return version
 
 
 def message(plugin, language, key):
@@ -114,19 +128,16 @@ def folder_zip(path, plugin_ini, files=()):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("dist", type=pathlib.Path)
-    parser.add_argument("version")
+    parser.add_argument("release")
     parser.add_argument("base_url")
     parser.add_argument("--date", default=datetime.date.today().isoformat())
     # One plugin alone: an update of it between releases (store-plugin.yml).
     parser.add_argument("--only")
+    parser.add_argument("--tag")
     args = parser.parse_args()
-    dist, version, base = args.dist, args.version, args.base_url.rstrip("/")
-    # The plugins' own version: the release's whole, a beta's too
-    # (0.5.0-beta.2), as their manifests say it (`package_version!`):
-    # devices and the store order them as SemVer does (beta.1, beta.2,
-    # then 0.5.0), so a beta's fixes come to the one before as updates.
-    plugin_version = version
-    sdk = ".".join(version.split("-")[0].split("+")[0].split(".")[:2])
+    dist, release, base = args.dist, args.release, args.base_url.rstrip("/")
+    tag = args.tag or f"v{release}"
+    sdk = ".".join(release.split("-")[0].split("+")[0].split(".")[:2])
     (dist / "catalogue").mkdir(parents=True, exist_ok=True)
     keys = set()
     sums = []
@@ -140,6 +151,7 @@ def main():
             fail(f"{plugin}: no {plugin}.plugin.name or .description in English")
         if len(summary) > 160:
             fail(f"{plugin}: its description is longer than a summary may be (160)")
+        version = plugin_version(plugin)
         how = how_files(plugin)
         if "how/en.txt" not in dict(how):
             fail(f"{plugin}: no How it works in English (plugins/{plugin}/how/en.txt)")
@@ -159,14 +171,14 @@ def main():
             f"id = {plugin}\n"
             f"name = {name}\n"
             f"description = {summary}\n"
-            f"version = {plugin_version}\n"
+            f"version = {version}\n"
         )
         folder = dist / f"{plugin}-{version}.zip"
         folder_zip(folder, plugin_ini, how)
         sums.append((sha256(folder), folder.name))
         lines = [
-            f"# PaperPaw's own plugin, built for PaperPaw {version} by its release",
-            "# (tools/plugin-files). Newer versions are added above older ones.",
+            f"# PaperPaw's own plugin, built for PaperPaw {release} (tools/plugin-files).",
+            "# Newer versions are added above older ones.",
             f"id = {toml(plugin)}",
             f"name = {toml(name)}",
             f"summary = {toml(summary)}",
@@ -188,7 +200,7 @@ def main():
         lines += [
             "",
             "[[versions]]",
-            f"version = {toml(plugin_version)}",
+            f"version = {toml(version)}",
             f"sdk = {toml(sdk)}",
             f"date = {toml(args.date)}",
             f"url = {toml(base + '/' + folder.name)}",
@@ -196,7 +208,7 @@ def main():
             "",
             "[versions.source]",
             f"repository = {toml(REPOSITORY)}",
-            f"revision = {toml('v' + version)}",
+            f"revision = {toml(tag)}",
             'path = "tools/plugin-files"',
             f"bin = {toml(plugin)}",
         ]

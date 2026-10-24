@@ -28,6 +28,13 @@ def signed(fingerprint):
     return header + trailer + bytes(catalogue.SIGNATURE_LEN - len(trailer))
 
 
+def built(dist):
+    """A file for the X4 of each plugin of the store, named by its version."""
+    for plugin, _ in catalogue.plugins():
+        version = catalogue.plugin_version(plugin)
+        dist.joinpath(f"{plugin}-{version}-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+
+
 class HowItWorks(unittest.TestCase):
     def test_every_plugin_of_the_store_has_one_in_english(self):
         for plugin, _ in catalogue.plugins():
@@ -49,13 +56,13 @@ class HowItWorks(unittest.TestCase):
     def test_the_store_s_folders_carry_it(self):
         with tempfile.TemporaryDirectory() as dist:
             dist = pathlib.Path(dist)
-            for plugin, _ in catalogue.plugins():
-                dist.joinpath(f"{plugin}-0.4.0-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+            built(dist)
             argv = ["catalogue.py", str(dist), "0.4.0", "https://example.invalid/r", "--date", "2026-10-23"]
             with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
                 catalogue.main()
-            first = dist.joinpath("battery-0.4.0.zip").read_bytes()
-            with zipfile.ZipFile(dist / "battery-0.4.0.zip") as z:
+            folder = f"battery-{catalogue.plugin_version('battery')}.zip"
+            first = dist.joinpath(folder).read_bytes()
+            with zipfile.ZipFile(dist / folder) as z:
                 names = z.namelist()
                 english = z.read("how/en.txt").decode("utf-8")
             self.assertEqual(names, ["plugin.ini", "how/de.txt", "how/en.txt"])
@@ -63,44 +70,58 @@ class HowItWorks(unittest.TestCase):
             # The same bytes again: the release's checksums hold.
             with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
                 catalogue.main()
-            self.assertEqual(dist.joinpath("battery-0.4.0.zip").read_bytes(), first)
+            self.assertEqual(dist.joinpath(folder).read_bytes(), first)
             sums = dist.joinpath("SHA256SUMS").read_text(encoding="utf-8")
-            self.assertIn("battery-0.4.0.zip", sums)
+            self.assertIn(folder, sums)
 
 
 
 class Versions(unittest.TestCase):
-    def test_a_beta_s_plugins_carry_its_whole_version(self):
+    def test_a_release_s_plugins_carry_their_own_versions(self):
         with tempfile.TemporaryDirectory() as dist:
             dist = pathlib.Path(dist)
-            for plugin, _ in catalogue.plugins():
-                dist.joinpath(f"{plugin}-0.5.0-beta.2-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+            built(dist)
             argv = ["catalogue.py", str(dist), "0.5.0-beta.2", "https://example.invalid/r", "--date", "2026-10-24"]
             with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
                 catalogue.main()
+            own = catalogue.plugin_version("battery")
             entry = dist.joinpath("catalogue", "battery.toml").read_text(encoding="utf-8")
-            # The beta's version, so beta.1's plugins take it as an update;
-            # the SDK its release's.
-            self.assertIn('version = "0.5.0-beta.2"', entry)
+            # Its crate's version, not PaperPaw's; the SDK and the source
+            # the release's.
+            self.assertIn(f'version = "{own}"', entry)
+            self.assertNotIn('version = "0.5.0-beta.2"', entry)
             self.assertIn('sdk = "0.5"', entry)
             self.assertIn('revision = "v0.5.0-beta.2"', entry)
-            with zipfile.ZipFile(dist / "battery-0.5.0-beta.2.zip") as z:
-                self.assertIn("version = 0.5.0-beta.2" + chr(10), z.read("plugin.ini").decode("utf-8"))
+            with zipfile.ZipFile(dist / f"battery-{own}.zip") as z:
+                self.assertIn(f"version = {own}" + chr(10), z.read("plugin.ini").decode("utf-8"))
 
     def test_one_plugin_alone_between_releases(self):
         with tempfile.TemporaryDirectory() as dist:
             dist = pathlib.Path(dist)
-            dist.joinpath("vocabulary-0.5.0-beta.3-x4.ppn").write_bytes(signed(0x85073A61323717FF))
-            argv = ["catalogue.py", str(dist), "0.5.0-beta.3", "https://example.invalid/r", "--only", "vocabulary"]
+            own = catalogue.plugin_version("vocabulary")
+            dist.joinpath(f"vocabulary-{own}-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+            argv = ["catalogue.py", str(dist), "0.5.0-beta.2", "https://example.invalid/r",
+                    "--only", "vocabulary", "--tag", f"vocabulary-v{own}"]
             with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
                 catalogue.main()
             # Its entry alone, so the store keeps the others' versions.
             self.assertEqual([p.name for p in dist.joinpath("catalogue").iterdir()], ["vocabulary.toml"])
             entry = dist.joinpath("catalogue", "vocabulary.toml").read_text(encoding="utf-8")
-            self.assertIn('version = "0.5.0-beta.3"', entry)
-            self.assertIn('revision = "v0.5.0-beta.3"', entry)
+            self.assertIn(f'version = "{own}"', entry)
+            self.assertIn('sdk = "0.5"', entry)
+            self.assertIn(f'revision = "vocabulary-v{own}"', entry)
             sums = dist.joinpath("SHA256SUMS").read_text(encoding="utf-8")
             self.assertNotIn("battery", sums)
+
+    def test_a_plugin_without_a_version_of_its_own_is_refused(self):
+        with tempfile.TemporaryDirectory() as root:
+            crate = pathlib.Path(root, "demo")
+            crate.mkdir()
+            crate.joinpath("Cargo.toml").write_text('[package]\nname = "demo"\nversion.workspace = true\n')
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                catalogue.plugin_version("demo", pathlib.Path(root))
+            crate.joinpath("Cargo.toml").write_text('[package]\nname = "demo"\nversion = "1.2.0"\n')
+            self.assertEqual(catalogue.plugin_version("demo", pathlib.Path(root)), "1.2.0")
 
     def test_only_a_plugin_of_the_store(self):
         with tempfile.TemporaryDirectory() as dist:

@@ -15,7 +15,9 @@ name: Release
 # their own. PaperPaw's own plugins that the store
 # offers (tools/plugin-files) come as files for each device, signed with
 # the first-party plugin key, with their folders and their entries for
-# the plugin library (`paperpaw-<version>-catalogue.zip`). The web
+# the plugin library (`paperpaw-<version>-catalogue.zip`); each keeps
+# its own version (its crate's), the release builds it again for its
+# firmware. The web
 # emulator (shells/web) comes as its module and its pages
 # (`paperpaw-web-<version>.zip`), for pages that show PaperPaw in a
 # browser (paperpaw.org's "Try it out"), with its SHA-256 and a signature
@@ -29,9 +31,11 @@ name: Release
 # with its SHA-256 and a signature of its own, made with the firmware's
 # key over a domain of its own (`paperpaw-sign check-asset` reads it). The release notes come from
 # CHANGELOG.md.
+# Only tags of PaperPaw's versions: a plugin's update between releases is
+# tagged `<id>-v<version>` (store-plugin.yml).
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]*"]
 
 permissions:
   contents: write
