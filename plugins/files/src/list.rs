@@ -353,7 +353,7 @@ impl ListScreen {
             shelves: Vec::new(),
             card: false,
             focus: 0,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             filter_focused: false,
             loaded: Vec::new(),
             loaded_page: None,

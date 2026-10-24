@@ -460,7 +460,7 @@ impl KernelBuilder {
                 reader: false,
                 clipboard: String::new(),
                 system_clipboard: false,
-                last_input: paperpaw_sdk::keys::InputMode::default(),
+                last_input: paperpaw_sdk::keys::InputMode::at_start(&self.device.input),
                 inputs: Vec::new(),
                 stack: Vec::new(),
                 content: Rect::new(0, 0, display.width, display.height),

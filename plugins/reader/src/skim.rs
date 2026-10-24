@@ -109,7 +109,7 @@ impl SkimScreen {
         });
         let mut screen = Self {
             focus: None,
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             style,
             region,
             path: params.get(params::PATH).unwrap_or_default().to_string(),

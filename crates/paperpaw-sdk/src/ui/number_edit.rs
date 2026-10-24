@@ -12,9 +12,9 @@ use alloc::vec;
 
 use crate::builtin::actions;
 use crate::id::Id;
-use crate::screen::{Handled, Hint};
+use crate::screen::Hint;
 use crate::settings::{SettingSpec, SettingValue};
-use crate::ui::{next_value, slider};
+use crate::ui::{Response, next_value, slider};
 use crate::{Command, Cx, Env, RefreshMode};
 
 /// A number being changed with the buttons, or none.
@@ -37,30 +37,33 @@ impl NumberEdit {
         cx.request_refresh(RefreshMode::Fast);
     }
 
-    /// What `action` does while `spec` is being changed: moves it, keeps
-    /// it (Select) or goes back to the value before (Back).
-    /// [`Handled::No`] while nothing is being changed, and for the
-    /// actions it leaves to the screen.
+    /// What `action` does while `spec` is being changed: moves it
+    /// ([`Response::Changed`]), keeps it (Select) or goes back to the
+    /// value before (Back), [`Response::Done`] with whether it was kept.
+    /// Ignored while nothing is being changed, and for the actions it
+    /// leaves to the screen. It asks for its own drawing.
     pub fn on_action(
         &mut self,
         env: &Env<'_>,
         spec: Option<&SettingSpec>,
         action: &Id,
         cx: &mut Cx<'_, '_>,
-    ) -> Handled {
+    ) -> Response<bool> {
         if !self.active() {
-            return Handled::No;
+            return Response::Ignored;
         }
         if let Some(step) = slider::key_step(action) {
             if let Some(spec) = spec {
                 preview_step(env, spec, step, cx);
             }
+            Response::Changed
         } else if *action == actions::CONFIRM || *action == actions::BACK {
-            self.finish(env, spec, *action == actions::CONFIRM, cx);
+            let keep = *action == actions::CONFIRM;
+            self.finish(env, spec, keep, cx);
+            Response::Done(keep)
         } else {
-            return Handled::No;
+            Response::Ignored
         }
-        Handled::Yes
     }
 
     /// Ends changing `spec`: keeps the value shown (`keep`), or shows the

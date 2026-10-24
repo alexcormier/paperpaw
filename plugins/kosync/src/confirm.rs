@@ -195,10 +195,9 @@ impl Screen for ConfirmScreen {
         let row = self.button_row();
         let text = Rect::new(r.x, r.y, r.width, row.y - r.y);
         ui::draw_message(canvas, env, &style, text, &self.text);
-        let touch = env.device.input.touch;
         for (index, key) in self.buttons.iter().enumerate() {
             // With buttons, the frame shows which one confirm takes.
-            let focused = !touch && index == self.focus && self.buttons.len() > 1;
+            let focused = ui::focus_shown(env) && index == self.focus && self.buttons.len() > 1;
             let rect = self.button(index);
             ui::draw_button(
                 canvas,

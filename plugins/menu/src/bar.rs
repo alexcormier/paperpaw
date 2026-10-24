@@ -221,7 +221,7 @@ impl BarScreen {
             cells,
             targets,
             focus,
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             style,
             params: params.clone(),
         }

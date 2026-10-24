@@ -872,7 +872,7 @@ impl Screen for CalibreScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if self.state == State::Offline && *action != actions::BACK {
-            let chosen = self.offer.on_action(action, cx);
+            let chosen = self.offer.on_action(action, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }
@@ -898,7 +898,7 @@ impl Screen for CalibreScreen {
             return Handled::Yes;
         }
         if self.state == State::Offline {
-            let chosen = self.offer.on_tap(gesture.start, cx);
+            let chosen = self.offer.on_gesture(&gesture, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }

@@ -152,7 +152,11 @@ Some rules every screen should follow:
 - **Touch and buttons alike.** Some devices have only buttons (the
   Xteink X4), some mostly touch (the Boox). Everything must be easy with
   either: buttons move a focus and confirm, taps act at once. Show the
-  focus only once buttons are used (`ListView::focus_on_keys`).
+  focus only once buttons are used (`ui::focus_shown`,
+  `ListView::focus_on_keys`). The building blocks that take the buttons'
+  actions and gestures (`on_action`, `on_gesture`) answer with a
+  `ui::Response`: not theirs (`Ignored`), taken (`Same`), changed and to
+  be drawn again (`Changed`), or done with a result (`Done`).
 - **`draw` only draws.** On small devices a frame is drawn in bands
   (the X4 draws five), so `draw` runs several times for one frame, and
   again for every frame after it: whatever it reads or works out, it

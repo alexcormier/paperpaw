@@ -177,7 +177,7 @@ impl GroupList {
             style,
             header,
             rows: ui::Rows::new(area, heights, headings),
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             icon_room,
             covered: Covered::default(),
         }
@@ -280,7 +280,7 @@ impl Screen for GroupList {
         match self.rows.hit(gesture.start) {
             Some(index) => {
                 self.rows.set_focus(index);
-                self.keys = !cx.env().device.input.touch;
+                self.keys = ui::focus_shown(cx.env());
                 self.choose(index, cx);
                 Handled::Yes
             }

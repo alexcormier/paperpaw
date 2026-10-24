@@ -556,7 +556,7 @@ impl Screen for TransferScreen {
                 ui::draw_message(canvas, env, &style, room, env.i18n.tr("transfer.starting"));
                 if let Some(button) = button {
                     let label = env.i18n.tr("transfer.without-router");
-                    let focused = !env.device.input.touch;
+                    let focused = ui::focus_shown(env);
                     ui::draw_button(canvas, env, &style, button, label, false, focused);
                 }
                 return;
@@ -589,7 +589,7 @@ impl Screen for TransferScreen {
                 );
                 if let Some(button) = button {
                     let label = env.i18n.tr("transfer.without-router");
-                    let focused = !env.device.input.touch;
+                    let focused = ui::focus_shown(env);
                     ui::draw_button(canvas, env, &style, button, label, false, focused);
                 }
                 return;
@@ -635,7 +635,7 @@ impl Screen for TransferScreen {
         );
         if let Some(button) = button {
             let label = env.i18n.tr("transfer.without-router");
-            let focused = !env.device.input.touch;
+            let focused = ui::focus_shown(env);
             ui::draw_button(canvas, env, &style, button, label, false, focused);
         }
     }
@@ -678,7 +678,7 @@ impl Screen for TransferScreen {
             self.without_router(cx);
             Handled::Yes
         } else if let State::Offline(offer) = &mut self.state {
-            let chosen = offer.on_action(action, cx);
+            let chosen = offer.on_action(action, cx).done();
             self.offered(chosen, cx);
             Handled::Yes
         } else {
@@ -708,7 +708,7 @@ impl Screen for TransferScreen {
         if gesture.kind == GestureKind::Tap
             && let State::Offline(offer) = &mut self.state
         {
-            let chosen = offer.on_tap(gesture.start, cx);
+            let chosen = offer.on_gesture(&gesture, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }

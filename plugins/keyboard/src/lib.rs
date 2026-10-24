@@ -531,7 +531,7 @@ impl KeyboardScreen {
             current,
             shift: false,
             rows,
-            focus: (!env.device.input.touch).then_some((0, 0)),
+            focus: ui::focus_shown(env).then_some((0, 0)),
             buttons: Vec::new(),
             popup: None,
             style,

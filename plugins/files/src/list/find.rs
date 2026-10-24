@@ -86,7 +86,7 @@ impl FindScreen {
         let note = Rect::new(0, bottom + gap, display.width, row * 2);
         Self {
             focus: usize::from(!letters.is_empty()),
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             columns: usize::from(columns),
             style,
             header,
