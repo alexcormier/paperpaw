@@ -120,6 +120,10 @@
 //!   first point, moved to the second in `steps` steps `ms` apart and
 //!   lifted, read as the touch controller's readings are (in their
 //!   interrupt, also while the main loop is busy); `PP:OK` at once;
+//! - `clicks <button> <count> <every ms> <held ms>`: the button clicked
+//!   `count` times, read as its own readings are (in their interrupt,
+//!   also while the main loop is busy), to try how presses get through
+//!   while PaperPaw works; `PP:OK` at once;
 //! - `time set <unix ms>`: the clock set (`PP:OK`);
 //! - `restart`: what plugins keep saved, then the X4 starts again
 //!   (`PP:OK` first; the connection comes back by itself);
@@ -256,6 +260,14 @@ pub enum Command {
         steps: u16,
         ms: u16,
     },
+    /// Button `button` (of [`crate::buttons::ALL`]) clicked `count`
+    /// times, `every` ms apart, held `held` ms each.
+    Clicks {
+        button: &'static str,
+        count: u16,
+        every: u16,
+        held: u16,
+    },
     /// The clock set, to milliseconds since 1970.
     SetTime(i64),
     Restart,
@@ -375,6 +387,21 @@ pub fn parse(line: &str) -> Option<Command> {
                 to,
                 steps,
                 ms,
+            }
+        }
+        "clicks" => {
+            let name = words.next()?;
+            let button = *crate::buttons::ALL.iter().find(|b| **b == name)?;
+            let mut number = || words.next()?.parse::<u16>().ok();
+            let (count, every, held) = (number()?, number()?, number()?);
+            if held == 0 || held >= every {
+                return None;
+            }
+            Command::Clicks {
+                button,
+                count,
+                every,
+                held,
             }
         }
         "touch" => Command::Touch {
@@ -724,6 +751,17 @@ mod tests {
             })
         );
         assert_eq!(parse("drag 1 2 3 4 0 10"), None);
+        assert_eq!(
+            parse("clicks right 30 800 100"),
+            Some(Command::Clicks {
+                button: crate::buttons::ALL[3],
+                count: 30,
+                every: 800,
+                held: 100,
+            })
+        );
+        assert_eq!(parse("clicks right 30 100 100"), None);
+        assert_eq!(parse("clicks nose 30 800 100"), None);
         assert_eq!(parse("drag 1 2 3"), None);
         assert_eq!(
             parse("emit core.book-opened path=2f61"),

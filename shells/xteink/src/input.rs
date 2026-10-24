@@ -132,6 +132,8 @@ impl Sampler {
         POWER_DOWN.store(power_down, Ordering::Relaxed);
         self.power_armed |= !power_down;
         let (reading, levels) = keys.read(self.power_armed && power_down);
+        #[cfg(feature = "remote")]
+        let reading = paperpaw_x4::buttons::State(reading.0 | clicked(now).0);
         // Only the interrupt writes it (the X4's chip has no atomic adds).
         SAMPLES.store(
             SAMPLES.load(Ordering::Relaxed).wrapping_add(1),
@@ -218,6 +220,62 @@ fn dragged(now: u64) -> Option<Touch> {
         drag.due = now + u64::from(drag.ms);
         cell.set((drag.step <= drag.steps + 1).then_some(drag));
         Some(touch)
+    })
+}
+
+/// Clicks of a button by the remote control (`clicks`): which, how many
+/// are left, how far apart, held how long, and when the next begins.
+#[cfg(feature = "remote")]
+#[derive(Debug, Clone, Copy)]
+struct Clicks {
+    button: &'static str,
+    left: u16,
+    every: u16,
+    held: u16,
+    next: u64,
+}
+
+#[cfg(feature = "remote")]
+static CLICKS: Mutex<Cell<Option<Clicks>>> = Mutex::new(Cell::new(None));
+
+/// Clicks `button` `count` times, `every` ms apart, held `held` ms each,
+/// read in the interrupt as the button's own readings are.
+#[cfg(feature = "remote")]
+pub fn clicks(button: &'static str, count: u16, every: u16, held: u16) {
+    let clicks = Clicks {
+        button,
+        left: count,
+        every,
+        held,
+        next: millis(),
+    };
+    critical_section::with(|cs| CLICKS.borrow(cs).set(Some(clicks)));
+}
+
+/// What the remote control's clicks hold down now.
+#[cfg(feature = "remote")]
+fn clicked(now: u64) -> paperpaw_x4::buttons::State {
+    use paperpaw_x4::buttons::{ALL, State};
+    critical_section::with(|cs| {
+        let cell = CLICKS.borrow(cs);
+        let Some(mut clicks) = cell.get() else {
+            return State(0);
+        };
+        if now >= clicks.next + u64::from(clicks.held) {
+            // This one let go: the next, if any is left.
+            clicks.left = clicks.left.saturating_sub(1);
+            clicks.next += u64::from(clicks.every);
+            cell.set((clicks.left > 0).then_some(clicks));
+            return State(0);
+        }
+        if now < clicks.next {
+            return State(0);
+        }
+        let mut down = [false; ALL.len()];
+        if let Some(i) = ALL.iter().position(|b| *b == clicks.button) {
+            down[i] = true;
+        }
+        State::keys(down)
     })
 }
 

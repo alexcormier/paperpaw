@@ -64,6 +64,8 @@ STEPS, separated by commas:
   tap:240:400        a tap there
   swipe:240:700:240:100   a finger from one point to the other (also :ms)
   drag:240:700:240:100:40:15  the same as the touch controller reads it
+  clicks:right:30:800:100  a button clicked 30 times 800 ms apart, held
+                     100 ms each, read as its own readings are
                      (40 moves 15 ms apart, also while PaperPaw is busy)
   tap-label:Search online  a tap in the middle of what shows that text
 
@@ -530,6 +532,10 @@ def run(x4, step):
             # beat (5 ms) once due, and a little more.
             beat = max(5, -(-int(ms) // 5) * 5)
             time.sleep(((int(steps) + 1) * beat + 100) / 1000)
+        case ["clicks", button, count, every, held]:
+            x4.ask(f"clicks {button} {count} {every} {held}", "OK")
+            # They go on in the X4's interrupt: wait for the last.
+            time.sleep((int(count) * int(every) + 200) / 1000)
         case ["tap-label", *_]:
             found = [p for p in x4.parts() if rest in p[6]]
             if not found:

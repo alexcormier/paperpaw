@@ -1076,6 +1076,15 @@ impl Firmware {
                 input::drag(from, to, steps, ms);
                 remote::ok();
             }
+            Command::Clicks {
+                button,
+                count,
+                every,
+                held,
+            } => {
+                input::clicks(button, count, every, held);
+                remote::ok();
+            }
             Command::Touch { phase, x, y } => {
                 use paperpaw_x4::remote::Touch;
                 let phase = match phase {

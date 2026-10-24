@@ -289,6 +289,7 @@ impl Remote {
             | Command::Show { .. }
             | Command::Touch { .. }
             | Command::Drag { .. }
+            | Command::Clicks { .. }
             | Command::SetTime(_)
             | Command::Restart) => return Some(command),
         }
