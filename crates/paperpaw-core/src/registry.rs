@@ -256,12 +256,20 @@ impl paperpaw_sdk::ScreenMaker for Registry {
         self.screens.title(screen.as_str())
     }
 
+    /// The highest priority first, those of one priority in the order
+    /// offered: the plugins' choice ([`Registry::resolve_slot`]) is the
+    /// last of the first priority, so those before it bind the slot as
+    /// high and those after it lower.
     fn slot_screens(&self, slot: &str) -> Vec<&Id> {
+        let mut candidates: Vec<_> = self
+            .candidates
+            .iter()
+            .filter(|c| c.slot.as_str() == slot && self.screens.contains_key(c.screen.as_str()))
+            .collect();
+        candidates.sort_by_key(|c| core::cmp::Reverse(c.priority));
         let mut screens: Vec<&Id> = Vec::new();
-        for candidate in self.candidates.iter().filter(|c| c.slot.as_str() == slot) {
-            if self.screens.contains_key(candidate.screen.as_str())
-                && !screens.contains(&&candidate.screen)
-            {
+        for candidate in candidates {
+            if !screens.contains(&&candidate.screen) {
                 screens.push(&candidate.screen);
             }
         }

@@ -770,7 +770,10 @@ impl<'a> Env<'a> {
     }
 
     /// Every screen offered for slot `slot` (to choose another, e.g. a
-    /// launcher of several).
+    /// launcher of several): the highest priority first, those of one
+    /// priority in the order offered. Where the user chose none, those
+    /// before [`Env::slot_screen`] bind the slot as high as it, those
+    /// after it lower (a fallback).
     pub fn slot_screens(&self, slot: &str) -> alloc::vec::Vec<&'a crate::Id> {
         self.screen_maker
             .map_or_else(alloc::vec::Vec::new, |maker| maker.slot_screens(slot))

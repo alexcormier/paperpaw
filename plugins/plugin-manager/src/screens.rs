@@ -72,6 +72,17 @@ fn candidates<'e>(env: &Env<'e>, slot: &str) -> Vec<&'e Id> {
         .collect()
 }
 
+/// Whether `screen` binds `slot` as high as the screen the plugins chose
+/// for it, and is not that one: offered before it (see
+/// [`Env::slot_screens`]).
+fn bound_as_high(env: &Env<'_>, slot: &str, screen: &str) -> bool {
+    let offered = env.slot_screens(slot);
+    let at = |id: Option<&Id>| id.and_then(|id| offered.iter().position(|s| *s == id));
+    let used = at(env.slot_screen(slot));
+    let this = offered.iter().position(|s| s.as_str() == screen);
+    matches!((this, used), (Some(this), Some(used)) if this < used)
+}
+
 /// The slots several screens are offered for.
 fn choosable<'e>(env: &Env<'e>) -> Vec<&'e Id> {
     env.slots()
@@ -98,7 +109,8 @@ fn known_path() -> String {
 
 /// Asks once, for a screen newly offered for a slot that has several,
 /// whether to use it now (not where the user chose, nor where it is
-/// used already). The first start only notes what there is.
+/// used already, nor for a screen bound lower than the one used, e.g. a
+/// fallback). The first start only notes what there is.
 fn offer(env: &Env<'_>, out: &mut Commands) {
     let now: Vec<String> = choosable(env)
         .into_iter()
@@ -126,8 +138,7 @@ fn offer(env: &Env<'_>, out: &mut Commands) {
         .filter(|line| !known.contains(line))
         .find(|line| {
             line.split_once(' ').is_some_and(|(slot, screen)| {
-                env.slot_choice(slot).is_none()
-                    && env.slot_screen(slot).map(Id::as_str) != Some(screen)
+                env.slot_choice(slot).is_none() && bound_as_high(env, slot, screen)
             })
         });
     let Some((slot, screen)) = new.and_then(|line| line.split_once(' ')) else {
