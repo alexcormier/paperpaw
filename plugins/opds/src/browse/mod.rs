@@ -4,7 +4,7 @@
 //! format PaperPaw reads, and can be read at once.
 //!
 //! *Back* returns to the feed before, and from the first to the list of
-//! catalogs.
+//! catalogs; while a book is downloading it stops the download instead.
 
 mod covers;
 mod downloads;
@@ -76,6 +76,8 @@ pub(crate) struct BrowseScreen {
     /// Where searches go, once known.
     template: Option<String>,
     message: Option<String>,
+    /// The title of the book being downloaded, while it is.
+    downloading: Option<String>,
     /// Covers of the feed's entries, where loaded (on devices with the
     /// memory for them).
     covers: Vec<Option<Thumbnail>>,
@@ -118,6 +120,7 @@ impl BrowseScreen {
             loading: None,
             template: None,
             message: None,
+            downloading: None,
             covers: Vec::new(),
             with_covers: env.device().memory == MemoryClass::Large
                 && env.settings().read(&crate::COVERS),
@@ -476,6 +479,8 @@ impl Screen for BrowseScreen {
             self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
             self.activate(self.list.focus(), cx);
+        } else if *a == actions::BACK && self.downloading.is_some() {
+            self.stop_download(cx);
         } else if *a == actions::BACK {
             self.back(cx);
         } else {
