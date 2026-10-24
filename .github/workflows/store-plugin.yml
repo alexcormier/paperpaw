@@ -2,29 +2,23 @@ name: Store plugin update
 
 # One of PaperPaw's own store plugins, updated between releases, for the
 # firmware of a release already out (`base`): built at `ref` (a branch
-# from the base's tag with the fix, the plugin's crate carrying the new
-# version), checked against the base firmware's fingerprint, signed with
-# the first-party plugin key, and released as a pre-release `v<version>`
-# with the plugin's files and its catalogue entry alone
-# (`paperpaw-<version>-catalogue.zip`). paperpaw.org imports it as it
-# imports a release, adding the version to that plugin's entry; with no
-# firmware in it, devices are offered no update of their own.
+# from the base's tag with the fix, the plugin's crate at a newer
+# version of its own), checked against the base firmware's fingerprint,
+# signed with the first-party plugin key, and released as a pre-release
+# tagged `<id>-v<version>` with the plugin's files and its catalogue
+# entry alone (`paperpaw-<id>-v<version>-catalogue.zip`). paperpaw.org
+# imports it as it imports a release, adding the version to that
+# plugin's entry; with no firmware in it, devices are offered no update
+# of their own. The next release builds the plugin again, at the version
+# it has then, for its own firmware.
 #
-# The version is the base's, its pre-release number one up (0.5.0-beta.2
-# gives 0.5.0-beta.3): devices read a pre-release as a name and one
-# number, so nothing lies between two betas. The next firmware release
-# then takes the number after it, so its plugins are newer again.
-#
-# The release is made with this workflow's token, so release.yml does not
-# run for its tag.
+# The release is made with this workflow's token, and release.yml runs
+# only for tags of PaperPaw's versions, so nothing else starts with it.
 on:
   workflow_dispatch:
     inputs:
       plugin:
         description: The plugin's id (tools/plugin-files/plugins.txt)
-        required: true
-      version:
-        description: Its new version, as its crate says it (e.g. 0.5.0-beta.3)
         required: true
       base:
         description: The release whose firmware it is for (e.g. v0.5.0-beta.2)
@@ -42,7 +36,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   PLUGIN: ${{ inputs.plugin }}
-  VERSION: ${{ inputs.version }}
   BASE: ${{ inputs.base }}
 
 jobs:
@@ -51,46 +44,45 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       commit: ${{ steps.source.outputs.commit }}
+      version: ${{ steps.source.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
-      - name: The version follows the base's
-        run: |
-          pre='^([0-9]+\.[0-9]+\.[0-9]+)-(alpha|beta|dev|pre|rc)\.(0|[1-9][0-9]{0,3})$'
-          base="${BASE#v}"
-          [[ "$VERSION" =~ $pre ]] || { echo "::error::$VERSION: not x.y.z-<name>.<n>"; exit 1; }
-          core=${BASH_REMATCH[1]} name=${BASH_REMATCH[2]} number=${BASH_REMATCH[3]}
-          [[ "$base" =~ $pre ]] || { echo "::error::$BASE: not a pre-release"; exit 1; }
-          # The devices' limit for the number (a u16 with the name).
-          (( number <= 8190 )) || { echo "::error::$VERSION: the number is over 8190"; exit 1; }
-          if [[ "$core-$name" != "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}" ]] || (( number <= BASH_REMATCH[3] )); then
-            echo "::error::$VERSION does not follow $base (same x.y.z and name, a higher number)"
-            exit 1
-          fi
-      - name: The source is the base's, the plugin's version the new one
+          fetch-depth: 0
+      - name: The source is the base's, the plugin at a newer version
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           workspace="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
           if [[ "v$workspace" != "$BASE" ]]; then
-            echo "::error::the source is $workspace, not $BASE: build it from the base's tag"
+            echo "::error::the source is PaperPaw $workspace, not $BASE: make the fix from the base's tag"
             exit 1
           fi
           sed -e 's/#.*//' tools/plugin-files/plugins.txt | awk 'NF { print $1 }' | grep -qx "$PLUGIN" \
             || { echo "::error::$PLUGIN is not in tools/plugin-files/plugins.txt"; exit 1; }
-          # Its manifest's version (`package_version!`), which devices compare.
-          own="$(sed -n '/^\[package\]/,/^\[/s/^version = "\(.*\)"/\1/p' "plugins/$PLUGIN/Cargo.toml")"
-          if [[ "$own" != "$VERSION" ]]; then
-            echo "::error::plugins/$PLUGIN/Cargo.toml says version ${own:-.workspace}, not $VERSION"
+          # Its own version, as its manifest says it, newer than the base's.
+          version="$(python3 -c '
+          import subprocess, sys
+          sys.path.insert(0, "tools/plugin-files")
+          import versions
+          plugin, base = sys.argv[1:]
+          manifest = f"plugins/{plugin}/Cargo.toml"
+          now = versions.version_in(open(manifest, encoding="utf-8").read(), open("Cargo.toml", encoding="utf-8").read())
+          then = versions.version_in(versions.git("show", f"{base}:{manifest}"),
+                                     versions.git("show", f"{base}:Cargo.toml"))
+          if versions.semver(now) <= versions.semver(then):
+              sys.exit(f"::error::{plugin} is at {now}, the base has {then}: raise it in {manifest}")
+          print(now)
+          ' "$PLUGIN" "$BASE")"
+          tag="$PLUGIN-v$version"
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
+            || git ls-remote --exit-code --tags origin "$tag" > /dev/null; then
+            echo "::error::$tag exists already"
             exit 1
           fi
-          if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
-            || git ls-remote --exit-code --tags origin "v$VERSION" > /dev/null; then
-            echo "::error::v$VERSION exists already"
-            exit 1
-          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   plugin:
@@ -107,13 +99,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.check.outputs.commit }}
-      # This workflow's scripts (one plugin alone), over the base's.
-      - name: The scripts of this workflow
-        run: |
-          git fetch -q --depth=1 origin "$GITHUB_SHA"
-          git checkout FETCH_HEAD -- tools/plugin-files/build.sh tools/plugin-files/catalogue.py
-      # The base's toolchain, its core libraries and its firmware's
-      # fingerprint, so its firmware loads the plugin.
+      # The base's toolchain (its actions), its core libraries and its
+      # firmware's fingerprint, so its firmware loads the plugin.
       - uses: ./.github/actions/xteink-tools
         with:
           device: ${{ matrix.device }}
@@ -124,7 +111,7 @@ jobs:
           base="${BASE#v}"
           dir="$RUNNER_TEMP/base"
           gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" -p "paperpaw-$DEVICE-$base-abi.txt"
-          echo "FINGERPRINT=$(tr -d '[:space:]' < "$dir/paperpaw-$DEVICE-$base-abi.txt")" >> "$GITHUB_ENV"
+          echo "FINGERPRINT=$(awk 'NR == 1 { print $1 }' "$dir/paperpaw-$DEVICE-$base-abi.txt")" >> "$GITHUB_ENV"
           if [[ "$DEVICE" != x4 ]]; then
             gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" \
               -p "paperpaw-xtensa-std-$base.tar.gz" -p "paperpaw-xtensa-std-$base.tar.gz.sha256"
@@ -137,8 +124,7 @@ jobs:
           archive: ${{ env.XTENSA_STD }}
       - name: Build it
         run: |
-          tools/plugin-files/build.sh "$DEVICE" dist/plugins --fingerprint "$FINGERPRINT" \
-            --only "$PLUGIN" --version "$VERSION"
+          tools/plugin-files/build.sh "$DEVICE" dist/plugins --fingerprint "$FINGERPRINT" --only "$PLUGIN"
           # The signing tool, built before the key comes near the disk.
           cargo build -q --release -p paperpaw-sign
       # Apart from the build: the key is on the disk only while the file
@@ -167,25 +153,25 @@ jobs:
     name: Release
     needs: [check, plugin]
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.check.outputs.commit }}
-      - name: The scripts of this workflow
-        run: |
-          git fetch -q --depth=1 origin "$GITHUB_SHA"
-          git checkout FETCH_HEAD -- tools/plugin-files/build.sh tools/plugin-files/catalogue.py
       - uses: actions/download-artifact@v8
         with:
           path: dist/plugins
           merge-multiple: true
       - name: Its folder and catalogue entry
         run: |
-          python3 tools/plugin-files/catalogue.py dist/plugins "$VERSION" \
-            "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" \
-            --date "$(date -u +%F)" --only "$PLUGIN"
-          (cd dist/plugins && zip -q -X -r "../paperpaw-$VERSION-catalogue.zip" catalogue)
-          mv dist/plugins/SHA256SUMS "dist/paperpaw-$VERSION-plugins.sha256"
+          tag="$PLUGIN-v$VERSION"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          python3 tools/plugin-files/catalogue.py dist/plugins "${BASE#v}" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag" \
+            --date "$(date -u +%F)" --only "$PLUGIN" --tag "$tag"
+          (cd dist/plugins && zip -q -X -r "../paperpaw-$tag-catalogue.zip" catalogue)
+          mv dist/plugins/SHA256SUMS "dist/paperpaw-$tag-plugins.sha256"
       - name: Make the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -193,11 +179,11 @@ jobs:
           NOTES: ${{ inputs.notes }}
         run: |
           {
-            echo "An update of the plugin $PLUGIN alone, for the firmware of $BASE."
+            echo "$PLUGIN $VERSION, an update of this plugin alone, for PaperPaw ${BASE#v}."
             echo
             echo "- $NOTES"
           } > dist/notes.md
-          gh release create "v$VERSION" -R "$GITHUB_REPOSITORY" --target "$COMMIT" \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target "$COMMIT" \
             --prerelease --latest=false --title "$PLUGIN $VERSION" --notes-file dist/notes.md \
             dist/plugins/*.ppn dist/plugins/*.zip \
-            "dist/paperpaw-$VERSION-catalogue.zip" "dist/paperpaw-$VERSION-plugins.sha256"
+            "dist/paperpaw-$TAG-catalogue.zip" "dist/paperpaw-$TAG-plugins.sha256"
