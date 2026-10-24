@@ -84,7 +84,16 @@ impl FindScreen {
             })
             .collect();
         let bottom = cells.last().map_or(top, |c| c.y + c.height);
-        let note = Rect::new(0, bottom + gap, display.width, row * 2);
+        // As high as its words need (two rows at least), up to the bottom.
+        let words = ui::tr_input(env, "files.list.find.note");
+        let high = (row * 2).max(ui::message_height(env, &style, display.width, words));
+        let top = bottom + gap;
+        let note = Rect::new(
+            0,
+            top,
+            display.width,
+            high.min(display.height.saturating_sub(top)),
+        );
         Self {
             focus: usize::from(!letters.is_empty()),
             shown: ui::focus_shown(env),
