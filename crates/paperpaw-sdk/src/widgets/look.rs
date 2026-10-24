@@ -251,7 +251,7 @@ pub fn frame_setting(widget: &Id, default: Frame) -> SettingSpec {
     .description("core.setting.frame.help")
 }
 
-/// [`frame_setting`] kept in the program ([`SettingSpec::fixed`]), for a
+/// [`frame_setting`] kept in the program (a `static` list), for a
 /// `static` list of the widget's settings: `id` must be
 /// `<widget>.frame`.
 pub const fn frame_spec(id: &'static str, widget: Id, default: Frame) -> SettingSpec {
@@ -273,7 +273,7 @@ pub fn padding_setting(widget: &Id, default: Padding) -> SettingSpec {
     .description("core.setting.padding.help")
 }
 
-/// [`padding_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
+/// [`padding_setting`] kept in the program (a `static` list): `id`
 /// must be `<widget>.padding`.
 pub const fn padding_spec(id: &'static str, widget: Id, default: Padding) -> SettingSpec {
     SettingSpec::choice(
@@ -292,14 +292,14 @@ pub fn padding(env: &Env<'_>, widget: &str) -> Padding {
     Padding::of(env.settings.text(&format!("{widget}.padding")))
 }
 
-/// [`size_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
+/// [`size_setting`] kept in the program (a `static` list): `id`
 /// must be `<widget>.size`.
 pub const fn size_spec(id: &'static str, widget: Id, default: TextSize, fit: bool) -> SettingSpec {
     SettingSpec::choice(id, "core.setting.size", sizes(fit), default.value(), widget)
         .description("core.setting.size.help")
 }
 
-/// [`part_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
+/// [`part_setting`] kept in the program (a `static` list): `id`
 /// must be `<widget>.<part>`.
 pub const fn part_spec(
     id: &'static str,

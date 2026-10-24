@@ -1000,7 +1000,7 @@ impl Settings {
     }
 
     /// Registers spec `at` of a list of fixed settings
-    /// ([`SettingSpec::fixed`]), kept by a reference to the list. Its
+    /// (a `static` list), kept by a reference to the list. Its
     /// default must be valid.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
