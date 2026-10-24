@@ -58,7 +58,7 @@ you can, and end with the checklist in section 11.
 | | Data plugin | Code plugin |
 |---|---|---|
 | What it is | a folder: `plugin.ini` and data files | the same folder, and its code built for each reader |
-| Uploaded | the folder as a ZIP, with `store/store.ini` | the folder as a ZIP, with `store/store.ini`; one signed `.ppn` per reader (`x4`, `x4-pro`, `x4-classic`) |
+| Uploaded | the folder as a ZIP, with `store/store.ini` | the folder as a ZIP, with `store/store.ini`; one signed `.ppn` per reader (`x4`, `x4-pro`, `x4-classic`); or all of it in one store file (section 6) |
 | Source | `source`, where it lives | also the exact source of the builds: a public repository and a tag or commit (`[source]`), or a source ZIP |
 | Signed | no | every `.ppn`, all with the author's one Ed25519 key |
 | Checked | the ZIP's contents and the entry | the same, every build, the key, the source; then a rebuild from the source |
@@ -504,13 +504,42 @@ git archive --format=zip -o clock-1.0.0-source.zip v1.0.0
    and press Sign in. The first time, give the name the store shows (at
    most 80 characters) and accept the rules for authors.
 2. **Upload** at `https://paperpaw.org/submit` (`POST /submit`,
-   multipart):
+   multipart). One file is the easiest: made in the PaperPaw Workshop,
+   it is `<id>-<version>-store.zip`; the user chooses it in the form's
+   first field, and nothing else. The form says what it found ("From
+   the Workshop: plugin ✓, X4 build ✓, source ✓") and puts the other
+   fields away. Without the Workshop, upload by the fields:
 
    | Field | What |
    |---|---|
-   | `package` | required: the folder as a ZIP |
+   | `package` | required: the folder as a ZIP, or a store file with all in it (then nothing else) |
    | `build-x4`, `build-x4-pro`, `build-x4-classic` | code plugins: the signed `.ppn` of each reader it runs on |
    | `source-zip` | optional: the source as a ZIP, only when `store.ini` names no repository and revision |
+
+   Each `.ppn` is taken for the reader its header names, whichever
+   field it is in; two builds for one reader are refused.
+
+   A store file can also be packed by hand, for one upload from a CI
+   job: a ZIP (entries stored or deflated) holding the parts at its top
+   and `paperpaw-store.ini`, which names them:
+
+   ```ini
+   [store-file]
+   format = 1
+   id = clock
+   version = 1.0.0
+   package = clock-1.0.0-upload.zip
+   source = clock-1.0.0-source.zip
+
+   [builds]
+   x4 = clock-1.0.0-x4.ppn
+   x4-pro = clock-1.0.0-x4-pro.ppn
+   ```
+
+   Every file in it must be named there; `source` is left out when
+   `store.ini` names the repository and revision. The site checks each
+   part as if uploaded apart, within the same limits, and `id` and
+   `version` must be `plugin.ini`'s.
 
    The site makes a draft only the author sees, at `/submit/<n>`.
 3. **Read the checks.** Each names its code and says Passed, Warning or
@@ -537,8 +566,9 @@ git archive --format=zip -o clock-1.0.0-source.zip v1.0.0
    States: Draft, Waiting, Published, Refused, Withdrawn, Taken down;
    `/account` lists them all.
 
-Limits: ZIP 20 MB (40 MB unpacked), each build 4 MB, source 50 MB, one
-upload 100 MB, 10 submissions a day (the site's setting).
+Limits: ZIP 20 MB (40 MB unpacked), each build 4 MB, source 50 MB (the
+same for each part in a store file), one upload 100 MB, 10 submissions a
+day (the site's setting).
 
 ## 7. Updates
 
@@ -547,8 +577,8 @@ upload 100 MB, 10 submissions a day (the site's setting).
    one taken down, is never used again.
 2. Code plugins: new builds, signed **with the same key**, from a new
    tag; `[source] revision` the new tag.
-3. Form: upload the new folder at `/submit` with the account that
-   published the plugin. What the upload leaves out is taken from the
+3. Form: upload the new folder (or the new store file) at `/submit`
+   with the account that published the plugin. What the upload leaves out is taken from the
    last published version (summary, description, group, licence,
    source, sdk, tags, translations, screenshots, `path`, `bin`).
 4. An update goes live at once only when the store's admins allow it,
@@ -564,13 +594,13 @@ change, so go by the code.
 
 | Code | What it checks | When it fails, and what to do |
 |---|---|---|
-| `upload` | the files can be read: a ZIP of at most 20 MB (40 MB unpacked), no name leading outside the folder, builds at most 4 MB, source at most 50 MB; warns when it left out files that are no part of a plugin | "not a ZIP", "larger than 20 MB", "a name outside the folder" (`..` or a backslash): zip again as in section 5a. "Left out what is no part of a plugin: .DS_Store" (warning): zip without them |
+| `upload` | the files can be read: a ZIP of at most 20 MB (40 MB unpacked), no name leading outside the folder, builds at most 4 MB, source at most 50 MB; a store file holds what its `paperpaw-store.ini` names and nothing else; each `.ppn` is a build for a reader, one per reader; warns when it left out files that are no part of a plugin | "Two files are builds for the Xteink X4": the same reader's build was chosen twice; choose the other reader's, or leave its field empty. "is no build for a reader": choose the `.ppn` that `paperpaw-sign pack` made. "The Workshop's file holds the builds and the source already": choose the store file alone. "holds ..., which paperpaw-store.ini does not name": name it or leave it out. "not a ZIP", "larger than 20 MB", "a name outside the folder" (`..` or a backslash): zip again as in section 5a. "Left out what is no part of a plugin: .DS_Store" (warning): zip without them |
 | `manifest` | `plugin.ini` at the top or in one folder at the top, with `id`, `name`, `version` | "The ZIP has no plugin.ini at its top": zip the plugin's folder itself, not the folder around it. "plugin.ini names no id": add the key |
 | `id` | the id is free or the author's | "belongs to another author", "is one of PaperPaw's own plugins", "was taken down and cannot be used again": choose another id in `plugin.ini` and the code |
 | `version` | three numbers, not published before, not older than the newest | "was published before; a new version needs a new number", "is older than": raise `version` |
 | `metadata` | the entry: id's letters, name, summary, description, licence, group, tags, languages, screenshots' names and alt, `source` https, `sdk` like `0.5`; for code its readers, key and source | fix the field the sentence names, in the form or `store.ini`. "sdk is not like 0.3": fill in `sdk`. "source: the revision is a tag or a commit": fill in `source-revision` |
 | `package` | the folder readers install: allowed file types, names, at most 64 files (63 for code), `plugin.ini`'s id and version, `formats`, translations that parse | "only ini, css, ttf, otf, ttc, ppfp, txt, md, png files belong in a data plugin": take that file out. "names are letters, digits, dots, hyphens and underscores": rename. "more than 63 files": fewer. A translation that does not parse names its line |
-| `build.x4`, `build.x4-pro`, `build.x4-classic` | each build: a plugin file of format 1, that reader's chip, as long as its header says, digest whole, signed | "The file is not signed": sign it. "built for chip 5, x4-pro has chip 9": the X4's file in the X4 Pro's field. "not a PaperPaw plugin file": that is the linked program; make the `.ppn` with `paperpaw-sign pack`. "Changed or damaged": build and pack again. "The file of this build is missing": upload it again |
+| `build.x4`, `build.x4-pro`, `build.x4-classic` | each build: a plugin file of format 1, that reader's chip, as long as its header says, digest whole, signed | "The file is not signed": sign it. "not a PaperPaw plugin file": that is the linked program; make the `.ppn` with `paperpaw-sign pack`. "Changed or damaged": build and pack again. "The file of this build is missing": upload it again |
 | `signature` | all builds signed by one key | "signed by 2 different keys": sign every build with the one key file. "another key than the entry names": sign with the key in `author_key`, or correct it |
 | `key` | the key is that of the versions before | "Earlier versions are signed by the key": sign with the earlier key; lost, section 9 |
 | `source` | fetched at the revision or uploaded; at most 50 MB; `Cargo.toml` at the top or at `path`; warns without `Cargo.lock` | "name a repository and a revision": fill in `[source]` or the fields. "could not be fetched from": push the tag, make the repository public, check the address. "has no Cargo.toml at its top": set `path`. "no Cargo.lock": commit it and tag again |
