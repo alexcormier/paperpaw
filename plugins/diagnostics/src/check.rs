@@ -205,10 +205,9 @@ impl Check {
     }
 
     fn save(&mut self, env: &Env<'_>) {
-        let when = env
-            .status
-            .clock
-            .map(|c| paperpaw_sdk::time::iso8601(c.unix_millis_at(env.now)));
+        let when = env.status.clock.map(|c| {
+            paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now)).iso8601()
+        });
         let about = About {
             device: env.device,
             version: env!("CARGO_PKG_VERSION"),
@@ -308,7 +307,7 @@ impl Check {
             Some(Step::Clock) => match env.status.clock {
                 Some(c) => (
                     Outcome::Pass,
-                    paperpaw_sdk::time::iso8601(c.unix_millis_at(env.now)),
+                    paperpaw_sdk::time::UnixTime::from_millis(c.unix_millis_at(env.now)).iso8601(),
                 ),
                 None => (Outcome::Skip, String::from("time of day not known")),
             },

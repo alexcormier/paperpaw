@@ -511,6 +511,15 @@ file to your report.
   (`largest_free`) and the heap's regions (`MemoryRegion`: the X4 Pro's
   internal RAM and PSRAM). `read_file` takes its buffer fallibly: a file
   the heap cannot take now is `StorageError::TooLarge`, not the end.
+- SDK: `time::UnixTime` is a moment (milliseconds since 1970, UTC):
+  `from_secs`, `from_millis`, `secs`, `millis`, `now(env)`, `local(offset)`,
+  and the ISO 8601 and HTTP date helpers as its methods (`iso8601`,
+  `parse_iso8601`, `parse_http_date`) in place of the free functions
+  `time::iso8601`, `time::parse_iso8601` and `web::http_date`, which
+  counted in different units. `LocalTime` has an `offset` (seconds ahead
+  of UTC; 0 where made without a zone), `LocalTime::from_unix` and
+  `LocalTime::unix`, and `time::local_time` fills it from the chosen
+  zone. `time::unix_seconds` stays, as `UnixTime::now(env).secs()`.
 - SDK: `Version` keeps a pre-release (`0.5.0-beta.2`) and orders versions
   as SemVer does (`Version::pre_name`, `pre_number`, `with_pre`,
   `release`, `try_parse`), in 8 bytes: a pre-release is `alpha`, `beta`,
@@ -520,7 +529,7 @@ file to your report.
   and, for a code plugin's `package_version!`, by the build. So a plugin
   of a beta loads and a later beta is an update; `satisfies` goes by the
   numbers. `SDK_VERSION` is the crate's version, a pre-release between
-  releases (`0.4.0-dev`); `firmware::compare_versions` orders by
+  releases (`0.5.0-dev`); `firmware::compare_versions` orders by
   `Version` where it can.
 - SDK: `Manifest` no longer names the SDK it was built against
   (`Manifest::sdk` and the field are gone), and the kernel no longer
