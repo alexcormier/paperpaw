@@ -33,13 +33,13 @@ pub mod steps;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
-use paperpaw_sdk::builtin::{actions, fonts, groups, menus, slots};
+use paperpaw_sdk::builtin::{actions, fonts, groups, menus};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, MenuNeed, Metrics, Params, Plugin, Priority, Rect, RefreshMode, RegisterError,
-    Registrar, Screen, ScreenSpec, SettingSpec,
+    MenuEntry, MenuNeed, Metrics, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
+    Screen, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("diagnostics");
@@ -86,7 +86,6 @@ impl Plugin for Diagnostics {
             "diagnostics.title",
             Box::new(|env, _| Box::new(DiagnosticsScreen::new(env))),
         ))?;
-        r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.add_action(ActionSpec::new(RESET, "diagnostics.action.reset"))?;
         r.add_screen(ScreenSpec::new(
             CHECK,
