@@ -284,7 +284,9 @@ fn numbers_change_with_the_buttons_kept_when_chosen() {
     let settings = app.kernel.settings();
     assert!(!settings.previewing());
     assert!(settings.is_set(size));
-    assert_eq!(settings.int(size), before - 1);
+    // The X4's reading font draws 10 and 11 points alike: a step down
+    // from 11 goes on to the next size that looks different.
+    assert_eq!(settings.int(size), before - 2);
 }
 
 /// On a touch screen a slider's knob is taken along by the finger, as far
@@ -318,7 +320,9 @@ fn sliders_follow_the_finger_kept_where_it_is_lifted() {
     app.finger(PointerPhase::Move, Point::new(track.right() as i32, y));
     let settings = app.kernel.settings();
     assert!(settings.previewing());
-    assert_eq!(settings.int(size), max, "the end of the track");
+    // The largest size the font draws, shown as the smallest drawn alike
+    // (15 and 16 points look the same).
+    assert_eq!(settings.int(size), max - 1, "the end of the track");
     assert!(!settings.is_set(size));
     // As far past the start: the start.
     let past = i32::from(track.x) - i32::from(track.width);
