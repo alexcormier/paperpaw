@@ -245,6 +245,10 @@ file to your report.
 
 #### Wi-Fi, sync and the store
 
+- Wi-Fi goes off as soon as you are back home or in a book and nothing
+  uses the network, not a minute later. On the X4 this frees its memory
+  before a book opens: a book opened right after the store could run
+  out of memory. On the X4 a download also takes less memory at once.
 - The store tells betas apart: a plugin's versions are compared whole,
   pre-release included (`0.5.0-beta.2` after `0.5.0-beta.1`, `0.5.0`
   after both), as firmware updates are. A newer beta is offered only
