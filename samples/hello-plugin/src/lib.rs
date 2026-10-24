@@ -72,8 +72,7 @@ impl Plugin for Hello {
 
         // The setting: shown in the settings, saved by the kernel.
         r.add_setting(
-            SettingSpec::text(&NAME, "hello.setting.name", "")
-                .group(groups::OTHER)
+            SettingSpec::text(NAME.static_str(), "hello.setting.name", "", groups::OTHER)
                 .description("hello.setting.name.help"),
         )?;
 

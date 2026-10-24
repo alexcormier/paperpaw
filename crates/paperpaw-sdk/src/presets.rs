@@ -340,6 +340,7 @@ mod tests {
             "a.size",
             SettingKind::Int { min: 0, max: 9 },
             SettingValue::Int(1),
+            crate::builtin::groups::OTHER,
         ))
         .unwrap();
         s.define(SettingSpec::new(
@@ -347,6 +348,7 @@ mod tests {
             "a.name",
             SettingKind::Text,
             SettingValue::Text(Cow::Borrowed("")),
+            crate::builtin::groups::OTHER,
         ))
         .unwrap();
         s.define(SettingSpec::new(
@@ -354,6 +356,7 @@ mod tests {
             "a.dots",
             SettingKind::Bool,
             SettingValue::Bool(true),
+            crate::builtin::groups::OTHER,
         ))
         .unwrap();
         s

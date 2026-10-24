@@ -82,7 +82,7 @@ paperpaw_sdk::event_data! {
 /// The account's settings, all set on the set-up.
 static ON_SETUP: SettingExtra = SettingExtra::new().editor(SCREEN);
 static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         SERVICE.static_str(),
         "joplin.service",
         &Service::KEYS,
@@ -91,18 +91,18 @@ static SETTINGS: [SettingSpec; 4] = [
     )
     .with_extra(&ON_SETUP)
     .kept_on_reset()
-    .described("joplin.service.help"),
-    SettingSpec::fixed_text(ADDRESS.static_str(), "joplin.address", "", groups::LIBRARY)
+    .description("joplin.service.help"),
+    SettingSpec::text(ADDRESS.static_str(), "joplin.address", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
         .kept_on_reset()
         .advanced()
-        .described("joplin.address.help"),
-    SettingSpec::fixed_text(USER.static_str(), "joplin.user", "", groups::LIBRARY)
+        .description("joplin.address.help"),
+    SettingSpec::text(USER.static_str(), "joplin.user", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
         .kept_on_reset()
         .advanced()
-        .described("joplin.user.help"),
-    SettingSpec::fixed_text(
+        .description("joplin.user.help"),
+    SettingSpec::text(
         NOTEBOOK.static_str(),
         "joplin.notebook",
         DEFAULT_NOTEBOOK,
@@ -111,7 +111,7 @@ static SETTINGS: [SettingSpec; 4] = [
     .with_extra(&ON_SETUP)
     .kept_on_reset()
     .advanced()
-    .described("joplin.notebook.help"),
+    .description("joplin.notebook.help"),
 ];
 
 /// The Joplin plugin.

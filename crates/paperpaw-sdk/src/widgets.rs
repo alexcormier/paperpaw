@@ -1090,23 +1090,23 @@ pub fn align_setting(widget: &Id, default: Align) -> SettingSpec {
         "core.setting.align",
         SettingKind::Choice(crate::settings::Choices::Fixed(ALIGNMENTS)),
         SettingValue::Text(Cow::Borrowed(default.value())),
+        widget.clone(),
     )
-    .group(widget.clone())
-    .described("core.setting.align.help")
+    .description("core.setting.align.help")
 }
 
 /// [`align_setting`] kept in the program
 /// ([`SettingSpec::fixed`](crate::SettingSpec::fixed)), for a `static`
 /// list of the widget's settings: `id` must be `<widget>.align`.
 pub const fn align_spec(id: &'static str, widget: Id, default: Align) -> SettingSpec {
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         id,
         "core.setting.align",
         ALIGNMENTS,
         default.value(),
         widget,
     )
-    .described("core.setting.align.help")
+    .description("core.setting.align.help")
 }
 
 /// Whether widget `id` has settings of its own (a settings group with its

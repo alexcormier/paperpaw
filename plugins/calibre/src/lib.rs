@@ -102,13 +102,13 @@ fn provided(metadata: &str) -> paperpaw_sdk::library::Provided {
 pub struct Calibre;
 
 /// Calibre's address, where it is not found by itself.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     ADDRESS.static_str(),
     "calibre.setting.address",
     "",
     groups::LIBRARY,
 )
-.described("calibre.setting.address.help")
+.description("calibre.setting.address.help")
 .advanced()];
 
 /// How it works, by language (see `Manifest::how`).

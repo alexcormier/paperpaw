@@ -43,14 +43,14 @@ static SETTINGS: [SettingSpec; 17] = [
     widgets::padding_spec("weather.now.padding", ID, Padding::Auto),
     widgets::size_spec("weather.now.size", ID, TextSize::Fit, true),
     widgets::align_spec("weather.now.align", ID, Align::Center),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.now.symbol",
         "weather.setting.symbol",
         &SYMBOLS,
         SYMBOLS[0],
         ID,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.now.placing",
         "weather.setting.placing",
         &PLACINGS,

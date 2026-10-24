@@ -218,28 +218,28 @@ const IDLE_OFF_IDS: [&str; IDLE_OFF_CHOICES.len()] = {
 
 /// When the radio is on.
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         ON_DEMAND.static_str(),
         "wifi.setting.on-demand",
         true,
         GROUP,
     )
-    .described("wifi.setting.on-demand.help"),
-    SettingSpec::fixed_choice(
+    .description("wifi.setting.on-demand.help"),
+    SettingSpec::choice(
         IDLE_OFF.static_str(),
         "wifi.setting.idle-off",
         &IDLE_OFF_IDS,
         "wifi.idle-off.1m",
         GROUP,
     )
-    .described("wifi.setting.idle-off.help"),
-    SettingSpec::fixed_switch(
+    .description("wifi.setting.idle-off.help"),
+    SettingSpec::switch(
         WHILE_CHARGING.static_str(),
         "wifi.setting.while-charging",
         false,
         GROUP,
     )
-    .described("wifi.setting.while-charging.help"),
+    .description("wifi.setting.while-charging.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

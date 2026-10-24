@@ -104,7 +104,7 @@ static IN_DICTIONARY: SettingExtra = SettingExtra::new().section(DICTIONARY_SECT
 
 /// Whether words are kept and marked.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         COLLECT.static_str(),
         "vocabulary.setting.collect",
         true,
@@ -112,15 +112,15 @@ static SETTINGS: [SettingSpec; 2] = [
     )
     .advanced()
     .with_extra(&IN_DICTIONARY)
-    .described("vocabulary.setting.collect.help"),
-    SettingSpec::fixed_switch(
+    .description("vocabulary.setting.collect.help"),
+    SettingSpec::switch(
         MARK.static_str(),
         "vocabulary.setting.mark",
         false,
         groups::READING,
     )
     .with_extra(&IN_DICTIONARY)
-    .described("vocabulary.setting.mark.help"),
+    .description("vocabulary.setting.mark.help"),
 ];
 
 /// The flash cards' part of the reading settings.
@@ -132,7 +132,7 @@ static IN_CARDS_PERCENT: SettingExtra = SettingExtra::new()
 /// How the flash cards are reviewed, and whether words looked up become
 /// cards.
 static CARD_SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_number(
+    SettingSpec::number(
         NEW_PER_DAY.static_str(),
         "vocabulary.setting.new-per-day",
         0,
@@ -141,8 +141,8 @@ static CARD_SETTINGS: [SettingSpec; 4] = [
         groups::READING,
     )
     .with_extra(&IN_CARDS)
-    .described("vocabulary.setting.new-per-day.help"),
-    SettingSpec::fixed_number(
+    .description("vocabulary.setting.new-per-day.help"),
+    SettingSpec::number(
         RETENTION.static_str(),
         "vocabulary.setting.retention",
         70,
@@ -152,23 +152,23 @@ static CARD_SETTINGS: [SettingSpec; 4] = [
     )
     .advanced()
     .with_extra(&IN_CARDS_PERCENT)
-    .described("vocabulary.setting.retention.help"),
-    SettingSpec::fixed_switch(
+    .description("vocabulary.setting.retention.help"),
+    SettingSpec::switch(
         FROM_LOOKUPS.static_str(),
         "vocabulary.setting.cards-from-lookups",
         false,
         groups::READING,
     )
     .with_extra(&IN_CARDS)
-    .described("vocabulary.setting.cards-from-lookups.help"),
-    SettingSpec::fixed_switch(
+    .description("vocabulary.setting.cards-from-lookups.help"),
+    SettingSpec::switch(
         REVIEW_ON_WAKE.static_str(),
         "vocabulary.setting.review-on-wake",
         false,
         groups::READING,
     )
     .with_extra(&IN_CARDS)
-    .described("vocabulary.setting.review-on-wake.help"),
+    .description("vocabulary.setting.review-on-wake.help"),
 ];
 
 /// How the words being learnt look in books.

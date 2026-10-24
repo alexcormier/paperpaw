@@ -40,30 +40,30 @@ static SETTINGS: [SettingSpec; 13] = [
     widgets::align_spec("widgets.calendar.align", ID, Align::Center),
     widgets::frame_spec("widgets.calendar.frame", ID, Frame::None),
     widgets::padding_spec("widgets.calendar.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.calendar.week-start",
         "widgets.setting.week-start",
         &WEEK_STARTS,
         WEEK_STARTS[0],
         ID,
     )
-    .described("widgets.calendar.week-start.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.calendar.week-start.help"),
+    SettingSpec::choice(
         "widgets.calendar.mark",
         "widgets.setting.today-mark",
         &MARKS,
         MARKS[0],
         ID,
     )
-    .described("widgets.calendar.mark.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.calendar.mark.help"),
+    SettingSpec::choice(
         "widgets.calendar.initials",
         "widgets.setting.initials",
         &INITIALS,
         INITIALS[0],
         ID,
     )
-    .described("widgets.calendar.initials.help"),
+    .description("widgets.calendar.initials.help"),
     widgets::part_spec(
         "widgets.calendar.heading",
         ID,

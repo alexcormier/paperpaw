@@ -28,15 +28,15 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::frame_spec("widgets.favourites.frame", ID, Frame::None),
     widgets::padding_spec("widgets.favourites.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.favourites.size", ID, TextSize::Medium, false),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.favourites.layout",
         "widgets.books.setting.layout",
         &LAYOUTS,
         LAYOUTS[0],
         ID,
     )
-    .described("widgets.favourites.layout.help"),
-    SettingSpec::fixed_number(
+    .description("widgets.favourites.layout.help"),
+    SettingSpec::number(
         "widgets.favourites.count",
         "widgets.books.setting.count",
         1,
@@ -44,7 +44,7 @@ static SETTINGS: [SettingSpec; 10] = [
         8,
         ID,
     )
-    .described("widgets.setting.count.help"),
+    .description("widgets.setting.count.help"),
     widgets::part_spec(
         "widgets.favourites.caption",
         ID,

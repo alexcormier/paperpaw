@@ -831,6 +831,7 @@ impl Kernel {
                     "core.network.allowed",
                     paperpaw_sdk::SettingKind::Bool,
                     paperpaw_sdk::SettingValue::Bool(true),
+                    NETWORK_GROUP,
                 )
                 .description("core.network.allowed.help"),
                 paperpaw_sdk::SettingSpec::new(
@@ -842,11 +843,12 @@ impl Kernel {
                     paperpaw_sdk::SettingValue::Text(alloc::borrow::Cow::Borrowed(
                         SAVING_CHOICES[0],
                     )),
+                    NETWORK_GROUP,
                 )
                 .description("core.saving.help"),
             ];
             for spec in specs {
-                let spec = spec.group(NETWORK_GROUP).with_extra(&NETWORK_EXTRA);
+                let spec = spec.with_extra(&NETWORK_EXTRA);
                 if let Err(e) = self.shared.settings.define(spec) {
                     self.warn_runtime(alloc::format!("{plugin}: {e:?}"));
                 }

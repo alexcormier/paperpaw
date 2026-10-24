@@ -189,6 +189,7 @@ impl Plugin for BarPlugin {
             "",
             SettingKind::Int { min: 0, max: 40 },
             SettingValue::Int(i64::from(SIZE)),
+            paperpaw_sdk::builtin::groups::OTHER,
         ))?;
         // Not over books, nor over the menu (which shares the bars of the
         // screen it is opened on all the same).

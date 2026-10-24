@@ -51,14 +51,14 @@ static WORD_SETTINGS: [SettingSpec; 8] = [
     widgets::padding_spec("vocabulary.widget.word.padding", WORD, Padding::Auto),
     widgets::size_spec("vocabulary.widget.word.size", WORD, TextSize::Medium, true),
     widgets::align_spec("vocabulary.widget.word.align", WORD, Align::Left),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "vocabulary.widget.word.pick",
         "vocabulary.setting.pick",
         &PICKS,
         PICKS[0],
         WORD,
     )
-    .described("vocabulary.setting.pick.help"),
+    .description("vocabulary.setting.pick.help"),
     widgets::part_spec(
         "vocabulary.widget.word.caption",
         WORD,

@@ -55,31 +55,31 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.word-clock.align", ID, Align::Left),
     widgets::frame_spec("widgets.word-clock.frame", ID, Frame::None),
     widgets::padding_spec("widgets.word-clock.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.word-clock.style",
         "widgets.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.word-clock.style.help"),
+    .description("widgets.word-clock.style.help"),
     widgets::size_spec("widgets.word-clock.size", ID, TextSize::Fit, true),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.word-clock.lead",
         "widgets.setting.word-clock-lead",
         &LEADS,
         LEADS[1],
         ID,
     )
-    .described("widgets.word-clock.lead.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.word-clock.lead.help"),
+    SettingSpec::choice(
         "widgets.word-clock.quarters",
         "widgets.setting.quarters",
         &QUARTERS,
         QUARTERS[0],
         ID,
     )
-    .described("widgets.word-clock.quarters.help"),
+    .description("widgets.word-clock.quarters.help"),
     widgets::part_spec(
         "widgets.word-clock.capitals",
         ID,

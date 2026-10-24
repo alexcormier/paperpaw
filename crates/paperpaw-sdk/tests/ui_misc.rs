@@ -563,7 +563,12 @@ fn a_text_setting_opens_the_keyboard_on_every_screen() {
     const ON: paperpaw_sdk::Setting<bool> = paperpaw_sdk::Setting::new("t.on");
     let h = support::Harness::new(support::Device::TOUCH);
     let env = h.env();
-    let name = SettingSpec::text(&NAME, "t.name", "Ann");
+    let name = SettingSpec::text(
+        NAME.static_str(),
+        "t.name",
+        "Ann",
+        paperpaw_sdk::builtin::groups::OTHER,
+    );
     let Some(Command::OpenSlot(slot, asked)) = ui::setting_opens(&env, &name) else {
         panic!("the keyboard");
     };
@@ -573,13 +578,29 @@ fn a_text_setting_opens_the_keyboard_on_every_screen() {
         Some(events::SETTING_TYPED.as_str())
     );
     assert_eq!(asked.get(params::ID), Some("t.name"));
-    let edited = SettingSpec::text(&NAME, "t.name", "").editor(Id::new_static("t.edit"));
+    static EDIT: paperpaw_sdk::SettingExtra =
+        paperpaw_sdk::SettingExtra::new().editor(Id::new_static("t.edit"));
+    let edited = SettingSpec::text(
+        NAME.static_str(),
+        "t.name",
+        "",
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&EDIT);
     assert!(matches!(
         ui::setting_opens(&env, &edited),
         Some(Command::OpenScreen(screen, _)) if screen == Id::new_static("t.edit")
     ));
     assert_eq!(
-        ui::setting_opens(&env, &SettingSpec::switch(&ON, "t.on", true)),
+        ui::setting_opens(
+            &env,
+            &SettingSpec::switch(
+                ON.static_str(),
+                "t.on",
+                true,
+                paperpaw_sdk::builtin::groups::OTHER
+            )
+        ),
         None
     );
 }

@@ -174,7 +174,7 @@ static IN_TRANSLATION: paperpaw_sdk::SettingExtra =
     paperpaw_sdk::SettingExtra::new().section(SECTION);
 
 /// The language to translate into.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
     TO.static_str(),
     "translate.setting.to",
     &TARGETS,
@@ -183,7 +183,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
 )
 .advanced()
 .with_extra(&IN_TRANSLATION)
-.described("translate.setting.to.help")];
+.description("translate.setting.to.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [

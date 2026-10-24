@@ -71,7 +71,7 @@ pub struct DictionaryPlugin;
 static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section("dictionary.section")
     .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     FOLDER.static_str(),
     "dictionary.setting.folder",
     "dictionaries",
@@ -79,7 +79,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
 )
 .advanced()
 .with_extra(&FOLDER_EXTRA)
-.described("dictionary.setting.folder.help")];
+.description("dictionary.setting.folder.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [

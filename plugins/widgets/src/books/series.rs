@@ -41,14 +41,14 @@ static SETTINGS: [SettingSpec; 12] = [
     widgets::frame_spec("widgets.series.frame", ID, Frame::None),
     widgets::padding_spec("widgets.series.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.series.size", ID, TextSize::Medium, false),
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         "widgets.series.name",
         "widgets.books.setting.series-name",
         "",
         ID,
     )
-    .described("widgets.books.setting.series-name.help"),
-    SettingSpec::fixed_number(
+    .description("widgets.books.setting.series-name.help"),
+    SettingSpec::number(
         "widgets.series.count",
         "widgets.books.setting.count",
         2,
@@ -56,15 +56,15 @@ static SETTINGS: [SettingSpec; 12] = [
         6,
         ID,
     )
-    .described("widgets.setting.count.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.setting.count.help"),
+    SettingSpec::choice(
         "widgets.series.start",
         "widgets.books.setting.series-start",
         &STARTS,
         STARTS[0],
         ID,
     )
-    .described("widgets.books.setting.series-start.help"),
+    .description("widgets.books.setting.series-start.help"),
     widgets::part_spec(
         "widgets.series.caption",
         ID,

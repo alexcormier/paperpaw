@@ -142,8 +142,8 @@ const fn list(
     default: &'static str,
     extra: &'static SettingExtra,
 ) -> SettingSpec {
-    SettingSpec::fixed(
-        id.static_str(),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(id.static_str()),
         title,
         SettingKind::List,
         SettingValue::Text(Cow::Borrowed(default)),
@@ -159,7 +159,7 @@ const fn part(
     default: &'static str,
     extra: &'static SettingExtra,
 ) -> SettingSpec {
-    list(id, title, default, extra).described("reader.status.part.help")
+    list(id, title, default, extra).description("reader.status.part.help")
 }
 
 /// The text size and place of the lines, which lines show above and
@@ -168,22 +168,22 @@ const fn part(
 /// time and the battery with the page, and Wi-Fi while it is in use),
 /// and the battery's percent.
 static SETTINGS: [SettingSpec; 11] = [
-    SettingSpec::fixed_number(SIZE.static_str(), "reader.status.size", 5, 16, 6, GROUP)
+    SettingSpec::number(SIZE.static_str(), "reader.status.size", 5, 16, 6, GROUP)
         .with_extra(&PT)
-        .described("reader.status.size.help"),
-    SettingSpec::fixed_number(EDGE.static_str(), "reader.status.edge", 0, 150, 15, GROUP)
+        .description("reader.status.size.help"),
+    SettingSpec::number(EDGE.static_str(), "reader.status.edge", 0, 150, 15, GROUP)
         .advanced()
         .with_extra(&TENTH_MM_5)
-        .described("reader.status.edge.help"),
+        .description("reader.status.edge.help"),
     list(TOP_LINES, "reader.status.top-lines", "", &TOP_LINES_EXTRA)
-        .described("reader.status.lines.help"),
+        .description("reader.status.lines.help"),
     list(
         BOTTOM_LINES,
         "reader.status.bottom-lines",
         "core.status-line.items, reader.status-line.progress, reader.status-line.empty",
         &BOTTOM_LINES_EXTRA,
     )
-    .described("reader.status.lines.help"),
+    .description("reader.status.lines.help"),
     part(TOP_LEFT, "reader.status.top-left", "", &TOP_ITEMS),
     part(TOP_CENTER, "reader.status.top-center", "", &TOP_ITEMS),
     part(TOP_RIGHT, "reader.status.top-right", "", &TOP_ITEMS),
@@ -205,13 +205,13 @@ static SETTINGS: [SettingSpec; 11] = [
         "lock.touch-status, wifi.status, power.status, core.status.battery, reader.status.page",
         &BOTTOM_ITEMS,
     ),
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         PERCENT.static_str(),
         "reader.status.battery-percent",
         true,
         GROUP,
     )
-    .described("reader.status.battery-percent.help"),
+    .description("reader.status.battery-percent.help"),
 ];
 
 #[expect(

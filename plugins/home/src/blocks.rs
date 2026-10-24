@@ -81,15 +81,15 @@ const PLACE: Place = Place::new(
 static STATUS_ITEMS: SettingExtra = SettingExtra::new().editor(screens::STATUS_ITEMS);
 static STATUS_LINES: SettingExtra = SettingExtra::new().editor(screens::STATUS_LINES);
 static STATUS_SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed(
-        STATUS_LINE.static_str(),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(STATUS_LINE.static_str()),
         "home.status.line",
         SettingKind::List,
         SettingValue::Text(Cow::Borrowed("")),
         Id::new_static(STATUS),
     )
     .with_extra(&STATUS_LINES)
-    .described("home.status.line.help"),
+    .description("home.status.line.help"),
     status_part(
         STATUS_LEFT.static_str(),
         "home.status.left",
@@ -104,22 +104,22 @@ static STATUS_SETTINGS: [SettingSpec; 4] = [
 ];
 
 const fn status_part(id: &'static str, title: &'static str, default: &'static str) -> SettingSpec {
-    SettingSpec::fixed(
-        id,
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(id),
         title,
         SettingKind::List,
         SettingValue::Text(Cow::Borrowed(default)),
         Id::new_static(STATUS),
     )
     .with_extra(&STATUS_ITEMS)
-    .described("home.status.part.help")
+    .description("home.status.part.help")
 }
 
 /// Recent books shown as covers at most.
 const MAX_COVERS: usize = 8;
 
 /// How many books the recent shelf shows at most.
-static RECENT_SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+static RECENT_SETTINGS: [SettingSpec; 1] = [SettingSpec::number(
     "home.recent.count",
     "home.setting.recent-count",
     1,
@@ -127,7 +127,7 @@ static RECENT_SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
     6,
     Id::new_static(RECENT),
 )
-.described("home.setting.recent-count.help")];
+.description("home.setting.recent-count.help")];
 
 /// The widgets' settings: where each sits, its frame, size and parts.
 static SETTINGS: [SettingSpec; 21] = {

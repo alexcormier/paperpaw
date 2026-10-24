@@ -219,14 +219,14 @@ const DATE_FORMATS: [&str; 4] = [
 /// "Wednesday, 14 October", "14/10/2026" or "2026-10-14"; `id` is
 /// `<widget>.date-format`.
 const fn date_format_spec(id: &'static str, widget: Id, default: &'static str) -> SettingSpec {
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         id,
         "widgets.setting.date-format",
         &DATE_FORMATS,
         default,
         widget,
     )
-    .described("widgets.setting.date-format.help")
+    .description("widgets.setting.date-format.help")
 }
 
 /// `year`-`month`-`day` written as `widget`'s date format says

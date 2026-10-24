@@ -71,17 +71,26 @@ impl Plugin for Emulated {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let light = self.0;
+        // The light's range and steps come from the device's profile, so
+        // its extra is made now.
         let number = |setting: &Setting<i64>, title: &'static str, default: i64, step: i64| {
-            let spec = SettingSpec::number(setting, title, 0, light.max, default)
-                .group(groups::DISPLAY)
-                .description(format!("{title}.help"))
-                .step(step)
-                .slider();
+            let mut extra = paperpaw_core::sdk::SettingExtra::new().step(step).slider();
             if light.percent {
-                spec.unit("core.unit.percent")
-            } else {
-                spec
+                extra.unit = Some("core.unit.percent".into());
             }
+            let mut spec = SettingSpec::new(
+                Id::from(setting),
+                title,
+                paperpaw_core::sdk::SettingKind::Int {
+                    min: 0,
+                    max: light.max,
+                },
+                paperpaw_core::sdk::SettingValue::Int(default),
+                groups::DISPLAY,
+            )
+            .with_owned_extra(extra);
+            spec.description = Some(format!("{title}.help").into());
+            spec
         };
         r.add_setting(number(&FRONTLIGHT, "emulator.frontlight", 0, light.step))?;
         let mut items = vec![FRONTLIGHT];

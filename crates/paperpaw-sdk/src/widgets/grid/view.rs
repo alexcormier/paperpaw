@@ -1287,7 +1287,7 @@ mod tests {
     use crate::{
         Actions, DeviceInfo, DisplayInfo, EnvParts, Fonts, Formats, Hyphenation, InputCaps,
         Instant, MemoryClass, MemoryStorage, Menus, Metrics, Output, PixelFormat, Plugins,
-        PointerTool, Setting, SettingSpec, SettingValue, Settings, SystemStatus, Translator,
+        PointerTool, SettingSpec, SettingValue, Settings, SystemStatus, Translator,
     };
 
     const CHOSEN: Event<Picked> = Event::new("test.chosen");
@@ -1894,11 +1894,15 @@ mod tests {
 
     #[test]
     fn placements_are_tried_a_bounded_number_of_times() {
-        let face = Setting::<bool>::new("test.w.face");
         let kit = |values: u32| {
             let mut kit = Kit::new(false);
             kit.settings
-                .define(SettingSpec::switch(&face, "face", false))
+                .define(SettingSpec::switch(
+                    "test.w.face",
+                    "face",
+                    false,
+                    crate::builtin::groups::OTHER,
+                ))
                 .unwrap();
             for n in 1..=values {
                 let id = format!("test.w@{n}.face");

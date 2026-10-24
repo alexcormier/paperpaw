@@ -134,20 +134,20 @@ pub struct Battery;
 
 /// Whether the battery is recorded, and by plugin.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         ENABLED.static_str(),
         "battery.setting.enabled",
         true,
         groups::SYSTEM,
     )
-    .described("battery.setting.enabled.help"),
-    SettingSpec::fixed_switch(
+    .description("battery.setting.enabled.help"),
+    SettingSpec::switch(
         BY_PLUGIN.static_str(),
         "battery.setting.by-plugin",
         true,
         groups::DEVELOPER,
     )
-    .described("battery.setting.by-plugin.help"),
+    .description("battery.setting.by-plugin.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

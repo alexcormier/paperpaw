@@ -50,8 +50,8 @@ const COUNT: Id = Id::new_static("counter.count");
 struct Counter(Rc<Cell<u32>>);
 
 static SWITCHES: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch("counter.a", "counter.a", false, groups::SYSTEM),
-    SettingSpec::fixed_switch("counter.b", "counter.b", false, groups::SYSTEM),
+    SettingSpec::switch("counter.a", "counter.a", false, groups::SYSTEM),
+    SettingSpec::switch("counter.b", "counter.b", false, groups::SYSTEM),
 ];
 
 impl Plugin for Counter {

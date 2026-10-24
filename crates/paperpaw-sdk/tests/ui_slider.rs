@@ -14,7 +14,6 @@ mod support;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::Role;
-use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::ui::slider::Slider;
 use paperpaw_sdk::ui::slider::SliderDrag;
@@ -377,16 +376,32 @@ fn every_way_of_moving_a_step_moves_one_step() {
     assert_eq!(key_step(&actions::BACK), None);
 }
 
+/// A slider in steps of 5.
+static SPACING: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().step(5).slider();
+
 #[test]
 fn sliders_show_on_touch_screens_and_numbers_elsewhere() {
-    let spec = SettingSpec::number(&Setting::new("t.spacing"), "t.spacing", 100, 250, 135)
-        .step(5)
-        .slider();
+    let spec = SettingSpec::number(
+        "t.spacing",
+        "t.spacing",
+        100,
+        250,
+        135,
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&SPACING);
     let touch = Harness::new(Device::TOUCH);
     let buttons = Harness::new(Device::BUTTONS);
     assert!(slider::shows(&touch.env(), &spec));
     assert!(!slider::shows(&buttons.env(), &spec), "buttons: − and +");
-    let plain = SettingSpec::number(&Setting::new("t.size"), "t.size", 1, 9, 3);
+    let plain = SettingSpec::number(
+        "t.size",
+        "t.size",
+        1,
+        9,
+        3,
+        paperpaw_sdk::builtin::groups::OTHER,
+    );
     assert!(!slider::shows(&touch.env(), &plain), "not marked");
 }
 

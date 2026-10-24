@@ -53,22 +53,22 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::padding_spec("stats.widget.year.padding", YEAR, Padding::Auto),
     widgets::size_spec("stats.widget.year.size", YEAR, TextSize::Medium, true),
     widgets::align_spec("stats.widget.year.align", YEAR, Align::Left),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.year.goal",
         "stats.setting.books-goal",
         &GOALS,
         GOALS[2],
         YEAR,
     )
-    .described("stats.setting.books-goal.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.books-goal.help"),
+    SettingSpec::choice(
         "stats.widget.year.style",
         "stats.setting.year-style",
         &STYLES,
         STYLES[0],
         YEAR,
     )
-    .described("stats.setting.year-style.help"),
+    .description("stats.setting.year-style.help"),
     widgets::part_spec(
         "stats.widget.year.caption",
         YEAR,
@@ -76,7 +76,7 @@ static SETTINGS: [SettingSpec; 9] = [
         true,
     ),
     widgets::part_spec("stats.widget.year.plan", YEAR, "stats.part.plan", true)
-        .described("stats.part.plan.help"),
+        .description("stats.part.plan.help"),
     widgets::part_spec("stats.widget.year.last", YEAR, "stats.part.last-book", true),
 ];
 

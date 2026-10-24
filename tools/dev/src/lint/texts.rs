@@ -71,7 +71,7 @@ pub fn without_help(plugin: &str, place: &str, settings: &[String]) -> Finding {
         place,
         format!(
             "{} {} no help text: {}{}; give each a sentence on what it changes with \
-             `.described(key)`.",
+             `.description(key)`.",
             settings.len(),
             if settings.len() == 1 {
                 "setting has"
@@ -271,15 +271,18 @@ mod tests {
 
     #[test]
     fn settings_need_titles_help_and_names() {
+        static POINTS: paperpaw_sdk::SettingExtra =
+            paperpaw_sdk::SettingExtra::new().unit("demo.unit.pt");
         let choices: &'static [&'static str] = &["demo.face.plain", "demo.face.ticks"];
         let spec = SettingSpec::new(
             Id::new_static("demo.face"),
             "demo.face",
             SettingKind::Choice(choices.into()),
             SettingValue::Text(Cow::Borrowed("demo.face.plain")),
+            paperpaw_sdk::builtin::groups::OTHER,
         )
         .description("demo.face.help")
-        .unit("demo.unit.pt");
+        .with_extra(&POINTS);
         let (used, lacks_help) = setting("demo", &spec);
         assert!(!lacks_help);
         let lacking = missing(&used, &english());
@@ -292,6 +295,7 @@ mod tests {
             "demo.size",
             SettingKind::Int { min: 1, max: 9 },
             SettingValue::Int(3),
+            paperpaw_sdk::builtin::groups::OTHER,
         );
         let (used, lacks_help) = setting("demo", &bare);
         assert!(lacks_help);

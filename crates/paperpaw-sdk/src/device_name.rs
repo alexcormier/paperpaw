@@ -21,14 +21,14 @@ pub const SETTING: Setting<Text> = Setting::new("core.device-name");
 /// The setting as the kernel offers it, `default` (the model's,
 /// [`default_name`]) until the reader sets another.
 pub fn setting(default: String) -> SettingSpec {
-    SettingSpec::fixed(
-        SETTING.static_str(),
+    SettingSpec::new(
+        crate::Id::new_static(SETTING.static_str()),
         "core.setting.device-name",
         SettingKind::Text,
         SettingValue::Text(Cow::Owned(default)),
         crate::builtin::groups::SYSTEM,
     )
-    .described("core.setting.device-name.help")
+    .description("core.setting.device-name.help")
 }
 
 /// Characters of a name at most.

@@ -128,24 +128,24 @@ static ON_PAGE: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().e
 
 /// The kind of lock, and whether waking up asks for it.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         KIND.static_str(),
         "lock.setting.kind",
         &KIND_VALUES,
         KIND_VALUES[0],
         groups::SYSTEM,
     )
-    .described("lock.setting.kind.help")
+    .description("lock.setting.kind.help")
     .guarded()
     .with_extra(&ON_PAGE),
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         ON_WAKE.static_str(),
         "lock.setting.on-wake",
         true,
         groups::SYSTEM,
     )
     .advanced()
-    .described("lock.setting.on-wake.help")
+    .description("lock.setting.on-wake.help")
     .guarded(),
 ];
 

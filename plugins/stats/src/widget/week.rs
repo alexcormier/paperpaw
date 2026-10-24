@@ -33,22 +33,22 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("stats.widget.week.frame", WEEK, Frame::None),
     widgets::padding_spec("stats.widget.week.padding", WEEK, Padding::Auto),
     widgets::align_spec("stats.widget.week.align", WEEK, Align::Left),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.week.period",
         "stats.setting.period",
         &PERIODS,
         PERIODS[0],
         WEEK,
     )
-    .described("stats.setting.period.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.period.help"),
+    SettingSpec::choice(
         "stats.widget.week.shape",
         "stats.setting.bars",
         &SHAPES,
         SHAPES[0],
         WEEK,
     )
-    .described("stats.setting.bars.help"),
+    .description("stats.setting.bars.help"),
     widgets::part_spec(
         "stats.widget.week.caption",
         WEEK,

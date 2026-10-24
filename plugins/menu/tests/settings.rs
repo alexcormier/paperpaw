@@ -94,25 +94,27 @@ impl Plugin for Probe {
         }
         r.add_setting_group(SettingGroupSpec::new(GROUP, "probe.group"))?;
         let choice = |id: Id| {
-            SettingSpec::new(
+            let mut spec = SettingSpec::new(
                 id.clone(),
-                id.as_str().to_string(),
+                "",
                 SettingKind::Choice(Choices::Fixed(OPTIONS)),
                 SettingValue::Text(Cow::Borrowed(OPTIONS[0])),
-            )
-            .group(GROUP)
+                GROUP,
+            );
+            spec.title = id.as_str().to_string().into();
+            spec
         };
-        r.add_setting(choice(KIND).editor(EDITOR))?;
+        static EDITED: paperpaw_sdk::SettingExtra =
+            paperpaw_sdk::SettingExtra::new().editor(EDITOR);
+        r.add_setting(choice(KIND).with_extra(&EDITED))?;
         r.add_setting(choice(MANY))?;
-        r.add_setting(
-            SettingSpec::new(
-                SIZE,
-                "probe.size",
-                SettingKind::Int { min: 1, max: 9 },
-                SettingValue::Int(5),
-            )
-            .group(GROUP),
-        )?;
+        r.add_setting(SettingSpec::new(
+            SIZE,
+            "probe.size",
+            SettingKind::Int { min: 1, max: 9 },
+            SettingValue::Int(5),
+            GROUP,
+        ))?;
         for (order, item) in [KIND, MANY, SIZE].into_iter().enumerate() {
             r.add_menu_entry(MenuEntry::new(BAR_MENU, item).order(order as i16))?;
         }

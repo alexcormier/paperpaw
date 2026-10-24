@@ -51,14 +51,14 @@ mod panel;
 pub struct Menu;
 
 /// How menus look.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
     STYLE.static_str(),
     "menu.setting.style",
     &[STYLE_LIST, STYLE_TILES],
     STYLE_LIST,
     paperpaw_sdk::builtin::groups::LOOK,
 )
-.described("menu.setting.style.help")];
+.description("menu.setting.style.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [

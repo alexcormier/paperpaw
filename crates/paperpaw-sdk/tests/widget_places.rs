@@ -60,7 +60,12 @@ fn harness() -> Harness {
         PlaceKind::Stack,
     ));
     h.settings
-        .define(SettingSpec::text(&LIST, "t.list", ""))
+        .define(SettingSpec::text(
+            LIST.static_str(),
+            "t.list",
+            "",
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))
         .unwrap();
     h
 }
@@ -231,7 +236,7 @@ fn one_frame_for_all_widgets_unless_one_has_its_own() {
     use paperpaw_sdk::widgets::{ALL_FRAMES, FRAMES, OWN_FRAME};
     let mut h = harness();
     h.settings
-        .define(SettingSpec::fixed_choice(
+        .define(SettingSpec::choice(
             WIDGET_FRAME.static_str(),
             "t.all",
             ALL_FRAMES,
@@ -284,10 +289,15 @@ fn one_frame_for_all_widgets_unless_one_has_its_own() {
     assert_eq!(placed, Frame::Line, "a placement's own");
     // Not a setting that ends so but is no widget's (a status line's
     // size), nor the frame of all in a theme.
-    let size: paperpaw_sdk::setting::Setting<i64> =
-        paperpaw_sdk::setting::Setting::new("t.status.size");
     h.settings
-        .define(SettingSpec::number(&size, "t.size", 5, 16, 6))
+        .define(SettingSpec::number(
+            "t.status.size",
+            "t.size",
+            5,
+            16,
+            6,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))
         .unwrap();
     let covered = paperpaw_sdk::presets::widget_look_settings(&h.settings, &h.widgets);
     let covered: Vec<&str> = covered.iter().map(Id::as_str).collect();

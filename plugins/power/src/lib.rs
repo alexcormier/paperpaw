@@ -54,15 +54,15 @@ const MODES: [&str; 4] = [
 const MARGIN: i64 = 5;
 
 static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         MODE.static_str(),
         "power.setting.mode",
         &MODES,
         AUTOMATIC,
         GROUP,
     )
-    .described("power.setting.mode.help"),
-    SettingSpec::fixed_number(
+    .description("power.setting.mode.help"),
+    SettingSpec::number(
         SAVING_BELOW.static_str(),
         "power.setting.saving-below",
         5,
@@ -70,8 +70,8 @@ static SETTINGS: [SettingSpec; 4] = [
         20,
         GROUP,
     )
-    .described("power.setting.saving-below.help"),
-    SettingSpec::fixed_number(
+    .description("power.setting.saving-below.help"),
+    SettingSpec::number(
         OFFLINE_BELOW.static_str(),
         "power.setting.offline-below",
         0,
@@ -79,14 +79,14 @@ static SETTINGS: [SettingSpec; 4] = [
         10,
         GROUP,
     )
-    .described("power.setting.offline-below.help"),
-    SettingSpec::fixed_switch(
+    .description("power.setting.offline-below.help"),
+    SettingSpec::switch(
         NORMAL_WHILE_CHARGING.static_str(),
         "power.setting.normal-while-charging",
         true,
         GROUP,
     )
-    .described("power.setting.normal-while-charging.help"),
+    .description("power.setting.normal-while-charging.help"),
 ];
 
 /// The mode to wear now, and whether the battery chose it.

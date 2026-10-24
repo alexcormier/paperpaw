@@ -31,22 +31,22 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.tile-clock.align", ID, Align::Center),
     widgets::frame_spec("widgets.tile-clock.frame", ID, Frame::None),
     widgets::padding_spec("widgets.tile-clock.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.tile-clock.tiles",
         "widgets.setting.tiles",
         &LOOKS,
         LOOKS[0],
         ID,
     )
-    .described("widgets.tile-clock.tiles.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.tile-clock.tiles.help"),
+    SettingSpec::choice(
         "widgets.tile-clock.group",
         "widgets.setting.tile-group",
         &GROUPS,
         GROUPS[0],
         ID,
     )
-    .described("widgets.tile-clock.group.help"),
+    .description("widgets.tile-clock.group.help"),
     widgets::part_spec(
         "widgets.tile-clock.hinge",
         ID,

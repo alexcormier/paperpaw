@@ -117,15 +117,20 @@ impl Screen for VoiceSettings {
     }
 }
 
+/// The voice's part and editor: the system's speech settings.
+static VOICE_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
+    .section(ALOUD_SECTION)
+    .editor(VOICE_SCREEN);
+/// Set with a slider.
+static SLIDER: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().slider();
+
 impl AndroidPlugin {
     /// The voice for reading aloud, with its other settings; it is
     /// chosen in the system's speech settings.
     fn register_voice(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::text(&VOICE, "android.voice", "")
-                .group(groups::READING)
-                .section(ALOUD_SECTION)
-                .editor(VOICE_SCREEN)
+            SettingSpec::text(VOICE.static_str(), "android.voice", "", groups::READING)
+                .with_extra(&VOICE_EXTRA)
                 .description("android.voice.help"),
         )?;
         r.set_menu_need(VOICE, MenuNeed::Speech)?;
@@ -148,29 +153,29 @@ impl AndroidPlugin {
         let lights = frontlight.lights;
         r.add_setting(
             SettingSpec::number(
-                &FRONTLIGHT,
+                FRONTLIGHT.static_str(),
                 "android.frontlight",
                 0,
                 i64::from(lights.max_brightness),
                 i64::from(frontlight.brightness),
+                groups::DISPLAY,
             )
-            .group(groups::DISPLAY)
             .description("android.frontlight.help")
-            .slider(),
+            .with_extra(&SLIDER),
         )?;
         let mut items = vec![FRONTLIGHT];
         if lights.has_warmth() {
             r.add_setting(
                 SettingSpec::number(
-                    &WARMTH,
+                    WARMTH.static_str(),
                     "android.warmth",
                     0,
                     i64::from(lights.max_warmth),
                     i64::from(frontlight.warmth),
+                    groups::DISPLAY,
                 )
-                .group(groups::DISPLAY)
                 .description("android.warmth.help")
-                .slider(),
+                .with_extra(&SLIDER),
             )?;
             items.push(WARMTH);
         }

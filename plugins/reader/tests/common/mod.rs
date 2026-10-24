@@ -120,8 +120,8 @@ static PLACE_PARTS: [paperpaw_sdk::SettingSpec; 3] = [
 ];
 
 const fn part(id: &'static str, default: &'static str) -> paperpaw_sdk::SettingSpec {
-    paperpaw_sdk::SettingSpec::fixed(
-        id,
+    paperpaw_sdk::SettingSpec::new(
+        paperpaw_sdk::Id::new_static(id),
         "recorder",
         paperpaw_sdk::SettingKind::List,
         paperpaw_sdk::SettingValue::Text(std::borrow::Cow::Borrowed(default)),

@@ -442,6 +442,15 @@ file to your report.
 
 #### For developers
 
+- SDK: `SettingSpec` has one builder set, all `const`, so settings are
+  declared as `static` lists: `switch`, `number`, `choice`, `text`,
+  `language` and `list` take the id, title, default and group;
+  `SettingSpec::new` takes any kind and an `Id` made at run time.
+  `description`, `advanced`, `scoped`, `guarded` and `kept_on_reset` are
+  const. Units, steps, sections, sliders, editors and secrets come from a
+  `static SettingExtra` (`with_extra`); `with_owned_extra` is for
+  settings made from data. `fixed`, `fixed_switch` and the like,
+  `described`, `for_advanced` and `group` are gone.
 - SDK: settings kept in the program take less memory: the kernel holds
   each list given to `add_settings` once, not each spec, and the network
   settings it makes for every plugin share one fixed extra

@@ -27,35 +27,35 @@ const FACE: Setting<Text> = Setting::new("widgets.greeting.face");
 
 /// The greeting's settings, kept in the program.
 static SETTINGS: [SettingSpec; 8] = [
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         "widgets.greeting.name",
         "widgets.greeting.setting.name",
         "",
         ID,
     )
-    .described("widgets.greeting.setting.name.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.greeting.setting.name.help"),
+    SettingSpec::choice(
         "widgets.greeting.line",
         "widgets.greeting.setting.line",
         &LINES,
         LINES[1],
         ID,
     )
-    .described("widgets.greeting.line.help"),
+    .description("widgets.greeting.line.help"),
     widgets::part_spec(
         "widgets.greeting.icon",
         ID,
         "widgets.greeting.setting.icon",
         false,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.greeting.face",
         "widgets.setting.font",
         &FACES,
         FACES[0],
         ID,
     )
-    .described("widgets.setting.face-font.help"),
+    .description("widgets.setting.face-font.help"),
     widgets::size_spec("widgets.greeting.size", ID, TextSize::Fit, true),
     widgets::align_spec("widgets.greeting.align", ID, Align::Center),
     widgets::frame_spec("widgets.greeting.frame", ID, Frame::None),

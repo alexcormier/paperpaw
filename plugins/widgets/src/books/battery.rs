@@ -33,14 +33,14 @@ static SETTINGS: [SettingSpec; 8] = [
     widgets::frame_spec("widgets.battery.frame", ID, Frame::None),
     widgets::padding_spec("widgets.battery.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.battery.size", ID, TextSize::Fit, true),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.battery.style",
         "widgets.books.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.battery.style.help"),
+    .description("widgets.battery.style.help"),
     widgets::part_spec(
         "widgets.battery.percent",
         ID,

@@ -145,38 +145,38 @@ pub struct Keyboard;
 /// The layouts to type with, chosen on their screen.
 static CHOSEN: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_SCREEN);
 static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed(
-        LAYOUTS_SETTING.static_str(),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(LAYOUTS_SETTING.static_str()),
         "keyboard.setting.layouts",
         paperpaw_sdk::SettingKind::List,
         paperpaw_sdk::SettingValue::Text(Cow::Borrowed(layouts::AUTO)),
         groups::SYSTEM,
     )
     .with_extra(&CHOSEN)
-    .described("keyboard.setting.layouts.help"),
-    SettingSpec::fixed_switch(
+    .description("keyboard.setting.layouts.help"),
+    SettingSpec::switch(
         UMLAUT_KEYS.static_str(),
         "keyboard.setting.umlaut-keys",
         false,
         groups::SYSTEM,
     )
-    .described("keyboard.setting.umlaut-keys.help"),
-    SettingSpec::fixed_choice(
+    .description("keyboard.setting.umlaut-keys.help"),
+    SettingSpec::choice(
         KEY_SHAPE.static_str(),
         "keyboard.setting.key-shape",
         &[SHAPE_ROUND, SHAPE_TALL, SHAPE_WIDE],
         SHAPE_ROUND,
         groups::SYSTEM,
     )
-    .described("keyboard.setting.key-shape.help"),
-    SettingSpec::fixed_choice(
+    .description("keyboard.setting.key-shape.help"),
+    SettingSpec::choice(
         KEY_SIZE.static_str(),
         "keyboard.setting.size",
         &[SIZE_SMALL, SIZE_MEDIUM, SIZE_LARGE],
         SIZE_MEDIUM,
         groups::SYSTEM,
     )
-    .described("keyboard.setting.size.help"),
+    .description("keyboard.setting.size.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

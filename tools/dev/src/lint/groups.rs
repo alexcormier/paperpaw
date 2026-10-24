@@ -116,7 +116,7 @@ mod tests {
     /// with no order and no icon, its widget's settings in it.
     struct Duck;
 
-    static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+    static SETTINGS: [SettingSpec; 1] = [SettingSpec::switch(
         "duck.widget.big",
         "Big",
         false,

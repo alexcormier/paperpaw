@@ -182,15 +182,15 @@ static IN_CATALOGS_10: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::
 
 /// Covers in lists, and how many books a sync fetches at most.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         COVERS.static_str(),
         "opds.setting.covers",
         true,
         groups::LIBRARY,
     )
     .with_extra(&IN_CATALOGS)
-    .described("opds.setting.covers.help"),
-    SettingSpec::fixed_number(
+    .description("opds.setting.covers.help"),
+    SettingSpec::number(
         sync::LIMIT.static_str(),
         "opds.setting.limit",
         10,
@@ -199,7 +199,7 @@ static SETTINGS: [SettingSpec; 2] = [
         groups::LIBRARY,
     )
     .with_extra(&IN_CATALOGS_10)
-    .described("opds.setting.limit.help"),
+    .description("opds.setting.limit.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

@@ -78,44 +78,44 @@ static ON_PLACE_SCREEN: paperpaw_sdk::SettingExtra =
     paperpaw_sdk::SettingExtra::new().editor(PLACE_SCREEN);
 static PLACE_SETTING: [SettingSpec; 1] =
     [
-        SettingSpec::fixed_text(PLACE.static_str(), "weather.setting.place", "", GROUP)
+        SettingSpec::text(PLACE.static_str(), "weather.setting.place", "", GROUP)
             .with_extra(&ON_PLACE_SCREEN)
-            .described("weather.setting.place.help"),
+            .description("weather.setting.place.help"),
     ];
 
 static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.temperature",
         "weather.setting.temperature",
         &TEMPERATURES,
         TEMPERATURES[0],
         GROUP,
     )
-    .described("weather.setting.temperature.help"),
-    SettingSpec::fixed_choice(
+    .description("weather.setting.temperature.help"),
+    SettingSpec::choice(
         "weather.wind",
         "weather.setting.wind",
         &WINDS,
         WINDS[0],
         GROUP,
     )
-    .described("weather.setting.wind.help"),
-    SettingSpec::fixed_choice(
+    .description("weather.setting.wind.help"),
+    SettingSpec::choice(
         "weather.every",
         "weather.setting.every",
         &EVERY_HOURS,
         EVERY_HOURS[0],
         GROUP,
     )
-    .described("weather.setting.every.help"),
-    SettingSpec::fixed_text(
+    .description("weather.setting.every.help"),
+    SettingSpec::text(
         "weather.coordinates",
         "weather.setting.coordinates",
         "",
         GROUP,
     )
-    .described("weather.setting.coordinates.help")
-    .for_advanced(),
+    .description("weather.setting.coordinates.help")
+    .advanced(),
 ];
 /// Fetches the weather now.
 pub const REFRESH: Id = Id::new_static("weather.refresh");

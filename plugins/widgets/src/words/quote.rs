@@ -64,22 +64,22 @@ fn turns_file() -> String {
 
 /// The quote's settings, kept in the program.
 static SETTINGS: [SettingSpec; 11] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.quote.source",
         "widgets.quote.setting.source",
         &SOURCES,
         SOURCES[2],
         ID,
     )
-    .described("widgets.quote.setting.source.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.quote.setting.source.help"),
+    SettingSpec::choice(
         "widgets.quote.change",
         "widgets.setting.change",
         &CHANGES,
         CHANGES[0],
         ID,
     )
-    .described("widgets.setting.change.help"),
+    .description("widgets.setting.change.help"),
     widgets::part_spec(
         "widgets.quote.author",
         ID,
@@ -104,14 +104,14 @@ static SETTINGS: [SettingSpec; 11] = [
         "widgets.quote.setting.caption",
         false,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.quote.face",
         "widgets.setting.font",
         &FACES,
         FACES[2],
         ID,
     )
-    .described("widgets.setting.face-font.help"),
+    .description("widgets.setting.face-font.help"),
     widgets::size_spec("widgets.quote.size", ID, TextSize::Fit, true),
     widgets::align_spec("widgets.quote.align", ID, Align::Center),
     widgets::frame_spec("widgets.quote.frame", ID, Frame::None),

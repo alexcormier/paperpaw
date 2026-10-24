@@ -37,22 +37,22 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::frame_spec("widgets.progress.frame", ID, Frame::None),
     widgets::padding_spec("widgets.progress.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.progress.size", ID, TextSize::Medium, false),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.progress.style",
         "widgets.books.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.progress.style.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.progress.style.help"),
+    SettingSpec::choice(
         "widgets.progress.thickness",
         "widgets.books.setting.thickness",
         &THICKNESSES,
         THICKNESSES[1],
         ID,
     )
-    .described("widgets.progress.thickness.help"),
+    .description("widgets.progress.thickness.help"),
     widgets::part_spec(
         "widgets.progress.cover",
         ID,

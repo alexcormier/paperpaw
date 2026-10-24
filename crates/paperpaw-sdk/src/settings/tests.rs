@@ -10,6 +10,7 @@ fn a_setting_follows_another_until_set_itself() {
             id,
             SettingKind::Int { min: 0, max: 99 },
             SettingValue::Int(4),
+            crate::builtin::groups::OTHER,
         )
         .scoped()
     };
@@ -17,10 +18,11 @@ fn a_setting_follows_another_until_set_itself() {
     s.define(int("a.ends").with_extra(&FOLLOWS)).unwrap();
     s.define(
         SettingSpec::new(
-            crate::builtin::settings::SCOPE_ONLY,
+            Id::from(crate::builtin::settings::SCOPE_ONLY),
             "x",
             SettingKind::Bool,
             SettingValue::Bool(false),
+            crate::builtin::groups::OTHER,
         )
         .scoped(),
     )
@@ -56,6 +58,7 @@ fn a_power_mode_wears_values_and_limits_and_takes_them_off() {
             id,
             SettingKind::Int { min: 0, max: 100 },
             SettingValue::Int(10),
+            crate::builtin::groups::OTHER,
         );
         s.define(spec).unwrap();
     }
@@ -100,6 +103,7 @@ fn scopes_override_scoped_settings_while_switched_on() {
             id,
             SettingKind::Int { min: 0, max: 99 },
             SettingValue::Int(10),
+            crate::builtin::groups::OTHER,
         );
         if scoped { spec.scoped() } else { spec }
     };
@@ -107,10 +111,11 @@ fn scopes_override_scoped_settings_while_switched_on() {
     s.define(int("a.other", false)).unwrap();
     s.define(
         SettingSpec::new(
-            SCOPE_ONLY,
+            Id::from(SCOPE_ONLY),
             "x",
             SettingKind::Bool,
             SettingValue::Bool(false),
+            crate::builtin::groups::OTHER,
         )
         .scoped(),
     )
@@ -155,6 +160,7 @@ fn settings() -> Settings {
             "test.count",
             SettingKind::Int { min: 1, max: 10 },
             SettingValue::Int(3),
+            crate::builtin::groups::OTHER,
         ))
         .unwrap();
     settings
@@ -163,6 +169,7 @@ fn settings() -> Settings {
             "test.mode",
             SettingKind::Choice(crate::settings::Choices::Fixed(&["a", "b"])),
             SettingValue::Text(Cow::Borrowed("a")),
+            crate::builtin::groups::OTHER,
         ))
         .unwrap();
     settings
@@ -219,12 +226,16 @@ fn groups_are_ordered_and_unknown_groups_fall_back() {
         "",
         SettingKind::Bool,
         SettingValue::Bool(false),
-    )
-    .group(Id::new_static("missing.group"));
+        Id::new_static("missing.group"),
+    );
     assert_eq!(s.group_of(&spec), crate::builtin::groups::OTHER);
     assert_eq!(
-        s.group_of(&spec.clone().group(Id::new_static("b.late")))
-            .as_str(),
+        s.group_of(&{
+            let mut late = spec.clone();
+            late.group = Id::new_static("b.late");
+            late
+        })
+        .as_str(),
         "b.late"
     );
 }
@@ -237,6 +248,7 @@ fn rejects_duplicates_and_bad_defaults() {
         "",
         SettingKind::Bool,
         SettingValue::Bool(false),
+        crate::builtin::groups::OTHER,
     );
     assert!(matches!(
         s.define(spec.clone()),
@@ -251,7 +263,7 @@ fn rejects_duplicates_and_bad_defaults() {
 #[test]
 fn placements_have_values_of_their_own() {
     let mut s = Settings::new();
-    static SPECS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+    static SPECS: [SettingSpec; 1] = [SettingSpec::switch(
         "widgets.clock.date",
         "widgets.clock.date",
         true,
@@ -295,13 +307,13 @@ fn placements_have_values_of_their_own() {
 fn previews_show_values_without_keeping_them() {
     let mut s = Settings::new();
     static SPECS: [SettingSpec; 2] = [
-        SettingSpec::fixed_switch(
+        SettingSpec::switch(
             "widgets.clock.date",
             "widgets.clock.date",
             true,
             Id::new_static("widgets.clock"),
         ),
-        SettingSpec::fixed_number(
+        SettingSpec::number(
             "widgets.clock.size",
             "",
             1,

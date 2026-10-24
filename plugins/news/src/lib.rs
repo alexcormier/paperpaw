@@ -385,7 +385,7 @@ pub struct News;
 
 /// How many articles a feed keeps, in steps of five.
 static STEP_5: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().step(5);
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::number(
     ARTICLES.static_str(),
     "news.setting.articles",
     5,
@@ -395,7 +395,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
 )
 .with_extra(&STEP_5)
 .advanced()
-.described("news.setting.articles.help")];
+.description("news.setting.articles.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [

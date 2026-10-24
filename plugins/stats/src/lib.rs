@@ -444,9 +444,9 @@ fn mark_finished(env: &Env<'_>, path: &str, now: i64) {
 
 /// The settings kept in the program (see [`SettingSpec::fixed`]).
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_switch("stats.enabled", "stats.setting.enabled", true, GROUP)
-        .described("stats.setting.enabled.help"),
-    SettingSpec::fixed_number(
+    SettingSpec::switch("stats.enabled", "stats.setting.enabled", true, GROUP)
+        .description("stats.setting.enabled.help"),
+    SettingSpec::number(
         MIN_SECONDS.static_str(),
         "stats.setting.min",
         1,
@@ -456,8 +456,8 @@ static SETTINGS: [SettingSpec; 3] = [
     )
     .with_extra(&SECONDS)
     .advanced()
-    .described("stats.setting.min.help"),
-    SettingSpec::fixed_number(
+    .description("stats.setting.min.help"),
+    SettingSpec::number(
         MAX_SECONDS.static_str(),
         "stats.setting.max",
         30,
@@ -467,7 +467,7 @@ static SETTINGS: [SettingSpec; 3] = [
     )
     .with_extra(&SECONDS_10)
     .advanced()
-    .described("stats.setting.max.help"),
+    .description("stats.setting.max.help"),
 ];
 
 /// Seconds, in steps of one and of ten.

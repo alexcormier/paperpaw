@@ -26,14 +26,14 @@ const FACE: Setting<Text> = Setting::new("widgets.logo.face");
 /// The logo's settings, kept in the program.
 static SETTINGS: [SettingSpec; 6] = [
     widgets::part_spec("widgets.logo.name", ID, "widgets.logo.setting.name", false),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.logo.face",
         "widgets.setting.font",
         &FACES,
         FACES[0],
         ID,
     )
-    .described("widgets.setting.face-font.help"),
+    .description("widgets.setting.face-font.help"),
     widgets::size_spec("widgets.logo.size", ID, TextSize::Medium, true),
     widgets::align_spec("widgets.logo.align", ID, Align::Center),
     widgets::frame_spec("widgets.logo.frame", ID, Frame::None),

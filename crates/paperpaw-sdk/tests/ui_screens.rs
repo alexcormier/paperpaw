@@ -272,10 +272,12 @@ fn status_harness(device: Device, value: &str) -> Harness {
         ));
     }
     h.settings
-        .define(SettingSpec::list(
-            &STATUS,
+        .define(SettingSpec::new(
+            paperpaw_sdk::Id::from(STATUS),
             "t.status",
-            Cow::Owned(value.to_string()),
+            paperpaw_sdk::SettingKind::List,
+            paperpaw_sdk::SettingValue::Text(Cow::Owned(value.to_string())),
+            paperpaw_sdk::builtin::groups::OTHER,
         ))
         .unwrap();
     h

@@ -29,14 +29,14 @@ static SETTINGS: [SettingSpec; 8] = [
     widgets::align_spec("widgets.day.align", ID, Align::Left),
     widgets::frame_spec("widgets.day.frame", ID, Frame::None),
     widgets::padding_spec("widgets.day.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.day.style",
         "widgets.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.day.style.help"),
+    .description("widgets.day.style.help"),
     widgets::size_spec("widgets.day.size", ID, TextSize::Fit, true),
     super::date_format_spec("widgets.day.date-format", ID, super::DATE_FORMATS[0]),
     widgets::part_spec("widgets.day.year", ID, "widgets.setting.year", true),

@@ -393,11 +393,10 @@ struct Account;
 const ACCOUNT_PAGE: Id = Id::new_static("acct.page");
 static ACCOUNT_SECRET: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().secret();
 static ACCOUNT_SETTINGS: [paperpaw_sdk::SettingSpec; 3] = [
-    paperpaw_sdk::SettingSpec::fixed_text("acct.server", "Server", "", ACCOUNT_PAGE)
-        .kept_on_reset(),
-    paperpaw_sdk::SettingSpec::fixed_text("acct.password", "Password", "", ACCOUNT_PAGE)
+    paperpaw_sdk::SettingSpec::text("acct.server", "Server", "", ACCOUNT_PAGE).kept_on_reset(),
+    paperpaw_sdk::SettingSpec::text("acct.password", "Password", "", ACCOUNT_PAGE)
         .with_extra(&ACCOUNT_SECRET),
-    paperpaw_sdk::SettingSpec::fixed_number("acct.count", "Count", 1, 50, 10, ACCOUNT_PAGE),
+    paperpaw_sdk::SettingSpec::number("acct.count", "Count", 1, 50, 10, ACCOUNT_PAGE),
 ];
 
 impl paperpaw_sdk::Plugin for Account {

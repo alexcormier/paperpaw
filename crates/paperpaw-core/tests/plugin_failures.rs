@@ -66,7 +66,7 @@ impl Plugin for Faulty {
         r.bind_slot(slots::HOME, id("screen"), Priority(i16::MAX))?;
         r.add_action(ActionSpec::new(id("act"), "x"))?;
         r.add_setting(SettingSpec::number(
-            &LEVEL,
+            LEVEL.static_str(),
             "x",
             1,
             5,
@@ -75,6 +75,7 @@ impl Plugin for Faulty {
             } else {
                 2
             },
+            paperpaw_sdk::builtin::groups::OTHER,
         ))?;
         let log = self.harness.log.clone();
         r.subscribe(
@@ -491,7 +492,7 @@ impl Plugin for Keeper {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::fixed_text(
+            SettingSpec::text(
                 "keeper.key",
                 "keeper.key",
                 "",

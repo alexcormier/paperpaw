@@ -30,14 +30,14 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.year-progress.align", ID, Align::Left),
     widgets::frame_spec("widgets.year-progress.frame", ID, Frame::None),
     widgets::padding_spec("widgets.year-progress.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.year-progress.style",
         "widgets.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.year-progress.style.help"),
+    .description("widgets.year-progress.style.help"),
     widgets::part_spec(
         "widgets.year-progress.year",
         ID,

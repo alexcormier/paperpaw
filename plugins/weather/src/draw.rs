@@ -19,7 +19,7 @@ pub(crate) const STYLES: [&str; 2] = ["weather.style.line", "weather.style.solid
 /// The setting of how `widget` draws its symbols, kept in the program:
 /// `id` is `<widget>.style`.
 pub(crate) const fn style_spec(id: &'static str, widget: Id) -> SettingSpec {
-    SettingSpec::fixed_choice(id, "weather.setting.style", &STYLES, STYLES[0], widget)
+    SettingSpec::choice(id, "weather.setting.style", &STYLES, STYLES[0], widget)
 }
 
 /// How `widget` draws its symbols.
