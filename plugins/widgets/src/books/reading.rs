@@ -26,7 +26,7 @@ use paperpaw_sdk::{
 };
 
 use super::{
-    Book, Covers, Lines, Role, add_settings, current, draw_bar, draw_cover, draw_message,
+    Book, Covers, FitMemo, Lines, Role, add_settings, current, draw_bar, draw_cover, draw_message,
     frame_height, percent_text, text_size,
 };
 use crate::PLUGIN;
@@ -268,6 +268,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 shown: None,
                 area: None,
                 covers: Covers::default(),
+                memo: Memo::default(),
             })
         })
         .category(widgets::categories::BOOKS),
@@ -281,9 +282,49 @@ struct Reading {
     /// Where it is drawn, once placed.
     area: Option<Rect>,
     covers: Covers,
+    /// Its text made to fit, kept for the frames that follow.
+    memo: Memo,
+}
+
+/// What drawing "Now reading" keeps between frames: the text laid out in
+/// its place (until the book or where it is read changes, or what it
+/// depends on) and its lines made to fit.
+#[derive(Debug, Default)]
+struct Memo {
+    lines: FitMemo,
+    layout: RefCell<Option<(String, Layout)>>,
+}
+
+impl Memo {
+    fn forget(&mut self) {
+        *self.layout.get_mut() = None;
+    }
+
+    /// The layout made for `key`, as kept, else as `make` makes it.
+    fn layout(&self, key: String, make: impl FnOnce() -> Layout) -> Layout {
+        if let Some((kept, layout)) = &*self.layout.borrow()
+            && *kept == key
+        {
+            return layout.clone();
+        }
+        let layout = make();
+        *self.layout.borrow_mut() = Some((key, layout.clone()));
+        layout
+    }
 }
 
 impl Reading {
+    /// The text laid out for where it goes, so that the first frame
+    /// finds it done.
+    fn make_layout(&self, env: &Env<'_>) {
+        if let (Some(area), Some((book, position))) = (self.area, &self.shown) {
+            let area = widgets::widget_look(env, WIDGET, area).area;
+            let (at, rest) = text_place(env, area, book);
+            let key = layout_key(env, rest, at.is_some());
+            self.memo.layout(key, || layout(env, rest, book, position));
+        }
+    }
+
     /// The cover shown, made small for where it goes.
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match (self.area, &self.shown) {
@@ -311,7 +352,9 @@ impl Widget for Reading {
         let changed = shown != self.shown;
         self.shown = shown;
         if changed {
+            self.memo.forget();
             self.make_covers(env);
+            self.make_layout(env);
         }
         changed
     }
@@ -320,6 +363,7 @@ impl Widget for Reading {
         if self.area != Some(area) {
             self.area = Some(area);
             self.make_covers(env);
+            self.make_layout(env);
         }
     }
 
@@ -338,7 +382,13 @@ impl Widget for Reading {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, WIDGET, area);
         match &self.shown {
-            Some((book, position)) => draw(canvas, env, &look, book, position, &self.covers),
+            Some((book, position)) => draw(
+                canvas,
+                env,
+                &look,
+                (book, position),
+                (&self.covers, &self.memo),
+            ),
             None => draw_message(canvas, env, &look, "widgets.books.nothing-read"),
         }
     }
@@ -501,26 +551,30 @@ fn cover_at(env: &Env<'_>, area: Rect, book: &Book) -> Option<Rect> {
         .then(|| Rect::new(area.x, area.y + (area.height - h) / 2, w, h))
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "longer than the limit from before it was set; split it when it is next changed"
-)]
-fn draw(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    look: &WidgetLook,
-    book: &Book,
-    position: &Position,
-    covers: &Covers,
-) {
-    let style = UiStyle::new(env);
-    let gap = style.gap();
-    let id = WIDGET;
-    let area = look.area;
-    let rest = match cover_at(env, area, book) {
+/// What the text of "Now reading" comes to in `rest` (the place beside
+/// the cover): the parts that stay, the lines they are broken into and
+/// how high they are together.
+#[derive(Debug, Clone)]
+struct Layout {
+    parts: Vec<Part>,
+    left: Option<String>,
+    title_size: f32,
+    title: Vec<String>,
+    pages: Vec<String>,
+    chapter: Vec<String>,
+    chapter_left: Vec<String>,
+    total: u16,
+}
+
+/// Where the cover goes in `area` (inside the frame), if shown, and the
+/// place left for the text.
+fn text_place(env: &Env<'_>, area: Rect, book: &Book) -> (Option<Rect>, Rect) {
+    let at = cover_at(env, area, book);
+    let rest = match at {
         Some(at) => {
-            draw_cover(canvas, env, look, at, book, covers);
-            let text_room = area.width.saturating_sub(at.width + gap);
+            let text_room = area
+                .width
+                .saturating_sub(at.width + UiStyle::new(env).gap());
             Rect::new(
                 area.x + area.width - text_room,
                 area.y,
@@ -530,6 +584,17 @@ fn draw(
         }
         None => area,
     };
+    (at, rest)
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
+fn layout(env: &Env<'_>, rest: Rect, book: &Book, position: &Position) -> Layout {
+    let style = UiStyle::new(env);
+    let gap = style.gap();
+    let id = WIDGET;
     let timed = widgets::shows(env, id, "left");
     let left = position.left().filter(|_| timed).map(|s| left_text(env, s));
     let font = style.font(env);
@@ -539,7 +604,6 @@ fn draw(
         font.as_ref()
             .is_none_or(|font| font.measure(style.small(), text) <= width)
     };
-    let caption_text = env.i18n().tr("widgets.reading.caption");
     let mut parts: Vec<Part> = [
         (Part::Caption, "caption", true),
         (Part::Author, "author", !book.author.is_empty()),
@@ -711,11 +775,93 @@ fn draw(
     } else {
         Vec::new()
     };
+    let total = total.min(rest.height);
+    Layout {
+        parts,
+        left,
+        title_size,
+        title,
+        pages,
+        chapter,
+        chapter_left,
+        total,
+    }
+}
+
+/// What a [`Layout`] depends on besides the book and where it is read:
+/// the place, the sizes and font the text is measured by, the language
+/// and which parts are shown.
+fn layout_key(env: &Env<'_>, rest: Rect, cover: bool) -> String {
+    let style = UiStyle::new(env);
+    let font = style.font(env).map(|f| f.id().clone());
+    let mut key = format!(
+        "{}x{} {} {} {} {} {} {} {:?} {}",
+        rest.width,
+        rest.height,
+        style.small().to_bits(),
+        style.text().to_bits(),
+        style.gap(),
+        style.line(),
+        text_size(env, WIDGET).to_bits(),
+        env.i18n().language(),
+        font.as_ref().map(paperpaw_sdk::Id::as_str),
+        cover,
+    );
+    for name in [
+        "caption",
+        "author",
+        "bar",
+        "pages",
+        "left",
+        "chapter",
+        "chapter-left",
+    ] {
+        key.push(if widgets::shows(env, WIDGET, name) {
+            '1'
+        } else {
+            '0'
+        });
+    }
+    key
+}
+
+fn draw(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &WidgetLook,
+    (book, position): (&Book, &Position),
+    (covers, memo): (&Covers, &Memo),
+) {
+    let style = UiStyle::new(env);
+    let gap = style.gap();
+    let id = WIDGET;
+    let area = look.area;
+    let (at, rest) = text_place(env, area, book);
+    if let Some(at) = at {
+        draw_cover(canvas, env, look, at, book, covers);
+    }
+    let cover = at.is_some();
+    let caption_text = env.i18n().tr("widgets.reading.caption");
+    let Layout {
+        parts,
+        left,
+        title_size,
+        title,
+        pages,
+        chapter,
+        chapter_left,
+        total,
+    } = memo.layout(layout_key(env, rest, cover), || {
+        layout(env, rest, book, position)
+    });
+    let line_gap = gap / 4;
+    let bar_h = (style.line() * 3).max(4);
+    let apart = gap / 2;
     let has = |part: Part| parts.contains(&part);
     let total = total.min(rest.height);
     let mut y = rest.y + (rest.height - total) / 2;
     let align = widgets::align(env, id);
-    let mut top = Lines::new();
+    let mut top = Lines::remembering(&memo.lines);
     if has(Part::Caption) {
         top.add(Role::Caption, style.small(), caption_text, look.faint);
     }
@@ -733,14 +879,14 @@ fn draw(
         draw_bar(canvas, env, look, bar, book.percent());
         y += bar_h + gap;
     }
-    let mut place = Lines::new();
+    let mut place = Lines::remembering(&memo.lines);
     for line in pages {
         place.add(Role::Main, style.small(), line, look.ink);
     }
     if let (true, Some(left)) = (has(Part::Left), left) {
         place.add(Role::Note, style.small(), left, look.faint);
     }
-    let mut chapter_lines = Lines::new();
+    let mut chapter_lines = Lines::remembering(&memo.lines);
     for line in chapter {
         chapter_lines.add(Role::Main, style.small(), line, look.ink);
     }
