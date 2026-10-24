@@ -19,6 +19,7 @@ pub fn paperpaw_xml::Tokenizer::finish(&mut self, &mut dyn core::ops::function::
 pub fn paperpaw_xml::Tokenizer::html() -> Self
 pub fn paperpaw_xml::Tokenizer::new() -> Self
 pub fn paperpaw_xml::Tokenizer::parse(&[u8], &mut dyn core::ops::function::FnMut(paperpaw_xml::Token<'_>))
+pub fn paperpaw_xml::Tokenizer::try_feed(&mut self, &[u8], &mut dyn core::ops::function::FnMut(paperpaw_xml::Token<'_>)) -> core::result::Result<(), alloc::collections::TryReserveError>
 pub fn paperpaw_xml::decode(&str) -> alloc::borrow::Cow<'_, str>
 pub fn paperpaw_xml::escape(&str, &mut alloc::string::String)
 pub fn paperpaw_xml::local_name(&str) -> &str

@@ -20,6 +20,7 @@ extern crate alloc;
 mod entities;
 
 use alloc::borrow::Cow;
+use alloc::collections::TryReserveError;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -46,8 +47,11 @@ const EAGER_TEXT: usize = 256;
 const MAX_TEXT: usize = 1024;
 /// Markup longer than this (e.g. an inline base64 image) is skipped.
 const MAX_MARKUP: usize = 4 * 1024;
-/// Input is tokenized in pieces of this size.
-const PIECE: usize = 1024;
+/// Input is tokenized in pieces of this size. The buffer grows by a
+/// piece at a time, never by doubling, so it holds at most an unfinished
+/// token and one piece: about 1 KiB for most books, never more than
+/// [`MAX_MARKUP`] and a piece.
+const PIECE: usize = 512;
 
 /// A token. Text is raw: decode entities with [`decode`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,6 +138,9 @@ pub fn local_name(name: &str) -> &str {
     name.rsplit(':').next().unwrap_or(name)
 }
 
+/// Makes room in the buffer for so many bytes more.
+type Grow<'a> = dyn FnMut(&mut Vec<u8>, usize) -> Result<(), TryReserveError> + 'a;
+
 /// Elements whose content HTML reads as text up to their end tag.
 const RAW_TEXT: [&str; 2] = ["script", "style"];
 
@@ -172,26 +179,69 @@ impl Tokenizer {
     /// Adds a chunk and emits every token it completes. Large chunks are
     /// processed in small pieces, so the buffer only ever holds an
     /// incomplete token plus one piece.
+    ///
+    /// Where the heap cannot give the buffer room, this stops the program,
+    /// as a full `Vec` does; [`Tokenizer::try_feed`] says so instead.
     pub fn feed(&mut self, data: &[u8], emit: &mut dyn FnMut(Token<'_>)) {
-        for mut piece in data.chunks(PIECE) {
-            if let Some(skip) = &mut self.skip {
-                match skip.end_in(piece) {
-                    Some(end) => {
-                        piece = &piece[end..];
-                        self.skip = None;
-                    }
-                    None => continue,
+        for piece in data.chunks(PIECE) {
+            let grown = self.piece(piece, emit, &mut |pending, more| {
+                pending.reserve_exact(more);
+                Ok(())
+            });
+            debug_assert!(grown.is_ok(), "growing infallibly cannot fail");
+        }
+    }
+
+    /// As [`Tokenizer::feed`], but an error where the heap cannot give the
+    /// buffer room for the next piece (at most a piece more than the
+    /// buffer has). The tokens before it were emitted; the rest of `data`
+    /// was not read, so the document cannot be read on from here.
+    pub fn try_feed(
+        &mut self,
+        data: &[u8],
+        emit: &mut dyn FnMut(Token<'_>),
+    ) -> Result<(), TryReserveError> {
+        for piece in data.chunks(PIECE) {
+            self.piece(piece, emit, &mut |pending, more| {
+                pending.try_reserve_exact(more)
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Tokenizes one piece of at most [`PIECE`] bytes; `grow` makes room
+    /// for so many more bytes in the buffer.
+    fn piece(
+        &mut self,
+        mut piece: &[u8],
+        emit: &mut dyn FnMut(Token<'_>),
+        grow: &mut Grow<'_>,
+    ) -> Result<(), TryReserveError> {
+        if let Some(skip) = &mut self.skip {
+            match skip.end_in(piece) {
+                Some(end) => {
+                    piece = &piece[end..];
+                    self.skip = None;
                 }
-            }
-            self.pending.extend_from_slice(piece);
-            let consumed = process(&self.pending, false, self.html, &mut self.raw, emit);
-            self.pending.drain(..consumed);
-            // What is left is unfinished markup; text is emitted early.
-            if self.pending.len() > MAX_MARKUP {
-                self.skip = Some(Skip::start(&self.pending));
-                self.pending.clear();
+                None => return Ok(()),
             }
         }
+        // Room by whole pieces: a buffer that grows by doubling would
+        // ask for twice what it holds.
+        let held = self.pending.len();
+        if held + piece.len() > self.pending.capacity() {
+            let more = (held + piece.len()).next_multiple_of(PIECE) - held;
+            grow(&mut self.pending, more)?;
+        }
+        self.pending.extend_from_slice(piece);
+        let consumed = process(&self.pending, false, self.html, &mut self.raw, emit);
+        self.pending.drain(..consumed);
+        // What is left is unfinished markup; text is emitted early.
+        if self.pending.len() > MAX_MARKUP {
+            self.skip = Some(Skip::start(&self.pending));
+            self.pending.clear();
+        }
+        Ok(())
     }
 
     /// Emits what is left at the end of the input.
@@ -485,7 +535,9 @@ mod tests {
         let mut out = Vec::new();
         let mut tokenizer = Tokenizer::new();
         for piece in data.as_bytes().chunks(chunk) {
-            tokenizer.feed(piece, &mut |t| out.push(describe(t)));
+            tokenizer
+                .try_feed(piece, &mut |t| out.push(describe(t)))
+                .unwrap();
         }
         tokenizer.finish(&mut |t| out.push(describe(t)));
         // Merge adjacent text pieces for comparison.
@@ -679,6 +731,49 @@ mod tests {
             tokenizer.finish(&mut emit);
             assert_eq!(text, "äöü€ abc", "chunk {chunk}");
         }
+    }
+
+    /// What the heap refuses: room for so many bytes more.
+    fn no_room() -> TryReserveError {
+        Vec::<u8>::new().try_reserve(usize::MAX).unwrap_err()
+    }
+
+    #[test]
+    fn a_piece_the_heap_has_no_room_for_is_an_error() {
+        let mut tokenizer = Tokenizer::new();
+        let mut out = Vec::new();
+        tokenizer
+            .try_feed(b"<p>one</p><p>tw", &mut |t| out.push(describe(t)))
+            .unwrap();
+        let held = tokenizer.pending.clone();
+        // A piece that needs more room than the buffer has, refused: an
+        // error, not a stop, and the buffer as it was.
+        let more = [b'o'; PIECE];
+        let refused = tokenizer.piece(&more, &mut |t| out.push(describe(t)), &mut |_, _| {
+            Err(no_room())
+        });
+        assert!(refused.is_err());
+        assert_eq!(tokenizer.pending, held);
+        assert_eq!(out, ["<p >", "'one'", "</p>", "<p >"]);
+        // A piece that fits in the room there is needs none.
+        let fits = tokenizer.piece(b"o", &mut |t| out.push(describe(t)), &mut |_, _| {
+            Err(no_room())
+        });
+        assert!(fits.is_ok());
+    }
+
+    #[test]
+    fn the_buffer_grows_by_pieces_not_by_doubling() {
+        // An ordinary page: the buffer stays within two pieces.
+        let page = "<p class=\"a\">Wörter und Zeichen, </p>".repeat(200);
+        let (_, most) = text_of(&page, 4096);
+        assert!(most <= 2 * PIECE, "buffer {most}");
+        // A long tag: room by pieces, up to the most markup and a piece.
+        let tag = alloc::format!("<p>a</p><img alt=\"{}\"/><p>b</p>", "x".repeat(3000));
+        let (text, most) = text_of(&tag, 4096);
+        assert_eq!(text, "ab");
+        assert_eq!(most % PIECE, 0);
+        assert!(most <= MAX_MARKUP + PIECE, "buffer {most}");
     }
 
     #[test]

@@ -143,6 +143,8 @@ impl Ota {
     /// Looks at what started and why (see the [module documentation](self));
     /// `None` without two app partitions (flashed before they came: the
     /// web flasher sets them up once).
+    // A frame of its own, off the stack before the kernel is built.
+    #[inline(never)]
     pub fn start(shared: Flash) -> Option<Self> {
         let mut flash = shared.borrow_mut();
         let Some(Partitions {

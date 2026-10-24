@@ -75,18 +75,24 @@ fn library(name: &str, book: Option<&str>) -> PathBuf {
 /// Runs the emulator headless on `profile` in a fresh library.
 fn emulator(name: &str, profile: &str, book: Option<&str>, args: &[&str]) -> Output {
     let library = library(name, book);
-    let mut command = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"));
-    command
-        .args(["--profile", profile, "--headless", "--library"])
-        .arg(&library)
-        .args(["--set", "help.show=false"])
-        .args(args);
+    let mut command = run_in(&library, profile, args);
     if book.is_none() {
         command.args(["--set", "reader.open-last=false"]);
     }
     let output = command.output().unwrap();
     let _ = fs::remove_dir_all(&library);
     output
+}
+
+/// The emulator headless on `profile` in `library`, with `args`.
+fn run_in(library: &Path, profile: &str, args: &[&str]) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"));
+    command
+        .args(["--profile", profile, "--headless", "--library"])
+        .arg(library)
+        .args(["--set", "help.show=false"])
+        .args(args);
+    command
 }
 
 /// What the last line of a run says: the screen shown, the heap's peak
@@ -192,6 +198,89 @@ fn reading_a_txt_stays_within_the_x4_budget() {
 #[test]
 fn reading_an_epub_stays_within_the_x4_pro_budget() {
     stays_within_budget("x4-pro-epub", "xteink-x4-pro", "books/die-verwandlung.epub");
+}
+
+/// An EPUB whose package document is large (400 chapters): inflating it
+/// takes a window of 32 KiB beside the decoder's 10 KiB.
+fn large_package() -> Vec<u8> {
+    let (mut items, mut spine) = (String::new(), String::new());
+    let mut zip = paperpaw_zip::testing::ZipBuilder::new()
+        .stored("mimetype", "application/epub+zip")
+        .deflated(
+            "META-INF/container.xml",
+            "<?xml version=\"1.0\"?><container version=\"1.0\" \
+             xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles>\
+             <rootfile full-path=\"content.opf\" media-type=\"application/oebps-package+xml\"/>\
+             </rootfiles></container>",
+        );
+    for n in 0..400 {
+        items.push_str(&format!(
+            "<item id=\"c{n}\" href=\"c{n}.xhtml\" media-type=\"application/xhtml+xml\"/>"
+        ));
+        spine.push_str(&format!("<itemref idref=\"c{n}\"/>"));
+        zip = zip.deflated(
+            &format!("c{n}.xhtml"),
+            format!("<html><body><p>Chapter {n}.</p></body></html>"),
+        );
+    }
+    let opf = format!(
+        "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" \
+         version=\"3.0\" unique-identifier=\"id\"><metadata \
+         xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"id\">large</dc:identifier>\
+         <dc:title>Large</dc:title><dc:language>en</dc:language></metadata>\
+         <manifest>{items}</manifest><spine>{spine}</spine></package>"
+    );
+    assert!(opf.len() > 32 * 1024);
+    zip.deflated("content.opf", opf).build()
+}
+
+/// A book the heap has no room to open, as on an X4 whose memory the
+/// Wi-Fi radio holds: *Continue reading* on home opens the reader, which
+/// says so in a few words, and the run goes on. On the device, running
+/// out on the way stopped it and it started again.
+#[test]
+fn a_book_without_room_to_open_says_so() {
+    let home = ["--set", "reader.open-last=false"];
+    let open = "confirm,confirm,wait:500,describe";
+    // Under a budget a little over what starting with the sample books
+    // takes, home shows; the book needs more than is left. Without one,
+    // it opens.
+    let started = heap(&emulator("no-room-start", "xteink-x4", None, &[]));
+    let budget = format!("{}", started.peak.ceil() as u32 + 4);
+    let tight = with_large_book(
+        "no-room",
+        &[&home[..], &["--heap-budget", &budget, "--script", open]].concat(),
+    );
+    let free = with_large_book(
+        "room",
+        &[&home[..], &["--heap-budget", "none", "--script", open]].concat(),
+    );
+    let catalog = fs::read_to_string(root().join("plugins/reader/i18n/en.ini")).unwrap();
+    let notice = catalog
+        .lines()
+        .find_map(|line| line.strip_prefix("reader.no-memory = "))
+        .expect("the notice in the catalog");
+    let stdout = String::from_utf8_lossy(&tight.stdout);
+    assert_eq!(heap(&tight).screen, "reader.screen", "{stdout}");
+    assert!(stdout.contains(notice), "{stdout}");
+    let opened = heap(&free);
+    assert_eq!(opened.screen, "reader.screen");
+    assert!(opened.peak > budget.parse().unwrap(), "{opened:?}");
+    assert!(!String::from_utf8_lossy(&free.stdout).contains(notice));
+}
+
+/// Runs the emulator on the X4 in a fresh library with the book of
+/// [`large_package`] as the one read last, the card on home naming it.
+fn with_large_book(name: &str, args: &[&str]) -> Output {
+    let book = "books/large.epub";
+    let library = library(name, Some(book));
+    fs::write(library.join(book), large_package()).unwrap();
+    let opened = library.join(".paperpaw/library");
+    fs::create_dir_all(&opened).unwrap();
+    fs::write(opened.join("opened.txt"), format!("{book}\n")).unwrap();
+    let output = run_in(&library, "xteink-x4", args).output().unwrap();
+    let _ = fs::remove_dir_all(&library);
+    output
 }
 
 /// A budget below what the app needs to start: the allocation that does

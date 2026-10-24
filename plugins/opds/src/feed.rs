@@ -492,7 +492,7 @@ pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed
     tokenizer.finish(&mut token);
     feed.title = own.rsplit('/').next().unwrap_or("").to_string();
     feed.entries
-        .sort_by_key(|e| (e.feed.is_none(), e.title.to_lowercase()));
+        .sort_by_cached_key(|e| (e.feed.is_none(), e.title.to_lowercase()));
     feed
 }
 

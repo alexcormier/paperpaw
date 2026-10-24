@@ -1239,7 +1239,7 @@ mod tests {
         // Too many chapters for the bar: the parts only.
         let mut many = alloc::vec![(0, 0), (0, 500)];
         many.extend((1..200).map(|i| (1, i * 5)));
-        many.sort_by_key(|&(_, at)| at);
+        many.sort_by_cached_key(|&(_, at)| at);
         assert_eq!(chapter_ticks(&many), [0, 500]);
         assert!(chapter_ticks(&[]).is_empty());
         // Many chapters without parts: each its tick, along the whole bar.

@@ -136,14 +136,18 @@ pub fn list(storage: &dyn Storage, dir: &str, hidden: bool) -> Result<Vec<Entry>
         }
     })?;
     // Compared letter by letter, without a lower-case copy of each name
-    // for every comparison.
-    entries.sort_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then_with(|| {
-            a.name
-                .chars()
-                .flat_map(char::to_lowercase)
-                .cmp(b.name.chars().flat_map(char::to_lowercase))
-        })
+    // for every comparison; names alike but for case by their letters.
+    // Unstable: a stable sort takes 4 KiB of stack (too much on the X4).
+    entries.sort_unstable_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| {
+                a.name
+                    .chars()
+                    .flat_map(char::to_lowercase)
+                    .cmp(b.name.chars().flat_map(char::to_lowercase))
+            })
+            .then_with(|| a.name.cmp(&b.name))
     });
     Ok(entries)
 }

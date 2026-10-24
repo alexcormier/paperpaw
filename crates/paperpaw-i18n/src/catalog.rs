@@ -274,8 +274,10 @@ impl Catalog {
                 .unwrap_or(0);
         }
         // Stable sort keeps file order for duplicates; the last one wins.
+        // By cached keys: its scratch lies on the heap, where `sort_by`
+        // takes 4 KiB of stack (too much on the X4).
         let key = |at: u32| key_of(source, &escaped, &others, at);
-        index.sort_by(|a, b| key(*a).cmp(key(*b)));
+        index.sort_by_cached_key(|at| key(*at));
         index.dedup_by(|later, earlier| {
             let duplicate = key(*later) == key(*earlier);
             if duplicate {

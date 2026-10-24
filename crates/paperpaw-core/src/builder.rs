@@ -8,7 +8,14 @@
 use super::*;
 
 /// Configures and creates a [`Kernel`].
-pub struct KernelBuilder {
+///
+/// What it holds lies on the heap: each call moves the builder, and a
+/// shell that calls many would otherwise keep a copy of it on the stack
+/// for each (the X4's start, whose stack is small).
+pub struct KernelBuilder(Box<BuilderParts>);
+
+/// What a [`KernelBuilder`] was told.
+struct BuilderParts {
     device: DeviceInfo,
     plugins: Vec<Box<dyn Plugin>>,
     /// Plugins shipped switched off, until the user switches them on.
@@ -42,8 +49,8 @@ pub struct KernelBuilder {
 impl fmt::Debug for KernelBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("KernelBuilder")
-            .field("device", &self.device.id)
-            .field("plugins", &self.plugins.len())
+            .field("device", &self.0.device.id)
+            .field("plugins", &self.0.plugins.len())
             .finish_non_exhaustive()
     }
 }
@@ -51,41 +58,41 @@ impl fmt::Debug for KernelBuilder {
 impl KernelBuilder {
     /// Adds a plugin. Plugins registered later win priority ties.
     pub fn plugin(mut self, plugin: impl Plugin + 'static) -> Self {
-        self.plugins.push(Box::new(plugin));
+        self.0.plugins.push(Box::new(plugin));
         self
     }
 
     /// Adds a plugin that is off until the user switches it on (e.g. in
     /// the plugin manager), for features not everyone wants.
     pub fn plugin_off(mut self, plugin: impl Plugin + 'static) -> Self {
-        self.off.push(String::from(plugin.manifest().id.as_str()));
+        self.0.off.push(String::from(plugin.manifest().id.as_str()));
         self.plugin(plugin)
     }
 
     /// Key bindings specific to the device (e.g. its physical buttons).
     pub fn device_keymap(mut self, source: impl Into<Cow<'static, str>>) -> Self {
-        self.device_keymap = Some(source.into());
+        self.0.device_keymap = Some(source.into());
         self
     }
 
     /// The user's configuration file (`paperpaw.ini`). It overrides
     /// settings, slot bindings and key maps, and can disable plugins.
     pub fn user_config(mut self, source: impl Into<String>) -> Self {
-        self.user_config = Some(source.into());
+        self.0.user_config = Some(source.into());
         self
     }
 
     /// The device's storage (books, settings, plugin data). Without it the
     /// kernel runs with an empty, read-only storage.
     pub fn storage(mut self, storage: impl Storage + 'static) -> Self {
-        self.storage = Some(Box::new(storage));
+        self.0.storage = Some(Box::new(storage));
         self
     }
 
     /// Like [`storage`](Self::storage), for a storage chosen at run time
     /// (e.g. the SD card, or none without one).
     pub fn storage_boxed(mut self, storage: Box<dyn Storage>) -> Self {
-        self.storage = Some(storage);
+        self.0.storage = Some(storage);
         self
     }
 
@@ -96,14 +103,14 @@ impl KernelBuilder {
     /// (the X4's), which handle [`Effects::proceed`]; it needs the
     /// [`clock`](KernelBuilder::clock) to know what is slow.
     pub fn busy_mark(mut self, on: bool) -> Self {
-        self.busy_mark = on;
+        self.0.busy_mark = on;
         self
     }
 
     /// A monotonic clock in microseconds, for measuring the time each
     /// plugin's code takes ([`paperpaw_sdk::usage::PluginUsage`]).
     pub fn clock(mut self, clock: fn() -> u64) -> Self {
-        self.clock = Some(clock);
+        self.0.clock = Some(clock);
         self
     }
 
@@ -119,7 +126,8 @@ impl KernelBuilder {
     /// time (e.g. from a device profile's file), its value written as in
     /// `paperpaw.ini`.
     pub fn setting_default_text(mut self, id: &str, value: &str) -> Self {
-        self.setting_defaults
+        self.0
+            .setting_defaults
             .push((String::from(id), String::from(value)));
         self
     }
@@ -128,14 +136,14 @@ impl KernelBuilder {
     /// read with; they appear as one plugin, "font folder". Only for
     /// devices that render scalable fonts.
     pub fn font_dir(mut self, dir: impl Into<String>) -> Self {
-        self.font_dirs.push(dir.into());
+        self.0.font_dirs.push(dir.into());
         self
     }
 
     /// A folder on the storage with data plugins (see `data_plugin`), one
     /// subfolder each. Without any, `plugins` is used.
     pub fn plugin_dir(mut self, dir: impl Into<String>) -> Self {
-        self.plugin_dirs.push(dir.into());
+        self.0.plugin_dirs.push(dir.into());
         self
     }
 
@@ -143,7 +151,7 @@ impl KernelBuilder {
     /// or `android` for paperpaw.org's (ADR 0023): its plugin store then
     /// offers what is made for it. Without, none is offered.
     pub fn catalog_device(mut self, name: &'static str) -> Self {
-        self.catalog_device = Some(name);
+        self.0.catalog_device = Some(name);
         self
     }
 
@@ -152,7 +160,7 @@ impl KernelBuilder {
     /// it could. Without, nothing that needs one works (e.g. the transfer
     /// by browser).
     pub fn random(mut self, fill: fn(&mut [u8]) -> bool) -> Self {
-        self.random = paperpaw_sdk::random::Random::new(fill);
+        self.0.random = paperpaw_sdk::random::Random::new(fill);
         self
     }
 
@@ -161,7 +169,7 @@ impl KernelBuilder {
     /// diagnostics and plugins checking their room. Without, nothing is
     /// known.
     pub fn memory(mut self, read: fn() -> Option<paperpaw_sdk::memory::MemoryUse>) -> Self {
-        self.memory = paperpaw_sdk::memory::Memory::new(read);
+        self.0.memory = paperpaw_sdk::memory::Memory::new(read);
         self
     }
 
@@ -169,7 +177,7 @@ impl KernelBuilder {
     /// for plugins: a wake, the power switched on, a restart by a
     /// watchdog. Without, it is not known.
     pub fn started(mut self, start: paperpaw_sdk::power::Start) -> Self {
-        self.started = start;
+        self.0.started = start;
         self
     }
 
@@ -177,8 +185,8 @@ impl KernelBuilder {
     /// [`Io::Wifi`] and reports with [`Kernel::wifi_event`]);
     /// it implies [`network`](Self::network). See [`paperpaw_sdk::wifi`].
     pub fn wifi(mut self, managed: bool) -> Self {
-        self.caps.wifi = managed;
-        self.caps.network |= managed;
+        self.0.caps.wifi = managed;
+        self.0.caps.network |= managed;
         self
     }
 
@@ -187,7 +195,7 @@ impl KernelBuilder {
     /// [`settings::FRONTLIGHT_WARMTH`](core_settings::FRONTLIGHT_WARMTH)
     /// say; without, they are not offered.
     pub fn frontlight(mut self, settable: bool) -> Self {
-        self.caps.frontlight = settable;
+        self.0.caps.frontlight = settable;
         self
     }
 
@@ -196,7 +204,7 @@ impl KernelBuilder {
     /// on at the start, files fit for `native` (which plugins see as
     /// [`Env::native`](paperpaw_sdk::Env)).
     pub fn code_plugins(mut self, native: Native, loader: Box<dyn CodeLoader>) -> Self {
-        self.code = Some(crate::code_plugin::CodePlugins {
+        self.0.code = Some(crate::code_plugin::CodePlugins {
             native,
             loader,
             safe_mode: None,
@@ -209,7 +217,7 @@ impl KernelBuilder {
     /// held the key for it. See [`paperpaw_sdk::native::SafeMode`]; the
     /// kernel fills in what it switched off.
     pub fn safe_mode(mut self, safe_mode: SafeMode) -> Self {
-        self.safe_mode = Some(safe_mode);
+        self.0.safe_mode = Some(safe_mode);
         self
     }
 
@@ -221,7 +229,7 @@ impl KernelBuilder {
     /// installs one while PaperPaw runs. One that is not what it says is
     /// refused, with a warning, and its folder removed.
     pub fn install_plugin(mut self, id: Id, folder: impl Into<String>) -> Self {
-        self.staged.push((id, folder.into()));
+        self.0.staged.push((id, folder.into()));
         self
     }
 
@@ -229,7 +237,7 @@ impl KernelBuilder {
     /// [`Io::Firmware`] and reports with
     /// [`Kernel::firmware_state`]). See [`paperpaw_sdk::firmware`].
     pub fn firmware(mut self, firmware: Firmware) -> Self {
-        self.firmware = Some(firmware);
+        self.0.firmware = Some(firmware);
         self
     }
 
@@ -237,7 +245,7 @@ impl KernelBuilder {
     /// [`Io::Server`], [`Io::Socket`]); without, plugins' requests fail
     /// at once.
     pub fn network(mut self, available: bool) -> Self {
-        self.caps.network = available;
+        self.0.caps.network = available;
         self
     }
 
@@ -245,21 +253,21 @@ impl KernelBuilder {
     /// text ([`Io::ReadClipboard`]); without, only text copied
     /// in PaperPaw is pasted.
     pub fn system_clipboard(mut self, available: bool) -> Self {
-        self.caps.system_clipboard = available;
+        self.0.caps.system_clipboard = available;
         self
     }
 
     /// The shell speaks text aloud ([`Io::Speech`]); without,
     /// plugins' speech fails at once.
     pub fn speech(mut self, available: bool) -> Self {
-        self.caps.speech = available;
+        self.0.caps.speech = available;
         self
     }
 
     /// The shell sleeps after showing PaperPaw's sleep screen (see
     /// [`Effect::Sleep`]); without, the system has its own (Android).
     pub fn sleep(mut self, available: bool) -> Self {
-        self.caps.sleep = available;
+        self.0.caps.sleep = available;
         self
     }
 
@@ -267,7 +275,7 @@ impl KernelBuilder {
     /// [`settings::ROTATION`](paperpaw_sdk::builtin::settings::ROTATION)
     /// says (see [`Kernel::rotation`]); without, it is not offered.
     pub fn rotation(mut self, available: bool) -> Self {
-        self.caps.rotation = available;
+        self.0.caps.rotation = available;
         self
     }
 
@@ -276,7 +284,7 @@ impl KernelBuilder {
     /// hints above them shows what they do
     /// ([`settings::BUTTON_HINTS`](core_settings::BUTTON_HINTS)).
     pub fn button_row(mut self, buttons: &'static [&'static str]) -> Self {
-        self.button_row = buttons;
+        self.0.button_row = buttons;
         self
     }
 
@@ -285,14 +293,14 @@ impl KernelBuilder {
     /// and [`settings::PAPER_COLOR`](paperpaw_sdk::builtin::settings::PAPER_COLOR)
     /// (see [`Kernel::colors`]); without, they are not offered.
     pub fn colors(mut self, available: bool) -> Self {
-        self.caps.colors = available;
+        self.0.caps.colors = available;
         self
     }
 
     /// Memory for glyphs rasterized at runtime (default 32 KiB). Bitmap font
     /// packs do not use it.
     pub fn glyph_cache(mut self, bytes: usize) -> Self {
-        self.glyph_cache = bytes;
+        self.0.glyph_cache = bytes;
         self
     }
 
@@ -301,7 +309,7 @@ impl KernelBuilder {
     /// size, while each band costs one more pass over the visible screens.
     /// For devices whose panel controller keeps the frame (e.g. the X4).
     pub fn frame_rows(mut self, rows: u16) -> Self {
-        self.frame_rows = Some(rows);
+        self.0.frame_rows = Some(rows);
         self
     }
 
@@ -310,12 +318,24 @@ impl KernelBuilder {
     /// them in a byte (the X4's, turned). Frame bands should be a multiple
     /// of it.
     pub fn row_align(mut self, rows: u16) -> Self {
-        self.row_align = rows.max(1);
+        self.0.row_align = rows.max(1);
         self
     }
 
     pub fn build(mut self) -> Result<Kernel, KernelError> {
-        let mut kernel = self.new_kernel()?;
+        let display = self.0.device.display;
+        let rows = self.0.frame_rows.unwrap_or(display.height);
+        let framebuffer = Framebuffer::banded(display.width, display.height, rows, display.format)
+            .map_err(KernelError::Graphics)?;
+        Ok(self.0.build(framebuffer))
+    }
+}
+
+impl BuilderParts {
+    /// The kernel, built where it is returned: it is large, and each copy
+    /// would take room on the stack while it is built (the X4's is small).
+    fn build(&mut self, framebuffer: Framebuffer) -> Kernel {
+        let mut kernel = self.new_kernel(framebuffer);
         paperpaw_sdk::data::take_over_old_name(kernel.shared.storage.as_ref());
         kernel.read_secrets();
         paperpaw_sdk::library::take_over_old(kernel.shared.storage.as_ref());
@@ -382,21 +402,18 @@ impl KernelBuilder {
         kernel.rebuild_keymap();
         kernel.apply_display_settings();
         kernel.settle();
-        Ok(kernel)
+        kernel
     }
 
-    /// The kernel with nothing registered: its frame, its storage (metered,
-    /// and what a call reads kept for the rest of it), what the shell said
-    /// it does.
+    /// The kernel with nothing registered: its `framebuffer`, its storage
+    /// (metered, and what a call reads kept for the rest of it), what the
+    /// shell said it does.
     #[expect(
         clippy::too_many_lines,
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
-    fn new_kernel(&mut self) -> Result<Kernel, KernelError> {
+    fn new_kernel(&mut self, framebuffer: Framebuffer) -> Kernel {
         let display = self.device.display;
-        let rows = self.frame_rows.unwrap_or(display.height);
-        let framebuffer = Framebuffer::banded(display.width, display.height, rows, display.format)
-            .map_err(KernelError::Graphics)?;
         let meter = meter::Meter::new(self.clock);
         // What a call reads, kept for the rest of it (more where memory is
         // plentiful).
@@ -420,7 +437,7 @@ impl KernelBuilder {
         caps.black_and_white = display.format == paperpaw_platform::PixelFormat::Mono1;
         caps.firmware = self.firmware.is_some();
         caps.button_row = !self.button_row.is_empty();
-        Ok(Kernel {
+        Kernel {
             shared: Shared {
                 registry: Registry::default(),
                 meter,
@@ -570,7 +587,7 @@ impl KernelBuilder {
             plugin_defaults: Vec::new(),
             plugin_choices: Vec::new(),
             now: Instant::default(),
-        })
+        }
     }
 }
 
@@ -968,7 +985,7 @@ impl Kernel {
 
 impl Kernel {
     pub fn builder(device: DeviceInfo) -> KernelBuilder {
-        KernelBuilder {
+        KernelBuilder(Box::new(BuilderParts {
             device,
             plugins: Vec::new(),
             off: Vec::new(),
@@ -993,6 +1010,6 @@ impl Kernel {
             random: paperpaw_sdk::random::Random::NONE,
             memory: paperpaw_sdk::memory::Memory::NONE,
             started: paperpaw_sdk::power::Start::Unknown,
-        }
+        }))
     }
 }

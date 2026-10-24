@@ -363,7 +363,7 @@ impl AddScreen {
                 order.unwrap_or(usize::MAX),
             )
         };
-        offered.sort_by_key(|(id, _)| rank(id));
+        offered.sort_by_cached_key(|(id, _)| rank(id));
         Self {
             widgets: offered,
             list: ListView::new(area, style.row).focus_on_keys(env),

@@ -677,7 +677,15 @@ impl<'a> StatusLine<'a> {
         let area = self.area;
         let reach = self.size * 0.2;
         let mut laid = self.layout(env, font, context);
-        laid.sort_by(|a, b| a.x.total_cmp(&b.x));
+        // A few items: sorted by insertion, stable without the 4 KiB of
+        // stack `sort_by` takes.
+        for i in 1..laid.len() {
+            let mut at = i;
+            while at > 0 && laid[at - 1].x.total_cmp(&laid[at].x).is_gt() {
+                laid.swap(at - 1, at);
+                at -= 1;
+            }
+        }
         laid.iter()
             .filter_map(|item| {
                 let command = env.status_items().tap(item.id, context)?;

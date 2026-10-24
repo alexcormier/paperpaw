@@ -4,7 +4,7 @@
 6958 crates/paperpaw-sdk/src/icon_table.rs
 3401 crates/paperpaw-core/src/tests.rs
 2162 crates/paperpaw-core/src/core_plugin.rs
-2030 plugins/format-epub/src/convert.rs
+1933 plugins/format-epub/src/convert.rs
 1925 crates/paperpaw-sdk/src/widgets/grid/view.rs
 1874 crates/paperpaw-sdk/src/library/catalog.rs
 1765 plugins/reader/tests/reading.rs

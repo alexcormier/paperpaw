@@ -106,7 +106,9 @@ fn scan(storage: &dyn Storage, path: &str) -> Result<Scan, DocumentError> {
         if n == 0 {
             break;
         }
-        tokenizer.feed(&chunk[..n], &mut handle);
+        tokenizer
+            .try_feed(&chunk[..n], &mut handle)
+            .map_err(|_| DocumentError::OutOfMemory)?;
         at += n as u64;
     }
     tokenizer.finish(&mut handle);

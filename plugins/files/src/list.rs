@@ -539,8 +539,8 @@ impl ListScreen {
                 count(&mut folders, shelf::Kind::Folder, &folder);
             }
         });
-        series.sort_by_key(|r| r.name.to_lowercase());
-        folders.sort_by_key(|r| r.name.to_lowercase());
+        series.sort_by_cached_key(|r| r.name.to_lowercase());
+        folders.sort_by_cached_key(|r| r.name.to_lowercase());
         let next = Filter::Next.order(&self.index, false).len();
         let mut shelves = Vec::new();
         if next > 0 {

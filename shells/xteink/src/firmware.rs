@@ -118,6 +118,10 @@ pub struct State {
 impl Firmware {
     /// Starts the kernel, then runs the main loop.
     pub fn run(mut self) -> ! {
+        // What building the kernel warned of.
+        for warning in self.kernel.take_warnings() {
+            warn!("{warning}");
+        }
         let effects = self.kernel.start(now());
         self.apply(effects);
         // Its first frame is shown: its code plugins started cleanly.
@@ -141,6 +145,9 @@ impl Firmware {
         self.ota.as_ref().is_some_and(Ota::installing)
     }
 
+    /// One turn of the main loop. Its frame lies under every plugin's work,
+    /// so what it calls aside from the kernel (the USB lines, updates,
+    /// sleeping) keeps frames of its own (`#[inline(never)]`).
     fn step(&mut self) {
         if let Some(ota) = &mut self.ota
             && ota.check_trial(now().0)
@@ -267,6 +274,7 @@ impl Firmware {
     }
 
     /// An update or a restart the kernel asked for.
+    #[inline(never)]
     fn firmware(&mut self, command: FirmwareCommand) {
         match command {
             FirmwareCommand::Install {
@@ -295,6 +303,7 @@ impl Firmware {
     }
 
     /// How an update goes.
+    #[inline(never)]
     fn firmware_step(&mut self) {
         if let Some(ota) = &mut self.ota
             && let Some(state) = ota.step(self.kernel.storage())
@@ -493,6 +502,7 @@ impl Firmware {
         clippy::expect_used,
         reason = "the power button is taken back only here; without it the X4 could not wake"
     )]
+    #[inline(never)]
     fn sleep(&mut self) {
         // A press over USB that put it to sleep is let go first.
         #[cfg(feature = "remote")]
@@ -671,6 +681,7 @@ impl Firmware {
     /// What came over USB: the cable transfer's lines for the kernel (all
     /// that is there, a few at most), the test remote control's commands
     /// (`remote` builds, one at a time).
+    #[inline(never)]
     fn usb(&mut self) {
         for _ in 0..CABLE_LINES {
             let Some(line) = self.usb.next_line() else {
@@ -911,6 +922,7 @@ fn heap_free() -> usize {
 /// What came over USB.
 #[cfg(feature = "remote")]
 impl Firmware {
+    #[inline(never)]
     fn remote(&mut self, line: Result<alloc::vec::Vec<u8>, crate::usb_lines::TooLong>) {
         if let Some(command) = self.remote.command(line)
             && let Some(command) = self.remote.answer(&mut self.kernel, &mut self.usb, command)

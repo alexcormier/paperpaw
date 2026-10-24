@@ -146,7 +146,9 @@ Pro's. A port to a board like one PaperPaw knows is mostly a board file.
   it running over (`stack.rs` paints it at start and checks it). Deep
   recursion and large locals are the usual cause. The device check's
   Memory page and `x4-remote.py`'s `heap` say how much of it was never
-  used.
+  used; a frame reserved but not written (a stable sort's 4 KiB of
+  scratch) does not show there, but does in `tools/stack-frames.py`,
+  which reads the frames from the firmware's code.
 - **The heap.** `MemoryClass::Small` devices have a heap of 262 KB, and
   opening a book takes up to 179 KB of it. Measure with the radio on:
   its buffers come from the same heap. With PSRAM, make it the heap

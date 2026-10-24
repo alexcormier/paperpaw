@@ -27,7 +27,7 @@ use paperpaw_sdk::Storage;
 use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{DocumentError, Metadata, PageProgression};
 use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
-use paperpaw_sdk::zip::ZipArchive;
+use paperpaw_sdk::zip::{ZipArchive, ZipError};
 use paperpaw_sdk::{config, web};
 
 use crate::css;
@@ -134,14 +134,32 @@ fn tokenize(
         .map_err(error)?
         .ok_or_else(|| DocumentError::Malformed(Cow::Owned(alloc::format!("missing {name}"))))?;
     let mut tokenizer = Tokenizer::new();
+    let mut out_of_memory = false;
     archive
         .stream(storage, &entry, &mut |chunk| {
-            tokenizer.feed(chunk, handle);
-            true
+            out_of_memory = tokenizer.try_feed(chunk, handle).is_err();
+            !out_of_memory
         })
         .map_err(error)?;
+    if out_of_memory {
+        return Err(DocumentError::OutOfMemory);
+    }
     tokenizer.finish(handle);
     Ok(())
+}
+
+/// Adds `more` to `text`, the text of an element being read, while it
+/// holds less than [`MAX_CAPTURE`]; false where the heap has no room.
+/// Grown by what it needs, not by doubling, so it stays near the most.
+fn capture(text: &mut String, more: &str) -> bool {
+    if text.len() >= MAX_CAPTURE {
+        return true;
+    }
+    if text.try_reserve_exact(more.len()).is_err() {
+        return false;
+    }
+    text.push_str(more);
+    true
 }
 
 /// The directory part of an archive path, with trailing slash.
@@ -232,10 +250,58 @@ fn read_u32(storage: &dyn Storage, path: &str, offset: u64) -> Option<u32> {
     (storage.read_at(path, offset, &mut buf).ok()? == 4).then(|| u32::from_le_bytes(buf))
 }
 
-/// The package from the cache, if it is complete and matches the book.
-pub(crate) fn load(storage: &dyn Storage, cache: &str, book: &str) -> Option<Package> {
-    let data = paperpaw_sdk::read_file(storage, &path(cache, "package.ini"), MAX_INI).ok()?;
-    let source = core::str::from_utf8(&data).ok()?;
+/// A file of the cache, at most `limit` bytes long: `None` where it is
+/// not there or cannot be read (it is made anew), an error where the heap
+/// has no room for it now (what is there stays).
+fn read_cache(
+    storage: &dyn Storage,
+    path: &str,
+    limit: usize,
+) -> Result<Option<Vec<u8>>, DocumentError> {
+    match paperpaw_sdk::read_file(storage, path, limit) {
+        Ok(data) => Ok(Some(data)),
+        // Not too long for the limit: too long for the heap.
+        Err(paperpaw_sdk::StorageError::TooLarge)
+            if storage.size(path).is_ok_and(|size| size <= limit as u64) =>
+        {
+            Err(DocumentError::OutOfMemory)
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+/// The package from the cache, if it is complete and matches the book;
+/// an error only where the heap has no room to read it.
+pub(crate) fn load(
+    storage: &dyn Storage,
+    cache: &str,
+    book: &str,
+) -> Result<Option<Package>, DocumentError> {
+    let Some(data) = read_cache(storage, &path(cache, "package.ini"), MAX_INI)? else {
+        return Ok(None);
+    };
+    let parsed = core::str::from_utf8(&data)
+        .ok()
+        .and_then(|source| parse_ini(source, book));
+    drop(data);
+    let Some((metadata, sections, toc_len, cover)) = parsed else {
+        return Ok(None);
+    };
+    let Some(spine) = load_spine(storage, cache, sections)? else {
+        return Ok(None);
+    };
+    Ok(Some(Package {
+        metadata,
+        spine,
+        toc_len,
+        cover,
+    }))
+}
+
+/// What `package.ini` says of the book: its metadata, its number of
+/// chapters and of entries of the contents, and its cover. `None` where
+/// it is damaged or of another book or cache version.
+fn parse_ini(source: &str, book: &str) -> Option<(Metadata, usize, u32, Option<String>)> {
     let mut metadata = Metadata::default();
     let (mut version, mut stamp, mut sections, mut toc_len) = (None, None, None, None);
     let mut cover = None;
@@ -271,26 +337,41 @@ pub(crate) fn load(storage: &dyn Storage, cache: &str, book: &str) -> Option<Pac
     if version != Some(CACHE_VERSION) || stamp.as_deref() != Some(book) {
         return None;
     }
-    let sections = sections? as usize;
-    let data = paperpaw_sdk::read_file(storage, &path(cache, "spine.bin"), sections * 8).ok()?;
-    if data.len() != sections * 8 || sections == 0 {
-        return None;
+    Some((metadata, sections? as usize, toc_len?, cover))
+}
+
+/// The spine of `sections` chapters from `spine.bin`, read a few records
+/// at a time into a list made once: `None` where the file is not whole.
+fn load_spine(
+    storage: &dyn Storage,
+    cache: &str,
+    sections: usize,
+) -> Result<Option<Vec<Chapter>>, DocumentError> {
+    let file = path(cache, "spine.bin");
+    if sections == 0 || storage.size(&file).ok() != Some(sections as u64 * 8) {
+        return Ok(None);
     }
-    let spine = data
-        .as_chunks::<8>()
-        .0
-        .iter()
-        .map(|c| Chapter {
+    let mut spine = Vec::new();
+    spine
+        .try_reserve_exact(sections)
+        .map_err(|_| DocumentError::OutOfMemory)?;
+    let mut buf = [0u8; FLUSH];
+    while spine.len() < sections {
+        let want = ((sections - spine.len()) * 8).min(buf.len());
+        let at = spine.len() as u64 * 8;
+        let mut filled = 0;
+        while filled < want {
+            match storage.read_at(&file, at + filled as u64, &mut buf[filled..want]) {
+                Ok(n) if n > 0 => filled += n,
+                _ => return Ok(None),
+            }
+        }
+        spine.extend(buf[..want].as_chunks::<8>().0.iter().map(|c| Chapter {
             record: u32::from_le_bytes([c[0], c[1], c[2], c[3]]),
             size: u32::from_le_bytes([c[4], c[5], c[6], c[7]]),
-        })
-        .collect();
-    Some(Package {
-        metadata,
-        spine,
-        toc_len: toc_len?,
-        cover,
-    })
+        }));
+    }
+    Ok(Some(spine))
 }
 
 /// Writes `fonts.txt`: the fonts the stylesheets embed and how
@@ -306,7 +387,7 @@ fn write_fonts(
     if !faces.is_empty() {
         let mut method = Method::None;
         // A missing encryption.xml is fine: nothing is obfuscated.
-        let _ = tokenize(storage, archive, "META-INF/encryption.xml", &mut |token| {
+        let read = tokenize(storage, archive, "META-INF/encryption.xml", &mut |token| {
             if let Token::Start { name, attrs, .. } = token {
                 match local_name(name) {
                     "EncryptionMethod" => {
@@ -322,6 +403,7 @@ fn write_fonts(
                 }
             }
         });
+        only_out_of_memory(read)?;
     }
     let mut out = alloc::format!("id\t{}\n", identifier.replace(['\t', '\n'], " "));
     for face in faces {
@@ -382,13 +464,17 @@ pub(crate) fn fonts(storage: &dyn Storage, cache: &str) -> (String, Vec<FontEntr
     (identifier, entries)
 }
 
-/// The book's stylesheet rules from the cache.
-pub(crate) fn styles(storage: &dyn Storage, cache: &str) -> css::Rules {
-    paperpaw_sdk::read_file(storage, &path(cache, "styles.txt"), 64 * 1024)
-        .ok()
-        .and_then(|data| String::from_utf8(data).ok())
-        .map(|text| css::Rules::decode(&text))
-        .unwrap_or_default()
+/// The book's stylesheet rules from the cache; an error where the heap
+/// has no room for them, as a chapter converted without them would be
+/// kept so.
+pub(crate) fn styles(storage: &dyn Storage, cache: &str) -> Result<css::Rules, DocumentError> {
+    let Some(data) = read_cache(storage, &path(cache, "styles.txt"), 64 * 1024)? else {
+        return Ok(css::Rules::default());
+    };
+    match String::from_utf8(data) {
+        Ok(text) => css::Rules::try_decode(&text).map_err(|_| DocumentError::OutOfMemory),
+        Err(_) => Ok(css::Rules::default()),
+    }
 }
 
 /// Reads table of contents entry `index` from the cache.
@@ -680,10 +766,12 @@ fn read_metadata(
             }
             _ => {}
         },
-        Token::Text(t) if capture.is_some() && text.len() < MAX_CAPTURE => {
-            text.push_str(&decode(&t));
+        Token::Text(t) if capture.is_some() => {
+            out_of_memory |= !self::capture(&mut text, &decode(&t));
         }
-        Token::CData(t) if capture.is_some() && text.len() < MAX_CAPTURE => text.push_str(t),
+        Token::CData(t) if capture.is_some() => {
+            out_of_memory |= !self::capture(&mut text, t);
+        }
         Token::End { name } => {
             // Series are captured from `<meta>` elements.
             let element = |field: &'static str| -> &'static str {
@@ -744,6 +832,13 @@ fn read_metadata(
     })
 }
 
+/// A chapter the spine names that is not in the archive. No record is
+/// there: it would be past the end of an archive of 4 GiB.
+const MISSING: Chapter = Chapter {
+    record: u32::MAX,
+    size: 0,
+};
+
 /// What the second pass keeps of the manifest.
 struct Items {
     /// The chapters, in reading order.
@@ -767,11 +862,13 @@ fn read_manifest(
     let (spine_ids, ncx_id, cover_id) = (&opf.spine_ids, opf.ncx_id, opf.cover_id);
     // Second pass: the manifest items the spine refers to, the navigation
     // document and the NCX. Nothing else of the manifest is kept.
-    let mut chapters: Vec<Option<Chapter>> = Vec::new();
+    // Chapters not found keep `MISSING` and go at the end: no list
+    // besides this one.
+    let mut chapters: Vec<Chapter> = Vec::new();
     chapters
         .try_reserve_exact(spine_ids.len())
         .map_err(|_| DocumentError::OutOfMemory)?;
-    chapters.resize(spine_ids.len(), None);
+    chapters.resize(spine_ids.len(), MISSING);
     let mut nav: Option<String> = None;
     let mut ncx: Option<String> = None;
     let mut ncx_by_type: Option<String> = None;
@@ -815,10 +912,10 @@ fn read_manifest(
         for &(_, position) in positions {
             match archive.entry(storage, &path) {
                 Ok(Some(entry)) => {
-                    chapters[position as usize] = Some(Chapter {
+                    chapters[position as usize] = Chapter {
                         record: entry.record(),
                         size: entry.size,
-                    });
+                    };
                 }
                 Ok(None) => {}
                 Err(e) => failed = Some(error(e)),
@@ -837,7 +934,8 @@ fn read_manifest(
     if let Some(e) = failed {
         return Err(e);
     }
-    let spine: Vec<Chapter> = chapters.into_iter().flatten().collect();
+    let mut spine = chapters;
+    spine.retain(|chapter| *chapter != MISSING);
     if spine.is_empty() {
         return Err(malformed("empty spine"));
     }
@@ -896,7 +994,7 @@ fn write_toc(
                 }
             }
         };
-        let _ = read_nav(
+        let read = read_nav(
             storage,
             archive,
             nav,
@@ -904,26 +1002,39 @@ fn write_toc(
             &mut add_page,
         );
         let _ = storage.append(&pages_path, pages.as_bytes());
+        only_out_of_memory(read)?;
     }
     if let Some(ncx) = ncx
         && toc.count == 0
     {
-        let _ = read_ncx(storage, archive, ncx, &mut |t, l, f, fr| {
+        only_out_of_memory(read_ncx(storage, archive, ncx, &mut |t, l, f, fr| {
             add(&mut toc, t, l, f, fr)
-        });
+        }))?;
     }
     toc.finish()
 }
 
-/// Writes where the chapters are in the archive.
-fn write_spine(storage: &dyn Storage, cache: &str, spine: &[Chapter]) -> Result<(), DocumentError> {
-    let mut spine_data = Vec::with_capacity(spine.len() * 8);
-    for chapter in spine {
-        spine_data.extend_from_slice(&chapter.record.to_le_bytes());
-        spine_data.extend_from_slice(&chapter.size.to_le_bytes());
+/// Only running out of memory from reading a table of contents: without
+/// one the book still opens, but contents cut short would be kept.
+fn only_out_of_memory(read: Result<(), DocumentError>) -> Result<(), DocumentError> {
+    match read {
+        Err(DocumentError::OutOfMemory) => Err(DocumentError::OutOfMemory),
+        _ => Ok(()),
     }
-    storage.write(&path(cache, "spine.bin"), &spine_data)?;
-    drop(spine_data);
+}
+
+/// Writes where the chapters are in the archive, a few at a time.
+fn write_spine(storage: &dyn Storage, cache: &str, spine: &[Chapter]) -> Result<(), DocumentError> {
+    let file = path(cache, "spine.bin");
+    storage.write(&file, &[])?;
+    let mut buf = [0u8; FLUSH];
+    for chapters in spine.chunks(FLUSH / 8) {
+        for (record, chapter) in buf.as_chunks_mut::<8>().0.iter_mut().zip(chapters) {
+            record[..4].copy_from_slice(&chapter.record.to_le_bytes());
+            record[4..].copy_from_slice(&chapter.size.to_le_bytes());
+        }
+        storage.append(&file, &buf[..chapters.len() * 8])?;
+    }
     Ok(())
 }
 
@@ -943,16 +1054,46 @@ fn write_styles(
             continue;
         };
         let mut pending: Vec<u8> = Vec::new();
-        let _ = archive.stream(storage, &entry, &mut |chunk| {
+        let mut out_of_memory = false;
+        let streamed = archive.stream(storage, &entry, &mut |chunk| {
+            out_of_memory = pending.try_reserve(chunk.len()).is_err();
+            if out_of_memory {
+                return false;
+            }
             pending.extend_from_slice(chunk);
             feed_utf8(&mut pending, &mut |text| parser.feed(text, &mut rules));
-            true
+            !rules.out_of_memory
         });
+        // A damaged stylesheet is passed over; one the heap had no room
+        // for would be missed in the cache.
+        if out_of_memory || rules.out_of_memory || streamed == Err(ZipError::OutOfMemory) {
+            return Err(DocumentError::OutOfMemory);
+        }
     }
-    storage.write(&path(cache, "styles.txt"), rules.encode().as_bytes())?;
+    write_rules(storage, &path(cache, "styles.txt"), &rules)?;
     write_fonts(storage, archive, cache, &rules.faces, identifier)?;
     drop(rules);
     Ok(())
+}
+
+/// Writes `rules` to `file` in their cache form, a few lines at a time.
+fn write_rules(storage: &dyn Storage, file: &str, rules: &css::Rules) -> Result<(), DocumentError> {
+    storage.write(file, &[])?;
+    let mut lines = String::new();
+    let mut failed = None;
+    rules.encode_lines(&mut |line| {
+        lines.push_str(line);
+        if lines.len() >= FLUSH {
+            if failed.is_none() {
+                failed = storage.append(file, lines.as_bytes()).err();
+            }
+            lines.clear();
+        }
+    });
+    match failed {
+        Some(e) => Err(DocumentError::Storage(e)),
+        None => Ok(storage.append(file, lines.as_bytes())?),
+    }
 }
 
 /// Feeds the text at the start of `pending` to `feed` and removes it: all
@@ -1050,6 +1191,7 @@ fn read_nav(
     let mut ol_depth = 0u8;
     let mut link: Option<(String, Option<String>)> = None;
     let mut text = String::new();
+    let mut out_of_memory = false;
     tokenize(storage, archive, path, &mut |token| match token {
         Token::Start {
             name,
@@ -1080,8 +1222,8 @@ fn read_nav(
             }
             _ => {}
         },
-        Token::Text(t) if (link.is_some() || page_link.is_some()) && text.len() < MAX_CAPTURE => {
-            text.push_str(&decode(&t));
+        Token::Text(t) if link.is_some() || page_link.is_some() => {
+            out_of_memory |= !capture(&mut text, &decode(&t));
         }
         Token::End { name } => match local_name(name) {
             "nav" => {
@@ -1113,7 +1255,11 @@ fn read_nav(
             _ => {}
         },
         _ => {}
-    })
+    })?;
+    if out_of_memory {
+        return Err(DocumentError::OutOfMemory);
+    }
+    Ok(())
 }
 
 /// EPUB 2: nested `<navPoint>` with `<navLabel><text>` and `<content src>`
@@ -1130,6 +1276,7 @@ fn read_ncx(
     let mut in_label = false;
     let mut text = String::new();
     let mut pending: Option<(String, u8)> = None;
+    let mut out_of_memory = false;
     tokenize(storage, archive, path, &mut |token| match token {
         Token::Start { name, attrs, .. } => match local_name(name) {
             "navMap" => in_map = true,
@@ -1147,7 +1294,7 @@ fn read_ncx(
             }
             _ => {}
         },
-        Token::Text(t) if in_label && text.len() < MAX_CAPTURE => text.push_str(&decode(&t)),
+        Token::Text(t) if in_label => out_of_memory |= !capture(&mut text, &decode(&t)),
         Token::End { name } => match local_name(name) {
             "navMap" => in_map = false,
             "navPoint" => depth = depth.saturating_sub(1),
@@ -1161,7 +1308,11 @@ fn read_ncx(
             _ => {}
         },
         _ => {}
-    })
+    })?;
+    if out_of_memory {
+        return Err(DocumentError::OutOfMemory);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
