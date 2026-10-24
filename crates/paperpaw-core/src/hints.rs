@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::{Instant, Rect, RefreshMode};
 use paperpaw_sdk::builtin::settings as core_settings;
-use paperpaw_sdk::{ActionHint, Hint, Hints, Id};
+use paperpaw_sdk::{ActionHint, Hint, HintVisibility, Id};
 
 use crate::keymap::InputKey;
 use crate::{ActiveScreen, HINTS_MS, Kernel};
@@ -55,18 +55,18 @@ impl Kernel {
     }
 
     /// When the full screen shown has the row of hints.
-    pub(crate) fn base_hints(&self) -> Hints {
+    pub(crate) fn base_hints(&self) -> HintVisibility {
         let env = self.shared.env(self.now);
         self.stack
             .iter()
             .rev()
             .find(|s| s.screen.region(&env).is_none())
-            .map_or(Hints::Shown, |s| self.hints_of(s))
+            .map_or(HintVisibility::Shown, |s| self.hints_of(s))
     }
 
     /// When open screen `active` shows the row: as it says, else as its
     /// plugin said for it.
-    pub(crate) fn hints_of(&self, active: &ActiveScreen) -> Hints {
+    pub(crate) fn hints_of(&self, active: &ActiveScreen) -> HintVisibility {
         active
             .screen
             .hints()
@@ -75,7 +75,7 @@ impl Kernel {
 
     /// Shows the row for a while over a screen that has it on a press.
     pub(crate) fn show_hints(&mut self) {
-        if self.hint.height == 0 || self.base_hints() != Hints::OnPress {
+        if self.hint.height == 0 || self.base_hints() != HintVisibility::OnPress {
             return;
         }
         self.hint.until = Some(self.now.add_millis(HINTS_MS));

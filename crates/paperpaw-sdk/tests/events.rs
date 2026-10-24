@@ -11,7 +11,8 @@
 
 use paperpaw_sdk::event::{Event, EventData, ParamValue};
 use paperpaw_sdk::{
-    Chosen, Command, HttpReply, Id, Instant, Params, ServerNotice, SocketNotice, Typed, http_params,
+    Command, FolderChosen, HttpReply, Id, Instant, Params, ServerNotice, SocketNotice, Typed,
+    http_params,
 };
 use proptest::prelude::*;
 
@@ -119,7 +120,7 @@ proptest! {
         let _ = ServerNotice::from_params(&params);
         let _ = SocketNotice::from_params(&params);
         let _ = Typed::from_params(&params);
-        let _ = Chosen::from_params(&params);
+        let _ = FolderChosen::from_params(&params);
     }
 
     /// An HTTP reply comes back with its headers and the request's own
@@ -189,8 +190,8 @@ proptest! {
     fn answers_come_back(text in "\\PC{0,20}", typed_context in context(&["text"]), chosen_context in context(&["path"])) {
         let typed = Typed::new(text.clone(), typed_context);
         prop_assert_eq!(Typed::from_params(&typed.to_params()), Some(typed));
-        let chosen = Chosen::new(text, chosen_context);
-        prop_assert_eq!(Chosen::from_params(&chosen.to_params()), Some(chosen));
+        let chosen = FolderChosen::new(text, chosen_context);
+        prop_assert_eq!(FolderChosen::from_params(&chosen.to_params()), Some(chosen));
     }
 }
 
@@ -301,7 +302,7 @@ fn replies_without_their_own_parameters_are_refused() {
         None
     );
     assert_eq!(Typed::from_params(&Params::new()), None);
-    assert_eq!(Chosen::from_params(&Params::new()), None);
+    assert_eq!(FolderChosen::from_params(&Params::new()), None);
     // A finished socket without a reason carries none.
     let done = SocketNotice::Done {
         socket: Id::new_static("a.b"),

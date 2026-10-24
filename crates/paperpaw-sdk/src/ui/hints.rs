@@ -176,7 +176,7 @@ pub fn draw_button_hints(
     let line = style.line.min(u32::from(area.height));
     let painted = style
         .look
-        .hints(canvas, &style, super::look::HintsPart { area });
+        .hints(canvas, &style, super::look::HintRowPart { area });
     if !painted {
         canvas.fill(area, Color::WHITE);
     }

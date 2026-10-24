@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::widgets::{self, CellsHint, Frame, Padding, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{self, CellSpan, Frame, Padding, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
 };
@@ -43,7 +43,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_widget(
         WidgetSpec::new(WIDGET, "reading-goal.widget", |_| Box::new(Cat::default()))
             .category(widgets::categories::READING)
-            .cells(CellsHint::new(2, 2)),
+            .cells(CellSpan::new(2, 2)),
     )
 }
 

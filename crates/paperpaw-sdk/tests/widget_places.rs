@@ -157,16 +157,16 @@ fn a_place_tells_whether_it_shows_a_widget() {
 /// and, square, as wide as high.
 #[test]
 fn a_widget_takes_the_cells_it_says() {
-    use paperpaw_sdk::widgets::CellsHint;
+    use paperpaw_sdk::widgets::CellSpan;
     use paperpaw_sdk::widgets::grid::{Cells, Geometry, What};
     let mut h = harness();
     h.widgets.add(
         WidgetSpec::new(Id::new_static("t.round"), "t.round", |_| Box::new(Block(1)))
-            .cells(CellsHint::new(2, 2).min(2, 2).square()),
+            .cells(CellSpan::new(2, 2).min(2, 2).square()),
     );
     h.widgets.add(
         WidgetSpec::new(Id::new_static("t.wide"), "t.wide", |_| Box::new(Block(1)))
-            .cells(CellsHint::new(9, 1)),
+            .cells(CellSpan::new(9, 1)),
     );
     let env = h.env();
     let geometry = Geometry::of(Rect::new(0, 100, 480, 600), 4, 6, 8);

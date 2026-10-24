@@ -559,7 +559,7 @@ impl GridView {
     }
 
     /// `cells` for item `index` as its widget's hint keeps them
-    /// ([`CellsHint::keep`](crate::widgets::CellsHint::keep)), the side
+    /// ([`CellSpan::keep`](crate::widgets::CellSpan::keep)), the side
     /// that changed `wide` or high.
     fn kept(&self, index: usize, cells: Cells, wide: bool, env: &Env<'_>) -> Cells {
         let hint = self

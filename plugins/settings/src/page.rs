@@ -192,10 +192,10 @@ impl GroupPage {
         }
         let rank = |section: &Option<Cow<'static, str>>| match section {
             None => 0,
-            Some(key) => setting_sections::ORDER
+            Some(key) => group_sections::ORDER
                 .iter()
                 .position(|s| *s == key.as_ref())
-                .map_or(setting_sections::ORDER.len() + 1, |p| p + 1),
+                .map_or(group_sections::ORDER.len() + 1, |p| p + 1),
         };
         sections.sort_by_key(rank);
         // Headings only where there is more than one part.

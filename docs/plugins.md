@@ -384,7 +384,7 @@ Event::new("news.fetched")`, and passes it with the request.
 
 To ask the reader, `ask::text("Server", &ENTERED).initial(url).command()`
 opens the keyboard and brings back a `Typed`. `ask::folder` brings back
-a `Chosen`, `ask::choice` a `Picked` and `ask::confirm` a `Confirmed`.
+a `FolderChosen`, `ask::choice` a `Picked` and `ask::confirm` a `Confirmed`.
 A value passed with `.with(key, value)` comes back in the answer's
 `context`, so a plugin tells its questions apart. On `ask::choice`,
 `.about(text)` comes back as the answer's `path`.
@@ -832,7 +832,7 @@ that their choices go along; a shell opens a book with
 | A book opened as the reader opens it | `reading::open_options`, `reading::conversion` | its places fit the reader's (a search, contents, an XPointer) |
 | Pages that go right to left | `Metadata::direction` (`PageProgression`), `Screen::mirrored` | readers mirror taps and swipes (an EPUB's `page-progression-direction`) |
 | Status lines' settings | `groups::STATUS_LINES` | the group readers put them in |
-| Reading aloud's settings | `setting_sections::ALOUD` | the section readers and shells put them in |
+| Reading aloud's settings | `group_sections::ALOUD` | the section readers and shells put them in |
 | Key bindings while reading | the layer `[keymap.core.reader]` | the slot's layer, whichever screen fills it |
 
 A reader in turn sends the reading events (`BOOK_OPENED`, `PAGE_TURNED`,
@@ -1259,12 +1259,12 @@ any button closes the note, and it does not come again for that screen;
 *No more hints* and the settings switch them all off.
 
 ```rust
-use paperpaw_sdk::help::{self, Hint, Zone};
+use paperpaw_sdk::help::{self, HelpHint, Zone};
 
 help::add(r, SCREEN.as_str(), &[
-    Hint::touch("hello.help.tap").zone(Zone::new(0, 0, 1000, 120)),
-    Hint::buttons("hello.help.confirm"),
-    Hint::any("hello.help.back"),
+    HelpHint::touch("hello.help.tap").zone(Zone::new(0, 0, 1000, 120)),
+    HelpHint::buttons("hello.help.confirm"),
+    HelpHint::any("hello.help.back"),
 ])?;
 ```
 

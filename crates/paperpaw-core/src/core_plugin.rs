@@ -11,8 +11,8 @@ use alloc::vec::Vec;
 use clean_up::{ask_clean_up, register_clean_up};
 
 use paperpaw_sdk::builtin::{
-    actions, events, fonts, groups, keymap_presets, menus, params, screens, setting_sections,
-    settings, settings_sections, slots, status_items,
+    actions, events, fonts, group_sections, groups, keymap_presets, menus, params, screens,
+    settings, settings_page, slots, status_items,
 };
 use paperpaw_sdk::library;
 use paperpaw_sdk::time::{self, AUTO, CLOCK_12H, CLOCK_24H, TIME_ZONES};
@@ -982,18 +982,10 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
 
     // The settings' main page: reading, the device, customising.
     for (id, title, order) in [
+        (settings_page::READING, "core.settings-section.reading", 0),
+        (settings_page::DEVICE, "core.settings-section.device", 50),
         (
-            settings_sections::READING,
-            "core.settings-section.reading",
-            0,
-        ),
-        (
-            settings_sections::DEVICE,
-            "core.settings-section.device",
-            50,
-        ),
-        (
-            settings_sections::CUSTOMISE,
+            settings_page::CUSTOMISE,
             "core.settings-section.customise",
             200,
         ),
@@ -1045,44 +1037,44 @@ static PERCENT_5_SLIDER: SettingExtra = SettingExtra::new()
 static PERCENT_5: SettingExtra = SettingExtra::new().unit("core.unit.percent").step(5);
 static MINUTES_5: SettingExtra = SettingExtra::new().unit("core.unit.minutes").step(5);
 static COLORS: SettingExtra = SettingExtra::new().section("core.section.colors");
-static FONT: SettingExtra = SettingExtra::new().section(setting_sections::FONT);
+static FONT: SettingExtra = SettingExtra::new().section(group_sections::FONT);
 static FONT_PT: SettingExtra = SettingExtra::new()
-    .section(setting_sections::FONT)
+    .section(group_sections::FONT)
     .unit("core.unit.pt")
     .slider();
 static LINES_KEPT: SettingExtra = SettingExtra::new()
     .unit("core.unit.lines")
-    .section(setting_sections::PAGE);
+    .section(group_sections::PAGE);
 static WEIGHT: SettingExtra = SettingExtra::new()
     .unit("core.unit.weight")
-    .section(setting_sections::FONT);
+    .section(group_sections::FONT);
 static WORDS: SettingExtra = SettingExtra::new()
     .unit("core.unit.percent")
     .step(10)
-    .section(setting_sections::FONT)
+    .section(group_sections::FONT)
     .slider();
 static LINES: SettingExtra = SettingExtra::new()
     .unit("core.unit.percent")
     .step(5)
-    .section(setting_sections::PAGE)
+    .section(group_sections::PAGE)
     .slider();
 static MARGINS: SettingExtra = SettingExtra::new()
     .unit("core.unit.mm")
-    .section(setting_sections::PAGE)
+    .section(group_sections::PAGE)
     .slider();
 static MARGINS_ENDS: SettingExtra = SettingExtra::new()
     .unit("core.unit.mm")
-    .section(setting_sections::PAGE)
+    .section(group_sections::PAGE)
     .slider()
     .follows(Id::new_static(settings::MARGIN.static_str()));
-static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAGE);
+static IN_PAGE: SettingExtra = SettingExtra::new().section(group_sections::PAGE);
 /// The reading apps' part of the reading settings: the default one and
 /// one for each format (registered once the formats are known).
 /// A reading app chosen whose plugin is gone is kept, and passed over.
 static IN_APPS: SettingExtra = SettingExtra::new()
     .section("core.section.reading-apps")
     .keeps_unknown();
-static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections::BEHAVIOUR);
+static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(group_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
 static GENERAL: [SettingSpec; 9] = [

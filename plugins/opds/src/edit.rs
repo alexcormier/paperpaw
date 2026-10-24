@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::{Chosen, Typed};
+use paperpaw_sdk::replies::{FolderChosen, Typed};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
@@ -20,7 +20,7 @@ use crate::catalogs::{self, Catalog};
 /// The keyboard's reply with a field's new text.
 const ENTERED: Event<Typed> = Event::new("opds.entered");
 /// The folder chooser's reply.
-const FOLDER_CHOSEN: Event<Chosen> = Event::new("opds.folder-chosen");
+const FOLDER_CHOSEN: Event<FolderChosen> = Event::new("opds.folder-chosen");
 /// Parameter of the reply: which field.
 const FIELD: &str = "field";
 

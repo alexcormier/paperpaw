@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: one name per item of the core API. The hints have each their
+  own: `help::HelpHint` (was `help::Hint`), `HintVisibility` (was
+  `Hints`, when a screen shows the row of button hints), `ui::look::
+  HintRowPart` (was `HintsPart`) and `widgets::CellSpan` (was
+  `CellsHint`); `Hint` is the label of one button and `ActionHint` an
+  action's. The three modules of sections have their own too:
+  `builtin::menu_sections` (was `sections`), `settings_page` (was
+  `settings_sections`) and `group_sections` (was `setting_sections`).
+  `replies::FolderChosen` is the answer to `ask::folder` (was
+  `Chosen`; `Picked` stays the answer to `ask::choice`).
 - SDK: `Contribution` is the kernel's: a plugin adds through the
   `Registrar`'s methods, and `Registrar::add`, `contributions` and
   `into_contributions` need the `kernel` feature (a plugin's tests that

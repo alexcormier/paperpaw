@@ -801,7 +801,7 @@ pub mod groups {
 /// order is 0, the default, names none: it is listed at the end of the
 /// section for customising, by name. A group shows the icon its plugin
 /// gives it (`Registrar::add_icon` with its id), else a plugin's.
-pub mod settings_sections {
+pub mod settings_page {
     use crate::Id;
 
     /// Text, status bars, library, statistics, synchronisation.
@@ -816,7 +816,7 @@ pub mod settings_sections {
 /// setting names one with
 /// [`SettingSpec::section`](crate::SettingSpec::section). Other parts
 /// (any translation key) follow these.
-pub mod setting_sections {
+pub mod group_sections {
     /// The reading font, its size and weight.
     pub const FONT: &str = "core.setting-section.font";
     /// How a page is set: spacing, margins, justification, hyphenation.
@@ -834,7 +834,7 @@ pub mod setting_sections {
 /// Sections of the main menu ([`menus::MAIN`]): plugins put their
 /// entries in one by their order (reading 1 to 29, tools 31 to 79,
 /// system 81 to 99).
-pub mod sections {
+pub mod menu_sections {
     use crate::Id;
 
     /// Home, library and the like.

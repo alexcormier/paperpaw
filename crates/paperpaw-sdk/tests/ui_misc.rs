@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::logo::{self, Logo};
-use paperpaw_sdk::replies::{Chosen, Typed};
+use paperpaw_sdk::replies::{FolderChosen, Typed};
 use paperpaw_sdk::semantics::{self, Role};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, TextSize, WidgetSpec, Wrapped};
@@ -34,7 +34,7 @@ use support::{Device, Harness, describe, drawn_in, drawn_outside, frame};
 #[test]
 fn questions_ask_the_keyboard_and_the_folder_chooser_with_their_reply() {
     const NAMED: Event<Typed> = Event::new("t.named");
-    const PLACED: Event<Chosen> = Event::new("t.placed");
+    const PLACED: Event<FolderChosen> = Event::new("t.placed");
     let command = ask::text("Name of the shelf", &NAMED)
         .initial("Novels")
         .password()

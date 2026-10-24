@@ -103,7 +103,7 @@ impl fmt::Debug for ScreenSpec {
 /// [`Registrar::set_screen_hints`](crate::Registrar::set_screen_hints)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
-pub enum Hints {
+pub enum HintVisibility {
     /// Always, below it: the screen has the part above the row. Also for
     /// menus over a screen without it.
     #[default]
@@ -393,8 +393,8 @@ pub trait Screen {
     /// plugin said for all its openings
     /// ([`Registrar::set_screen_hints`](crate::Registrar::set_screen_hints)):
     /// read when it is opened, for the part of the screen it is made for,
-    /// and whenever the row would come for a while ([`Hints::OnPress`]).
-    fn hints(&self) -> Option<Hints> {
+    /// and whenever the row would come for a while ([`HintVisibility::OnPress`]).
+    fn hints(&self) -> Option<HintVisibility> {
         None
     }
 

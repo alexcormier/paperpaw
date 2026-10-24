@@ -1,7 +1,7 @@
 //! What comes back to a plugin, as typed events: the answer to an HTTP
 //! request ([`HttpReply`]), what happens to its server ([`ServerNotice`])
 //! or its sockets ([`SocketNotice`]), and what the reader typed, chose or
-//! answered when asked ([`Typed`], [`Chosen`], [`Confirmed`], see
+//! answered when asked ([`Typed`], [`FolderChosen`], [`Confirmed`], see
 //! [`ask`](crate::ask)).
 //!
 //! A plugin names the event that brings it, e.g.
@@ -610,13 +610,13 @@ impl EventData for Typed {
 /// The folder the reader chose when asked ([`ask::folder`](crate::ask::folder)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Chosen {
+pub struct FolderChosen {
     pub path: String,
     /// The parameters the question was asked with.
     pub context: Params,
 }
 
-impl Chosen {
+impl FolderChosen {
     /// The folder `path`, chosen for a question asked with `context`.
     pub fn new(path: impl Into<String>, context: Params) -> Self {
         Self {
@@ -626,7 +626,7 @@ impl Chosen {
     }
 }
 
-impl EventData for Chosen {
+impl EventData for FolderChosen {
     fn to_params(&self) -> Params {
         with_context(Params::new(), &self.context).with(params::PATH, self.path.clone())
     }

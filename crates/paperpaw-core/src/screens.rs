@@ -24,7 +24,7 @@ impl Kernel {
         let entry = paperpaw_sdk::StackEntry::new(id.clone(), slot.clone(), false, key);
         // Made once, at the size it asked for: above the row of hints, or
         // all of the screen, less the bars shown over it.
-        let mut hinted = self.shared.registry.hints_of(&id) == Hints::Shown;
+        let mut hinted = self.shared.registry.hints_of(&id) == HintVisibility::Shown;
         let mut area = self.layout(hinted, Some(&entry), None);
         set_area(&mut self.shared.device, &mut self.shared.content, area);
         let running = self.shared.meter.enter(id.namespace());
@@ -32,7 +32,7 @@ impl Kernel {
         // It says otherwise of the row of hints: made again for the part
         // of the screen it then has.
         if let Some(own) = screen.hints()
-            && (own == Hints::Shown) != hinted
+            && (own == HintVisibility::Shown) != hinted
         {
             hinted = !hinted;
             area = self.layout(hinted, Some(&entry), None);

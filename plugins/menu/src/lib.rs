@@ -97,10 +97,10 @@ impl Plugin for Menu {
             r,
             PANEL.as_str(),
             &[
-                paperpaw_sdk::help::Hint::any("menu.help.panel"),
-                paperpaw_sdk::help::Hint::touch("menu.help.panel-tap"),
-                paperpaw_sdk::help::Hint::touch("menu.help.panel-close"),
-                paperpaw_sdk::help::Hint::buttons("menu.help.panel-buttons"),
+                paperpaw_sdk::help::HelpHint::any("menu.help.panel"),
+                paperpaw_sdk::help::HelpHint::touch("menu.help.panel-tap"),
+                paperpaw_sdk::help::HelpHint::touch("menu.help.panel-close"),
+                paperpaw_sdk::help::HelpHint::buttons("menu.help.panel-buttons"),
             ],
         )?;
         r.add_screen(ScreenSpec::new(

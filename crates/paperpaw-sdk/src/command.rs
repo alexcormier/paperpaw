@@ -629,7 +629,7 @@ pub enum Command {
     /// (`[slots]`), e.g. "use this as the home screen?".
     BindSlot(Id, Option<Id>),
     /// Shows the row of hints for a few seconds on a screen that has it
-    /// only on a press ([`Hints::OnPress`](crate::Hints)).
+    /// only on a press ([`HintVisibility::OnPress`](crate::HintVisibility)).
     ShowHints,
     /// Changes a setting; invalid values are rejected with a warning.
     SetSetting(Id, SettingValue),

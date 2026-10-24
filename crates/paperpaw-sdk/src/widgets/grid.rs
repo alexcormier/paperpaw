@@ -319,7 +319,7 @@ impl Geometry {
 /// `start` is at `point`: moved by as many cells as the finger moved, or
 /// with `resize` (its corner taken), its corner in the cell under the
 /// finger, at least one cell (a widget's least where it says, see
-/// [`CellsHint::keep`](crate::widgets::CellsHint::keep)). `None` off the
+/// [`CellSpan::keep`](crate::widgets::CellSpan::keep)). `None` off the
 /// grid.
 pub fn dragged(
     geometry: &Geometry,

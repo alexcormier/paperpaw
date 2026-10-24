@@ -27,7 +27,7 @@ pub(crate) struct Registry {
     pub(crate) screens: VecMap<Id, ScreenSpec>,
     pub(crate) slots: VecMap<Id, SlotSpec>,
     /// When screens show the row of hints, where they said.
-    pub(crate) hints: VecMap<Id, paperpaw_sdk::Hints>,
+    pub(crate) hints: VecMap<Id, paperpaw_sdk::HintVisibility>,
     candidates: Vec<SlotCandidate>,
     /// Slot bindings from the user's configuration.
     user_bindings: VecMap<Id, Id>,
@@ -44,7 +44,7 @@ impl Registry {
     }
 
     /// When `screen` shows the row of hints.
-    pub(crate) fn hints_of(&self, screen: &Id) -> paperpaw_sdk::Hints {
+    pub(crate) fn hints_of(&self, screen: &Id) -> paperpaw_sdk::HintVisibility {
         self.hints.get(screen).copied().unwrap_or_default()
     }
 
@@ -197,7 +197,7 @@ pub(crate) struct Staging {
     pub(crate) hidden_entries: Vec<(Id, Id, Id)>,
     pub(crate) item_states: Vec<(Id, paperpaw_sdk::ItemStateFn)>,
     pub(crate) item_descriptions: Vec<(Id, Cow<'static, str>)>,
-    pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::Hints)>,
+    pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::HintVisibility)>,
     pub(crate) keymap_presets: Vec<(Id, Cow<'static, str>)>,
     pub(crate) setting_defaults: Vec<(Id, Cow<'static, str>)>,
     pub(crate) choices: Vec<(Id, Cow<'static, str>)>,
