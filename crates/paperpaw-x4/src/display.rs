@@ -78,6 +78,49 @@ const GRAY_LUT: [u8; 110] = [
     0x17, 0x41, 0xA8, 0x32, 0x30,
 ];
 
+/// How dark the two grays between black and white come out with
+/// [`GRAY_LUT`]: its every level is first driven white, then black for 12
+/// frames (black for 21), the grays then lightened by 2 (dark) or 4 (light)
+/// frames of white, which leaves them faint beside the X4 Pro's (which
+/// shows them black first and lightens them by one or two of its frames).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GrayTone {
+    /// The stock firmware's waveform as it is: lightened by 2 and 4 frames.
+    Stock,
+    /// Lightened by 1 frame (dark gray) and 3 (light gray): as dark as
+    /// the X4 Pro's beside it, the levels apart (chosen on the devices;
+    /// not lightened at all, they came out darker than the Pro's, and
+    /// close).
+    #[default]
+    Middle,
+}
+
+impl GrayTone {
+    /// The waveform's second and third phase groups for light gray
+    /// (*shown* 0 and *new* 1) and for dark gray (the other way round):
+    /// four phases of two bits each, `01` driving black, `10` white, of
+    /// 12, 2, 7 and 2 frames in the second group, 1, 0, 2 and 0 in the
+    /// third.
+    fn grays(self) -> [u8; 4] {
+        // Light: second, third; dark: second, third.
+        match self {
+            GrayTone::Stock => [0x62, 0x00, 0x60, 0x00],
+            GrayTone::Middle => [0x60, 0x80, 0x40, 0x80],
+        }
+    }
+
+    /// The waveform with them.
+    fn lut(self) -> [u8; 110] {
+        let mut lut = GRAY_LUT;
+        let [light, light_after, dark, dark_after] = self.grays();
+        lut[11] = light;
+        lut[12] = light_after;
+        lut[21] = dark;
+        lut[22] = dark_after;
+        lut
+    }
+}
+
 /// The controller's commands used here.
 mod cmd {
     pub const DRIVER_OUTPUT: u8 = 0x01;
@@ -170,6 +213,8 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     /// The panel shows grays ([`Display::refresh_gray`]): the next refresh
     /// drives every pixel.
     gray: bool,
+    /// How dark the grays between come out.
+    tone: GrayTone,
     buffer: Vec<u8>,
 }
 
@@ -192,6 +237,7 @@ where
             fresh: true,
             rotation: Rotation::Deg0,
             gray: false,
+            tone: GrayTone::default(),
             buffer: Vec::new(),
         }
     }
@@ -339,15 +385,21 @@ where
         self.write_plane(top, &rows, height, cmd::WRITE_SHOWN, &high, false)
     }
 
+    /// How dark the grays between come out from now on.
+    pub fn set_gray_tone(&mut self, tone: GrayTone) {
+        self.tone = tone;
+    }
+
     /// Shows the grays written by [`Display::write_gray_rows`], with the stock
     /// firmware's gray waveform (about as long as a full refresh). The next
     /// refresh drives every pixel (a half refresh), as after
     /// [`Display::init`].
     pub fn refresh_gray(&mut self) -> Result<(), Error> {
-        self.command(cmd::WRITE_LUT, &GRAY_LUT[..105])?;
-        self.command(cmd::GATE_VOLTAGE, &GRAY_LUT[105..106])?;
-        self.command(cmd::SOURCE_VOLTAGE, &GRAY_LUT[106..109])?;
-        self.command(cmd::WRITE_VCOM, &GRAY_LUT[109..110])?;
+        let lut = self.tone.lut();
+        self.command(cmd::WRITE_LUT, &lut[..105])?;
+        self.command(cmd::GATE_VOLTAGE, &lut[105..106])?;
+        self.command(cmd::SOURCE_VOLTAGE, &lut[106..109])?;
+        self.command(cmd::WRITE_VCOM, &lut[109..110])?;
         self.command(cmd::BORDER, &[0xC0])?;
         // Both memories count; the loaded waveform, not the panel's own.
         self.command(cmd::UPDATE_CONTROL_1, &[0x00])?;
@@ -1057,6 +1109,32 @@ mod tests {
             sequences,
             [(0x40, 0xD7), (0x00, 0xCC), (0x40, 0xD7), (0x00, 0xFC)]
         );
+    }
+
+    #[test]
+    fn the_tones_lighten_the_two_grays_less_after_their_black() {
+        // Frames of white after the black, for a level's phase groups.
+        let white = |lut: &[u8; 110], level: usize| {
+            let frames = [[12, 2, 7, 2], [1, 0, 2, 0]];
+            (0..2)
+                .map(|group| {
+                    let byte = lut[level * 10 + 1 + group];
+                    (0..4)
+                        .filter(|&p| (byte >> (6 - 2 * p)) & 0b11 == 0b10)
+                        .map(|p| frames[group][p])
+                        .sum::<u32>()
+                })
+                .sum::<u32>()
+        };
+        assert_eq!(GrayTone::Stock.lut(), GRAY_LUT);
+        let lightened = |tone: GrayTone| (white(&tone.lut(), 2), white(&tone.lut(), 1));
+        assert_eq!(lightened(GrayTone::Stock), (2, 4));
+        assert_eq!(lightened(GrayTone::Middle), (1, 3));
+        let lut = GrayTone::Middle.lut();
+        let changed: Vec<usize> = (0..lut.len()).filter(|&i| lut[i] != GRAY_LUT[i]).collect();
+        assert_eq!(changed, [11, 12, 21, 22]);
+        // The 12 frames of black stay first.
+        assert_eq!((lut[11] >> 6, lut[21] >> 6), (0b01, 0b01));
     }
 
     #[test]

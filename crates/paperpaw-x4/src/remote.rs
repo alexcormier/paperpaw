@@ -56,6 +56,8 @@
 //!   where the run before was then and its light sleeps, e.g. after a
 //!   watchdog's reset or an `idle sleep`, and `PP:PANIC <message>` if the
 //!   run before panicked;
+//! - `graytone <stock|middle>`: how dark the X4's grays between
+//!   come out from now on, to compare them (`PP:OK`);
 //! - `nap <seconds>`: one light sleep that long (at most a minute), then a
 //!   new start, to try that the RTC's watchdog starts it again first;
 //! - `wifi scan`: switches the radio on and lists the networks in reach,
@@ -187,6 +189,8 @@ pub enum Command {
     },
     /// Four grays on the panel, with a decoded gray picture if named.
     Gray(Option<String>),
+    /// How dark the X4's grays between come out from now on (to compare).
+    GrayTone(crate::display::GrayTone),
     /// Light sleep while idle even on USB, for so many seconds.
     IdleSleep(u64),
     /// A file of so many bytes for that path.
@@ -466,6 +470,11 @@ pub fn parse(line: &str) -> Option<Command> {
             };
         }
         "nap" => Command::Nap(words.next()?.parse().ok()?),
+        "graytone" => Command::GrayTone(match words.next()? {
+            "stock" => crate::display::GrayTone::Stock,
+            "middle" => crate::display::GrayTone::Middle,
+            _ => return None,
+        }),
         "gray" => Command::Gray(match words.next() {
             Some(path) => Some(unhex(path)?),
             None => None,

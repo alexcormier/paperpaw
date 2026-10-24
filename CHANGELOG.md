@@ -48,6 +48,8 @@ change the plugin SDK.
   frame in grays or a full refresh of the screen (1.7 to 2 s). Covers
   there show in black and white; a setting (Library › Covers) shows them
   in gray, finer but slower to move over.
+- On the X4, pictures in gray (the sleeping cat, covers) are as dark as
+  on the X4 Pro; they were faint.
 
 ## [0.5.0-beta.1] - 2026-10-24
 

@@ -144,6 +144,14 @@ where
         each!(self, d => d.refresh_gray())
     }
 
+    /// How dark the grays between come out on the X4's controller (the X4
+    /// Pro's lightens them from black, as dark as they are).
+    pub fn set_gray_tone(&mut self, tone: display::GrayTone) {
+        if let Panel::Ssd1677 { display, .. } = self {
+            display.set_gray_tone(tone);
+        }
+    }
+
     pub fn refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
         each!(self, d => d.refresh(refresh, power_off))
     }

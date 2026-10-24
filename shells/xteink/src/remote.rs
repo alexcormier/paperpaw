@@ -290,6 +290,7 @@ impl Remote {
             | Command::Touch { .. }
             | Command::Drag { .. }
             | Command::Clicks { .. }
+            | Command::GrayTone(_)
             | Command::SetTime(_)
             | Command::Restart) => return Some(command),
         }

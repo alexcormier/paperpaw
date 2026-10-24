@@ -1052,6 +1052,10 @@ impl Firmware {
                 self.state.gray_shown = true;
                 remote::ok();
             }
+            Command::GrayTone(tone) => {
+                self.panel.set_gray_tone(tone);
+                remote::ok();
+            }
             Command::Refresh { full } => {
                 let refresh = if full { Refresh::Full } else { Refresh::Fast };
                 remote::refreshed(self.panel.refresh(refresh, false));

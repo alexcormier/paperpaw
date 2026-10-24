@@ -47,6 +47,8 @@ STEPS, separated by commas:
   heap               print the heap used and free, and the stack never used, in bytes
   gray               four grays on the panel to judge them (bars, a gradient)
   gray:.paperpaw/…/cover.gray   with a decoded gray picture below
+  graytone:middle    how dark the X4's grays between come out from now on
+                     (stock, middle), to compare them
   refresh:full       refresh the panel from what the controller holds (also
                      refresh:fast), nothing sent
   input              print how the buttons and the battery are read
@@ -651,6 +653,8 @@ def run(x4, step):
             print(x4.ask("gray", "OK")[-1])
         case ["gray", path]:
             print(x4.ask(f"gray {path.encode().hex()}", "OK")[-1])
+        case ["graytone", tone]:
+            print(x4.ask(f"graytone {tone}", "OK")[-1])
         case ["refresh", kind]:
             print(x4.ask(f"refresh {kind}", "OK")[-1])
         case ["heap"]:
