@@ -227,15 +227,15 @@ mod extras {
 /// The reader's own settings: smooth letters, what it does, and reading
 /// aloud (the type of pages is the kernel's, see `settings`).
 static SETTINGS: [SettingSpec; 9] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         settings::SMOOTH_TEXT.static_str(),
         "reader.setting.smooth-text",
         false,
         groups::READING,
     )
     .with_extra(&extras::IN_FONT)
-    .described("reader.setting.smooth-text.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.smooth-text.help"),
+    SettingSpec::switch(
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
         true,
@@ -243,24 +243,24 @@ static SETTINGS: [SettingSpec; 9] = [
     )
     .advanced()
     .with_extra(&extras::IN_BEHAVIOUR)
-    .described("reader.setting.open-last.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.open-last.help"),
+    SettingSpec::switch(
         settings::CORNER_BOOKMARK.static_str(),
         "reader.setting.corner-bookmark",
         true,
         groups::CONTROLS,
     )
     .advanced()
-    .described("reader.setting.corner-bookmark.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.corner-bookmark.help"),
+    SettingSpec::switch(
         settings::HOLD_CHAPTERS.static_str(),
         "reader.setting.hold-chapters",
         true,
         groups::CONTROLS,
     )
     .advanced()
-    .described("reader.setting.hold-chapters.help"),
-    SettingSpec::fixed_number(
+    .description("reader.setting.hold-chapters.help"),
+    SettingSpec::number(
         settings::AUTO_TURN_SECONDS.static_str(),
         "reader.setting.auto-turn-seconds",
         5,
@@ -270,8 +270,8 @@ static SETTINGS: [SettingSpec; 9] = [
     )
     .advanced()
     .with_extra(&extras::AUTO_TURN)
-    .described("reader.setting.auto-turn-seconds.help"),
-    SettingSpec::fixed_number(
+    .description("reader.setting.auto-turn-seconds.help"),
+    SettingSpec::number(
         settings::ALOUD_SPEED.static_str(),
         "reader.setting.aloud-speed",
         50,
@@ -280,24 +280,24 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::READING,
     )
     .with_extra(&extras::ALOUD_SPEED)
-    .described("reader.setting.aloud-speed.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.aloud-speed.help"),
+    SettingSpec::switch(
         settings::ALOUD_HIGHLIGHT.static_str(),
         "reader.setting.aloud-highlight",
         true,
         groups::READING,
     )
     .with_extra(&extras::IN_ALOUD)
-    .described("reader.setting.aloud-highlight.help"),
-    SettingSpec::fixed_switch(
+    .description("reader.setting.aloud-highlight.help"),
+    SettingSpec::switch(
         settings::ALOUD_TURN.static_str(),
         "reader.setting.aloud-turn-pages",
         true,
         groups::READING,
     )
     .with_extra(&extras::IN_ALOUD)
-    .described("reader.setting.aloud-turn-pages.help"),
-    SettingSpec::fixed_choice(
+    .description("reader.setting.aloud-turn-pages.help"),
+    SettingSpec::choice(
         settings::ALOUD_TIMER.static_str(),
         "reader.setting.aloud-timer",
         &aloud::TIMER_CHOICES,
@@ -305,7 +305,7 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::READING,
     )
     .with_extra(&extras::IN_ALOUD)
-    .described("reader.setting.aloud-timer.help"),
+    .description("reader.setting.aloud-timer.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

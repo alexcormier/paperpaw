@@ -123,7 +123,7 @@ static PERCENT: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
 /// What the sleep screen shows, the folder of its pictures, its widgets
 /// and its picture over the page.
 static SETTINGS: [SettingSpec; 9] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         SHOW.static_str(),
         "sleep.setting.show",
         &[CAT, COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE],
@@ -131,17 +131,17 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&IN_SLEEP)
-    .described("sleep.setting.show.help"),
-    SettingSpec::fixed_text(
+    .description("sleep.setting.show.help"),
+    SettingSpec::text(
         FOLDER.static_str(),
         "sleep.setting.folder",
         "sleep",
         groups::DISPLAY,
     )
     .with_extra(&FOLDER_EXTRA)
-    .described("sleep.setting.folder.help"),
-    SettingSpec::fixed(
-        WIDGET_LIST.static_str(),
+    .description("sleep.setting.folder.help"),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(WIDGET_LIST.static_str()),
         "sleep.setting.widgets",
         paperpaw_sdk::SettingKind::List,
         paperpaw_sdk::SettingValue::Text(Cow::Borrowed(
@@ -150,24 +150,24 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&WIDGETS_EXTRA)
-    .described("sleep.setting.widgets.help"),
-    SettingSpec::fixed_text(
+    .description("sleep.setting.widgets.help"),
+    SettingSpec::text(
         overlay::PICTURE.static_str(),
         "sleep.setting.overlay-picture",
         "",
         groups::DISPLAY,
     )
     .with_extra(&PICKED_EXTRA)
-    .described("sleep.setting.overlay-picture.help"),
-    SettingSpec::fixed_text(
+    .description("sleep.setting.overlay-picture.help"),
+    SettingSpec::text(
         overlay::WIDGET.static_str(),
         "sleep.setting.overlay-widget",
         "",
         groups::DISPLAY,
     )
     .with_extra(&PICKED_EXTRA)
-    .described("sleep.setting.overlay-widget.help"),
-    SettingSpec::fixed_choice(
+    .description("sleep.setting.overlay-widget.help"),
+    SettingSpec::choice(
         overlay::POSITION.static_str(),
         "sleep.setting.overlay-position",
         &overlay::POSITIONS,
@@ -175,8 +175,8 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&IN_SLEEP)
-    .described("sleep.setting.overlay-position.help"),
-    SettingSpec::fixed_number(
+    .description("sleep.setting.overlay-position.help"),
+    SettingSpec::number(
         overlay::SIZE.static_str(),
         "sleep.setting.overlay-size",
         10,
@@ -185,8 +185,8 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&PERCENT)
-    .described("sleep.setting.overlay-size.help"),
-    SettingSpec::fixed_number(
+    .description("sleep.setting.overlay-size.help"),
+    SettingSpec::number(
         overlay::SEE_THROUGH.static_str(),
         "sleep.setting.overlay-see-through",
         0,
@@ -195,8 +195,8 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&PERCENT)
-    .described("sleep.setting.overlay-see-through.help"),
-    SettingSpec::fixed_choice(
+    .description("sleep.setting.overlay-see-through.help"),
+    SettingSpec::choice(
         overlay::USED.static_str(),
         "sleep.setting.overlay-when",
         &overlay::WHEN,
@@ -204,7 +204,7 @@ static SETTINGS: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&IN_SLEEP)
-    .described("sleep.setting.overlay-when.help"),
+    .description("sleep.setting.overlay-when.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

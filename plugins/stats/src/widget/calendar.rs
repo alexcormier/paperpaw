@@ -43,30 +43,30 @@ static SETTINGS: [SettingSpec; 11] = [
     widgets::frame_spec("stats.widget.calendar.frame", CALENDAR, Frame::None),
     widgets::padding_spec("stats.widget.calendar.padding", CALENDAR, Padding::Auto),
     widgets::align_spec("stats.widget.calendar.align", CALENDAR, Align::Center),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.calendar.style",
         "stats.setting.calendar",
         &STYLES,
         STYLES[0],
         CALENDAR,
     )
-    .described("stats.setting.calendar.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.calendar.help"),
+    SettingSpec::choice(
         "stats.widget.calendar.weeks",
         "stats.setting.weeks",
         &WEEKS,
         WEEKS[1],
         CALENDAR,
     )
-    .described("stats.setting.weeks.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.weeks.help"),
+    SettingSpec::choice(
         "stats.widget.calendar.cells",
         "stats.setting.cells",
         &CELLS,
         CELLS[0],
         CALENDAR,
     )
-    .described("stats.setting.cells.help"),
+    .description("stats.setting.cells.help"),
     widgets::part_spec(
         "stats.widget.calendar.caption",
         CALENDAR,

@@ -47,22 +47,22 @@ static SETTINGS: [SettingSpec; 9] = [
         true,
     ),
     widgets::part_spec("widgets.moon.lit", ID, "widgets.setting.lit-percent", false),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.moon.shadow",
         "widgets.setting.shadow",
         &SHADOWS,
         SHADOWS[0],
         ID,
     )
-    .described("widgets.moon.shadow.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.moon.shadow.help"),
+    SettingSpec::choice(
         "widgets.moon.hemisphere",
         "widgets.setting.hemisphere",
         &HEMISPHERES,
         HEMISPHERES[0],
         ID,
     )
-    .described("widgets.moon.hemisphere.help"),
+    .description("widgets.moon.hemisphere.help"),
     super::date_format_spec("widgets.moon.date-format", ID, super::DATE_FORMATS[0]),
 ];
 

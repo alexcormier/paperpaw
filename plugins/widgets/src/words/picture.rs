@@ -59,32 +59,32 @@ fn stamp_file() -> String {
 /// The folder of the pictures, chosen on the folder chooser.
 static CHOSEN_FOLDER: paperpaw_sdk::SettingExtra =
     paperpaw_sdk::SettingExtra::new().editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
-static FOLDER_SETTING: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static FOLDER_SETTING: [SettingSpec; 1] = [SettingSpec::text(
     FOLDER.static_str(),
     "widgets.picture.setting.folder",
     "Pictures",
     ID,
 )
 .with_extra(&CHOSEN_FOLDER)
-.described("widgets.picture.setting.folder.help")];
+.description("widgets.picture.setting.folder.help")];
 
 static SETTINGS: [SettingSpec; 6] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.picture.change",
         "widgets.setting.change",
         &CHANGES,
         CHANGES[0],
         ID,
     )
-    .described("widgets.setting.change.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.setting.change.help"),
+    SettingSpec::choice(
         "widgets.picture.fit",
         "widgets.picture.setting.fit",
         &FITS,
         FITS[0],
         ID,
     )
-    .described("widgets.picture.fit.help"),
+    .description("widgets.picture.fit.help"),
     widgets::part_spec(
         "widgets.picture.caption",
         ID,

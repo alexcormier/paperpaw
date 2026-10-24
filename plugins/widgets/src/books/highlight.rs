@@ -51,22 +51,22 @@ static SETTINGS: [SettingSpec; 11] = [
     widgets::frame_spec("widgets.highlight.frame", ID, Frame::None),
     widgets::padding_spec("widgets.highlight.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.highlight.size", ID, TextSize::Fit, true),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.highlight.source",
         "widgets.books.setting.highlight-source",
         &SOURCES,
         SOURCES[0],
         ID,
     )
-    .described("widgets.highlight.source.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.highlight.source.help"),
+    SettingSpec::choice(
         "widgets.highlight.change",
         "widgets.books.setting.highlight-change",
         &CHANGES,
         CHANGES[0],
         ID,
     )
-    .described("widgets.books.setting.highlight-change.help"),
+    .description("widgets.books.setting.highlight-change.help"),
     widgets::part_spec(
         "widgets.highlight.caption",
         ID,

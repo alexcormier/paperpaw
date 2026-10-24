@@ -1086,60 +1086,60 @@ static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections
 
 /// The language, night mode, speech and the edges for swipes.
 static GENERAL: [SettingSpec; 9] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         settings::DEVELOPER.static_str(),
         "core.setting.developer",
         false,
         groups::SYSTEM,
     )
     .advanced()
-    .described("core.setting.developer.help"),
-    SettingSpec::fixed(
-        settings::LANGUAGE.static_str(),
+    .description("core.setting.developer.help"),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(settings::LANGUAGE.static_str()),
         "core.setting.language",
         SettingKind::Language,
         SettingValue::Text(Cow::Borrowed(paperpaw_i18n::FALLBACK_LANGUAGE)),
         groups::SYSTEM,
     )
-    .described("core.setting.language.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.language.help"),
+    SettingSpec::switch(
         settings::NIGHT_MODE.static_str(),
         "core.setting.night-mode",
         false,
         groups::DISPLAY,
     )
-    .described("core.setting.night-mode.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.night-mode.help"),
+    SettingSpec::switch(
         settings::NIGHT_PICTURES.static_str(),
         "core.setting.night-pictures",
         false,
         groups::DISPLAY,
     )
-    .described("core.setting.night-pictures.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.night-pictures.help"),
+    SettingSpec::choice(
         settings::MONO_TEXT.static_str(),
         "core.setting.mono-text",
         settings::MONO_TEXT_LEVELS,
         settings::MONO_TEXT_LEVELS[1],
         groups::DISPLAY,
     )
-    .described("core.setting.mono-text.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.mono-text.help"),
+    SettingSpec::switch(
         settings::SPEAK_FOCUS.static_str(),
         "core.setting.speak-focus",
         false,
         groups::SYSTEM,
     )
-    .described("core.setting.speak-focus.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.speak-focus.help"),
+    SettingSpec::choice(
         settings::VOICE.static_str(),
         "core.setting.voice",
         &[settings::VOICE_SYSTEM],
         settings::VOICE_SYSTEM,
         groups::SYSTEM,
     )
-    .described("core.setting.voice.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.voice.help"),
+    SettingSpec::number(
         settings::EDGE_ENDS.static_str(),
         "core.setting.edge-ends",
         0,
@@ -1149,8 +1149,8 @@ static GENERAL: [SettingSpec; 9] = [
     )
     .with_extra(&MM)
     .advanced()
-    .described("core.setting.edge.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.edge.help"),
+    SettingSpec::number(
         settings::EDGE_SIDES.static_str(),
         "core.setting.edge-sides",
         0,
@@ -1160,13 +1160,13 @@ static GENERAL: [SettingSpec; 9] = [
     )
     .with_extra(&MM)
     .advanced()
-    .described("core.setting.edge.help"),
+    .description("core.setting.edge.help"),
 ];
 
 /// The library folder, chosen with the folder chooser: the reader's own,
 /// kept when the settings are reset.
 static FOLDER_EDITOR: SettingExtra = SettingExtra::new().editor(screens::FOLDER_EDITOR);
-static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static LIBRARY: [SettingSpec; 1] = [SettingSpec::text(
     settings::LIBRARY_FOLDER.static_str(),
     "core.setting.library-folder",
     "books",
@@ -1174,7 +1174,7 @@ static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
 )
 .with_extra(&FOLDER_EDITOR)
 .kept_on_reset()
-.described("core.setting.library-folder.help")];
+.description("core.setting.library-folder.help")];
 
 fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&GENERAL)?;
@@ -1190,7 +1190,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 /// titles and room. The defaults are PaperPaw's look (soft corners,
 /// pills, plain headers, faint lines); themes (data plugins) set others.
 static LOOK: [SettingSpec; 14] = [
-    SettingSpec::fixed_number(
+    SettingSpec::number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
         7,
@@ -1199,16 +1199,16 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&PT_SLIDER)
-    .described("core.setting.ui-size.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.ui-size.help"),
+    SettingSpec::choice(
         settings::UI_CONTRAST.static_str(),
         "core.setting.ui-contrast",
         &[settings::CONTRAST_NORMAL, settings::CONTRAST_STRONG],
         settings::CONTRAST_NORMAL,
         groups::LOOK,
     )
-    .described("core.setting.ui-contrast.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.ui-contrast.help"),
+    SettingSpec::choice(
         settings::UI_HEADER.static_str(),
         "core.setting.ui-header",
         &[
@@ -1219,27 +1219,27 @@ static LOOK: [SettingSpec; 14] = [
         settings::HEADER_PLAIN,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-header.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.ui-header.help"),
+    SettingSpec::choice(
         settings::WIDGET_FRAME.static_str(),
         "core.setting.widget-frame",
         paperpaw_sdk::widgets::ALL_FRAMES,
         paperpaw_sdk::widgets::OWN_FRAME,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.widget-frame.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.widget-frame.help"),
+    SettingSpec::choice(
         settings::UI_CORNERS.static_str(),
         "core.setting.ui-corners",
         settings::CORNERS,
         settings::CORNERS[3],
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-corners.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.ui-corners.help"),
+    SettingSpec::choice(
         settings::UI_FOCUS.static_str(),
         "core.setting.ui-focus",
         &[
@@ -1250,9 +1250,9 @@ static LOOK: [SettingSpec; 14] = [
         settings::FOCUS_FILL,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-focus.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.ui-focus.help"),
+    SettingSpec::choice(
         settings::UI_SEPARATORS.static_str(),
         "core.setting.ui-separators",
         &[
@@ -1263,18 +1263,18 @@ static LOOK: [SettingSpec; 14] = [
         settings::SEPARATORS_INSET,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-separators.help"),
-    SettingSpec::fixed_choice(
+    .advanced()
+    .description("core.setting.ui-separators.help"),
+    SettingSpec::choice(
         settings::UI_GROUPS.static_str(),
         "core.setting.ui-groups",
         &[settings::GROUPS_PLAIN, settings::GROUPS_CARDS],
         settings::GROUPS_PLAIN,
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-groups.help"),
-    SettingSpec::fixed_number(
+    .advanced()
+    .description("core.setting.ui-groups.help"),
+    SettingSpec::number(
         settings::UI_TITLE.static_str(),
         "core.setting.ui-title",
         100,
@@ -1283,9 +1283,9 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&PERCENT_5_SLIDER)
-    .for_advanced()
-    .described("core.setting.ui-title.help"),
-    SettingSpec::fixed_number(
+    .advanced()
+    .description("core.setting.ui-title.help"),
+    SettingSpec::number(
         settings::UI_MARGIN.static_str(),
         "core.setting.ui-margin",
         0,
@@ -1294,9 +1294,9 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&MM_SLIDER)
-    .for_advanced()
-    .described("core.setting.ui-margin.help"),
-    SettingSpec::fixed_number(
+    .advanced()
+    .description("core.setting.ui-margin.help"),
+    SettingSpec::number(
         settings::UI_ROW.static_str(),
         "core.setting.ui-row",
         120,
@@ -1305,9 +1305,9 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&PERCENT_10_SLIDER)
-    .for_advanced()
-    .described("core.setting.ui-row.help"),
-    SettingSpec::fixed_number(
+    .advanced()
+    .description("core.setting.ui-row.help"),
+    SettingSpec::number(
         settings::UI_LINES.static_str(),
         "core.setting.ui-lines",
         1,
@@ -1316,28 +1316,28 @@ static LOOK: [SettingSpec; 14] = [
         groups::LOOK,
     )
     .with_extra(&TENTH_MM)
-    .for_advanced()
-    .described("core.setting.ui-lines.help"),
+    .advanced()
+    .description("core.setting.ui-lines.help"),
     // A picture in place of PaperPaw's logo: for data plugins, which set
     // it in their settings.ini, and those who type a path.
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         paperpaw_sdk::logo::LOGO.static_str(),
         "core.setting.logo",
         "",
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.logo.help"),
+    .advanced()
+    .description("core.setting.logo.help"),
     // The interface's grays by what they are for: for themes, which set
     // it in their settings.ini.
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         settings::UI_PALETTE.static_str(),
         "core.setting.ui-palette",
         "",
         groups::LOOK,
     )
-    .for_advanced()
-    .described("core.setting.ui-palette.help"),
+    .advanced()
+    .description("core.setting.ui-palette.help"),
 ];
 
 fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1347,15 +1347,15 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
 static DEVICE: [SettingSpec; 15] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
         &[keymap_presets::STANDARD_NAME],
         keymap_presets::STANDARD_NAME,
         groups::CONTROLS,
     )
-    .described("core.setting.keymap-preset.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.keymap-preset.help"),
+    SettingSpec::number(
         settings::FULL_REFRESH_INTERVAL.static_str(),
         "core.setting.full-refresh-interval",
         0,
@@ -1365,23 +1365,23 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .with_extra(&PAGES)
     .scoped()
-    .described("core.setting.full-refresh-interval.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.full-refresh-interval.help"),
+    SettingSpec::switch(
         settings::FLASH_SCREENS.static_str(),
         "core.setting.flash-screens",
         true,
         groups::DISPLAY,
     )
     .advanced()
-    .described("core.setting.flash-screens.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.flash-screens.help"),
+    SettingSpec::switch(
         settings::PICTURES_IN_GRAYS.static_str(),
         "core.setting.pictures-in-grays",
         true,
         groups::DISPLAY,
     )
-    .described("core.setting.pictures-in-grays.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.pictures-in-grays.help"),
+    SettingSpec::number(
         settings::SLEEP_AFTER.static_str(),
         "core.setting.sleep-after",
         0,
@@ -1390,8 +1390,8 @@ static DEVICE: [SettingSpec; 15] = [
         groups::SYSTEM,
     )
     .with_extra(&MINUTES_5)
-    .described("core.setting.sleep-after.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.sleep-after.help"),
+    SettingSpec::choice(
         settings::ROTATION.static_str(),
         "core.setting.rotation",
         settings::ROTATIONS,
@@ -1399,22 +1399,22 @@ static DEVICE: [SettingSpec; 15] = [
         groups::DISPLAY,
     )
     .scoped()
-    .described("core.setting.rotation.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.rotation.help"),
+    SettingSpec::switch(
         settings::BUTTON_HINTS.static_str(),
         "core.setting.button-hints",
         true,
         groups::CONTROLS,
     )
-    .described("core.setting.button-hints.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.button-hints.help"),
+    SettingSpec::switch(
         settings::SWAP_PAGE_BUTTONS.static_str(),
         "core.setting.swap-page-buttons",
         false,
         groups::CONTROLS,
     )
-    .described("core.setting.swap-page-buttons.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.swap-page-buttons.help"),
+    SettingSpec::number(
         settings::NOTICE_SECONDS.static_str(),
         "core.setting.notice-seconds",
         1,
@@ -1424,8 +1424,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&SECONDS)
-    .described("core.setting.notice-seconds.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.notice-seconds.help"),
+    SettingSpec::number(
         settings::LONG_PRESS_MS.static_str(),
         "core.setting.long-press-ms",
         200,
@@ -1435,8 +1435,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&MS)
-    .described("core.setting.long-press-ms.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.long-press-ms.help"),
+    SettingSpec::number(
         settings::DOUBLE_TAP_MS.static_str(),
         "core.setting.double-tap-ms",
         150,
@@ -1446,8 +1446,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&MS)
-    .described("core.setting.double-tap-ms.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.double-tap-ms.help"),
+    SettingSpec::number(
         settings::TAP_SLOP.static_str(),
         "core.setting.tap-slop",
         1,
@@ -1457,8 +1457,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&MM)
-    .described("core.setting.tap-slop.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.tap-slop.help"),
+    SettingSpec::number(
         settings::SWIPE_DISTANCE.static_str(),
         "core.setting.swipe-distance",
         2,
@@ -1468,8 +1468,8 @@ static DEVICE: [SettingSpec; 15] = [
     )
     .advanced()
     .with_extra(&MM)
-    .described("core.setting.swipe-distance.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.swipe-distance.help"),
+    SettingSpec::number(
         settings::FRONTLIGHT.static_str(),
         "core.setting.frontlight",
         0,
@@ -1478,8 +1478,8 @@ static DEVICE: [SettingSpec; 15] = [
         groups::DISPLAY,
     )
     .with_extra(&PERCENT_5)
-    .described("core.setting.frontlight.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.frontlight.help"),
+    SettingSpec::number(
         settings::FRONTLIGHT_WARMTH.static_str(),
         "core.setting.frontlight-warmth",
         0,
@@ -1488,7 +1488,7 @@ static DEVICE: [SettingSpec; 15] = [
         groups::DISPLAY,
     )
     .with_extra(&PERCENT_5)
-    .described("core.setting.frontlight-warmth.help"),
+    .description("core.setting.frontlight-warmth.help"),
 ];
 
 fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1517,7 +1517,7 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// The colours of text and paper, each with its own colour code.
 static COLOR_SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         settings::TEXT_COLOR.static_str(),
         "core.setting.text-color",
         settings::TEXT_COLORS,
@@ -1525,16 +1525,16 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         groups::LOOK,
     )
     .with_extra(&COLORS)
-    .described("core.setting.colors.help"),
-    SettingSpec::fixed_text(
+    .description("core.setting.colors.help"),
+    SettingSpec::text(
         settings::TEXT_COLOR_OWN.static_str(),
         "core.setting.text-color-own",
         "#5b4636",
         groups::LOOK,
     )
     .with_extra(&COLORS)
-    .described("core.setting.color-own.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.color-own.help"),
+    SettingSpec::choice(
         settings::PAPER_COLOR.static_str(),
         "core.setting.paper-color",
         settings::PAPER_COLORS,
@@ -1542,15 +1542,15 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         groups::LOOK,
     )
     .with_extra(&COLORS)
-    .described("core.setting.colors.help"),
-    SettingSpec::fixed_text(
+    .description("core.setting.colors.help"),
+    SettingSpec::text(
         settings::PAPER_COLOR_OWN.static_str(),
         "core.setting.paper-color-own",
         "#f4ecd8",
         groups::LOOK,
     )
     .with_extra(&COLORS)
-    .described("core.setting.color-own.help"),
+    .description("core.setting.color-own.help"),
 ];
 
 fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1570,15 +1570,15 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
 static READING: [SettingSpec; 19] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
         &[settings::STATUS_FONT_UI, settings::STATUS_FONT_BOOK],
         settings::STATUS_FONT_UI,
         groups::STATUS_LINES,
     )
-    .described("core.setting.status-font.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.status-font.help"),
+    SettingSpec::choice(
         settings::READING_FONT.static_str(),
         "core.setting.reading-font",
         &[settings::DEFAULT_FONT],
@@ -1587,8 +1587,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&FONT)
     .scoped()
-    .described("core.setting.reading-font.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.reading-font.help"),
+    SettingSpec::number(
         settings::FONT_SIZE.static_str(),
         "core.setting.font-size",
         crate::plugins::FONT_SIZES.0,
@@ -1598,8 +1598,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&FONT_PT)
     .scoped()
-    .described("core.setting.font-size.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.font-size.help"),
+    SettingSpec::number(
         settings::LINE_SPACING.static_str(),
         "core.setting.line-spacing",
         80,
@@ -1609,8 +1609,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&LINES)
     .scoped()
-    .described("core.setting.line-spacing.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.line-spacing.help"),
+    SettingSpec::number(
         settings::FONT_WEIGHT.static_str(),
         "core.setting.font-weight",
         0,
@@ -1620,8 +1620,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&WEIGHT)
     .scoped()
-    .described("core.setting.font-weight.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.font-weight.help"),
+    SettingSpec::number(
         settings::WORD_SPACING.static_str(),
         "core.setting.word-spacing",
         50,
@@ -1631,8 +1631,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&WORDS)
     .scoped()
-    .described("core.setting.word-spacing.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.word-spacing.help"),
+    SettingSpec::number(
         settings::MARGIN.static_str(),
         "core.setting.margin",
         0,
@@ -1642,8 +1642,8 @@ static READING: [SettingSpec; 19] = [
     )
     .with_extra(&MARGINS)
     .scoped()
-    .described("core.setting.margin.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.margin.help"),
+    SettingSpec::number(
         settings::MARGIN_ENDS.static_str(),
         "core.setting.margin-ends",
         0,
@@ -1654,8 +1654,8 @@ static READING: [SettingSpec; 19] = [
     .with_extra(&MARGINS_ENDS)
     .advanced()
     .scoped()
-    .described("core.setting.margin-ends.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.margin-ends.help"),
+    SettingSpec::switch(
         settings::JUSTIFY.static_str(),
         "core.setting.justify",
         true,
@@ -1663,8 +1663,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.justify.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.justify.help"),
+    SettingSpec::switch(
         settings::HYPHENATE.static_str(),
         "core.setting.hyphenate",
         true,
@@ -1672,8 +1672,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.hyphenate.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.hyphenate.help"),
+    SettingSpec::switch(
         settings::PUBLISHER_STYLES.static_str(),
         "core.setting.publisher-styles",
         true,
@@ -1681,8 +1681,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.publisher-styles.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.publisher-styles.help"),
+    SettingSpec::switch(
         settings::INDENT.static_str(),
         "core.setting.indent",
         true,
@@ -1690,8 +1690,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.indent.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.indent.help"),
+    SettingSpec::switch(
         settings::PARAGRAPH_SPACING.static_str(),
         "core.setting.paragraph-spacing",
         false,
@@ -1699,8 +1699,8 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.paragraph-spacing.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.paragraph-spacing.help"),
+    SettingSpec::number(
         settings::WIDOWS.static_str(),
         "core.setting.widows",
         1,
@@ -1711,8 +1711,8 @@ static READING: [SettingSpec; 19] = [
     .advanced()
     .scoped()
     .with_extra(&LINES_KEPT)
-    .described("core.setting.widows.help"),
-    SettingSpec::fixed_number(
+    .description("core.setting.widows.help"),
+    SettingSpec::number(
         settings::ORPHANS.static_str(),
         "core.setting.orphans",
         1,
@@ -1723,8 +1723,8 @@ static READING: [SettingSpec; 19] = [
     .advanced()
     .scoped()
     .with_extra(&LINES_KEPT)
-    .described("core.setting.orphans.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.orphans.help"),
+    SettingSpec::choice(
         settings::READING_APP.static_str(),
         "core.setting.reading-app",
         &[settings::READING_APP_DEFAULT],
@@ -1732,8 +1732,8 @@ static READING: [SettingSpec; 19] = [
         groups::READING,
     )
     .with_extra(&IN_APPS)
-    .described("core.setting.reading-app.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.reading-app.help"),
+    SettingSpec::choice(
         settings::FOOTNOTES.static_str(),
         "core.setting.footnotes",
         &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
@@ -1742,8 +1742,8 @@ static READING: [SettingSpec; 19] = [
     )
     .advanced()
     .with_extra(&IN_BEHAVIOUR)
-    .described("core.setting.footnotes.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.footnotes.help"),
+    SettingSpec::choice(
         settings::PAGE_FRAME.static_str(),
         "core.setting.page-frame",
         &[settings::PAGE_FRAME_SINGLE],
@@ -1752,15 +1752,15 @@ static READING: [SettingSpec; 19] = [
     )
     .scoped()
     .with_extra(&IN_PAGE)
-    .described("core.setting.page-frame.help"),
-    SettingSpec::fixed_switch(
+    .description("core.setting.page-frame.help"),
+    SettingSpec::switch(
         settings::SCOPE_ONLY.static_str(),
         "core.setting.scope-only",
         false,
         groups::READING,
     )
     .scoped()
-    .described("core.setting.scope-only.help"),
+    .description("core.setting.scope-only.help"),
 ];
 
 fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1824,42 +1824,42 @@ const ZONES: [&str; TIME_ZONES.len() + 1] = {
 
 /// How the time is shown, and where it is.
 static TIME: [SettingSpec; 4] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         settings::CLOCK_FORMAT.static_str(),
         "core.setting.clock-format",
         &[CLOCK_24H, CLOCK_12H],
         CLOCK_24H,
         groups::SYSTEM,
     )
-    .described("core.setting.clock-format.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.clock-format.help"),
+    SettingSpec::choice(
         settings::WEEK_START.static_str(),
         "core.setting.week-start",
         time::WEEK_STARTS,
         time::WEEK_STARTS[0],
         groups::SYSTEM,
     )
-    .described("core.setting.week-start.help"),
-    SettingSpec::fixed_choice(
+    .description("core.setting.week-start.help"),
+    SettingSpec::choice(
         settings::TIME_ZONE.static_str(),
         "core.setting.time-zone",
         &ZONES,
         AUTO,
         groups::SYSTEM,
     )
-    .described("core.setting.time-zone.help"),
-    SettingSpec::fixed_text(
+    .description("core.setting.time-zone.help"),
+    SettingSpec::text(
         settings::TIME_ZONE_RULE.static_str(),
         "core.setting.time-zone-rule",
         "",
         groups::SYSTEM,
     )
     .advanced()
-    .described("core.setting.time-zone-rule.help"),
+    .description("core.setting.time-zone-rule.help"),
 ];
 
 /// Below which charge the battery shows when it shows only when low.
-static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
+static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::number(
     settings::BATTERY_LOW.static_str(),
     "core.setting.battery-low",
     5,
@@ -1869,7 +1869,7 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
 )
 .with_extra(&PERCENT_5)
 .advanced()
-.described("core.setting.battery-low.help")];
+.description("core.setting.battery-low.help")];
 
 /// The line of the items of the place it is drawn in.
 fn items_line<'e>(
@@ -2083,14 +2083,14 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
 }
 
 /// The size of the gap widget.
-static SPACE: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+static SPACE: [SettingSpec; 1] = [SettingSpec::choice(
     widgets::SPACE_SIZE.static_str(),
     "core.setting.space-size",
     widgets::SPACE_SIZES,
     widgets::SPACE_SIZES[1],
     Id::new_static(widgets::SPACE),
 )
-.described("core.setting.space-size.help")];
+.description("core.setting.space-size.help")];
 
 /// The widgets for room between the others: a gap of a set height, and
 /// the room left (see `paperpaw_sdk::widgets`).

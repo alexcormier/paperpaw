@@ -40,12 +40,12 @@ static IN_HELP: SettingExtra = SettingExtra::new().section(SECTION);
 static AGAIN_EXTRA: SettingExtra = SettingExtra::new().section(SECTION).editor(AGAIN);
 
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(SHOW.static_str(), "help.setting.show", true, groups::SYSTEM)
+    SettingSpec::switch(SHOW.static_str(), "help.setting.show", true, groups::SYSTEM)
         .with_extra(&IN_HELP)
-        .described("help.setting.show.help"),
-    SettingSpec::fixed_text("help.again", "help.setting.again", "", groups::SYSTEM)
+        .description("help.setting.show.help"),
+    SettingSpec::text("help.again", "help.setting.again", "", groups::SYSTEM)
         .with_extra(&AGAIN_EXTRA)
-        .described("help.setting.again.help"),
+        .description("help.setting.again.help"),
 ];
 
 fn seen_file() -> String {

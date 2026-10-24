@@ -5898,38 +5898,23 @@ pub paperpaw_sdk::SettingSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::SettingSpec::accepts(&self, &paperpaw_sdk::SettingValue) -> bool
 pub const fn paperpaw_sdk::SettingSpec::advanced(self) -> Self
-pub fn paperpaw_sdk::SettingSpec::choice(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::Choices, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
-pub const fn paperpaw_sdk::SettingSpec::described(self, &'static str) -> Self
-pub fn paperpaw_sdk::SettingSpec::description(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
-pub fn paperpaw_sdk::SettingSpec::editor(self, paperpaw_sdk::Id) -> Self
-pub fn paperpaw_sdk::SettingSpec::editor_slot(self, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingSpec::choice(&'static str, &'static str, &'static [&'static str], &'static str, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingSpec::description(self, &'static str) -> Self
 pub fn paperpaw_sdk::SettingSpec::extra(&self) -> &paperpaw_sdk::SettingExtra
-pub const fn paperpaw_sdk::SettingSpec::fixed(&'static str, &'static str, paperpaw_sdk::SettingKind, paperpaw_sdk::SettingValue, paperpaw_sdk::Id) -> Self
-pub const fn paperpaw_sdk::SettingSpec::fixed_choice(&'static str, &'static str, &'static [&'static str], &'static str, paperpaw_sdk::Id) -> Self
-pub const fn paperpaw_sdk::SettingSpec::fixed_number(&'static str, &'static str, i64, i64, i64, paperpaw_sdk::Id) -> Self
-pub const fn paperpaw_sdk::SettingSpec::fixed_switch(&'static str, &'static str, bool, paperpaw_sdk::Id) -> Self
-pub const fn paperpaw_sdk::SettingSpec::fixed_text(&'static str, &'static str, &'static str, paperpaw_sdk::Id) -> Self
-pub const fn paperpaw_sdk::SettingSpec::for_advanced(self) -> Self
-pub fn paperpaw_sdk::SettingSpec::group(self, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingSpec::guarded(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::is_kept_on_reset(&self) -> bool
-pub fn paperpaw_sdk::SettingSpec::keeps_unknown(self) -> Self
 pub const fn paperpaw_sdk::SettingSpec::kept_on_reset(self) -> Self
-pub fn paperpaw_sdk::SettingSpec::language(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
-pub fn paperpaw_sdk::SettingSpec::list(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
-pub fn paperpaw_sdk::SettingSpec::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::SettingKind, paperpaw_sdk::SettingValue) -> Self
-pub fn paperpaw_sdk::SettingSpec::number(&paperpaw_sdk::setting::Setting<i64>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, i64, i64, i64) -> Self
+pub const fn paperpaw_sdk::SettingSpec::language(&'static str, &'static str, &'static str, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingSpec::list(&'static str, &'static str, &'static str, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingSpec::new(paperpaw_sdk::Id, &'static str, paperpaw_sdk::SettingKind, paperpaw_sdk::SettingValue, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingSpec::number(&'static str, &'static str, i64, i64, i64, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::SettingSpec::parse(&self, &str) -> core::option::Option<paperpaw_sdk::SettingValue>
 pub const fn paperpaw_sdk::SettingSpec::scoped(self) -> Self
-pub fn paperpaw_sdk::SettingSpec::secret(self) -> Self
-pub fn paperpaw_sdk::SettingSpec::section(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::SettingSpec::section_key(&self) -> core::option::Option<alloc::borrow::Cow<'static, str>>
-pub fn paperpaw_sdk::SettingSpec::slider(self) -> Self
-pub fn paperpaw_sdk::SettingSpec::step(self, i64) -> Self
-pub fn paperpaw_sdk::SettingSpec::switch(&paperpaw_sdk::setting::Setting<bool>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool) -> Self
-pub fn paperpaw_sdk::SettingSpec::text(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
-pub fn paperpaw_sdk::SettingSpec::unit(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub const fn paperpaw_sdk::SettingSpec::switch(&'static str, &'static str, bool, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingSpec::text(&'static str, &'static str, &'static str, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingSpec::with_extra(self, &'static paperpaw_sdk::SettingExtra) -> Self
+pub fn paperpaw_sdk::SettingSpec::with_owned_extra(self, paperpaw_sdk::SettingExtra) -> Self
 pub struct paperpaw_sdk::Settings
 impl paperpaw_sdk::Settings
 pub fn paperpaw_sdk::Settings::bool(&self, &str) -> bool

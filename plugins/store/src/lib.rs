@@ -65,13 +65,13 @@ pub const CATALOG: Setting<paperpaw_sdk::setting::Text> = Setting::new("store.ca
 
 /// The plugin library's address, for developers and libraries of one's
 /// own.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     CATALOG.static_str(),
     "store.setting.catalog",
     catalog::OFFICIAL_LIST,
     groups::DEVELOPER,
 )
-.described("store.setting.catalog.help")];
+.description("store.setting.catalog.help")];
 
 /// The answer to a file's download.
 const DOWNLOADED: Event<HttpReply> = Event::new("store.downloaded");

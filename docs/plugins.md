@@ -285,58 +285,49 @@ dialog.draw(canvas, env, &style, Some(self.focus));
 
 A setting is a constant with its id and the type of its value
 (`Setting<bool>`, `Setting<i64>` or `Setting<Text>` for choices,
-languages, lists and text):
+languages, lists and text). Its spec is declared in a `static` list,
+which the plugin registers once. On the X4 the list stays in flash and
+takes next to no memory:
 
 ```rust
 pub const NAME: Setting<Text> = Setting::new("hello.name");
+pub const DATE: Setting<bool> = Setting::new("hello.clock.date");
+const GROUP: Id = Id::new_static("hello.clock");
 
-r.add_setting(
-    SettingSpec::text(&NAME, "hello.setting.name", "")
-        .group(groups::OTHER)
+static SETTINGS: [SettingSpec; 3] = [
+    SettingSpec::text(NAME.static_str(), "hello.setting.name", "", GROUP)
         .description("hello.setting.name.help"),
-)?;
+    SettingSpec::switch(DATE.static_str(), "hello.setting.date", true, GROUP),
+    SettingSpec::choice("hello.clock.face", "hello.setting.face",
+        &["hello.face.plain", "hello.face.ticks"], "hello.face.ticks", GROUP)
+        .description("hello.setting.face.help"),
+];
+
+r.add_settings(&SETTINGS)?;
 
 let name: &str = env.settings().read(&NAME);
 out.push(Command::set(&NAME, "Ada".into()));
 ```
 
 `SettingSpec::switch`, `number`, `choice`, `language`, `list` and
-`text` make the others, their defaults of the setting's type. The
-settings screens list every setting by its group, with its description
-below it; the kernel saves changes to `paperpaw.ini`. Settings can be
-numbers with units and steps, switches, choices, languages or text;
-`advanced()` hides rarely needed ones, `scoped()` lets one be set per
-book, `editor(screen)` opens a screen of your own instead. Settings
-known only at run time (one per widget, say) are read by their ids,
-`env.settings().text("…")` and so on. Passwords and keys do not belong in
-settings: see [Passwords and keys](#passwords-and-keys).
+`text` make them, each with its id, title, default and group;
+`SettingSpec::new` takes any kind and an `Id`, for a spec whose id is
+known only at run time (registered with `add_setting`). Every builder is
+`const`. The settings screens list every setting by its group, with its
+description below it; the kernel saves changes to `paperpaw.ini`.
+`advanced()` hides rarely needed ones, and `scoped()` lets one be set per
+book. Settings known only at run time (one per widget, say) are read by
+their ids, `env.settings().text("…")` and so on. Passwords and keys do
+not belong in settings: see [Passwords and keys](#passwords-and-keys).
 
-Each setting built this way takes about 200 bytes while the device
-runs. A plugin with many settings keeps them in the program instead, in
-a `static` list (on the X4 it stays in flash, next to no memory):
-
-```rust
-const GROUP: Id = Id::new_static("hello.clock");
-static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch("hello.clock.date", "hello.setting.date", true, GROUP),
-    SettingSpec::fixed_choice("hello.clock.face", "hello.setting.face",
-        &["hello.face.plain", "hello.face.ticks"], "hello.face.ticks", GROUP)
-        .described("hello.setting.face.help"),
-];
-
-r.add_settings(&SETTINGS)?;
-```
-
-Such settings are read like any other. What few settings need goes
-into a `static SettingExtra`, which a setting takes with
-`with_extra(&EXTRA)`: a unit, a step, a section, a slider or an editor
-screen. `for_advanced()` shows a fixed setting only with the advanced
-settings.
+What few settings need goes into a `static SettingExtra`, which a
+setting takes with `with_extra(&EXTRA)`: a unit, a step, a section, a
+slider, an editor screen of your own, or being a secret.
 
 ```rust
-static WHILE_SYNCING: SettingExtra = SettingExtra::new().shown_if("hello.sync", "on");
+static WHILE_SYNCING: SettingExtra = SettingExtra::new().shown_if(Id::new_static("hello.sync"), "on");
 static SERVER: [SettingSpec; 1] = [
-    SettingSpec::fixed_text("hello.server", "hello.setting.server", "", GROUP).with_extra(&WHILE_SYNCING),
+    SettingSpec::text("hello.server", "hello.setting.server", "", GROUP).with_extra(&WHILE_SYNCING),
 ];
 ```
 

@@ -34,30 +34,30 @@ static SETTINGS: [SettingSpec; 11] = [
     widgets::padding_spec("stats.widget.streak.padding", STREAK, Padding::Auto),
     widgets::size_spec("stats.widget.streak.size", STREAK, TextSize::Medium, true),
     widgets::align_spec("stats.widget.streak.align", STREAK, Align::Center),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.streak.counts",
         "stats.setting.counts",
         &COUNTS,
         COUNTS[0],
         STREAK,
     )
-    .described("stats.setting.counts.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.counts.help"),
+    SettingSpec::choice(
         "stats.widget.streak.style",
         "stats.setting.marks",
         &MARKS,
         MARKS[1],
         STREAK,
     )
-    .described("stats.setting.marks.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.marks.help"),
+    SettingSpec::choice(
         "stats.widget.streak.days",
         "stats.setting.days",
         &DAYS,
         DAYS[0],
         STREAK,
     )
-    .described("stats.setting.days.help"),
+    .description("stats.setting.days.help"),
     widgets::part_spec(
         "stats.widget.streak.caption",
         STREAK,
@@ -76,7 +76,7 @@ static SETTINGS: [SettingSpec; 11] = [
         "stats.part.marks",
         true,
     )
-    .described("stats.part.marks.help"),
+    .description("stats.part.marks.help"),
     widgets::part_spec(
         "stats.widget.streak.weekdays",
         STREAK,

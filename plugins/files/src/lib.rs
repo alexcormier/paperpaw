@@ -91,7 +91,7 @@ static FOLDER: paperpaw_sdk::SettingExtra =
 /// Where the archive is, and how the library shows the books (the
 /// library folder is the kernel's, [`ROOT`]).
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         ARCHIVE.static_str(),
         "files.setting.archive",
         "books/Archive",
@@ -100,23 +100,23 @@ static SETTINGS: [SettingSpec; 3] = [
     .with_extra(&FOLDER)
     .kept_on_reset()
     .advanced()
-    .described("files.setting.archive.help"),
-    SettingSpec::fixed_choice(
+    .description("files.setting.archive.help"),
+    SettingSpec::choice(
         VIEW.static_str(),
         "files.setting.view",
         &[VIEW_LIST, VIEW_COVERS],
         VIEW_LIST,
         groups::LIBRARY,
     )
-    .described("files.setting.view.help"),
-    SettingSpec::fixed_choice(
+    .description("files.setting.view.help"),
+    SettingSpec::choice(
         SORT.static_str(),
         "files.setting.sort",
         &[SORT_RECENT, SORT_NAME],
         SORT_RECENT,
         groups::LIBRARY,
     )
-    .described("files.setting.sort.help"),
+    .description("files.setting.sort.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

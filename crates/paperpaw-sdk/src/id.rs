@@ -156,7 +156,7 @@ impl Id {
     }
 
     /// The id as text kept in the program, for specs kept there too
-    /// (e.g. `SettingSpec::fixed_number(MARGIN.static_str(), …)`, see
+    /// (e.g. `SettingSpec::number(MARGIN.static_str(), …)`, see
     /// [`SettingSpec::fixed`](crate::SettingSpec::fixed)): for ids made
     /// with [`Id::new_static`]; empty for ids parsed at run time. Takes
     /// the id, so it can be used in `const` and `static` items.

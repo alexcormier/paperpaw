@@ -568,13 +568,13 @@ fn at_most_five(
 static AT_MOST_FIVE: paperpaw_core::sdk::SettingExtra =
     paperpaw_core::sdk::SettingExtra::new().check(at_most_five);
 static CHECKED_SETTINGS: [paperpaw_core::sdk::SettingSpec; 2] = [
-    paperpaw_core::sdk::SettingSpec::fixed_text(
+    paperpaw_core::sdk::SettingSpec::text(
         "checked.name",
         "checked.name",
         "",
         paperpaw_core::sdk::builtin::groups::OTHER,
     ),
-    paperpaw_core::sdk::SettingSpec::fixed_number(
+    paperpaw_core::sdk::SettingSpec::number(
         "checked.count",
         "checked.count",
         1,
@@ -867,14 +867,14 @@ fn input_filters_see_no_key_of_a_secret() {
 }
 
 static VAULT_SETTINGS: [paperpaw_core::sdk::SettingSpec; 3] = [
-    paperpaw_core::sdk::SettingSpec::fixed_text(
+    paperpaw_core::sdk::SettingSpec::text(
         "vault.key",
         "vault.key",
         "",
         paperpaw_core::sdk::builtin::groups::OTHER,
     )
     .with_extra(&KEPT_SECRET),
-    paperpaw_core::sdk::SettingSpec::fixed_text(
+    paperpaw_core::sdk::SettingSpec::text(
         "vault.box.note",
         "vault.box.note",
         "",
@@ -882,7 +882,7 @@ static VAULT_SETTINGS: [paperpaw_core::sdk::SettingSpec; 3] = [
     ),
     // Keeps the device safe: only its plugin and the settings editor
     // change it.
-    paperpaw_core::sdk::SettingSpec::fixed_text(
+    paperpaw_core::sdk::SettingSpec::text(
         "vault.pin",
         "vault.pin",
         "",

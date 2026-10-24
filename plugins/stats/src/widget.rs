@@ -73,14 +73,14 @@ pub(crate) fn goal(env: &Env<'_>) -> Option<u64> {
 }
 
 /// The plugin's settings for the widgets, kept in the program.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
     "stats.goal",
     "stats.setting.goal",
     &GOALS,
     GOALS[0],
     crate::GROUP,
 )
-.described("stats.setting.goal.help")];
+.description("stats.setting.goal.help")];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;

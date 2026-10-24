@@ -34,23 +34,23 @@ const TYPED: Event<Typed> = Event::new("widgets.note.typed");
 
 /// The note's settings, kept in the program.
 static SETTINGS: [SettingSpec; 7] = [
-    SettingSpec::fixed_text("widgets.note.text", "widgets.note.setting.text", "", ID)
-        .described("widgets.note.setting.text.help"),
-    SettingSpec::fixed_text(
+    SettingSpec::text("widgets.note.text", "widgets.note.setting.text", "", ID)
+        .description("widgets.note.setting.text.help"),
+    SettingSpec::text(
         "widgets.note.heading",
         "widgets.note.setting.heading",
         "",
         ID,
     )
-    .described("widgets.note.setting.heading.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.note.setting.heading.help"),
+    SettingSpec::choice(
         "widgets.note.face",
         "widgets.setting.font",
         &FACES,
         FACES[0],
         ID,
     )
-    .described("widgets.setting.face-font.help"),
+    .description("widgets.setting.face-font.help"),
     widgets::size_spec("widgets.note.size", ID, TextSize::Fit, true),
     widgets::align_spec("widgets.note.align", ID, Align::Center),
     widgets::frame_spec("widgets.note.frame", ID, Frame::None),

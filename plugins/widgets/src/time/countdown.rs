@@ -32,28 +32,28 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.countdown.align", ID, Align::Left),
     widgets::frame_spec("widgets.countdown.frame", ID, Frame::None),
     widgets::padding_spec("widgets.countdown.padding", ID, Padding::Auto),
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         "widgets.countdown.title",
         "widgets.setting.countdown-title",
         "",
         ID,
     )
-    .described("widgets.setting.countdown-title.help"),
-    SettingSpec::fixed_text(
+    .description("widgets.setting.countdown-title.help"),
+    SettingSpec::text(
         "widgets.countdown.date",
         "widgets.setting.countdown-date",
         "12-24",
         ID,
     )
-    .described("widgets.setting.countdown-date.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.setting.countdown-date.help"),
+    SettingSpec::choice(
         "widgets.countdown.style",
         "widgets.setting.style",
         &STYLES,
         STYLES[0],
         ID,
     )
-    .described("widgets.countdown.style.help"),
+    .description("widgets.countdown.style.help"),
     widgets::size_spec("widgets.countdown.size", ID, TextSize::Fit, true),
     widgets::part_spec(
         "widgets.countdown.show-date",

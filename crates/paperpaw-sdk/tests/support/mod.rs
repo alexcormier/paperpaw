@@ -183,6 +183,7 @@ impl Harness {
                 "x",
                 SettingKind::Int { min, max },
                 SettingValue::Int(value),
+                paperpaw_sdk::builtin::groups::OTHER,
             ))
             .unwrap();
     }
@@ -195,6 +196,7 @@ impl Harness {
                 "x",
                 SettingKind::Text,
                 SettingValue::Text(value.to_string().into()),
+                paperpaw_sdk::builtin::groups::OTHER,
             ))
             .unwrap();
     }
@@ -207,6 +209,7 @@ impl Harness {
                 "x",
                 SettingKind::Bool,
                 SettingValue::Bool(value),
+                paperpaw_sdk::builtin::groups::OTHER,
             ))
             .unwrap();
     }

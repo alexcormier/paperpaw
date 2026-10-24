@@ -99,9 +99,9 @@ static ITEMS: SettingExtra = SettingExtra::new()
 
 /// The setting of page `n` (1 the first).
 const fn page(id: &'static str, title: &'static str, default: &'static str) -> SettingSpec {
-    SettingSpec::fixed_text(id, title, default, groups::LOOK)
+    SettingSpec::text(id, title, default, groups::LOOK)
         .with_extra(&PAGE)
-        .described("home.setting.page.help")
+        .description("home.setting.page.help")
         .advanced()
 }
 
@@ -115,7 +115,7 @@ static SETTINGS: [SettingSpec; 16] = [
     page("home.page-6", "home.setting.page-6", DEFAULTS[5]),
     page("home.page-7", "home.setting.page-7", DEFAULTS[6]),
     page("home.page-8", "home.setting.page-8", DEFAULTS[7]),
-    SettingSpec::fixed_number(
+    SettingSpec::number(
         COLUMNS.static_str(),
         "home.setting.columns",
         2,
@@ -124,8 +124,8 @@ static SETTINGS: [SettingSpec; 16] = [
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.columns.help"),
-    SettingSpec::fixed_number(
+    .description("home.setting.columns.help"),
+    SettingSpec::number(
         ROWS.static_str(),
         "home.setting.rows",
         0,
@@ -134,56 +134,56 @@ static SETTINGS: [SettingSpec; 16] = [
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.rows.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.rows.help"),
+    SettingSpec::switch(
         crate::blocks::TOOL_LABELS.static_str(),
         "home.setting.tool-labels",
         true,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.tool-labels.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.tool-labels.help"),
+    SettingSpec::switch(
         crate::blocks::FOCUS_AT_ONCE.static_str(),
         "home.setting.focus-at-once",
         false,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.focus-at-once.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.focus-at-once.help"),
+    SettingSpec::switch(
         STATUS_BAR.static_str(),
         "home.setting.status-bar",
         true,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.status-bar.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.status-bar.help"),
+    SettingSpec::switch(
         FOOTER_PENCIL.static_str(),
         "home.setting.footer-pencil",
         true,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.footer-pencil.help"),
-    SettingSpec::fixed_switch(
+    .description("home.setting.footer-pencil.help"),
+    SettingSpec::switch(
         FOOTER_DOTS.static_str(),
         "home.setting.footer-dots",
         true,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)
-    .described("home.setting.footer-dots.help"),
-    SettingSpec::fixed(
-        FOOTER_ITEMS.static_str(),
+    .description("home.setting.footer-dots.help"),
+    SettingSpec::new(
+        paperpaw_sdk::Id::new_static(FOOTER_ITEMS.static_str()),
         "home.setting.footer-items",
         SettingKind::List,
         SettingValue::Text(Cow::Borrowed("")),
         groups::LOOK,
     )
     .with_extra(&ITEMS)
-    .described("home.setting.footer-items.help"),
+    .description("home.setting.footer-items.help"),
 ];
 
 /// The pages as a place of widgets in a grid.

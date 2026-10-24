@@ -127,6 +127,7 @@ impl Harness {
                     "x",
                     SettingKind::Int { min: 0, max: 400 },
                     SettingValue::Int(value),
+                    paperpaw_sdk::builtin::groups::OTHER,
                 ))
                 .unwrap();
         }

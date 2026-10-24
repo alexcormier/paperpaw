@@ -746,14 +746,14 @@ static ACCOUNT: paperpaw_sdk::SettingExtra =
 
 /// The account, whether books sync by themselves, and the server.
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_text(USER.static_str(), "kosync.setting.user", "", GROUP)
+    SettingSpec::text(USER.static_str(), "kosync.setting.user", "", GROUP)
         .with_extra(&ACCOUNT)
         .kept_on_reset()
-        .described("kosync.setting.user.help"),
-    SettingSpec::fixed_switch(AUTO.static_str(), "kosync.setting.auto", true, GROUP)
-        .described("kosync.setting.auto.help"),
+        .description("kosync.setting.user.help"),
+    SettingSpec::switch(AUTO.static_str(), "kosync.setting.auto", true, GROUP)
+        .description("kosync.setting.auto.help"),
     // Set on the account screen too, which tells that it signs out.
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         SERVER.static_str(),
         "kosync.setting.server",
         DEFAULT_SERVER,
@@ -762,7 +762,7 @@ static SETTINGS: [SettingSpec; 3] = [
     .with_extra(&ACCOUNT)
     .kept_on_reset()
     .advanced()
-    .described("kosync.setting.server.help"),
+    .description("kosync.setting.server.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

@@ -248,15 +248,15 @@ pub fn frame_setting(widget: &Id, default: Frame) -> SettingSpec {
         FRAMES,
         default.value(),
     )
-    .described("core.setting.frame.help")
+    .description("core.setting.frame.help")
 }
 
 /// [`frame_setting`] kept in the program ([`SettingSpec::fixed`]), for a
 /// `static` list of the widget's settings: `id` must be
 /// `<widget>.frame`.
 pub const fn frame_spec(id: &'static str, widget: Id, default: Frame) -> SettingSpec {
-    SettingSpec::fixed_choice(id, "core.setting.frame", FRAMES, default.value(), widget)
-        .described("core.setting.frame.help")
+    SettingSpec::choice(id, "core.setting.frame", FRAMES, default.value(), widget)
+        .description("core.setting.frame.help")
 }
 
 /// The setting of how far `widget`'s content keeps from its frame,
@@ -270,20 +270,20 @@ pub fn padding_setting(widget: &Id, default: Padding) -> SettingSpec {
         PADDINGS,
         default.value(),
     )
-    .described("core.setting.padding.help")
+    .description("core.setting.padding.help")
 }
 
 /// [`padding_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
 /// must be `<widget>.padding`.
 pub const fn padding_spec(id: &'static str, widget: Id, default: Padding) -> SettingSpec {
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         id,
         "core.setting.padding",
         PADDINGS,
         default.value(),
         widget,
     )
-    .described("core.setting.padding.help")
+    .description("core.setting.padding.help")
 }
 
 /// How far `widget`'s content keeps from its frame, by its
@@ -295,8 +295,8 @@ pub fn padding(env: &Env<'_>, widget: &str) -> Padding {
 /// [`size_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
 /// must be `<widget>.size`.
 pub const fn size_spec(id: &'static str, widget: Id, default: TextSize, fit: bool) -> SettingSpec {
-    SettingSpec::fixed_choice(id, "core.setting.size", sizes(fit), default.value(), widget)
-        .described("core.setting.size.help")
+    SettingSpec::choice(id, "core.setting.size", sizes(fit), default.value(), widget)
+        .description("core.setting.size.help")
 }
 
 /// [`part_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
@@ -307,7 +307,7 @@ pub const fn part_spec(
     title: &'static str,
     default: bool,
 ) -> SettingSpec {
-    SettingSpec::fixed_switch(id, title, default, widget).described("core.setting.part.help")
+    SettingSpec::switch(id, title, default, widget).description("core.setting.part.help")
 }
 
 /// What `widget` is drawn in, by its [`frame_setting`]; none without one.
@@ -349,7 +349,7 @@ pub fn size_setting(widget: &Id, default: TextSize, fit: bool) -> SettingSpec {
         sizes(fit),
         default.value(),
     )
-    .described("core.setting.size.help")
+    .description("core.setting.size.help")
 }
 
 /// How large `widget`'s text is, by its [`size_setting`]; medium without
@@ -366,14 +366,16 @@ pub fn part_setting(
     title: impl Into<Cow<'static, str>>,
     default: bool,
 ) -> SettingSpec {
-    SettingSpec::new(
+    let mut spec = SettingSpec::new(
         setting_id(widget, part),
-        title,
+        "",
         SettingKind::Bool,
         SettingValue::Bool(default),
+        widget.clone(),
     )
-    .group(widget.clone())
-    .described("core.setting.part.help")
+    .description("core.setting.part.help");
+    spec.title = title.into();
+    spec
 }
 
 /// Whether `widget` shows `part` ([`part_setting`]).
@@ -390,13 +392,15 @@ pub fn choice_setting(
     values: &'static [&'static str],
     default: &'static str,
 ) -> SettingSpec {
-    SettingSpec::new(
+    let mut spec = SettingSpec::new(
         setting_id(widget, key),
-        title,
+        "",
         SettingKind::Choice(Choices::Fixed(values)),
         SettingValue::Text(Cow::Borrowed(default)),
-    )
-    .group(widget.clone())
+        widget.clone(),
+    );
+    spec.title = title.into();
+    spec
 }
 
 /// `widget`'s place inside its frame in `area` and the colours there,

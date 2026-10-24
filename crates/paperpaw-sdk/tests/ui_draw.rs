@@ -1232,10 +1232,10 @@ fn setting_titles_are_never_cut_for_their_control() {
     const NUMBER: &str = "Offline below (%)";
     const SWITCH: &str = "Pictures in night mode too";
     let specs = [
-        SettingSpec::fixed_number("t.long", NUMBER, 0, 100, 20, groups::OTHER),
-        SettingSpec::fixed_switch("t.switch", SWITCH, false, groups::OTHER),
+        SettingSpec::number("t.long", NUMBER, 0, 100, 20, groups::OTHER),
+        SettingSpec::switch("t.switch", SWITCH, false, groups::OTHER),
     ];
-    let short = SettingSpec::fixed_number("t.short", "Size", 0, 100, 20, groups::OTHER);
+    let short = SettingSpec::number("t.short", "Size", 0, 100, 20, groups::OTHER);
     for device in [Device::TOUCH, Device::BUTTONS] {
         let h = Harness::new(device);
         let env = h.env();
@@ -1290,7 +1290,7 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
     use paperpaw_sdk::{Choices, SettingSpec, SettingValue};
     const OPTIONS: [&str; 2] = ["Off", "Only while the device is charging"];
     let mut h = Harness::new(Device::TOUCH);
-    let spec = SettingSpec::fixed_choice("t.when", "Sync", &OPTIONS, "Off", groups::OTHER);
+    let spec = SettingSpec::choice("t.when", "Sync", &OPTIONS, "Off", groups::OTHER);
     assert!(matches!(
         spec.kind,
         paperpaw_sdk::SettingKind::Choice(Choices::Fixed(_))
@@ -1321,7 +1321,7 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
     // On and off shown as a value (a switch with an editor of its own).
     static EDITED: paperpaw_sdk::SettingExtra =
         paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::Id::new_static("t.editor"));
-    let spec = SettingSpec::fixed_switch("t.on", "Sync", false, groups::OTHER).with_extra(&EDITED);
+    let spec = SettingSpec::switch("t.on", "Sync", false, groups::OTHER).with_extra(&EDITED);
     h.settings.define(spec.clone()).unwrap();
     // At every width, where one of them fits beside the title and the
     // other not as well.
@@ -1386,7 +1386,7 @@ fn a_switch_without_a_note_is_measured_as_drawn() {
         "Pictures in night",
         "Pictures in night mode",
     ] {
-        let spec = SettingSpec::fixed_switch("t.switch", title, false, groups::OTHER);
+        let spec = SettingSpec::switch("t.switch", title, false, groups::OTHER);
         assert!(spec.description.is_none());
         let lines = ui::row_lines(&env, &style, &spec, 480, "", row, true);
         let rect = Rect::new(0, 100, 480, lines.height);

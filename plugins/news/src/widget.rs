@@ -49,14 +49,14 @@ static SETTINGS: [SettingSpec; 9] = [
         false,
     ),
     widgets::align_spec("news.widget.headlines.align", HEADLINES, Align::Left),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "news.widget.headlines.count",
         "news.setting.count",
         &COUNTS,
         COUNTS[2],
         HEADLINES,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "news.widget.headlines.lines",
         "news.setting.lines",
         &LINES,

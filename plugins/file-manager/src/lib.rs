@@ -81,14 +81,14 @@ enum Focus {
 pub struct FileManager;
 
 /// Whether hidden files show.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::switch(
     HIDDEN.static_str(),
     "file-manager.setting.hidden",
     false,
     groups::SYSTEM,
 )
 .advanced()
-.described("file-manager.setting.hidden.help")];
+.description("file-manager.setting.hidden.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [

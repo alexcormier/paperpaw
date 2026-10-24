@@ -391,6 +391,7 @@ pub fn add_role(
             title,
             SettingKind::Choice(Choices::Fixed(options)),
             value,
+            crate::builtin::groups::OTHER,
         ))
     };
     let specs = [
@@ -423,28 +424,33 @@ pub fn add_role(
             "core.mark.thickness",
             SettingKind::Int { min: 1, max: 20 },
             SettingValue::Int(default_thickness(default)),
-        )
-        .unit("core.unit.tenth-mm"),
+            crate::builtin::groups::OTHER,
+        ),
         SettingSpec::new(
             id(ASPECTS[5])?,
             "core.mark.frame",
             SettingKind::Bool,
             SettingValue::Bool(default.frame),
+            crate::builtin::groups::OTHER,
         ),
         SettingSpec::new(
             id(ASPECTS[6])?,
             "core.mark.struck",
             SettingKind::Bool,
             SettingValue::Bool(default.struck),
+            crate::builtin::groups::OTHER,
         ),
     ];
-    for (spec, aspect) in specs.into_iter().zip(ASPECTS) {
-        let help = format!("core.mark.{aspect}.help");
-        r.add_setting(
-            spec.group(groups::MARKS)
-                .section(title.clone())
-                .description(help),
-        )?;
+    for (mut spec, aspect) in specs.into_iter().zip(ASPECTS) {
+        // A role from data: its section, its name, is known only now.
+        let mut extra = SettingExtra::new();
+        extra.section = Some(title.clone());
+        if aspect == "thickness" {
+            extra.unit = Some(Cow::Borrowed("core.unit.tenth-mm"));
+        }
+        spec.group = groups::MARKS;
+        spec.description = Some(Cow::Owned(format!("core.mark.{aspect}.help")));
+        r.add_setting(spec.with_owned_extra(extra))?;
     }
     Ok(())
 }
@@ -458,7 +464,15 @@ pub const fn fixed_role(
     thickness: &'static SettingExtra,
     default: Decoration,
 ) -> [SettingSpec; 7] {
-    let choice = SettingSpec::fixed;
+    const fn choice(
+        id: &'static str,
+        title: &'static str,
+        kind: SettingKind,
+        default: SettingValue,
+        group: Id,
+    ) -> SettingSpec {
+        SettingSpec::new(Id::new_static(id), title, kind, default, group)
+    }
     let tones = SettingKind::Choice(Choices::Fixed(&TONES));
     let inks = SettingKind::Choice(Choices::Fixed(&INKS));
     let lines = SettingKind::Choice(Choices::Fixed(&LINES));
@@ -471,7 +485,7 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(section)
-        .described("core.mark.background.help"),
+        .description("core.mark.background.help"),
         choice(
             ids[1],
             "core.mark.ink",
@@ -480,7 +494,7 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(section)
-        .described("core.mark.ink.help"),
+        .description("core.mark.ink.help"),
         choice(
             ids[2],
             "core.mark.line",
@@ -489,7 +503,7 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(section)
-        .described("core.mark.line.help"),
+        .description("core.mark.line.help"),
         choice(
             ids[3],
             "core.mark.line-tone",
@@ -498,8 +512,8 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(section)
-        .described("core.mark.line-tone.help"),
-        SettingSpec::fixed_number(
+        .description("core.mark.line-tone.help"),
+        SettingSpec::number(
             ids[4],
             "core.mark.thickness",
             1,
@@ -508,13 +522,13 @@ pub const fn fixed_role(
             groups::MARKS,
         )
         .with_extra(thickness)
-        .described("core.mark.thickness.help"),
-        SettingSpec::fixed_switch(ids[5], "core.mark.frame", default.frame, groups::MARKS)
+        .description("core.mark.thickness.help"),
+        SettingSpec::switch(ids[5], "core.mark.frame", default.frame, groups::MARKS)
             .with_extra(section)
-            .described("core.mark.frame.help"),
-        SettingSpec::fixed_switch(ids[6], "core.mark.struck", default.struck, groups::MARKS)
+            .description("core.mark.frame.help"),
+        SettingSpec::switch(ids[6], "core.mark.struck", default.struck, groups::MARKS)
             .with_extra(section)
-            .described("core.mark.struck.help"),
+            .description("core.mark.struck.help"),
     ]
 }
 

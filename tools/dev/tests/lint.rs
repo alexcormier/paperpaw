@@ -148,13 +148,13 @@ fn a_data_plugin_found_wanting() {
 /// row's two lines.
 struct Wordy;
 
-static WORDY: [paperpaw_sdk::SettingSpec; 1] = [paperpaw_sdk::SettingSpec::fixed_switch(
+static WORDY: [paperpaw_sdk::SettingSpec; 1] = [paperpaw_sdk::SettingSpec::switch(
     "wordy.long",
     "Long",
     false,
     paperpaw_sdk::builtin::groups::SYSTEM,
 )
-.described("wordy.long.help")];
+.description("wordy.long.help")];
 
 impl paperpaw_sdk::Plugin for Wordy {
     fn manifest(&self) -> paperpaw_sdk::Manifest {

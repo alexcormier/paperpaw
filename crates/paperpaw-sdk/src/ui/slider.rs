@@ -628,7 +628,7 @@ impl SliderDrag {
 mod tests {
     use super::*;
     use crate::{Point, PointerTool};
-    use alloc::borrow::Cow;
+
     use paperpaw_graphics::Framebuffer;
     use paperpaw_platform::PixelFormat;
 
@@ -721,24 +721,25 @@ mod tests {
 
     #[test]
     fn settings_give_their_range_and_step() {
+        static STEP: crate::SettingExtra = crate::SettingExtra::new().step(5);
+        static SLIDER: crate::SettingExtra = crate::SettingExtra::new().step(5).slider();
+        static ON_SLIDER: crate::SettingExtra = crate::SettingExtra::new().slider();
         let spec = crate::SettingSpec::number(
-            &crate::setting::Setting::new("a.spacing"),
+            "a.spacing",
             "a.spacing",
             100,
             250,
             135,
+            crate::builtin::groups::OTHER,
         )
-        .step(5);
+        .with_extra(&STEP);
         assert_eq!(Slider::of(&spec), Some(Slider::new(100, 250).step(5)));
         assert!(!marked(&spec));
-        assert!(marked(&spec.clone().slider()));
-        let switch = crate::SettingSpec::switch(
-            &crate::setting::Setting::new("a.on"),
-            Cow::Borrowed("a.on"),
-            true,
-        );
+        assert!(marked(&spec.clone().with_extra(&SLIDER)));
+        let switch =
+            crate::SettingSpec::switch("a.on", "a.on", true, crate::builtin::groups::OTHER);
         assert_eq!(Slider::of(&switch), None);
-        assert!(!marked(&switch.slider()));
+        assert!(!marked(&switch.with_extra(&ON_SLIDER)));
     }
 
     #[test]

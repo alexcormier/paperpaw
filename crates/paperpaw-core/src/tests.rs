@@ -131,6 +131,7 @@ impl Plugin for TestPlugin {
             "test.level",
             SettingKind::Int { min: 1, max: 5 },
             SettingValue::Int(2),
+            paperpaw_sdk::builtin::groups::OTHER,
         ))?;
         if let Some(keymap) = self.keymap {
             r.add_keymap(Cow::Borrowed(keymap))?;

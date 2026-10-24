@@ -76,7 +76,7 @@ fn file() -> String {
 
 /// The list's settings, kept in the program.
 static SETTINGS: [SettingSpec; 8] = [
-    SettingSpec::fixed_number(
+    SettingSpec::number(
         "widgets.todo.count",
         "widgets.todo.setting.count",
         1,
@@ -84,23 +84,23 @@ static SETTINGS: [SettingSpec; 8] = [
         5,
         ID,
     )
-    .described("widgets.todo.count.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.todo.count.help"),
+    SettingSpec::choice(
         "widgets.todo.done",
         "widgets.todo.setting.done",
         &DONE,
         DONE[0],
         ID,
     )
-    .described("widgets.todo.done.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.todo.done.help"),
+    SettingSpec::choice(
         "widgets.todo.box",
         "widgets.todo.setting.box",
         &BOXES,
         BOXES[0],
         ID,
     )
-    .described("widgets.todo.box.help"),
+    .description("widgets.todo.box.help"),
     widgets::part_spec(
         "widgets.todo.caption",
         ID,

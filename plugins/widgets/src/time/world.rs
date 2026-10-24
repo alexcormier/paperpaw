@@ -71,38 +71,38 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.world-clock.align", ID, Align::Left),
     widgets::frame_spec("widgets.world-clock.frame", ID, Frame::None),
     widgets::padding_spec("widgets.world-clock.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.world-clock.place-1",
         "widgets.setting.place-1",
         &ZONES,
         "core.tz.new-york",
         ID,
     )
-    .described("widgets.world-clock.place.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.world-clock.place.help"),
+    SettingSpec::choice(
         "widgets.world-clock.place-2",
         "widgets.setting.place-2",
         &ZONES_OR_NONE,
         "core.tz.tokyo",
         ID,
     )
-    .described("widgets.world-clock.place.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.world-clock.place.help"),
+    SettingSpec::choice(
         "widgets.world-clock.place-3",
         "widgets.setting.place-3",
         &ZONES_OR_NONE,
         NONE,
         ID,
     )
-    .described("widgets.world-clock.place.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.world-clock.place.help"),
+    SettingSpec::choice(
         "widgets.world-clock.layout",
         "widgets.setting.layout",
         &LAYOUTS,
         LAYOUTS[0],
         ID,
     )
-    .described("widgets.world-clock.layout.help"),
+    .description("widgets.world-clock.layout.help"),
     widgets::part_spec(
         "widgets.world-clock.here",
         ID,

@@ -42,22 +42,22 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::padding_spec("stats.widget.goal.padding", RING, Padding::Auto),
     widgets::size_spec("stats.widget.goal.size", RING, TextSize::Fit, true),
     widgets::align_spec("stats.widget.goal.align", RING, Align::Center),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "stats.widget.goal.style",
         "stats.setting.ring",
         &STYLES,
         STYLES[0],
         RING,
     )
-    .described("stats.setting.ring.help"),
-    SettingSpec::fixed_choice(
+    .description("stats.setting.ring.help"),
+    SettingSpec::choice(
         "stats.widget.goal.line",
         "stats.setting.line",
         &LINES,
         LINES[1],
         RING,
     )
-    .described("stats.setting.line.help"),
+    .description("stats.setting.line.help"),
     widgets::part_spec(
         "stats.widget.goal.caption",
         RING,
@@ -71,7 +71,7 @@ static SETTINGS: [SettingSpec; 9] = [
         "stats.part.streak-left",
         true,
     )
-    .described("stats.part.streak-left.help"),
+    .description("stats.part.streak-left.help"),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {

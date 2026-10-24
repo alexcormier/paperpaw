@@ -54,14 +54,14 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("widgets.next.frame", ID, Frame::None),
     widgets::padding_spec("widgets.next.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.next.size", ID, TextSize::Medium, false),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.next.pick",
         "widgets.books.setting.pick",
         &PICKS,
         PICKS[0],
         ID,
     )
-    .described("widgets.books.setting.pick.help"),
+    .description("widgets.books.setting.pick.help"),
     widgets::part_spec(
         "widgets.next.caption",
         ID,

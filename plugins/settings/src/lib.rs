@@ -90,13 +90,13 @@ const FOCUS: &str = paperpaw_sdk::builtin::params::FOCUS;
 pub struct SettingsPlugin;
 
 /// Whether advanced settings show.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::switch(
     ADVANCED.static_str(),
     "settings.advanced",
     false,
     groups::SYSTEM,
 )
-.described("settings.advanced.help")];
+.description("settings.advanced.help")];
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [

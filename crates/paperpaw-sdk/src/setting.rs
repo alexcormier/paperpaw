@@ -117,7 +117,7 @@ impl<T: SettingType> Setting<T> {
     }
 
     /// The id as text kept in the program, for a spec kept there too
-    /// (e.g. `SettingSpec::fixed_switch(SHOW.static_str(), …)`, see
+    /// (e.g. `SettingSpec::switch(SHOW.static_str(), …)`, see
     /// [`SettingSpec::fixed`](crate::SettingSpec::fixed)). Takes the
     /// setting, so it can be used in `const` and `static` items.
     pub const fn static_str(self) -> &'static str {
@@ -206,26 +206,29 @@ mod tests {
         let mut settings = Settings::new();
         settings
             .define(SettingSpec::new(
-                ON,
+                Id::from(ON),
                 "on",
                 SettingKind::Bool,
                 ON.value(true),
+                crate::builtin::groups::OTHER,
             ))
             .unwrap();
         settings
             .define(SettingSpec::new(
-                SIZE,
+                Id::from(SIZE),
                 "size",
                 SettingKind::Int { min: 1, max: 20 },
                 SIZE.value(9),
+                crate::builtin::groups::OTHER,
             ))
             .unwrap();
         settings
             .define(SettingSpec::new(
-                THEME,
+                Id::from(THEME),
                 "theme",
                 SettingKind::Text,
                 THEME.value(Cow::Borrowed("light")),
+                crate::builtin::groups::OTHER,
             ))
             .unwrap();
         assert!(settings.read(&ON));

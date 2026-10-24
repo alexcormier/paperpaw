@@ -158,8 +158,8 @@ impl Escape {
 /// The switch, with the controls.
 pub(crate) static SETTINGS: [SettingSpec; 1] =
     [
-        SettingSpec::fixed_switch(LOCKED.static_str(), "lock.touch", false, groups::CONTROLS)
-            .described("lock.touch.help"),
+        SettingSpec::switch(LOCKED.static_str(), "lock.touch", false, groups::CONTROLS)
+            .description("lock.touch.help"),
     ];
 
 /// While touch is locked, the power button held unlocks it, and the home

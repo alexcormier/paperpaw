@@ -40,37 +40,23 @@ fn setting(id: &'static str) -> SettingSpec {
         "",
         SettingKind::Bool,
         SettingValue::Bool(false),
+        paperpaw_sdk::builtin::groups::OTHER,
     )
 }
 
 #[test]
 fn settings_kept_in_the_program_are_checked_like_others() {
     static OWN: [SettingSpec; 2] = [
-        SettingSpec::fixed_switch("demo.a", "", false, groups::OTHER),
-        SettingSpec::fixed_switch("demo.b", "", false, groups::OTHER),
+        SettingSpec::switch("demo.a", "", false, groups::OTHER),
+        SettingSpec::switch("demo.b", "", false, groups::OTHER),
     ];
-    static FOREIGN: [SettingSpec; 1] = [SettingSpec::fixed_switch(
-        "other.a",
-        "",
-        false,
-        groups::OTHER,
-    )];
+    static FOREIGN: [SettingSpec; 1] = [SettingSpec::switch("other.a", "", false, groups::OTHER)];
     static TWICE: [SettingSpec; 2] = [
-        SettingSpec::fixed_switch("demo.c", "", false, groups::OTHER),
-        SettingSpec::fixed_switch("demo.c", "", true, groups::OTHER),
+        SettingSpec::switch("demo.c", "", false, groups::OTHER),
+        SettingSpec::switch("demo.c", "", true, groups::OTHER),
     ];
-    static AGAIN: [SettingSpec; 1] = [SettingSpec::fixed_switch(
-        "demo.a",
-        "",
-        false,
-        groups::OTHER,
-    )];
-    static BUILT: [SettingSpec; 1] = [SettingSpec::fixed_switch(
-        "demo.built",
-        "",
-        false,
-        groups::OTHER,
-    )];
+    static AGAIN: [SettingSpec; 1] = [SettingSpec::switch("demo.a", "", false, groups::OTHER)];
+    static BUILT: [SettingSpec; 1] = [SettingSpec::switch("demo.built", "", false, groups::OTHER)];
     let mut r = registrar();
     r.add_settings(&OWN).unwrap();
     assert_eq!(

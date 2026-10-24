@@ -65,6 +65,12 @@ const LIGHT: Setting<i64> = Setting::new("test.light");
 
 struct Light;
 
+/// A percentage set by a slider, in steps of 5.
+static LIGHT_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(5)
+    .slider();
+
 impl Plugin for Light {
     fn manifest(&self) -> Manifest {
         Manifest::new(
@@ -78,10 +84,15 @@ impl Plugin for Light {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::number(&LIGHT, "test.light", 0, 100, 0)
-                .unit("core.unit.percent")
-                .step(5)
-                .slider(),
+            SettingSpec::number(
+                LIGHT.static_str(),
+                "test.light",
+                0,
+                100,
+                0,
+                paperpaw_sdk::builtin::groups::OTHER,
+            )
+            .with_extra(&LIGHT_EXTRA),
         )?;
         r.add_menu_entry(MenuEntry::new(menus::QUICK, LIGHT.into()).order(20))
     }

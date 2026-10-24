@@ -268,7 +268,13 @@ fn clock(unix_millis: i64, offset: Option<i32>) -> Harness {
         &settings::WEEK_START,
     ] {
         h.settings
-            .define(SettingSpec::text(setting, "x", ""))
+            .define(SettingSpec::new(
+                paperpaw_sdk::Id::from(setting),
+                "x",
+                paperpaw_sdk::SettingKind::Text,
+                paperpaw_sdk::SettingValue::Text("".into()),
+                paperpaw_sdk::builtin::groups::OTHER,
+            ))
             .unwrap();
     }
     for catalog in catalogs() {

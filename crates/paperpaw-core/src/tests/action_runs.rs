@@ -777,6 +777,7 @@ mod guarded_settings {
                     "on",
                     SettingKind::Bool,
                     SettingValue::Bool(true),
+                    paperpaw_sdk::builtin::groups::OTHER,
                 )
                 .guarded(),
             )?;

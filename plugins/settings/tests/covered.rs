@@ -117,15 +117,13 @@ impl Plugin for Probe {
             Box::new(|_, _| Box::new(Blank)),
         ))?;
         r.add_setting_group(SettingGroupSpec::new(GROUP, "probe.group"))?;
-        r.add_setting(
-            SettingSpec::new(
-                Id::new_static(SIZE),
-                SIZE,
-                SettingKind::Int { min: 1, max: 9 },
-                SettingValue::Int(5),
-            )
-            .group(GROUP),
-        )?;
+        r.add_setting(SettingSpec::new(
+            Id::new_static(SIZE),
+            SIZE,
+            SettingKind::Int { min: 1, max: 9 },
+            SettingValue::Int(5),
+            GROUP,
+        ))?;
         let made = self.0.clone();
         r.add_widget(
             WidgetSpec::new(PREVIEW, "probe.preview", move |_| {

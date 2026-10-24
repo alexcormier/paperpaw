@@ -254,7 +254,13 @@ impl Harness {
 
     fn define(&mut self, id: &str, kind: SettingKind, value: SettingValue) {
         self.settings
-            .define(SettingSpec::new(Id::parse(id).unwrap(), "x", kind, value))
+            .define(SettingSpec::new(
+                Id::parse(id).unwrap(),
+                "x",
+                kind,
+                value,
+                paperpaw_sdk::builtin::groups::OTHER,
+            ))
             .unwrap();
     }
 

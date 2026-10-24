@@ -57,20 +57,20 @@ const OFFERED: &str = "offered.txt";
 
 /// The update server's address, for developers and servers of one's own.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_text(
+    SettingSpec::text(
         online::SERVER.static_str(),
         "update.setting.server",
         online::DEFAULT_SERVER,
         groups::DEVELOPER,
     )
-    .described("update.setting.server.help"),
-    SettingSpec::fixed_switch(
+    .description("update.setting.server.help"),
+    SettingSpec::switch(
         online::BETAS.static_str(),
         "update.setting.betas",
         false,
         groups::SYSTEM,
     )
-    .described("update.setting.betas.help"),
+    .description("update.setting.betas.help"),
 ];
 
 /// `version` as the update's texts show it: a beta as `0.5.0 Beta 1`,

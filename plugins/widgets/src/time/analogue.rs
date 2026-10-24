@@ -44,38 +44,38 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.analogue-clock.align", ID, Align::Center),
     widgets::frame_spec("widgets.analogue-clock.frame", ID, Frame::None),
     widgets::padding_spec("widgets.analogue-clock.padding", ID, Padding::Auto),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "widgets.analogue-clock.face",
         "widgets.setting.face",
         &FACES,
         FACES[1],
         ID,
     )
-    .described("widgets.analogue-clock.face.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.analogue-clock.face.help"),
+    SettingSpec::choice(
         "widgets.analogue-clock.ring",
         "widgets.setting.ring",
         &RINGS,
         RINGS[1],
         ID,
     )
-    .described("widgets.analogue-clock.ring.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.analogue-clock.ring.help"),
+    SettingSpec::choice(
         "widgets.analogue-clock.hands",
         "widgets.setting.hands",
         &HANDS,
         HANDS[1],
         ID,
     )
-    .described("widgets.analogue-clock.hands.help"),
-    SettingSpec::fixed_choice(
+    .description("widgets.analogue-clock.hands.help"),
+    SettingSpec::choice(
         "widgets.analogue-clock.date",
         "widgets.setting.clock-date",
         &DATES,
         DATES[0],
         ID,
     )
-    .described("widgets.analogue-clock.date.help"),
+    .description("widgets.analogue-clock.date.help"),
     super::date_format_spec(
         "widgets.analogue-clock.date-format",
         ID,

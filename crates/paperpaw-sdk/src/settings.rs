@@ -7,7 +7,6 @@ use core::fmt;
 use crate::collections::VecMap;
 use crate::id::Id;
 use crate::plugin::RegisterError;
-use crate::setting::{Setting, Text};
 use specs::Specs;
 
 /// A setting's value.
@@ -186,7 +185,8 @@ pub struct SettingSpec {
     extra: Option<Extra>,
 }
 
-/// Where a spec's [`SettingExtra`] is: in the program, or on the heap.
+/// Where a spec's [`SettingExtra`] is: in the program, or on the heap
+/// for a setting made from data ([`SettingSpec::with_owned_extra`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Extra {
     Fixed(&'static SettingExtra),
@@ -297,7 +297,7 @@ impl SettingExtra {
     /// const GROUP: Id = Id::new_static("my.page");
     /// static PERCENT: SettingExtra = SettingExtra::new().unit("my.unit.percent").step(10);
     /// static SETTINGS: [SettingSpec; 1] = [
-    ///     SettingSpec::fixed_number("my.zoom", "my.zoom", 50, 200, 100, GROUP)
+    ///     SettingSpec::number("my.zoom", "my.zoom", 50, 200, 100, GROUP)
     ///         .with_extra(&PERCENT),
     /// ];
     /// ```
@@ -406,60 +406,45 @@ impl Default for SettingExtra {
 }
 
 impl SettingSpec {
-    /// A basic setting in the [`OTHER`](crate::builtin::groups::OTHER)
-    /// group; see the builder methods for the rest.
-    pub fn new(
-        id: impl Into<Id>,
-        title: impl Into<Cow<'static, str>>,
-        kind: SettingKind,
-        default: SettingValue,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            title: title.into(),
-            kind,
-            default,
-            group: crate::builtin::groups::OTHER,
-            level: Level::Basic,
-            description: None,
-            scoped: false,
-            guarded: false,
-            kept_on_reset: false,
-            extra: None,
-        }
-    }
-
-    /// A setting kept in the program rather than built at start: in a
-    /// `static` list registered with
-    /// [`Registrar::add_settings`](crate::Registrar::add_settings), it
+    /// A setting of `kind` with its `default`, called `title` (a
+    /// translation key), in `group`. Every builder of a spec is `const`, so
+    /// a plugin declares its settings as a `static` list registered with
+    /// [`Registrar::add_settings`](crate::Registrar::add_settings): it
     /// takes next to no memory (on small devices the list stays in flash).
-    /// Plugins with many settings, such as widgets with their looks, use
-    /// these. Its unit, editor and the like ([`SettingSpec::extra`]) are
-    /// given with [`SettingSpec::with_extra`], also kept in the program.
+    /// Its unit, section, editor and the like are a [`SettingExtra`], kept
+    /// in the program too ([`SettingSpec::with_extra`]).
     ///
     /// ```
-    /// use paperpaw_sdk::{Id, SettingSpec};
+    /// use paperpaw_sdk::{Id, SettingExtra, SettingSpec};
     /// const GROUP: Id = Id::new_static("my.clock");
-    /// static SETTINGS: [SettingSpec; 2] = [
-    ///     SettingSpec::fixed_switch("my.clock.date", "my.clock.date", true, GROUP),
-    ///     SettingSpec::fixed_choice(
+    /// static PERCENT: SettingExtra = SettingExtra::new().unit("my.unit.percent").step(10);
+    /// static SETTINGS: [SettingSpec; 3] = [
+    ///     SettingSpec::switch("my.clock.date", "my.clock.date", true, GROUP),
+    ///     SettingSpec::choice(
     ///         "my.clock.face",
     ///         "my.clock.face",
     ///         &["my.plain", "my.ticks"],
     ///         "my.ticks",
     ///         GROUP,
-    ///     ),
+    ///     )
+    ///     .description("my.clock.face.help"),
+    ///     SettingSpec::number("my.clock.zoom", "my.clock.zoom", 50, 200, 100, GROUP)
+    ///         .with_extra(&PERCENT),
     /// ];
     /// ```
-    pub const fn fixed(
-        id: &'static str,
+    ///
+    /// A spec whose id is known only at run time (one for each plugin, say)
+    /// is made with this, and registered with
+    /// [`Registrar::add_setting`](crate::Registrar::add_setting).
+    pub const fn new(
+        id: Id,
         title: &'static str,
         kind: SettingKind,
         default: SettingValue,
         group: Id,
     ) -> Self {
         Self {
-            id: Id::new_static(id),
+            id,
             title: Cow::Borrowed(title),
             kind,
             default,
@@ -473,15 +458,10 @@ impl SettingSpec {
         }
     }
 
-    /// A fixed switch ([`SettingSpec::fixed`]).
-    pub const fn fixed_switch(
-        id: &'static str,
-        title: &'static str,
-        default: bool,
-        group: Id,
-    ) -> Self {
-        Self::fixed(
-            id,
+    /// A switch, on or off ([`SettingSpec::new`]).
+    pub const fn switch(id: &'static str, title: &'static str, default: bool, group: Id) -> Self {
+        Self::new(
+            Id::new_static(id),
             title,
             SettingKind::Bool,
             SettingValue::Bool(default),
@@ -489,8 +469,8 @@ impl SettingSpec {
         )
     }
 
-    /// A fixed whole number from `min` to `max` ([`SettingSpec::fixed`]).
-    pub const fn fixed_number(
+    /// A whole number from `min` to `max` ([`SettingSpec::new`]).
+    pub const fn number(
         id: &'static str,
         title: &'static str,
         min: i64,
@@ -498,8 +478,8 @@ impl SettingSpec {
         default: i64,
         group: Id,
     ) -> Self {
-        Self::fixed(
-            id,
+        Self::new(
+            Id::new_static(id),
             title,
             SettingKind::Int { min, max },
             SettingValue::Int(default),
@@ -507,16 +487,17 @@ impl SettingSpec {
         )
     }
 
-    /// A fixed choice of `options` ([`SettingSpec::fixed`]).
-    pub const fn fixed_choice(
+    /// One of `options`, each the translation key of its name
+    /// ([`SettingSpec::new`]).
+    pub const fn choice(
         id: &'static str,
         title: &'static str,
         options: &'static [&'static str],
         default: &'static str,
         group: Id,
     ) -> Self {
-        Self::fixed(
-            id,
+        Self::new(
+            Id::new_static(id),
             title,
             SettingKind::Choice(Choices::Fixed(options)),
             SettingValue::Text(Cow::Borrowed(default)),
@@ -524,15 +505,15 @@ impl SettingSpec {
         )
     }
 
-    /// A fixed text, typed in ([`SettingSpec::fixed`]).
-    pub const fn fixed_text(
+    /// Text, typed in ([`SettingSpec::new`]).
+    pub const fn text(
         id: &'static str,
         title: &'static str,
         default: &'static str,
         group: Id,
     ) -> Self {
-        Self::fixed(
-            id,
+        Self::new(
+            Id::new_static(id),
             title,
             SettingKind::Text,
             SettingValue::Text(Cow::Borrowed(default)),
@@ -540,200 +521,49 @@ impl SettingSpec {
         )
     }
 
-    /// The same with a help text (for [`SettingSpec::fixed`] ones, which
-    /// cannot use [`description`](Self::description)).
-    pub const fn described(self, key: &'static str) -> Self {
-        let mut spec = self;
-        let old = spec.description.replace(Cow::Borrowed(key));
-        core::mem::forget(old);
-        spec
-    }
-
-    /// The same, shown only with advanced settings (for
-    /// [`SettingSpec::fixed`] ones).
-    pub const fn for_advanced(self) -> Self {
-        let mut spec = self;
-        spec.level = Level::Advanced;
-        spec
-    }
-
-    /// The same with `extra` (its unit, section and the like), kept in the
-    /// program too: for [`SettingSpec::fixed`] ones.
-    pub const fn with_extra(mut self, extra: &'static SettingExtra) -> Self {
-        core::mem::forget(self.extra.replace(Extra::Fixed(extra)));
-        self
-    }
-
-    /// Its unit, editor, step, slider, section and whether it is a secret
-    /// (the defaults for a setting that sets none of them).
-    /// The translation key of the part of its group it is shown in
-    /// ([`SettingExtra::section`], [`SettingExtra::section_of_plugin`]).
-    pub fn section_key(&self) -> Option<Cow<'static, str>> {
-        let extra = self.extra();
-        if extra.section_of_plugin {
-            let plugin = self.id.as_str().rsplit('.').next().unwrap_or_default();
-            return Some(Cow::Owned(alloc::format!("{plugin}.plugin.name")));
-        }
-        extra.section.clone()
-    }
-
-    pub fn extra(&self) -> &SettingExtra {
-        match &self.extra {
-            Some(Extra::Fixed(extra)) => extra,
-            Some(Extra::Owned(extra)) => extra,
-            None => &NO_EXTRA,
-        }
-    }
-
-    fn extra_mut(&mut self) -> &mut SettingExtra {
-        if let Some(Extra::Fixed(extra)) = self.extra {
-            self.extra = Some(Extra::Owned(Box::new(extra.clone())));
-        }
-        match self
-            .extra
-            .get_or_insert_with(|| Extra::Owned(Box::default()))
-        {
-            Extra::Owned(extra) => extra,
-            Extra::Fixed(_) => unreachable!("made owned above"),
-        }
-    }
-
-    /// A switch, on or off (see [`setting`](crate::setting)).
-    pub fn switch(
-        setting: &Setting<bool>,
-        title: impl Into<Cow<'static, str>>,
-        default: bool,
+    /// A language: the tag of one of the installed translations
+    /// ([`SettingSpec::new`]).
+    pub const fn language(
+        id: &'static str,
+        title: &'static str,
+        default: &'static str,
+        group: Id,
     ) -> Self {
         Self::new(
-            setting,
-            title,
-            SettingKind::Bool,
-            SettingValue::Bool(default),
-        )
-    }
-
-    /// A whole number from `min` to `max`.
-    pub fn number(
-        setting: &Setting<i64>,
-        title: impl Into<Cow<'static, str>>,
-        min: i64,
-        max: i64,
-        default: i64,
-    ) -> Self {
-        Self::new(
-            setting,
-            title,
-            SettingKind::Int { min, max },
-            SettingValue::Int(default),
-        )
-    }
-
-    /// One of `options`, each the translation key of its name.
-    pub fn choice(
-        setting: &Setting<Text>,
-        title: impl Into<Cow<'static, str>>,
-        options: Choices,
-        default: impl Into<Cow<'static, str>>,
-    ) -> Self {
-        Self::new(
-            setting,
-            title,
-            SettingKind::Choice(options),
-            SettingValue::Text(default.into()),
-        )
-    }
-
-    /// Text, typed in.
-    pub fn text(
-        setting: &Setting<Text>,
-        title: impl Into<Cow<'static, str>>,
-        default: impl Into<Cow<'static, str>>,
-    ) -> Self {
-        Self::new(
-            setting,
-            title,
-            SettingKind::Text,
-            SettingValue::Text(default.into()),
-        )
-    }
-
-    /// A language: the tag of one of the installed translations.
-    pub fn language(
-        setting: &Setting<Text>,
-        title: impl Into<Cow<'static, str>>,
-        default: impl Into<Cow<'static, str>>,
-    ) -> Self {
-        Self::new(
-            setting,
+            Id::new_static(id),
             title,
             SettingKind::Language,
-            SettingValue::Text(default.into()),
+            SettingValue::Text(Cow::Borrowed(default)),
+            group,
         )
     }
 
     /// Ids separated by commas, chosen on the setting's editor screen
-    /// ([`SettingKind::List`]).
-    pub fn list(
-        setting: &Setting<Text>,
-        title: impl Into<Cow<'static, str>>,
-        default: impl Into<Cow<'static, str>>,
+    /// ([`SettingKind::List`], [`SettingSpec::new`]).
+    pub const fn list(
+        id: &'static str,
+        title: &'static str,
+        default: &'static str,
+        group: Id,
     ) -> Self {
         Self::new(
-            setting,
+            Id::new_static(id),
             title,
             SettingKind::List,
-            SettingValue::Text(default.into()),
+            SettingValue::Text(Cow::Borrowed(default)),
+            group,
         )
     }
 
-    /// Puts the setting into a part of its group (see
-    /// [`SettingSpec::section`]).
-    pub fn section(mut self, key: impl Into<Cow<'static, str>>) -> Self {
-        self.extra_mut().section = Some(key.into());
+    /// With a help text, the translation key `key`.
+    pub const fn description(mut self, key: &'static str) -> Self {
+        core::mem::forget(self.description.replace(Cow::Borrowed(key)));
         self
     }
 
-    /// A choice keeping values its options lack (see
-    /// [`SettingExtra::keeps_unknown`]).
-    pub fn keeps_unknown(mut self) -> Self {
-        self.extra_mut().keeps_unknown = true;
-        self
-    }
-
-    /// Whether it takes `value`: one of its kind, or for a choice keeping
-    /// unknown values ([`SettingExtra::keeps_unknown`]) any word.
-    pub fn accepts(&self, value: &SettingValue) -> bool {
-        self.kind.accepts(value)
-            || (self.extra().keeps_unknown
-                && matches!((&self.kind, value),
-                    (SettingKind::Choice(_), SettingValue::Text(v)) if !v.is_empty()))
-    }
-
-    /// Parses a value as written in a configuration file, as
-    /// [`SettingSpec::accepts`] takes it.
-    pub fn parse(&self, text: &str) -> Option<SettingValue> {
-        let value = match self.kind.parse(text) {
-            Some(value) => value,
-            None => SettingValue::Text(Cow::Owned(String::from(text))),
-        };
-        self.accepts(&value).then_some(value)
-    }
-
-    /// A number set with a slider (see [`SettingExtra::slider`]).
-    pub fn slider(mut self) -> Self {
-        self.extra_mut().slider = true;
-        self
-    }
-
-    /// A secret, such as an API key (see [`SettingSpec::secret`]).
-    pub fn secret(mut self) -> Self {
-        self.extra_mut().secret = true;
-        self
-    }
-
-    /// How much one step (a `+` or `−`) changes a number.
-    pub fn step(mut self, step: i64) -> Self {
-        self.extra_mut().step = step.max(1);
+    /// Shown only with advanced settings.
+    pub const fn advanced(mut self) -> Self {
+        self.level = Level::Advanced;
         self
     }
 
@@ -759,44 +589,66 @@ impl SettingSpec {
         self
     }
 
+    /// With `extra`: its unit, section, editor, step and the like, kept in
+    /// the program too.
+    pub const fn with_extra(mut self, extra: &'static SettingExtra) -> Self {
+        core::mem::forget(self.extra.replace(Extra::Fixed(extra)));
+        self
+    }
+
+    /// With `extra` made at run time, for a setting made from data (a
+    /// data plugin's), whose section or unit only the data names. Settings
+    /// a plugin's code declares use [`SettingSpec::with_extra`], which
+    /// takes no memory.
+    pub fn with_owned_extra(mut self, extra: SettingExtra) -> Self {
+        self.extra = Some(Extra::Owned(Box::new(extra)));
+        self
+    }
+
+    /// The translation key of the part of its group it is shown in
+    /// ([`SettingExtra::section`], [`SettingExtra::section_of_plugin`]).
+    pub fn section_key(&self) -> Option<Cow<'static, str>> {
+        let extra = self.extra();
+        if extra.section_of_plugin {
+            let plugin = self.id.as_str().rsplit('.').next().unwrap_or_default();
+            return Some(Cow::Owned(alloc::format!("{plugin}.plugin.name")));
+        }
+        extra.section.clone()
+    }
+
+    /// Its unit, editor, step, slider, section and whether it is a secret
+    /// (the defaults for a setting that sets none of them).
+    pub fn extra(&self) -> &SettingExtra {
+        match &self.extra {
+            Some(Extra::Fixed(extra)) => extra,
+            Some(Extra::Owned(extra)) => extra,
+            None => &NO_EXTRA,
+        }
+    }
+
+    /// Whether it takes `value`: one of its kind, or for a choice keeping
+    /// unknown values ([`SettingExtra::keeps_unknown`]) any word.
+    pub fn accepts(&self, value: &SettingValue) -> bool {
+        self.kind.accepts(value)
+            || (self.extra().keeps_unknown
+                && matches!((&self.kind, value),
+                    (SettingKind::Choice(_), SettingValue::Text(v)) if !v.is_empty()))
+    }
+
+    /// Parses a value as written in a configuration file, as
+    /// [`SettingSpec::accepts`] takes it.
+    pub fn parse(&self, text: &str) -> Option<SettingValue> {
+        let value = match self.kind.parse(text) {
+            Some(value) => value,
+            None => SettingValue::Text(Cow::Owned(String::from(text))),
+        };
+        self.accepts(&value).then_some(value)
+    }
+
     /// Whether the resets of the settings pages leave it as it is: marked
     /// so, or a secret (a reset never removes a password).
     pub fn is_kept_on_reset(&self) -> bool {
         self.kept_on_reset || self.extra().secret
-    }
-
-    pub fn group(mut self, group: Id) -> Self {
-        self.group = group;
-        self
-    }
-
-    /// Shown only with advanced settings.
-    pub const fn advanced(mut self) -> Self {
-        self.level = Level::Advanced;
-        self
-    }
-
-    pub fn description(mut self, key: impl Into<Cow<'static, str>>) -> Self {
-        self.description = Some(key.into());
-        self
-    }
-
-    pub fn unit(mut self, key: impl Into<Cow<'static, str>>) -> Self {
-        self.extra_mut().unit = Some(key.into());
-        self
-    }
-
-    /// Edited on its own screen (see [`SettingExtra::editor`]).
-    pub fn editor(mut self, screen: Id) -> Self {
-        self.extra_mut().editor = Some(Editor::Screen(screen));
-        self
-    }
-
-    /// Edited on whatever screen fills slot `slot` (see
-    /// [`SettingExtra::editor_slot`]).
-    pub fn editor_slot(mut self, slot: Id) -> Self {
-        self.extra_mut().editor = Some(Editor::Slot(slot));
-        self
     }
 }
 

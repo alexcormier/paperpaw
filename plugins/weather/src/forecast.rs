@@ -54,26 +54,26 @@ static IN_DAYS: paperpaw_sdk::SettingExtra =
     paperpaw_sdk::SettingExtra::new().unit("weather.unit.days");
 static DAYS_SETTING: [SettingSpec; 1] =
     [
-        SettingSpec::fixed_number(DAYS.static_str(), "weather.setting.days", 3, 7, 5, ID)
+        SettingSpec::number(DAYS.static_str(), "weather.setting.days", 3, 7, 5, ID)
             .with_extra(&IN_DAYS),
     ];
 
 static SETTINGS: [SettingSpec; 11] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.forecast.start",
         "weather.setting.start",
         &STARTS,
         STARTS[0],
         ID,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.forecast.layout",
         "weather.setting.layout",
         &LAYOUTS,
         LAYOUTS[0],
         ID,
     ),
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         "weather.forecast.names",
         "weather.setting.names",
         &NAMES,

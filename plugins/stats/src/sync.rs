@@ -68,15 +68,15 @@ const ETAG: &str = "etag";
 /// The WebDAV folder and its user, both set on the sync page.
 static ON_PAGE: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(SCREEN);
 static SETTINGS: [paperpaw_sdk::SettingSpec; 2] = [
-    paperpaw_sdk::SettingSpec::fixed_text(URL.static_str(), "stats.setting.sync", "", crate::GROUP)
+    paperpaw_sdk::SettingSpec::text(URL.static_str(), "stats.setting.sync", "", crate::GROUP)
         .with_extra(&ON_PAGE)
         .kept_on_reset()
-        .described("stats.setting.sync.help"),
-    paperpaw_sdk::SettingSpec::fixed_text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
+        .description("stats.setting.sync.help"),
+    paperpaw_sdk::SettingSpec::text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
         .with_extra(&ON_PAGE)
         .kept_on_reset()
         .advanced()
-        .described("stats.sync.user.help"),
+        .description("stats.sync.user.help"),
 ];
 const USER_ENTERED: Event<Typed> = Event::new("stats.user-entered");
 const PASSWORD_ENTERED: Event<Typed> = Event::new("stats.password-entered");

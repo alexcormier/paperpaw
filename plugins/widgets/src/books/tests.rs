@@ -215,6 +215,7 @@ fn a_logo_picture_draws_from_memory() {
                 "x",
                 SettingKind::Text,
                 SettingValue::Text(Cow::Borrowed(logo)),
+                paperpaw_sdk::builtin::groups::OTHER,
             ))
             .unwrap();
         h.set(

@@ -122,15 +122,15 @@ static IN_AIDS: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().s
 
 /// Bold word beginnings, and words replaced.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_switch(
+    SettingSpec::switch(
         BOLD_BEGINNINGS.static_str(),
         "aids.setting.bold-beginnings",
         false,
         groups::READING,
     )
     .with_extra(&IN_AIDS)
-    .described("aids.setting.bold-beginnings.help"),
-    SettingSpec::fixed_text(
+    .description("aids.setting.bold-beginnings.help"),
+    SettingSpec::text(
         REPLACE.static_str(),
         "aids.setting.replace",
         "",
@@ -139,7 +139,7 @@ static SETTINGS: [SettingSpec; 2] = [
     .advanced()
     .with_extra(&IN_AIDS)
     .kept_on_reset()
-    .described("aids.setting.replace.help"),
+    .description("aids.setting.replace.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

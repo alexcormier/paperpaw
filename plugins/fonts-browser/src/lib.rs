@@ -37,13 +37,13 @@ const FONT_SCREEN: Id = Id::new_static("fonts-browser.font");
 pub const CATALOG: Setting<paperpaw_sdk::setting::Text> = Setting::new("fonts-browser.catalog");
 
 /// The font library's address, for developers and libraries of one's own.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     CATALOG.static_str(),
     "fonts-browser.setting.catalog",
     "https://paperpaw.org/api/v1/fonts.json",
     groups::DEVELOPER,
 )
-.described("fonts-browser.setting.catalog.help")];
+.description("fonts-browser.setting.catalog.help")];
 
 /// The fonts browser.
 #[derive(Debug, Default)]

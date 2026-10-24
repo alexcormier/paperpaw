@@ -40,21 +40,21 @@ pub struct X4;
 /// How quickly presses are answered; whether it sleeps lightly between
 /// button reads.
 static SETTINGS: [SettingSpec; 2] = [
-    SettingSpec::fixed_choice(
+    SettingSpec::choice(
         BUTTON_RESPONSE.static_str(),
         "x4.button-response",
         &[RESPONSE_NORMAL, RESPONSE_FASTER],
         RESPONSE_NORMAL,
         groups::CONTROLS,
     )
-    .described("x4.button-response.help"),
-    SettingSpec::fixed_switch(
+    .description("x4.button-response.help"),
+    SettingSpec::switch(
         LIGHT_SLEEP.static_str(),
         "x4.light-sleep",
         true,
         groups::DEVELOPER,
     )
-    .described("x4.light-sleep.help"),
+    .description("x4.light-sleep.help"),
 ];
 
 /// The X4 Pro's front light, set with sliders: how bright in single
@@ -69,7 +69,7 @@ static LIGHT_SETTINGS: [SettingSpec; 2] = {
         .step(5)
         .slider();
     [
-        SettingSpec::fixed_number(
+        SettingSpec::number(
             FRONTLIGHT.static_str(),
             "x4.frontlight",
             0,
@@ -78,8 +78,8 @@ static LIGHT_SETTINGS: [SettingSpec; 2] = {
             groups::DISPLAY,
         )
         .with_extra(&BRIGHTNESS)
-        .described("x4.frontlight.help"),
-        SettingSpec::fixed_number(
+        .description("x4.frontlight.help"),
+        SettingSpec::number(
             WARMTH.static_str(),
             "x4.warmth",
             0,
@@ -88,7 +88,7 @@ static LIGHT_SETTINGS: [SettingSpec; 2] = {
             groups::DISPLAY,
         )
         .with_extra(&PERCENT)
-        .described("x4.warmth.help"),
+        .description("x4.warmth.help"),
     ]
 };
 

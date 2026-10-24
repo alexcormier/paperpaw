@@ -596,16 +596,16 @@ pub struct Wallabag;
 /// The server and the account, set on the setup screen.
 static ON_SETUP: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(SCREEN);
 static SETTINGS: [SettingSpec; 3] = [
-    SettingSpec::fixed_text(SERVER.static_str(), "wallabag.server", "", groups::LIBRARY)
+    SettingSpec::text(SERVER.static_str(), "wallabag.server", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
         .kept_on_reset()
-        .described("wallabag.server.help"),
-    SettingSpec::fixed_text(USER.static_str(), "wallabag.user", "", groups::LIBRARY)
+        .description("wallabag.server.help"),
+    SettingSpec::text(USER.static_str(), "wallabag.user", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
         .kept_on_reset()
         .advanced()
-        .described("wallabag.user.help"),
-    SettingSpec::fixed_text(
+        .description("wallabag.user.help"),
+    SettingSpec::text(
         CLIENT.static_str(),
         "wallabag.client-id",
         "",
@@ -614,7 +614,7 @@ static SETTINGS: [SettingSpec; 3] = [
     .with_extra(&ON_SETUP)
     .kept_on_reset()
     .advanced()
-    .described("wallabag.client-id.help"),
+    .description("wallabag.client-id.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).

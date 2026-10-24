@@ -19,8 +19,8 @@ use common::{DEVICE, Harness};
 use paperpaw_core::Kernel;
 use paperpaw_core::sdk::builtin::CONFIG_FILE;
 use paperpaw_core::sdk::{
-    Choices, Command, Manifest, MemoryStorage, Plugin, RegisterError, Registrar, Setting,
-    SettingSpec, SettingValue, Text,
+    Command, Manifest, MemoryStorage, Plugin, RegisterError, Registrar, Setting, SettingSpec,
+    SettingValue, Text,
 };
 use paperpaw_platform::Instant;
 use proptest::prelude::*;
@@ -45,18 +45,59 @@ impl Plugin for Settings {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(SettingSpec::switch(&FLAG, "rt.flag", false))?;
-        r.add_setting(SettingSpec::number(&COUNT, "rt.count", MIN, MAX, 0))?;
-        r.add_setting(SettingSpec::choice(
-            &MODE,
-            "rt.mode",
-            Choices::Fixed(&MODES),
-            MODES[0],
+        r.add_setting(SettingSpec::switch(
+            FLAG.static_str(),
+            "rt.flag",
+            false,
+            paperpaw_sdk::builtin::groups::OTHER,
         ))?;
-        r.add_setting(SettingSpec::text(&NAME, "rt.name", "nobody"))?;
-        r.add_setting(SettingSpec::list(&LIST, "rt.list", ""))?;
-        r.add_setting(SettingSpec::number(&PAGE, "rt.page", 1, 100, 10).scoped())?;
-        r.add_setting(SettingSpec::text(&FACE, "rt.face", "plain").scoped())?;
+        r.add_setting(SettingSpec::number(
+            COUNT.static_str(),
+            "rt.count",
+            MIN,
+            MAX,
+            0,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))?;
+        r.add_setting(SettingSpec::choice(
+            MODE.static_str(),
+            "rt.mode",
+            &MODES,
+            MODES[0],
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))?;
+        r.add_setting(SettingSpec::text(
+            NAME.static_str(),
+            "rt.name",
+            "nobody",
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))?;
+        r.add_setting(SettingSpec::list(
+            LIST.static_str(),
+            "rt.list",
+            "",
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))?;
+        r.add_setting(
+            SettingSpec::number(
+                PAGE.static_str(),
+                "rt.page",
+                1,
+                100,
+                10,
+                paperpaw_sdk::builtin::groups::OTHER,
+            )
+            .scoped(),
+        )?;
+        r.add_setting(
+            SettingSpec::text(
+                FACE.static_str(),
+                "rt.face",
+                "plain",
+                paperpaw_sdk::builtin::groups::OTHER,
+            )
+            .scoped(),
+        )?;
         Ok(())
     }
 }

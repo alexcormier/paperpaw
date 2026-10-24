@@ -85,8 +85,18 @@ impl Plugin for Probe {
             MADE.fetch_add(1, Ordering::SeqCst);
             Box::new(ProbeWidget)
         }))?;
-        r.add_setting(SettingSpec::switch(&OTHER, "probe.other", false))?;
-        r.add_setting(SettingSpec::switch(&OWN, "probe.own", false))?;
+        r.add_setting(SettingSpec::switch(
+            OTHER.static_str(),
+            "probe.other",
+            false,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))?;
+        r.add_setting(SettingSpec::switch(
+            OWN.static_str(),
+            "probe.own",
+            false,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))?;
         // Something to open, listed with the tools.
         r.add_action(ActionSpec::new(APP, "probe.app").handler(|_, _, _| {}))?;
         r.add_menu_entry(MenuEntry::new(menus::APPS, APP))?;
