@@ -15,6 +15,12 @@ change the plugin SDK.
 - Touch lock: the way out it explains (tap twice, hold the second tap)
   unlocks; it wanted a third touch held after two taps, which still
   works too.
+- Choosing another Wi-Fi network while joined to one works on the X4s:
+  they leave the first network before joining, instead of failing with
+  "did not answer". Networks are joined with the security the scan found
+  (WPA and mixed WPA/WPA2 ones too), and a password that was not taken
+  for another reason than being wrong is offered again, not typed anew.
+
 ### Added
 
 - The plugin store has five more groups, so every kind of plugin has a
