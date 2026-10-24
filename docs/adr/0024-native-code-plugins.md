@@ -258,9 +258,12 @@ What the spike left open, as the implementation found it (2026-10-20):
   same in two workspaces built alike, but any difference in cargo's
   profile changes it (`debug = 2` against `"line-tables-only"`,
   `panic = "abort"`), so a plugin built apart did not find a service by
-  it. Services are now published with their type's name
-  (`Registrar::publish`) and found by it where the `TypeId` differs; a
-  service whose type changes takes a new id. A test loads a plugin built
+  it. Services were then published with their type's name
+  (`Registrar::publish`) and found by it where the `TypeId` differs. A
+  service now has a contract instead: its type names a key
+  (`service_type!`), the plugin provides it with `Registrar::provide`,
+  and others find it with `Services::get` by id, type and version; a
+  service whose type changes takes a new key. A test loads a plugin built
   in a workspace of its own into a kernel and finds its service so
   (`crates/paperpaw-core/tests/native_plugin.rs`).
 - **On the devices**: several plugins at once (packed one after the

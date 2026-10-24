@@ -50,11 +50,12 @@ impl Link {
         };
         let socket = net.socket(self.socket);
         let mut moved = false;
-        while session.wants_input() && socket.can_recv() {
+        while session.room() > 0 && socket.can_recv() {
             let got = socket
                 .recv(|data| {
-                    session.feed(data);
-                    (data.len(), data.len())
+                    let n = data.len().min(session.room());
+                    session.feed(&data[..n]);
+                    (n, n)
                 })
                 .map_err(|_| "connection lost")?;
             moved |= got > 0;

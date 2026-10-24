@@ -27,7 +27,9 @@ pub struct Catalog {
     plural: PluralRule,
     /// Decoded values that contained escape sequences; the meta values
     /// first (`meta_len` bytes), which stay when the catalog is unloaded.
-    escaped: String,
+    /// Boxed, as it changes only when the catalog is scanned: two words
+    /// rather than three, in each catalog of every plugin.
+    escaped: Box<str>,
     meta_len: u32,
     /// The messages, sorted by key; empty while unloaded. Each is where
     /// its line's key starts in the source or, with [`OTHER`] set, the
@@ -36,6 +38,10 @@ pub struct Catalog {
     /// Messages whose line does not give them plainly.
     others: Box<[(Span, Span)]>,
     loaded: bool,
+    /// The index holds wide entries, each in two of its places (see
+    /// [`Index`]); kept here, beside the other small fields, rather than
+    /// in the index, where it would take a word.
+    wide: bool,
 }
 
 /// A byte range in the source, or in `escaped` if the top bit is set.
@@ -50,25 +56,18 @@ const ESCAPED: u32 = 1 << 31;
 const OTHER: u32 = 1 << 31;
 
 /// The index of a catalog: its entries (see [`OTHER`]) in two bytes each
-/// where they fit, as in most catalogs (of a source under 32 KiB).
-#[derive(Debug, Clone)]
-enum Index {
-    Narrow(Box<[u16]>),
-    Wide(Box<[u32]>),
-}
+/// where they fit, as in most catalogs (of a source under 32 KiB); else
+/// (a wide index, see `Catalog::wide`) each in four, the low half first.
+#[derive(Debug, Clone, Default)]
+struct Index(Box<[u16]>);
 
 /// In a narrow index: a message of `others`.
 const NARROW_OTHER: u16 = 1 << 15;
 
-impl Default for Index {
-    fn default() -> Self {
-        Index::Narrow(Box::default())
-    }
-}
-
 impl Index {
-    /// `entries` (sorted), narrow where every one fits.
-    fn of(entries: Vec<u32>) -> Self {
+    /// `entries` (sorted), narrow where every one fits; and whether it is
+    /// wide.
+    fn of(entries: Vec<u32>) -> (Self, bool) {
         let narrow = |at: u32| -> Option<u16> {
             let place = at & !OTHER;
             let place = u16::try_from(place)
@@ -85,31 +84,32 @@ impl Index {
             .map(|at| narrow(*at))
             .collect::<Option<Vec<u16>>>()
         {
-            Some(narrow) => Index::Narrow(narrow.into_boxed_slice()),
-            None => Index::Wide(entries.into_boxed_slice()),
+            Some(narrow) => (Index(narrow.into_boxed_slice()), false),
+            None => {
+                let halves = entries
+                    .iter()
+                    .flat_map(|at| [*at as u16, (at >> 16) as u16])
+                    .collect::<Vec<u16>>();
+                (Index(halves.into_boxed_slice()), true)
+            }
         }
     }
 
-    fn len(&self) -> usize {
-        match self {
-            Index::Narrow(entries) => entries.len(),
-            Index::Wide(entries) => entries.len(),
-        }
+    fn len(&self, wide: bool) -> usize {
+        if wide { self.0.len() / 2 } else { self.0.len() }
     }
 
     /// Entry `i`, as a wide index has it.
-    fn at(&self, i: usize) -> u32 {
-        match self {
-            Index::Narrow(entries) => {
-                let at = entries[i];
-                let place = u32::from(at & !NARROW_OTHER);
-                if at & NARROW_OTHER != 0 {
-                    place | OTHER
-                } else {
-                    place
-                }
-            }
-            Index::Wide(entries) => entries[i],
+    fn at(&self, i: usize, wide: bool) -> u32 {
+        if wide {
+            return u32::from(self.0[2 * i]) | u32::from(self.0[2 * i + 1]) << 16;
+        }
+        let at = self.0[i];
+        let place = u32::from(at & !NARROW_OTHER);
+        if at & NARROW_OTHER != 0 {
+            place | OTHER
+        } else {
+            place
         }
     }
 }
@@ -189,11 +189,12 @@ impl Catalog {
             language: Span { start: 0, len: 0 },
             name: Span { start: 0, len: 0 },
             plural: PluralRule::OneOther,
-            escaped: String::new(),
+            escaped: Box::default(),
             meta_len: 0,
             index: Index::default(),
             others: Box::default(),
             loaded: false,
+            wide: false,
         };
         catalog.scan(true)?;
         Ok(catalog)
@@ -207,7 +208,7 @@ impl Catalog {
         let mut escaped = if meta {
             String::new()
         } else {
-            let mut kept = core::mem::take(&mut self.escaped);
+            let mut kept = String::from(core::mem::take(&mut self.escaped));
             kept.truncate(self.meta_len as usize);
             kept
         };
@@ -285,11 +286,10 @@ impl Catalog {
             }
             duplicate
         });
-        escaped.shrink_to_fit();
-        self.escaped = escaped;
+        self.escaped = escaped.into_boxed_str();
         // Boxed: they no longer change, and a box is smaller than a
         // vector (one of each per catalog, of every plugin).
-        self.index = Index::of(index);
+        (self.index, self.wide) = Index::of(index);
         self.others = others.into_boxed_slice();
         self.loaded = true;
         Ok(())
@@ -298,9 +298,9 @@ impl Catalog {
     /// Drops the message index (keeps language, name and plural rule).
     pub fn unload(&mut self) {
         self.index = Index::default();
+        self.wide = false;
         self.others = Box::default();
-        self.escaped.truncate(self.meta_len as usize);
-        self.escaped.shrink_to_fit();
+        self.escaped = Box::from(&self.escaped[..self.meta_len as usize]);
         self.loaded = false;
     }
 
@@ -340,13 +340,13 @@ impl Catalog {
 
     /// The message for `key`, if this catalog has one and is loaded.
     pub fn get(&self, key: &str) -> Option<&str> {
-        let (mut low, mut high) = (0, self.index.len());
+        let (mut low, mut high) = (0, self.index.len(self.wide));
         let at = loop {
             if low >= high {
                 return None;
             }
             let middle = low + (high - low) / 2;
-            let at = self.index.at(middle);
+            let at = self.index.at(middle, self.wide);
             match self.key(at).cmp(key) {
                 core::cmp::Ordering::Less => low = middle + 1,
                 core::cmp::Ordering::Greater => high = middle,
@@ -363,15 +363,15 @@ impl Catalog {
 
     /// All message keys, sorted.
     pub fn keys(&self) -> impl Iterator<Item = &str> {
-        (0..self.index.len()).map(|i| self.key(self.index.at(i)))
+        (0..self.index.len(self.wide)).map(|i| self.key(self.index.at(i, self.wide)))
     }
 
     pub fn len(&self) -> usize {
-        self.index.len()
+        self.index.len(self.wide)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.index.len() == 0
+        self.index.0.is_empty()
     }
 }
 
@@ -400,6 +400,45 @@ fn text_of<'a>(source: &'a str, escaped: &'a str, span: Span) -> &'a str {
 mod tests {
     use super::*;
     use alloc::vec::Vec;
+
+    /// A catalog of a source past 32 KiB has a wide index: every message
+    /// is found, plain or quoted, before and after unloading.
+    #[test]
+    fn a_large_catalog_finds_every_message() {
+        let mut source = String::from(
+            "[meta]
+language = en
+[messages]
+",
+        );
+        for n in 0..3000 {
+            source.push_str(&alloc::format!(
+                "message.{n:04} = The text of message {n}.
+"
+            ));
+        }
+        source.push_str(
+            "quoted.last = \"  far \"
+",
+        );
+        assert!(source.len() > 64 * 1024);
+        let mut catalog = Catalog::parse(source).unwrap();
+        assert!(catalog.wide);
+        for _ in 0..2 {
+            assert_eq!(catalog.len(), 3001);
+            assert_eq!(catalog.get("message.0000"), Some("The text of message 0."));
+            assert_eq!(
+                catalog.get("message.2999"),
+                Some("The text of message 2999.")
+            );
+            assert_eq!(catalog.get("quoted.last"), Some("  far "));
+            assert_eq!(catalog.get("message.3000"), None);
+            assert_eq!(catalog.keys().next(), Some("message.0000"));
+            catalog.unload();
+            assert!(catalog.is_empty());
+            catalog.load();
+        }
+    }
 
     #[test]
     fn parses_meta_and_messages() {

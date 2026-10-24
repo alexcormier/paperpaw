@@ -528,11 +528,12 @@ impl Screen for MenuScreen {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
         ui.canvas().fill(self.region, Color::WHITE);
+        // As thick as the edges of the other sheets.
         let border = Rect::new(
             self.region.x,
             self.region.y,
             self.region.width,
-            u32::from(style.line()).max(1) as u16,
+            (u32::from(style.line()) * 2).max(2) as u16,
         );
         ui.canvas().fill(border, Color::BLACK);
         if ui.font().is_none() {

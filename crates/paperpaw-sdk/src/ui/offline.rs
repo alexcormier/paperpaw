@@ -12,7 +12,7 @@
 //!
 //! ```ignore
 //! if self.offer.shows(env) {
-//!     self.offer.draw(canvas, env, &style, area);
+//!     self.offer.draw(&mut ui, area);
 //! }
 //! // In `on_action` and `on_gesture`:
 //! if let Some(Offer::Online) = self.offer.on_action(action, cx) {

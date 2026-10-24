@@ -278,8 +278,8 @@ library crate, tested on a computer and tried in the emulator.
 ### The key (once per author)
 
 ```sh
-# paperpaw-sign of the release built for (its tag, here v0.4.0):
-cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.4.0 paperpaw-sign
+# paperpaw-sign of the release built for (its tag, here v0.5.0-beta.1):
+cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.1 paperpaw-sign
 mkdir -p ~/.paperpaw
 paperpaw-sign key ~/.paperpaw/author.key
 ```
@@ -321,7 +321,7 @@ files with its own. *About* on the reader shows its fingerprint and
 compiler; each PaperPaw release lists the fingerprints in its files
 `paperpaw-<reader>-<version>-abi.txt`.
 
-- Name the SDK of the release in `Cargo.toml` (`paperpaw-sdk = "0.5"`),
+- Name the SDK of the release in `Cargo.toml` (`paperpaw-sdk = "0.5.0-beta.1"`),
   never a path or a development version.
 - Pin its compilers: `rust-toolchain.toml`'s `channel` as the release's
   `shells/xteink/rust-toolchain.toml`; the workflow's `RUST_X4`,

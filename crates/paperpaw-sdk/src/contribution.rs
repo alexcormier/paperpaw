@@ -4,7 +4,8 @@
 //! The registrar only collects; the kernel applies the contributions once
 //! the plugin is done (and parses key maps and translations then). So
 //! anything can look at what a plugin adds without running PaperPaw, e.g.
-//! a plugin's own tests or a plugin library:
+//! a plugin's own tests or a plugin library (these methods come with the
+//! `kernel` feature, which such tests name as a dev-dependency):
 //!
 //! ```
 //! # use paperpaw_sdk::{Contribution, Id, Plugin, Registrar};

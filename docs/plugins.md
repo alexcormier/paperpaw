@@ -607,10 +607,10 @@ plugin and the app share one:
 
 ```toml
 [dev-dependencies]
-paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.4.0" }
+paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.1" }
 
 [patch.crates-io]
-paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.4.0" }
+paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.1" }
 ```
 
 `examples/paperpaw-dev.rs` adds the plugin to the app:
@@ -1493,7 +1493,7 @@ show which plugins wait for a build.
 The desktop emulator loads a plugin's code built for the computer it runs
 on, as Android loads `code.so`: a `cdylib` crate with the same
 `plugin!` line, built with the emulator's toolchain against its SDK with
-the `outline` feature (`paperpaw-sdk = { version = "0.4", features =
+the `outline` feature (`paperpaw-sdk = { version = "0.5.0-beta.1", features =
 ["outline"] }`), is `code-host.dll`, `code-host.so` or `code-host.dylib`
 in the plugin's folder (`plugins/<id>/` of the emulator's library,
 beside its `plugin.ini`). The emulator runs such code only when it is started
@@ -1835,7 +1835,7 @@ group = home
 tags = clock, widget
 licence = MIT
 source = https://codeberg.org/your-name/clock
-sdk = 0.4
+sdk = 0.5
 
 [source]
 repository = https://codeberg.org/your-name/clock
@@ -1898,7 +1898,7 @@ installs as authors do (see [The crate](#the-crate)). So:
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
   `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`), its SDK
-  (`paperpaw-sdk = "0.4"`) and, for the X4 Pro, its core libraries
+  (`paperpaw-sdk = "0.5.0-beta.1"`) and, for the X4 Pro, its core libraries
   installed, and build again for every release until 1.0 (see
   [Which build fits](#which-build-fits));
 - never set `RUSTFLAGS`, which would replace the flags that link the

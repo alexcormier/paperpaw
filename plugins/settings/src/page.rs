@@ -86,15 +86,14 @@ impl Preview {
         }
         ui.heading(self.heading, env.i18n().tr("settings.preview"));
         self.widget.draw(ui.canvas(), env, self.area);
-        // As the lines between rows.
-        let margin = style.margin();
-        let line = Rect::new(
-            self.area.x + margin,
-            self.area.y + self.area.height + style.gap() / 2,
-            self.area.width.saturating_sub(2 * margin),
-            style.line(),
+        // The line between rows, below it.
+        let below = Rect::new(
+            self.area.x,
+            self.area.y,
+            self.area.width,
+            self.area.height + style.gap() / 2 + style.line(),
         );
-        ui.canvas().fill_tint(line, Color::gray(170));
+        ui.separator(below, 0);
     }
 
     /// Lays it out anew for the values shown; `true` if it changed.

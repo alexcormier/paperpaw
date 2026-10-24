@@ -599,10 +599,13 @@ fn controller_config() -> ControllerConfig {
         .with_dynamic_tx_buf_num(DYNAMIC)
         // Below the receive buffers, as the driver requires.
         .with_rx_ba_win(STATIC_RX - 1)
+        // Aggregated sending: what PaperPaw sends is small (requests, a
+        // reading position), and its sessions take memory.
+        .with_ampdu_tx_enable(false)
 }
 
 /// Receive buffers kept while the radio is on.
-const STATIC_RX: u8 = 5;
+const STATIC_RX: u8 = 4;
 /// Buffers taken as frames come and go, at most, each way: a connection's
 /// window (8 KB, `http`) in frames, and some.
 const DYNAMIC: u16 = 16;

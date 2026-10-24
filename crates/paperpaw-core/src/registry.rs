@@ -20,11 +20,136 @@ struct SlotCandidate {
     priority: Priority,
 }
 
+/// The screens plugins added, sorted by id: each id with the translation
+/// key of its name, as [`Env::screens`](paperpaw_sdk::Env) hands them out
+/// (not copied for it), and apart from them what makes the screen.
+#[derive(Default)]
+pub(crate) struct Screens {
+    titles: Vec<(Id, Cow<'static, str>)>,
+    made: Vec<Made>,
+}
+
+/// What makes a screen, of its [`ScreenSpec`].
+pub(crate) struct Made {
+    pub(crate) factory: paperpaw_sdk::ScreenFactory,
+    pub(crate) refresh_on_open: Option<paperpaw_sdk::RefreshMode>,
+}
+
+impl core::fmt::Debug for Screens {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_list()
+            .entries(self.titles.iter().map(|(id, _)| id))
+            .finish()
+    }
+}
+
+impl Screens {
+    fn find(&self, id: &str) -> Result<usize, usize> {
+        self.titles
+            .binary_search_by(|(other, _)| other.as_str().cmp(id))
+    }
+
+    pub(crate) fn contains_key<Q: core::borrow::Borrow<str> + ?Sized>(&self, id: &Q) -> bool {
+        self.find(id.borrow()).is_ok()
+    }
+
+    pub(crate) fn get<Q: core::borrow::Borrow<str> + ?Sized>(&self, id: &Q) -> Option<&Made> {
+        self.find(id.borrow()).ok().map(|at| &self.made[at])
+    }
+
+    fn title(&self, id: &str) -> Option<&str> {
+        self.find(id).ok().map(|at| self.titles[at].1.as_ref())
+    }
+
+    /// Adds `spec`, in place of one of its id.
+    fn insert(&mut self, spec: ScreenSpec) {
+        // Each part kept: a part added to `ScreenSpec` must be kept here
+        // too.
+        let ScreenSpec {
+            id,
+            title,
+            factory,
+            refresh_on_open,
+            ..
+        } = spec;
+        let made = Made {
+            factory,
+            refresh_on_open,
+        };
+        match self.find(id.as_str()) {
+            Ok(at) => {
+                self.titles[at].1 = title;
+                self.made[at] = made;
+            }
+            Err(at) => {
+                self.titles.insert(at, (id, title));
+                self.made.insert(at, made);
+            }
+        }
+    }
+
+    /// Every screen with the translation key of its name, by id.
+    pub(crate) fn titles(&self) -> &[(Id, Cow<'static, str>)] {
+        &self.titles
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.titles.shrink_to_fit();
+        self.made.shrink_to_fit();
+    }
+}
+
+/// The events plugins subscribed to, plugin by plugin in the order they
+/// registered: each plugin's id once, with how many of the handlers after
+/// those of the plugin before are its (a plugin subscribes to a few
+/// events; there are some hundred and fifty subscriptions).
+#[derive(Default)]
+pub(crate) struct Subscriptions {
+    plugins: Vec<(Id, u16)>,
+    handlers: Vec<(Id, paperpaw_sdk::EventHandler)>,
+}
+
+impl Subscriptions {
+    /// Adds `subscriptions` (event, plugin, handler), emptying it.
+    pub(crate) fn append(&mut self, subscriptions: &mut Vec<(Id, Id, paperpaw_sdk::EventHandler)>) {
+        for (event, plugin, handler) in subscriptions.drain(..) {
+            match self.plugins.last_mut() {
+                Some((last, count)) if *last == plugin && *count < u16::MAX => *count += 1,
+                _ => self.plugins.push((plugin, 1)),
+            }
+            self.handlers.push((event, handler));
+        }
+    }
+
+    /// Every subscription: the event, the plugin, its handler.
+    pub(crate) fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&Id, &Id, &paperpaw_sdk::EventHandler)> + '_ {
+        self.plugins
+            .iter()
+            .scan(0, |at, (plugin, count)| {
+                let from = *at;
+                *at += usize::from(*count);
+                Some((plugin, from..*at))
+            })
+            .flat_map(move |(plugin, handlers)| {
+                self.handlers[handlers]
+                    .iter()
+                    .map(move |(event, handler)| (event, plugin, handler))
+            })
+    }
+
+    pub(crate) fn shrink_to_fit(&mut self) {
+        self.plugins.shrink_to_fit();
+        self.handlers.shrink_to_fit();
+    }
+}
+
 /// All active contributions except settings, key maps and translations,
 /// which live in their own stores.
 #[derive(Debug, Default)]
 pub(crate) struct Registry {
-    pub(crate) screens: VecMap<Id, ScreenSpec>,
+    pub(crate) screens: Screens,
     pub(crate) slots: VecMap<Id, SlotSpec>,
     /// When screens show the row of hints, where they said.
     pub(crate) hints: VecMap<Id, paperpaw_sdk::HintVisibility>,
@@ -109,7 +234,7 @@ impl paperpaw_sdk::ScreenMaker for Registry {
         env: &paperpaw_sdk::Env<'_>,
         params: &paperpaw_sdk::Params,
     ) -> Option<alloc::boxed::Box<dyn paperpaw_sdk::Screen>> {
-        let spec = self.screens.get(id)?;
+        let spec = self.screens.get(id.as_str())?;
         Some((spec.factory)(env, params))
     }
 
@@ -120,7 +245,7 @@ impl paperpaw_sdk::ScreenMaker for Registry {
     fn slot_choice(&self, slot: &str) -> Option<&Id> {
         self.user_bindings
             .get(slot)
-            .filter(|screen| self.screens.contains_key(*screen))
+            .filter(|screen| self.screens.contains_key(screen.as_str()))
     }
 
     fn slot_title(&self, slot: &str) -> Option<&str> {
@@ -128,13 +253,14 @@ impl paperpaw_sdk::ScreenMaker for Registry {
     }
 
     fn screen_title(&self, screen: &Id) -> Option<&str> {
-        self.screens.get(screen).map(|spec| spec.title.as_ref())
+        self.screens.title(screen.as_str())
     }
 
     fn slot_screens(&self, slot: &str) -> Vec<&Id> {
         let mut screens: Vec<&Id> = Vec::new();
         for candidate in self.candidates.iter().filter(|c| c.slot.as_str() == slot) {
-            if self.screens.contains_key(&candidate.screen) && !screens.contains(&&candidate.screen)
+            if self.screens.contains_key(candidate.screen.as_str())
+                && !screens.contains(&&candidate.screen)
             {
                 screens.push(&candidate.screen);
             }
@@ -249,7 +375,7 @@ impl Staging {
                 self.screens
                     .iter()
                     .map(|s| &s.id)
-                    .find(|id| registry.screens.contains_key(*id))
+                    .find(|id| registry.screens.contains_key(id.as_str()))
             })
             .or_else(|| {
                 self.slots
@@ -264,7 +390,7 @@ impl Staging {
             actions.insert(action);
         }
         for screen in self.screens.drain(..) {
-            registry.screens.insert(screen.id.clone(), screen);
+            registry.screens.insert(screen);
         }
         for slot in self.slots.drain(..) {
             registry.slots.insert(slot.id.clone(), slot);
@@ -446,5 +572,43 @@ fn validate_keymap(source: &str) -> Result<(), RegisterError> {
             message: problem.message,
         }),
         None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::boxed::Box;
+    use alloc::string::String;
+
+    /// Subscriptions come back as they were added: in order, each with its
+    /// event and plugin, a plugin's id kept once for its run of them.
+    #[test]
+    fn subscriptions_come_back_in_order_with_their_plugins() {
+        let handler = || -> paperpaw_sdk::EventHandler { Box::new(|_, _, _| {}) };
+        let id = |text: &str| Id::parse(text).unwrap();
+        let mut subscriptions = Subscriptions::default();
+        let mut first = alloc::vec![
+            (id("e.one"), id("a"), handler()),
+            (id("e.two"), id("a"), handler()),
+            (id("e.one"), id("b"), handler()),
+        ];
+        subscriptions.append(&mut first);
+        assert!(first.is_empty());
+        subscriptions.append(&mut alloc::vec![(id("e.three"), id("b"), handler())]);
+        subscriptions.append(&mut alloc::vec![(id("e.one"), id("a"), handler())]);
+        let seen: Vec<(String, String)> = subscriptions
+            .iter()
+            .map(|(event, plugin, _)| (event.as_str().into(), plugin.as_str().into()))
+            .collect();
+        let pairs = [
+            ("e.one", "a"),
+            ("e.two", "a"),
+            ("e.one", "b"),
+            ("e.three", "b"),
+            ("e.one", "a"),
+        ];
+        assert_eq!(seen, pairs.map(|(e, p)| (String::from(e), String::from(p))));
+        assert_eq!(subscriptions.plugins.len(), 3);
     }
 }

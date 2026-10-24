@@ -16,7 +16,7 @@
 //! it). With buttons alone, the focus goes from item to item.
 //!
 //! ```ignore
-//! struct Board { grid: GridView }
+//! struct Board { grid: GridView } // made with `GridView::asking(env, CHOSEN)`
 //!
 //! impl Board {
 //!     fn layout(&mut self, env: &Env<'_>) {

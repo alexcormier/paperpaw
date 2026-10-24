@@ -83,10 +83,10 @@ use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::native::{Native, SafeMode};
 use paperpaw_sdk::setting::{Setting, SettingType};
 use paperpaw_sdk::{
-    Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
-    Fonts, Formats, Gesture, GestureKind, Handled, HintVisibility, Hyphenation, Id, Manifest,
-    Menus, Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError,
-    RequiredFor, Screen, Settings, ShowsThrough, StatusItems,
+    Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, Fonts, Formats,
+    Gesture, GestureKind, Handled, HintVisibility, Hyphenation, Id, Manifest, Menus, Metrics,
+    Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor, Screen,
+    Settings, ShowsThrough, StatusItems,
 };
 
 pub use crate::builder::KernelBuilder;
@@ -103,6 +103,9 @@ use crate::keymap::{InputKey, Keymap, Origin, Zone};
 use crate::refresh::RefreshPolicy;
 use crate::registry::{Registry, Staging};
 use crate::screens::uncovered;
+pub use crate::work::NetworkSettings;
+#[doc(hidden)]
+pub use crate::work::network_specs_of;
 use paperpaw_sdk::Registrar;
 use paperpaw_sdk::filters::InputVerdict;
 pub use paperpaw_sdk::firmware::{Firmware, FirmwareCommand, FirmwareState, InstallFailure};
@@ -349,7 +352,7 @@ struct EdgeTouch {
 pub struct Kernel {
     shared: Shared,
     framebuffer: Framebuffer,
-    subscriptions: Vec<(Id, Id, EventHandler)>,
+    subscriptions: crate::registry::Subscriptions,
     /// The lowest screen the last offer of input reached ([`Kernel::offer`]).
     offered_down_to: usize,
     /// The params of the action offered to the screens now, for their
@@ -1086,7 +1089,12 @@ impl Kernel {
 
     /// The ids of every screen plugins added, whether open or not.
     pub fn known_screens(&self) -> impl Iterator<Item = &Id> {
-        self.shared.screens.iter().map(|(id, _)| id)
+        self.shared
+            .registry
+            .screens
+            .titles()
+            .iter()
+            .map(|(id, _)| id)
     }
 
     /// What the device did since start (see [`paperpaw_sdk::usage`]).
@@ -1360,8 +1368,6 @@ struct Shared {
     content: Rect,
     /// Slots some screen is bound to.
     slots: Vec<Id>,
-    /// Every screen, with the translation key of its name.
-    screens: Vec<(Id, Cow<'static, str>)>,
     /// Folders fonts are read from.
     font_dirs: Vec<String>,
     /// The folders of data plugins, by plugin, for removing them.
@@ -1438,7 +1444,7 @@ impl Shared {
             content: self.content,
             stack: &self.stack,
             slots: &self.slots,
-            screens: &self.screens,
+            screens: self.registry.screens.titles(),
             font_dirs: &self.font_dirs,
             catalog_device: self.catalog_device,
             secrets: &self.secrets,

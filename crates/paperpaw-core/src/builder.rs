@@ -44,6 +44,8 @@ struct BuilderParts {
     random: paperpaw_sdk::random::Random,
     memory: paperpaw_sdk::memory::Memory,
     started: paperpaw_sdk::power::Start,
+    /// Network settings kept in the program, by plugin.
+    network_settings: &'static [crate::NetworkSettings],
 }
 
 impl fmt::Debug for KernelBuilder {
@@ -77,6 +79,15 @@ impl KernelBuilder {
 
     /// The user's configuration file (`paperpaw.ini`). It overrides
     /// settings, slot bindings and key maps, and can disable plugins.
+    /// The network settings of the networked plugins it is given, kept
+    /// in the program rather than made at every start (see
+    /// [`network_settings!`](crate::network_settings)); those of any
+    /// other networked plugin are made as before.
+    pub fn network_settings(mut self, settings: &'static [crate::NetworkSettings]) -> Self {
+        self.0.network_settings = settings;
+        self
+    }
+
     pub fn user_config(mut self, source: impl Into<String>) -> Self {
         self.0.user_config = Some(source.into());
         self
@@ -379,7 +390,7 @@ impl BuilderParts {
                 }),
         );
         // Every plugin's network, before the values kept for it are read.
-        kernel.define_network_settings();
+        kernel.define_network_settings(self.network_settings);
         if let Some(source) = self.device_keymap.take() {
             kernel.load_device_keymap(source);
         }
@@ -487,7 +498,6 @@ impl BuilderParts {
                 stack: Vec::new(),
                 content: Rect::new(0, 0, display.width, display.height),
                 slots: Vec::new(),
-                screens: Vec::new(),
                 font_dirs: Vec::new(),
                 data_folders: Vec::new(),
                 plugin_dirs: Vec::new(),
@@ -553,7 +563,7 @@ impl BuilderParts {
             stylesheet_owners: Vec::new(),
             timing: drawing::Timing::default(),
             framebuffer,
-            subscriptions: Vec::new(),
+            subscriptions: crate::registry::Subscriptions::default(),
             offered_down_to: 0,
             action_params: Params::new(),
             action_observers: Vec::new(),
@@ -977,13 +987,6 @@ impl Kernel {
     fn settle(&mut self) {
         self.shrink_to_fit();
         self.shared.slots = self.shared.registry.bound_slots();
-        self.shared.screens = self
-            .shared
-            .registry
-            .screens
-            .iter()
-            .map(|(id, spec)| (id.clone(), spec.title.clone()))
-            .collect();
         self.hint.height = self.wanted_hint_height();
     }
 }
@@ -1015,6 +1018,7 @@ impl Kernel {
             random: paperpaw_sdk::random::Random::NONE,
             memory: paperpaw_sdk::memory::Memory::NONE,
             started: paperpaw_sdk::power::Start::Unknown,
+            network_settings: &[],
         }))
     }
 }

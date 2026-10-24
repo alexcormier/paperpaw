@@ -315,14 +315,22 @@ impl Session {
         Ok(session)
     }
 
-    /// There is room for more received bytes.
-    pub fn wants_input(&self) -> bool {
-        self.pipes.incoming.len() - self.pipes.taken < IN_LIMIT
+    /// How many more received bytes it takes now: the rest stays in the
+    /// connection's buffer, not twice in memory.
+    pub fn room(&self) -> usize {
+        IN_LIMIT.saturating_sub(self.pipes.incoming.len() - self.pipes.taken)
     }
 
-    /// Bytes received over the connection.
+    /// Bytes received over the connection, at most [`Session::room`].
     pub fn feed(&mut self, data: &[u8]) {
-        self.pipes.incoming.extend_from_slice(data);
+        let pipes = &mut *self.pipes;
+        // What mbedTLS took goes first, so that the pipe holds no more
+        // than `IN_LIMIT`.
+        if pipes.taken > 0 {
+            pipes.incoming.drain(..pipes.taken);
+            pipes.taken = 0;
+        }
+        pipes.incoming.extend_from_slice(data);
     }
 
     /// The other side closed the connection.

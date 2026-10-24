@@ -5,8 +5,8 @@ over the USB cable or over the Wi-Fi transfer page. Both ways use the same
 requests and the same install routine. Nothing is written before the
 reader agrees on the device.
 
-This page is for those who write such a computer program (the workshop,
-a page in a browser with Web Serial, a script). `tools/usb-transfer.py`
+This page is for those who write such a computer program (the plugin
+workshop, a page in a browser with Web Serial, a script). `tools/usb-transfer.py`
 is a small client to read along with.
 
 ## The cable
@@ -59,11 +59,12 @@ of ten seconds opens the screen again.
 
 ```json
 {"protocol": 1, "device": "xteink-x4-pro", "name": "Xteink X4 Pro",
- "version": "0.4.0", "fingerprint": "bccc27c20e5fe947"}
+ "version": "0.5.0-beta.1", "fingerprint": "0002c27c20e5fe94"}
 ```
 
-`fingerprint` is the build that plugins with code must be made for, or
-`null` where the device runs no plugins with code.
+`fingerprint` is the build that plugins with code must be made for (its
+first four digits are the plugin interface), or `null` where the device
+runs no plugins with code.
 
 `GET /api/plugins` lists the plugins installed:
 

@@ -30,7 +30,7 @@ its driver crates. A port touches these:
 | Wi-Fi | `wifi.rs`, `network.rs` | The radio, usually unchanged within a chip family |
 | What the kernel is told | `main.rs` (`DeviceInfo`, `KernelBuilder`) | Id, name, screen, input, memory, capabilities, defaults |
 | Updates | `ota.rs`, `partitions.csv` | The chip and the firmware's name each update is checked against |
-| Code plugins | `shells/xteink/versions.env`, `rust-toolchain.toml` | The toolchain, and so the fingerprint plugin files must have |
+| Code plugins | `shells/xteink/versions.env`, `rust-toolchain.toml` | The toolchain, and so the compiler and fingerprint plugin files must have |
 | The emulator | `shells/desktop/src/profiles.rs` | A profile as the firmware builds the device |
 | CI and releases | `.github/workflows/ci.yml`, `release.yml`, `.github/actions/xteink-tools`, and `xtensa-std` for an ESP32-S3 | The device in each matrix: lint, build, images, updates, plugins |
 | Documents | ADR 0013, `shells/xteink/README.md`, `CHANGELOG.md`, `README.md` | What works, what was tried on a device, what is to come |
@@ -106,11 +106,11 @@ network, updates and remote control stay one. In the order it was done:
    The X4 Pro and the X4 Classic share their chip but not their board.
    So each has a firmware name of its own and refuses the other's
    firmware.
-10. **Code plugins.** A plugin file runs only on firmware built by the
-    same compiler from the same SDK
-    ([ADR 0024](adr/0024-native-code-plugins.md)): the firmware exports
-    its fingerprint (`PAPERPAW_NATIVE_FINGERPRINT`), and the release
-    builds PaperPaw's store plugins for each device with it.
+10. **Code plugins.** A plugin file runs only on firmware of its plugin
+    interface and chip, built by the compiler the file names
+    ([ADR 0026](adr/0026-plugin-interface-version.md)): the firmware
+    exports its fingerprint (`PAPERPAW_NATIVE_FINGERPRINT`), and the
+    release builds PaperPaw's store plugins for each device with it.
 11. **The emulator.** A profile in `shells/desktop/src/profiles.rs` with
     the firmware's screen, buttons, memory budget and builder settings,
     so plugins can be tried for the device without it.
@@ -127,8 +127,8 @@ network, updates and remote control stay one. In the order it was done:
     coalesced while the panel refreshes, the light in steps the eye sees
     as even.
 
-The X4 Classic took a day after that. It is not part of the beta: its
-firmware is built but not yet tried on one. It is an ESP32-S3 board with the X4
+The X4 Classic took a day after that. It is not part of 0.5.0-beta.1:
+its firmware is built but not yet tried on one. It is an ESP32-S3 board with the X4
 Pro's glass, card, gauge and clock, the panel on other pins, and the
 X4's seven buttons each on a pin. It is a board file, `board_classic.rs`,
 and a feature, `x4-classic`, with its id and firmware name, its emulator

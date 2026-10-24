@@ -1,0 +1,1 @@
+A beta for testers: a calmer library with covers and series, a home screen grid with many widgets, a rounder look, hints on first use, and many fixes. Expect rough edges, and keep a copy of your books.

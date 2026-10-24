@@ -26,7 +26,7 @@ is a new record that links back.
 | [0017](0017-tls-on-the-x4.md) | TLS on the X4 | Accepted |
 | [0018](0018-font-packs-for-other-scripts.md) | Font packs for other scripts | Accepted |
 | [0019](0019-firmware-updates.md) | Firmware updates | Accepted |
-| [0020](0020-sdk-compatibility.md) | SDK compatibility | Accepted |
+| [0020](0020-sdk-compatibility.md) | SDK compatibility | Accepted; plugins no longer name an SDK in their manifest ([0026](0026-plugin-interface-version.md)) |
 | [0021](0021-decorations.md) | Decorations of text | Accepted |
 | [0022](0022-plugins-in-updates.md) | Plugins in updates | Accepted |
 | [0023](0023-plugin-store.md) | The plugin store | Accepted |
