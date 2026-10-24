@@ -4,12 +4,14 @@
 # each (signed with --key), and checks that it fits the firmware:
 #
 #   tools/plugin-files/build.sh <device> <out-dir> [--key <file>] [--fingerprint <hex>]
+#       [--only <id> --version <version>]
 #
 # <device> is x4, x4-pro or x4-classic; the files are
 # <out-dir>/<id>-<version>-<device>.ppn, <version> the workspace's. With
 # --fingerprint (the firmware's, `paperpaw-sign fingerprint <elf>`) each
-# file must have it. Run from anywhere; paperpaw-sign is built from this
-# repository.
+# file must have it. With --only, one plugin alone, named by --version
+# (its crate's own: an update of it between releases). Run from
+# anywhere; paperpaw-sign is built from this repository.
 #
 # Needs: the X4's Rust from rust-toolchain.toml, for the X4 Pro and the
 # X4 Classic espup's `esp` toolchain with its environment and the
@@ -20,20 +22,26 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 
-usage() { echo "usage: $0 <x4|x4-pro|x4-classic> <out-dir> [--key <file>] [--fingerprint <hex>]" >&2; exit 2; }
+usage() { echo "usage: $0 <x4|x4-pro|x4-classic> <out-dir> [--key <file>] [--fingerprint <hex>] [--only <id> --version <version>]" >&2; exit 2; }
 [[ $# -ge 2 ]] || usage
 device=$1
 out=$2
 shift 2
 key=()
 fingerprint=
+only=
+named=
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --key) [[ $# -ge 2 ]] || usage; key=(--key "$2"); shift 2 ;;
         --fingerprint) [[ $# -ge 2 ]] || usage; fingerprint=$2; shift 2 ;;
+        --only) [[ $# -ge 2 ]] || usage; only=$2; shift 2 ;;
+        --version) [[ $# -ge 2 ]] || usage; named=$2; shift 2 ;;
         *) usage ;;
     esac
 done
+# Both or neither.
+[[ -z "$only" && -z "$named" || -n "$only" && -n "$named" ]] || usage
 
 case "$device" in
     x4) build=(cargo x4 --locked); target=riscv32imc-unknown-none-elf; chip=5 ;;
@@ -43,6 +51,21 @@ esac
 
 version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' "$root/Cargo.toml")"
 [[ -n "$version" ]] || { echo "no version in $root/Cargo.toml" >&2; exit 1; }
+ids="$(sed -e 's/#.*//' "$here/plugins.txt" | awk 'NF { print $1 }')"
+if [[ -n "$only" ]]; then
+    grep -qx "$only" <<< "$ids" || { echo "$only is not in plugins.txt" >&2; exit 1; }
+    ids=$only
+    version=$named
+else
+    # A release names them all by its version: a plugin left with its own
+    # (from an update between releases) would say another in its manifest.
+    for id in $ids; do
+        if ! grep -qx 'version.workspace = true' "$root/plugins/$id/Cargo.toml"; then
+            echo "plugins/$id has a version of its own: back to version.workspace = true" >&2
+            exit 1
+        fi
+    done
+fi
 
 (cd "$here" && env -u RUSTFLAGS "${build[@]}")
 target_dir="${CARGO_TARGET_DIR:-$here/target}"
@@ -50,7 +73,7 @@ sign() { (cd "$root" && cargo run -q --release -p paperpaw-sign -- "$@"); }
 
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
-for id in $(sed -e 's/#.*//' "$here/plugins.txt" | awk 'NF { print $1 }'); do
+for id in $ids; do
     file="$out/$id-$version-$device.ppn"
     sign pack "$target_dir/$target/release/$id" "$file" "${key[@]}"
     shown="$(sign plugin "$file")"

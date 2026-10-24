@@ -3,6 +3,7 @@
 (plugins.txt), from the files build.sh made for every reader of a release:
 
     python3 tools/plugin-files/catalogue.py <dist> <version> <base-url> [--date YYYY-MM-DD]
+        [--only <id>]
 
 <dist> holds <id>-<version>-<device>.ppn for each reader built. Writes into
 <dist>:
@@ -116,6 +117,8 @@ def main():
     parser.add_argument("version")
     parser.add_argument("base_url")
     parser.add_argument("--date", default=datetime.date.today().isoformat())
+    # One plugin alone: an update of it between releases (store-plugin.yml).
+    parser.add_argument("--only")
     args = parser.parse_args()
     dist, version, base = args.dist, args.version, args.base_url.rstrip("/")
     # The plugins' own version: the release's whole, a beta's too
@@ -127,7 +130,10 @@ def main():
     (dist / "catalogue").mkdir(parents=True, exist_ok=True)
     keys = set()
     sums = []
-    for plugin, group in plugins():
+    chosen = [(p, g) for p, g in plugins() if args.only in (None, p)]
+    if not chosen:
+        fail(f"{args.only} is not in plugins.txt")
+    for plugin, group in chosen:
         name = message(plugin, "en", f"{plugin}.plugin.name")
         summary = message(plugin, "en", f"{plugin}.plugin.description")
         if not name or not summary:
@@ -210,7 +216,7 @@ def main():
     for entry in (dist / "catalogue").glob("*.toml"):
         entry.write_text(entry.read_text(encoding="utf-8").replace("AUTHOR_KEY", toml(key)), encoding="utf-8")
     (dist / "SHA256SUMS").write_text("".join(f"{d}  {n}\n" for d, n in sorted(sums, key=lambda s: s[1])), encoding="utf-8")
-    print(f"{len(plugins())} plugins, signed by {key}")
+    print(f"{len(chosen)} plugins, signed by {key}")
 
 
 if __name__ == "__main__":

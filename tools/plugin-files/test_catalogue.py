@@ -87,5 +87,28 @@ class Versions(unittest.TestCase):
             with zipfile.ZipFile(dist / "battery-0.5.0-beta.2.zip") as z:
                 self.assertIn("version = 0.5.0-beta.2" + chr(10), z.read("plugin.ini").decode("utf-8"))
 
+    def test_one_plugin_alone_between_releases(self):
+        with tempfile.TemporaryDirectory() as dist:
+            dist = pathlib.Path(dist)
+            dist.joinpath("vocabulary-0.5.0-beta.3-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+            argv = ["catalogue.py", str(dist), "0.5.0-beta.3", "https://example.invalid/r", "--only", "vocabulary"]
+            with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                catalogue.main()
+            # Its entry alone, so the store keeps the others' versions.
+            self.assertEqual([p.name for p in dist.joinpath("catalogue").iterdir()], ["vocabulary.toml"])
+            entry = dist.joinpath("catalogue", "vocabulary.toml").read_text(encoding="utf-8")
+            self.assertIn('version = "0.5.0-beta.3"', entry)
+            self.assertIn('revision = "v0.5.0-beta.3"', entry)
+            sums = dist.joinpath("SHA256SUMS").read_text(encoding="utf-8")
+            self.assertNotIn("battery", sums)
+
+    def test_only_a_plugin_of_the_store(self):
+        with tempfile.TemporaryDirectory() as dist:
+            argv = ["catalogue.py", dist, "0.5.0-beta.3", "https://example.invalid/r", "--only", "nonesuch"]
+            with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    catalogue.main()
+
+
 if __name__ == "__main__":
     unittest.main()
