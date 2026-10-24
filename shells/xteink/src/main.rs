@@ -52,6 +52,8 @@ mod native;
 mod net;
 mod network;
 mod ota;
+#[cfg(feature = "remote")]
+mod peak;
 mod power;
 mod probe;
 mod provision;
@@ -255,8 +257,15 @@ fn memory() -> Option<paperpaw_sdk::memory::MemoryUse> {
 }
 
 /// The largest block of memory that could be had now (found by asking for
-/// blocks, given back at once).
+/// blocks, given back at once; not counted in the heap's peak).
 pub fn largest_block() -> usize {
+    #[cfg(feature = "remote")]
+    return peak::probing(search_largest_block);
+    #[cfg(not(feature = "remote"))]
+    search_largest_block()
+}
+
+fn search_largest_block() -> usize {
     let (mut can, mut cannot) = (0, esp_alloc::HEAP.free() + 1);
     while cannot - can > 64 {
         let size = (can + cannot) / 2;

@@ -63,7 +63,7 @@ impl Remote {
                     esp_alloc::HEAP.used(),
                     esp_alloc::HEAP.free(),
                     crate::largest_block(),
-                    esp_alloc::HEAP.stats().max_usage
+                    crate::peak::peak()
                 );
             }
             Command::Put { size, path } => self.receive(kernel, lines, size, &path),
