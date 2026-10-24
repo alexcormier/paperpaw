@@ -460,7 +460,7 @@ impl CalibreScreen {
                 let challenge = protocol::text(args, "passwordChallenge").unwrap_or_default();
                 let password = env.secrets().get(PASSWORD).map(String::from);
                 let extensions: Vec<&str> = env
-                    .formats
+                    .formats()
                     .iter()
                     .flat_map(|f| f.extensions.iter().map(|e| e.as_ref()))
                     .collect();
@@ -575,7 +575,7 @@ impl CalibreScreen {
             op::ERROR => {
                 let message = protocol::text(args, "message").unwrap_or_default();
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("calibre.failed", &[("reason", Arg::Str(&message))]);
                 cx.command(Command::Disconnect(SOCKET));
                 return self.end(text, cx);
@@ -605,7 +605,7 @@ impl CalibreScreen {
         // there that Calibre did not send: the bytes are taken, then
         // dropped.
         let extensions: Vec<&str> = env
-            .formats
+            .formats()
             .iter()
             .flat_map(|f| f.extensions.iter().map(|e| e.as_ref()))
             .collect();
@@ -614,7 +614,7 @@ impl CalibreScreen {
         let target = match target {
             Some(path) if env.storage().exists(&path) && !library::sent(env.storage(), &lpath) => {
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("calibre.not-replaced", &[("title", Arg::Str(&title))]);
                 cx.command(Command::Notify(text));
                 None
@@ -726,7 +726,7 @@ impl Screen for CalibreScreen {
             }
             State::Connecting => env.i18n().tr("calibre.connecting").to_string(),
             State::Connected => env
-                .i18n
+                .i18n()
                 .format("calibre.connected", &[("name", Arg::Str(&name))]),
             State::Receiving {
                 title,
@@ -747,13 +747,13 @@ impl Screen for CalibreScreen {
         line(&mut ui, style.title(), &status, Color::BLACK);
         if let Some(library) = &self.library {
             let text = env
-                .i18n
+                .i18n()
                 .format("calibre.library", &[("library", Arg::Str(library))]);
             line(&mut ui, style.text(), &text, style.faint(ui::Ink::Detail));
         }
         if self.received > 0 {
             let text = env
-                .i18n
+                .i18n()
                 .plural("calibre.received", i64::from(self.received), &[]);
             line(&mut ui, style.text(), &text, Color::BLACK);
         }

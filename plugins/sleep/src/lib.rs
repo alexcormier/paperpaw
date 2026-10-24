@@ -333,7 +333,7 @@ fn picture(env: &Env<'_>) -> Option<ImageRef> {
 /// other from where the last sleep left off.
 pub(crate) fn next_from_folder(env: &Env<'_>) -> Option<String> {
     let folder = env
-        .settings
+        .settings()
         .text(FOLDER.as_str())
         .trim_matches('/')
         .to_string();

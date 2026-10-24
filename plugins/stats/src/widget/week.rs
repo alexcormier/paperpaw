@@ -256,7 +256,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[
     let first_day = fmt::week_start(env);
     let base = i32::from(chart.y + chart.height);
     let few_grays = env
-        .device
+        .device()
         .display
         .format
         .gray_levels()

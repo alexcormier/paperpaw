@@ -163,7 +163,7 @@ impl ShelfScreen {
         let finished = self.entries.iter().filter(|e| e.progress == 100).count();
         self.summary_text = if self.kind == Kind::Series && finished > 0 {
             let done = env
-                .i18n
+                .i18n()
                 .plural("files.list.finished.count", finished as i64, &[]);
             alloc::format!("{books} · {done}")
         } else {
@@ -245,10 +245,10 @@ impl ShelfScreen {
         match self.kind {
             Kind::Favourites => env.i18n().tr("files.favourites").to_string(),
             Kind::Search => env
-                .i18n
+                .i18n()
                 .format("files.search.title", &[("text", Arg::Str(&self.name))]),
             Kind::Letter => env
-                .i18n
+                .i18n()
                 .format("files.list.letter", &[("letter", Arg::Str(&self.name))]),
             Kind::Folder => paperpaw_sdk::files::name(&self.name).to_string(),
             Kind::Author if self.name.is_empty() => {

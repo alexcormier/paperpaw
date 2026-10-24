@@ -104,7 +104,7 @@ fn is_menu(env: &Env<'_>, id: &str) -> bool {
 /// The display name of an entry: an action, a setting or a submenu.
 fn name(env: &Env<'_>, id: &str) -> String {
     let key = env
-        .actions
+        .actions()
         .get(id)
         .map(|a| a.title.as_ref())
         .or_else(|| {
@@ -840,7 +840,7 @@ impl AddScreen {
                 // Taken out of this menu by a plugin: which, beside it.
                 let noted = env.menus().hidden_by(&menu, id.as_str()).map(|by| {
                     let plugin = env
-                        .plugins
+                        .plugins()
                         .get(by.as_str())
                         .map_or(by.as_str(), |info| info.name(env.i18n()));
                     env.i18n().format(

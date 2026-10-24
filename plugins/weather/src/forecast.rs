@@ -296,7 +296,7 @@ impl Context<'_, '_> {
         let rain = day.rain.filter(|_| self.shows("rain"))?;
         Some(
             self.env
-                .i18n
+                .i18n()
                 .format("weather.percent", &[("percent", Arg::Int(i64::from(rain)))]),
         )
     }

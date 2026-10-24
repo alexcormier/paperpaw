@@ -374,7 +374,7 @@ pub(crate) fn can_archive(env: &Env<'_>, path: &str) -> bool {
 /// Moves the book at `path` to the archive folder, and says how it went.
 pub(crate) fn archive(env: &Env<'_>, path: &str, cx: &mut Cx<'_, '_>) {
     let archive = env
-        .settings
+        .settings()
         .text(ARCHIVE.as_str())
         .trim_matches('/')
         .to_string();

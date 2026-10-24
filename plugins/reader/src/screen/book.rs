@@ -187,11 +187,11 @@ impl Book {
         };
         let options = paperpaw_sdk::reading::open_options(env);
         let document = env
-            .formats
+            .formats()
             .open_with(env.storage(), path, &options)
             .map_err(error)?;
         let font = env
-            .fonts
+            .fonts()
             .role(fonts::READING.as_str())
             .ok_or_else(|| env.i18n().tr("reader.no-font").to_string())?;
         let language = document

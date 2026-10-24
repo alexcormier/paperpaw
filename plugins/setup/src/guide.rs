@@ -174,7 +174,7 @@ fn steps(env: &Env<'_>) -> Vec<Id> {
         .into_iter()
         .filter(|s| match &s.page {
             paperpaw_sdk::setup::SetupPage::Setting(id) => env
-                .settings
+                .settings()
                 .spec(id.as_str())
                 .is_none_or(|spec| env.settings().shows(spec)),
             _ => true,
@@ -221,7 +221,7 @@ impl Guide {
         let values: Vec<String> = match &spec.kind {
             SettingKind::Choice(options) => options.iter().map(|o| o.to_string()).collect(),
             SettingKind::Language => env
-                .i18n
+                .i18n()
                 .languages()
                 .into_iter()
                 .map(|(tag, _)| tag.to_string())

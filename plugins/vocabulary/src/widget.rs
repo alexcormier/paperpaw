@@ -692,7 +692,7 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, summary
     let area = look.area;
     let room = area.height.saturating_sub(caption_in(env, id, area));
     let headline = env
-        .i18n
+        .i18n()
         .plural("vocabulary.widget.words", summary.count as i64, &[]);
     let width = f32::from(area.width);
     let fits = |text: &str| text.is_empty() || font.measure(style.small(), text) <= width;
@@ -802,7 +802,7 @@ impl Widget for Due {
             .height
             .saturating_sub(caption_in(env, DUE_NAME, inner));
         let headline = env
-            .i18n
+            .i18n()
             .plural("vocabulary.widget.due.count", count as i64, &[]);
         let width = f32::from(inner.width);
         // Too wide: the number alone.

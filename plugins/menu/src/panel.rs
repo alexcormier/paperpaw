@@ -724,7 +724,7 @@ fn slider_extra(env: &Env<'_>, style: &UiStyle, width: u16, spec: &SettingSpec) 
 /// The title of action `id`, translated.
 fn action_title(env: &Env<'_>, id: &Id) -> String {
     let title = env
-        .actions
+        .actions()
         .get(id.as_str())
         .map_or(id.as_str(), |a| a.title.as_ref());
     env.i18n().tr(title).to_string()

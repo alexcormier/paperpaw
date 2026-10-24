@@ -56,7 +56,7 @@ const GROUP_ICON: &str = "puzzle";
 /// customising, by name; each with its icon, or a plugin's.
 fn groups(env: &Env<'_>) -> Vec<(i32, bool, Entry)> {
     let mut found: Vec<(i32, bool, Entry)> = env
-        .settings
+        .settings()
         .groups()
         // A widget's own settings are opened where it is edited.
         .filter(|group| !env.widgets().has(group.id.as_str()))
@@ -95,7 +95,7 @@ impl GroupList {
         let menu = settings_menu.as_str();
         // (order, headings before entries of the same order, entry)
         let mut placed: Vec<(i32, bool, Entry)> = env
-            .menus
+            .menus()
             .items(menu)
             .iter()
             // Passwords and keys only once there are some.
@@ -198,7 +198,7 @@ impl GroupList {
                 // The group's own page, if its plugin brings one.
                 let page = cx
                     .env()
-                    .settings
+                    .settings()
                     .groups()
                     .find(|g| g.id == *id)
                     .and_then(|g| g.page.clone());

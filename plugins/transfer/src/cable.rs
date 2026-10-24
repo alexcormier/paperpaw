@@ -319,7 +319,7 @@ impl CableScreen {
         if self.permission == Permission::Asking {
             if self.question.is_none() {
                 let mine = env
-                    .stack
+                    .stack()
                     .iter()
                     .rposition(|e| e.screen == crate::CABLE_SCREEN);
                 // The first question above it (another screen may have
@@ -415,10 +415,10 @@ impl CableScreen {
         if let Some(staging) = id.and_then(|id| Staging::apart(id, STAGING)) {
             staging.abort(env.storage());
             let _ = env
-                .storage
+                .storage()
                 .create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
             let _ = env
-                .storage
+                .storage()
                 .write(&offered_file(), staging.plugin().as_bytes());
         }
         self.serial = self.serial.wrapping_add(1);
@@ -476,7 +476,7 @@ impl CableScreen {
         match staging.put(env.storage(), file, body, &sha256) {
             Ok(()) => {
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("transfer.cable.receiving", &[("name", Arg::Str(id))]);
                 self.said(text, cx);
                 json(200, String::from("{\"ok\":true}"))
@@ -540,7 +540,7 @@ impl CableScreen {
             }
             Err(refusal) => {
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("transfer.cable.not-installed", &[("name", Arg::Str(id))]);
                 self.said(text, cx);
                 json(422, refused(refusal))
@@ -585,7 +585,7 @@ impl CableScreen {
                 }
                 out.push(paperpaw_sdk::library::added(&at, "transfer"));
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("transfer.received", &[("name", Arg::Str(files::name(&at)))]);
                 self.said(text, cx);
                 json(200, format!("{{\"path\":{}}}", json_string(&at)))

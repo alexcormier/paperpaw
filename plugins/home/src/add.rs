@@ -71,7 +71,7 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
         })
         .map(|(id, title)| {
             let kind = env
-                .widgets
+                .widgets()
                 .category(id.as_str())
                 .unwrap_or(categories::OTHER);
             (

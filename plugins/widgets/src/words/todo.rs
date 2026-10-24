@@ -413,7 +413,7 @@ impl Widget for TodoWidget {
         }
         if let Some((row, more)) = places.more {
             let text = env
-                .i18n
+                .i18n()
                 .format("widgets.todo.more", &[("count", Arg::Int(more as i64))]);
             let text = ui::fit(&font, style.small(), &text, f32::from(row.width));
             let x = align.x(row, font.measure(style.small(), &text));

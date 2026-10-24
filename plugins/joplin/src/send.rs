@@ -580,7 +580,7 @@ impl Run {
         if self.apart > 0 && !self.quiet {
             let count = self.apart as i64;
             let text = env
-                .i18n
+                .i18n()
                 .plural("joplin.apart", count, &[("count", Arg::Int(count))]);
             out.push(Command::Notify(text));
         }
@@ -594,7 +594,7 @@ impl Run {
         }
         self.quiet = false;
         let text = env
-            .i18n
+            .i18n()
             .plural("joplin.sent", sent, &[("count", Arg::Int(sent))]);
         self.end_with(env, text, End::Again, out);
     }

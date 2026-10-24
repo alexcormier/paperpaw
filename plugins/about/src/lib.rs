@@ -137,7 +137,7 @@ fn lines(env: &Env<'_>) -> String {
             }
             used[at].1 += end;
             let name = env
-                .plugins
+                .plugins()
                 .get(plugin.as_str())
                 .map_or(plugin.as_str(), |info| info.name(env.i18n()));
             text.push('*');

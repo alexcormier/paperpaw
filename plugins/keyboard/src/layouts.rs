@@ -61,7 +61,7 @@ pub(crate) struct Added {
 pub(crate) fn added(env: &Env<'_>) -> Vec<Added> {
     let mut added: Vec<Added> = Vec::new();
     for mut layout in env
-        .services
+        .services()
         .contributions(POINT)
         .flat_map(|(_, text)| text.lines())
         .filter_map(parse)

@@ -62,105 +62,105 @@ pub struct Capabilities {
 #[derive(Clone, Copy)]
 #[non_exhaustive]
 pub struct Env<'a> {
-    pub device: &'a DeviceInfo,
+    pub(crate) device: &'a DeviceInfo,
     /// Time of the event being handled.
-    pub now: Instant,
-    pub metrics: Metrics,
-    pub settings: &'a Settings,
-    pub i18n: &'a Translator,
-    pub fonts: &'a Fonts,
-    pub formats: &'a Formats,
+    pub(crate) now: Instant,
+    pub(crate) metrics: Metrics,
+    pub(crate) settings: &'a Settings,
+    pub(crate) i18n: &'a Translator,
+    pub(crate) fonts: &'a Fonts,
+    pub(crate) formats: &'a Formats,
     /// Hyphenation patterns by language.
-    pub hyphenation: &'a Hyphenation,
-    pub menus: &'a Menus,
+    pub(crate) hyphenation: &'a Hyphenation,
+    pub(crate) menus: &'a Menus,
     /// Every action, e.g. to offer them in a menu editor.
-    pub actions: &'a Actions,
+    pub(crate) actions: &'a Actions,
     /// Every plugin with its state, for plugin managers.
-    pub plugins: &'a Plugins,
+    pub(crate) plugins: &'a Plugins,
     /// The time of day and the battery, as far as the device knows them
     /// (see [`time`](crate::time) for the local time).
-    pub status: &'a SystemStatus,
+    pub(crate) status: &'a SystemStatus,
     /// What the device did since PaperPaw started: refreshes, input (see
     /// [`usage`](crate::usage)); what each plugin took is
     /// [`Env::plugin_usage`].
-    pub usage: &'a crate::usage::Usage,
+    pub(crate) usage: &'a crate::usage::Usage,
     /// What each plugin took, kept by the kernel as it goes.
     plugin_usage: &'a core::cell::RefCell<alloc::vec::Vec<crate::usage::PluginUsage>>,
     /// Items for status lines, from every plugin.
-    pub status_items: &'a StatusItems,
+    pub(crate) status_items: &'a StatusItems,
     /// Filters of book text before it is laid out, from every plugin.
-    pub text_filters: &'a crate::filters::TextFilters,
+    pub(crate) text_filters: &'a crate::filters::TextFilters,
     /// Marks on the words of book pages, from every plugin (see
     /// [`decorations`](crate::decorations)).
-    pub decorators: &'a crate::decorations::Decorators,
+    pub(crate) decorators: &'a crate::decorations::Decorators,
     /// Layers on book pages and frames of their text, from every plugin
     /// (see [`layers`](crate::layers)).
-    pub page_layers: &'a crate::layers::PageLayers,
+    pub(crate) page_layers: &'a crate::layers::PageLayers,
     /// Where words are looked up, from every plugin (see
     /// [`lookup`](crate::lookup)).
-    pub lookup: &'a crate::lookup::LookupProviders,
+    pub(crate) lookup: &'a crate::lookup::LookupProviders,
     /// The reading apps, from every plugin (see
     /// [`readers`](crate::readers)).
-    pub readers: &'a crate::readers::Readers,
+    pub(crate) readers: &'a crate::readers::Readers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
-    pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
+    pub(crate) stylesheets: &'a [alloc::borrow::Cow<'static, str>],
     /// Folders of what plugins keep for each book
     /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
-    pub book_data: &'a [crate::library::BookData],
+    pub(crate) book_data: &'a [crate::library::BookData],
     /// Fields plugins keep with books
     /// ([`Registrar::add_book_field`](crate::Registrar::add_book_field)).
-    pub book_fields: &'a [crate::library::BookField],
+    pub(crate) book_fields: &'a [crate::library::BookField],
     /// Badges plugins put on books' rows
     /// ([`Registrar::add_book_badge`](crate::Registrar::add_book_badge)).
-    pub book_badges: &'a [crate::library::BookBadge],
+    pub(crate) book_badges: &'a [crate::library::BookBadge],
     /// Widgets for screens that show them, from every plugin.
-    pub widgets: &'a crate::widgets::Widgets,
+    pub(crate) widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
     /// [`setup`](crate::setup)).
-    pub setup: &'a crate::setup::SetupSteps,
+    pub(crate) setup: &'a crate::setup::SetupSteps,
     /// What plugins offer each other (see [`services`](crate::services)).
-    pub services: &'a crate::services::Services,
+    pub(crate) services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
-    pub keys: &'a dyn crate::keys::KeyBindings,
+    pub(crate) keys: &'a dyn crate::keys::KeyBindings,
     /// The look a plugin gave the parts of screens, set with
     /// [`Registrar::set_ui_look`](crate::Registrar::set_ui_look) (see
     /// [`ui::look`](crate::ui::look)).
-    pub look: crate::ui::look::Look,
+    pub(crate) look: crate::ui::look::Look,
     /// What the device and its shell can do (network, speech, the sleep
     /// screen …).
-    pub caps: Capabilities,
+    pub(crate) caps: Capabilities,
     /// Wi-Fi, where PaperPaw manages it itself (see
     /// [`wifi`](crate::wifi)); `None` where the system does.
-    pub wifi: Option<&'a crate::wifi::Wifi>,
+    pub(crate) wifi: Option<&'a crate::wifi::Wifi>,
     /// Firmware updates, where PaperPaw is the device's firmware (see
     /// [`firmware`](crate::firmware)); `None` where it is an app.
-    pub firmware: Option<&'a crate::firmware::Firmware>,
+    pub(crate) firmware: Option<&'a crate::firmware::Firmware>,
     /// How native code plugins are loaded here, e.g. which builds fit
     /// (see [`native`](crate::native)); `None` where PaperPaw loads none.
-    pub native: Option<&'a crate::native::Native>,
+    pub(crate) native: Option<&'a crate::native::Native>,
     /// The power level and mode in use (see [`power`](crate::power)).
-    pub power: &'a crate::power::Power,
+    pub(crate) power: &'a crate::power::Power,
     /// Where declared work stands, and plugins' notes (see
     /// [`work`](crate::work)).
-    pub work: &'a crate::work::WorkStates,
+    pub(crate) work: &'a crate::work::WorkStates,
     /// What is handled now is the reader's own doing (input, a screen or
     /// an action they opened or ran, the answer to their request): act at
     /// once. Otherwise it is background work (an event, a rule's action,
     /// declared work), which may wait for a good moment (see
     /// [`work`](crate::work)) and says nothing over reading.
-    pub reader: bool,
+    pub(crate) reader: bool,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
-    pub clipboard: bool,
+    pub(crate) clipboard: bool,
     /// What the reader used last: buttons, a finger or a pen, e.g. to
     /// show a focus only after buttons were used, also on touch devices.
-    pub last_input: crate::keys::InputMode,
+    pub(crate) last_input: crate::keys::InputMode,
     /// The inputs plugins added ([`keys::InputSpec`](crate::keys::InputSpec)),
     /// to bind like any other.
-    pub inputs: &'a [crate::keys::InputSpec],
+    pub(crate) inputs: &'a [crate::keys::InputSpec],
     /// Makes the screens plugins added, for [`Env::make_screen`]: the
     /// kernel's ([`Env::with_screen_maker`]). Never behind a feature: a
     /// plugin built without `kernel` reads the `Env` the kernel made.
@@ -171,41 +171,41 @@ pub struct Env<'a> {
     /// gets input relative to its corner, and
     /// [`device.display`](paperpaw_platform::DeviceInfo::display) has its
     /// size.
-    pub content: paperpaw_platform::Rect,
+    pub(crate) content: paperpaw_platform::Rect,
     /// The open screens, the one shown last (see [`StackEntry`](crate::StackEntry)):
     /// what is shown, e.g. for a rule or a refresh filter.
-    pub stack: &'a [crate::StackEntry],
+    pub(crate) stack: &'a [crate::StackEntry],
     /// The slots some screen is bound to (see [`Env::has_slot`]).
-    pub slots: &'a [crate::Id],
+    pub(crate) slots: &'a [crate::Id],
     /// Every screen: its id and the translation key of its name, e.g. for
     /// settings that differ per screen (what gestures do there).
-    pub screens: &'a [(crate::Id, alloc::borrow::Cow<'static, str>)],
+    pub(crate) screens: &'a [(crate::Id, alloc::borrow::Cow<'static, str>)],
     /// The folders reading fonts are found in at start-up, the first one
     /// PaperPaw's own (where new fonts go); empty where the device has
     /// only its built-in fonts.
-    pub font_dirs: &'a [alloc::string::String],
+    pub(crate) font_dirs: &'a [alloc::string::String],
     /// What plugin libraries call this kind of device, e.g. `x4`, `x4-pro`
     /// or `android` for paperpaw.org's (ADR 0023); `None` where the shell
     /// names none, and a store has nothing made for it.
-    pub catalog_device: Option<&'a str>,
+    pub(crate) catalog_device: Option<&'a str>,
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
-    pub secrets: crate::secrets::Visible<'a>,
+    pub(crate) secrets: crate::secrets::Visible<'a>,
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
-    pub random: crate::random::Random,
+    pub(crate) random: crate::random::Random,
     /// How much memory is free now, where the shell can tell (see
     /// [`memory`](crate::memory)).
-    pub memory: crate::memory::Memory,
+    pub(crate) memory: crate::memory::Memory,
     /// A monotonic clock in microseconds, for measuring how long work
     /// takes (see [`time::Clock`](crate::time::Clock)).
-    pub clock: crate::time::Clock,
+    pub(crate) clock: crate::time::Clock,
     /// How PaperPaw started this time, where the shell can tell (see
     /// [`power::Start`](crate::power::Start)).
-    pub started: crate::power::Start,
+    pub(crate) started: crate::power::Start,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
-    pub storage: &'a dyn Storage,
+    pub(crate) storage: &'a dyn Storage,
 }
 
 /// The environment's parts, read through methods: what PaperPaw adds

@@ -377,7 +377,7 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
         String::from("application/json"),
     );
     let code: Vec<(&str, String)> = env
-        .plugins
+        .plugins()
         .iter()
         .filter(|p| p.kind == PluginKind::Code)
         .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))

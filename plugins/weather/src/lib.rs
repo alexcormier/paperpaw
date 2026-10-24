@@ -425,7 +425,7 @@ fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Commands)
         Some(weather) => {
             let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
             let _ = env
-                .storage
+                .storage()
                 .write(&weather_file(), weather.to_text().as_bytes());
             state.weather = Some(weather);
             state.loaded = true;

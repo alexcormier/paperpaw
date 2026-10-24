@@ -116,7 +116,7 @@ fn seconds(env: &Env<'_>, micros: u64) -> String {
 /// What a time awake used, for the list of recent ones.
 fn session_line(env: &Env<'_>, s: &Session) -> Line {
     let pages = env
-        .i18n
+        .i18n()
         .plural("battery.pages-count", i64::from(s.pages()), &[]);
     let used = s.used().unwrap_or(0);
     Line::Value(
@@ -145,7 +145,7 @@ impl BatteryView {
         lines.push(Line::Heading(tr("battery.now")));
         if let Some(charge) = now.percent {
             let mut value = env
-                .i18n
+                .i18n()
                 .format("battery.percent", &[("value", Arg::Int(i64::from(charge)))]);
             if let Some(mv) = now.millivolts {
                 value = format!("{value} · {}", volts(env, mv));
@@ -216,7 +216,7 @@ impl BatteryView {
         // What each plugin took this time awake (its screens shown, its
         // code running): for developers.
         let developer = env
-            .settings
+            .settings()
             .bool(paperpaw_sdk::builtin::settings::DEVELOPER.as_str())
             && env.settings().read(&crate::BY_PLUGIN);
         // Asked for only where shown (a copy of the kernel's table).
@@ -310,7 +310,7 @@ impl BatteryView {
 
         // Where the log is, for those who look into files: developers.
         let footer = if env
-            .settings
+            .settings()
             .read(&paperpaw_sdk::builtin::settings::DEVELOPER)
         {
             env.i18n().format(

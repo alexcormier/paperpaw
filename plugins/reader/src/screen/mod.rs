@@ -177,7 +177,7 @@ impl ReaderScreen {
         // Shown as a screen opening is: the book replaces the notice.
         cx.request_redraw();
         let flash = env
-            .settings
+            .settings()
             .bool(paperpaw_sdk::builtin::settings::FLASH_SCREENS.as_str());
         cx.request_refresh(if flash {
             RefreshMode::Full
@@ -295,7 +295,7 @@ impl ReaderScreen {
                 "reader.go-to-page.counting"
             };
             let title = env
-                .i18n
+                .i18n()
                 .format(key, &[("pages", Arg::Int(i64::from(pages)))]);
             ask::text(title, &crate::PAGE_ENTERED).number()
         };
@@ -688,9 +688,9 @@ impl Screen for ReaderScreen {
             // where the bookmark corner or the way back are).
             if !corner
                 && !back
-                && let Some(layer) = env
-                    .page_layers
-                    .tapped(&env, &book.typography.rooms, p.x, p.y)
+                && let Some(layer) =
+                    env.page_layers()
+                        .tapped(&env, &book.typography.rooms, p.x, p.y)
             {
                 book.tap_layer(layer, Some(p), cx);
                 return Handled::Yes;
@@ -1054,7 +1054,7 @@ impl ReaderScreen {
         {
             let env = *cx.env();
             let look = env
-                .settings
+                .settings()
                 .specs()
                 .any(|s| s.id.as_str() == id && s.group == paperpaw_sdk::builtin::groups::MARKS);
             let marked = book

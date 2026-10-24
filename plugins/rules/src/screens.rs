@@ -777,7 +777,7 @@ impl PickScreen {
         entries.sort_by_key(|e| e.1.to_lowercase());
         entries.dedup_by(|a, b| a.0 == b.0);
         let title = env
-            .i18n
+            .i18n()
             .tr(match mode {
                 SWITCH => "rules.pick.switch",
                 NUMBER => "rules.pick.number",

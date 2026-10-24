@@ -214,7 +214,7 @@ impl BrowserScreen {
         }
         self.loading = Some(url.to_string());
         let message = env
-            .i18n
+            .i18n()
             .format("browser.loading", &[("host", Arg::Str(&host))]);
         self.say(message, cx);
         cx.command(Command::http(
@@ -259,7 +259,7 @@ impl BrowserScreen {
         let tmp = download_path();
         if status == 0 {
             let message = env
-                .i18n
+                .i18n()
                 .format("browser.failed", &[("host", Arg::Str(&host))]);
             return self.say(message, cx);
         }

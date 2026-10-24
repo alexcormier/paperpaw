@@ -180,7 +180,7 @@ impl MenuScreen {
         let main = menus::MAIN;
         let menu = params.get(params::MENU).unwrap_or(main.as_str());
         let mut items: Vec<Item> = env
-            .menus
+            .menus()
             .shown_items(env, menu)
             .into_iter()
             .filter(|item| !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
@@ -499,7 +499,7 @@ fn tiles(env: &Env<'_>, params: &Params) -> bool {
         return false;
     }
     let items = env
-        .menus
+        .menus()
         .items(params.get(params::MENU).unwrap_or_default());
     let entries: Vec<_> = items.iter().filter(|i| !i.section).collect();
     !entries.is_empty() && entries.iter().all(|i| i.icon.is_some())

@@ -48,7 +48,7 @@ pub(crate) fn state(
         return State::Busy(env.i18n().tr("store.state.queued").to_string());
     }
     let restart = env
-        .plugins
+        .plugins()
         .get(&plugin.id)
         .is_some_and(paperpaw_sdk::PluginInfo::restart_needed);
     if restart {

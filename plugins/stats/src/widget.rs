@@ -435,7 +435,7 @@ fn draw_arc(
     // Halfway between paper and ink where the panel has grays to show
     // it, else faint (black or white, told apart by its thinness).
     let grays = env
-        .device
+        .device()
         .display
         .format
         .gray_levels()

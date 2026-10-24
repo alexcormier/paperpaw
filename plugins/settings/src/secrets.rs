@@ -63,7 +63,7 @@ impl SecretList {
     fn open(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let id = cx
             .env()
-            .secrets
+            .secrets()
             .listed()
             .nth(index)
             .map(|s| s.id.to_string());

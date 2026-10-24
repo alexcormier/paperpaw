@@ -185,7 +185,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
             (options, "core.reading-app.always-with", "b")
         };
         let title = env
-            .i18n
+            .i18n()
             .format(key, &[("name", paperpaw_sdk::Arg::Str(name))]);
         out.push(
             paperpaw_sdk::ask::choice(title, &READING_APP_PICKED)
@@ -508,7 +508,7 @@ fn waits(env: &Env<'_>, walk: bool) -> bool {
     let shown = env.stack().iter().rev().find(|entry| !entry.overlay);
     let reading = shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
     let library_open = env
-        .stack
+        .stack()
         .iter()
         .any(|entry| entry.slot.as_ref() == Some(&slots::LIBRARY));
     reading
@@ -802,7 +802,7 @@ fn declare_clean_up(env: &Env<'_>, out: &mut Commands) {
         // Seen first now: as if done the right while ago.
         let seen = now - (CLEAN_UP_EVERY - CLEAN_UP_FIRST);
         let _ = env
-            .storage
+            .storage()
             .write(CLEANED_UP, alloc::format!("{seen}\n").as_bytes());
         seen
     });
@@ -1893,7 +1893,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         )
         .signature(Box::new(|env, context| {
             let lists: Vec<&str> = env
-                .status_items
+                .status_items()
                 .places()
                 .flat_map(|p| p.lists(env))
                 .collect();

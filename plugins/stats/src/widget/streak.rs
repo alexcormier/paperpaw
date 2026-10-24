@@ -227,7 +227,7 @@ fn marks_height(env: &Env<'_>, small: u16, width: u16, weekdays: bool) -> u16 {
 /// "5 days", and below it "in a row, longest 12" (or how to begin one).
 fn texts(env: &Env<'_>, streaks: Streaks) -> (String, String) {
     let first = env
-        .i18n
+        .i18n()
         .plural("stats.days", i64::from(streaks.current), &[]);
     let second = if streaks.current == 0 {
         String::from(env.i18n().tr("stats.widget.streak.start"))

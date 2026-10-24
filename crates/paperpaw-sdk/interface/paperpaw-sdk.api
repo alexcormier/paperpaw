@@ -4947,56 +4947,6 @@ pub fn paperpaw_sdk::Cx<'a, 'e>::slot(&self) -> core::option::Option<&paperpaw_s
 pub fn paperpaw_sdk::Cx<'a, 'e>::wake_at(&mut self, paperpaw_platform::input::Instant)
 pub fn paperpaw_sdk::Cx<'a, 'e>::with_params(self, &'a paperpaw_sdk::Params) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::Env<'a>
-pub paperpaw_sdk::Env::actions: &'a paperpaw_sdk::Actions
-pub paperpaw_sdk::Env::book_badges: &'a [paperpaw_sdk::library::service::BookBadge]
-pub paperpaw_sdk::Env::book_data: &'a [paperpaw_sdk::library::BookData]
-pub paperpaw_sdk::Env::book_fields: &'a [paperpaw_sdk::library::service::BookField]
-pub paperpaw_sdk::Env::caps: paperpaw_sdk::Capabilities
-pub paperpaw_sdk::Env::catalog_device: core::option::Option<&'a str>
-pub paperpaw_sdk::Env::clipboard: bool
-pub paperpaw_sdk::Env::clock: paperpaw_sdk::time::Clock
-pub paperpaw_sdk::Env::content: paperpaw_platform::geometry::Rect
-pub paperpaw_sdk::Env::decorators: &'a paperpaw_sdk::decorations::Decorators
-pub paperpaw_sdk::Env::device: &'a paperpaw_platform::DeviceInfo
-pub paperpaw_sdk::Env::firmware: core::option::Option<&'a paperpaw_sdk::firmware::Firmware>
-pub paperpaw_sdk::Env::font_dirs: &'a [alloc::string::String]
-pub paperpaw_sdk::Env::fonts: &'a paperpaw_sdk::Fonts
-pub paperpaw_sdk::Env::formats: &'a paperpaw_sdk::Formats
-pub paperpaw_sdk::Env::hyphenation: &'a paperpaw_sdk::Hyphenation
-pub paperpaw_sdk::Env::i18n: &'a paperpaw_i18n::Translator
-pub paperpaw_sdk::Env::inputs: &'a [paperpaw_sdk::keys::InputSpec]
-pub paperpaw_sdk::Env::keys: &'a dyn paperpaw_sdk::keys::KeyBindings
-pub paperpaw_sdk::Env::last_input: paperpaw_sdk::keys::InputMode
-pub paperpaw_sdk::Env::look: paperpaw_sdk::ui::look::Look
-pub paperpaw_sdk::Env::lookup: &'a paperpaw_sdk::lookup::LookupProviders
-pub paperpaw_sdk::Env::memory: paperpaw_sdk::memory::Memory
-pub paperpaw_sdk::Env::menus: &'a paperpaw_sdk::Menus
-pub paperpaw_sdk::Env::metrics: paperpaw_sdk::Metrics
-pub paperpaw_sdk::Env::native: core::option::Option<&'a paperpaw_sdk::native::Native>
-pub paperpaw_sdk::Env::now: paperpaw_platform::input::Instant
-pub paperpaw_sdk::Env::page_layers: &'a paperpaw_sdk::layers::PageLayers
-pub paperpaw_sdk::Env::plugins: &'a paperpaw_sdk::Plugins
-pub paperpaw_sdk::Env::power: &'a paperpaw_sdk::power::Power
-pub paperpaw_sdk::Env::random: paperpaw_sdk::random::Random
-pub paperpaw_sdk::Env::reader: bool
-pub paperpaw_sdk::Env::readers: &'a paperpaw_sdk::readers::Readers
-pub paperpaw_sdk::Env::screens: &'a [(paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)]
-pub paperpaw_sdk::Env::secrets: paperpaw_sdk::secrets::Visible<'a>
-pub paperpaw_sdk::Env::services: &'a paperpaw_sdk::services::Services
-pub paperpaw_sdk::Env::settings: &'a paperpaw_sdk::Settings
-pub paperpaw_sdk::Env::setup: &'a paperpaw_sdk::setup::SetupSteps
-pub paperpaw_sdk::Env::slots: &'a [paperpaw_sdk::Id]
-pub paperpaw_sdk::Env::stack: &'a [paperpaw_sdk::StackEntry]
-pub paperpaw_sdk::Env::started: paperpaw_sdk::power::Start
-pub paperpaw_sdk::Env::status: &'a paperpaw_platform::status::SystemStatus
-pub paperpaw_sdk::Env::status_items: &'a paperpaw_sdk::status::StatusItems
-pub paperpaw_sdk::Env::storage: &'a dyn paperpaw_platform::storage::Storage
-pub paperpaw_sdk::Env::stylesheets: &'a [alloc::borrow::Cow<'static, str>]
-pub paperpaw_sdk::Env::text_filters: &'a paperpaw_sdk::filters::TextFilters
-pub paperpaw_sdk::Env::usage: &'a paperpaw_sdk::usage::Usage
-pub paperpaw_sdk::Env::widgets: &'a paperpaw_sdk::widgets::Widgets
-pub paperpaw_sdk::Env::wifi: core::option::Option<&'a paperpaw_sdk::wifi::Wifi>
-pub paperpaw_sdk::Env::work: &'a paperpaw_sdk::work::WorkStates
 impl paperpaw_sdk::Env<'_>
 pub fn paperpaw_sdk::Env<'_>::has_slot(&self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::Env<'_>::make_screen(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Params) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::Screen>>

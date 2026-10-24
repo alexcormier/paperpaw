@@ -148,7 +148,7 @@ pub(crate) fn draw_symbol(
 pub(crate) fn clock(env: &Env<'_>, minutes: u16) -> String {
     let (hour, minute) = (minutes / 60, minutes % 60);
     let twelve = env
-        .settings
+        .settings()
         .read(&paperpaw_sdk::builtin::settings::CLOCK_FORMAT)
         == time::CLOCK_12H;
     if !twelve {

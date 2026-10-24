@@ -109,7 +109,7 @@ fn read(storage: &dyn Storage) -> Result<Option<Vec<Catalog>>, Unreadable> {
 fn fill_passwords(env: &Env<'_>, catalogs: &mut [Catalog]) {
     for c in catalogs.iter_mut().filter(|c| c.password.is_empty()) {
         c.password = env
-            .secrets
+            .secrets()
             .get(&secret_id(&c.url))
             .unwrap_or_default()
             .to_string();
@@ -202,7 +202,7 @@ fn keep_passwords(env: &Env<'_>, catalogs: &[Catalog], out: &mut Commands) {
             }
         } else if kept != Some(c.password.as_str()) {
             let label = env
-                .i18n
+                .i18n()
                 .format("opds.secret", &[("name", Arg::Str(&c.name))]);
             out.push(Command::set_secret(SecretChange::keep(
                 &id,

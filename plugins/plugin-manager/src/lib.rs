@@ -169,7 +169,7 @@ impl PluginList {
     /// open (e.g. installed from a store opened from it).
     fn read_rows(&mut self, env: &Env<'_>) {
         self.more = env
-            .menus
+            .menus()
             .items(MORE.as_str())
             .into_iter()
             .filter(|item| !item.section && env.actions().contains(item.id.as_str()))
@@ -469,7 +469,7 @@ impl Screen for PluginList {
                 // Named by its action, told by the plugin that added it.
                 let name = env.actions().get(action.as_str()).map_or("", |a| &a.title);
                 let note = env
-                    .plugins
+                    .plugins()
                     .owner(action)
                     .map_or("", |p| p.description(env.i18n()));
                 let name = env.i18n().tr(name);

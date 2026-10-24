@@ -265,7 +265,7 @@ fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
     // switch.
     if env.settings().group_of(spec) == groups::DEVELOPER {
         return env
-            .settings
+            .settings()
             .bool(paperpaw_sdk::builtin::settings::DEVELOPER.as_str());
     }
     spec.level == Level::Basic || env.settings().read(&ADVANCED)

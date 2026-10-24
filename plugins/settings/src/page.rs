@@ -160,12 +160,12 @@ impl GroupPage {
         let own = group.unplaced();
         let of = own.as_ref().unwrap_or(&group);
         let title = env
-            .settings
+            .settings()
             .groups()
             .find(|g| g.id == *of)
             .map_or_else(String::new, |g| env.i18n().tr(&g.title).to_string());
         let specs = env
-            .settings
+            .settings()
             .specs()
             .filter(|spec| env.settings().group_of(spec) == *of && visible(env, spec))
             .cloned()

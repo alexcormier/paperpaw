@@ -337,7 +337,7 @@ impl Popup {
         let others = env.lookup().fitting(env, &popup.query(), false).count() > 1;
         if popup.dictionaries.is_empty() && !others {
             let message = env
-                .i18n
+                .i18n()
                 .format("dictionary.none", &[("folder", Arg::Str(folder))]);
             popup.set_text(env, message);
             return popup;
@@ -431,7 +431,7 @@ impl Popup {
         }
         if text.is_empty() && self.pending.is_empty() {
             text = env
-                .i18n
+                .i18n()
                 .format("dictionary.not-found", &[("word", Arg::Str(&self.word))]);
         }
         let top = self.top;
@@ -535,7 +535,7 @@ impl Popup {
     fn providers_online(&self, env: &Env<'_>) -> bool {
         !self.asked_online
             && env
-                .lookup
+                .lookup()
                 .fitting(env, &self.query(), true)
                 .next()
                 .is_some()

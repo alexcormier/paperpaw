@@ -229,7 +229,7 @@ impl Screens {
             )),
             (Row::ReadingApp, _) => {
                 if let Some(open) = env
-                    .settings
+                    .settings()
                     .spec(settings::READING_APP.as_str())
                     .and_then(|spec| ui::setting_opens(env, spec))
                 {

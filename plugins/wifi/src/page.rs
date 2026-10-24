@@ -50,7 +50,7 @@ fn state_text(env: &Env<'_>, state: &WifiState, scanning: bool) -> String {
         WifiState::On if scanning => env.i18n().tr("wifi.state.searching").to_string(),
         WifiState::On => env.i18n().tr("wifi.state.on").to_string(),
         WifiState::Joining { ssid } => env
-            .i18n
+            .i18n()
             .format("wifi.state.joining", &[("ssid", Arg::Str(ssid))]),
         WifiState::Online { ssid, address } => env.i18n().format(
             "wifi.state.online",
@@ -161,7 +161,7 @@ impl WifiPage {
                     }
                 } else if network.secured {
                     let title = env
-                        .i18n
+                        .i18n()
                         .format("wifi.password", &[("ssid", Arg::Str(&network.ssid))]);
                     cx.command(
                         paperpaw_sdk::ask::text(title, &PASSWORD_ENTERED)
@@ -316,7 +316,7 @@ impl Screen for WifiPage {
         let env = *cx.env();
         if *event == events::WIFI_CHANGED
             && env
-                .wifi
+                .wifi()
                 .is_some_and(|w| w.state == WifiState::On && w.networks.is_empty())
             && self.policy.borrow().goal == crate::policy::Goal::Nothing
         {

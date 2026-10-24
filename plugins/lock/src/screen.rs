@@ -388,7 +388,7 @@ impl LockScreen {
             Step::New => {
                 if entered.chars().count() < MIN_LENGTH {
                     let text = env
-                        .i18n
+                        .i18n()
                         .format("lock.too-short", &[("count", Arg::Int(MIN_LENGTH as i64))]);
                     self.message = Some(text);
                 } else {

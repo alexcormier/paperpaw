@@ -40,7 +40,7 @@ fn opened(env: &Env<'_>, file: &str) -> Option<ImageRef> {
 /// One's own picture of `mood`, if the folder has one PaperPaw reads.
 fn own(env: &Env<'_>, mood: Mood) -> Option<ImageRef> {
     let folder: String = env
-        .settings
+        .settings()
         .text(PICTURES.as_str())
         .trim_matches('/')
         .into();

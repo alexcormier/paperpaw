@@ -224,7 +224,7 @@ proptest! {
         let decoration = decoration.thickness(decoration.thickness % 9);
         let h = Harness::new(Device::TOUCH);
         let env = h.env();
-        let pad = env.metrics.tenth_mm(5).max(1) as u16;
+        let pad = env.metrics().tenth_mm(5).max(1) as u16;
         for b in &boxes {
             let mut frame = frame(640, 260);
             decorations::draw_behind(&mut frame.canvas(), &env, &[*b], &decoration);
@@ -247,7 +247,7 @@ proptest! {
         let decoration = decoration.thickness(decoration.thickness % 21);
         let h = Harness::new(Device::TOUCH);
         let env = h.env();
-        let pad = env.metrics.tenth_mm(5).max(1) as u16;
+        let pad = env.metrics().tenth_mm(5).max(1) as u16;
         for b in &boxes {
             let mut frame = frame(640, 260);
             decorations::draw_behind(&mut frame.canvas(), &env, &[*b], &decoration);
@@ -286,7 +286,7 @@ proptest! {
 fn a_background_at_the_left_edge_keeps_its_padding_on_the_right() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
-    let pad = env.metrics.tenth_mm(5).max(1) as u16;
+    let pad = env.metrics().tenth_mm(5).max(1) as u16;
     let word = Rect::new(0, 20, 50, 30);
     let mut frame = frame(200, 80);
     let marked = Decoration::NONE.background(Tone::Black);

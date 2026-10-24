@@ -192,7 +192,7 @@ impl BrowseScreen {
         }
         self.loading = Some((url.to_string(), back));
         let message = env
-            .i18n
+            .i18n()
             .format("opds.loading", &[("host", Arg::Str(host(url)))]);
         self.say(message, cx);
         let params = Params::new().with(URL, url.to_string());
@@ -276,7 +276,7 @@ impl BrowseScreen {
                     Params::new().with(URL, url.clone()),
                 )));
                 let message = env
-                    .i18n
+                    .i18n()
                     .format("opds.loading", &[("host", Arg::Str(host(&url)))]);
                 return self.say(message, cx);
             }

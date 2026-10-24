@@ -394,7 +394,7 @@ impl State {
                 // is not converted a second time).
                 let options = paperpaw_sdk::reading::open_options(env);
                 let document = env
-                    .formats
+                    .formats()
                     .open_with(env.storage(), &position.path, &options)
                     .ok();
                 let xpointer = document

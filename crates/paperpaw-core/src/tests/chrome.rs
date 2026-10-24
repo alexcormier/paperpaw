@@ -225,7 +225,7 @@ fn a_bar_at_the_bottom_leaves_the_rest_to_the_screen() {
         ["page made 90x70", "bar made 90x20", "bar shown"]
     );
     assert_eq!(
-        kernel.shared.env(Instant(0)).content,
+        kernel.shared.env(Instant(0)).content(),
         Rect::new(0, 0, 90, 70)
     );
     assert_eq!(

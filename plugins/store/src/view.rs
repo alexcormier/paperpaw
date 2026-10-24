@@ -281,7 +281,7 @@ impl ViewScreen {
         let env = *cx.env();
         let pages = self.list.pages(self.len()) as i64;
         let title = env
-            .i18n
+            .i18n()
             .format("store.go-to-page", &[("pages", Arg::Int(pages))]);
         cx.command(ask::text(title, &JUMPED).number().command());
     }
@@ -300,7 +300,7 @@ impl ViewScreen {
             View::Installed => env.i18n().tr("store.installed-list").to_string(),
             View::New => env.i18n().tr("store.new").to_string(),
             View::Search(text) => env
-                .i18n
+                .i18n()
                 .format("store.search.title", &[("query", Arg::Str(text))]),
         }
     }

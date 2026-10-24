@@ -397,7 +397,7 @@ fn draw_day(
     // few grays, days with numbers get the lightest shade and a bar as
     // long as their level instead.
     let few = env
-        .device
+        .device()
         .display
         .format
         .gray_levels()

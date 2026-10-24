@@ -114,7 +114,7 @@ impl<'a> Device<'a> {
             code_file: env.native().map_or("", |native| &native.file),
             plugins: Some(env.plugins()),
             sdk: env
-                .plugins
+                .plugins()
                 .kernel()
                 .map_or(paperpaw_sdk::SDK_VERSION, |kernel| kernel.manifest.version),
             official: env.settings().read(&crate::CATALOG).trim() == OFFICIAL_LIST,

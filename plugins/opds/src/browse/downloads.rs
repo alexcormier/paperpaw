@@ -40,7 +40,7 @@ impl BrowseScreen {
                 params,
             )));
             let message = env
-                .i18n
+                .i18n()
                 .format("opds.downloading", &[("title", Arg::Str(&entry.title))]);
             return self.say(message, cx);
         }

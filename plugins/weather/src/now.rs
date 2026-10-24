@@ -251,7 +251,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
         && let Some(feels) = current.feels
     {
         let text = env
-            .i18n
+            .i18n()
             .format("weather.feels", &[("degrees", Arg::Str(&degrees(feels)))]);
         details.push((text, 2));
     }
@@ -264,7 +264,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
             &[("speed", Arg::Int(i64::from(wind_unit.speed(wind))))],
         );
         let text = env
-            .i18n
+            .i18n()
             .format("weather.wind", &[("speed", Arg::Str(&speed))]);
         details.push((text, 2));
     }
@@ -272,7 +272,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
         && let Some(rain) = today.and_then(|d| d.rain)
     {
         let text = env
-            .i18n
+            .i18n()
             .format("weather.rain", &[("percent", Arg::Int(i64::from(rain)))]);
         details.push((text, 2));
     }

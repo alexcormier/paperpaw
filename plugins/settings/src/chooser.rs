@@ -51,7 +51,7 @@ impl Chooser {
         });
         let options: Vec<(String, String)> = match spec.as_ref().map(|s| (&s.kind, s)) {
             Some((SettingKind::Language, _)) => env
-                .i18n
+                .i18n()
                 .languages()
                 .into_iter()
                 .map(|(tag, name)| (tag.to_string(), name.to_string()))

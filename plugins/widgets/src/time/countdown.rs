@@ -273,7 +273,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let mut notes = alloc::vec::Vec::new();
     if widgets::shows(env, ID.as_str(), "weeks") && days.abs() >= 7 {
         let weeks = env
-            .i18n
+            .i18n()
             .plural("widgets.countdown.weeks", days.abs() / 7, &[]);
         let rest = days.abs() % 7;
         notes.push(if rest == 0 {

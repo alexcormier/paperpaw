@@ -54,7 +54,7 @@ pub(crate) fn duration(env: &Env<'_>, seconds: u64) -> String {
     }
     if minutes < 60 {
         return env
-            .i18n
+            .i18n()
             .format("stats.minutes", &[("m", Arg::Int(minutes as i64))]);
     }
     env.i18n().format(

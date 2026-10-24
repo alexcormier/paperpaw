@@ -243,11 +243,11 @@ fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
         footer.y.saturating_sub(top),
     );
     let columns = env
-        .settings
+        .settings()
         .read(&pages::COLUMNS)
         .clamp(2, i64::from(grid::MAX_COLUMNS)) as u8;
     let rows = env
-        .settings
+        .settings()
         .read(&pages::ROWS)
         .clamp(0, i64::from(grid::MAX_ROWS)) as u8;
     (status, Geometry::new(env, area, columns, rows), footer)
@@ -462,7 +462,7 @@ impl Dashboard {
                 let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
                 ui.icon(name, size, x, *area, style.faint(ui::Ink::Note));
                 let title = env
-                    .menus
+                    .menus()
                     .title(action.as_str())
                     .map_or(action.as_str(), |t| env.i18n().tr(t));
                 ui.canvas()

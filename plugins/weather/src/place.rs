@@ -129,11 +129,12 @@ impl PlaceScreen {
                 }
             }
             Search::Searching(_) => env.i18n().tr("weather.place.searching").to_string(),
-            Search::Found => env
-                .i18n
-                .plural("weather.place.found", self.places.len() as i64, &[]),
+            Search::Found => {
+                env.i18n()
+                    .plural("weather.place.found", self.places.len() as i64, &[])
+            }
             Search::Nothing(name) => env
-                .i18n
+                .i18n()
                 .format("weather.place.nothing", &[("name", Arg::Str(name))]),
             Search::Failed => env.i18n().tr("weather.place.failed").to_string(),
             Search::NoNetwork => env.i18n().tr("weather.place.no-network").to_string(),

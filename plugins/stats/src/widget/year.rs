@@ -267,7 +267,7 @@ fn headline(env: &Env<'_>, shown: &Shown) -> String {
             &[("done", Arg::Int(i64::from(shown.done)))],
         ),
         None => env
-            .i18n
+            .i18n()
             .plural("stats.widget.year.read", i64::from(shown.done), &[]),
     }
 }
@@ -299,7 +299,7 @@ fn notes(env: &Env<'_>, shown: &Shown) -> Vec<(String, bool)> {
         .filter(|_| widgets::shows(env, id, "last"))
     {
         let note = env
-            .i18n
+            .i18n()
             .format("stats.widget.year.last", &[("title", Arg::Str(title))]);
         notes.push((note, true));
     }

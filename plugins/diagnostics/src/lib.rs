@@ -352,7 +352,7 @@ impl Screen for DiagnosticsScreen {
 
         // One stripe per gray level the panel can show (at most 16).
         let levels = env
-            .device
+            .device()
             .display
             .format
             .gray_levels()

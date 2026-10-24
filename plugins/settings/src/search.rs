@@ -88,7 +88,7 @@ fn find(env: &Env<'_>, query: &str) -> Vec<Hit> {
         }
         let group = env.settings().group_of(spec).clone();
         let note = env
-            .settings
+            .settings()
             .groups()
             .find(|g| g.id == group)
             .map_or_else(String::new, |g| env.i18n().tr(&g.title).to_string());

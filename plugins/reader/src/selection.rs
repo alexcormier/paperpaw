@@ -106,7 +106,7 @@ impl Selection {
 pub(crate) fn items(env: &Env<'_>, highlight: Option<bool>) -> Vec<Item> {
     let translates = translates(env);
     let mut all: Vec<Item> = env
-        .menus
+        .menus()
         .items(SELECTION_MENU.as_str())
         .into_iter()
         .filter(|item| {

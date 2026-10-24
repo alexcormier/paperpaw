@@ -476,7 +476,7 @@ fn a_progress_bar_fills_inside_its_track() {
         h.device.display.dpi = dpi;
         let env = h.env();
         let base = UiStyle::new(&env);
-        for (corner, pill) in [(0, false), (env.metrics.tenth_mm(8), false), (0, true)] {
+        for (corner, pill) in [(0, false), (env.metrics().tenth_mm(8), false), (0, true)] {
             let style = base.with_corner(corner as u16).with_pill(pill);
             for (width, height) in [(300u16, 24u16), (120, 12), (400, 40), (60, 9)] {
                 let area = Rect::new(20, 30, width, height);

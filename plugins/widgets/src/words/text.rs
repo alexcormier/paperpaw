@@ -29,7 +29,7 @@ pub(super) fn font<'a>(env: &Env<'a>, face: &str) -> Option<FontHandle<'a>> {
     match FACES.iter().position(|f| *f == face) {
         Some(1) => book().or_else(ui),
         Some(2) => env
-            .fonts
+            .fonts()
             .bound(fonts::READING_ITALIC.as_str())
             .or_else(book)
             .or_else(ui),

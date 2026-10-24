@@ -335,7 +335,7 @@ impl Book {
     /// Hands `text` over to be spoken, after what is spoken with `queue`.
     pub(super) fn speak(&self, env: &Env<'_>, text: String, queue: bool, cx: &mut Cx<'_, '_>) {
         let rate = env
-            .settings
+            .settings()
             .int(crate::settings::ALOUD_SPEED.as_str())
             .clamp(50, 300) as u16;
         let speech = paperpaw_sdk::Speech::new(text, crate::SPOKEN)

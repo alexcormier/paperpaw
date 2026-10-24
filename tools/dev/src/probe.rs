@@ -106,7 +106,7 @@ impl Screen for Measuring {
         let style = UiStyle::new(env);
         let width = env.device().display.width;
         let cut: Vec<(String, String)> = env
-            .settings
+            .settings()
             .specs()
             .filter_map(|spec| {
                 let text = env.i18n().tr(spec.description.as_deref()?);

@@ -246,7 +246,7 @@ impl ReaderScreen {
         }
         // An action of the selection menu, e.g. chosen in its list.
         if env
-            .menus
+            .menus()
             .items(crate::SELECTION_MENU.as_str())
             .iter()
             .any(|item| item.id == a)

@@ -154,7 +154,7 @@ impl Today {
     pub(crate) fn now(env: &Env<'_>) -> Today {
         // `stats.goal.30`: 30; `stats.goal.off`: none.
         let goal = env
-            .settings
+            .settings()
             .text(GOAL)
             .rsplit('.')
             .next()

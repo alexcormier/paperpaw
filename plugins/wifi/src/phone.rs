@@ -253,7 +253,7 @@ impl PhoneScreen {
                     ("POST", "/join") => match form.as_deref().and_then(chosen) {
                         Some((ssid, password)) => {
                             let text = env
-                                .i18n
+                                .i18n()
                                 .format("wifi.phone.joining-page", &[("ssid", Arg::Str(&ssid))]);
                             let body = format!("<h1>{}</h1>", escape(&text));
                             (200, page(&env, &body), Some((ssid, password)))
@@ -611,10 +611,10 @@ impl Screen for PhoneScreen {
                 return self.draw_step(&mut ui, area, own);
             }
             (State::Leaving { ssid, .. } | State::Joining(ssid), _) => env
-                .i18n
+                .i18n()
                 .format("wifi.state.joining", &[("ssid", Arg::Str(ssid))]),
             (State::Joined(ssid), _) => env
-                .i18n
+                .i18n()
                 .format("wifi.phone.joined", &[("ssid", Arg::Str(ssid))]),
             (State::Failed(text), _) => text.clone(),
         };

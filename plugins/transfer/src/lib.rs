@@ -408,7 +408,7 @@ impl TransferScreen {
             Some(plugins::Ask::Code(id)) => {
                 let question = String::from(env.i18n().tr("transfer.code.question"));
                 let text = env
-                    .i18n
+                    .i18n()
                     .format("transfer.code.text", &[("name", Arg::Str(&id))]);
                 cx.command(
                     paperpaw_sdk::ask::confirm(question, &CODE_APPROVED)

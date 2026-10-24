@@ -247,7 +247,7 @@ impl Loaded {
             return self.author.clone();
         }
         let number = env
-            .i18n
+            .i18n()
             .format("files.series-number", &[("number", Arg::Str(&self.number))]);
         if self.author.is_empty() {
             number

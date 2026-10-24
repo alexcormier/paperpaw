@@ -97,7 +97,7 @@ fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
     let time = fmt::duration(env, numbers.today);
     let first = if widgets::shows(env, NAME, "pages") {
         let pages = env
-            .i18n
+            .i18n()
             .plural("stats.pages", i64::from(numbers.pages), &[]);
         format!("{time} · {pages}")
     } else {
@@ -114,7 +114,7 @@ fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
         Some(goal) if numbers.today < goal => {
             let left = unbroken(fmt::duration(env, (goal - numbers.today).max(60)));
             let line = env
-                .i18n
+                .i18n()
                 .format("stats.goal.left", &[("time", Arg::Str(&left))]);
             match numbers.streak {
                 0 => line,
@@ -127,7 +127,7 @@ fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
         Some(_) => match numbers.streak {
             0 | 1 => env.i18n().tr("stats.goal.reached").to_string(),
             days => env
-                .i18n
+                .i18n()
                 .plural("stats.goal.reached-days", i64::from(days), &[]),
         },
     };

@@ -188,7 +188,7 @@ fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Commands) {
     if let Some((ahead, at)) = next {
         // The start of that minute.
         let at_minute = env
-            .now
+            .now()
             .add_millis(u64::from(ahead) * 60_000 - u64::from(now.second) * 1000);
         out.push(Command::work(
             Work::at(TIME, at_minute).with(Params::new().with(MINUTE, at.to_string())),
@@ -229,7 +229,7 @@ fn days_text(env: &Env<'_>, days: u8) -> String {
 /// The name of a setting.
 fn setting_title<'e>(env: &Env<'e>, id: &'e Id) -> &'e str {
     let title = env
-        .settings
+        .settings()
         .specs()
         .find(|s| s.id == *id)
         .map_or(id.as_str(), |s| s.title.as_ref());
@@ -327,7 +327,7 @@ fn effect_text(env: &Env<'_>, effect: &Effect) -> String {
     match effect {
         Effect::Action(id) => {
             let title = env
-                .actions
+                .actions()
                 .get(id.as_str())
                 .map_or(id.as_str(), |a| a.title.as_ref());
             env.i18n().tr(title).to_string()
@@ -350,7 +350,7 @@ fn effect_text(env: &Env<'_>, effect: &Effect) -> String {
             ],
         ),
         Effect::Message(text) => env
-            .i18n
+            .i18n()
             .format("rules.do.message", &[("text", Arg::Str(text))]),
     }
 }

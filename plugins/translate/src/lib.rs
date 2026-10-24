@@ -449,7 +449,7 @@ impl Screen for Panel {
         self.asked = true;
         let env = *cx.env();
         let key = env
-            .secrets
+            .secrets()
             .get(KEY.as_str())
             .unwrap_or_default()
             .to_string();

@@ -198,11 +198,11 @@ impl ListScreen {
 /// What a font is: its kind and how many styles, by whom.
 pub(crate) fn describe(env: &Env<'_>, font: &Font) -> String {
     let kind = env
-        .i18n
+        .i18n()
         .get(&format!("fonts-browser.category.{}", font.category))
         .unwrap_or_else(|| env.i18n().tr("fonts-browser.category.other"));
     let styles = env
-        .i18n
+        .i18n()
         .plural("fonts-browser.styles", i64::from(font.styles.max(1)), &[]);
     let mut text = format!("{kind} · {styles}");
     if !font.author.is_empty() {

@@ -374,7 +374,7 @@ fn keep_headlines(env: &Env<'_>, book: &str, titles: &[String]) {
         }
     }
     let _ = env
-        .storage
+        .storage()
         .write(&headlines_file(), lines.join("\n").as_bytes());
 }
 
@@ -573,7 +573,7 @@ impl Screen for FeedsScreen {
                 (env.i18n().tr("news.add").to_string(), "›", note)
             } else if row == 0 {
                 let note = env
-                    .i18n
+                    .i18n()
                     .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))]);
                 (env.i18n().tr("news.fetch").to_string(), "", note)
             } else {

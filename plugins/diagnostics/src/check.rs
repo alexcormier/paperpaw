@@ -215,7 +215,7 @@ impl Check {
         };
         let report = self.results.report(&about);
         self.unsaved = env
-            .storage
+            .storage()
             .write(steps::REPORT, report.as_bytes())
             .err()
             .map(|e| format!("{e:?}"));
@@ -895,7 +895,7 @@ impl Check {
         if let Some(error) = &self.unsaved {
             let report = env.i18n().tr("diagnostics.check.report").to_string();
             let unsaved = env
-                .i18n
+                .i18n()
                 .format("diagnostics.check.unsaved", &[("error", Arg::Str(error))]);
             lines.push((report, unsaved));
         }

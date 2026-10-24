@@ -190,7 +190,7 @@ pub(crate) fn staged_over_wifi(env: &Env<'_>, id: &str) -> bool {
 /// Whether the cable transfer, open, has an offer of plugin `id`.
 fn staged_over_cable(env: &Env<'_>, id: &str) -> bool {
     let open = env
-        .stack
+        .stack()
         .iter()
         .any(|entry| entry.screen == crate::CABLE_SCREEN);
     open && crate::cable::offered_plugin(env).as_deref() == Some(id)

@@ -73,7 +73,7 @@ pub(crate) fn used(env: &Env<'_>) -> bool {
         return false;
     }
     let reading = env
-        .stack
+        .stack()
         .iter()
         .rev()
         .find(|entry| !entry.overlay)
@@ -108,7 +108,7 @@ pub(crate) fn over(env: &Env<'_>) -> Result<Over, String> {
     let widget = env.settings().text(WIDGET.as_str()).trim();
     if !widget.is_empty() {
         return env
-            .widgets
+            .widgets()
             .make(widget, env)
             .map(Over::Widget)
             .ok_or_else(|| tr("sleep.overlay.no-widget", widget));
@@ -343,7 +343,7 @@ impl Picker {
                 .and_then(|b| String::from_utf8(b).ok())
                 .map(|why| {
                     let text = env
-                        .i18n
+                        .i18n()
                         .tr("sleep.overlay.failed")
                         .replace("{reason}", &why);
                     let area =
@@ -369,7 +369,7 @@ impl Picker {
             _ if !widget.is_empty() => false,
             Source::Folder => env.settings().text(PICTURE.as_str()).trim().is_empty(),
             Source::Preset(id) => env
-                .settings
+                .settings()
                 .presets()
                 .get(id.as_str())
                 .is_some_and(|preset| {

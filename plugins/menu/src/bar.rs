@@ -99,7 +99,7 @@ impl BarScreen {
         let display = env.device().display;
         let menu = params.get(params::MENU).unwrap_or_default();
         let entries: Vec<Entry> = env
-            .menus
+            .menus()
             .shown_items(env, menu)
             .into_iter()
             .filter(|item| !item.section && !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
@@ -112,7 +112,7 @@ impl BarScreen {
             .map(|item| Entry {
                 id: item.id.clone(),
                 title: env
-                    .i18n
+                    .i18n()
                     .get(&alloc::format!("{}.short", item.title))
                     .unwrap_or(env.i18n().tr(item.title))
                     .to_string(),

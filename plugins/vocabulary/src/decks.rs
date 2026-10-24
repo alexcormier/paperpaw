@@ -120,7 +120,7 @@ impl Screen for DecksScreen {
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
         let due = env
-            .i18n
+            .i18n()
             .plural("vocabulary.cards.due", self.due as i64, &[]);
         let empty = self.decks.is_empty();
         let decks = &self.decks;

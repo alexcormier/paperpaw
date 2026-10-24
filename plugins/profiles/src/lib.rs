@@ -344,9 +344,9 @@ impl Screen for ListScreen {
                         } else {
                             String::new()
                         };
-                        let note = env
-                            .i18n
-                            .plural("profiles.settings", p.values.len() as i64, &[]);
+                        let note =
+                            env.i18n()
+                                .plural("profiles.settings", p.values.len() as i64, &[]);
                         ui::Row::value(&p.name, &value)
                             .note(&note)
                             .focused(focused)

@@ -315,7 +315,7 @@ impl PageScreen {
         // One at a time: another one going on is said, not stopped.
         if let Some(other) = &self.job {
             let text = env
-                .i18n
+                .i18n()
                 .format("store.busy", &[("name", Arg::Str(&other.name))]);
             return cx.command(Command::Notify(text));
         }
@@ -434,7 +434,7 @@ impl PageScreen {
             }
             Some(Row::Remove) => {
                 let title = env
-                    .i18n
+                    .i18n()
                     .format("store.remove-question", &[("name", Arg::Str(&plugin.name))]);
                 cx.command(
                     paperpaw_sdk::ask::choice(&title, &REMOVE)
@@ -707,7 +707,7 @@ impl Screen for PageScreen {
                 env.i18n().tr("store.downloading").to_string()
             }
             (Some(job), _) if job.plugin != plugin.id => env
-                .i18n
+                .i18n()
                 .format("store.busy", &[("name", Arg::Str(&job.name))]),
             (_, Some(Row::Restart)) => env.i18n().tr("store.restart.help").to_string(),
             _ => String::new(),

@@ -797,7 +797,7 @@ impl Screen for Browser {
             };
             let target = ops::free_path(env.storage(), &self.dir, name);
             self.message = env
-                .storage
+                .storage()
                 .create_dir(&target)
                 .err()
                 .map(|e| error(&env, e));

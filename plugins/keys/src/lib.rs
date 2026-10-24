@@ -148,7 +148,7 @@ fn places(env: &Env<'_>) -> Vec<Place> {
     ]);
     // Tools that say how they take gestures.
     let mut tools: Vec<Place> = env
-        .screens
+        .screens()
         .iter()
         // The reader binds on its slot's layer, which is a place already.
         .filter(|(id, _)| env.keys().bound(&[id.as_str()], POLICY).is_some())
@@ -165,7 +165,7 @@ fn places(env: &Env<'_>) -> Vec<Place> {
 /// Every screen as a place, for choosing one not listed.
 fn all_screens(env: &Env<'_>) -> Vec<Place> {
     let mut all: Vec<Place> = env
-        .screens
+        .screens()
         .iter()
         .map(|(id, title)| Place {
             title: env.i18n().tr(title).to_string(),
@@ -367,27 +367,27 @@ fn input_name(env: &Env<'_>, input: &str) -> String {
     match kind {
         "button" => part("button"),
         "long" => env
-            .i18n
+            .i18n()
             .format("keys.long", &[("input", Arg::Str(&part("button")))]),
         "double" => env
-            .i18n
+            .i18n()
             .format("keys.double", &[("input", Arg::Str(&part("button")))]),
         "tap" => env
-            .i18n
+            .i18n()
             .format("keys.tap", &[("zone", Arg::Str(&part("zone")))]),
         "double-tap" => env
-            .i18n
+            .i18n()
             .format("keys.double-tap", &[("zone", Arg::Str(&part("zone")))]),
         "tap2" => env.i18n().tr("keys.tap2").to_string(),
         "input" | "gesture" => env
-            .inputs
+            .inputs()
             .iter()
             .find(|spec| spec.key() == input)
             .map_or(input.to_string(), |spec| {
                 env.i18n().tr(&spec.title).to_string()
             }),
         "long-tap" => env
-            .i18n
+            .i18n()
             .format("keys.long-tap", &[("zone", Arg::Str(&part("zone")))]),
         "swipe" => part("swipe"),
         "edge" => part("edge"),
@@ -990,7 +990,7 @@ impl PickScreen {
         // Nothing, standard and the gesture policies are no actions to pick.
         let hidden = |id: &Id| *id == actions::NOTHING || id.as_str().starts_with("core.gestures.");
         let mut found: Vec<(usize, Id, String)> = env
-            .actions
+            .actions()
             .iter()
             .filter(|a| !hidden(&a.id))
             .map(|a| {

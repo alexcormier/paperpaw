@@ -201,7 +201,7 @@ impl Overview {
         let week: u32 = (0..7).map(|d| self.seconds_on(today - d)).sum();
         let streak = totals::streak(&self.days, today);
         let pages = env
-            .i18n
+            .i18n()
             .plural("stats.pages", i64::from(self.today_pages), &[]);
         Some([
             (

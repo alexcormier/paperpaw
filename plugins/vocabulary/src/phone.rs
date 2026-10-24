@@ -177,10 +177,10 @@ impl Done {
     fn text(&self, env: &Env<'_>) -> String {
         match self {
             Done::Deck(name) => env
-                .i18n
+                .i18n()
                 .format("vocabulary.phone.deck-saved", &[("name", Arg::Str(name))]),
             Done::Card(front) => env
-                .i18n
+                .i18n()
                 .format("vocabulary.phone.card-saved", &[("front", Arg::Str(front))]),
             Done::Deleted => env.i18n().tr("vocabulary.phone.deleted").into(),
             Done::Imported(n) => env

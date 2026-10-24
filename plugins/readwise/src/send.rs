@@ -183,7 +183,7 @@ impl Run {
             return;
         }
         let kept = env
-            .secrets
+            .secrets()
             .get(SECRET)
             .filter(|t| self.refused.as_deref() != Some(*t));
         let Some(token) = token.or(kept) else {
@@ -294,7 +294,7 @@ impl Run {
         self.quiet = false;
         let count = self.sent;
         let text = env
-            .i18n
+            .i18n()
             .plural("readwise.sent", count, &[("count", Arg::Int(count))]);
         self.end_with(env, text, out);
     }
