@@ -1347,6 +1347,9 @@ struct Shared {
     caps: Capabilities,
     /// Wi-Fi, where PaperPaw manages it (see [`KernelBuilder::wifi`]).
     wifi: Option<paperpaw_sdk::wifi::Wifi>,
+    /// Bluetooth, where the kernel uses a radio (see
+    /// [`KernelBuilder::bluetooth`]).
+    bluetooth: Option<paperpaw_sdk::bluetooth::Bluetooth>,
     /// Firmware updates, where PaperPaw is the firmware (see
     /// [`KernelBuilder::firmware`]).
     firmware: Option<Firmware>,
@@ -1444,6 +1447,7 @@ impl Shared {
             book_badges: &self.book_badges,
             caps: self.caps,
             wifi: self.wifi.as_ref(),
+            bluetooth: self.bluetooth.as_ref(),
             firmware: self.firmware.as_ref(),
             native: self.native.as_ref(),
             power: &self.power,

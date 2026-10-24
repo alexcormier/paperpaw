@@ -97,6 +97,276 @@ pub fn paperpaw_sdk::ask::choice(impl core::convert::Into<alloc::string::String>
 pub fn paperpaw_sdk::ask::confirm(impl core::convert::Into<alloc::string::String>, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::Confirmed>) -> paperpaw_sdk::ask::ConfirmQuestion
 pub fn paperpaw_sdk::ask::folder(&paperpaw_sdk::event::Event<paperpaw_sdk::replies::FolderChosen>) -> paperpaw_sdk::ask::FolderQuestion
 pub fn paperpaw_sdk::ask::text(impl core::convert::Into<alloc::string::String>, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed>) -> paperpaw_sdk::ask::TextQuestion
+pub mod paperpaw_sdk::bluetooth
+pub mod paperpaw_sdk::bluetooth::bt_params
+pub const paperpaw_sdk::bluetooth::bt_params::BONDED: &str
+pub const paperpaw_sdk::bluetooth::bt_params::BYTES: &str
+pub const paperpaw_sdk::bluetooth::bt_params::DEVICE: &str
+pub const paperpaw_sdk::bluetooth::bt_params::DEVICE_KIND: &str
+pub const paperpaw_sdk::bluetooth::bt_params::ERROR: &str
+pub const paperpaw_sdk::bluetooth::bt_params::HANDLE: &str
+pub const paperpaw_sdk::bluetooth::bt_params::KIND: &str
+pub const paperpaw_sdk::bluetooth::bt_params::NAME: &str
+pub const paperpaw_sdk::bluetooth::bt_params::ON: &str
+pub const paperpaw_sdk::bluetooth::bt_params::REPORT: &str
+pub const paperpaw_sdk::bluetooth::bt_params::REQUEST: &str
+pub const paperpaw_sdk::bluetooth::bt_params::RSSI: &str
+pub const paperpaw_sdk::bluetooth::bt_params::SERVICE: &str
+pub const paperpaw_sdk::bluetooth::bt_params::SERVICES: &str
+#[non_exhaustive] pub enum paperpaw_sdk::bluetooth::BtCommand
+pub paperpaw_sdk::bluetooth::BtCommand::Advertise(paperpaw_sdk::bluetooth::Advertising)
+pub paperpaw_sdk::bluetooth::BtCommand::Connect
+pub paperpaw_sdk::bluetooth::BtCommand::Connect::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Connect::events: paperpaw_sdk::Id
+pub paperpaw_sdk::bluetooth::BtCommand::Disconnect
+pub paperpaw_sdk::bluetooth::BtCommand::Disconnect::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Discover
+pub paperpaw_sdk::bluetooth::BtCommand::Discover::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Forget
+pub paperpaw_sdk::bluetooth::BtCommand::Forget::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Give
+pub paperpaw_sdk::bluetooth::BtCommand::Give::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Give::given: bool
+pub paperpaw_sdk::bluetooth::BtCommand::Give::plugin: paperpaw_sdk::Id
+pub paperpaw_sdk::bluetooth::BtCommand::HidReports
+pub paperpaw_sdk::bluetooth::BtCommand::HidReports::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::HidReports::events: paperpaw_sdk::Id
+pub paperpaw_sdk::bluetooth::BtCommand::Keys
+pub paperpaw_sdk::bluetooth::BtCommand::Keys::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Keys::on: bool
+pub paperpaw_sdk::bluetooth::BtCommand::Notify
+pub paperpaw_sdk::bluetooth::BtCommand::Notify::bytes: alloc::vec::Vec<u8>
+pub paperpaw_sdk::bluetooth::BtCommand::Notify::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtCommand::Pair
+pub paperpaw_sdk::bluetooth::BtCommand::Pair::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Read
+pub paperpaw_sdk::bluetooth::BtCommand::Read::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Read::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtCommand::Respond
+pub paperpaw_sdk::bluetooth::BtCommand::Respond::bytes: alloc::vec::Vec<u8>
+pub paperpaw_sdk::bluetooth::BtCommand::Respond::request: paperpaw_sdk::bluetooth::Request
+pub paperpaw_sdk::bluetooth::BtCommand::Scan(paperpaw_sdk::bluetooth::Scan)
+pub paperpaw_sdk::bluetooth::BtCommand::StopAdvertising
+pub paperpaw_sdk::bluetooth::BtCommand::StopScan
+pub paperpaw_sdk::bluetooth::BtCommand::StopScan::events: paperpaw_sdk::Id
+pub paperpaw_sdk::bluetooth::BtCommand::Subscribe
+pub paperpaw_sdk::bluetooth::BtCommand::Subscribe::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Subscribe::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtCommand::Unsubscribe
+pub paperpaw_sdk::bluetooth::BtCommand::Unsubscribe::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Unsubscribe::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtCommand::Write
+pub paperpaw_sdk::bluetooth::BtCommand::Write::bytes: alloc::vec::Vec<u8>
+pub paperpaw_sdk::bluetooth::BtCommand::Write::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtCommand::Write::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtCommand::Write::kind: paperpaw_sdk::bluetooth::WriteKind
+impl paperpaw_sdk::bluetooth::BtCommand
+pub fn paperpaw_sdk::bluetooth::BtCommand::command(self) -> paperpaw_sdk::Command
+#[non_exhaustive] pub enum paperpaw_sdk::bluetooth::BtError
+pub paperpaw_sdk::bluetooth::BtError::Att(u8)
+pub paperpaw_sdk::bluetooth::BtError::Busy
+pub paperpaw_sdk::bluetooth::BtError::Lost
+pub paperpaw_sdk::bluetooth::BtError::NotAllowed
+pub paperpaw_sdk::bluetooth::BtError::NotFound
+pub paperpaw_sdk::bluetooth::BtError::Off
+pub paperpaw_sdk::bluetooth::BtError::Refused
+pub paperpaw_sdk::bluetooth::BtError::Timeout
+pub paperpaw_sdk::bluetooth::BtError::Unsupported
+impl paperpaw_sdk::bluetooth::BtError
+pub fn paperpaw_sdk::bluetooth::BtError::parse(&str) -> core::option::Option<paperpaw_sdk::bluetooth::BtError>
+pub fn paperpaw_sdk::bluetooth::BtError::to_text(self) -> alloc::string::String
+#[non_exhaustive] pub enum paperpaw_sdk::bluetooth::BtEvent
+pub paperpaw_sdk::bluetooth::BtEvent::Advertising
+pub paperpaw_sdk::bluetooth::BtEvent::AdvertisingEnded
+pub paperpaw_sdk::bluetooth::BtEvent::Connected
+pub paperpaw_sdk::bluetooth::BtEvent::Connected::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtEvent::Disconnected
+pub paperpaw_sdk::bluetooth::BtEvent::Disconnected::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtEvent::Disconnected::reason: core::option::Option<paperpaw_sdk::bluetooth::BtError>
+pub paperpaw_sdk::bluetooth::BtEvent::Discovered
+pub paperpaw_sdk::bluetooth::BtEvent::Discovered::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtEvent::Discovered::services: alloc::vec::Vec<paperpaw_sdk::bluetooth::Service>
+pub paperpaw_sdk::bluetooth::BtEvent::Failed
+pub paperpaw_sdk::bluetooth::BtEvent::Failed::device: core::option::Option<paperpaw_sdk::bluetooth::DeviceId>
+pub paperpaw_sdk::bluetooth::BtEvent::Failed::error: paperpaw_sdk::bluetooth::BtError
+pub paperpaw_sdk::bluetooth::BtEvent::Found(paperpaw_sdk::bluetooth::Device)
+pub paperpaw_sdk::bluetooth::BtEvent::HidReport
+pub paperpaw_sdk::bluetooth::BtEvent::HidReport::bytes: alloc::vec::Vec<u8>
+pub paperpaw_sdk::bluetooth::BtEvent::HidReport::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtEvent::HidReport::report: core::option::Option<u8>
+pub paperpaw_sdk::bluetooth::BtEvent::Paired
+pub paperpaw_sdk::bluetooth::BtEvent::Paired::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtEvent::ReadRequest
+pub paperpaw_sdk::bluetooth::BtEvent::ReadRequest::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtEvent::ReadRequest::request: paperpaw_sdk::bluetooth::Request
+pub paperpaw_sdk::bluetooth::BtEvent::ScanEnded
+pub paperpaw_sdk::bluetooth::BtEvent::Subscribed
+pub paperpaw_sdk::bluetooth::BtEvent::Subscribed::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtEvent::Subscribed::on: bool
+pub paperpaw_sdk::bluetooth::BtEvent::Value
+pub paperpaw_sdk::bluetooth::BtEvent::Value::bytes: alloc::vec::Vec<u8>
+pub paperpaw_sdk::bluetooth::BtEvent::Value::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtEvent::Value::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtEvent::WriteRequest
+pub paperpaw_sdk::bluetooth::BtEvent::WriteRequest::bytes: alloc::vec::Vec<u8>
+pub paperpaw_sdk::bluetooth::BtEvent::WriteRequest::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::BtEvent::Written
+pub paperpaw_sdk::bluetooth::BtEvent::Written::device: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::BtEvent::Written::handle: paperpaw_sdk::bluetooth::Handle
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::bluetooth::BtEvent
+pub fn paperpaw_sdk::bluetooth::BtEvent::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::bluetooth::BtEvent::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::bluetooth::BtEvent::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub enum paperpaw_sdk::bluetooth::DeviceKind
+pub paperpaw_sdk::bluetooth::DeviceKind::Keyboard
+pub paperpaw_sdk::bluetooth::DeviceKind::Other
+pub paperpaw_sdk::bluetooth::DeviceKind::Phone
+pub paperpaw_sdk::bluetooth::DeviceKind::Remote
+pub paperpaw_sdk::bluetooth::DeviceKind::Sensor
+impl paperpaw_sdk::bluetooth::DeviceKind
+pub const fn paperpaw_sdk::bluetooth::DeviceKind::as_str(self) -> &'static str
+pub fn paperpaw_sdk::bluetooth::DeviceKind::parse(&str) -> paperpaw_sdk::bluetooth::DeviceKind
+pub const fn paperpaw_sdk::bluetooth::DeviceKind::types(self) -> bool
+#[non_exhaustive] pub enum paperpaw_sdk::bluetooth::RadioState
+pub paperpaw_sdk::bluetooth::RadioState::Off
+pub paperpaw_sdk::bluetooth::RadioState::On
+#[non_exhaustive] pub enum paperpaw_sdk::bluetooth::WriteKind
+pub paperpaw_sdk::bluetooth::WriteKind::WithResponse
+pub paperpaw_sdk::bluetooth::WriteKind::WithoutResponse
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::Advertising
+pub paperpaw_sdk::bluetooth::Advertising::events: paperpaw_sdk::Id
+pub paperpaw_sdk::bluetooth::Advertising::ms: u32
+pub paperpaw_sdk::bluetooth::Advertising::name: core::option::Option<alloc::borrow::Cow<'static, str>>
+pub paperpaw_sdk::bluetooth::Advertising::services: alloc::vec::Vec<paperpaw_sdk::bluetooth::Uuid>
+impl paperpaw_sdk::bluetooth::Advertising
+pub fn paperpaw_sdk::bluetooth::Advertising::command(self) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::Advertising::for_ms(self, u32) -> Self
+pub fn paperpaw_sdk::bluetooth::Advertising::name(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_sdk::bluetooth::Advertising::service(self, paperpaw_sdk::bluetooth::Uuid) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::Bluetooth
+pub paperpaw_sdk::bluetooth::Bluetooth::bonded: alloc::vec::Vec<paperpaw_sdk::bluetooth::Bonded>
+pub paperpaw_sdk::bluetooth::Bluetooth::busy: bool
+pub paperpaw_sdk::bluetooth::Bluetooth::max_links: u8
+pub paperpaw_sdk::bluetooth::Bluetooth::state: paperpaw_sdk::bluetooth::RadioState
+impl paperpaw_sdk::bluetooth::Bluetooth
+pub fn paperpaw_sdk::bluetooth::Bluetooth::bond(&self, paperpaw_sdk::bluetooth::DeviceId) -> core::option::Option<&paperpaw_sdk::bluetooth::Bonded>
+pub fn paperpaw_sdk::bluetooth::Bluetooth::new(u8) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::Bonded
+pub paperpaw_sdk::bluetooth::Bonded::connected: bool
+pub paperpaw_sdk::bluetooth::Bonded::given: alloc::vec::Vec<paperpaw_sdk::Id>
+pub paperpaw_sdk::bluetooth::Bonded::id: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::Bonded::keys: bool
+pub paperpaw_sdk::bluetooth::Bonded::kind: paperpaw_sdk::bluetooth::DeviceKind
+pub paperpaw_sdk::bluetooth::Bonded::name: alloc::string::String
+impl paperpaw_sdk::bluetooth::Bonded
+pub fn paperpaw_sdk::bluetooth::Bonded::new(paperpaw_sdk::bluetooth::DeviceId, impl core::convert::Into<alloc::string::String>, paperpaw_sdk::bluetooth::DeviceKind) -> Self
+pub struct paperpaw_sdk::bluetooth::BtRequest
+impl paperpaw_sdk::bluetooth::BtRequest
+pub fn paperpaw_sdk::bluetooth::BtRequest::command(&self) -> &paperpaw_sdk::bluetooth::BtCommand
+pub fn paperpaw_sdk::bluetooth::BtRequest::from(&self) -> core::option::Option<&paperpaw_sdk::Id>
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::Characteristic
+pub paperpaw_sdk::bluetooth::Characteristic::handle: paperpaw_sdk::bluetooth::Handle
+pub paperpaw_sdk::bluetooth::Characteristic::properties: paperpaw_sdk::bluetooth::Properties
+pub paperpaw_sdk::bluetooth::Characteristic::uuid: paperpaw_sdk::bluetooth::Uuid
+impl paperpaw_sdk::bluetooth::Characteristic
+pub fn paperpaw_sdk::bluetooth::Characteristic::new(paperpaw_sdk::bluetooth::Uuid, paperpaw_sdk::bluetooth::Handle, paperpaw_sdk::bluetooth::Properties) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::Device
+pub paperpaw_sdk::bluetooth::Device::bonded: bool
+pub paperpaw_sdk::bluetooth::Device::id: paperpaw_sdk::bluetooth::DeviceId
+pub paperpaw_sdk::bluetooth::Device::kind: paperpaw_sdk::bluetooth::DeviceKind
+pub paperpaw_sdk::bluetooth::Device::name: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::bluetooth::Device::rssi: core::option::Option<i8>
+pub paperpaw_sdk::bluetooth::Device::services: alloc::vec::Vec<paperpaw_sdk::bluetooth::Uuid>
+impl paperpaw_sdk::bluetooth::Device
+pub fn paperpaw_sdk::bluetooth::Device::bonded(self) -> Self
+pub fn paperpaw_sdk::bluetooth::Device::kind(self, paperpaw_sdk::bluetooth::DeviceKind) -> Self
+pub fn paperpaw_sdk::bluetooth::Device::name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::bluetooth::Device::new(paperpaw_sdk::bluetooth::DeviceId) -> Self
+pub fn paperpaw_sdk::bluetooth::Device::rssi(self, i8) -> Self
+pub fn paperpaw_sdk::bluetooth::Device::service(self, paperpaw_sdk::bluetooth::Uuid) -> Self
+pub struct paperpaw_sdk::bluetooth::DeviceId(_)
+impl paperpaw_sdk::bluetooth::DeviceId
+pub const fn paperpaw_sdk::bluetooth::DeviceId::number(self) -> u32
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::GattServiceSpec
+pub paperpaw_sdk::bluetooth::GattServiceSpec::characteristics: alloc::vec::Vec<(paperpaw_sdk::bluetooth::Uuid, paperpaw_sdk::bluetooth::Properties)>
+pub paperpaw_sdk::bluetooth::GattServiceSpec::events: paperpaw_sdk::Id
+pub paperpaw_sdk::bluetooth::GattServiceSpec::uuid: paperpaw_sdk::bluetooth::Uuid
+impl paperpaw_sdk::bluetooth::GattServiceSpec
+pub fn paperpaw_sdk::bluetooth::GattServiceSpec::characteristic(self, paperpaw_sdk::bluetooth::Uuid, paperpaw_sdk::bluetooth::Properties) -> Self
+pub fn paperpaw_sdk::bluetooth::GattServiceSpec::new(paperpaw_sdk::bluetooth::Uuid, &paperpaw_sdk::event::Event<paperpaw_sdk::bluetooth::BtEvent>) -> Self
+pub struct paperpaw_sdk::bluetooth::Handle(_)
+impl paperpaw_sdk::bluetooth::Handle
+pub const fn paperpaw_sdk::bluetooth::Handle::get(self) -> u16
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::Properties
+pub paperpaw_sdk::bluetooth::Properties::indicate: bool
+pub paperpaw_sdk::bluetooth::Properties::notify: bool
+pub paperpaw_sdk::bluetooth::Properties::read: bool
+pub paperpaw_sdk::bluetooth::Properties::write: bool
+pub paperpaw_sdk::bluetooth::Properties::write_without_response: bool
+impl paperpaw_sdk::bluetooth::Properties
+pub const paperpaw_sdk::bluetooth::Properties::NONE: paperpaw_sdk::bluetooth::Properties
+pub const fn paperpaw_sdk::bluetooth::Properties::bits(self) -> u8
+pub const fn paperpaw_sdk::bluetooth::Properties::from_bits(u8) -> paperpaw_sdk::bluetooth::Properties
+pub const fn paperpaw_sdk::bluetooth::Properties::indicate(self) -> Self
+pub const fn paperpaw_sdk::bluetooth::Properties::notify(self) -> Self
+pub const fn paperpaw_sdk::bluetooth::Properties::read(self) -> Self
+pub const fn paperpaw_sdk::bluetooth::Properties::write(self) -> Self
+pub const fn paperpaw_sdk::bluetooth::Properties::write_without_response(self) -> Self
+pub struct paperpaw_sdk::bluetooth::Request(_)
+impl paperpaw_sdk::bluetooth::Request
+pub const fn paperpaw_sdk::bluetooth::Request::number(self) -> u32
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::Scan
+pub paperpaw_sdk::bluetooth::Scan::events: paperpaw_sdk::Id
+pub paperpaw_sdk::bluetooth::Scan::ms: u32
+pub paperpaw_sdk::bluetooth::Scan::name_prefix: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::bluetooth::Scan::services: alloc::vec::Vec<paperpaw_sdk::bluetooth::Uuid>
+impl paperpaw_sdk::bluetooth::Scan
+pub fn paperpaw_sdk::bluetooth::Scan::command(self) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::Scan::for_ms(self, u32) -> Self
+pub fn paperpaw_sdk::bluetooth::Scan::name_prefix(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::bluetooth::Scan::passes(&self, &paperpaw_sdk::bluetooth::Device) -> bool
+pub fn paperpaw_sdk::bluetooth::Scan::service(self, paperpaw_sdk::bluetooth::Uuid) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::bluetooth::Service
+pub paperpaw_sdk::bluetooth::Service::characteristics: alloc::vec::Vec<paperpaw_sdk::bluetooth::Characteristic>
+pub paperpaw_sdk::bluetooth::Service::uuid: paperpaw_sdk::bluetooth::Uuid
+impl paperpaw_sdk::bluetooth::Service
+pub fn paperpaw_sdk::bluetooth::Service::new(paperpaw_sdk::bluetooth::Uuid, alloc::vec::Vec<paperpaw_sdk::bluetooth::Characteristic>) -> Self
+pub struct paperpaw_sdk::bluetooth::Uuid(_)
+impl paperpaw_sdk::bluetooth::Uuid
+pub const fn paperpaw_sdk::bluetooth::Uuid::as_u128(self) -> u128
+pub const fn paperpaw_sdk::bluetooth::Uuid::from_u128(u128) -> paperpaw_sdk::bluetooth::Uuid
+pub fn paperpaw_sdk::bluetooth::Uuid::parse(&str) -> core::option::Option<paperpaw_sdk::bluetooth::Uuid>
+pub const fn paperpaw_sdk::bluetooth::Uuid::short(self) -> core::option::Option<u16>
+pub const fn paperpaw_sdk::bluetooth::Uuid::sig(u16) -> paperpaw_sdk::bluetooth::Uuid
+impl core::fmt::Display for paperpaw_sdk::bluetooth::Uuid
+pub fn paperpaw_sdk::bluetooth::Uuid::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_sdk::bluetooth::Write
+impl paperpaw_sdk::bluetooth::Write
+pub fn paperpaw_sdk::bluetooth::Write::command(self) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::Write::without_response(self) -> Self
+pub const paperpaw_sdk::bluetooth::ADVERTISE_MOST_MS: u32
+pub const paperpaw_sdk::bluetooth::SCAN_MOST_MS: u32
+pub fn paperpaw_sdk::bluetooth::advertise(&paperpaw_sdk::event::Event<paperpaw_sdk::bluetooth::BtEvent>) -> paperpaw_sdk::bluetooth::Advertising
+pub fn paperpaw_sdk::bluetooth::characteristic(&[paperpaw_sdk::bluetooth::Service], paperpaw_sdk::bluetooth::Uuid, paperpaw_sdk::bluetooth::Uuid) -> core::option::Option<&paperpaw_sdk::bluetooth::Characteristic>
+pub fn paperpaw_sdk::bluetooth::connect(paperpaw_sdk::bluetooth::DeviceId, &paperpaw_sdk::event::Event<paperpaw_sdk::bluetooth::BtEvent>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::disconnect(paperpaw_sdk::bluetooth::DeviceId) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::discover(paperpaw_sdk::bluetooth::DeviceId) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::forget(paperpaw_sdk::bluetooth::DeviceId) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::give(paperpaw_sdk::bluetooth::DeviceId, impl core::convert::Into<paperpaw_sdk::Id>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::hid_reports(paperpaw_sdk::bluetooth::DeviceId, &paperpaw_sdk::event::Event<paperpaw_sdk::bluetooth::BtEvent>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::keys(paperpaw_sdk::bluetooth::DeviceId) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::keys_off(paperpaw_sdk::bluetooth::DeviceId) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::notify(paperpaw_sdk::bluetooth::Handle, impl core::convert::Into<alloc::vec::Vec<u8>>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::pair(paperpaw_sdk::bluetooth::DeviceId) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::read(paperpaw_sdk::bluetooth::DeviceId, paperpaw_sdk::bluetooth::Handle) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::respond(paperpaw_sdk::bluetooth::Request, impl core::convert::Into<alloc::vec::Vec<u8>>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::scan(&paperpaw_sdk::event::Event<paperpaw_sdk::bluetooth::BtEvent>) -> paperpaw_sdk::bluetooth::Scan
+pub fn paperpaw_sdk::bluetooth::stop_advertising() -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::stop_scan(&paperpaw_sdk::event::Event<paperpaw_sdk::bluetooth::BtEvent>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::subscribe(paperpaw_sdk::bluetooth::DeviceId, paperpaw_sdk::bluetooth::Handle) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::take_back(paperpaw_sdk::bluetooth::DeviceId, impl core::convert::Into<paperpaw_sdk::Id>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::unsubscribe(paperpaw_sdk::bluetooth::DeviceId, paperpaw_sdk::bluetooth::Handle) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::bluetooth::write(paperpaw_sdk::bluetooth::DeviceId, paperpaw_sdk::bluetooth::Handle, impl core::convert::Into<alloc::vec::Vec<u8>>) -> paperpaw_sdk::bluetooth::Write
 pub mod paperpaw_sdk::builtin
 pub mod paperpaw_sdk::builtin::actions
 pub const paperpaw_sdk::builtin::actions::BACK: paperpaw_sdk::Id
@@ -454,6 +724,7 @@ pub fn paperpaw_sdk::builtin::events::WordLookedUp::into_params(self) -> paperpa
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::to_params(&self) -> paperpaw_sdk::Params
 pub const paperpaw_sdk::builtin::events::ANNOTATIONS_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::AnnotationsChanged>
 pub const paperpaw_sdk::builtin::events::BATTERY_MEASURED: paperpaw_sdk::event::Event<()>
+pub const paperpaw_sdk::builtin::events::BLUETOOTH_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::BOOK_ADDED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::BookAdded>
 pub const paperpaw_sdk::builtin::events::BOOK_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::BookChanged>
 pub const paperpaw_sdk::builtin::events::BOOK_CHOSEN: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::BookChosen>
@@ -805,6 +1076,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_font_extension(&mut self, impl
 pub fn paperpaw_sdk::contribution::Registrar::add_font_face(&mut self, paperpaw_sdk::FontFace) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_font_file(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::string::String>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_format(&mut self, paperpaw_sdk::FormatSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_gatt_service(&mut self, paperpaw_sdk::bluetooth::GattServiceSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_gesture(&mut self, paperpaw_sdk::keys::GestureSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_hyphenation(&mut self, paperpaw_sdk::HyphenationSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_icon(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -1076,6 +1348,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::Params
 pub fn paperpaw_sdk::Params::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::Params::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::Params::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::bluetooth::BtEvent
+pub fn paperpaw_sdk::bluetooth::BtEvent::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::bluetooth::BtEvent::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::bluetooth::BtEvent::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::AnnotationsChanged
 pub fn paperpaw_sdk::builtin::events::AnnotationsChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::AnnotationsChanged::into_params(self) -> paperpaw_sdk::Params
@@ -4484,6 +4760,7 @@ pub fn paperpaw_sdk::work::Refusal::write(&self, &mut paperpaw_sdk::Params)
 #[non_exhaustive] pub struct paperpaw_sdk::work::Work
 pub paperpaw_sdk::work::Work::after: core::option::Option<core::time::Duration>
 pub paperpaw_sdk::work::Work::at: core::option::Option<paperpaw_platform::input::Instant>
+pub paperpaw_sdk::work::Work::bluetooth: bool
 pub paperpaw_sdk::work::Work::charging: bool
 pub paperpaw_sdk::work::Work::every: core::option::Option<core::time::Duration>
 pub paperpaw_sdk::work::Work::id: paperpaw_sdk::Id
@@ -4497,6 +4774,7 @@ impl paperpaw_sdk::work::Work
 pub fn paperpaw_sdk::work::Work::after(self, core::time::Duration) -> Self
 pub fn paperpaw_sdk::work::Work::at(impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_platform::input::Instant) -> Self
 pub fn paperpaw_sdk::work::Work::at_moments(self, paperpaw_sdk::work::Moments) -> Self
+pub fn paperpaw_sdk::work::Work::bluetooth(impl core::convert::Into<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::work::Work::charging(self) -> Self
 pub fn paperpaw_sdk::work::Work::every(self, core::time::Duration) -> Self
 pub fn paperpaw_sdk::work::Work::expected(self) -> Self
@@ -4583,6 +4861,7 @@ pub paperpaw_sdk::Command::Bind::action: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::Command::Bind::input: alloc::string::String
 pub paperpaw_sdk::Command::Bind::layer: alloc::string::String
 pub paperpaw_sdk::Command::BindSlot(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::Id>)
+pub paperpaw_sdk::Command::Bluetooth(alloc::boxed::Box<paperpaw_sdk::bluetooth::BtRequest>)
 pub paperpaw_sdk::Command::Broadcast(alloc::boxed::Box<paperpaw_sdk::Broadcast>)
 pub paperpaw_sdk::Command::CancelHttp(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::CancelWork(paperpaw_sdk::Id, core::option::Option<alloc::string::String>)
@@ -4716,6 +4995,7 @@ pub paperpaw_sdk::Level::Advanced
 pub paperpaw_sdk::Level::Basic
 #[non_exhaustive] pub enum paperpaw_sdk::MenuNeed
 pub paperpaw_sdk::MenuNeed::BlackAndWhite
+pub paperpaw_sdk::MenuNeed::Bluetooth
 pub paperpaw_sdk::MenuNeed::ButtonRow
 pub paperpaw_sdk::MenuNeed::Colors
 pub paperpaw_sdk::MenuNeed::Firmware
@@ -4915,6 +5195,7 @@ pub fn paperpaw_sdk::Broadcast::ports(&self) -> &[u16]
 pub fn paperpaw_sdk::Broadcast::wait_ms(&self) -> u32
 #[non_exhaustive] pub struct paperpaw_sdk::Capabilities
 pub paperpaw_sdk::Capabilities::black_and_white: bool
+pub paperpaw_sdk::Capabilities::bluetooth: bool
 pub paperpaw_sdk::Capabilities::button_row: bool
 pub paperpaw_sdk::Capabilities::colors: bool
 pub paperpaw_sdk::Capabilities::firmware: bool
@@ -4978,6 +5259,7 @@ pub fn paperpaw_sdk::Env<'_>::plugin_usage(&self) -> alloc::vec::Vec<paperpaw_sd
 pub fn paperpaw_sdk::Env<'_>::top(&self) -> core::option::Option<&paperpaw_sdk::StackEntry>
 impl<'a> paperpaw_sdk::Env<'a>
 pub fn paperpaw_sdk::Env<'a>::actions(&self) -> &'a paperpaw_sdk::Actions
+pub fn paperpaw_sdk::Env<'a>::bluetooth(&self) -> core::option::Option<&'a paperpaw_sdk::bluetooth::Bluetooth>
 pub fn paperpaw_sdk::Env<'a>::book_badges(&self) -> &'a [paperpaw_sdk::library::service::BookBadge]
 pub fn paperpaw_sdk::Env<'a>::book_data(&self) -> &'a [paperpaw_sdk::library::BookData]
 pub fn paperpaw_sdk::Env<'a>::book_fields(&self) -> &'a [paperpaw_sdk::library::service::BookField]
@@ -5478,6 +5760,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_font_extension(&mut self, impl
 pub fn paperpaw_sdk::contribution::Registrar::add_font_face(&mut self, paperpaw_sdk::FontFace) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_font_file(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::string::String>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_format(&mut self, paperpaw_sdk::FormatSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_gatt_service(&mut self, paperpaw_sdk::bluetooth::GattServiceSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_gesture(&mut self, paperpaw_sdk::keys::GestureSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_hyphenation(&mut self, paperpaw_sdk::HyphenationSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_icon(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -5799,6 +6082,7 @@ pub fn paperpaw_sdk::replies::Typed::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
 pub struct paperpaw_sdk::Uses(_)
 impl paperpaw_sdk::Uses
+pub const paperpaw_sdk::Uses::BLUETOOTH: paperpaw_sdk::Uses
 pub const paperpaw_sdk::Uses::NETWORK: paperpaw_sdk::Uses
 pub const paperpaw_sdk::Uses::NOTHING: paperpaw_sdk::Uses
 pub const fn paperpaw_sdk::Uses::bits(self) -> u8
@@ -5842,6 +6126,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::Params
 pub fn paperpaw_sdk::Params::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::Params::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::Params::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::bluetooth::BtEvent
+pub fn paperpaw_sdk::bluetooth::BtEvent::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::bluetooth::BtEvent::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::bluetooth::BtEvent::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::AnnotationsChanged
 pub fn paperpaw_sdk::builtin::events::AnnotationsChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::AnnotationsChanged::into_params(self) -> paperpaw_sdk::Params

@@ -202,6 +202,8 @@ pub struct Work {
     pub params: Params,
     /// It needs the network.
     pub network: bool,
+    /// It needs Bluetooth ([`bluetooth`](crate::bluetooth)).
+    pub bluetooth: bool,
     /// It runs only while the device charges.
     pub charging: bool,
     pub importance: Importance,
@@ -227,6 +229,7 @@ impl Work {
             key: String::new(),
             params: Params::new(),
             network: false,
+            bluetooth: false,
             charging: false,
             importance: Importance::Expected,
             at: None,
@@ -241,6 +244,16 @@ impl Work {
     pub fn network(id: impl Into<Id>) -> Self {
         Self {
             network: true,
+            ..Self::new(id)
+        }
+    }
+
+    /// Work needing Bluetooth (reading a sensor now and then): it runs
+    /// at the moments the network's would, and its commands may switch
+    /// the radio on.
+    pub fn bluetooth(id: impl Into<Id>) -> Self {
+        Self {
+            bluetooth: true,
             ..Self::new(id)
         }
     }

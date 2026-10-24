@@ -234,6 +234,9 @@ pub enum MenuNeed {
     BlackAndWhite,
     /// A front light PaperPaw sets ([`Capabilities::frontlight`](crate::Capabilities)).
     Frontlight,
+    /// A Bluetooth radio the kernel uses ([`Env::bluetooth`](crate::Env)),
+    /// hidden elsewhere.
+    Bluetooth,
 }
 
 impl MenuNeed {
@@ -247,6 +250,7 @@ impl MenuNeed {
             MenuNeed::Colors => caps.colors,
             MenuNeed::ButtonRow => caps.button_row,
             MenuNeed::Wifi => caps.wifi,
+            MenuNeed::Bluetooth => caps.bluetooth,
             MenuNeed::Firmware => caps.firmware,
             MenuNeed::BlackAndWhite => caps.black_and_white,
             MenuNeed::NoTouch => !caps.touch,

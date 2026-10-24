@@ -147,6 +147,9 @@ pub enum Contribution {
     Reader(crate::readers::ReaderSpec),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
+    /// A service of the device's own GATT server (see
+    /// [`bluetooth`](crate::bluetooth)).
+    GattService(Box<crate::bluetooth::GattServiceSpec>),
     /// A bar along an edge of the screen (see [`chrome`](crate::chrome)).
     Chrome(Box<crate::chrome::ChromeSpec>),
     /// A named input (see [`keys::InputSpec`](crate::keys::InputSpec)).
@@ -244,6 +247,7 @@ impl Contribution {
             Contribution::Reader(_) => "reader",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
+            Contribution::GattService(_) => "gatt-service",
             Contribution::Chrome(_) => "chrome",
             Contribution::Input(_) => "input",
             Contribution::ActionOverride(_) => "action-override",

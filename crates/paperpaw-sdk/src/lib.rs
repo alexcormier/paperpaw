@@ -52,6 +52,7 @@ extern crate alloc;
 mod action;
 pub mod annotations;
 pub mod ask;
+pub mod bluetooth;
 pub mod builtin;
 pub mod chrome;
 pub mod collections;

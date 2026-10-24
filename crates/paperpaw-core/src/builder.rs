@@ -486,6 +486,7 @@ impl BuilderParts {
                 book_badges: Vec::new(),
                 caps,
                 wifi: caps.wifi.then(paperpaw_sdk::wifi::Wifi::default),
+                bluetooth: None,
                 firmware: self.firmware.take(),
                 native: None,
                 power: paperpaw_sdk::power::Power::default(),
