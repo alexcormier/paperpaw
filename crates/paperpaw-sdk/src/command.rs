@@ -822,7 +822,7 @@ pub enum Command {
     ReadClipboard(Id, Params),
     /// Speaks text aloud where the device can
     /// ([`Capabilities::speech`](crate::Capabilities)), instead of what is being spoken or
-    /// after it ([`Speech::queue`]). Without speech the reply comes at
+    /// after it (`Speech::queue`). Without speech the reply comes at
     /// once, failed. Speech stops when the screen that started it is
     /// closed. Made with [`Command::speak`].
     Speak(alloc::boxed::Box<Speech>),

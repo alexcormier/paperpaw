@@ -206,7 +206,7 @@ impl Registrar {
         self.add_checked(Contribution::Setting(Box::new(setting)))
     }
 
-    /// Adds settings kept in the program ([`SettingSpec::fixed`]), e.g. a
+    /// Adds settings kept in the program (a `static` list), e.g. a
     /// `static` list of a widget's: they take next to no memory, where
     /// each added with [`add_setting`](Self::add_setting) takes about
     /// 200 bytes.

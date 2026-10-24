@@ -1096,7 +1096,7 @@ pub fn align_setting(widget: &Id, default: Align) -> SettingSpec {
 }
 
 /// [`align_setting`] kept in the program
-/// ([`SettingSpec::fixed`](crate::SettingSpec::fixed)), for a `static`
+/// (a `static` list), for a `static`
 /// list of the widget's settings: `id` must be `<widget>.align`.
 pub const fn align_spec(id: &'static str, widget: Id, default: Align) -> SettingSpec {
     SettingSpec::choice(

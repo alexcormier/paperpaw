@@ -102,23 +102,19 @@ impl Screen for BookView {
         let style = self.style;
         let display = env.device.display;
         let title = self.book.as_ref().map_or("", |b| b.title.as_str());
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, None);
         let top = self.header.area().height + style.gap();
         let Some(book) = &self.book else {
             let area = Rect::new(0, top, display.width, display.height - top);
-            ui::draw_message(canvas, env, &style, area, env.i18n.tr("stats.no-books"));
+            ui.message(area, env.i18n.tr("stats.no-books"));
             return;
         };
         let row = style.row() * 4 / 5;
         let rows = self.rows(env, book);
         for (n, (label, value)) in rows.iter().enumerate() {
             let rect = Rect::new(0, top + row * n as u16, display.width, row);
-            ui::draw_value_row(canvas, env, &style, rect, false, label, value);
+            ui::Row::value(label, value).draw(&mut ui, rect);
         }
         // The last days it was read.
         let chart_top = top + row * rows.len() as u16 + style.gap() * 2;
@@ -126,22 +122,17 @@ impl Screen for BookView {
         if height < style.row() * 2 || self.totals.days.is_empty() {
             return;
         }
-        let Some(font) = style.font(env) else {
+        if ui.font().is_none() {
             return;
-        };
+        }
         let margin = style.margin();
         let title_h = (style.small() * 1.6) as u16;
         let label_area = Rect::new(margin, chart_top, display.width - 2 * margin, title_h);
         let label = env.i18n.tr("stats.by-day");
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            f32::from(margin),
-            label_area,
-            label,
-            style.faint(ui::Ink::Muted),
-        );
+        ui::Label::new(label)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Muted))
+            .draw_from(&mut ui, f32::from(margin), label_area);
         let days = &self.totals.days[self.totals.days.len().saturating_sub(CHART_DAYS)..];
         let values: Vec<u32> = days.iter().map(|(_, s)| *s).collect();
         let dates: Vec<String> = days
@@ -166,15 +157,7 @@ impl Screen for BookView {
             display.width - 2 * margin,
             height.saturating_sub(title_h).min(style.row() * 5),
         );
-        chart::bars(
-            canvas,
-            env,
-            &style,
-            area,
-            &values,
-            &labels,
-            (None, &top_label),
-        );
+        chart::bars(&mut ui, area, &values, &labels, (None, &top_label));
     }
 
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {

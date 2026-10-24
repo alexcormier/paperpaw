@@ -6,7 +6,7 @@ use super::{SettingError, SettingSpec};
 
 /// The settings' specs in registration order, found by id through an
 /// index sorted by it: each id kept once. Specs kept in the program
-/// ([`SettingSpec::fixed`], e.g. in flash) are held as the lists a plugin
+/// (a `static` list of `SettingSpec`s, e.g. in flash) are held as the lists a plugin
 /// gave ([`Registrar::add_settings`](crate::Registrar::add_settings)),
 /// a reference to each list rather than to each spec; the others as they
 /// are.

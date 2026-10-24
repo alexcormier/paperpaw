@@ -814,7 +814,7 @@ pub mod settings_page {
 
 /// Parts of setting groups shared by plugins, in the order shown: a
 /// setting names one with
-/// [`SettingSpec::section`](crate::SettingSpec::section). Other parts
+/// `SettingSpec::section_key`. Other parts
 /// (any translation key) follow these.
 pub mod group_sections {
     /// The reading font, its size and weight.

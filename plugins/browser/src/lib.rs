@@ -485,19 +485,17 @@ fn download_path() -> String {
 impl Screen for BrowserScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let rows = self.rows();
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("browser.title"),
             None,
             self.list.paging(rows.len()),
         );
         let (bookmarks, history) = (&self.bookmarks, &self.history);
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value) = match rows[index] {
                     Row::Address => (
                         env.i18n.tr("browser.address").to_string(),
@@ -512,19 +510,15 @@ impl Screen for BrowserScreen {
                         paperpaw_sdk::web::host(&history[i].url).to_string(),
                     ),
                 };
-                ui::draw_value_row(canvas, env, &style, rect, focused, &title, &value);
-            },
-        );
-        if let (Some(message), Some(font)) = (&self.message, style.font(env)) {
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                style.margin() as f32,
-                self.status,
-                message,
-                style.faint(ui::Ink::Note),
-            );
+                ui::Row::value(&title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        if let Some(message) = &self.message {
+            ui::Label::new(message)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(&mut ui, style.margin() as f32, self.status);
         }
     }
 

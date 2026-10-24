@@ -633,15 +633,8 @@ impl PanelScreen {
         cx.request_refresh(RefreshMode::Fast);
     }
 
-    fn draw_control(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        control: &Control,
-        rect: Rect,
-        focused: bool,
-    ) {
-        let style = self.style;
+    fn draw_control(&self, ui: &mut ui::Ui<'_>, control: &Control, rect: Rect, focused: bool) {
+        let env = ui.env();
         let state = env.menus.state(env, control.id().as_str());
         let (on, label): (bool, String) = match control {
             Control::Toggle(id) => {
@@ -665,7 +658,7 @@ impl PanelScreen {
                     (true, None) => ui::slider::SliderFocus::Focused,
                     (true, Some(_)) => ui::slider::SliderFocus::Editing,
                 };
-                return draw_slider(canvas, env, &style, id, rect, focus);
+                return draw_slider(ui, id, rect, focus);
             }
             Control::Option(id, option) => (
                 env.settings.text(id.as_str()) == option,
@@ -677,11 +670,13 @@ impl PanelScreen {
                     return;
                 };
                 if focused {
-                    ui::draw_focus(canvas, &style, rect);
+                    ui.focus(rect);
                 }
                 let value = alloc::format!("{} ›", ui::setting_value(env, spec));
                 let title = state.text(env.i18n.tr(&spec.title));
-                ui::draw_value_row(canvas, env, &style, rect, focused, &title, &value);
+                ui::Row::value(&title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
                 return;
             }
             Control::Run(id) => (
@@ -690,9 +685,9 @@ impl PanelScreen {
             ),
         };
         if state.enabled {
-            ui::draw_button(canvas, env, &style, rect, &label, on, focused);
+            ui.button(rect, &label, on, focused);
         } else {
-            ui::draw_faint_button(canvas, env, &style, rect, &label, focused);
+            ui.faint_button(rect, &label, focused);
         }
     }
 }
@@ -700,20 +695,14 @@ impl PanelScreen {
 /// A slider's row, as on the settings pages: its title and value (the
 /// one shown while it moves), and the slider across the screen below, on
 /// the focus bar when focused.
-fn draw_slider(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    id: &Id,
-    rect: Rect,
-    focus: ui::slider::SliderFocus,
-) {
+fn draw_slider(ui: &mut ui::Ui<'_>, id: &Id, rect: Rect, focus: ui::slider::SliderFocus) {
+    let (env, style) = (ui.env(), ui.style());
     let Some((spec, slider)) = spec(env, id).and_then(|s| Some((s, ui::slider::Slider::of(s)?)))
     else {
         return;
     };
     if focus != ui::slider::SliderFocus::None {
-        ui::draw_focus(canvas, style, rect);
+        ui.focus(rect);
     }
     let shown = ui::setting_value(env, spec);
     let room = ui::number_room(env, style, [spec]);
@@ -721,7 +710,7 @@ fn draw_slider(
         .title(env.i18n.tr(&spec.title))
         .room(&room)
         .focus(focus);
-    slider.draw_row(canvas, env, style, &view);
+    slider.draw_row(ui.canvas(), env, style, &view);
 }
 
 /// How much higher than its line a slider's title is in a row `width`
@@ -811,20 +800,22 @@ impl Screen for PanelScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
+        ui.canvas().fill(r, Color::WHITE);
         let border = (u32::from(style.line()) * 2).max(2);
         let y = if self.top {
             i32::from(r.y + r.height) - border as i32
         } else {
             i32::from(r.y)
         };
-        canvas.fill_rect(i32::from(r.x), y, u32::from(r.width), border, Color::BLACK);
-        let Some(font) = style.font(env) else {
+        ui.canvas()
+            .fill_rect(i32::from(r.x), y, u32::from(r.width), border, Color::BLACK);
+        let Some(font) = ui.font() else {
             return;
         };
         if self.rows.is_empty() {
-            ui::draw_message(canvas, env, &style, r, env.i18n.tr("menu.empty"));
+            ui.message(r, env.i18n.tr("menu.empty"));
             return;
         }
         for (first, row) in self.visible_rows() {
@@ -843,7 +834,9 @@ impl Screen for PanelScreen {
                 };
                 let title = env.i18n.tr(&spec.title);
                 let value = ui::setting_value(env, spec);
-                ui::draw_number(canvas, env, &style, row.area, title, &value, &value, focus);
+                ui::Row::number(title, &value, &value)
+                    .step_focus(focus)
+                    .draw(&mut ui, row.area);
                 continue;
             }
             if let Some(spec) = label
@@ -856,25 +849,17 @@ impl Screen for PanelScreen {
                 let first = row.controls.first().map_or(r.width, |(_, c)| c.x);
                 let room = f32::from(first) - x - style.gap() as f32;
                 let name = ui::fit(&font, style.text(), env.i18n.tr(&spec.title), room);
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.text(),
-                    x,
-                    row.area,
-                    &name,
-                    Color::BLACK,
-                );
+                ui::Label::new(&name)
+                    .px(style.text())
+                    .color(Color::BLACK)
+                    .draw_from(&mut ui, x, row.area);
             }
             for (index, (control, rect)) in (first..).zip(row.controls.iter()) {
-                self.draw_control(canvas, env, control, *rect, self.focus == Some(index));
+                self.draw_control(&mut ui, control, *rect, self.focus == Some(index));
             }
         }
         if let Some(pager) = &self.pager {
-            pager.draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                ui::Paging::new(self.page, self.pages()),
-            );
+            pager.draw(&mut ui, ui::Paging::new(self.page, self.pages()));
         }
     }
 

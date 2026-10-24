@@ -831,7 +831,7 @@ impl Screen for LifecycleScreen {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         self.log.borrow_mut().push(String::from("show"));
-        let at = cx.env().now.add_millis(10);
+        let at = cx.env().now().add_millis(10);
         cx.wake_at(at);
     }
 
@@ -844,10 +844,10 @@ impl Screen for LifecycleScreen {
         self.log.borrow_mut().push(alloc::format!(
             "timer {} at {}",
             self.ticks,
-            cx.env().now.millis()
+            cx.env().now().millis()
         ));
         if self.ticks < 2 {
-            let at = cx.env().now.add_millis(10);
+            let at = cx.env().now().add_millis(10);
             cx.wake_at(at);
         }
     }
@@ -1437,7 +1437,7 @@ impl Screen for CoverScreen {
             width: 8,
             height: 8,
         };
-        paperpaw_sdk::ui::draw_image(canvas, env.storage, &image, Rect::new(10, 10, 60, 60));
+        paperpaw_sdk::ui::draw_image(canvas, env.storage(), &image, Rect::new(10, 10, 60, 60));
     }
 
     fn pictures_in_grays(&self) -> bool {
@@ -2813,7 +2813,7 @@ impl Plugin for ServicePlugin {
                         .get::<Greeting>("provider.greeting", Version::new(1, 0, 0))
                         .map(|g| &g.0);
                     log.borrow_mut().push(alloc::format!("{greeting:?}"));
-                    for (plugin, shape) in env.services.contributions("provider.shapes") {
+                    for (plugin, shape) in env.services().contributions("provider.shapes") {
                         log.borrow_mut().push(alloc::format!("{plugin}:{shape}"));
                     }
                 },
@@ -2946,7 +2946,7 @@ impl Plugin for SizedPlugin {
                 id.clone(),
                 "sized",
                 Box::new(move |env, _| {
-                    made.borrow_mut().push((name, env.device.display.height));
+                    made.borrow_mut().push((name, env.device().display.height));
                     Box::new(SizedScreen)
                 }),
             ))?;
@@ -3035,8 +3035,8 @@ struct PictureScreen(Rc<RefCell<bool>>);
 impl Screen for PictureScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         if *self.0.borrow() {
-            let row = alloc::vec![128u8; usize::from(env.device.display.width)];
-            for y in 0..i32::from(env.device.display.height) {
+            let row = alloc::vec![128u8; usize::from(env.device().display.width)];
+            for y in 0..i32::from(env.device().display.height) {
                 canvas.draw_gray_row(0, y, &row);
             }
         } else {

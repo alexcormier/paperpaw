@@ -78,19 +78,14 @@ impl Preview {
         })
     }
 
-    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
+    fn draw(&self, ui: &mut ui::Ui<'_>) {
+        let (env, style) = (ui.env(), ui.style());
         let all = self.heading.union(&self.area);
-        if all.intersection(&canvas.clip()).is_none() {
+        if all.intersection(&ui.canvas().clip()).is_none() {
             return;
         }
-        ui::draw_heading(
-            canvas,
-            env,
-            style,
-            self.heading,
-            env.i18n.tr("settings.preview"),
-        );
-        self.widget.draw(canvas, env, self.area);
+        ui.heading(self.heading, env.i18n.tr("settings.preview"));
+        self.widget.draw(ui.canvas(), env, self.area);
         // As the lines between rows.
         let margin = style.margin();
         let line = Rect::new(
@@ -99,7 +94,7 @@ impl Preview {
             self.area.width.saturating_sub(2 * margin),
             style.line(),
         );
-        canvas.fill_tint(line, Color::gray(170));
+        ui.canvas().fill_tint(line, Color::gray(170));
     }
 
     /// Lays it out anew for the values shown; `true` if it changed.
@@ -451,7 +446,7 @@ impl Screen for GroupPage {
         self.header
             .draw(&mut ui, &self.title, None, paging(&self.rows));
         if let Some(preview) = &self.preview {
-            preview.draw(ui.canvas(), env, &style);
+            preview.draw(&mut ui);
         }
         let entries = &self.entries;
         let editing = self.edit.active();

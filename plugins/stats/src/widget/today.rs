@@ -202,7 +202,8 @@ fn progress(env: &Env<'_>, numbers: &Numbers) -> u64 {
 
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook, numbers: &Numbers) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -256,28 +257,31 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook, numb
         first
     };
     // The lines together in the middle, the caption above them.
-    let block = super::captioned(canvas, env, id, look, caption, big + band + note_h);
+    let block = super::captioned(ui.canvas(), env, id, look, caption, big + band + note_h);
     let align = widgets::align(env, id);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     let first = ui::fit(&font, size, &first, width);
     let x = align.x(area, font.measure(size, &first));
-    ui::draw_label(canvas, &font, size, x, row(block.y, big), &first, look.ink);
+    ui::Label::new(&first)
+        .px(size)
+        .color(look.ink)
+        .draw_from(&mut ui, x, row(block.y, big));
     let mut y = block.y + big;
     if band > 0 {
         // A bar filled up to today's share of the goal, its ends round.
         let height = env.metrics.mm(1).max(4) as u16;
         let track = Rect::new(area.x, y + (band - height) / 2, area.width, height);
         let radius = u32::from(height / 2);
-        canvas.fill_round_shaded(track, radius, shade(look, 1));
+        ui.canvas().fill_round_shaded(track, radius, shade(look, 1));
         let filled = (u64::from(area.width) * progress(env, numbers) / 1000) as u16;
         if filled > 0 {
             let filled = filled.max(height);
             let bar = Rect::new(track.x, track.y, filled, height);
-            canvas.fill_round(bar, radius, look.ink);
+            ui.canvas().fill_round(bar, radius, look.ink);
         }
         y += band;
     }
     if let Some(note) = note {
-        note.draw(canvas, env, row(y, note_h), align, look.faint);
+        note.draw(ui.canvas(), env, row(y, note_h), align, look.faint);
     }
 }

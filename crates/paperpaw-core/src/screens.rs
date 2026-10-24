@@ -696,7 +696,7 @@ impl Kernel {
 /// Where the notice `screen` shows on the screen: in the part of the
 /// screen on top (`env`'s), from its corner.
 pub(crate) fn notice_area(screen: &dyn Screen, env: &Env<'_>) -> Rect {
-    let content = env.content;
+    let content = env.content();
     let all = Rect::new(0, 0, content.width, content.height);
     chrome::on_screen(screen.region(env).unwrap_or(all), content)
 }

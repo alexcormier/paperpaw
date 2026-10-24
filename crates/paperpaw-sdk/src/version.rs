@@ -8,7 +8,7 @@ use core::fmt;
 /// orders nothing.
 ///
 /// A pre-release is one of `alpha`, `beta`, `dev`, `pre` and `rc`, with
-/// an optional number up to [`MAX_PRE_NUMBER`] (`rc.3`): it takes 2
+/// an optional number up to `MAX_PRE_NUMBER` (`rc.3`): it takes 2
 /// bytes, so a version is 8 bytes, as the device has many of them. Any
 /// other pre-release is not a version here ([`Version::try_parse`] says
 /// why).

@@ -625,19 +625,12 @@ impl Screen for SyncScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("stats.sync.title");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, None);
         let rows = &self.rows;
         let has_password = !password(env).is_empty();
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value) = match rows[index] {
                     Row::Folder => {
                         let url = folder(env.settings.read(&URL));
@@ -656,18 +649,11 @@ impl Screen for SyncScreen {
                     Row::SyncNow => ("stats.sync.now", String::from("›")),
                     Row::Import => ("stats.import", String::from("›")),
                 };
-                ui::draw_value_row(
-                    canvas,
-                    env,
-                    &style,
-                    rect,
-                    focused,
-                    env.i18n.tr(title),
-                    &value,
-                );
-            },
-        );
-        ui::draw_message(canvas, env, &style, self.note, &self.message);
+                ui::Row::value(env.i18n.tr(title), &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        ui.message(self.note, &self.message);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

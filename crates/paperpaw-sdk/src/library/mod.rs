@@ -67,7 +67,7 @@ pub const FOLDER: crate::setting::Setting<crate::setting::Text> =
 /// The library folder ([`FOLDER`]) as a path in the storage, without
 /// slashes around it (`""` for the storage's top).
 pub fn folder<'e>(env: &Env<'e>) -> &'e str {
-    env.settings.read(&FOLDER).trim_matches('/')
+    env.settings().read(&FOLDER).trim_matches('/')
 }
 /// Books remembered for "recently read" order.
 const MAX_OPENED: usize = 100;
@@ -809,7 +809,7 @@ fn write_details(storage: &dyn Storage, path: &str, book: &Book) -> Result<(), c
 /// EPUB's package is read), so views do this for one book at a time,
 /// e.g. for the rows they show.
 pub fn index(env: &Env<'_>, path: &str) -> Book {
-    let storage = env.storage;
+    let storage = env.storage();
     // Details that could not be read are not written over.
     let (mut book, known) = match book_for_update(storage, path) {
         Ok(book) => (book, true),
@@ -820,7 +820,7 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
     if book.added.is_none() {
         book.added = today(env);
     }
-    if let Ok(document) = env.formats.open(storage, path) {
+    if let Ok(document) = env.formats().open(storage, path) {
         // What the book names; else what its source said ([`provide`]).
         let metadata = document.metadata();
         book.title = metadata.title.clone().or(book.title.take());
@@ -867,7 +867,7 @@ pub fn is_new_on(book: &Book, opened: bool, today: Option<u32>) -> bool {
 /// What the library knows of the book at `path`, read from the book
 /// first if it is not yet ([`index`](fn@index)).
 pub fn indexed(env: &Env<'_>, path: &str) -> Book {
-    match book(env.storage, path) {
+    match book(env.storage(), path) {
         Some(book) if book.indexed => book,
         _ => index(env, path),
     }
@@ -950,7 +950,7 @@ pub fn set_field(storage: &dyn Storage, path: &str, id: &str, value: &str) {
 /// opened book its place in the "recently read" order.
 pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: bool) {
     let path = reading.path.as_str();
-    let storage = env.storage;
+    let storage = env.storage();
     if opened {
         update_list(storage, &opened_file(), MAX_OPENED, |list| {
             list.retain(|p| p != path);

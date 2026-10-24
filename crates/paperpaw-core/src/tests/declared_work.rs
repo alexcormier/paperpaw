@@ -83,7 +83,7 @@ impl Plugin for WorkPlugin {
         r.add_action(ActionSpec::new(Id::new_static("wk.who"), "who").handler(
             move |env, _, _| {
                 log.borrow_mut()
-                    .push(alloc::format!("reader {}", env.reader));
+                    .push(alloc::format!("reader {}", env.reader()));
             },
         ))?;
         r.subscribe(

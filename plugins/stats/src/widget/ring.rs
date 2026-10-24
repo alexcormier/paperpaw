@@ -222,7 +222,8 @@ fn time_text(env: &Env<'_>, numbers: Numbers) -> String {
 
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, numbers: Numbers) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -242,7 +243,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, numbers: Numb
     if area.width >= area.height.saturating_mul(2) && area.height >= least {
         // Wide: the ring, the time and the note beside it, placed
         // together as the alignment says.
-        let area = super::captioned(canvas, env, id, look, caption, area.height);
+        let area = super::captioned(ui.canvas(), env, id, look, caption, area.height);
         let d = area.height.min(area.width * 2 / 5).min(limit);
         let gap = style.gap();
         let room = area.width.saturating_sub(d + gap);
@@ -275,9 +276,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, numbers: Numb
             let group = d + gap + ((wide + 0.99) as u16).min(room);
             let left = align.x(area, f32::from(group)) as u16;
             let ring = middle(Rect::new(left, area.y, d, area.height), d);
-            draw_ring(canvas, env, look, ring, progress, numbers.today, true);
+            draw_ring(&mut ui, look, ring, progress, numbers.today, true);
             let text = Rect::new(left + d + gap, area.y, room, area.height);
-            lines.draw(canvas, env, text, Align::Left, look.faint);
+            lines.draw(ui.canvas(), env, text, Align::Left, look.faint);
             return;
         }
         let wide = note
@@ -287,17 +288,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, numbers: Numb
         let group = d + gap + ((wide + 0.99) as u16).min(room);
         let left = align.x(area, f32::from(group)) as u16;
         let ring = middle(Rect::new(left, area.y, d, area.height), d);
-        draw_ring(canvas, env, look, ring, progress, numbers.today, false);
+        draw_ring(&mut ui, look, ring, progress, numbers.today, false);
         let text = Rect::new(left + d + gap, area.y, room, area.height);
-        let note_h = if note.is_some() { small } else { 0 };
-        let block = middle(text, big + note_h);
-        let row = Rect::new(text.x, block.y, text.width, big);
-        let x = f32::from(text.x);
-        ui::draw_label(canvas, &font, size, x, row, &first, look.ink);
-        if let Some(note) = note {
-            let row = Rect::new(text.x, block.y + big, text.width, small);
-            ui::draw_label(canvas, &font, style.small(), x, row, &note, look.faint);
-        }
+        draw_beside(&mut ui, look, text, (&*first, size), note.as_deref());
         return;
     }
     // The ring with the note below, together in the middle; where the
@@ -318,32 +311,63 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, numbers: Numb
     let d = ring_in(note_h);
     if d < least {
         // No room for a ring: the time as text, the note below it.
-        draw_time(canvas, env, (look, caption), area, numbers, lines);
+        draw_time(&mut ui, (look, caption), area, numbers, lines);
         return;
     }
     let note = lines.filter(|_| note_h > 0);
-    let block = super::captioned(canvas, env, id, look, caption, d + note_h);
+    let block = super::captioned(ui.canvas(), env, id, look, caption, d + note_h);
     let x = align.x(area, f32::from(d)) as u16;
     let ring = Rect::new(x, block.y, d, d);
-    draw_ring(canvas, env, look, ring, progress, numbers.today, true);
+    draw_ring(&mut ui, look, ring, progress, numbers.today, true);
     if let Some(lines) = note {
         let row = Rect::new(area.x, block.y + d + gap, area.width, note_h - gap);
-        lines.draw(canvas, env, row, align, look.faint);
+        lines.draw(ui.canvas(), env, row, align, look.faint);
+    }
+}
+
+/// The time `size` pixels large in `text` beside the ring, the note below
+/// it, together in the middle of its height.
+fn draw_beside(
+    ui: &mut ui::Ui<'_>,
+    look: &WidgetLook,
+    text: Rect,
+    (first, size): (&str, f32),
+    note: Option<&str>,
+) {
+    let style = *ui.style();
+    let Some(font) = ui.font() else {
+        return;
+    };
+    let (big, small) = (line(&font, size), line(&font, style.small()));
+    let note_h = if note.is_some() { small } else { 0 };
+    let block = middle(text, big + note_h);
+    let row = Rect::new(text.x, block.y, text.width, big);
+    let x = f32::from(text.x);
+    ui::Label::new(first)
+        .px(size)
+        .color(look.ink)
+        .draw_from(ui, x, row);
+    if let Some(note) = note {
+        let row = Rect::new(text.x, block.y + big, text.width, small);
+        ui::Label::new(note)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(ui, x, row);
     }
 }
 
 /// The time read as text where there is no room for a ring, as large as
 /// fits, with the note below it where that fits too.
 fn draw_time(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
+    ui: &mut ui::Ui<'_>,
     (look, caption): (&WidgetLook, Option<&str>),
     area: Rect,
     numbers: Numbers,
     note: Option<widgets::Wrapped>,
 ) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let env = ui.env();
+    let style = *ui.style();
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -379,16 +403,19 @@ fn draw_time(
     let note = note.filter(|_| keep);
     let note_h = note.as_ref().map_or(0, |n| n.height(env));
     let align = widgets::align(env, id);
-    let block = super::captioned(canvas, env, id, look, caption, big + note_h);
+    let block = super::captioned(ui.canvas(), env, id, look, caption, big + note_h);
     let width = f32::from(area.width);
     let shown = super::number_if_narrow(&font, size, &first, area.width);
     let shown = ui::fit(&font, size, shown, width);
     let x = align.x(area, font.measure(size, &shown));
     let row = Rect::new(area.x, block.y, area.width, big);
-    ui::draw_label(canvas, &font, size, x, row, &shown, look.ink);
+    ui::Label::new(&shown)
+        .px(size)
+        .color(look.ink)
+        .draw_from(ui, x, row);
     if let Some(note) = note {
         let row = Rect::new(area.x, block.y + big, area.width, note_h);
-        note.draw(canvas, env, row, align, look.faint);
+        note.draw(ui.canvas(), env, row, align, look.faint);
     }
 }
 
@@ -397,16 +424,16 @@ fn draw_time(
 /// (`progress` in thousandths) with round ends, and the minutes read
 /// inside (with "min" below them if `unit` and the unit shows).
 fn draw_ring(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
+    ui: &mut ui::Ui<'_>,
     look: &WidgetLook,
     at: Rect,
     progress: Option<u32>,
     seconds: u64,
     unit: bool,
 ) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let env = ui.env();
+    let style = *ui.style();
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -424,7 +451,7 @@ fn draw_ring(
     .max(3)
     .max(if d < 80 { d / 8 } else { 0 });
     let gauge = chosen(env, id, "style") == STYLES[1];
-    super::draw_arc(canvas, env, look, at, progress, thick, gauge);
+    super::draw_arc(ui.canvas(), env, look, at, progress, thick, gauge);
     let track = u32::from(style.line()).max(1).min(thick);
     // The minutes inside.
     let inner = d.saturating_sub(2 * thick + 2 * track) as u16;
@@ -446,19 +473,17 @@ fn draw_ring(
     }
     let row = Rect::new(at.x, shown.y, at.width, big);
     let cx = f32::from(at.x) + d as f32 / 2.0;
-    ui::draw_label(canvas, &font, size, cx - w / 2.0, row, &minutes, look.ink);
+    ui::Label::new(&minutes)
+        .px(size)
+        .color(look.ink)
+        .draw_from(ui, cx - w / 2.0, row);
     if unit_h > 0 {
         let text = env.i18n.tr("stats.unit.minutes");
         let w = font.measure(style.small(), text);
         let row = Rect::new(at.x, shown.y + big, at.width, unit_h);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            cx - w / 2.0,
-            row,
-            text,
-            look.faint,
-        );
+        ui::Label::new(text)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(ui, cx - w / 2.0, row);
     }
 }

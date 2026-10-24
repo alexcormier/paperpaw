@@ -200,7 +200,7 @@ impl Screen for Layered {
             "lay.on" => cx.set_key_layer(Some(book)),
             "lay.off" => cx.set_key_layer(None),
             "lay.other" => {
-                let below = cx.env().stack[0].key;
+                let below = cx.env().stack()[0].key;
                 cx.command(Command::SetKeyLayer(below, Some(book)));
             }
             _ if *action == actions::CONFIRM => {}

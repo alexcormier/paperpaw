@@ -337,9 +337,10 @@ impl PhoneScreen {
     /// The step shown, its title and line at the top, its button at the
     /// bottom: joining shows the code to join and the network's name and
     /// password large; opening the page's code and its address.
-    fn draw_step(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, own: &Own) {
+    fn draw_step(&self, ui: &mut ui::Ui<'_>, area: Rect, own: &Own) {
+        let env = ui.env();
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let margin = style.margin();
@@ -356,7 +357,7 @@ impl PhoneScreen {
         let small = widgets::line_height(env, style.small());
         let width = f32::from(inner.width);
         // Lines of `text` wrapped, together one part of the stack.
-        let lines = |canvas: &mut Canvas<'_>,
+        let lines = |ui: &mut ui::Ui<'_>,
                      stack: &mut ui::Stack,
                      text: &str,
                      size: f32,
@@ -366,35 +367,23 @@ impl PhoneScreen {
             let block = stack.take(high * wrapped.len() as u16);
             for (i, range) in wrapped.into_iter().enumerate() {
                 let row = Rect::new(block.x, block.y + i as u16 * high, block.width, high);
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    size,
-                    f32::from(row.x),
-                    row,
-                    text[range].trim(),
-                    ink,
-                );
+                ui::Label::new(text[range].trim())
+                    .px(size)
+                    .color(ink)
+                    .draw_from(ui, f32::from(row.x), row);
             }
         };
         if let Some(problem) = &self.problem {
-            lines(
-                canvas,
-                &mut stack,
-                problem,
-                style.small(),
-                small,
-                Color::BLACK,
-            );
+            lines(ui, &mut stack, problem, style.small(), small, Color::BLACK);
         }
         let (number, title, note) = match self.step {
             Step::Join => (1, "wifi.phone.join-title", "wifi.phone.join-note"),
             Step::Open => (2, "wifi.phone.open-title", "wifi.phone.open-note"),
         };
         let title = format!("{number}. {}", env.i18n.tr(title));
-        lines(canvas, &mut stack, &title, style.text(), line, Color::BLACK);
+        lines(ui, &mut stack, &title, style.text(), line, Color::BLACK);
         lines(
-            canvas,
+            ui,
             &mut stack,
             env.i18n.tr(note),
             style.small(),
@@ -403,20 +392,21 @@ impl PhoneScreen {
         );
         let label = env.i18n.tr(self.step.button());
         let button = stack.take_bottom(ui::button_height_for(env, &style, inner.width, label));
-        ui::draw_button(canvas, env, &style, button, label, false, false);
+        ui.button(button, label, false, false);
         self.button.set(button);
         match self.step {
-            Step::Join => self.draw_join(canvas, env, &mut stack, own),
-            Step::Open => self.draw_open(canvas, env, &stack, area),
+            Step::Join => self.draw_join(ui, &mut stack, own),
+            Step::Open => self.draw_open(ui, &stack, area),
         }
     }
 
     /// The step to join, below its title: the network's name and password
     /// large on a card above the button, to be read and typed; its code
     /// above them.
-    fn draw_join(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, stack: &mut ui::Stack, own: &Own) {
+    fn draw_join(&self, ui: &mut ui::Ui<'_>, stack: &mut ui::Stack, own: &Own) {
+        let env = ui.env();
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let (margin, gap) = (style.margin(), style.gap());
@@ -425,7 +415,7 @@ impl PhoneScreen {
         let big = style.text() * 1.2;
         let tall = widgets::line_height(env, big);
         let card = stack.take_bottom(2 * margin + 2 * (small + tall) + gap);
-        let inside = ui::draw_card(canvas, &style, card, widgets::Frame::Line);
+        let inside = ui.card(card, widgets::Frame::Line);
         let password = random::grouped(&own.password);
         let x = f32::from(inside.x);
         let mut y = inside.y;
@@ -434,40 +424,39 @@ impl PhoneScreen {
             ("wifi.phone.password", password.as_str()),
         ] {
             let row = Rect::new(inside.x, y, inside.width, small);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                x,
-                row,
-                env.i18n.tr(key),
-                style.faint(ui::Ink::Note),
-            );
+            ui::Label::new(env.i18n.tr(key))
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(ui, x, row);
             let (size, value) =
                 widgets::fit_line(&font, big, style.small(), value, f32::from(inside.width));
             let row = Rect::new(inside.x, y + small, inside.width, tall);
-            ui::draw_label(canvas, &font, size, x, row, &value, Color::BLACK);
+            ui::Label::new(&value)
+                .px(size)
+                .color(Color::BLACK)
+                .draw_from(ui, x, row);
             y += small + tall + gap;
         }
         let rest = stack.rest();
         match own.qr.as_ref() {
             Some(qr) => {
-                ui::draw_qr(canvas, qr, rest);
+                ui::draw_qr(ui.canvas(), qr, rest);
             }
-            None => draw_opening(canvas, env, &style, rest),
+            None => draw_opening(ui, rest),
         }
     }
 
     /// The step to open the page, below its title: its code with the
     /// address below, across the screen (its own margins).
-    fn draw_open(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, stack: &ui::Stack, area: Rect) {
+    fn draw_open(&self, ui: &mut ui::Ui<'_>, stack: &ui::Stack, area: Rect) {
+        let env = ui.env();
         let style = self.style;
         // The address's own margins: across the screen.
         let rest = stack.rest();
         let full = Rect::new(area.x, rest.y, area.width, rest.height);
         match self.page() {
             Some((url, qr)) => ui::draw_address(
-                canvas,
+                ui.canvas(),
                 env,
                 &style,
                 full,
@@ -476,19 +465,20 @@ impl PhoneScreen {
                 env.i18n.tr("wifi.phone.type-address"),
                 None,
             ),
-            None => draw_opening(canvas, env, &style, full),
+            None => draw_opening(ui, full),
         }
     }
 }
 
 /// That the reader's own network is opening, in `room` below a step: as a
 /// message, or in the small size where the room is too short for that.
-fn draw_opening(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, room: Rect) {
+fn draw_opening(ui: &mut ui::Ui<'_>, room: Rect) {
+    let (env, style) = (ui.env(), ui.style());
     let text = env.i18n.tr("wifi.phone.opening");
-    if ui::message_height(env, style, room.width, text) <= room.height {
-        return ui::draw_message(canvas, env, style, room, text);
+    if ui.message_height(room.width, text) <= room.height {
+        return ui.message(room, text);
     }
-    let Some(font) = style.font(env) else {
+    let Some(font) = ui.font() else {
         return;
     };
     let margin = style.margin();
@@ -502,7 +492,10 @@ fn draw_opening(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, room: R
         let x = f32::from(room.x + margin)
             + (f32::from(width) - font.measure(style.small(), part)).max(0.0) / 2.0;
         let at = Rect::new(room.x, y, room.width, line);
-        ui::draw_label(canvas, &font, style.small(), x, at, part, Color::BLACK);
+        ui::Label::new(part)
+            .px(style.small())
+            .color(Color::BLACK)
+            .draw_from(ui, x, at);
         y += line;
     }
 }
@@ -600,13 +593,9 @@ impl Screen for PhoneScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("wifi.phone.title");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        self.header.draw(&mut ui, title, None, None);
         let display = env.device.display;
         let top = self.header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -616,7 +605,7 @@ impl Screen for PhoneScreen {
             (State::Searching, _) => message("wifi.state.searching"),
             (State::Opening, _) if self.problem.is_none() => message("wifi.phone.opening"),
             (State::Opening | State::Hosting { .. }, Some(own)) => {
-                return self.draw_step(canvas, env, area, own);
+                return self.draw_step(&mut ui, area, own);
             }
             (State::Leaving { ssid, .. } | State::Joining(ssid), _) => env
                 .i18n
@@ -626,7 +615,7 @@ impl Screen for PhoneScreen {
                 .format("wifi.phone.joined", &[("ssid", Arg::Str(ssid))]),
             (State::Failed(text), _) => text.clone(),
         };
-        ui::draw_message(canvas, env, &style, area, &text);
+        ui.message(area, &text);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

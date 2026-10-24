@@ -179,10 +179,10 @@ impl Staging {
     ) -> Result<Committed, Refusal> {
         let checked = self.check(env, commit);
         if !matches!(checked, Ok(_) | Err(Refusal::NeedsApproval)) {
-            self.abort(env.storage);
+            self.abort(env.storage());
         }
         let code = checked?;
-        let storage = env.storage;
+        let storage = env.storage();
         // Those the store installed before origins were kept stay its.
         super::adopt(env);
         // Named as installed, and no store's, once it is in place.
@@ -205,7 +205,7 @@ impl Staging {
     /// Whether the files sent make the plugin; its code's SHA-256 (the
     /// header's, as installers name it) where it has code.
     fn check(&self, env: &Env<'_>, commit: Commit) -> Result<Option<[u8; 32]>, Refusal> {
-        let storage = env.storage;
+        let storage = env.storage();
         let folder = self.folder();
         if folder_plugin_id(storage, &folder).as_deref() != Some(self.plugin.as_str()) {
             return Err(Refusal::NotThePlugin);

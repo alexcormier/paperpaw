@@ -404,28 +404,22 @@ impl Picker {
 impl Screen for Picker {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.rows.len();
         let title = env.i18n.tr("sleep.setting.overlay-picture");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
         let on = env.i18n.tr("core.state.on");
         let chosen: Vec<bool> = (0..len).map(|row| self.chosen(env, row)).collect();
         let rows = &self.rows;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, row, rect, focused| {
-                let canvas = ui.canvas();
-                let value = if chosen[row] { on } else { "" };
-                ui::draw_value_row(canvas, env, &style, rect, focused, &rows[row].1, value);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            let value = if chosen[row] { on } else { "" };
+            ui::Row::value(&rows[row].1, value)
+                .focused(focused)
+                .draw(ui, rect);
+        });
         if let Some((text, area)) = &self.failed {
-            ui::draw_note_line(canvas, env, &style, *area, text);
+            ui.note_line(*area, text);
         }
     }
 

@@ -62,7 +62,7 @@ impl Screen for Bar {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         self.log.borrow_mut().push(String::from("bar shown"));
         if !mem::replace(&mut self.timer_asked, true) {
-            let at = cx.env().now.add_millis(100);
+            let at = cx.env().now().add_millis(100);
             cx.wake_at(at);
         }
     }
@@ -79,7 +79,7 @@ impl Screen for Bar {
 fn bar(log: &Log) -> paperpaw_sdk::ScreenFactory {
     let log = log.clone();
     Box::new(move |env, _| {
-        let display = env.device.display;
+        let display = env.device().display;
         let line = alloc::format!("bar made {}x{}", display.width, display.height);
         log.borrow_mut().push(line);
         Box::new(Bar {
@@ -99,8 +99,8 @@ impl Screen for Panel {
     }
 
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
-        let height = env.device.display.height;
-        Some(Rect::new(0, height - 40, env.device.display.width, 20))
+        let height = env.device().display.height;
+        Some(Rect::new(0, height - 40, env.device().display.width, 20))
     }
 
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
@@ -141,7 +141,7 @@ impl Screen for Lock {
 fn corner(name: &'static str, log: &Log) -> paperpaw_sdk::ScreenFactory {
     let log = log.clone();
     Box::new(move |env, _| {
-        let display = env.device.display;
+        let display = env.device().display;
         let line = alloc::format!("{name} made {}x{}", display.width, display.height);
         log.borrow_mut().push(line);
         Box::new(Corner {
@@ -173,7 +173,7 @@ impl Plugin for BarPlugin {
             LOCK,
             "lock",
             Box::new(move |env, _| {
-                let display = env.device.display;
+                let display = env.device().display;
                 let line = alloc::format!("lock made {}x{}", display.width, display.height);
                 log.borrow_mut().push(line);
                 Box::new(Lock(Corner {
@@ -196,7 +196,7 @@ impl Plugin for BarPlugin {
         let shown = |_: &Env<'_>, entry: &StackEntry| entry.screen != BOOK && entry.screen != MENU;
         r.add_chrome(
             ChromeSpec::new(Id::new_static("bar.tabs"), self.1, bar(&self.0))
-                .size(|env| env.settings.int("bar.size") as u16)
+                .size(|env| env.settings().int("bar.size") as u16)
                 .shown(shown)
                 .need(paperpaw_sdk::MenuNeed::Touch),
         )

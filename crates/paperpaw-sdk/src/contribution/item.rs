@@ -28,7 +28,7 @@ pub enum Contribution {
     Action(Box<ActionSpec>),
     Screen(ScreenSpec),
     Slot(SlotSpec),
-    /// A screen proposed for a slot (see [`Registrar::bind_slot`]).
+    /// A screen proposed for a slot (see [`Registrar::bind_slot`](crate::Registrar::bind_slot)).
     #[non_exhaustive]
     SlotBinding {
         slot: Id,
@@ -36,24 +36,24 @@ pub enum Contribution {
         priority: Priority,
     },
     Setting(Box<SettingSpec>),
-    /// Settings kept in the program ([`SettingSpec::fixed`]).
+    /// Settings kept in the program (a `static` list).
     FixedSettings(&'static [SettingSpec]),
     SettingGroup(crate::settings::SettingGroup),
     /// Another default for any plugin's setting (see
-    /// [`Registrar::set_setting_default`]).
+    /// [`Registrar::set_setting_default`](crate::Registrar::set_setting_default)).
     #[non_exhaustive]
     SettingDefault {
         setting: Id,
         value: Cow<'static, str>,
     },
     /// Another value of any plugin's choice setting (see
-    /// [`Registrar::add_choice`]).
+    /// [`Registrar::add_choice`](crate::Registrar::add_choice)).
     #[non_exhaustive]
     Choice {
         setting: Id,
         value: Cow<'static, str>,
     },
-    /// Default key bindings (see [`Registrar::add_keymap`]).
+    /// Default key bindings (see [`Registrar::add_keymap`](crate::Registrar::add_keymap)).
     Keymap(Cow<'static, str>),
     #[non_exhaustive]
     KeymapPreset {
@@ -61,7 +61,7 @@ pub enum Contribution {
         source: Cow<'static, str>,
     },
     /// Key bindings that apply while a switch is on (see
-    /// [`Registrar::add_keymap_when`]).
+    /// [`Registrar::add_keymap_when`](crate::Registrar::add_keymap_when)).
     #[non_exhaustive]
     KeymapWhen {
         setting: Id,
@@ -69,9 +69,9 @@ pub enum Contribution {
     },
     Stylesheet(Cow<'static, str>),
     BookData(crate::library::BookData),
-    /// A field kept with books ([`Registrar::add_book_field`]).
+    /// A field kept with books ([`Registrar::add_book_field`](crate::Registrar::add_book_field)).
     BookField(Box<crate::library::BookField>),
-    /// A badge on books' rows ([`Registrar::add_book_badge`]).
+    /// A badge on books' rows ([`Registrar::add_book_badge`](crate::Registrar::add_book_badge)).
     BookBadge(Box<crate::library::BookBadge>),
     Font(Box<FontSpec>),
     #[non_exhaustive]
@@ -85,7 +85,7 @@ pub enum Contribution {
         path: String,
         extends: Id,
     },
-    /// A face of a family in a file (see [`Registrar::add_font_face`]).
+    /// A face of a family in a file (see [`Registrar::add_font_face`](crate::Registrar::add_font_face)).
     FontFace(Box<FontFace>),
     #[non_exhaustive]
     FontBinding {
@@ -152,11 +152,11 @@ pub enum Contribution {
     /// A named input (see [`keys::InputSpec`](crate::keys::InputSpec)).
     Input(crate::keys::InputSpec),
     /// A handler put in place of an action's own, of any plugin
-    /// ([`Registrar::override_action`]).
+    /// ([`Registrar::override_action`](crate::Registrar::override_action)).
     ActionOverride(Box<crate::action::ActionOverride>),
-    /// Sees every action run ([`Registrar::observe_actions`]).
+    /// Sees every action run ([`Registrar::observe_actions`](crate::Registrar::observe_actions)).
     ActionObserver(Box<crate::action::ObserverSpec>),
-    /// Sees every event emitted ([`Registrar::observe_events`]).
+    /// Sees every event emitted ([`Registrar::observe_events`](crate::Registrar::observe_events)).
     EventObserver(Box<crate::action::ObserverSpec>),
     /// A recognizer of gestures (see [`keys::GestureSpec`](crate::keys::GestureSpec)).
     Gesture(Box<crate::keys::GestureSpec>),
@@ -168,15 +168,15 @@ pub enum Contribution {
     Preset(Box<Preset>),
     /// Presets kept in the program.
     FixedPresets(&'static [Preset]),
-    /// A service with the name of its type (see [`Registrar::publish`]).
+    /// A service with the name of its type (see [`Registrar::provide`](crate::Registrar::provide)).
     #[non_exhaustive]
     Published {
         id: Id,
         service: crate::services::Service,
     },
-    /// A point declared to contribute to ([`Registrar::add_point`]).
+    /// A point declared to contribute to ([`Registrar::add_point`](crate::Registrar::add_point)).
     Point(Box<crate::services::PointSpec>),
-    /// An event declared ([`Registrar::declare_event`]).
+    /// An event declared ([`Registrar::declare_event`](crate::Registrar::declare_event)).
     EventDeclared(Box<crate::services::EventSpec>),
     /// Text for a point another plugin defined (see
     /// [`services`](crate::services)).
@@ -187,7 +187,7 @@ pub enum Contribution {
     },
     /// A translation catalog (see `paperpaw-i18n`).
     Translations(Cow<'static, str>),
-    /// A look for the parts of screens (see [`Registrar::set_ui_look`]).
+    /// A look for the parts of screens (see [`Registrar::set_ui_look`](crate::Registrar::set_ui_look)).
     #[non_exhaustive]
     UiLook {
         painters: &'static crate::ui::look::Painters,

@@ -341,7 +341,7 @@ fn what_plugins_see_changes_only_with_the_interface() {
 
 /// Every crate of PaperPaw that a crate of `interface/crates.txt` depends
 /// on is named there too: its types may cross as well. The SDK names the
-/// same (`native::CROSSING_CRATES`, for services found by name).
+/// same (`native::CROSSING_CRATES`).
 #[test]
 fn every_crate_below_the_sdk_is_kept() {
     let listed = crates();

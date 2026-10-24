@@ -8,7 +8,7 @@
 //! `.paperpaw/library`: each book's details, the books read last, the
 //! favourites and the catalog ([`catalog`], [`index`](mod@super::index)). A replacement
 //! publishes itself as the service [`SERVICE`]
-//! ([`Registrar::publish`](crate::Registrar::publish), a
+//! ([`Registrar::provide`](crate::Registrar::provide), a
 //! `Box<dyn Library>`) and answers the same questions its own way; views
 //! that ask [`service`] show its books.
 
@@ -35,25 +35,25 @@ pub const SERVICE: &str = "core.library";
 pub trait Library {
     /// What the library knows of the book at `path`.
     fn book(&self, env: &Env<'_>, path: &str) -> Option<Book> {
-        super::book(env.storage, path)
+        super::book(env.storage(), path)
     }
 
     /// Whether there are books to ask for ([`catalog::state`]).
     fn catalog_state(&self, env: &Env<'_>) -> State {
-        catalog::state(env.storage)
+        catalog::state(env.storage())
     }
 
     /// Calls `f` with every book and its key (where its line starts in the
     /// catalog, [`catalog::each_at`]): a key fits 32 bits, and
     /// [`Library::records`] reads the book again by it.
     fn each(&self, env: &Env<'_>, f: &mut dyn FnMut(u64, Record)) {
-        catalog::each_at(env.storage, f);
+        catalog::each_at(env.storage(), f);
     }
 
     /// The books of `keys` (a page of a view), each `None` where it is no
     /// longer there ([`catalog::read_page`]).
     fn records(&self, env: &Env<'_>, keys: &[u64]) -> Vec<Option<Record>> {
-        catalog::read_page(env.storage, keys)
+        catalog::read_page(env.storage(), keys)
     }
 
     /// Which version of the books there is: another once keys may mean
@@ -61,7 +61,7 @@ pub trait Library {
     /// so that what a view keeps of them is known to hold; `None` without
     /// books.
     fn version(&self, env: &Env<'_>) -> Option<u64> {
-        super::index::catalog_version(env.storage)
+        super::index::catalog_version(env.storage())
     }
 
     /// `n` books `query` finds, after `after` ([`catalog::query`]).
@@ -77,7 +77,7 @@ pub trait Library {
     /// The index of every book ([`Index::collect`]): at most `cap`, those
     /// in the folder `archive` left out.
     fn index(&self, env: &Env<'_>, cap: usize, archive: &str) -> Index {
-        let opened = super::index::opened(env.storage);
+        let opened = super::index::opened(env.storage());
         let version = self.version(env);
         Index::collect(cap, archive, &opened, version, &mut |f| self.each(env, f))
     }
@@ -90,19 +90,19 @@ pub trait Library {
     /// Takes what changed of single books into `index` (how far read,
     /// favourite, removed, the books read last; [`Index::refresh`]).
     fn refresh(&self, env: &Env<'_>, index: &mut Index) {
-        index.refresh(env.storage);
+        index.refresh(env.storage());
     }
 
     /// Keeps `index` in the file `file` while the view lets it go
     /// (`Index::save`); `false` where it is not kept.
     fn keep_index(&self, env: &Env<'_>, index: &Index, file: &str, archive: &str) -> bool {
-        index.write(env.storage, file, archive).is_ok()
+        index.write(env.storage(), file, archive).is_ok()
     }
 
     /// The index kept in `file`, where it is of the books there are now
     /// ([`Index::load`]).
     fn kept_index(&self, env: &Env<'_>, file: &str, archive: &str) -> Option<Index> {
-        Index::load(env.storage, file, archive, self.version(env)?)
+        Index::load(env.storage(), file, archive, self.version(env)?)
     }
 
     /// The book of item `i` of `index`.
@@ -114,13 +114,13 @@ pub trait Library {
     /// Marks the book at `path` finished, or unread; the command tells
     /// everyone ([`super::changed_book`]).
     fn set_finished(&self, env: &Env<'_>, path: &str, finished: bool) -> Command {
-        super::set_finished(env.storage, path, finished);
+        super::set_finished(env.storage(), path, finished);
         super::changed_book(path, what::STATUS | what::PROGRESS)
     }
 
     /// Makes the book at `path` a favourite, or no longer one.
     fn set_favourite(&self, env: &Env<'_>, path: &str, favourite: bool) -> Command {
-        super::set_favourite(env.storage, path, favourite);
+        super::set_favourite(env.storage(), path, favourite);
         super::changed_book(path, what::FAVOURITE)
     }
 
@@ -128,7 +128,7 @@ pub trait Library {
     /// then): the kernel's library, where its file is there and is a
     /// book ([`is_book_path`]).
     fn can_delete(&self, env: &Env<'_>, path: &str) -> bool {
-        is_book_path(env, path) && env.storage.exists(path)
+        is_book_path(env, path) && env.storage().exists(path)
     }
 
     /// Deletes the books at `paths`: the kernel's library removes each
@@ -145,7 +145,7 @@ pub trait Library {
                 deleted.refused.push(String::from(*path));
                 continue;
             }
-            match env.storage.remove(path) {
+            match env.storage().remove(path) {
                 Ok(()) => {
                     let removed = crate::builtin::events::BookRemoved::new(String::from(*path));
                     let command = crate::builtin::events::BOOK_REMOVED.emit(removed);
@@ -169,7 +169,7 @@ pub fn is_book_path(env: &Env<'_>, path: &str) -> bool {
         .clone()
         .next()
         .is_some_and(|first| first.eq_ignore_ascii_case(crate::data::DIR));
-    !own && !parts.any(|part| part == "..") && env.formats.supports_file(env.storage, path)
+    !own && !parts.any(|part| part == "..") && env.formats().supports_file(env.storage(), path)
 }
 
 /// What [`Library::delete`] did: the commands that tell everyone, the
@@ -209,7 +209,7 @@ pub const VERSION: crate::Version = crate::Version::new(1, 0, 0);
 /// The library to ask: one a plugin provided as [`SERVICE`], else the
 /// kernel's.
 pub fn service<'e>(env: &Env<'e>) -> &'e dyn Library {
-    match env.services.get::<LibraryService>(SERVICE, VERSION) {
+    match env.services().get::<LibraryService>(SERVICE, VERSION) {
         Some(library) => library.0.as_ref(),
         None => &KEPT,
     }
@@ -296,7 +296,7 @@ impl fmt::Debug for BookBadge {
 
 /// The badges of `record`, at most `n`, from every plugin.
 pub fn badges(env: &Env<'_>, record: &Record, n: usize) -> Vec<Badge> {
-    env.book_badges
+    env.book_badges()
         .iter()
         .filter_map(|b| (b.badge)(env, record))
         .take(n)

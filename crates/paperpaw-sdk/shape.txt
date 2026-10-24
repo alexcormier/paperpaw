@@ -381,7 +381,7 @@ const paperpaw_sdk::library::what::STATUS: u32 = 16u32
 const paperpaw_sdk::logo::LOGO: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.logo")
 const paperpaw_sdk::memory::Memory::NONE: Self = Self { read: None }
 const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "code-host.dll", "code-host.so", "code-host.dylib", ]
-const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = CROSSING
+const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = &[ "paperpaw_sdk", "paperpaw_platform", "paperpaw_graphics", "paperpaw_i18n", "paperpaw_config", "paperpaw_text", "paperpaw_document", "paperpaw_layout", "paperpaw_xml", "paperpaw_zip", "paperpaw_hyphen", "paperpaw_image", "paperpaw_update", "paperpaw_digest", "paperpaw_json", "paperpaw_qr", "paperpaw_native", ]
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 2u16
 const paperpaw_sdk::native::LAYOUT: u64 = 17_791_023_075_115_623_855u64

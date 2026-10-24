@@ -70,7 +70,7 @@ impl Plugin for CorePlugin {
             let Some(id) = id else {
                 return;
             };
-            if env.settings.spec(id.as_str()).is_none() {
+            if env.settings().spec(id.as_str()).is_none() {
                 return;
             }
             // A secret setting's text is kept with the secrets, never in
@@ -145,8 +145,8 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
     // Where there is something to choose: another reading app, or another
     // way to open books.
     r.set_item_state(actions::OPEN_WITH, |env| {
-        let more = env.readers.len() > 1 || !env.menus.items(menus::OPEN_WITH.as_str()).is_empty();
-        paperpaw_sdk::ItemState::new().shown(more)
+        let others = !env.menus().items(menus::OPEN_WITH.as_str()).is_empty();
+        paperpaw_sdk::ItemState::new().shown(others || env.readers().len() > 1)
     })?;
     r.on(events::BOOK_CHOSEN, |_, chosen, out| {
         if chosen.action == actions::OPEN_WITH {
@@ -158,7 +158,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         let name = paperpaw_sdk::files::name(path);
         let once = wanted.once == Some(true) && !wanted.folder;
         let readers_of_book = || {
-            env.readers
+            env.readers()
                 .for_book(env, path)
                 .into_iter()
                 .map(|r| r.id.as_str())
@@ -167,7 +167,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         let (options, key, kind) = if once {
             let mut options = readers_of_book();
             options.extend(
-                env.menus
+                env.menus()
                     .items(menus::OPEN_WITH.as_str())
                     .into_iter()
                     .filter(|item| !item.section)
@@ -176,7 +176,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
             options.push(ALWAYS);
             (options, "core.reading-app.open-with", "o")
         } else if wanted.folder {
-            let mut options: Vec<&str> = env.readers.iter().map(|r| r.id.as_str()).collect();
+            let mut options: Vec<&str> = env.readers().iter().map(|r| r.id.as_str()).collect();
             options.push(settings::READING_APP_DEFAULT);
             (options, "core.reading-app.for-folder", "f")
         } else {
@@ -202,7 +202,7 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         if kind == "o" {
             if option == ALWAYS {
                 out.push(readers::ask(Choice::Book(path)));
-            } else if let Some(reader) = env.readers.get(option) {
+            } else if let Some(reader) = env.readers().get(option) {
                 out.push(readers::open_with(path, reader));
             } else if let Ok(action) = Id::parse(option) {
                 // Another way to open it, as an action of the book menu.
@@ -214,13 +214,13 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         }
         let reader = Id::parse(option)
             .ok()
-            .filter(|id| env.readers.get(id.as_str()).is_some());
+            .filter(|id| env.readers().get(id.as_str()).is_some());
         let choice = match kind {
             "f" => Choice::Folder(path),
             _ => Choice::Book(path),
         };
-        if readers::remember(env.storage, choice, reader.as_ref()).is_err() {
-            let text = env.i18n.tr("core.reading-app.not-kept");
+        if readers::remember(env.storage(), choice, reader.as_ref()).is_err() {
+            let text = env.i18n().tr("core.reading-app.not-kept");
             out.push(Command::Notify(String::from(text)));
         }
         if kind == "b" {
@@ -409,7 +409,7 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
             "core.action.sleep",
             Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| {
                 // The sleep screen first, if there is one, then sleep.
-                if env.caps.sleep && env.has_slot(&slots::SLEEP) {
+                if env.caps().sleep && env.has_slot(&slots::SLEEP) {
                     out.push(Command::open_slot(slots::SLEEP));
                 }
                 out.push(Command::Sleep);
@@ -419,7 +419,7 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
             actions::TOGGLE_NIGHT_MODE,
             "core.action.toggle-night-mode",
             Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| {
-                let night = env.settings.read(&settings::NIGHT_MODE);
+                let night = env.settings().read(&settings::NIGHT_MODE);
                 out.push(Command::set(&settings::NIGHT_MODE, !night));
             }),
         ),
@@ -505,7 +505,7 @@ struct Catalog {
 /// whose index takes the memory. Catching up, which takes little, goes on
 /// beside the library; a library with no catalog yet holds no index.
 fn waits(env: &Env<'_>, walk: bool) -> bool {
-    let shown = env.stack.iter().rev().find(|entry| !entry.overlay);
+    let shown = env.stack().iter().rev().find(|entry| !entry.overlay);
     let reading = shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
     let library_open = env
         .stack
@@ -513,10 +513,10 @@ fn waits(env: &Env<'_>, walk: bool) -> bool {
         .any(|entry| entry.slot.as_ref() == Some(&slots::LIBRARY));
     reading
         || (walk
-            && env.device.memory == paperpaw_sdk::MemoryClass::Small
+            && env.device().memory == paperpaw_sdk::MemoryClass::Small
             && library_open
             && matches!(
-                library::catalog::state(env.storage),
+                library::catalog::state(env.storage()),
                 library::catalog::State::Ready { .. }
             ))
 }
@@ -581,7 +581,7 @@ impl Catalog {
     /// One step of the job.
     fn step(&self, env: &Env<'_>, out: &mut Commands) -> paperpaw_sdk::work::Step {
         use paperpaw_sdk::work::Step;
-        let storage = env.storage;
+        let storage = env.storage();
         let mut job = self.job.borrow_mut();
         let walk_next = match &*job {
             Some(running) => matches!(running, CatalogJob::Walk(_)),
@@ -674,8 +674,9 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::CATALOG_WANTED, move |env, wanted, out| {
-            let missing = library::catalog::state(env.storage) == library::catalog::State::Missing;
-            if !env.formats.is_empty() && (wanted.anew || missing || !catalog.walked.get()) {
+            let missing =
+                library::catalog::state(env.storage()) == library::catalog::State::Missing;
+            if !env.formats().is_empty() && (wanted.anew || missing || !catalog.walked.get()) {
                 catalog.want_walk(true, wanted.anew, out);
             }
         })?;
@@ -705,7 +706,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::BOOK_CHANGED, move |env, changed, out| {
-            let kept = env.book_fields.iter().any(|f| f.in_catalog);
+            let kept = env.book_fields().iter().any(|f| f.in_catalog);
             if changed.what & library::what::FIELDS != 0 && kept {
                 catalog.want_catch_up(Some(&changed.path), false, out);
             }
@@ -729,12 +730,12 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
         let catalog = Rc::clone(&catalog);
         r.on(event, move |env, reading, out| {
             library::record(env, reading, false);
-            library::note_status(env.storage, &reading.path);
+            library::note_status(env.storage(), &reading.path);
             out.push(library::changed_book(
                 &reading.path,
                 library::what::PROGRESS,
             ));
-            if library::catalog::log_is_long(env.storage) {
+            if library::catalog::log_is_long(env.storage()) {
                 catalog.want_catch_up(None, false, out);
             }
         })?;
@@ -745,9 +746,9 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::BOOK_MOVED, move |env, moved, out| {
-            library::moved(env.storage, &moved.from, &moved.path);
-            library::move_data(env.storage, env.book_data, &moved.from, &moved.path);
-            let _ = library::catalog::forget(env.storage, &moved.from);
+            library::moved(env.storage(), &moved.from, &moved.path);
+            library::move_data(env.storage(), env.book_data(), &moved.from, &moved.path);
+            let _ = library::catalog::forget(env.storage(), &moved.from);
             catalog.fresh.borrow_mut().retain(|p| *p != moved.from);
             catalog.want_catch_up(Some(&moved.path), true, out);
         })?;
@@ -755,11 +756,11 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::BOOK_REMOVED, move |env, removed, out| {
-            library::removed(env.storage, &removed.path);
-            library::remove_data(env.storage, env.book_data, &removed.path);
-            let _ = library::catalog::forget(env.storage, &removed.path);
+            library::removed(env.storage(), &removed.path);
+            library::remove_data(env.storage(), env.book_data(), &removed.path);
+            let _ = library::catalog::forget(env.storage(), &removed.path);
             catalog.fresh.borrow_mut().retain(|p| *p != removed.path);
-            if library::catalog::log_is_long(env.storage) {
+            if library::catalog::log_is_long(env.storage()) {
                 catalog.want_catch_up(None, false, out);
             }
         })?;
@@ -788,7 +789,7 @@ fn declare_clean_up(env: &Env<'_>, out: &mut Commands) {
     let Some(now) = paperpaw_sdk::time::unix_seconds(env) else {
         return;
     };
-    let last = paperpaw_sdk::read_file(env.storage, CLEANED_UP, 32)
+    let last = paperpaw_sdk::read_file(env.storage(), CLEANED_UP, 32)
         .ok()
         .and_then(|bytes| {
             core::str::from_utf8(&bytes)
@@ -951,7 +952,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_menu_entry(MenuEntry::new(menus::TOOLS, menus::APPS).order(90))?;
     r.add_icon(menus::APPS, Cow::Borrowed("apps"))?;
     r.set_item_state(menus::APPS, |env| {
-        paperpaw_sdk::ItemState::new().shown(!env.menus.items(menus::APPS.as_str()).is_empty())
+        paperpaw_sdk::ItemState::new().shown(!env.menus().items(menus::APPS.as_str()).is_empty())
     })?;
     for (action, order, icon) in [
         // The quick panel at the top: found without its gesture or key.
@@ -1868,7 +1869,7 @@ fn items_line<'e>(
     env: &Env<'e>,
     frame: &paperpaw_sdk::StatusFrame<'_>,
 ) -> Option<paperpaw_sdk::status::StatusLine<'e>> {
-    let place = env.status_items.place(frame.place?)?;
+    let place = env.status_items().place(frame.place?)?;
     let line = place.line(env, frame.area, frame.size, frame.color);
     Some(line.percent(frame.percent))
 }
@@ -1882,7 +1883,8 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
             paperpaw_sdk::builtin::status_lines::ITEMS,
             "core.status.line.items",
             Box::new(|canvas, env, frame| {
-                let (Some(line), Some(font)) = (items_line(env, frame), env.fonts.role(frame.font))
+                let (Some(line), Some(font)) =
+                    (items_line(env, frame), env.fonts().role(frame.font))
                 else {
                     return;
                 };
@@ -1900,7 +1902,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         // The reader's line of items before it was the kernel's.
         .also(Id::new_static("reader.status-line.items"))
         .targets(Box::new(|env, frame| {
-            match (items_line(env, frame), env.fonts.role(frame.font)) {
+            match (items_line(env, frame), env.fonts().role(frame.font)) {
                 (Some(line), Some(font)) => line.targets(env, &font, frame.context),
                 _ => Vec::new(),
             }
@@ -1930,7 +1932,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
             status_items::BATTERY,
             "core.status.battery",
             Box::new(|env, _| {
-                env.status.battery.map(|b| StatusValue::Level {
+                env.status().battery.map(|b| StatusValue::Level {
                     percent: b.percent,
                     charging: b.charging,
                 })
@@ -1942,8 +1944,8 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         status_items::BATTERY_LOW,
         "core.status.battery-low",
         Box::new(|env, _| {
-            let low = env.settings.read(&settings::BATTERY_LOW);
-            env.status
+            let low = env.settings().read(&settings::BATTERY_LOW);
+            env.status()
                 .battery
                 .filter(|b| i64::from(b.percent) <= low)
                 .map(|b| StatusValue::Level {
@@ -1985,7 +1987,7 @@ fn register_keymaps_and_setup(r: &mut Registrar) -> Result<(), RegisterError> {
         )
         .order(20)
         .applies(Box::new(|env: &paperpaw_sdk::Env<'_>| {
-            env.device.input.buttons && !env.device.input.touch
+            env.device().input.buttons && !env.device().input.touch
         })),
     )?;
     r.add_setup_step(
@@ -1997,7 +1999,7 @@ fn register_keymaps_and_setup(r: &mut Registrar) -> Result<(), RegisterError> {
         .help("core.setup.time-zone.help")
         .order(40)
         .applies(Box::new(|env: &paperpaw_sdk::Env<'_>| {
-            env.status
+            env.status()
                 .clock
                 .is_none_or(|c| c.utc_offset_minutes.is_none())
         })),
@@ -2014,8 +2016,8 @@ struct PlaceholderScreen;
 impl Screen for PlaceholderScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let area = canvas.clip();
-        let margin = env.metrics.mm(4);
-        let line = env.metrics.tenth_mm(5);
+        let margin = env.metrics().mm(4);
+        let line = env.metrics().tenth_mm(5);
         let (w, h) = (u32::from(area.width), u32::from(area.height));
         let inner_w = w.saturating_sub(2 * margin);
         let inner_h = h.saturating_sub(2 * margin);
@@ -2027,9 +2029,9 @@ impl Screen for PlaceholderScreen {
             line,
             Color::BLACK,
         );
-        if let Some(font) = env.fonts.role(fonts::UI.as_str()) {
-            let size = env.metrics.pt(14.0);
-            let text = env.i18n.tr("core.screen.placeholder");
+        if let Some(font) = env.fonts().role(fonts::UI.as_str()) {
+            let size = env.metrics().pt(14.0);
+            let text = env.i18n().tr("core.screen.placeholder");
             let width = font.measure(size, text);
             let x = (w as f32 - width) / 2.0;
             let baseline = (h / 2) as i32 + (size / 3.0) as i32;
@@ -2052,7 +2054,7 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
     } else {
         alloc::format!("{parent}/Screenshots")
     };
-    let _ = env.storage.create_dir(&dir);
+    let _ = env.storage().create_dir(&dir);
     let name = match paperpaw_sdk::time::local_time(env) {
         Some(t) => alloc::format!(
             "PaperPaw {}-{:02}-{:02} {:02}-{:02}-{:02}",
@@ -2063,11 +2065,11 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
             t.minute,
             t.second
         ),
-        None => alloc::format!("PaperPaw {}", env.now.0),
+        None => alloc::format!("PaperPaw {}", env.now().0),
     };
     let mut path = alloc::format!("{dir}/{name}.png");
     let mut n = 2;
-    while env.storage.exists(&path) {
+    while env.storage().exists(&path) {
         path = alloc::format!("{dir}/{name} ({n}).png");
         n += 1;
     }
@@ -2091,13 +2093,13 @@ fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&space, "core.widget.space"))?;
     r.add_settings(&SPACE)?;
     let space_height = |env: &Env<'_>, _| {
-        let size = env.settings.read(&widgets::SPACE_SIZE);
+        let size = env.settings().read(&widgets::SPACE_SIZE);
         let mm = match widgets::SPACE_SIZES.iter().position(|s| *s == size) {
             Some(0) => 4,
             Some(2) => 20,
             _ => 10,
         };
-        env.metrics.mm(mm).min(u32::from(u16::MAX)) as u16
+        env.metrics().mm(mm).min(u32::from(u16::MAX)) as u16
     };
     r.add_widget(
         WidgetSpec::drawn(

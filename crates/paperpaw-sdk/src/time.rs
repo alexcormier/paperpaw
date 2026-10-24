@@ -258,8 +258,8 @@ impl UnixTime {
 
     /// Now, if the device knows the time.
     pub fn now(env: &Env<'_>) -> Option<Self> {
-        let clock = env.status.clock?;
-        Some(Self(clock.unix_millis_at(env.now)))
+        let clock = env.status().clock?;
+        Some(Self(clock.unix_millis_at(env.now())))
     }
 
     /// How it reads on a wall `offset` seconds ahead of UTC.
@@ -610,11 +610,11 @@ pub fn iso_week(year: i32, month: u8, day: u8) -> u8 {
 /// that is not one ([`TimeZone::parse`]) counts as none: the zone chosen
 /// from the list then.
 fn chosen_zone(env: &Env<'_>) -> Option<TimeZone> {
-    let rule = env.settings.read(&settings::TIME_ZONE_RULE).trim();
+    let rule = env.settings().read(&settings::TIME_ZONE_RULE).trim();
     if let Some(zone) = TimeZone::parse(rule) {
         return Some(zone);
     }
-    let zone = env.settings.read(&settings::TIME_ZONE);
+    let zone = env.settings().read(&settings::TIME_ZONE);
     TIME_ZONES
         .iter()
         .find(|(id, _)| *id == zone)
@@ -636,7 +636,7 @@ fn zone_offset(env: &Env<'_>, unix: i64) -> i32 {
 
 /// Local milliseconds since 1970 at `now`, if the device knows the time.
 fn local_millis(env: &Env<'_>, now: Instant) -> Option<i64> {
-    let clock = env.status.clock?;
+    let clock = env.status().clock?;
     let utc = clock.unix_millis_at(now);
     Some(utc + i64::from(zone_offset(env, utc.div_euclid(1000))) * 1000)
 }
@@ -665,8 +665,11 @@ pub fn local_time(env: &Env<'_>) -> Option<LocalTime> {
 
 /// When the minute changes next, e.g. to update a clock.
 pub fn next_minute(env: &Env<'_>) -> Option<Instant> {
-    let ms = local_millis(env, env.now)?;
-    Some(env.now.add_millis((60_000 - ms.rem_euclid(60_000)) as u64))
+    let ms = local_millis(env, env.now())?;
+    Some(
+        env.now()
+            .add_millis((60_000 - ms.rem_euclid(60_000)) as u64),
+    )
 }
 
 /// The time now as the user wants to see it: `14:05` or `2:05 PM`
@@ -679,7 +682,7 @@ pub fn clock_text(env: &Env<'_>) -> Option<String> {
 /// Whether the user wants times on a twelve-hour clock (setting
 /// `core.clock-format`).
 pub fn twelve_hours(env: &Env<'_>) -> bool {
-    env.settings.read(&settings::CLOCK_FORMAT) == CLOCK_12H
+    env.settings().read(&settings::CLOCK_FORMAT) == CLOCK_12H
 }
 
 /// A time of day (`hour` 0 to 23) as the user wants to see it: `14:05`
@@ -698,7 +701,7 @@ pub fn clock_of(env: &Env<'_>, hour: u8, minute: u8) -> String {
         h => h,
     };
     let time = format!("{shown}:{minute:02}");
-    env.i18n
+    env.i18n()
         .format(key, &[("time", paperpaw_i18n::Arg::Str(&time))])
 }
 
@@ -719,12 +722,12 @@ fn dated(env: &Env<'_>, key: &str, kind: &str) -> Option<String> {
     let now = local_time(env)?;
     let weekday = format!("core.weekday{kind}.{}", now.weekday);
     let month = format!("core.month{kind}.{}", now.month);
-    Some(env.i18n.format(
+    Some(env.i18n().format(
         key,
         &[
-            ("weekday", paperpaw_i18n::Arg::Str(env.i18n.tr(&weekday))),
+            ("weekday", paperpaw_i18n::Arg::Str(env.i18n().tr(&weekday))),
             ("day", paperpaw_i18n::Arg::Int(i64::from(now.day))),
-            ("month", paperpaw_i18n::Arg::Str(env.i18n.tr(&month))),
+            ("month", paperpaw_i18n::Arg::Str(env.i18n().tr(&month))),
         ],
     ))
 }
@@ -738,10 +741,10 @@ pub const WEEK_STARTS: &[&str] = &["core.week.auto", "core.week.monday", "core.w
 /// set to the language's habit, as the translation `core.week-start-day`
 /// says. Every calendar and week of a plugin starts there.
 pub fn week_start(env: &Env<'_>) -> u8 {
-    match env.settings.read(&crate::builtin::settings::WEEK_START) {
+    match env.settings().read(&crate::builtin::settings::WEEK_START) {
         "core.week.sunday" => 0,
         "core.week.monday" => 1,
-        _ => u8::from(env.i18n.tr("core.week-start-day") != "0"),
+        _ => u8::from(env.i18n().tr("core.week-start-day") != "0"),
     }
 }
 
@@ -829,15 +832,15 @@ fn iso_millis(text: &str) -> Option<i64> {
 pub fn duration_text(env: &Env<'_>, seconds: u64) -> String {
     let minutes = seconds / 60;
     if minutes == 0 {
-        return env.i18n.tr("core.duration.under-a-minute").into();
+        return env.i18n().tr("core.duration.under-a-minute").into();
     }
     if minutes < 60 {
-        return env.i18n.format(
+        return env.i18n().format(
             "core.duration.minutes",
             &[("m", paperpaw_i18n::Arg::Int(minutes as i64))],
         );
     }
-    env.i18n.format(
+    env.i18n().format(
         "core.duration.hours",
         &[
             ("h", paperpaw_i18n::Arg::Int((minutes / 60) as i64)),

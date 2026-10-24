@@ -510,6 +510,7 @@ impl Screen for Check {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         if self.step != Some(Step::Touch) {
             // Which step, as a note: the header's page arrows would turn
             // nothing here.
@@ -517,37 +518,22 @@ impl Screen for Check {
                 .step
                 .map(|s| format!("{} / {}", s.index() + 1, Step::ALL.len()));
             let title = env.i18n.tr("diagnostics.check.title");
-            self.header.draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                title,
-                step.as_deref(),
-                None,
-            );
+            self.header.draw(&mut ui, title, step.as_deref(), None);
         }
         let l = &self.layout;
         let (title, help) = texts(env, self.step);
+        paragraph(&mut ui, l.title, style.title(), &title, Color::BLACK);
         paragraph(
-            canvas,
-            env,
-            &style,
-            l.title,
-            style.title(),
-            &title,
-            Color::BLACK,
-        );
-        paragraph(
-            canvas,
-            env,
-            &style,
+            &mut ui,
             l.help,
             style.small(),
             &help,
             style.faint(ui::Ink::Note),
         );
         match self.step {
-            Some(Step::Screen) => draw_screen_test(canvas, env, l.body, self.flipped),
-            Some(Step::Touch) => self.draw_targets(canvas, env),
-            _ => draw_lines(canvas, env, &style, l.body, &self.lines(env)),
+            Some(Step::Screen) => draw_screen_test(ui.canvas(), env, l.body, self.flipped),
+            Some(Step::Touch) => self.draw_targets(ui.canvas(), env),
+            _ => draw_lines(&mut ui, l.body, &self.lines(env)),
         }
         // The answer suggested stands out; while buttons are asked for,
         // they choose nothing.
@@ -556,7 +542,7 @@ impl Screen for Check {
             let label = env.i18n.tr(control.label());
             let focused = self.shown && i == self.focus && !self.takes_buttons();
             let on = Some(*control) == suggested || *control == Control::Done;
-            ui::draw_button(canvas, env, &style, *rect, label, on, focused);
+            ui.button(*rect, label, on, focused);
         }
     }
 
@@ -1100,19 +1086,11 @@ fn line_height(env: &Env<'_>, style: &UiStyle, size: f32) -> u16 {
 }
 
 /// Draws `text` wrapped into `area`, as many lines as fit.
-fn paragraph(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    size: f32,
-    text: &str,
-    color: Color,
-) {
-    let Some(font) = style.font(env) else {
+fn paragraph(ui: &mut ui::Ui<'_>, area: Rect, size: f32, text: &str, color: Color) {
+    let Some(font) = ui.font() else {
         return;
     };
-    canvas.describe(Role::Text, text, area);
+    ui.canvas().describe(Role::Text, text, area);
     let height = font.line_metrics(size).line_height as u16;
     let mut top = area.y;
     for range in font.wrap(size, text, f32::from(area.width)) {
@@ -1120,27 +1098,17 @@ fn paragraph(
             break;
         }
         let row = Rect::new(area.x, top, area.width, height);
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            f32::from(area.x),
-            row,
-            &text[range],
-            color,
-        );
+        ui::Label::new(&text[range])
+            .px(size)
+            .color(color)
+            .draw_from(ui, f32::from(area.x), row);
         top += height;
     }
 }
 
 /// Lines of a name and its value, one a row, as many as fit.
-fn draw_lines(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    lines: &[(String, String)],
-) {
+fn draw_lines(ui: &mut ui::Ui<'_>, area: Rect, lines: &[(String, String)]) {
+    let (env, style) = (ui.env(), ui.style());
     // A row each, closer where they do not fit so (the end's list).
     let line = line_height(env, style, style.small());
     let count = u16::try_from(lines.len()).unwrap_or(u16::MAX).max(1);
@@ -1159,7 +1127,7 @@ fn draw_lines(
             area.width + 2 * inside,
             row,
         );
-        ui::draw_value_row(canvas, env, style, rect, false, name, value);
+        ui::Row::value(name, value).draw(ui, rect);
         top += row;
     }
 }
