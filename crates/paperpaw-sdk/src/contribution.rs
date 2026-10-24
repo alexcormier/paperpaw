@@ -23,7 +23,6 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-
 use crate::action::ActionSpec;
 use crate::event::EventHandler;
 use crate::filters::{InputFilterSpec, RefreshFilterSpec, TextFilterSpec};
