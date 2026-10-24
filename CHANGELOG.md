@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `Contribution` is the kernel's: a plugin adds through the
+  `Registrar`'s methods, and `Registrar::add`, `contributions` and
+  `into_contributions` need the `kernel` feature (a plugin's tests that
+  look at what it adds name it as a dev-dependency).
 - SDK: replies are read typed only. The reply to `Command::Speak` is a
   `Spoken` (whether it was spoken, and the speech's parameters); the
   string keys of replies (`http_params`, `server_params`,
