@@ -10,7 +10,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 
 use paperpaw_sdk::digest::md5::Md5;
-use paperpaw_sdk::time::parse_iso8601;
+use paperpaw_sdk::time::UnixTime;
 use paperpaw_sdk::{Storage, StorageError};
 
 use crate::markdown;
@@ -103,7 +103,9 @@ pub fn parse_props(text: &str) -> Props {
             "type_" => props.kind = value.parse().unwrap_or(0),
             "parent_id" => props.parent = value.to_string(),
             "created_time" => props.created = value.to_string(),
-            "updated_time" => props.updated = parse_iso8601(value).unwrap_or(0),
+            "updated_time" => {
+                props.updated = UnixTime::parse_iso8601(value).map_or(0, UnixTime::millis)
+            }
             "user_created_time" => props.user_created = value.to_string(),
             "order" => props.order = value.parse().unwrap_or(0),
             "deleted_time" => props.deleted = !matches!(value, "" | "0"),
@@ -233,7 +235,8 @@ mod tests {
 
     #[test]
     fn times_as_joplin_writes_them() {
-        use paperpaw_sdk::time::iso8601;
+        let iso8601 = |ms| UnixTime::from_millis(ms).iso8601();
+        let parse_iso8601 = |text: &str| UnixTime::parse_iso8601(text).map(UnixTime::millis);
         assert_eq!(iso8601(1_792_448_650_090), "2026-10-19T22:24:10.090Z");
         assert_eq!(iso8601(0), "1970-01-01T00:00:00.000Z");
         for ms in [0, 951_782_400_123, 1_792_448_650_090, 4_107_542_399_999] {

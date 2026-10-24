@@ -12,7 +12,7 @@
 use std::ops::ControlFlow;
 
 use paperpaw_sdk::web::{
-    base64, basic_auth, clean_name, encode, file_name, host, http_date, join_url, percent_decode,
+    base64, basic_auth, clean_name, encode, file_name, host, join_url, percent_decode,
 };
 use paperpaw_sdk::{MemoryStorage, Storage, StorageError, files};
 use proptest::prelude::*;
@@ -393,4 +393,9 @@ fn deleting_a_folder_takes_everything_in_it() {
     files::delete(&storage, "d").unwrap();
     assert!(!storage.exists("d/e/f.txt") && !files::is_dir(&storage, "d"));
     assert!(storage.exists("dd.txt"));
+}
+
+/// An HTTP date as seconds since 1970, or none.
+fn http_date(text: &str) -> Option<i64> {
+    paperpaw_sdk::time::UnixTime::parse_http_date(text).map(paperpaw_sdk::time::UnixTime::secs)
 }

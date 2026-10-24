@@ -213,11 +213,9 @@ pub fn basic_auth(user: &str, password: &str) -> String {
     format!("Basic {}", base64(format!("{user}:{password}").as_bytes()))
 }
 
-/// The seconds since 1970 (UTC) of an HTTP date as servers send them,
-/// e.g. in `Last-Modified` or WebDAV's `getlastmodified`:
-/// `Tue, 20 Oct 2026 08:00:00 GMT` (RFC 9110's preferred form; the
-/// obsolete ones are not read).
-pub fn http_date(text: &str) -> Option<i64> {
+/// The seconds since 1970 (UTC) of an HTTP date
+/// ([`UnixTime::parse_http_date`](crate::time::UnixTime)).
+pub(crate) fn http_date_seconds(text: &str) -> Option<i64> {
     const MONTHS: [&str; 12] = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];
@@ -279,10 +277,10 @@ mod tests {
     #[test]
     fn http_dates() {
         assert_eq!(
-            http_date("Tue, 20 Oct 2026 08:00:00 GMT"),
+            http_date_seconds("Tue, 20 Oct 2026 08:00:00 GMT"),
             Some(1_792_483_200)
         );
-        assert_eq!(http_date("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
+        assert_eq!(http_date_seconds("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
         for wrong in [
             "",
             "20 Oct 2026 08:00:00 GMT",
@@ -291,7 +289,7 @@ mod tests {
             "Tue, 20 Oct 2026 25:00:00 GMT",
             "Tuesday, 20-Oct-26 08:00:00 GMT",
         ] {
-            assert_eq!(http_date(wrong), None, "{wrong}");
+            assert_eq!(http_date_seconds(wrong), None, "{wrong}");
         }
     }
 

@@ -31,6 +31,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::json::stream::{self, Event as Json};
 use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::time::UnixTime;
 use paperpaw_sdk::{Arg, Command, Commands, Env, HttpRequest, Params, StorageError};
 
 use crate::item::{self, NOTE, NOTEBOOK};
@@ -399,7 +400,7 @@ impl Run {
         let old = kept::notebook(env.storage).map(|(_, id)| id);
         let id = item::new_id(&format!("paperpaw notebook {name} {now}"), old.as_deref());
         let mut request = self.put(env, &item::file_name(&id), &NOTEBOOK_MADE);
-        request = request.body(item::notebook(&id, name, &paperpaw_sdk::time::iso8601(now)));
+        request = request.body(item::notebook(&id, name, &UnixTime::from_millis(now).iso8601()));
         request = request.with(Params::new().with(ID, id));
         out.push(Command::http(request));
     }
@@ -491,7 +492,7 @@ impl Run {
         // Later than the note found, or Joplin keeps that one (also if
         // this device's clock is behind).
         let updated =
-            paperpaw_sdk::time::iso8601(found.as_ref().map_or(now, |p| now.max(p.updated + 1)));
+            UnixTime::from_millis(found.as_ref().map_or(now, |p| now.max(p.updated + 1))).iso8601();
         let old = book.last().map(|n| n.id.as_str());
         let id = match (&found, old) {
             (Some(_), Some(old)) => old.to_string(),

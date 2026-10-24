@@ -164,10 +164,16 @@ pub struct LocalTime {
     pub second: u8,
     /// 0 (Sunday) to 6 (Saturday).
     pub weekday: u8,
+    /// The seconds this wall time is ahead of UTC (east of it): what
+    /// makes it a moment ([`LocalTime::unix`]). 0 where it was made
+    /// without a zone ([`LocalTime::new`], [`LocalTime::from_seconds`]),
+    /// which reads it as UTC.
+    pub offset: i32,
 }
 
 impl LocalTime {
-    /// The time of day on a date; its weekday follows from the date.
+    /// The time of day on a date, read as UTC; its weekday follows from
+    /// the date.
     pub fn new(year: i32, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> Self {
         Self {
             year,
@@ -177,7 +183,25 @@ impl LocalTime {
             minute,
             second,
             weekday: weekday(year, month, day),
+            offset: 0,
         }
+    }
+
+    /// The same wall time in a zone `offset` seconds ahead of UTC.
+    pub const fn with_offset(mut self, offset: i32) -> Self {
+        self.offset = offset;
+        self
+    }
+
+    /// The wall time of the moment `at` in a zone `offset` seconds ahead
+    /// of UTC.
+    pub fn from_unix(at: UnixTime, offset: i32) -> Self {
+        Self::from_seconds(at.secs() + i64::from(offset)).with_offset(offset)
+    }
+
+    /// The moment this wall time is, in its zone ([`LocalTime::offset`]).
+    pub fn unix(&self) -> UnixTime {
+        UnixTime::from_secs(self.to_seconds() - i64::from(self.offset))
     }
 
     /// The local time `seconds` after 1970-01-01 00:00 local time.
@@ -202,6 +226,77 @@ impl LocalTime {
             + i64::from(self.hour) * 3600
             + i64::from(self.minute) * 60
             + i64::from(self.second)
+    }
+}
+
+/// A moment: milliseconds since 1970-01-01 00:00 UTC, whatever the zone.
+/// What books' times, files' times and web services' times are made of;
+/// a [`LocalTime`] is how it reads on a wall.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct UnixTime(i64);
+
+impl UnixTime {
+    /// `millis` milliseconds since 1970 (UTC).
+    pub const fn from_millis(millis: i64) -> Self {
+        Self(millis)
+    }
+
+    /// `secs` seconds since 1970 (UTC).
+    pub const fn from_secs(secs: i64) -> Self {
+        Self(secs.saturating_mul(1000))
+    }
+
+    /// Milliseconds since 1970 (UTC).
+    pub const fn millis(self) -> i64 {
+        self.0
+    }
+
+    /// Whole seconds since 1970 (UTC), rounded down.
+    pub const fn secs(self) -> i64 {
+        self.0.div_euclid(1000)
+    }
+
+    /// Now, if the device knows the time.
+    pub fn now(env: &Env<'_>) -> Option<Self> {
+        let clock = env.status.clock?;
+        Some(Self(clock.unix_millis_at(env.now)))
+    }
+
+    /// How it reads on a wall `offset` seconds ahead of UTC.
+    pub fn local(self, offset: i32) -> LocalTime {
+        LocalTime::from_unix(self, offset)
+    }
+
+    /// As ISO 8601 in UTC, as web services and Joplin write times:
+    /// `2026-10-19T22:24:10.090Z`.
+    pub fn iso8601(self) -> String {
+        let ms = self.0;
+        let t = LocalTime::from_seconds(ms.div_euclid(1000));
+        alloc::format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+            t.year,
+            t.month,
+            t.day,
+            t.hour,
+            t.minute,
+            t.second,
+            ms.rem_euclid(1000)
+        )
+    }
+
+    /// An ISO 8601 time: a date (`2026-10-19`, its midnight in UTC), or a
+    /// date and a time with seconds or not, a fraction of a second or
+    /// not, and `Z`, an offset such as `+02:00` or none (taken as UTC).
+    /// `None` for anything else.
+    pub fn parse_iso8601(text: &str) -> Option<Self> {
+        iso_millis(text).map(Self)
+    }
+
+    /// An HTTP date as servers send them, e.g. in `Last-Modified` or
+    /// WebDAV's `getlastmodified`: `Tue, 20 Oct 2026 08:00:00 GMT` (RFC
+    /// 9110's preferred form; the obsolete ones are not read).
+    pub fn parse_http_date(text: &str) -> Option<Self> {
+        crate::web::http_date_seconds(text).map(Self::from_secs)
     }
 }
 
@@ -526,21 +621,30 @@ fn chosen_zone(env: &Env<'_>) -> Option<TimeZone> {
         .and_then(|(_, rule)| TimeZone::parse(rule))
 }
 
+/// The seconds the chosen time zone (or the system's) is ahead of UTC at
+/// `unix` seconds since 1970.
+fn zone_offset(env: &Env<'_>, unix: i64) -> i32 {
+    match chosen_zone(env) {
+        Some(zone) => zone.offset_at(unix),
+        None => env
+            .status
+            .clock
+            .and_then(|c| c.utc_offset_minutes)
+            .map_or(0, |m| m * 60),
+    }
+}
+
 /// Local milliseconds since 1970 at `now`, if the device knows the time.
 fn local_millis(env: &Env<'_>, now: Instant) -> Option<i64> {
     let clock = env.status.clock?;
     let utc = clock.unix_millis_at(now);
-    let offset = match chosen_zone(env) {
-        Some(zone) => i64::from(zone.offset_at(utc.div_euclid(1000))) * 1000,
-        None => i64::from(clock.utc_offset_minutes.unwrap_or(0)) * 60_000,
-    };
-    Some(utc + offset)
+    Some(utc + i64::from(zone_offset(env, utc.div_euclid(1000))) * 1000)
 }
 
-/// Seconds since 1970 (UTC) now, if the device knows the time.
+/// Seconds since 1970 (UTC) now, if the device knows the time:
+/// `UnixTime::now(env)` as a number, for what keeps seconds.
 pub fn unix_seconds(env: &Env<'_>) -> Option<i64> {
-    let clock = env.status.clock?;
-    Some(clock.unix_millis_at(env.now).div_euclid(1000))
+    UnixTime::now(env).map(UnixTime::secs)
 }
 
 /// `unix` seconds since 1970 (UTC) as local seconds since 1970, in the
@@ -549,20 +653,14 @@ pub fn unix_seconds(env: &Env<'_>) -> Option<i64> {
 /// system's zone is known by its offset now only: a time in another
 /// season is off by the hour summer time adds.
 pub fn local_seconds(env: &Env<'_>, unix: i64) -> i64 {
-    let offset = match chosen_zone(env) {
-        Some(zone) => i64::from(zone.offset_at(unix)),
-        None => env
-            .status
-            .clock
-            .and_then(|c| c.utc_offset_minutes)
-            .map_or(0, |m| i64::from(m) * 60),
-    };
-    unix.saturating_add(offset)
+    unix.saturating_add(i64::from(zone_offset(env, unix)))
 }
 
-/// The local date and time now, if the device knows the time.
+/// The local date and time now, in the chosen zone (its offset in
+/// [`LocalTime::offset`]), if the device knows the time.
 pub fn local_time(env: &Env<'_>) -> Option<LocalTime> {
-    local_millis(env, env.now).map(|ms| LocalTime::from_seconds(ms.div_euclid(1000)))
+    let now = UnixTime::now(env)?;
+    Some(now.local(zone_offset(env, now.secs())))
 }
 
 /// When the minute changes next, e.g. to update a clock.
@@ -653,27 +751,8 @@ pub fn week_start(env: &Env<'_>) -> u8 {
 pub const CLOCK_24H: &str = "core.clock.24h";
 pub const CLOCK_12H: &str = "core.clock.12h";
 
-/// `unix_millis` (milliseconds since 1970, UTC) as ISO 8601 in UTC, as
-/// web services and Joplin write times: `2026-10-19T22:24:10.090Z`.
-pub fn iso8601(unix_millis: i64) -> String {
-    let t = LocalTime::from_seconds(unix_millis.div_euclid(1000));
-    alloc::format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        t.year,
-        t.month,
-        t.day,
-        t.hour,
-        t.minute,
-        t.second,
-        unix_millis.rem_euclid(1000)
-    )
-}
-
-/// An ISO 8601 time as milliseconds since 1970 (UTC): a date
-/// (`2026-10-19`, its midnight in UTC), or a date and a time with seconds
-/// or not, a fraction of a second or not, and `Z`, an offset such as
-/// `+02:00` or none (taken as UTC). `None` for anything else.
-pub fn parse_iso8601(text: &str) -> Option<i64> {
+/// [`UnixTime::parse_iso8601`], in milliseconds.
+fn iso_millis(text: &str) -> Option<i64> {
     let text = text.trim();
     let (date, clock) = match text.split_once(['T', ' ']) {
         Some((date, clock)) => (date, Some(clock)),
@@ -775,7 +854,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_moment_reads_on_a_wall_and_back() {
+        let moment = UnixTime::from_millis(1_792_448_650_090); // 2026-10-19T22:24:10.090Z
+        assert_eq!(
+            (moment.secs(), moment.millis()),
+            (1_792_448_650, 1_792_448_650_090)
+        );
+        assert_eq!(UnixTime::from_secs(5).millis(), 5000);
+        assert_eq!(UnixTime::from_millis(-1).secs(), -1, "rounded down");
+        // Two hours ahead of UTC: past midnight, the next day.
+        let wall = moment.local(2 * 3600);
+        assert_eq!(
+            (
+                wall.year,
+                wall.month,
+                wall.day,
+                wall.hour,
+                wall.minute,
+                wall.second
+            ),
+            (2026, 10, 20, 0, 24, 10)
+        );
+        assert_eq!(wall.offset, 7200);
+        assert_eq!(wall.unix().secs(), moment.secs());
+        // Behind UTC, and a zone with no offset (read as UTC).
+        let behind = moment.local(-5 * 3600 - 1800);
+        assert_eq!((behind.day, behind.hour, behind.minute), (19, 16, 54));
+        assert_eq!(behind.unix().secs(), moment.secs());
+        assert_eq!(
+            LocalTime::new(2026, 10, 19, 22, 24, 10).unix().secs(),
+            1_792_448_650
+        );
+        assert_eq!(
+            LocalTime::new(2026, 10, 19, 22, 24, 10)
+                .with_offset(3600)
+                .unix()
+                .secs(),
+            1_792_448_650 - 3600
+        );
+        // The weekday follows the wall.
+        assert_eq!(wall.weekday, weekday(2026, 10, 20));
+    }
+
+    #[test]
+    fn http_dates_are_moments() {
+        let at = UnixTime::parse_http_date("Tue, 20 Oct 2026 08:00:00 GMT").unwrap();
+        assert_eq!(at.iso8601(), "2026-10-20T08:00:00.000Z");
+        assert_eq!(UnixTime::parse_http_date("20 Oct 2026"), None);
+    }
+
+    #[test]
     fn iso8601_times_are_written_and_read_back() {
+        let iso8601 = |ms| UnixTime::from_millis(ms).iso8601();
+        let parse_iso8601 = |text: &str| UnixTime::parse_iso8601(text).map(UnixTime::millis);
         let ms = 1_792_448_650_090; // 2026-10-19T22:24:10.090Z
         assert_eq!(iso8601(ms), "2026-10-19T22:24:10.090Z");
         assert_eq!(parse_iso8601(&iso8601(ms)), Some(ms));

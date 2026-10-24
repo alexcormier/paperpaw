@@ -127,7 +127,8 @@ fn webdav_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>
                 let file = file.rsplit('/').next().unwrap_or_default();
                 let exclusive = file.starts_with(&alloc::format!("{EXCLUSIVE}_"))
                     && files::has_extension(file, "json");
-                let renewed = paperpaw_sdk::web::http_date(&modified).map(|s| s * 1000);
+                let renewed =
+                    paperpaw_sdk::time::UnixTime::parse_http_date(&modified).map(|t| t.millis());
                 found |= exclusive && held(renewed);
             }
             _ => {}
