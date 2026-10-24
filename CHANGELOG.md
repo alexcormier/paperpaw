@@ -188,6 +188,10 @@ file to your report.
   interface's font, its second line cut. The card grows with the size
   (fewer words where there is no more room), and follows the size as it
   changes.
+- Every step of the text size changes the text, in the setup, the
+  settings, the quick panel and with the reader's buttons: sizes the
+  font of the X4 and X4 Pro draws alike (9 and 10 pt on the X4 Pro) are
+  skipped. Sizes kept stay as they are.
 
 ### Touch, buttons and the keyboard
 
@@ -779,6 +783,10 @@ breaking again.
 - `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).
+- `ui::shown_step`, `ui::shown_number` and `ui::shown_slider_value`
+  give the value a number setting steps or slides to: for the size of
+  book text the next one the reading font draws differently.
+  `ui::next_value` steps so.
 - `xml::Tokenizer::try_feed` tokenizes as `feed` does, but where the
   heap has no room for its buffer it returns an error rather than
   stopping the program. The buffer grows by 512 bytes at a time, never

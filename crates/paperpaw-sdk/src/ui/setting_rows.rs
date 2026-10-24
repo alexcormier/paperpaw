@@ -1270,9 +1270,102 @@ pub fn opens_screen(env: &Env<'_>, spec: &SettingSpec) -> bool {
             && !two_options(env, spec))
 }
 
+/// The sizes of book text and how the reading font draws them: sizes
+/// that look alike are drawn at the same pixel size of a font pack.
+struct FontSizes<'e> {
+    font: crate::FontHandle<'e>,
+    metrics: crate::Metrics,
+    min: i64,
+    max: i64,
+}
+
+impl<'e> FontSizes<'e> {
+    /// Those `spec` sets, where it is the size of book text and a reading
+    /// font is there.
+    fn of(env: &Env<'e>, spec: &SettingSpec) -> Option<Self> {
+        let SettingKind::Int { min, max } = spec.kind else {
+            return None;
+        };
+        if spec.id.as_str() != crate::builtin::settings::FONT_SIZE.as_str() {
+            return None;
+        }
+        Some(Self {
+            font: env.fonts().role(crate::builtin::fonts::READING.as_str())?,
+            metrics: env.metrics(),
+            min,
+            max: max.max(min),
+        })
+    }
+
+    /// What `points` looks like: alike for sizes drawn alike.
+    fn looks(&self, points: i64) -> (u32, u32) {
+        let px = self.metrics.pt(points as f32);
+        let height = self.font.line_metrics(px).line_height;
+        (
+            height.to_bits(),
+            self.font.measure(px, "Hamburgefonstiv").to_bits(),
+        )
+    }
+
+    /// The smallest of the sizes that look as `points` does.
+    fn first_alike(&self, points: i64) -> i64 {
+        let mut points = points.clamp(self.min, self.max);
+        let look = self.looks(points);
+        while points > self.min && self.looks(points - 1) == look {
+            points -= 1;
+        }
+        points
+    }
+}
+
+/// The value number setting `spec` shows for `value`, e.g. where a finger
+/// leaves a slider: `value`, but for the size of book text the smallest
+/// of the sizes the reading font draws alike (a font pack has a few pixel
+/// sizes; on the X4 Pro 9 and 10 points are both 28 pixels), so that no
+/// two sizes offered look the same. Values kept stay as they are.
+pub fn shown_number(env: &Env<'_>, spec: &SettingSpec, value: i64) -> i64 {
+    FontSizes::of(env, spec).map_or(value, |sizes| sizes.first_alike(value))
+}
+
+/// The value number setting `spec` steps to from `from` towards `to`
+/// (a step of its own, a button's, a key's): `to`, but for the size of
+/// book text the next size that looks different from `from`, as
+/// [`shown_number`] shows it, and `from` where none that way does.
+pub fn shown_step(env: &Env<'_>, spec: &SettingSpec, from: i64, to: i64) -> i64 {
+    let Some(sizes) = FontSizes::of(env, spec).filter(|_| to != from) else {
+        return to;
+    };
+    let direction = (to - from).signum();
+    let before = sizes.looks(from);
+    let mut points = to.clamp(sizes.min, sizes.max);
+    while sizes.looks(points) == before {
+        let next = (points + direction).clamp(sizes.min, sizes.max);
+        if next == points {
+            return from;
+        }
+        points = next;
+    }
+    sizes.first_alike(points)
+}
+
+/// The value a slider of number setting `spec` comes to, moved from
+/// `before` (its value when the finger came down, or the key was
+/// pressed) to `value` ([`Slider`](crate::ui::slider::Slider) steps and
+/// drags): a step away, the next value that looks different
+/// ([`shown_step`]); further, the value shown for `value`
+/// ([`shown_number`]). Only the size of book text skips values.
+pub fn shown_slider_value(env: &Env<'_>, spec: &SettingSpec, before: i64, value: i64) -> i64 {
+    if value.abs_diff(before) == spec.extra().step.unsigned_abs().max(1) {
+        shown_step(env, spec, before, value)
+    } else {
+        shown_number(env, spec, value)
+    }
+}
+
 /// The value after one step of the setting: a switch toggles, a number
-/// moves by `step` within its range, a choice or language moves to the
-/// next (or previous) option. `None` for text.
+/// moves by `step` within its range (the size of book text to the next
+/// size that looks different, see [`shown_step`]), a choice or language
+/// moves to the next (or previous) option. `None` for text.
 pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<SettingValue> {
     let current = env.settings().get(spec.id.as_str())?;
     let cycle = |options: &[&str], value: &str| -> SettingValue {
@@ -1294,7 +1387,12 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
         (SettingKind::Bool, SettingValue::Bool(v)) => SettingValue::Bool(!v),
         (SettingKind::Int { min, max }, SettingValue::Int(v)) => {
             let next = v.saturating_add(step.saturating_mul(spec.extra().step));
-            SettingValue::Int(next.clamp(*min, (*max).max(*min)))
+            SettingValue::Int(shown_step(
+                env,
+                spec,
+                *v,
+                next.clamp(*min, (*max).max(*min)),
+            ))
         }
         (SettingKind::Choice(options), SettingValue::Text(v)) => {
             let options: Vec<&str> = options.iter().collect();

@@ -517,7 +517,9 @@ impl PanelScreen {
         };
         let id = spec.id.clone();
         if let Some(step) = ui::slider::key_step(action) {
-            let value = slider.stepped(env.settings().int(id.as_str()), step);
+            let now = env.settings().int(id.as_str());
+            // The size of book text on to the next that looks different.
+            let value = ui::shown_step(&env, spec, now, slider.stepped(now, step));
             show(cx, id, value);
             return Handled::Yes;
         }
@@ -1022,10 +1024,15 @@ impl Screen for PanelScreen {
                 value
             }
         };
+        // Only the sizes of book text that look different.
+        let shown = |value: i64| {
+            spec(&env, &id).map_or(value, |s| ui::shown_slider_value(&env, s, before, value))
+        };
         match step {
-            ui::slider::SliderStep::Moved(value) => show(cx, id, value),
+            ui::slider::SliderStep::Moved(value) => show(cx, id.clone(), shown(value)),
             ui::slider::SliderStep::Same => {}
             ui::slider::SliderStep::Chosen(value) => {
+                let value = shown(value);
                 self.dragged = None;
                 let row = self.rows[row].area;
                 done(&env, cx, id, (value != before).then_some(value), row);

@@ -3894,6 +3894,9 @@ pub fn paperpaw_sdk::ui::setting_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::u
 pub fn paperpaw_sdk::ui::setting_opens(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> core::option::Option<paperpaw_sdk::Command>
 pub fn paperpaw_sdk::ui::setting_row(&paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u32, bool) -> u32
 pub fn paperpaw_sdk::ui::setting_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> alloc::string::String
+pub fn paperpaw_sdk::ui::shown_number(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, i64) -> i64
+pub fn paperpaw_sdk::ui::shown_slider_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, i64, i64) -> i64
+pub fn paperpaw_sdk::ui::shown_step(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, i64, i64) -> i64
 pub fn paperpaw_sdk::ui::step_focus(usize, isize, usize) -> usize
 pub fn paperpaw_sdk::ui::stepper(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str) -> core::option::Option<(paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect)>
 pub fn paperpaw_sdk::ui::stepper_lines(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, u16, &str, &str) -> paperpaw_sdk::ui::RowLines

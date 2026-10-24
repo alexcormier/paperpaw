@@ -675,8 +675,14 @@ impl Screen for GroupPage {
                 before
             }
         };
+        // Only the sizes of book text that look different.
+        let shown = |value: i64| {
+            self.spec(index)
+                .map_or(value, |s| ui::shown_slider_value(&env, s, before, value))
+        };
         match step {
             ui::slider::SliderStep::Moved(value) => {
+                let value = shown(value);
                 cx.command(Command::PreviewSettings(alloc::vec![(
                     id,
                     Some(SettingValue::Int(value))
@@ -684,6 +690,7 @@ impl Screen for GroupPage {
             }
             ui::slider::SliderStep::Same => {}
             ui::slider::SliderStep::Chosen(value) => {
+                let value = shown(value);
                 self.dragged = None;
                 if value != before {
                     cx.command(Command::SetSetting(id, SettingValue::Int(value)));
