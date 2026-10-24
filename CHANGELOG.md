@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: replies are read typed only. The reply to `Command::Speak` is a
+  `Spoken` (whether it was spoken, and the speech's parameters); the
+  string keys of replies (`http_params`, `server_params`,
+  `socket_params`, `speech_params`) are the kernel's. `Speech::new`
+  takes an `Event<Spoken>` (or an id).
 - SDK: commands stay small, 88 bytes in place of 216 (a test keeps
   them so): `Command::Http`, `Speak`, `Respond`, `Broadcast`, `Work`
   and `SetSecret` hold their payload boxed, made with `Command::http`,

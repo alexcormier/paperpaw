@@ -17,7 +17,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::builtin::params;
-use crate::command::{http_params, server_params, socket_params};
+use crate::command::{http_params, server_params, socket_params, speech_params};
 use crate::event::EventData;
 use crate::id::Id;
 use crate::params::Params;
@@ -294,6 +294,43 @@ impl EventData for HttpReply {
                     Some((String::from(name), String::from(v)))
                 })
                 .collect(),
+        })
+    }
+}
+
+/// The reply to [`Command::Speak`](crate::Command::Speak): whether the
+/// text was spoken, and the speech's own parameters
+/// ([`Speech::with`](crate::Speech::with)).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Spoken {
+    /// It was spoken; `false` if it could not be (e.g. without a voice
+    /// for its language).
+    pub spoken: bool,
+    /// The parameters the speech was given.
+    pub context: Params,
+}
+
+impl Spoken {
+    pub fn new(spoken: bool, context: Params) -> Self {
+        Self { spoken, context }
+    }
+}
+
+impl EventData for Spoken {
+    fn to_params(&self) -> Params {
+        let params = with_context(Params::new(), &self.context);
+        if self.spoken {
+            params
+        } else {
+            params.with(speech_params::FAILED, "1")
+        }
+    }
+
+    fn from_params(params: &Params) -> Option<Self> {
+        Some(Self {
+            spoken: params.get(speech_params::FAILED).is_none(),
+            context: context(params, &[speech_params::FAILED]),
         })
     }
 }

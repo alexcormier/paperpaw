@@ -774,7 +774,7 @@ A request and its answer: the reply event brings the `HttpReply`.
 ```rust
 const FETCHED: Event<HttpReply> = Event::new("news.fetched");
 // In an action or a screen:
-out.push(Command::Http(HttpRequest::get("https://example.org/feed", &FETCHED)));
+out.push(Command::http(HttpRequest::get("https://example.org/feed", &FETCHED)));
 // When registering:
 r.on(FETCHED, |_env, reply, out| {
     if reply.status == 200 {
@@ -787,10 +787,10 @@ A timer: the work's event comes at that time, here each hour.
 
 ```rust
 const TICK: Event<()> = Event::new("weather.tick");
-out.push(Command::Work(
+out.push(Command::work(
     Work::at(&TICK, env.now().add_millis(60 * 60 * 1000)).every(Duration::from_secs(3600)),
 ));
-r.on(TICK, |_env, _, out| out.push(Command::Http(HttpRequest::get(FORECAST, &FETCHED))))?;
+r.on(TICK, |_env, _, out| out.push(Command::http(HttpRequest::get(FORECAST, &FETCHED))))?;
 ```
 
 ### What every reader offers
@@ -1274,7 +1274,7 @@ so it would not get ready under them. The note is the
 ### Passwords and keys
 
 Plugins keep passwords, API keys and tokens with
-`Command::SetSecret(SecretChange::keep(id, label, value))` and read them
+`Command::set_secret(SecretChange::keep(id, label, value))` and read them
 with `env.secrets().get(id)`. They are all listed in *Settings, Passwords
 and keys*, where the user changes or removes them. Ask for one on the
 keyboard in password mode (`ask::text(…).password()`); the keyboard
@@ -1289,7 +1289,7 @@ secret.
 
 ### The network
 
-`Command::Http(HttpRequest::get(url, &FETCHED))` makes a request where
+`Command::http(HttpRequest::get(url, &FETCHED))` makes a request where
 the device has a network (`env.caps().network`); the answer comes as the
 request's reply event, an `HttpReply` with the status and the body, or
 saved to a file (`.save_to(path)`) for large ones. A request may set a
@@ -1314,7 +1314,7 @@ What a plugin does on its own, not because the reader just asked for
 it, it declares as work (`paperpaw_sdk::work`, ADR 0025), and the
 kernel runs it at the moment that costs least: waking, a book opened or
 closed, going to sleep, the radio on anyway, charging, idle.
-`Command::Work(Work::network(PUSH).within(Duration::from_secs(1800))
+`Command::work(Work::network(PUSH).within(Duration::from_secs(1800))
 .at_moments(Moments::BOOK_CLOSED | Moments::SLEEP))` sends the reading
 position when the book is closed or the device sleeps, at the latest
 after half an hour; the kernel then emits the work's event and the
@@ -1353,7 +1353,7 @@ and `Command::SocketRead` asks for what comes next, as text
 it comes (`SocketRead::File`), so files of any size never need to fit in
 memory. `Command::Broadcast` finds services in the local network by a
 UDP datagram and their answers. Everything comes back as events
-(`SocketNotice`s, `socket_params`); a socket closes when the screen
+(`SocketNotice`s); a socket closes when the screen
 that was open as it opened closes.
 
 ### Firmware updates

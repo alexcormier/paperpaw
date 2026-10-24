@@ -197,12 +197,12 @@ impl ReaderScreen {
     /// the one after it is handed over, turning the page where needed.
     /// Ends at the end of the book, of the page if pages are not turned,
     /// or with the timer.
-    pub(super) fn spoken(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    pub(super) fn spoken(&mut self, spoken: &paperpaw_sdk::replies::Spoken, cx: &mut Cx<'_, '_>) {
         let Some(aloud) = self.aloud else {
             return;
         };
         let env = *cx.env();
-        if params.get(paperpaw_sdk::speech_params::FAILED).is_some() {
+        if !spoken.spoken {
             self.pause_aloud(cx);
             self.resume = None;
             cx.command(Command::Notify(

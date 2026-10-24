@@ -224,7 +224,7 @@ impl HttpRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ServerResponse {
-    /// The request's number ([`server_params::REQUEST`]).
+    /// The request's number ([`ServerNotice::Request`](crate::ServerNotice::Request)).
     request: u32,
     status: u16,
     content_type: String,
@@ -393,10 +393,10 @@ pub mod server_params {
 #[non_exhaustive]
 pub enum SocketRead {
     /// What has come, up to `max` bytes, as text (UTF-8; invalid bytes
-    /// replaced): the event [`socket_params::RECEIVED`] with it.
+    /// replaced): the notice [`SocketNotice::Received`](crate::SocketNotice::Received) with it.
     Text { max: u32 },
     /// Exactly `len` bytes, written to `path` in storage as they come (a
-    /// file there is replaced): the event [`socket_params::SAVED`] once
+    /// file there is replaced): the notice [`SocketNotice::Saved`](crate::SocketNotice::Saved) once
     /// they all came, so files of any size never need to fit in memory.
     File { path: String, len: u64 },
 }
@@ -458,8 +458,8 @@ pub struct Speech {
     language: String,
     /// How fast, in percent of the voice's normal speed.
     rate: u16,
-    /// Emitted with `params` once the text has been spoken, with
-    /// [`speech_params::FAILED`] if it could not be.
+    /// Emitted once the text has been spoken, or could not be: a
+    /// [`Spoken`](crate::replies::Spoken) with `params`.
     reply: Id,
     params: Params,
     /// Spoken after the texts given before instead of replacing them: the
@@ -470,12 +470,12 @@ pub struct Speech {
 
 impl Speech {
     /// `text` in the system's language at normal speed.
-    pub fn new(text: impl Into<String>, reply: Id) -> Self {
+    pub fn new(text: impl Into<String>, reply: impl Into<Id>) -> Self {
         Self {
             text: text.into(),
             language: String::new(),
             rate: 100,
-            reply,
+            reply: reply.into(),
             params: Params::new(),
             queue: false,
         }
@@ -545,11 +545,9 @@ impl Speech {
     /// Its reply: it was `spoken`, or could not be (a plugin's voice
     /// answers so, see [`voices`](crate::voices)).
     pub fn answer(&self, spoken: bool) -> Command {
-        let params = match spoken {
-            true => self.params.clone(),
-            false => self.params.clone().with(speech_params::FAILED, "1"),
-        };
-        Command::Emit(self.reply.clone(), params)
+        use crate::event::EventData;
+        let reply = crate::replies::Spoken::new(spoken, self.params.clone());
+        Command::Emit(self.reply.clone(), reply.into_params())
     }
 }
 
@@ -780,8 +778,8 @@ pub enum Command {
     /// Serves HTTP to the local network on `port` (shells that cannot say
     /// so with a failure). Everything about the server comes as the event
     /// `events`: that it started (with its address), each request (answer
-    /// with [`Command::Respond`]), that it failed or stopped; see
-    /// [`server_params`]. Serve only while the user wants it: a server
+    /// with [`Command::Respond`]), that it failed or stopped: a
+    /// [`ServerNotice`](crate::ServerNotice). Serve only while the user wants it: a server
     /// also stops when the screen showing as it started is closed.
     #[non_exhaustive]
     Serve { server: Id, port: u16, events: Id },
@@ -791,8 +789,8 @@ pub enum Command {
     /// [ADR 0014](https://github.com/hthoene/paperpaw/blob/main/docs/adr/0014-sockets-for-plugins.md)).
     /// Everything about it comes as the event `events`, with `id` the
     /// socket ([`params::ID`](crate::builtin::params::ID)) and what
-    /// happened ([`socket_params`]): connected, received, saved, closed,
-    /// failed. Nothing is read unasked ([`Command::SocketRead`]). A socket
+    /// happened, a [`SocketNotice`](crate::SocketNotice): connected,
+    /// received, saved, closed, failed. Nothing is read unasked ([`Command::SocketRead`]). A socket
     /// also closes when the screen showing as it was opened is closed.
     #[non_exhaustive]
     Connect {
@@ -811,8 +809,8 @@ pub enum Command {
     Disconnect(Id),
     /// Sends `data` as a UDP datagram to the local network on each of
     /// `ports`, e.g. to find a service. Each answer within `wait_ms` comes
-    /// as the event `events` ([`socket_params::ANSWER`], with `id`), then
-    /// [`socket_params::DONE`]. Made with [`Command::broadcast`].
+    /// as the event `events` ([`SocketNotice::Answer`](crate::SocketNotice::Answer), with `id`), then
+    /// [`SocketNotice::Done`](crate::SocketNotice::Done). Made with [`Command::broadcast`].
     Broadcast(alloc::boxed::Box<Broadcast>),
     /// Answers a request of a server. Made with [`Command::respond`].
     Respond(alloc::boxed::Box<ServerResponse>),

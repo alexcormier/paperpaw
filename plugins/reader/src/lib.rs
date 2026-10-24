@@ -81,7 +81,8 @@ const NOTE_ENTERED: Event<Typed> = Event::new("reader.note-entered");
 pub const LAYOUT_MENU: Id = menus::READER_PANEL;
 pub const MORE_MENU: Id = menus::READER_MORE;
 /// The reply when a page has been read aloud; parameter `path`.
-const SPOKEN: Id = Id::new_static("reader.spoken");
+const SPOKEN: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Spoken> =
+    paperpaw_sdk::event::Event::new("reader.spoken");
 /// Skimming through the book, an overlay (see `skim`); it asks the
 /// reader to move with `reader.skim` and hears where the book is with
 /// `reader.skimmed`.

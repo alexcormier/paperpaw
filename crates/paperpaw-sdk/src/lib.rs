@@ -114,12 +114,16 @@ pub use action::{
     ActionHandler, ActionHint, ActionOverride, ActionSpec, Actions, Observer, ObserverSpec,
 };
 pub use command::{
-    Broadcast, Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead,
-    Speech, http_params, server_params, socket_params, speech_params,
+    Broadcast, Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
 };
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use command::{HttpParts, ResponseParts};
+/// The parameters of replies as they are written, for the kernel (plugins
+/// read replies typed: see [`replies`]).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use command::{http_params, server_params, socket_params, speech_params};
 pub use commands::Commands;
 pub use contribution::{Contribution, Registrar};
 #[cfg(any(test, feature = "kernel"))]
