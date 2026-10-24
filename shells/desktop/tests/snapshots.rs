@@ -41,6 +41,9 @@ struct Case {
     /// On colour profiles: the share of pixels, in parts per ten thousand,
     /// that must be in colour (ADR 0015). The reference keeps the grays.
     colour: usize,
+    /// Requests answered from the emulator's fixtures (`--network
+    /// fixtures`): a plugin library and the servers plugins ask, offline.
+    fixtures: bool,
 }
 
 const CASES: &[Case] = &[
@@ -52,6 +55,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-setup-size",
@@ -60,6 +64,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "page-forward,page-forward",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-setup",
@@ -68,6 +73,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-home",
@@ -76,6 +82,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-reader-epub",
@@ -84,6 +91,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "page-forward,page-forward",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-settings-round-strong",
@@ -96,6 +104,7 @@ const CASES: &[Case] = &[
         ],
         script: "right,right",
         colour: 0,
+        fixtures: false,
     },
     // The reading settings with a sample of text above them. On the X4
     // (buttons alone, compact rows) the text size changed with the
@@ -108,6 +117,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.settings,wait:300,right,confirm,wait:300,right,confirm,right,right,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-reading-de",
@@ -116,6 +126,7 @@ const CASES: &[Case] = &[
         sets: &["core.language=de"],
         script: "swipe:600:1100:600:500,wait:300,tap-on:Einstellungen,wait:500,tap-on:Lesen,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-home",
@@ -124,6 +135,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-home-arranged",
@@ -138,6 +150,7 @@ const CASES: &[Case] = &[
         ],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-reader-epub",
@@ -146,6 +159,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-reader-txt",
@@ -154,6 +168,7 @@ const CASES: &[Case] = &[
         sets: &["core.language=de"],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-small-caps",
@@ -162,6 +177,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-settings",
@@ -170,6 +186,7 @@ const CASES: &[Case] = &[
         sets: &["slots.core.home=settings.list"],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-widget-editor",
@@ -179,6 +196,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "long-tap:600:1400,wait:300,tap:600:120,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-home-hints",
@@ -187,6 +205,7 @@ const CASES: &[Case] = &[
         sets: &["help.show=true"],
         script: "",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-developer-settings",
@@ -196,6 +215,7 @@ const CASES: &[Case] = &[
         sets: &["settings.advanced=true", "core.developer=true"],
         script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:500,tap-on:Developer,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         // The Wi-Fi page (the emulator pretends to manage Wi-Fi on the X4
@@ -206,6 +226,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "swipe:240:700:240:300,wait:300,tap-on:Settings,wait:500,page-forward,wait:300,                 tap-on:Wi-Fi,wait:500,tap:240:140,wait:2500",
         colour: 0,
+        fixtures: false,
     },
     // The plugin store on the X4, its list kept from before (the library
     // asked for does not answer): search, the newest, then the groups with
@@ -217,6 +238,37 @@ const CASES: &[Case] = &[
         sets: &["store.catalog=http://127.0.0.1:9/plugins.json"],
         script: "run:store.open,wait:6000",
         colour: 0,
+        fixtures: false,
+    },
+    // A plugin's page in the store, from the library the emulator answers
+    // offline: its long summary, its facts and its rows each below the
+    // other (a page that drew its rows over its summary passed before).
+    Case {
+        name: "x4-store-page",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:store.open,wait:3000,open:store.plugin:id=reading-aids,wait:3000",
+        colour: 0,
+        fixtures: true,
+    },
+    Case {
+        name: "x4-pro-store-page",
+        profile: "xteink-x4-pro",
+        book: None,
+        sets: &[],
+        script: "run:store.open,wait:3000,open:store.plugin:id=reading-aids,wait:3000",
+        colour: 0,
+        fixtures: true,
+    },
+    Case {
+        name: "boox-store-page",
+        profile: "boox-go-7",
+        book: None,
+        sets: &[],
+        script: "run:store.open,wait:3000,open:store.plugin:id=reading-aids,wait:3000",
+        colour: 0,
+        fixtures: true,
     },
     Case {
         name: "boox-all-tools",
@@ -226,6 +278,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "swipe:600:1100:600:500,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-menu-drag",
@@ -237,6 +290,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:menu-editor.open,wait:300,tap-on:Main menu,wait:300,                 swipe:1220:159:1220:420,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-lock-pin",
@@ -246,6 +300,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:300,                 tap-on:System,wait:300,tap-on:Screen lock,wait:300,tap-on:PIN,wait:300",
         colour: 0,
+        fixtures: false,
     },
     // The screens one passes through most, on the X4 (buttons alone,
     // black and white) and on the Boox (touch): the main menu and the
@@ -259,6 +314,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.menu,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-tools",
@@ -267,6 +323,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.tools,wait:300",
         colour: 0,
+        fixtures: false,
     },
     // All tools in German: names on two lines, hyphenated, and the
     // focus round the focused tool's icon and name.
@@ -277,6 +334,7 @@ const CASES: &[Case] = &[
         sets: &["core.language=de"],
         script: "open:home.drawer,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-library",
@@ -285,6 +343,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.library,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-reader-menu",
@@ -293,6 +352,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "confirm,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-toc",
@@ -301,6 +361,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:reader.show-toc,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-bookmarks",
@@ -310,6 +371,7 @@ const CASES: &[Case] = &[
         script: "page-forward,page-forward,page-forward,run:reader.toggle-bookmark,wait:300,\
                  run:reader.show-annotations,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-settings-display",
@@ -318,6 +380,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.settings,wait:300,open:settings.group:id=core.group.display,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-settings-controls",
@@ -326,6 +389,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.settings,wait:300,open:settings.group:id=core.group.controls,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-stats",
@@ -334,6 +398,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "page-forward,page-forward,run:stats.open,wait:300",
         colour: 0,
+        fixtures: false,
     },
     // Buttons in slots of a touch row: the footnote's side by side, the
     // skim screen's four, the transfer's and the update page's one below
@@ -345,6 +410,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "open:reader.footnote:text=A note at the foot of the page.,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-skim",
@@ -353,6 +419,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "page-forward,open:reader.skim-screen,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-transfer",
@@ -361,6 +428,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:transfer.open,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-update",
@@ -369,6 +437,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:update.open,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-file-manager",
@@ -377,6 +446,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:file-manager.open,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         // The power button: the sleep screen, the device asleep.
@@ -386,6 +456,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "power,wait:500",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-about",
@@ -394,6 +465,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:about.open,wait:500",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-licences",
@@ -404,6 +476,7 @@ const CASES: &[Case] = &[
         // between), so the status line shows the page, not a percentage.
         script: "run:about.open,left,confirm,wait:40000",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-main-menu",
@@ -412,6 +485,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.menu,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-library",
@@ -420,6 +494,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.library,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         // A tap in the middle of the page: the reader's menu bar.
@@ -429,6 +504,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "page-forward,tap:632:840,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         // The panel below the page: font, sizes, switches.
@@ -438,6 +514,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "page-forward,run:reader.quick-settings,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-toc",
@@ -446,6 +523,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:reader.show-toc,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-settings-display",
@@ -454,6 +532,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.settings,wait:300,tap-on:Display,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         // The settings searched: the keyboard below the field.
@@ -463,6 +542,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.settings,wait:300,tap-on:Search the settings,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-stats",
@@ -471,6 +551,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "swipe:1000:800:300:800,wait:300,swipe:1000:800:300:800,wait:300,run:stats.open,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-file-manager",
@@ -479,6 +560,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:file-manager.open,wait:300,tap-on:books,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         // A long press on a book in the library: what can be done with it.
@@ -488,6 +570,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.library,wait:300,long-tap:600:200,wait:300",
         colour: 0,
+        fixtures: false,
     },
     // The quick panel while reading, its sliders a fingertip high and
     // across the screen: on the X4 Pro while a finger moves the light's
@@ -500,6 +583,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.quick-panel,wait:300,down:300:410,move:330:415,move:360:420,wait:100",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-quick-panel",
@@ -508,6 +592,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.quick-panel,wait:300,down:1000:565,move:950:570,move:800:575,up:800:575,wait:300",
         colour: 0,
+        fixtures: false,
     },
     // The reader's panel on the X4, the row that opens the fonts focused:
     // its whole name and value on the focus bar, aligned with the rows
@@ -519,6 +604,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:reader.quick-settings,wait:300,right,wait:200",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "kobo-colour-cover",
@@ -527,6 +613,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "",
         colour: 1_000,
+        fixtures: false,
     },
     // The library: the book being read as a card, then the books; as
     // covers; what to show, chosen from the row above the books.
@@ -537,6 +624,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "page-forward,page-forward,run:core.library,wait:1000",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-library-covers",
@@ -545,6 +633,7 @@ const CASES: &[Case] = &[
         sets: &["files.view=files.view.covers"],
         script: "page-forward,page-forward,run:core.library,wait:1000",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "x4-pro-library-show",
@@ -553,6 +642,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "run:core.library,wait:1000,tap-on:All books,wait:300",
         colour: 0,
+        fixtures: false,
     },
     Case {
         name: "boox-library-reading",
@@ -561,6 +651,7 @@ const CASES: &[Case] = &[
         sets: &[],
         script: "swipe:1000:800:300:800,wait:300,swipe:1000:800:300:800,wait:300,run:core.library,wait:1000",
         colour: 0,
+        fixtures: false,
     },
 ];
 
@@ -705,6 +796,9 @@ fn draw(case: &Case) -> (u32, u32, Vec<u8>, usize) {
     if case.book.is_none() {
         command.args(["--set", "reader.open-last=false"]);
     }
+    if case.fixtures {
+        command.args(["--network", "fixtures"]);
+    }
     let output = command.output().unwrap();
     assert!(
         output.status.success(),
@@ -776,6 +870,7 @@ fn screens_say_what_they_show() {
         sets: &["slots.core.home=settings.list"],
         script: "",
         colour: 0,
+        fixtures: false,
     };
     let library = library(&case);
     let output = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
@@ -826,6 +921,7 @@ fn headers_are_centred_by_their_capitals() {
                 sets: &[],
                 script: "",
                 colour: 0,
+                fixtures: false,
             };
             let library = library(&case);
             let shot = library.join("shot.png");

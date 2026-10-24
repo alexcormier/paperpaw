@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- The emulator answers the requests of PaperPaw's own plugins offline
+  with `--network fixtures`: a small plugin library (a data plugin with a
+  long summary, screenshots and a source, a code plugin, a long name),
+  so that the store's screens can be drawn and checked without a
+  network, alike everywhere. On the X4 profiles the pretend radio's test
+  network is known from the start, so it is joined when a plugin wants
+  the network.
+
 ### Fixed
 
 - On the X4 and X4 Pro on battery, clicks made while the screen refreshes

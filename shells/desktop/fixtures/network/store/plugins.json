@@ -1,0 +1,104 @@
+{
+ "format": 2,
+ "plugins": [
+  {
+   "id": "long-notes",
+   "name": "Bookmarks with notes, highlights and a page of its own for each book",
+   "summary": "Notes.",
+   "group": "reading",
+   "author": "Someone",
+   "licence": "MIT",
+   "kind": "data",
+   "added": "2025-06-01",
+   "latest": {
+    "version": "0.3.1",
+    "sdk": "0.4",
+    "formats": 1,
+    "size": 129,
+    "date": "2026-09-01"
+   }
+  },
+  {
+   "id": "reading-aids",
+   "name": "Reading aids",
+   "summary": "Reading aids for the words: bold starts of words, wider spacing of letters, words and lines, and a calmer type for those who read with dyslexia.",
+   "group": "reading",
+   "author": "Someone",
+   "licence": "MIT",
+   "kind": "data",
+   "added": "2025-06-01",
+   "latest": {
+    "version": "1.2.0",
+    "sdk": "0.4",
+    "formats": 1,
+    "size": 75,
+    "date": "2026-09-01"
+   }
+  },
+  {
+   "id": "word-clock",
+   "name": "Word clock",
+   "summary": "The time in words on the home screen.",
+   "group": "home",
+   "author": "Someone",
+   "licence": "MIT",
+   "kind": "code",
+   "added": "2026-02-01",
+   "author_key": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
+   "latest": {
+    "version": "1.0.0",
+    "sdk": "0.4",
+    "formats": 1,
+    "size": 41000,
+    "date": "2026-08-01",
+    "builds": [
+     {
+      "device": "x4",
+      "abi": "{abi}",
+      "url": "word-clock/1.0.0/x4.ppn",
+      "size": 41000,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+     },
+     {
+      "device": "x4-pro",
+      "abi": "{abi}",
+      "url": "word-clock/1.0.0/x4-pro.ppn",
+      "size": 41000,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+     },
+     {
+      "device": "x4-classic",
+      "abi": "{abi}",
+      "url": "word-clock/1.0.0/x4-classic.ppn",
+      "size": 41000,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+     },
+     {
+      "device": "android",
+      "abi": "{abi}",
+      "url": "word-clock/1.0.0/android.ppn",
+      "size": 41000,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airy-theme",
+   "name": "Airy",
+   "summary": "A light look with round corners and wide margins.",
+   "group": "look",
+   "author": "Someone",
+   "licence": "MIT",
+   "kind": "data",
+   "added": "2025-06-01",
+   "latest": {
+    "version": "1.0.0",
+    "sdk": "0.4",
+    "formats": 1,
+    "size": 65,
+    "date": "2026-09-01"
+   }
+  }
+ ]
+}

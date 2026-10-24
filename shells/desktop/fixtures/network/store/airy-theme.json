@@ -1,0 +1,27 @@
+{
+ "format": 2,
+ "plugin": {
+  "id": "airy-theme",
+  "name": "Airy",
+  "summary": "A light look with round corners and wide margins.",
+  "group": "look",
+  "author": "Someone",
+  "licence": "MIT",
+  "kind": "data",
+  "added": "2025-06-01",
+  "latest": {
+   "version": "1.0.0",
+   "sdk": "0.4",
+   "formats": 1,
+   "size": 65,
+   "files": [
+    {
+     "path": "plugin.ini",
+     "url": "airy-theme/1.0.0/plugin.ini",
+     "size": 65,
+     "sha1": "6719b45809193372df773055009730f727584f87"
+    }
+   ]
+  }
+ }
+}

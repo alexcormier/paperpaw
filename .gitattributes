@@ -4,6 +4,8 @@
 samples/library/books/** -text
 # The plugin store's kept index: its offsets count the bytes.
 shells/desktop/tests/fixtures/store/** -text
+# The emulator's answers offline: their sizes and digests count the bytes.
+shells/desktop/fixtures/network/** -text
 
 *.png binary
 *.bin binary

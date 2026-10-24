@@ -24,10 +24,14 @@ const ADDRESS: &str = "192.168.1.42";
 /// they are served on this computer.
 const HOST_ADDRESS: &str = "192.168.4.1";
 
+/// The pretend radio's strongest network, joined with any password but
+/// `wrong`.
+pub const TEST_NETWORK: &str = "PaperPaw Test";
+
 fn networks() -> Vec<WifiNetwork> {
     let net = |ssid: &str, signal, secured| WifiNetwork::new(String::from(ssid), signal, secured);
     vec![
-        net("PaperPaw Test", -48, true),
+        net(TEST_NETWORK, -48, true),
         net("Cafe", -70, false),
         net("Far Away", -88, true),
     ]

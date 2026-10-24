@@ -1,0 +1,27 @@
+{
+ "format": 2,
+ "plugin": {
+  "id": "long-notes",
+  "name": "Bookmarks with notes, highlights and a page of its own for each book",
+  "summary": "Notes.",
+  "group": "reading",
+  "author": "Someone",
+  "licence": "MIT",
+  "kind": "data",
+  "added": "2025-06-01",
+  "latest": {
+   "version": "0.3.1",
+   "sdk": "0.4",
+   "formats": 1,
+   "size": 129,
+   "files": [
+    {
+     "path": "plugin.ini",
+     "url": "long-notes/0.3.1/plugin.ini",
+     "size": 129,
+     "sha1": "5b6428efea21655d10b39e4057eea84eb8d29d85"
+    }
+   ]
+  }
+ }
+}
