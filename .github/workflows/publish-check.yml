@@ -36,6 +36,8 @@ jobs:
         run: |
           if [[ -z "$VERSION" ]]; then
             current="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
-            VERSION="${current%%-*}-beta.1"
+            # A pre-release never published: a published one (such as
+            # beta.1) would be taken from crates.io instead of this tree.
+            VERSION="${current%%-*}-check.1"
           fi
           tools/publish-dry-run.sh "$VERSION"
