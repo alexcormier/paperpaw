@@ -524,7 +524,7 @@ file to your report.
   and, for a code plugin's `package_version!`, by the build. So a plugin
   of a beta loads and a later beta is an update; `satisfies` goes by the
   numbers. `SDK_VERSION` is the crate's version, a pre-release between
-  releases (`0.4.0-dev`); `firmware::compare_versions` orders by
+  releases (`0.5.0-dev`); `firmware::compare_versions` orders by
   `Version` where it can.
 - SDK: `Manifest` no longer names the SDK it was built against
   (`Manifest::sdk` and the field are gone), and the kernel no longer
