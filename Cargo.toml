@@ -89,7 +89,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.0-beta.4"
+version = "0.5.0-beta.5"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
@@ -98,32 +98,32 @@ homepage = "https://github.com/hthoene/paperpaw"
 authors = ["Hannes Thoene", "The PaperPaw contributors"]
 
 [workspace.dependencies]
-paperpaw-platform = { path = "crates/paperpaw-platform", version = "0.5.0-beta.4" }
-paperpaw-config = { path = "crates/paperpaw-config", version = "0.5.0-beta.4" }
-paperpaw-sqlite = { path = "crates/paperpaw-sqlite", version = "0.5.0-beta.4" }
-paperpaw-serve = { path = "crates/paperpaw-serve", version = "0.5.0-beta.4" }
-paperpaw-i18n = { path = "crates/paperpaw-i18n", version = "0.5.0-beta.4" }
-paperpaw-graphics = { path = "crates/paperpaw-graphics", version = "0.5.0-beta.4" }
-paperpaw-text = { path = "crates/paperpaw-text", version = "0.5.0-beta.4" }
-paperpaw-document = { path = "crates/paperpaw-document", version = "0.5.0-beta.4" }
-paperpaw-zip = { path = "crates/paperpaw-zip", version = "0.5.0-beta.4" }
-paperpaw-http = { path = "crates/paperpaw-http", version = "0.5.0-beta.4" }
-paperpaw-xml = { path = "crates/paperpaw-xml", version = "0.5.0-beta.4" }
-paperpaw-stardict = { path = "crates/paperpaw-stardict", version = "0.5.0-beta.4" }
-paperpaw-layout = { path = "crates/paperpaw-layout", version = "0.5.0-beta.4" }
-paperpaw-x4 = { path = "crates/paperpaw-x4", version = "0.5.0-beta.4" }
+paperpaw-platform = { path = "crates/paperpaw-platform", version = "0.5.0-beta.5" }
+paperpaw-config = { path = "crates/paperpaw-config", version = "0.5.0-beta.5" }
+paperpaw-sqlite = { path = "crates/paperpaw-sqlite", version = "0.5.0-beta.5" }
+paperpaw-serve = { path = "crates/paperpaw-serve", version = "0.5.0-beta.5" }
+paperpaw-i18n = { path = "crates/paperpaw-i18n", version = "0.5.0-beta.5" }
+paperpaw-graphics = { path = "crates/paperpaw-graphics", version = "0.5.0-beta.5" }
+paperpaw-text = { path = "crates/paperpaw-text", version = "0.5.0-beta.5" }
+paperpaw-document = { path = "crates/paperpaw-document", version = "0.5.0-beta.5" }
+paperpaw-zip = { path = "crates/paperpaw-zip", version = "0.5.0-beta.5" }
+paperpaw-http = { path = "crates/paperpaw-http", version = "0.5.0-beta.5" }
+paperpaw-xml = { path = "crates/paperpaw-xml", version = "0.5.0-beta.5" }
+paperpaw-stardict = { path = "crates/paperpaw-stardict", version = "0.5.0-beta.5" }
+paperpaw-layout = { path = "crates/paperpaw-layout", version = "0.5.0-beta.5" }
+paperpaw-x4 = { path = "crates/paperpaw-x4", version = "0.5.0-beta.5" }
 paperpaw-fat = { path = "crates/paperpaw-fat" }
-paperpaw-update = { path = "crates/paperpaw-update", version = "0.5.0-beta.4" }
-paperpaw-digest = { path = "crates/paperpaw-digest", version = "0.5.0-beta.4" }
-paperpaw-native = { path = "crates/paperpaw-native", version = "0.5.0-beta.4" }
-paperpaw-json = { path = "crates/paperpaw-json", version = "0.5.0-beta.4" }
-paperpaw-qr = { path = "crates/paperpaw-qr", version = "0.5.0-beta.4" }
-paperpaw-sdk = { path = "crates/paperpaw-sdk", version = "0.5.0-beta.4" }
-paperpaw-core = { path = "crates/paperpaw-core", version = "0.5.0-beta.4" }
-paperpaw-hyphen = { path = "crates/paperpaw-hyphen", version = "0.5.0-beta.4" }
-paperpaw-image = { path = "crates/paperpaw-image", version = "0.5.0-beta.4" }
-paperpaw-app = { path = "crates/paperpaw-app", version = "0.5.0-beta.4" }
-paperpaw-fs = { path = "crates/paperpaw-fs", version = "0.5.0-beta.4" }
+paperpaw-update = { path = "crates/paperpaw-update", version = "0.5.0-beta.5" }
+paperpaw-digest = { path = "crates/paperpaw-digest", version = "0.5.0-beta.5" }
+paperpaw-native = { path = "crates/paperpaw-native", version = "0.5.0-beta.5" }
+paperpaw-json = { path = "crates/paperpaw-json", version = "0.5.0-beta.5" }
+paperpaw-qr = { path = "crates/paperpaw-qr", version = "0.5.0-beta.5" }
+paperpaw-sdk = { path = "crates/paperpaw-sdk", version = "0.5.0-beta.5" }
+paperpaw-core = { path = "crates/paperpaw-core", version = "0.5.0-beta.5" }
+paperpaw-hyphen = { path = "crates/paperpaw-hyphen", version = "0.5.0-beta.5" }
+paperpaw-image = { path = "crates/paperpaw-image", version = "0.5.0-beta.5" }
+paperpaw-app = { path = "crates/paperpaw-app", version = "0.5.0-beta.5" }
+paperpaw-fs = { path = "crates/paperpaw-fs", version = "0.5.0-beta.5" }
 paperpaw-plugin-diagnostics = { path = "plugins/diagnostics", version = "1.0.0" }
 paperpaw-plugin-dictionary = { path = "plugins/dictionary", version = "1.0.0" }
 paperpaw-plugin-menu = { path = "plugins/menu", version = "1.0.0" }

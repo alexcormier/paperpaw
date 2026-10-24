@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.5] - 2026-10-25
+
 ### Fixed
 
 - After the Wi-Fi link is lost and joined again, the X4s count as
@@ -20,12 +22,12 @@ change the plugin SDK.
   "did not answer". Networks are joined with the security the scan found
   (WPA and mixed WPA/WPA2 ones too), and a password that was not taken
   for another reason than being wrong is offered again, not typed anew.
-
 - News: articles with a long body in a CDATA section (WordPress feeds, The
   Verge) show their whole text; the reader dropped any section over 4 KiB
   and fell back to the summary. The XML reader now passes a long CDATA
   section on in pieces, in the same small memory. Dates, Atom
   and RSS, show short as the language writes them (Sat 24 Oct 2026).
+
 ### Added
 
 - Switching from CrossPoint without a computer: each release has an
