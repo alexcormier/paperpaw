@@ -11,6 +11,16 @@
 
 #![no_std]
 
+// Before the errors of the code the feature adds, whose crates are left
+// out there (see Cargo.toml).
+#[cfg(all(feature = "outline", target_os = "none"))]
+compile_error!(
+    "the `outline` feature is for computers, phones and browsers (the emulator's build of a \
+     plugin); a device without an operating system, such as the X4 and X4 Pro, draws font packs \
+     and loads only plugins built without it: build for it without `outline` \
+     (docs/plugins.md, \"Which build fits\")"
+);
+
 extern crate alloc;
 
 mod bitmap;

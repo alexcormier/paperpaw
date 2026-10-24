@@ -323,6 +323,13 @@ compiler; each PaperPaw release lists the fingerprints in its files
 
 - Name the SDK of the release in `Cargo.toml` (`paperpaw-sdk = "0.5.0-beta.1"`),
   never a path or a development version.
+- Build for the readers without the SDK's `outline` feature: it is in the
+  fingerprint, and the readers' firmware has none. Give it to the
+  emulator's build only, in a target section
+  (`[target.'cfg(not(target_os = "none"))'.dependencies]`, see
+  `docs/plugins.md`, "The crate"). With `outline` the X4 build fails in
+  `once_cell` (``no method named `compare_exchange` ``); from SDK
+  0.5.0-beta.2 on it stops with a message that says so.
 - Pin its compilers: `rust-toolchain.toml`'s `channel` as the release's
   `shells/xteink/rust-toolchain.toml`; the workflow's `RUST_X4`,
   `RUST_X4_PRO` and `ESP_GCC` as the release's `shells/xteink/versions.env`

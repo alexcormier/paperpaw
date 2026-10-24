@@ -125,13 +125,21 @@ fn third_party() -> Vec<String> {
     found.into_iter().collect()
 }
 
-/// A manifest's `[dependencies]`.
-fn dependencies(manifest: &str) -> &str {
-    manifest
-        .split("\n[dependencies]\n")
-        .nth(1)
-        .map(|rest| rest.split("\n[").next().unwrap_or_default())
-        .unwrap_or_default()
+/// A manifest's `[dependencies]`, and those of some targets only
+/// (`[target.'cfg(…)'.dependencies]`), one after the other.
+fn dependencies(manifest: &str) -> String {
+    let mut found = String::new();
+    for section in manifest.split("\n[").skip(1) {
+        let (head, body) = section.split_once('\n').unwrap_or((section, ""));
+        let head = head.trim_end();
+        if head == "dependencies]"
+            || (head.starts_with("target.") && head.ends_with(".dependencies]"))
+        {
+            found.push_str(body);
+            found.push('\n');
+        }
+    }
+    found
 }
 
 /// The path an item's line names: its first path, generics and all after

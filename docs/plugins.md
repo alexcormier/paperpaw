@@ -1466,6 +1466,21 @@ cargo x4                  # riscv32imc-unknown-none-elf, the X4
 cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro (espup's toolchain)
 ```
 
+The devices draw font packs and load only plugins built without the
+SDK's `outline` feature; the emulator's build (for the computer, see
+below) takes it. One manifest gives each its own, by target:
+
+```toml
+[dependencies]
+paperpaw-sdk = "0.5.0-beta.2"
+
+# Outline fonts for the emulator's build only: the X4s draw font packs.
+[target.'cfg(not(target_os = "none"))'.dependencies]
+paperpaw-sdk = { version = "0.5.0-beta.2", features = ["outline"] }
+```
+
+A build for a device that asks for `outline` stops and says so.
+
 The X4's core libraries (`core`, `alloc`) come from rustup, with the
 target in the sample's `rust-toolchain.toml`. The X4 Pro's come with each
 PaperPaw release, built once and signed
@@ -1502,8 +1517,7 @@ show which plugins wait for a build.
 The desktop emulator loads a plugin's code built for the computer it runs
 on, as Android loads `code.so`: a `cdylib` crate with the same
 `plugin!` line, built with the emulator's toolchain against its SDK with
-the `outline` feature (`paperpaw-sdk = { version = "0.5.0-beta.1", features =
-["outline"] }`), is `code-host.dll`, `code-host.so` or `code-host.dylib`
+the `outline` feature (the target section above gives it), is `code-host.dll`, `code-host.so` or `code-host.dylib`
 in the plugin's folder (`plugins/<id>/` of the emulator's library,
 beside its `plugin.ini`). The emulator runs such code only when it is started
 with `--trust-code`, which installs every such file in the library first

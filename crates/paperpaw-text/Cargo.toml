@@ -14,6 +14,11 @@ keywords = ["font", "text", "rasterizer", "no-std"]
 [dependencies]
 paperpaw-graphics.workspace = true
 paperpaw-platform.workspace = true
+
+# Outline fonts only where there is an operating system (a computer, a
+# phone, a browser): a device without one (the X4s) draws font packs, and
+# its firmware is built without them (see `outline` below).
+[target.'cfg(not(target_os = "none"))'.dependencies]
 # Exact versions: their types lie inside OutlineFont, which crosses
 # between a code plugin and PaperPaw, so the plugin interface keeps them
 # (ADR 0026). read-fonts and font-types are skrifa's, named only to pin.
@@ -23,9 +28,12 @@ font-types = { version = "=0.12.7", default-features = false, optional = true }
 
 [features]
 default = []
-# Render OpenType/TrueType fonts at runtime. Not available on targets
-# without atomic compare-and-swap (ESP32-C3); those use pre-rendered bitmap
-# font packs generated with `paperpaw-fontgen`.
+# Render OpenType/TrueType fonts at runtime: on computers, phones and in
+# browsers. A device without an operating system (the X4s) draws
+# pre-rendered font packs (`paperpaw-fontgen`), and its firmware is built
+# without this: the feature is in a code plugin's fingerprint, so a
+# plugin built with it for such a device would never load there. Asked
+# for there, the build stops and says so.
 outline = ["dep:skrifa", "dep:read-fonts", "dep:font-types"]
 
 [dev-dependencies]

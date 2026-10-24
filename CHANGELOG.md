@@ -25,6 +25,14 @@ change the plugin SDK.
 
 ### Fixed
 
+- A code plugin built for the X4 or X4 Pro with the SDK's `outline`
+  feature now stops with a message that says to build for the readers
+  without it (it is in a plugin's fingerprint, and the readers draw font
+  packs): on the X4 it failed in `once_cell` (no `compare_exchange` on
+  its chip), on the X4 Pro it built a file the reader never loads. The
+  emulator's build takes it from a target section of the manifest
+  (docs/plugins.md, "The crate").
+
 - On the X4 and X4 Pro on battery, clicks made while the screen refreshes
   are no longer lost, and a quick click is no longer taken as a long
   press (which opened the quick panel while turning pages).
