@@ -16,7 +16,7 @@ use crate::gesture::{Direction, Gesture, GestureKind};
 use crate::replies::Typed;
 use crate::{Command, Id};
 
-use super::{Ink, UiStyle};
+use super::{Ink, Response, UiStyle};
 
 /// Where a text field's title and box go in `row`: the title measured
 /// first keeps its whole width (`title_width`, the width of its widest
@@ -433,9 +433,9 @@ impl TextView {
     }
 
     /// Scrolls as `action` says: up and down a third of a page, the page
-    /// buttons (and previous and next) a page; whether it moved. Other
-    /// actions are not its (`false`, and nothing moves).
-    pub fn on_action(&mut self, action: &Id) -> bool {
+    /// buttons (and previous and next) a page: [`Response::Changed`]
+    /// where it moved. Other actions are not its.
+    pub fn on_action(&mut self, action: &Id) -> Response {
         let page = self.rows() as isize;
         let few = (page / 3).max(1);
         let by = if *action == actions::DOWN {
@@ -447,17 +447,17 @@ impl TextView {
         } else if [actions::PREV_PAGE, actions::PREVIOUS].contains(action) {
             -page
         } else {
-            return false;
+            return Response::Ignored;
         };
-        self.scroll(by)
+        Response::changed_if(self.scroll(by))
     }
 
     /// Scrolls as `gesture` says: a swipe up a page on, down a page back;
-    /// a tap in the lower half a page on, in the upper half back. Whether
-    /// it moved.
-    pub fn on_gesture(&mut self, gesture: &Gesture) -> bool {
+    /// a tap in the lower half a page on, in the upper half back.
+    /// [`Response::Changed`] where it moved.
+    pub fn on_gesture(&mut self, gesture: &Gesture) -> Response {
         if !self.area.contains(gesture.start) {
-            return false;
+            return Response::Ignored;
         }
         let page = self.rows() as isize;
         let middle = i32::from(self.area.y) + i32::from(self.area.height) / 2;
@@ -466,9 +466,9 @@ impl TextView {
             GestureKind::Swipe(Direction::Down) => -page,
             GestureKind::Tap if gesture.start.y >= middle => page,
             GestureKind::Tap => -page,
-            _ => return false,
+            _ => return Response::Ignored,
         };
-        self.scroll(by)
+        Response::changed_if(self.scroll(by))
     }
 
     /// Draws the lines shown of `text` (the text it was made of), and on
@@ -536,32 +536,32 @@ mod tests {
     fn a_text_view_scrolls_by_buttons_within_the_text() {
         let mut v = view(25);
         assert_eq!(v.rows(), 10);
-        assert!(v.on_action(&actions::DOWN));
+        assert!(v.on_action(&actions::DOWN).changed());
         assert_eq!(v.top(), 3);
-        assert!(v.on_action(&actions::NEXT_PAGE));
+        assert!(v.on_action(&actions::NEXT_PAGE).changed());
         assert_eq!(v.top(), 13);
         // Not past the last page.
-        assert!(v.on_action(&actions::NEXT_PAGE));
+        assert!(v.on_action(&actions::NEXT_PAGE).changed());
         assert_eq!(v.top(), 15);
-        assert!(!v.on_action(&actions::NEXT_PAGE));
-        assert!(v.on_action(&actions::PREV_PAGE));
+        assert_eq!(v.on_action(&actions::NEXT_PAGE), Response::Same);
+        assert!(v.on_action(&actions::PREV_PAGE).changed());
         assert_eq!(v.top(), 5);
-        assert!(!v.on_action(&actions::CONFIRM));
+        assert!(!v.on_action(&actions::CONFIRM).taken());
         // Text that fits does not scroll.
-        assert!(!view(5).on_action(&actions::DOWN));
+        assert_eq!(view(5).on_action(&actions::DOWN), Response::Same);
     }
 
     #[test]
     fn a_text_view_scrolls_by_touch() {
         let mut v = view(25);
-        assert!(v.on_gesture(&gesture(GestureKind::Swipe(Direction::Up), 150)));
+        assert!(v.on_gesture(&gesture(GestureKind::Swipe(Direction::Up), 150)).changed());
         assert_eq!(v.top(), 10);
-        assert!(v.on_gesture(&gesture(GestureKind::Tap, 120)));
+        assert!(v.on_gesture(&gesture(GestureKind::Tap, 120)).changed());
         assert_eq!(v.top(), 0);
-        assert!(v.on_gesture(&gesture(GestureKind::Tap, 280)));
+        assert!(v.on_gesture(&gesture(GestureKind::Tap, 280)).changed());
         assert_eq!(v.top(), 10);
         // Outside its area: not its.
-        assert!(!v.on_gesture(&gesture(GestureKind::Tap, 50)));
+        assert!(!v.on_gesture(&gesture(GestureKind::Tap, 50)).taken());
     }
 
     #[test]

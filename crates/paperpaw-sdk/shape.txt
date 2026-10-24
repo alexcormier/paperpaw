@@ -558,6 +558,7 @@ enum paperpaw_sdk::ui::offline::Offer { Online, NotNow }
 enum paperpaw_sdk::ui::picker::DateOrder { DayMonthYear, MonthDayYear, YearMonthDay }
 enum paperpaw_sdk::ui::picker::PickerPart { Plus(0: usize), Minus(0: usize), Value(0: usize) }
 enum paperpaw_sdk::ui::reorder::ReorderStep { Changed, Same, Dropped { from: usize, to: usize } }
+enum paperpaw_sdk::ui::response::Response<T> { Ignored, Same, Changed, Done(0: T) }
 enum paperpaw_sdk::ui::sections::Item { Heading(0: usize), Entry(0: usize) }
 enum paperpaw_sdk::ui::slider::SliderFocus { None, Focused, Editing }
 enum paperpaw_sdk::ui::slider::SliderStep { Moved(0: i64), Same, Chosen(0: i64), Cancelled }

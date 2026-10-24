@@ -280,7 +280,7 @@ impl MenuScreen {
             rows,
             pager,
             edit: ui::NumberEdit::default(),
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             icon_width,
             lines,
             depth: params.get(DEPTH).and_then(|d| d.parse().ok()).unwrap_or(0),
@@ -542,7 +542,7 @@ impl Screen for MenuScreen {
                 .get(self.rows.focus())
                 .and_then(|item| Self::setting(&env, &item.id))
                 .cloned();
-            return self.edit.on_action(&env, spec.as_ref(), a, cx);
+            return self.edit.on_action(&env, spec.as_ref(), a, cx).handled();
         }
         // Directions, not pages: turning pages (also by swiping) keeps the
         // focus hidden on touch screens.

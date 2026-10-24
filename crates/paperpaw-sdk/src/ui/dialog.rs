@@ -29,7 +29,7 @@ use crate::builtin::actions;
 use crate::env::Env;
 use crate::widgets::Frame;
 
-use super::UiStyle;
+use super::{Response, UiStyle};
 
 /// A dialog: where its box and buttons are, and what it says.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -275,37 +275,38 @@ impl Dialog {
     }
 
     /// Where title and text scroll: the page buttons and up and down
-    /// scroll them a page less a line (`true`, the action taken, whether
-    /// or not they moved); else `false`, the action is the caller's.
-    pub fn on_scroll_action(&mut self, action: &Id) -> bool {
+    /// scroll them a page less a line ([`Response::Changed`] where they
+    /// moved). Other actions, and all where nothing scrolls, are the
+    /// caller's: the buttons' choice stays with it.
+    pub fn on_action(&mut self, action: &Id) -> Response {
         if !self.scrolls() {
-            return false;
+            return Response::Ignored;
         }
         let page = self.fitting_from(self.top).saturating_sub(1).max(1) as isize;
-        if [actions::NEXT_PAGE, actions::DOWN].contains(action) {
-            self.scroll(page);
+        let by = if [actions::NEXT_PAGE, actions::DOWN].contains(action) {
+            page
         } else if [actions::PREV_PAGE, actions::UP].contains(action) {
-            self.scroll(-page);
+            -page
         } else {
-            return false;
-        }
-        true
+            return Response::Ignored;
+        };
+        Response::changed_if(self.scroll(by))
     }
 
-    /// A swipe up or down over its box scrolls title and text a page;
-    /// whether it was one.
-    pub fn on_gesture(&mut self, gesture: &crate::Gesture) -> bool {
+    /// A swipe up or down over its box scrolls title and text a page
+    /// ([`Response::Changed`] where they moved).
+    pub fn on_gesture(&mut self, gesture: &crate::Gesture) -> Response {
         use crate::gesture::{Direction, GestureKind};
         if !self.scrolls() || !self.panel.contains(gesture.start) {
-            return false;
+            return Response::Ignored;
         }
         let page = self.fitting_from(self.top).saturating_sub(1).max(1) as isize;
-        match gesture.kind {
-            GestureKind::Swipe(Direction::Up) => self.scroll(page),
-            GestureKind::Swipe(Direction::Down) => self.scroll(-page),
-            _ => return false,
+        let by = match gesture.kind {
+            GestureKind::Swipe(Direction::Up) => page,
+            GestureKind::Swipe(Direction::Down) => -page,
+            _ => return Response::Ignored,
         };
-        true
+        Response::changed_if(self.scroll(by))
     }
 
     /// The height of line `i` of title and text, the space before the
@@ -584,11 +585,11 @@ mod tests {
             assert!(button.bottom() <= u32::from(d.panel().bottom() as u16 - margin));
             assert!(button.y >= d.area.bottom() as u16);
         }
-        assert!(d.on_scroll_action(&actions::NEXT_PAGE));
+        assert!(d.on_action(&actions::NEXT_PAGE).changed());
         assert!(d.top > 0);
         assert!(d.scroll(10_000));
         assert_eq!(d.top, d.last_top());
-        assert!(!d.on_scroll_action(&actions::CONFIRM));
+        assert!(!d.on_action(&actions::CONFIRM).taken());
         // Lines beyond what any number holds: no overflow.
         assert!(dialog(70_000, 1).height() <= 800);
         // One that fits does not scroll.

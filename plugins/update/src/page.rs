@@ -144,7 +144,7 @@ impl UpdatePage {
             style,
             view: View::Nothing,
             focus: 0,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             anyway: false,
             help: None,
         };
@@ -891,7 +891,7 @@ impl Screen for UpdatePage {
         } else if [actions::PREV_PAGE, actions::NEXT_PAGE].contains(a)
             && let Some((view, _)) = &mut self.help
         {
-            if view.on_action(a) {
+            if view.on_action(a).changed() {
                 self.redraw(cx, RefreshMode::Fast);
             }
         } else if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
@@ -922,7 +922,7 @@ impl Screen for UpdatePage {
         if let Some((view, area)) = &mut self.help
             && area.contains(gesture.start)
         {
-            if view.on_gesture(&gesture) {
+            if view.on_gesture(&gesture).changed() {
                 self.redraw(cx, RefreshMode::Fast);
             }
             return Handled::Yes;

@@ -167,7 +167,7 @@ impl Check {
             results: read_report(env),
             step: None,
             focus: 0,
-            shown: !env.device.input.touch,
+            shown: ui::focus_shown(env),
             unsaved: None,
             started: false,
             flipped: false,

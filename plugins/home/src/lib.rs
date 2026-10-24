@@ -506,7 +506,7 @@ impl Screen for Dashboard {
         // hidden (its widgets went) or changed, else what they show read
         // again. The focus where wanted.
         self.grid
-            .set_focus_shown(!env.device.input.touch && env.settings.read(&blocks::FOCUS_AT_ONCE));
+            .set_focus_shown(ui::focus_shown(&env) && env.settings.read(&blocks::FOCUS_AT_ONCE));
         if self.stale {
             self.layout(&env);
         } else {

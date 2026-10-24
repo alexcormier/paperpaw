@@ -1771,6 +1771,8 @@ pub paperpaw_sdk::keys::InputKind::Input
 pub paperpaw_sdk::keys::InputMode::Buttons
 pub paperpaw_sdk::keys::InputMode::Pen
 pub paperpaw_sdk::keys::InputMode::Touch
+impl paperpaw_sdk::keys::InputMode
+pub fn paperpaw_sdk::keys::InputMode::at_start(&paperpaw_platform::input::InputCaps) -> Self
 #[non_exhaustive] pub enum paperpaw_sdk::keys::PointerVerdict
 pub paperpaw_sdk::keys::PointerVerdict::Capture
 pub paperpaw_sdk::keys::PointerVerdict::Observe
@@ -3388,8 +3390,8 @@ impl paperpaw_sdk::ui::offline::OfflineOffer
 pub fn paperpaw_sdk::ui::offline::OfflineOffer::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::ui::offline::OfflineOffer::height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16) -> u16
 pub fn paperpaw_sdk::ui::offline::OfflineOffer::new() -> Self
-pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
-pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_tap(&mut self, paperpaw_platform::geometry::Point, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::ui::Response<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_gesture(&mut self, &paperpaw_sdk::Gesture, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::ui::Response<paperpaw_sdk::ui::offline::Offer>
 pub fn paperpaw_sdk::ui::offline::OfflineOffer::shows(&self, &paperpaw_sdk::Env<'_>) -> bool
 pub mod paperpaw_sdk::ui::reorder
 #[non_exhaustive] pub enum paperpaw_sdk::ui::reorder::ReorderStep
@@ -3592,6 +3594,19 @@ pub fn paperpaw_sdk::ui::ListChange::request(self, &mut paperpaw_sdk::Cx<'_, '_>
 pub paperpaw_sdk::ui::PickerPart::Minus(usize)
 pub paperpaw_sdk::ui::PickerPart::Plus(usize)
 pub paperpaw_sdk::ui::PickerPart::Value(usize)
+#[non_exhaustive] pub enum paperpaw_sdk::ui::Response<T>
+pub paperpaw_sdk::ui::Response::Changed
+pub paperpaw_sdk::ui::Response::Done(T)
+pub paperpaw_sdk::ui::Response::Ignored
+pub paperpaw_sdk::ui::Response::Same
+impl<T> paperpaw_sdk::ui::Response<T>
+pub fn paperpaw_sdk::ui::Response<T>::changed(&self) -> bool
+pub fn paperpaw_sdk::ui::Response<T>::changed_if(bool) -> Self
+pub fn paperpaw_sdk::ui::Response<T>::done(self) -> core::option::Option<T>
+pub fn paperpaw_sdk::ui::Response<T>::handled(&self) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::Response<T>::map<U>(self, impl core::ops::function::FnOnce(T) -> U) -> paperpaw_sdk::ui::Response<U>
+pub fn paperpaw_sdk::ui::Response<T>::request(&self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::Response<T>::taken(&self) -> bool
 #[non_exhaustive] pub enum paperpaw_sdk::ui::Separators
 pub paperpaw_sdk::ui::Separators::Inset
 pub paperpaw_sdk::ui::Separators::Line
@@ -3633,8 +3648,8 @@ pub fn paperpaw_sdk::ui::DatePicker::height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::DatePicker::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<paperpaw_sdk::ui::PickerPart>
 pub fn paperpaw_sdk::ui::DatePicker::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::time::Date) -> Self
 pub fn paperpaw_sdk::ui::DatePicker::next_field(&mut self) -> bool
-pub fn paperpaw_sdk::ui::DatePicker::on_action(&mut self, &paperpaw_sdk::Id) -> bool
-pub fn paperpaw_sdk::ui::DatePicker::on_tap(&mut self, paperpaw_platform::geometry::Point) -> bool
+pub fn paperpaw_sdk::ui::DatePicker::on_action(&mut self, &paperpaw_sdk::Id) -> paperpaw_sdk::ui::Response
+pub fn paperpaw_sdk::ui::DatePicker::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> paperpaw_sdk::ui::Response
 pub fn paperpaw_sdk::ui::DatePicker::order(self, paperpaw_sdk::ui::DateOrder) -> Self
 pub fn paperpaw_sdk::ui::DatePicker::set_focus(&mut self, usize)
 pub fn paperpaw_sdk::ui::DatePicker::value(&self) -> paperpaw_sdk::time::Date
@@ -3646,8 +3661,8 @@ pub fn paperpaw_sdk::ui::Dialog::draw(&self, &mut paperpaw_graphics::canvas::Can
 pub fn paperpaw_sdk::ui::Dialog::height(&self) -> u16
 pub fn paperpaw_sdk::ui::Dialog::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::Dialog::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &str, &[&str], &[&str]) -> Self
-pub fn paperpaw_sdk::ui::Dialog::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> bool
-pub fn paperpaw_sdk::ui::Dialog::on_scroll_action(&mut self, &paperpaw_sdk::Id) -> bool
+pub fn paperpaw_sdk::ui::Dialog::on_action(&mut self, &paperpaw_sdk::Id) -> paperpaw_sdk::ui::Response
+pub fn paperpaw_sdk::ui::Dialog::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> paperpaw_sdk::ui::Response
 pub fn paperpaw_sdk::ui::Dialog::panel(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::Dialog::place(&mut self, u16)
 pub fn paperpaw_sdk::ui::Dialog::scroll(&mut self, isize) -> bool
@@ -3696,7 +3711,7 @@ pub fn paperpaw_sdk::ui::NumberEdit::active(&self) -> bool
 pub fn paperpaw_sdk::ui::NumberEdit::finish(&mut self, &paperpaw_sdk::Env<'_>, core::option::Option<&paperpaw_sdk::SettingSpec>, bool, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::NumberEdit::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
 pub fn paperpaw_sdk::ui::NumberEdit::leave(&mut self, &paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Cx<'_, '_>)
-pub fn paperpaw_sdk::ui::NumberEdit::on_action(&mut self, &paperpaw_sdk::Env<'_>, core::option::Option<&paperpaw_sdk::SettingSpec>, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::NumberEdit::on_action(&mut self, &paperpaw_sdk::Env<'_>, core::option::Option<&paperpaw_sdk::SettingSpec>, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::ui::Response<bool>
 pub fn paperpaw_sdk::ui::NumberEdit::start(&mut self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, &mut paperpaw_sdk::Cx<'_, '_>)
 pub struct paperpaw_sdk::ui::Pager
 impl paperpaw_sdk::ui::Pager
@@ -3767,8 +3782,8 @@ pub struct paperpaw_sdk::ui::TextView
 impl paperpaw_sdk::ui::TextView
 pub fn paperpaw_sdk::ui::TextView::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &str)
 pub fn paperpaw_sdk::ui::TextView::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str) -> Self
-pub fn paperpaw_sdk::ui::TextView::on_action(&mut self, &paperpaw_sdk::Id) -> bool
-pub fn paperpaw_sdk::ui::TextView::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> bool
+pub fn paperpaw_sdk::ui::TextView::on_action(&mut self, &paperpaw_sdk::Id) -> paperpaw_sdk::ui::Response
+pub fn paperpaw_sdk::ui::TextView::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> paperpaw_sdk::ui::Response
 pub fn paperpaw_sdk::ui::TextView::rows(&self) -> usize
 pub fn paperpaw_sdk::ui::TextView::scroll(&mut self, isize) -> bool
 pub fn paperpaw_sdk::ui::TextView::top(&self) -> usize
@@ -3790,8 +3805,8 @@ pub fn paperpaw_sdk::ui::TimePicker::height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::TimePicker::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<paperpaw_sdk::ui::PickerPart>
 pub fn paperpaw_sdk::ui::TimePicker::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::time::Time) -> Self
 pub fn paperpaw_sdk::ui::TimePicker::next_field(&mut self) -> bool
-pub fn paperpaw_sdk::ui::TimePicker::on_action(&mut self, &paperpaw_sdk::Id) -> bool
-pub fn paperpaw_sdk::ui::TimePicker::on_tap(&mut self, paperpaw_platform::geometry::Point) -> bool
+pub fn paperpaw_sdk::ui::TimePicker::on_action(&mut self, &paperpaw_sdk::Id) -> paperpaw_sdk::ui::Response
+pub fn paperpaw_sdk::ui::TimePicker::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> paperpaw_sdk::ui::Response
 pub fn paperpaw_sdk::ui::TimePicker::set_focus(&mut self, usize)
 pub fn paperpaw_sdk::ui::TimePicker::twelve_hours(self, bool) -> Self
 pub fn paperpaw_sdk::ui::TimePicker::value(&self) -> paperpaw_sdk::time::Time
@@ -3909,6 +3924,7 @@ pub fn paperpaw_sdk::ui::fit(&paperpaw_sdk::FontHandle<'_>, f32, &str, f32) -> a
 pub fn paperpaw_sdk::ui::fit_image(&paperpaw_document::ImageRef, u16, u16) -> (u16, u16)
 pub fn paperpaw_sdk::ui::fit_pair(&paperpaw_sdk::FontHandle<'_>, f32, &str, &str, f32, f32) -> (alloc::string::String, alloc::string::String, f32)
 pub fn paperpaw_sdk::ui::focus_rect(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::focus_shown(&paperpaw_sdk::Env<'_>) -> bool
 pub fn paperpaw_sdk::ui::has_icon(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::ui::has_icons(&paperpaw_sdk::Env<'_>) -> bool
 pub fn paperpaw_sdk::ui::heading_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle) -> u16

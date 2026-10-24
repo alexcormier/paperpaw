@@ -470,7 +470,7 @@ impl Screen for BrowseScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         if *a != actions::BACK && self.offering(cx.env()) {
-            let chosen = self.offer.on_action(a, cx);
+            let chosen = self.offer.on_action(a, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }
@@ -500,7 +500,7 @@ impl Screen for BrowseScreen {
             return Handled::Yes;
         }
         if self.offering(cx.env()) {
-            let chosen = self.offer.on_tap(gesture.start, cx);
+            let chosen = self.offer.on_gesture(&gesture, cx).done();
             self.offered(chosen, cx);
             return Handled::Yes;
         }

@@ -303,7 +303,7 @@ impl GroupPage {
             style,
             header,
             rows: ui::Rows::new(area, heights, headings),
-            keys: !env.device.input.touch,
+            keys: ui::focus_shown(env),
             edit: ui::NumberEdit::default(),
             drag: SliderDrag::default(),
             dragged: None,
@@ -551,7 +551,7 @@ impl Screen for GroupPage {
         let env = *cx.env();
         if self.edit.active() {
             let spec = self.focused().cloned();
-            return self.edit.on_action(&env, spec.as_ref(), action, cx);
+            return self.edit.on_action(&env, spec.as_ref(), action, cx).handled();
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
             change.request(cx);
@@ -630,7 +630,7 @@ impl Screen for GroupPage {
             return Handled::Yes;
         }
         // Anything else acts at once; the focus hides again.
-        let keys = !env.device.input.touch;
+        let keys = ui::focus_shown(&env);
         if index != self.rows.focus() || keys != self.keys {
             self.rows.set_focus(index);
             self.keys = keys;

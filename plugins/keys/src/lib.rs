@@ -632,7 +632,7 @@ impl Screen for ListScreen {
         let layers = place.layer_refs();
         let entries = &self.entries;
         let room = ui::icon_room(env, &style, true);
-        let shown = !env.device.input.touch;
+        let shown = ui::focus_shown(env);
         self.rows
             .draw(canvas, &style, shown, |canvas, index, rect, focused| {
                 let ink = style.focus_ink(focused);
@@ -1076,7 +1076,7 @@ impl Screen for PickScreen {
         let entries = &self.entries;
         let query = &self.query;
         let room = ui::icon_room(env, &style, true);
-        let shown = !env.device.input.touch;
+        let shown = ui::focus_shown(env);
         self.rows
             .draw(canvas, &style, shown, |canvas, index, rect, focused| {
                 let ink = style.focus_ink(focused);

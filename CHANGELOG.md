@@ -559,6 +559,19 @@ file to your report.
   `grid`.
 - SDK: `ui::choice::open` and `GridView::new` are gone (`ask::choice`,
   `GridView::asking`).
+- SDK: one input contract for the building blocks. Those that take the
+  buttons' actions and gestures (`on_action`, `on_gesture`) answer with
+  a `ui::Response`: `Ignored` (the screen's), `Same`, `Changed` (draw it
+  again; `request` asks for it) or `Done` with a result. `TextView`,
+  `Dialog` (`on_scroll_action` is `on_action`), `DatePicker` and
+  `TimePicker` (`on_tap` is `on_gesture`), `NumberEdit` (`Done` with
+  whether the value was kept) and `offline::OfflineOffer` (`on_tap` is
+  `on_gesture`, `Done` with the `Offer`).
+- SDK: `ui::focus_shown(env)` says whether a focus is shown: always
+  without a touch screen, with one once the buttons were used last. The
+  kernel starts with `Env::last_input` at `InputMode::at_start` (`Touch`
+  on touch screens). The SDK's parts and the plugins ask it rather than
+  the device.
 - SDK: `ui::Chips` and `ui::Segments` keep their labels: they are given
   once when the part is made (`Segments::new` takes the labels, not
   their count) and `draw` no longer takes them; `label(index)` reads one.
