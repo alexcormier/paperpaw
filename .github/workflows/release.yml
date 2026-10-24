@@ -2,8 +2,8 @@ name: Release
 
 # A tag `v1.2.3` (the workspace's version) makes a GitHub release with the
 # Android app signed with the release key and the firmware of the Xteink
-# X4 and X4 Pro, and of the X4 Classic, which is experimental (not yet
-# tried on one; paperpaw.org offers it as such). For each device: one
+# X4 and X4 Pro, and of the X4 Classic and the X3, which are experimental
+# (not yet tried on one; paperpaw.org offers them as such). For each device: one
 # image for its whole
 # flash (which paperpaw.org offers for flashing in the browser) with a
 # signature file of its own, and the update file, both signed with the
@@ -222,8 +222,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # As the release step lists them (the X4 Classic experimental).
-        device: [x4, x4-pro, x4-classic]
+        # As the release step lists them (the X4 Classic and the X3
+        # experimental).
+        device: [x4, x4-pro, x4-classic, x3]
     env:
       DEVICE: ${{ matrix.device }}
     steps:
@@ -245,12 +246,12 @@ jobs:
       # The release's core libraries, which its store plugins for the
       # ESP32-S3 link with.
       - uses: actions/download-artifact@v8
-        if: matrix.device != 'x4'
+        if: matrix.device != 'x4' && matrix.device != 'x3'
         with:
           name: xtensa-std
           path: ${{ runner.temp }}/xtensa-std
       - uses: ./.github/actions/xtensa-std
-        if: matrix.device != 'x4'
+        if: matrix.device != 'x4' && matrix.device != 'x3'
         with:
           archive: ${{ runner.temp }}/xtensa-std/paperpaw-xtensa-std-${{ env.VERSION }}.tar.gz
       # One image for the whole flash (with the partitions of
@@ -287,7 +288,9 @@ jobs:
       # PaperPaw's own plugins that the store offers, built for this
       # firmware (ADR 0024) and signed with the first-party plugin key (its
       # public key is the catalogue's `author_key`; never the firmware's).
+      # Not for the X3 yet: the plugin library does not list it.
       - name: The store's first-party plugins
+        if: matrix.device != 'x3'
         env:
           FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
         run: |
@@ -297,6 +300,7 @@ jobs:
       # Apart from every build: the key is on the disk only while the
       # files are signed (audit O-17).
       - name: Sign the store's first-party plugins
+        if: matrix.device != 'x3'
         env:
           PAPERPAW_PLUGIN_KEY: ${{ secrets.PAPERPAW_PLUGIN_KEY }}
         run: |
@@ -348,7 +352,7 @@ jobs:
       # libraries installed into it go again, so that no run finds those
       # of another commit.
       - name: The core libraries out of the cached toolchain
-        if: always() && matrix.device != 'x4'
+        if: always() && matrix.device != 'x4' && matrix.device != 'x3'
         run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
 
   release:
@@ -421,9 +425,9 @@ jobs:
           prerelease=()
           [[ "$VERSION" == 0.* || "$VERSION" == *-* ]] && prerelease=(--prerelease)
           assets=("dist/paperpaw-$VERSION.apk" "dist/paperpaw-$VERSION.apk.sha256")
-          # The devices of the firmware job; the X4 Classic's are
-          # experimental (not yet tried on one).
-          for device in x4 x4-pro x4-classic; do
+          # The devices of the firmware job; the X4 Classic's and the
+          # X3's are experimental (not yet tried on one).
+          for device in x4 x4-pro x4-classic x3; do
             for part in .bin .bin.sha256 .bin.sig -update.bin -update.bin.sha256 -install.bin \
               -install.bin.sha256 -plugins.txt -abi.txt; do
               assets+=("dist/paperpaw-$device-$VERSION$part")

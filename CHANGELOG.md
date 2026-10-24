@@ -44,10 +44,11 @@ change the plugin SDK.
   high while charging, the card started up to four times, and its
   power kept on through sleep. Its partitions keep the factory's NVS
   whole.
-- A build for the Xteink X3 (`cargo x3`), experimental and not yet tried
-  on one: the X4's chip and buttons, its UC8253 panel at 792 x 528 in
-  black and white, a fuel gauge and a clock; an emulator profile too.
-  What is not known without a device is listed in `shells/xteink`.
+- The Xteink X3's firmware comes with each release too (`cargo x3`),
+  experimental and not yet tried on one, without store plugins yet: the
+  X4's chip and buttons, its UC8253 panel at 792 x 528 in black and
+  white, a fuel gauge and a clock; an emulator profile too. What is not
+  known without a device is listed in `shells/xteink`.
 - The plugin store has five more groups, so every kind of plugin has a
   place: notes, learning, news, tools and games, before system. Of
   PaperPaw's own plugins, vocabulary moved to learning; news, wallabag
