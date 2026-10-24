@@ -784,12 +784,7 @@ impl Radio {
     /// the cheapest power that serves everyone.
     fn settle(&mut self, now: Instant) {
         if self.wanted() {
-            self.idle_since = None;
-            if !self.radio_on {
-                self.radio_on = true;
-                self.on_since = Some(now);
-                self.calls.push(BtCall::Radio { on: true });
-            }
+            self.power_up(now);
         } else if self.radio_on {
             let since = *self.idle_since.get_or_insert(now);
             if now.since(since) >= RADIO_GRACE_MS {
@@ -819,6 +814,17 @@ impl Radio {
             self.advertised.clone_from(&advert);
             self.calls
                 .push(BtCall::Advertise(advert.unwrap_or_default()));
+        }
+    }
+
+    /// The radio on, where it is not: before any call that needs it, so
+    /// that the shell never hears of a link before the radio.
+    fn power_up(&mut self, now: Instant) {
+        self.idle_since = None;
+        if !self.radio_on {
+            self.radio_on = true;
+            self.on_since = Some(now);
+            self.calls.push(BtCall::Radio { on: true });
         }
     }
 
@@ -877,6 +883,7 @@ impl Radio {
             .find(|k| k.id == device)
             .map(|k| k.address.clone())
             .ok_or(BtError::NotFound)?;
+        self.power_up(now);
         let number = self.next_link;
         self.next_link += 1;
         self.links.push(Link {

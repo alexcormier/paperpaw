@@ -157,6 +157,26 @@ fn the_radio_comes_on_for_a_scan_goes_off_a_while_after_and_its_time_is_counted(
 }
 
 #[test]
+fn the_radio_comes_on_before_a_link_is_asked_for() {
+    let mut radio = radio();
+    radio.load([("core.bluetooth.1", "aa	Remote	remote	0		keys")].into_iter());
+    let mut out = Vec::new();
+    let device = DeviceId::new(1);
+    run(
+        &mut radio,
+        "a",
+        bt::remote_keys(device, &DONE),
+        readers(0),
+        &mut out,
+    )
+    .unwrap();
+    let calls = radio.take();
+    assert_eq!(calls[0], BtCall::Radio { on: true }, "{calls:?}");
+    assert!(matches!(calls[1], BtCall::Connect { .. }), "{calls:?}");
+    assert_eq!(calls.len(), 2, "{calls:?}");
+}
+
+#[test]
 fn a_scan_is_never_longer_than_a_minute() {
     let mut radio = radio();
     let mut out = Vec::new();
