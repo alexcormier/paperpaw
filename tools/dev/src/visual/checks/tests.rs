@@ -242,6 +242,40 @@ fn text_under_another_text_is_found() {
     assert!(overlap(&scene(&image, parts)).is_empty());
 }
 
+/// Texts whose boxes reach to the end of the room they were given (a
+/// label beside its value, the days of a calendar) lie over each other
+/// where nothing of them is drawn: no overlap. Words drawn over each
+/// other are.
+#[test]
+fn texts_are_compared_where_their_words_are() {
+    let mut image = paper();
+    word(&mut image, 30, 110, 4, 20);
+    word(&mut image, 90, 110, 4, 20);
+    // A label wrapped beside its value, its lines' boxes to the edge.
+    word(&mut image, 30, 210, 9, 20);
+    word(&mut image, 30, 250, 7, 20);
+    word(&mut image, 380, 230, 6, 20);
+    let parts = vec![
+        d(Role::Text, "Mo", Rect::new(30, 100, 420, 40)),
+        d(Role::Text, "Tu", Rect::new(90, 100, 360, 40)),
+        d(Role::Text, "Paragraph", Rect::new(26, 200, 454, 40)),
+        d(Role::Text, "spacing", Rect::new(26, 240, 454, 40)),
+        d(Role::Text, "Medium", Rect::new(380, 200, 100, 80)),
+    ];
+    assert!(overlap(&scene(&image, parts.clone())).is_empty());
+    // Drawn half over the first: found.
+    word(&mut image, 30, 125, 4, 20);
+    let mut over = parts;
+    over.push(d(Role::Text, "We", Rect::new(30, 120, 60, 40)));
+    let issues = overlap(&scene(&image, over));
+    assert!(
+        issues
+            .iter()
+            .any(|i| i.message.contains("under the text \"We\"")),
+        "{issues:?}"
+    );
+}
+
 #[test]
 fn text_running_into_a_switch_is_found() {
     let mut image = paper();
