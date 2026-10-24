@@ -293,7 +293,10 @@ const paperpaw_sdk::command::http_params::ERROR: &str = "error"
 const paperpaw_sdk::command::http_params::ETAG: &str = "etag"
 const paperpaw_sdk::command::http_params::FINAL_URL: &str = "final-url"
 const paperpaw_sdk::command::http_params::HEADER: &str = "header:"
+const paperpaw_sdk::command::http_params::PROGRESS: &str = "http-progress"
+const paperpaw_sdk::command::http_params::RECEIVED: &str = "received"
 const paperpaw_sdk::command::http_params::STATUS: &str = "status"
+const paperpaw_sdk::command::http_params::TOTAL: &str = "total"
 const paperpaw_sdk::command::http_params::TRUNCATED: &str = "truncated"
 const paperpaw_sdk::command::server_params::ADDRESS: &str = "address"
 const paperpaw_sdk::command::server_params::BODY_FILE: &str = "body-file"
@@ -783,6 +786,7 @@ struct paperpaw_sdk::reading::typeset::StatusRoom { top: bool, bottom: bool, hei
 struct paperpaw_sdk::reading::typeset::WordBox { area: paperpaw_platform::geometry::Rect, text: alloc::string::String, start: paperpaw_document::Locator, end: paperpaw_document::Locator }
 struct paperpaw_sdk::replies::Confirmed { yes: bool, context: paperpaw_sdk::params::Params }
 struct paperpaw_sdk::replies::FolderChosen { path: alloc::string::String, context: paperpaw_sdk::params::Params }
+struct paperpaw_sdk::replies::HttpProgress { received: u64, total: core::option::Option<u64>, context: paperpaw_sdk::params::Params }
 struct paperpaw_sdk::replies::HttpReply { status: u16, body: alloc::vec::Vec<u8>, truncated: bool, error: core::option::Option<paperpaw_sdk::replies::HttpError>, etag: core::option::Option<alloc::string::String>, content_type: core::option::Option<alloc::string::String>, final_url: core::option::Option<alloc::string::String>, context: paperpaw_sdk::params::Params, refused: core::option::Option<paperpaw_sdk::work::Refusal>, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)> }
 struct paperpaw_sdk::replies::Spoken { spoken: bool, context: paperpaw_sdk::params::Params }
 struct paperpaw_sdk::replies::Typed { text: alloc::string::String, typing: bool, context: paperpaw_sdk::params::Params }

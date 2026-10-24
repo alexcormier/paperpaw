@@ -341,6 +341,26 @@ impl Kernel {
         self.finish()
     }
 
+    /// How much of the body of request `id` came so far (`received` bytes,
+    /// of `total` where the answer said), for a request that asks
+    /// ([`HttpCall::progress`]): shells say so as the body comes, as often
+    /// as they like; the plugin hears it at most every 5 % or 2 seconds,
+    /// and never after the answer.
+    pub fn http_progress(
+        &mut self,
+        now: Instant,
+        id: u32,
+        received: u64,
+        total: Option<u64>,
+    ) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        self.io
+            .http
+            .progress(id, received, total, now, &mut self.output.commands);
+        self.finish()
+    }
+
     /// What the shell is to do: requests, servers, sockets, speech, the
     /// clipboard, the radio, the firmware (see [`Io`]). Check after every
     /// kernel call. Network work waits here until there is a network,

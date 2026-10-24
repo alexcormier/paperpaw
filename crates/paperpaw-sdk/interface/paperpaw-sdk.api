@@ -1204,6 +1204,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::FolderChosen
 pub fn paperpaw_sdk::replies::FolderChosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::FolderChosen::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::replies::FolderChosen::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpProgress
+pub fn paperpaw_sdk::replies::HttpProgress::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::replies::HttpProgress::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::replies::HttpProgress::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::HttpReply::into_params(self) -> paperpaw_sdk::Params
@@ -2662,6 +2666,17 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::FolderChosen
 pub fn paperpaw_sdk::replies::FolderChosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::FolderChosen::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::replies::FolderChosen::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::replies::HttpProgress
+pub paperpaw_sdk::replies::HttpProgress::context: paperpaw_sdk::Params
+pub paperpaw_sdk::replies::HttpProgress::received: u64
+pub paperpaw_sdk::replies::HttpProgress::total: core::option::Option<u64>
+impl paperpaw_sdk::replies::HttpProgress
+pub fn paperpaw_sdk::replies::HttpProgress::new(u64, core::option::Option<u64>, paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::replies::HttpProgress::permille(&self) -> core::option::Option<u16>
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpProgress
+pub fn paperpaw_sdk::replies::HttpProgress::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::replies::HttpProgress::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::replies::HttpProgress::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::replies::HttpReply
 pub paperpaw_sdk::replies::HttpReply::body: alloc::vec::Vec<u8>
 pub paperpaw_sdk::replies::HttpReply::content_type: core::option::Option<alloc::string::String>
@@ -5153,6 +5168,17 @@ pub fn paperpaw_sdk::Gesture::new(paperpaw_sdk::GestureKind, paperpaw_platform::
 pub paperpaw_sdk::HttpOptions::max_body: core::option::Option<usize>
 pub paperpaw_sdk::HttpOptions::timeout: core::option::Option<core::time::Duration>
 pub paperpaw_sdk::HttpOptions::want_headers: alloc::vec::Vec<alloc::string::String>
+#[non_exhaustive] pub struct paperpaw_sdk::HttpProgress
+pub paperpaw_sdk::HttpProgress::context: paperpaw_sdk::Params
+pub paperpaw_sdk::HttpProgress::received: u64
+pub paperpaw_sdk::HttpProgress::total: core::option::Option<u64>
+impl paperpaw_sdk::replies::HttpProgress
+pub fn paperpaw_sdk::replies::HttpProgress::new(u64, core::option::Option<u64>, paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::replies::HttpProgress::permille(&self) -> core::option::Option<u16>
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpProgress
+pub fn paperpaw_sdk::replies::HttpProgress::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::replies::HttpProgress::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::replies::HttpProgress::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::HttpReply
 pub paperpaw_sdk::HttpReply::body: alloc::vec::Vec<u8>
 pub paperpaw_sdk::HttpReply::content_type: core::option::Option<alloc::string::String>
@@ -5190,6 +5216,7 @@ pub fn paperpaw_sdk::HttpRequest::new(&str, &str, impl core::convert::Into<paper
 pub fn paperpaw_sdk::HttpRequest::options(&self) -> &paperpaw_sdk::HttpOptions
 pub fn paperpaw_sdk::HttpRequest::param(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::HttpRequest::params(&self) -> &paperpaw_sdk::Params
+pub fn paperpaw_sdk::HttpRequest::progress(self, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::HttpProgress>) -> Self
 pub fn paperpaw_sdk::HttpRequest::reply(&self) -> &paperpaw_sdk::Id
 pub fn paperpaw_sdk::HttpRequest::save_path(&self) -> core::option::Option<&str>
 pub fn paperpaw_sdk::HttpRequest::save_to(self, impl core::convert::Into<alloc::string::String>) -> Self
@@ -5940,6 +5967,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::FolderChosen
 pub fn paperpaw_sdk::replies::FolderChosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::FolderChosen::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::replies::FolderChosen::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpProgress
+pub fn paperpaw_sdk::replies::HttpProgress::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::replies::HttpProgress::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::replies::HttpProgress::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::HttpReply::into_params(self) -> paperpaw_sdk::Params

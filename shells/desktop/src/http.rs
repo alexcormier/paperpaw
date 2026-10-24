@@ -246,6 +246,7 @@ mod tests {
             timeout_ms: 1000,
             want_headers: Vec::new(),
             save_to: save_to.map(String::from),
+            progress: false,
         }
     }
 

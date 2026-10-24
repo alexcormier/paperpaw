@@ -359,6 +359,7 @@ impl Network {
                     timeout_ms: 30_000,
                     want_headers: Vec::new(),
                     save_to,
+                    progress: false,
                 });
             }
         }

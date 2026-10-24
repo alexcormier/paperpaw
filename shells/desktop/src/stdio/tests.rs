@@ -368,6 +368,7 @@ fn recorded_answers_answer_their_requests() {
         timeout_ms: 1000,
         want_headers: Vec::new(),
         save_to: None,
+        progress: false,
     };
     let fixture = |url: &str, method: Option<&str>, body: &str| Fixture {
         url: String::from(url),

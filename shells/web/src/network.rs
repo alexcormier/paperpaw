@@ -508,6 +508,7 @@ mod tests {
             timeout_ms: 30_000,
             want_headers: vec![String::from("X-Count")],
             save_to: None,
+            progress: false,
         }
     }
 
