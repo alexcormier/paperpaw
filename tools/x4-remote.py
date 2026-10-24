@@ -160,9 +160,23 @@ class X4:
         line, self.buffer = self.buffer.split(b"\n", 1)
         return line.decode("utf-8", "replace").rstrip("\r")
 
+    def pass_time(self, seconds):
+        """Lets `seconds` go by; with `verbose`, the X4's log meanwhile is
+        printed, not dropped by the next command."""
+        if not self.verbose:
+            time.sleep(seconds)
+            return
+        deadline = time.monotonic() + seconds
+        while (line := self.line(deadline)) is not None:
+            if not line.startswith("PP:"):
+                print(line)
+
     def ask(self, command, until, timeout=TIMEOUT_S):
         """Sends a command and returns the X4's answers (lines with "PP:")
         up to the one starting with `until`."""
+        if self.verbose:
+            # What the log said since the last command, before it goes.
+            self.pass_time(0)
         self.port.reset_input_buffer()
         self.buffer = b""
         self.port.write(command.encode() + b"\n")
@@ -494,7 +508,7 @@ def run(x4, step):
     rest = step.split(":", 1)[1] if ":" in step else ""
     match parts:
         case ["wait", ms]:
-            time.sleep(int(ms) / 1000)
+            x4.pass_time(int(ms) / 1000)
         case ["until", *_]:
             text, ms = rest, 30000
             if ":" in rest and rest.rsplit(":", 1)[1].isdigit():
@@ -535,7 +549,7 @@ def run(x4, step):
         case ["clicks", button, count, every, held]:
             x4.ask(f"clicks {button} {count} {every} {held}", "OK")
             # They go on in the X4's interrupt: wait for the last.
-            time.sleep((int(count) * int(every) + 200) / 1000)
+            x4.pass_time((int(count) * int(every) + 200) / 1000)
         case ["tap-label", *_]:
             found = [p for p in x4.parts() if rest in p[6]]
             if not found:
