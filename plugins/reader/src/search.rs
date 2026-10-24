@@ -306,12 +306,9 @@ impl Screen for SearchScreen {
         let len = self.hits.len();
         let title = format!("„{}“", self.query);
         let note = self.header_note(env);
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &title,
-            Some(&note),
-            self.list.paging(len),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, &title, Some(&note), self.list.paging(len));
         if len == 0 {
             let message = if self.next.is_some() {
                 env.i18n.tr("reader.search.wait").to_string()
@@ -319,23 +316,21 @@ impl Screen for SearchScreen {
                 env.i18n
                     .format("reader.search.none", &[("query", Arg::Str(&self.query))])
             };
-            ui::draw_message(canvas, env, &style, self.list.area(), &message);
+            ui.message(self.list.area(), &message);
             return;
         }
         let hits = &self.hits;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let hit = &hits[index];
-                let note = env.i18n.format(
-                    "reader.percent",
-                    &[("percent", Arg::Int(i64::from(hit.percent)))],
-                );
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &hit.snippet, "", &note);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let hit = &hits[index];
+            let note = env.i18n.format(
+                "reader.percent",
+                &[("percent", Arg::Int(i64::from(hit.percent)))],
+            );
+            ui::Row::plain(&hit.snippet)
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

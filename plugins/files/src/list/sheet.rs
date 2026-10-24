@@ -273,8 +273,9 @@ impl Screen for BookSheet {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
@@ -283,17 +284,8 @@ impl Screen for BookSheet {
         );
         // The book as a row of the list, but larger text: its cover, title,
         // author and state, never focused.
-        rows::draw_book_row(
-            canvas,
-            env,
-            &style,
-            &self.sizes,
-            self.head,
-            false,
-            &self.book,
-            false,
-        );
-        ui::draw_separator(canvas, &style, self.head, 0);
+        rows::draw_book_row(&mut ui, &self.sizes, self.head, false, &self.book, false);
+        ui.separator(self.head, 0);
         if let Some(answers) = &self.asking {
             // The question right below the book, above the answers, as
             // long as the room allows (smaller where it needs more).
@@ -308,32 +300,23 @@ impl Screen for BookSheet {
             // as a text, which a row of the list below would take in).
             let heading = paperpaw_sdk::semantics::Role::Heading;
             let room_rect = Rect::new(margin, area.y, width, room + 2 * gap);
-            canvas.describe(heading, text, room_rect);
+            ui.canvas().describe(heading, text, room_rect);
             let at = Rect::new(margin, area.y + gap, width, question.height(env).min(room));
-            question.draw(canvas, env, at, widgets::Align::Left, Color::BLACK);
-            answers.draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                ANSWERS.len(),
-                |ui, index, rect, focused| {
-                    let canvas = ui.canvas();
-                    let label = env.i18n.tr(ANSWERS[index].0);
-                    ui::draw_value_row(canvas, env, &style, rect, focused, label, "");
-                },
-            );
+            question.draw(ui.canvas(), env, at, widgets::Align::Left, Color::BLACK);
+            answers.draw(&mut ui, ANSWERS.len(), |ui, index, rect, focused| {
+                let label = env.i18n.tr(ANSWERS[index].0);
+                ui::Row::plain(label).focused(focused).draw(ui, rect);
+            });
             return;
         }
         let actions = &self.actions;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            actions.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, actions.len(), |ui, index, rect, focused| {
                 let label = &actions[index].1;
-                ui::draw_value_row(canvas, env, &style, rect, focused, label, "");
-            },
-        );
+                ui::Row::plain(label).focused(focused).draw(ui, rect);
+            });
         if let (Some(pager), Some(page)) = (&self.pager, self.list.paging(actions.len())) {
-            pager.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), page);
+            pager.draw(&mut ui, page);
         }
     }
 

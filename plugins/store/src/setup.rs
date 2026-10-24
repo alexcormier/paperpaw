@@ -193,51 +193,43 @@ impl Screen for OfferScreen {
         let button = self.button(env);
         self.on_button &= button.is_some();
         self.list.set_active(!self.on_button);
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("store.offer.title"),
             None,
             self.list.paging(len),
         );
         let rows = &self.rows;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let (id, on) = rows[index];
-                let (name, note) = (
-                    alloc::format!("store.offer.{id}"),
-                    alloc::format!("store.offer.{id}.help"),
-                );
-                let (name, note) = (env.i18n.tr(&name), env.i18n.tr(&note));
-                ui::draw_switch_row(canvas, env, &style, rect, focused, name, note, on);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (id, on) = rows[index];
+            let (name, note) = (
+                alloc::format!("store.offer.{id}"),
+                alloc::format!("store.offer.{id}.help"),
+            );
+            let (name, note) = (env.i18n.tr(&name), env.i18n.tr(&note));
+            ui::Row::switch(name, on)
+                .note(note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
-        canvas.fill(line, Color::gray(150));
+        ui.canvas().fill(line, Color::gray(150));
         if let Some(button) = button {
             let label = env.i18n.tr("store.offer.add");
-            ui::draw_button(canvas, env, &style, button, label, true, self.on_button);
+            ui.button(button, label, true, self.on_button);
         }
-        if let Some(font) = style.font(env) {
-            let right = button.map_or(self.bar.width, |b| b.x);
-            let area = Rect::new(
-                0,
-                self.bar.y,
-                right.saturating_sub(style.gap()),
-                self.bar.height,
-            );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                style.margin() as f32,
-                area,
-                ui::tr_input(env, "store.offer.hint"),
-                style.faint(ui::Ink::Note),
-            );
-        }
+        let right = button.map_or(self.bar.width, |b| b.x);
+        let area = Rect::new(
+            0,
+            self.bar.y,
+            right.saturating_sub(style.gap()),
+            self.bar.height,
+        );
+        ui::Label::new(ui::tr_input(env, "store.offer.hint"))
+            .px(style.small())
+            .color(style.faint(ui::Ink::Note))
+            .draw_from(&mut ui, style.margin() as f32, area);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

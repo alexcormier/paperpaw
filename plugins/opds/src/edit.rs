@@ -197,8 +197,9 @@ impl EditScreen {
 impl Screen for EditScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             &self.catalog.name,
             None,
             self.list.paging(FIELDS.len()),
@@ -206,23 +207,25 @@ impl Screen for EditScreen {
         let values: Vec<String> = FIELDS.iter().map(|&f| self.value(env, f)).collect();
         let (on, webdav) = (self.catalog.sync, self.catalog.webdav);
         let catalog = &self.catalog;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            FIELDS.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, FIELDS.len(), |ui, index, rect, focused| {
                 let field = FIELDS[index];
                 let title = env.i18n.tr(field.key());
                 let note = env.i18n.tr(field.help(catalog));
                 if field == Field::Sync || field == Field::WebDav {
                     let on = if field == Field::Sync { on } else { webdav };
-                    ui::draw_switch_row(canvas, env, &style, rect, focused, title, note, on);
+                    ui::Row::switch(title, on)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
                 } else {
                     let value = &values[index];
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, value, note);
+                    ui::Row::value(title, value)
+                        .note(note)
+                        .focused(focused)
+                        .draw(ui, rect);
                 }
-            },
-        );
+            });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

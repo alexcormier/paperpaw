@@ -171,17 +171,15 @@ impl Screen for AnnotationsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("reader.annotations"),
             None,
             self.list.paging(len),
         );
         if len == 0 {
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 "bookmarks",
                 env.i18n.tr("reader.annotations.empty.title"),
@@ -190,37 +188,38 @@ impl Screen for AnnotationsScreen {
             return;
         }
         let annotations = &self.annotations;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let Some(a) = annotations.get(index) else {
-                    let title = env.i18n.tr("reader.export");
-                    let note = env.i18n.tr("reader.export.help");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", note);
-                    return;
-                };
-                let (kind, title) = match a.mark.kind {
-                    Kind::Bookmark => ("reader.bookmark", a.text.clone()),
-                    Kind::Highlight => (
-                        "reader.highlight",
-                        env.i18n.format(
-                            "reader.quoted",
-                            &[("text", paperpaw_sdk::Arg::Str(&a.text))],
-                        ),
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let Some(a) = annotations.get(index) else {
+                let title = env.i18n.tr("reader.export");
+                let note = env.i18n.tr("reader.export.help");
+                ui::Row::value(title, "›")
+                    .note(note)
+                    .focused(focused)
+                    .draw(ui, rect);
+                return;
+            };
+            let (kind, title) = match a.mark.kind {
+                Kind::Bookmark => ("reader.bookmark", a.text.clone()),
+                Kind::Highlight => (
+                    "reader.highlight",
+                    env.i18n.format(
+                        "reader.quoted",
+                        &[("text", paperpaw_sdk::Arg::Str(&a.text))],
                     ),
-                    _ => ("reader.highlight", a.text.clone()),
-                };
-                let what = if a.note.is_empty() {
-                    env.i18n.tr(kind)
-                } else {
-                    a.note.as_str()
-                };
-                let note = format!("{what} · {} %", a.percent);
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, "", &note);
-            },
-        );
+                ),
+                _ => ("reader.highlight", a.text.clone()),
+            };
+            let what = if a.note.is_empty() {
+                env.i18n.tr(kind)
+            } else {
+                a.note.as_str()
+            };
+            let note = format!("{what} · {} %", a.percent);
+            ui::Row::plain(&title)
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

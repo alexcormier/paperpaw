@@ -727,7 +727,9 @@ fn draw_placeholder(
     title: &str,
 ) {
     let style = UiStyle::new(env);
-    canvas.stroke(at, u32::from(style.line()).max(2), look.ink);
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    ui.canvas()
+        .stroke(at, u32::from(style.line()).max(2), look.ink);
     let pad = (style.gap() / 2).min(at.width / 6);
     let inner = Rect::new(
         at.x + pad,
@@ -747,7 +749,10 @@ fn draw_placeholder(
     let lines = cover_lines(&font, size, title, f32::from(inner.width), fits);
     for (n, text) in lines.iter().enumerate() {
         let row = Rect::new(inner.x, inner.y + n as u16 * line, inner.width, line);
-        ui::draw_label(canvas, &font, size, f32::from(inner.x), row, text, look.ink);
+        ui::Label::new(text)
+            .px(size)
+            .color(look.ink)
+            .draw_from(&mut ui, f32::from(inner.x), row);
     }
 }
 

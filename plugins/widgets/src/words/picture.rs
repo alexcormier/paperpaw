@@ -298,6 +298,7 @@ impl Widget for PictureWidget {
         let Some(font) = style.font(env) else {
             return;
         };
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let small = widgets::line_height(env, style.small());
         // Just below the picture, wherever its whole leaves it.
         let row = Rect::new(
@@ -308,7 +309,10 @@ impl Widget for PictureWidget {
         );
         let name = ui::fit(&font, style.small(), &shown.name, f32::from(area.width));
         let x = widgets::align(env, ID.as_str()).x(area, font.measure(style.small(), &name));
-        ui::draw_label(canvas, &font, style.small(), x, row, &name, look.faint);
+        ui::Label::new(&name)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(&mut ui, x, row);
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {

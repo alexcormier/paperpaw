@@ -349,50 +349,47 @@ impl AddScreen {
         env.i18n.tr(key).to_string()
     }
 
-    fn draw_list(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = self.style;
+    fn draw_list(&mut self, ui: &mut ui::Ui<'_>) {
+        let (env, style) = (ui.env(), self.style);
         let len = self.rows.len();
         let rows = &self.rows;
-        let room = ui::icon_room(env, &style, true);
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let ink = style.focus_ink(focused);
-                let (icon, title, value) = match &rows[index] {
-                    Row::Kind(kind, count) => (
-                        Some(kind_icon(env, kind)),
-                        env.i18n.tr(kind).to_string(),
-                        count.to_string(),
-                    ),
-                    Row::Add(What::Tool(action), title) => (
-                        env.menus.icon(action.as_str()),
-                        env.i18n.tr(title).to_string(),
-                        String::from("+"),
-                    ),
-                    Row::Add(_, title) => (None, env.i18n.tr(title).to_string(), String::from("+")),
-                    Row::AddPage => (
-                        Some("plus"),
-                        env.i18n.tr("home.edit.add-page").to_string(),
-                        String::new(),
-                    ),
-                    Row::RemovePage => (
-                        Some("trash"),
-                        env.i18n.tr("home.edit.remove-page").to_string(),
-                        String::new(),
-                    ),
-                };
-                let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
-                ui::draw_value_row(canvas, env, &style, rect, focused, &title, &value);
-            },
-        );
+        let room = ui.icon_room(true);
+        self.list.draw(ui, len, |ui, index, rect, focused| {
+            let ink = style.focus_ink(focused);
+            let (icon, title, value) = match &rows[index] {
+                Row::Kind(kind, count) => (
+                    Some(kind_icon(env, kind)),
+                    env.i18n.tr(kind).to_string(),
+                    count.to_string(),
+                ),
+                Row::Add(What::Tool(action), title) => (
+                    env.menus.icon(action.as_str()),
+                    env.i18n.tr(title).to_string(),
+                    String::from("+"),
+                ),
+                Row::Add(_, title) => (None, env.i18n.tr(title).to_string(), String::from("+")),
+                Row::AddPage => (
+                    Some("plus"),
+                    env.i18n.tr("home.edit.add-page").to_string(),
+                    String::new(),
+                ),
+                Row::RemovePage => (
+                    Some("trash"),
+                    env.i18n.tr("home.edit.remove-page").to_string(),
+                    String::new(),
+                ),
+            };
+            let rect = ui.row_icon(rect, room, icon, ink);
+            ui::Row::value(&title, &value)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     /// The gallery's page with the focus: each widget's name, and the
     /// widget as it would show; the focused one framed.
-    fn draw_gallery(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = self.style;
+    fn draw_gallery(&self, ui: &mut ui::Ui<'_>) {
+        let (env, style) = (ui.env(), self.style);
         let Some(font) = style.font(env) else {
             return;
         };
@@ -405,7 +402,7 @@ impl AddScreen {
             };
             let focused = shown && preview.row == focus;
             let name = env.i18n.tr(title);
-            canvas
+            ui.canvas()
                 .describe(
                     paperpaw_sdk::semantics::Role::Row,
                     name,
@@ -413,21 +410,16 @@ impl AddScreen {
                 )
                 .focused(focused);
             let name = ui::fit(&font, style.title(), name, f32::from(preview.title.width));
-            ui::draw_label(
-                canvas,
-                &font,
-                style.title(),
-                f32::from(preview.title.x),
-                preview.title,
-                &name,
-                Color::BLACK,
-            );
+            ui::Label::new(&name)
+                .px(style.title())
+                .color(Color::BLACK)
+                .draw_from(ui, f32::from(preview.title.x), preview.title);
             // The widget in its place, as on the page; round it, outside
             // it so that nothing of it is covered, a faint line so its
             // size shows, or a strong frame round the focused one.
             let around = preview.area;
             if let Some(widget) = &preview.widget {
-                widget.draw(canvas, env, around);
+                widget.draw(ui.canvas(), env, around);
             }
             let pad = (u32::from(style.gap()) / 2) as u16;
             let ring = Rect::new(
@@ -438,7 +430,7 @@ impl AddScreen {
             );
             if focused {
                 ui::stroke_round(
-                    canvas,
+                    ui.canvas(),
                     &style,
                     ring,
                     u32::from(style.line()) * 3,
@@ -446,7 +438,7 @@ impl AddScreen {
                 );
             } else {
                 ui::stroke_round(
-                    canvas,
+                    ui.canvas(),
                     &style,
                     ring,
                     u32::from(style.line()),
@@ -462,16 +454,12 @@ impl Screen for AddScreen {
         let style = self.style;
         let paging = self.paging();
         let title = self.header_title(env);
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &title,
-            None,
-            paging,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, &title, None, paging);
         if self.is_gallery() {
-            self.draw_gallery(canvas, env);
+            self.draw_gallery(&mut ui);
         } else {
-            self.draw_list(canvas, env);
+            self.draw_list(&mut ui);
         }
     }
 

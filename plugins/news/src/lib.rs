@@ -547,33 +547,32 @@ impl Screen for FeedsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("news.title"),
             None,
             self.list.paging(len),
         );
         let feeds = &self.feeds;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, row, rect, focused| {
-                let canvas = ui.canvas();
-                let (title, value, note) = if row + 1 == len {
-                    let note = env.i18n.tr("news.add.help").to_string();
-                    (env.i18n.tr("news.add").to_string(), "›", note)
-                } else if row == 0 {
-                    let note = env
-                        .i18n
-                        .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))]);
-                    (env.i18n.tr("news.fetch").to_string(), "", note)
-                } else {
-                    let feed = &feeds[row - 1];
-                    (feed.shown(), "", feed.url.clone())
-                };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, value, &note);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            let (title, value, note) = if row + 1 == len {
+                let note = env.i18n.tr("news.add.help").to_string();
+                (env.i18n.tr("news.add").to_string(), "›", note)
+            } else if row == 0 {
+                let note = env
+                    .i18n
+                    .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))]);
+                (env.i18n.tr("news.fetch").to_string(), "", note)
+            } else {
+                let feed = &feeds[row - 1];
+                (feed.shown(), "", feed.url.clone())
+            };
+            ui::Row::value(&title, value)
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
         if feeds.is_empty() {
             let area = self.list.area();
             let top = area.y + self.list.row() as u16;
@@ -583,10 +582,7 @@ impl Screen for FeedsScreen {
                 area.width,
                 area.bottom().saturating_sub(u32::from(top)) as u16,
             );
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 below,
                 "rss",
                 env.i18n.tr("news.empty.title"),

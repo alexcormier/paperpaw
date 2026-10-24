@@ -73,8 +73,9 @@ impl Screen for DrawerScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.tools.len();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("home.drawer"),
             None,
             self.list.paging(len),
@@ -90,13 +91,13 @@ impl Screen for DrawerScreen {
             let focused = list.shown() && index == list.focus();
             // Named after its action, also where its name is not shown.
             let name = grid::What::Tool(tools[index].clone()).title(env);
-            canvas
+            ui.canvas()
                 .describe(paperpaw_sdk::semantics::Role::Button, &name, rect)
                 .focused(focused);
-            let ink = blocks::draw_tool_lines(canvas, env, rect, &tools[index], lines);
+            let ink = blocks::draw_tool_lines(ui.canvas(), env, rect, &tools[index], lines);
             if focused {
                 // Round its icon and name, never through them.
-                paperpaw_sdk::widgets::grid::draw_tool_focus(canvas, &style, ink);
+                paperpaw_sdk::widgets::grid::draw_tool_focus(ui.canvas(), &style, ink);
             }
         }
     }

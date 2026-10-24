@@ -324,17 +324,10 @@ impl Screen for ListScreen {
             .room
             .as_deref()
             .filter(|_| self.index.is_some() && self.paging().is_none());
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            note,
-            self.paging(),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, note, self.paging());
         if self.offering(env) {
-            return self.offer.draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                self.area,
-            );
+            return self.offer.draw(&mut ui, self.area);
         }
         if self.list.is_empty() {
             let (icon, title, text) = match self.trouble {
@@ -350,23 +343,12 @@ impl Screen for ListScreen {
             } else {
                 ui::tr_input(env, text)
             };
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
-                self.area,
-                icon,
-                env.i18n.tr(title),
-                text,
-            );
+            ui.empty(self.area, icon, env.i18n.tr(title), text);
             return;
         }
-        let room = ui::icon_room(env, &style, true);
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            self.keys,
-            |ui, item, rect, focused| {
-                let canvas = ui.canvas();
+        let room = ui.icon_room(true);
+        self.list
+            .draw(&mut ui, self.keys, |ui, item, rect, focused| {
                 let entry = match item {
                     Item::Heading(_) => return,
                     Item::Entry(entry) => entry,
@@ -375,8 +357,7 @@ impl Screen for ListScreen {
                     return;
                 };
                 let ink = style.focus_ink(focused);
-                let rest =
-                    ui::draw_row_icon(canvas, env, &style, rect, room, Some(row.icon()), ink);
+                let rest = ui.row_icon(rect, room, Some(row.icon()), ink);
                 let name = match row {
                     Row::Search => env.i18n.tr("store.search"),
                     Row::Installed => env.i18n.tr("store.installed-list"),
@@ -389,14 +370,13 @@ impl Screen for ListScreen {
                     let text = env.i18n.plural("store.updates-count", count, &[]);
                     let right = f32::from(rect.x + rect.width) - style.margin() as f32;
                     let band = rest;
-                    rows::draw_pill(canvas, env, &style, band, right, &text, focused);
-                    ui::draw_value_row(canvas, env, &style, rest, focused, name, "");
+                    rows::draw_pill(ui, band, right, &text, focused);
+                    ui::Row::plain(name).focused(focused).draw(ui, rest);
                     return;
                 }
                 let value = self.value(row);
-                ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
-            },
-        );
+                ui::Row::value(name, &value).focused(focused).draw(ui, rest);
+            });
     }
 
     fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {

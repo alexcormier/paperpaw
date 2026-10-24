@@ -387,12 +387,9 @@ impl Screen for BatteryView {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            env.i18n.tr("battery.title"),
-            None,
-            self.paging(),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, env.i18n.tr("battery.title"), None, self.paging());
         let display = env.device.display;
         let footer_height = style.row();
         let (mut y, bottom) = self.room(env);
@@ -409,38 +406,22 @@ impl Screen for BatteryView {
             }
             let rect = Rect::new(0, y, display.width, height);
             match line {
-                Line::Heading(text) => ui::draw_heading(canvas, env, &style, rect, text),
-                Line::Value(title, value) => {
-                    ui::draw_value_row(canvas, env, &style, rect, false, title, value);
-                }
+                Line::Heading(text) => ui.heading(rect, text),
+                Line::Value(title, value) => ui::Row::value(title, value).draw(&mut ui, rect),
                 Line::Message(text) => {
-                    if let Some(font) = style.font(env) {
-                        ui::draw_label(
-                            canvas,
-                            &font,
-                            style.small(),
-                            style.margin() as f32,
-                            rect,
-                            text,
-                            style.faint(ui::Ink::Muted),
-                        );
-                    }
+                    ui::Label::new(text)
+                        .px(style.small())
+                        .color(style.faint(ui::Ink::Muted))
+                        .draw_from(&mut ui, style.margin() as f32, rect);
                 }
             }
             y += height;
         }
-        if let Some(font) = style.font(env) {
-            let rect = Rect::new(0, bottom, display.width, footer_height);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                style.margin() as f32,
-                rect,
-                &self.footer,
-                style.faint(ui::Ink::Note),
-            );
-        }
+        let rect = Rect::new(0, bottom, display.width, footer_height);
+        ui::Label::new(&self.footer)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Note))
+            .draw_from(&mut ui, style.margin() as f32, rect);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

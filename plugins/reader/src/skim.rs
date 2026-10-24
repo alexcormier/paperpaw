@@ -185,14 +185,15 @@ impl Screen for SkimScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill(
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill(
             Rect::new(r.x, r.y, r.width, (u32::from(style.line()) * 2) as u16),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        if ui.font().is_none() {
             return;
-        };
+        }
         // Where one is: the page, then the chapter.
         let x = f32::from(style.margin());
         let info = Rect::new(
@@ -201,26 +202,16 @@ impl Screen for SkimScreen {
             r.width.saturating_sub(2 * style.margin()),
             style.row(),
         );
-        let label_width = ui::draw_label(
-            canvas,
-            &font,
-            style.text(),
-            x,
-            info,
-            &self.label,
-            Color::BLACK,
-        );
+        let label_end = ui::Label::new(&self.label)
+            .px(style.text())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, x, info);
         if !self.chapter.is_empty() {
-            let at = x + label_width + style.gap() as f32 * 2.0;
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                at,
-                info,
-                &self.chapter,
-                style.faint(ui::Ink::Detail),
-            );
+            let at = label_end + style.gap() as f32 * 2.0;
+            ui::Label::new(&self.chapter)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Detail))
+                .draw_from(&mut ui, at, info);
         }
         // The bar has the focus while no button has it, shown as the
         // style shows a focus (its own row widened by what the focus takes
@@ -234,13 +225,14 @@ impl Screen for SkimScreen {
                 self.bar.width + 2 * side,
                 self.bar.height,
             );
-            ui::draw_focus(canvas, &style, around);
+            ui.focus(around);
         }
         let ink = style.focus_ink(on_bar);
         // The bar: read up to here, chapters as ticks, a knob where one is.
         let track = self.track();
         let width = u32::from(track.width);
         let done = (width * self.at / 1000) as u16;
+        let canvas = ui.canvas();
         if on_bar && style.dark_focus() {
             // Gray does not show on the dark focus: a thin line of its ink.
             let thin = (style.line()).max(1);
@@ -272,10 +264,7 @@ impl Screen for SkimScreen {
             .focused(on_bar);
         // The buttons.
         for (i, (slot, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
-            ui::draw_button(
-                canvas,
-                env,
-                &style,
+            ui.button(
                 ui::button_in_slot(&style, *slot),
                 env.i18n.tr(key),
                 false,

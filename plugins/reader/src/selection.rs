@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect};
+use paperpaw_sdk::{Color, Env, Id, Point, Rect};
 
 use crate::SELECTION_MENU;
 use crate::actions::{CANCEL, EXTEND, HIGHLIGHT, MORE, NOTE, TRANSLATE};
@@ -232,17 +232,12 @@ fn item_areas(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<Rect> {
     areas
 }
 
-pub(crate) fn draw_bar(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    items: &[Item],
-    focus: Option<usize>,
-) {
-    let style = UiStyle::new(env);
+pub(crate) fn draw_bar(ui: &mut ui::Ui<'_>, items: &[Item], focus: Option<usize>) {
+    let (env, style) = (ui.env(), *ui.style());
     let bar = bar_area(env, &style);
-    canvas.fill(bar, Color::WHITE);
+    ui.canvas().fill(bar, Color::WHITE);
     let line = u32::from(style.line()).max(2);
-    canvas.fill_rect(
+    ui.canvas().fill_rect(
         i32::from(bar.x),
         i32::from(bar.y),
         u32::from(bar.width),
@@ -261,15 +256,7 @@ pub(crate) fn draw_bar(
             band.height,
         );
         let label = env.i18n.tr(&item.title);
-        ui::draw_button(
-            canvas,
-            env,
-            &style,
-            button,
-            label,
-            false,
-            focus == Some(index),
-        );
+        ui.button(button, label, false, focus == Some(index));
     }
 }
 

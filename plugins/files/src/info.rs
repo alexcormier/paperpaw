@@ -238,12 +238,9 @@ impl Screen for InfoScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            env.i18n.tr("files.info"),
-            None,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, env.i18n.tr("files.info"), None, None);
         let Some(font) = style.font(env) else {
             return;
         };
@@ -258,11 +255,11 @@ impl Screen for InfoScreen {
         // The cover beside title and author.
         match (&layout.cover, &d.cover) {
             (Some((at, Some(small))), _) => {
-                small.draw_round(canvas, at.x, at.y, crate::picture_radius(&style, *at));
+                small.draw_round(ui.canvas(), at.x, at.y, crate::picture_radius(&style, *at));
             }
             (Some((at, None)), _) => {
                 ui::stroke_round(
-                    canvas,
+                    ui.canvas(),
                     &style,
                     *at,
                     ui::button_border(&style),
@@ -276,19 +273,17 @@ impl Screen for InfoScreen {
         for (top, text) in &layout.title {
             let row = Rect::new(text_x, *top, text_width, line(style.title()));
             let x = f32::from(text_x);
-            ui::draw_label(canvas, &font, style.title(), x, row, text, Color::BLACK);
+            ui::Label::new(text)
+                .px(style.title())
+                .color(Color::BLACK)
+                .draw_from(&mut ui, x, row);
         }
         if !d.author.is_empty() {
             let row = Rect::new(text_x, layout.author, text_width, line(style.text()));
-            ui::draw_label(
-                canvas,
-                &font,
-                style.text(),
-                f32::from(text_x),
-                row,
-                &d.author,
-                style.faint(ui::Ink::Detail),
-            );
+            ui::Label::new(&d.author)
+                .px(style.text())
+                .color(style.faint(ui::Ink::Detail))
+                .draw_from(&mut ui, f32::from(text_x), row);
         }
 
         // Label and value in two columns, the values aligned; label and
@@ -299,6 +294,7 @@ impl Screen for InfoScreen {
             let baseline = i32::from(y) + ascent as i32;
             let label = env.i18n.tr(key.as_ref());
             let row = Rect::new(margin, y, width, line(style.text()));
+            let canvas = ui.canvas();
             canvas.describe(Role::Text, label, row);
             canvas.describe(Role::Text, value, row);
             font.draw(
@@ -326,7 +322,10 @@ impl Screen for InfoScreen {
         let mut y = layout.description_top;
         for text in &layout.description {
             let row = Rect::new(margin, y, width, line(style.text()));
-            ui::draw_label(canvas, &font, style.text(), x, row, text, Color::BLACK);
+            ui::Label::new(text)
+                .px(style.text())
+                .color(Color::BLACK)
+                .draw_from(&mut ui, x, row);
             y += line(style.text());
         }
     }

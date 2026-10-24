@@ -312,7 +312,7 @@ fn a_label_on_one_line_keeps_to_its_area_and_alignment() {
     assert_eq!(told, said);
     assert!(old.view().data == new.view().data);
     // From between pixels, in a font given, as `draw_label` too.
-    for x in [41.37, 100.5] {
+    for x in [41.37, 100.5, 240.0, 300.0] {
         let (told, old) = describe(480, 200, |c| {
             ui::draw_label(c, &font, size, x, area, text, Color::BLACK);
         });

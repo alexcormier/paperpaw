@@ -124,39 +124,40 @@ impl Screen for FindScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("files.list.find.title");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, None, None);
         let Some(font) = style.font(env) else {
             return;
         };
         // The search, as a field.
         let focused = self.shown && self.focus == 0;
         if focused {
-            ui::draw_focus(canvas, &style, self.search);
+            ui.focus(self.search);
         } else {
             let field = ui::focus_rect(&style, self.search);
             let radius = style.radius(u32::from(field.height));
-            canvas.stroke_round(field, u32::from(style.line()).max(1), radius, Color::BLACK);
+            ui.canvas()
+                .stroke_round(field, u32::from(style.line()).max(1), radius, Color::BLACK);
         }
         let ink = style.focus_ink(focused);
         let margin = style.margin() as f32;
         let size = style.text() * ui::ICON_SCALE;
-        let w = ui::draw_icon(canvas, env, "search", size, margin, self.search, ink);
+        let w = ui.icon("search", size, margin, self.search, ink);
         let x = margin + w + style.gap() as f32;
         let hint = env.i18n.tr("files.list.find.search");
         let faint = style.focus_faint(focused, ui::Ink::Detail);
-        ui::draw_label(canvas, &font, style.text(), x, self.search, hint, faint);
+        ui::Label::new(hint)
+            .px(style.text())
+            .color(faint)
+            .draw_from(&mut ui, x, self.search);
         // The letters, the focused one on a dark circle.
         let big = style.title() * 1.2;
         for (n, (cell, letter)) in self.cells.iter().zip(&self.letters).enumerate() {
             let focused = self.shown && self.focus == n + 1;
             let ink = if focused {
                 let inner = cell.inset(style.gap() / 3, style.gap() / 3);
-                canvas.fill_round(inner, u32::from(inner.height / 2), Color::BLACK);
+                ui.canvas()
+                    .fill_round(inner, u32::from(inner.height / 2), Color::BLACK);
                 Color::WHITE
             } else {
                 Color::BLACK
@@ -165,10 +166,13 @@ impl Screen for FindScreen {
             let text = core::str::from_utf8(&label).unwrap_or("#");
             let w = font.measure(big, text);
             let x = f32::from(cell.x) + (f32::from(cell.width) - w) / 2.0;
-            ui::draw_label(canvas, &font, big, x, *cell, text, ink);
+            ui::Label::new(text)
+                .px(big)
+                .color(ink)
+                .draw_from(&mut ui, x, *cell);
         }
         let note = ui::tr_input(env, "files.list.find.note");
-        ui::draw_message(canvas, env, &style, self.note, note);
+        ui.message(self.note, note);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

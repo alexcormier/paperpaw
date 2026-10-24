@@ -922,30 +922,24 @@ impl ListScreen {
         self.refilter_keeping(env, keep, true);
     }
 
-    fn draw_shelf(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        row: &ShelfRow,
-        rect: Rect,
-        focused: bool,
-    ) {
+    fn draw_shelf(&self, ui: &mut ui::Ui<'_>, row: &ShelfRow, rect: Rect, focused: bool) {
         let style = &self.layout.style;
         // A row, whose words are those drawn in it.
-        canvas.describe(Role::Row, "", rect).focused(focused);
+        ui.canvas().describe(Role::Row, "", rect).focused(focused);
         let ink = style.focus_ink(focused);
-        let room = ui::icon_room(env, style, true);
+        let room = ui.icon_room(true);
         let band = ui::title_area(style, rect);
-        ui::draw_row_icon(canvas, env, style, band, room, Some(row.icon), ink);
+        ui.row_icon(band, room, Some(row.icon), ink);
         let text = Rect::new(
             rect.x + room,
             rect.y,
             rect.width.saturating_sub(room),
             rect.height,
         );
-        ui::draw_noted_row(
-            canvas, env, style, text, focused, &row.title, "›", &row.note,
-        );
+        ui::Row::value(&row.title, "›")
+            .note(&row.note)
+            .focused(focused)
+            .draw(ui, text);
     }
 }
 
@@ -961,27 +955,14 @@ impl Screen for ListScreen {
         let len = self.len();
         let paging = (len > 0).then(|| ui::Paging::new(self.page_of(self.focus), self.pages()));
         let title = env.i18n.tr("files.title");
-        layout.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            paging,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        layout.header.draw(&mut ui, title, None, paging);
         let has_books = self.index.has_books();
         let focused_filter = self.shown && self.filter_focused;
         if let Some(row) = layout.filter_row {
             if has_books {
                 let (label, end) = (&self.filter_label, &self.filter_end);
-                rows::draw_filter_row(
-                    canvas,
-                    env,
-                    &style,
-                    row,
-                    focused_filter,
-                    label,
-                    end,
-                    self.find,
-                );
+                rows::draw_filter_row(&mut ui, row, focused_filter, label, end, self.find);
             }
         } else {
             if let Some(button) = self.find {
@@ -989,7 +970,7 @@ impl Screen for ListScreen {
                 let w = ui::icon_width(env, "search", size);
                 let x = f32::from(button.x) + (f32::from(button.width) - w) / 2.0;
                 let ink = style.header_colors().1;
-                ui::draw_icon(canvas, env, "search", size, x, button, ink);
+                ui.icon("search", size, x, button, ink);
             }
             // No chips before there are books to sort. Next in your series
             // is on the shelves: their chip is the chosen one then.
@@ -1001,7 +982,7 @@ impl Screen for ListScreen {
                 };
                 let chosen = Filter::ALL.iter().position(|f| *f == shown);
                 layout.chips.draw(
-                    &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+                    &mut ui,
                     chosen.unwrap_or(usize::MAX),
                     chosen.filter(|_| focused_filter),
                 );
@@ -1010,10 +991,10 @@ impl Screen for ListScreen {
         if len == 0 {
             let area = layout.area;
             if self.collecting && !has_books {
-                ui::draw_message(canvas, env, &style, area, &self.empty_text);
+                ui.message(area, &self.empty_text);
             } else {
                 let (title, text) = (&self.empty_title, &self.empty_text);
-                ui::draw_empty(canvas, env, &style, area, "books", title, text);
+                ui.empty(area, "books", title, text);
             }
             return;
         }
@@ -1021,32 +1002,32 @@ impl Screen for ListScreen {
         let page = self.page_of(self.focus);
         for index in self.page_range(page) {
             let rect = self.place(index);
-            if canvas.clip().intersection(&rect).is_none() {
+            if ui.canvas().clip().intersection(&rect).is_none() {
                 continue;
             }
             let focused = self.shown && !self.filter_focused && index == self.focus;
             if self.card && index == 0 {
                 if let Some(book) = self.book(0) {
-                    rows::draw_card(canvas, env, &style, sizes, rect, focused, book);
+                    rows::draw_card(&mut ui, sizes, rect, focused, book);
                 }
                 continue;
             }
             if let Some(g) = self.covers() {
                 if let Some(book) = self.book(index) {
                     let count = self.counts.get(index).copied().unwrap_or(1);
-                    grid::draw_cell(canvas, env, &style, sizes, g, rect, focused, book, count);
+                    grid::draw_cell(&mut ui, sizes, g, rect, focused, book, count);
                 }
                 continue;
             }
             if focused {
-                ui::draw_focus(canvas, &style, rect);
+                ui.focus(rect);
             } else {
-                ui::draw_separator(canvas, &style, rect, 0);
+                ui.separator(rect, 0);
             }
             if self.filter == Filter::Shelves {
-                self.draw_shelf(canvas, env, &self.shelves[index], rect, focused);
+                self.draw_shelf(&mut ui, &self.shelves[index], rect, focused);
             } else if let Some(book) = self.book(index) {
-                rows::draw_book_row(canvas, env, &style, sizes, rect, focused, book, false);
+                rows::draw_book_row(&mut ui, sizes, rect, focused, book, false);
             }
         }
     }

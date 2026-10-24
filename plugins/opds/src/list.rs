@@ -268,19 +268,17 @@ impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let rows = self.rows();
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("opds.title"),
             None,
             self.list.paging(rows.len()),
         );
         let catalogs = &self.catalogs;
         let running = self.sync.borrow().running();
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value, note) = match rows[index] {
                     Row::Sync if running => (
                         env.i18n.tr("opds.stop").to_string(),
@@ -310,12 +308,14 @@ impl Screen for ListScreen {
                         String::new(),
                     ),
                 };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
-            },
-        );
-        canvas.fill(self.status, Color::WHITE);
+                ui::Row::value(&title, &value)
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        ui.canvas().fill(self.status, Color::WHITE);
         let text = self.status_text(env);
-        ui::draw_note_line(canvas, env, &style, self.status, &text);
+        ui.note_line(self.status, &text);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

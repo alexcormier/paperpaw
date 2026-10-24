@@ -222,7 +222,9 @@ impl<'t> Label<'t> {
         }
         canvas.describe(Role::Text, self.text, told);
         // A pixel of slack for rounding: callers often measured to fit.
-        let text: Cow<'_, str> = if width > room + 1.0 {
+        // No room at all (it starts past its area): drawn whole, the
+        // canvas clips it, as the parts' functions did.
+        let text: Cow<'_, str> = if room > 0.0 && width > room + 1.0 {
             let short = fit(font, size, self.text, room);
             width = font.measure(size, &short);
             Cow::Owned(short)

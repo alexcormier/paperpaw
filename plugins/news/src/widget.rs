@@ -344,6 +344,7 @@ fn draw_row(
     let small = line(&font, style.small());
     let rules = widgets::shows(env, NAME, "rules");
     let room = if rules { style.gap() } else { style.gap() / 3 };
+    let mut ui = ui::Ui::new(canvas, env, &style);
     if rule && rules {
         // A thin rule, dithered light where the panel has few grays.
         let thin = u32::from(style.line()).max(1) as u16;
@@ -352,7 +353,8 @@ fn draw_row(
         } else {
             Color::gray(150)
         };
-        canvas.fill_shaded(Rect::new(row.x, row.y, row.width, thin), gray);
+        ui.canvas()
+            .fill_shaded(Rect::new(row.x, row.y, row.width, thin), gray);
     }
     let align = widgets::align(env, NAME);
     let source_h = if widgets::shows(env, NAME, "source") {
@@ -367,17 +369,23 @@ fn draw_row(
         row.height.saturating_sub(room + source_h),
     );
     if lines_each(env) > 1 {
-        widgets::draw_wrapped(canvas, env, text, align, size, title, look.ink);
+        widgets::draw_wrapped(ui.canvas(), env, text, align, size, title, look.ink);
     } else {
         let shown = ui::fit(&font, size, title, f32::from(text.width));
         let x = align.x(text, font.measure(size, &shown));
-        ui::draw_label(canvas, &font, size, x, text, &shown, look.ink);
+        ui::Label::new(&shown)
+            .px(size)
+            .color(look.ink)
+            .draw_from(&mut ui, x, text);
     }
     if source_h > 0 {
         let at = Rect::new(row.x, text.y + text.height, row.width, small);
         let shown = ui::fit(&font, style.small(), source, f32::from(at.width));
         let x = align.x(at, font.measure(style.small(), &shown));
-        ui::draw_label(canvas, &font, style.small(), x, at, &shown, look.faint);
+        ui::Label::new(&shown)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(&mut ui, x, at);
     }
 }
 

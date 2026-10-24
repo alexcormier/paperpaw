@@ -39,8 +39,8 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Commands, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority,
-    Rect, RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
+    Color, Command, Commands, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("files");
@@ -306,17 +306,17 @@ pub(crate) fn stem_and_format(name: &str) -> (&str, String) {
 /// A book without a cover: an outline with the title's first letter,
 /// large, and the format below it.
 pub(crate) fn draw_placeholder(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
+    ui: &mut ui::Ui<'_>,
     area: Rect,
     title: &str,
     format: &str,
     color: Color,
 ) {
+    let style = ui.style();
     let radius = cover_radius(style, area);
-    canvas.stroke_round(area, ui::button_border(style), radius, color);
-    let Some(font) = style.font(env) else {
+    ui.canvas()
+        .stroke_round(area, ui::button_border(style), radius, color);
+    let Some(font) = ui.font() else {
         return;
     };
     let center = |text: &str, size: f32| {
@@ -344,29 +344,22 @@ pub(crate) fn draw_placeholder(
     match initial {
         Some(initial) if size >= style.text() => {
             let top = Rect::new(area.x, area.y, area.width, upper);
-            ui::draw_label(
-                canvas,
-                &font,
-                size,
-                center(initial, size),
-                top,
-                initial,
-                color,
-            );
+            ui::Label::new(initial)
+                .px(size)
+                .color(color)
+                .draw_from(ui, center(initial, size), top);
             let bottom = Rect::new(area.x, area.y + upper, area.width, lower);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                center(format, style.small()),
-                bottom,
-                format,
-                color,
-            );
+            ui::Label::new(format)
+                .px(style.small())
+                .color(color)
+                .draw_from(ui, center(format, style.small()), bottom);
         }
         _ => {
             let x = center(format, style.small());
-            ui::draw_label(canvas, &font, style.small(), x, area, format, color);
+            ui::Label::new(format)
+                .px(style.small())
+                .color(color)
+                .draw_from(ui, x, area);
         }
     }
 }

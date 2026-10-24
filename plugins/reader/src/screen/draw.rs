@@ -130,14 +130,14 @@ impl Book {
         ))
     }
 
-    pub(super) fn draw_back(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    pub(super) fn draw_back(&self, ui: &mut ui::Ui<'_>) {
+        let env = ui.env();
         let Some(area) = self.back_area(env) else {
             return;
         };
         // A button as the interface's others.
-        let style = UiStyle::new(env);
         let label = env.i18n.tr("reader.link-back");
-        ui::draw_button(canvas, env, &style, area, label, false, false);
+        ui.button(area, label, false, false);
     }
 
     /// Where a tap sets or removes a bookmark: the top right corner.
@@ -183,12 +183,7 @@ impl Book {
 
     /// A note's sign in the right margin, beside the first line of its
     /// highlight (the highlights themselves are marks, see `marks`).
-    pub(super) fn draw_note_signs(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        words: &[WordBox],
-    ) {
+    pub(super) fn draw_note_signs(&self, ui: &mut ui::Ui<'_>, words: &[WordBox]) {
         let highlights: Vec<&Mark> = self
             .marks
             .iter()
@@ -197,7 +192,7 @@ impl Book {
         if highlights.is_empty() {
             return;
         }
-        let style = UiStyle::new(env);
+        let style = ui.style();
         let size = style.small();
         let columns = &self.typography.columns;
         for mark in highlights.iter().filter(|m| m.noted) {
@@ -209,7 +204,7 @@ impl Book {
                     _ => self.right_edge(),
                 };
                 let x = right + (style.gap() as f32) / 2.0;
-                ui::draw_icon(canvas, env, "note", size, x, first.area, Color::BLACK);
+                ui.icon("note", size, x, first.area, Color::BLACK);
             }
         }
     }

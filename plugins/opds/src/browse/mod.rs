@@ -347,8 +347,8 @@ impl BrowseScreen {
 
     /// The message below the list: without rows it takes the room it
     /// needs above its line.
-    fn draw_status(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, empty: bool) {
-        let style = self.style;
+    fn draw_status(&self, ui: &mut ui::Ui<'_>, empty: bool) {
+        let env = ui.env();
         let text = match &self.message {
             Some(message) => message.clone(),
             None if empty && self.loading.is_none() => env.i18n.tr("opds.empty").to_string(),
@@ -358,7 +358,8 @@ impl BrowseScreen {
         let status = if empty {
             let s = self.status;
             let top = self.list.area().y;
-            let needed = ui::note_line_height(env, &style, s.width, &text)
+            let needed = ui
+                .note_line_height(s.width, &text)
                 .clamp(s.height, s.bottom().saturating_sub(u32::from(top)) as u16);
             Rect::new(
                 s.x,
@@ -369,8 +370,8 @@ impl BrowseScreen {
         } else {
             self.status
         };
-        canvas.fill(status, Color::WHITE);
-        ui::draw_note_line(canvas, env, &style, status, &text);
+        ui.canvas().fill(status, Color::WHITE);
+        ui.note_line(status, &text);
     }
 }
 
@@ -383,17 +384,12 @@ impl Screen for BrowseScreen {
         } else {
             &self.feed.title
         };
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(rows.len()),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(rows.len()));
         if self.offering(env) {
             let area = self.list.area();
-            return self
-                .offer
-                .draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), area);
+            return self.offer.draw(&mut ui, area);
         }
         let entries = &self.feed.entries;
         let covers = &self.covers;
@@ -404,11 +400,8 @@ impl Screen for BrowseScreen {
             0
         };
         let readable = |ext: &str| env.formats.supports(&format!("book.{ext}"));
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (title, value, note) = match rows[index] {
                     Row::Search => (
                         env.i18n.tr("opds.search").to_string(),
@@ -443,7 +436,7 @@ impl Screen for BrowseScreen {
                     Row::Entry(i) if column > 0 => {
                         if let Some(cover) = &covers[i] {
                             let y = rect.y + rect.height.saturating_sub(cover.height()) / 2;
-                            cover.draw(canvas, rect.x + style.margin(), y);
+                            cover.draw(ui.canvas(), rect.x + style.margin(), y);
                         }
                         Rect::new(
                             rect.x + column,
@@ -454,10 +447,12 @@ impl Screen for BrowseScreen {
                     }
                     _ => rect,
                 };
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
-            },
-        );
-        self.draw_status(canvas, env, rows.is_empty());
+                ui::Row::value(&title, &value)
+                    .note(&note)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        self.draw_status(&mut ui, rows.is_empty());
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

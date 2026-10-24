@@ -316,21 +316,14 @@ impl Screen for ViewScreen {
         let style = self.style;
         let title = self.title(env);
         let paging = self.list.paging(self.len());
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &title,
-            None,
-            paging,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, &title, None, paging);
         if self.len() == 0 {
             let (icon, title, text) = match self.view {
                 View::Search(_) => ("search", "store.search.none", "store.search.none.help"),
                 _ => ("puzzle", "store.empty", ""),
             };
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 icon,
                 env.i18n.tr(title),
@@ -343,60 +336,52 @@ impl Screen for ViewScreen {
             return;
         }
         if let Some(room) = self.room.as_deref().filter(|_| self.status.height > 0) {
-            ui::draw_note_line(canvas, env, &style, self.status, room);
+            ui.note_line(self.status, room);
         }
         let job = self.job.as_ref();
         let queued = self.queued.as_slice();
         let jump = self.list.pages(self.len()) > 1;
-        let room = ui::icon_room(env, &style, true);
+        let room = ui.icon_room(true);
         let top = &self.top;
         let order = self.order;
         let len = self.len();
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, row, rect, focused| {
-                let canvas = ui.canvas();
-                if let Some(&top) = top.get(row) {
-                    let ink = style.focus_ink(focused);
-                    let (icon, name, value) = match top {
-                        Top::Fonts => ("typography", env.i18n.tr("store.fonts"), "›".to_string()),
-                        Top::Sort => {
-                            let key = alloc::format!("store.order.{}", order.key());
-                            (
-                                "sort-ascending",
-                                env.i18n.tr("store.sort"),
-                                env.i18n.tr(&key).to_string(),
-                            )
-                        }
-                        Top::UpdateAll => (
-                            "circle-arrow-up",
-                            env.i18n.tr("store.update-all"),
-                            String::new(),
-                        ),
-                    };
-                    // Below the order of a long list: how to go to a page.
-                    if top == Top::Sort && jump {
-                        let band = ui::title_area(&style, rect);
-                        let rest =
-                            ui::draw_row_icon(canvas, env, &style, band, room, Some(icon), ink);
-                        ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
-                        let help = ui::tr_input(env, "store.jump.help");
-                        rows::draw_note(canvas, env, &style, rect, rest.x, focused, help);
-                        return;
+        self.list.draw(&mut ui, len, |ui, row, rect, focused| {
+            if let Some(&top) = top.get(row) {
+                let ink = style.focus_ink(focused);
+                let (icon, name, value) = match top {
+                    Top::Fonts => ("typography", env.i18n.tr("store.fonts"), "›".to_string()),
+                    Top::Sort => {
+                        let key = alloc::format!("store.order.{}", order.key());
+                        (
+                            "sort-ascending",
+                            env.i18n.tr("store.sort"),
+                            env.i18n.tr(&key).to_string(),
+                        )
                     }
-                    let rest = ui::draw_row_icon(canvas, env, &style, rect, room, Some(icon), ink);
-                    ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
+                    Top::UpdateAll => (
+                        "circle-arrow-up",
+                        env.i18n.tr("store.update-all"),
+                        String::new(),
+                    ),
+                };
+                // Below the order of a long list: how to go to a page.
+                if top == Top::Sort && jump {
+                    let band = ui::title_area(&style, rect);
+                    let rest = ui.row_icon(band, room, Some(icon), ink);
+                    ui::Row::value(name, &value).focused(focused).draw(ui, rest);
+                    let help = ui::tr_input(env, "store.jump.help");
+                    rows::draw_note(ui, rect, rest.x, focused, help);
                     return;
                 }
-                if let Some((_, plugin)) = self.plugin(row) {
-                    let origins = &self.origins;
-                    rows::draw(
-                        canvas, env, &style, rect, focused, plugin, job, queued, origins,
-                    );
-                }
-            },
-        );
+                let rest = ui.row_icon(rect, room, Some(icon), ink);
+                ui::Row::value(name, &value).focused(focused).draw(ui, rest);
+                return;
+            }
+            if let Some((_, plugin)) = self.plugin(row) {
+                let origins = &self.origins;
+                rows::draw(ui, rect, focused, plugin, job, queued, origins);
+            }
+        });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

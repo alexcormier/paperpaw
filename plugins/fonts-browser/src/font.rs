@@ -236,17 +236,11 @@ impl Screen for FontScreen {
         let style = self.style;
         let rows = self.rows(env);
         let title = self.font.as_ref().map_or("", |f| f.name.as_str());
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(rows.len()),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(rows.len()));
         let Some(font) = &self.font else {
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 self.list.area(),
                 "typography",
                 env.i18n.tr("fonts-browser.gone"),
@@ -272,7 +266,7 @@ impl Screen for FontScreen {
             for (n, range) in lines.into_iter().take(SAMPLE_LINES).enumerate() {
                 let baseline = f32::from(self.sample.y) + line * n as f32 + ascent;
                 face.draw(
-                    canvas,
+                    ui.canvas(),
                     size,
                     f32::from(self.sample.x) + margin,
                     baseline as i32,
@@ -298,7 +292,7 @@ impl Screen for FontScreen {
                 let text = ui::fit(&ui_font, style.small(), text, width);
                 let baseline = f32::from(self.info.y) + line * n as f32 + ascent;
                 ui_font.draw(
-                    canvas,
+                    ui.canvas(),
                     style.small(),
                     margin,
                     baseline as i32,
@@ -308,19 +302,17 @@ impl Screen for FontScreen {
             }
         }
         let job = self.job.as_ref();
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (name, value) = FontScreen::row_text(env, job, font, rows[index]);
-                ui::draw_value_row(canvas, env, &style, rect, focused, &name, &value);
-            },
-        );
-        canvas.fill(self.status, Color::WHITE);
+                ui::Row::value(&name, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        ui.canvas().fill(self.status, Color::WHITE);
         if rows.first() == Some(&Row::Stop) {
             let note = env.i18n.tr("fonts-browser.downloading");
-            ui::draw_note_line(canvas, env, &style, self.status, note);
+            ui.note_line(self.status, note);
         }
     }
 

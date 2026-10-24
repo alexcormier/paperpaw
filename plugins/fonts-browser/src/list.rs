@@ -217,12 +217,9 @@ impl Screen for ListScreen {
         let style = self.style;
         let len = self.fonts.len();
         let title = env.i18n.tr("fonts-browser.title");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(len),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
             let (icon, title, text) = match self.trouble {
                 Trouble::Offline => (
@@ -242,50 +239,47 @@ impl Screen for ListScreen {
             } else {
                 ui::tr_input(env, text)
             };
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
-                self.list.area(),
-                icon,
-                env.i18n.tr(title),
-                text,
-            );
+            ui.empty(self.list.area(), icon, env.i18n.tr(title), text);
             return;
         }
         let (fonts, samples, job) = (&self.fonts, &self.samples, self.job.as_ref());
         let size = samples.size as f32;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let font = &fonts[index];
-                let state = ListScreen::state(env, job, font);
-                // The name in its own font, once its sample is here, in the
-                // room the state leaves.
-                let band = ui::title_area(&style, rect);
-                ui::draw_value_row(canvas, env, &style, band, focused, "", &state);
-                let Some(ui_font) = style.font(env) else {
-                    return;
-                };
-                let ink = style.focus_ink(focused);
-                let margin = style.margin() as f32;
-                let x = f32::from(rect.x) + margin;
-                let room =
-                    f32::from(rect.width) - 3.0 * margin - ui_font.measure(style.text(), &state);
-                let (face, size) = match samples.get(&font.id) {
-                    Some(sample) => (sample, size),
-                    None => (ui_font, style.text()),
-                };
-                let name = ui::fit(&face, size, &font.name, room);
-                ui::draw_label(canvas, &face, size, x, band, &name, ink);
-                ui::draw_note(canvas, env, &style, rect, focused, &describe(env, font));
-            },
-        );
-        canvas.fill(self.status, Color::WHITE);
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let font = &fonts[index];
+            let state = ListScreen::state(env, job, font);
+            // The name in its own font, once its sample is here, in the
+            // room the state leaves.
+            let band = ui::title_area(&style, rect);
+            ui::Row::value("", &state).focused(focused).draw(ui, band);
+            let Some(ui_font) = style.font(env) else {
+                return;
+            };
+            let ink = style.focus_ink(focused);
+            let margin = style.margin() as f32;
+            let x = f32::from(rect.x) + margin;
+            let room = f32::from(rect.width) - 3.0 * margin - ui_font.measure(style.text(), &state);
+            let (face, size) = match samples.get(&font.id) {
+                Some(sample) => (sample, size),
+                None => (ui_font, style.text()),
+            };
+            let name = ui::fit(&face, size, &font.name, room);
+            ui::Label::new(&name)
+                .font(face)
+                .px(size)
+                .color(ink)
+                .draw_from(ui, x, band);
+            ui::draw_note(
+                ui.canvas(),
+                env,
+                &style,
+                rect,
+                focused,
+                &describe(env, font),
+            );
+        });
+        ui.canvas().fill(self.status, Color::WHITE);
         let note = ui::tr_input(env, "fonts-browser.hint");
-        ui::draw_note_line(canvas, env, &style, self.status, note);
+        ui.note_line(self.status, note);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

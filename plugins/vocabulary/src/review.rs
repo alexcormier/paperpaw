@@ -213,9 +213,9 @@ impl ReviewScreen {
         })
     }
 
-    fn draw_card(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, card: &Card) {
+    fn draw_card(&self, ui: &mut ui::Ui<'_>, area: Rect, card: &Card) {
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let margin = style.margin();
@@ -223,7 +223,7 @@ impl ReviewScreen {
         let large = style.text() * 1.5;
         let mut y = area.y + style.gap() * 2;
         let bottom = area.y + area.height;
-        let lines = |canvas: &mut Canvas<'_>, y: &mut u16, text: &str, size: f32, ink: Color| {
+        let lines = |ui: &mut ui::Ui<'_>, y: &mut u16, text: &str, size: f32, ink: Color| {
             let height = font.line_metrics(size).line_height as u16;
             for range in font.wrap(size, text, width) {
                 if *y + height > bottom {
@@ -232,23 +232,26 @@ impl ReviewScreen {
                 let line = &text[range];
                 let x = f32::from(margin) + (width - font.measure(size, line)).max(0.0) / 2.0;
                 let row = Rect::new(margin, *y, area.width.saturating_sub(2 * margin), height);
-                ui::draw_label(canvas, &font, size, x, row, line, ink);
+                ui::Label::new(line)
+                    .px(size)
+                    .color(ink)
+                    .draw_from(ui, x, row);
                 *y += height;
             }
         };
-        lines(canvas, &mut y, &card.front, large, Color::BLACK);
+        lines(ui, &mut y, &card.front, large, Color::BLACK);
         if !self.revealed {
             return;
         }
         y += style.gap();
         let rule = Rect::new(margin * 2, y, area.width.saturating_sub(4 * margin), 1);
-        canvas.fill(rule, style.faint(ui::Ink::Note));
+        ui.canvas().fill(rule, style.faint(ui::Ink::Note));
         y += style.gap() * 2;
-        lines(canvas, &mut y, &card.back, style.text(), Color::BLACK);
+        lines(ui, &mut y, &card.back, style.text(), Color::BLACK);
         if !card.example.is_empty() {
             y += style.gap();
             lines(
-                canvas,
+                ui,
                 &mut y,
                 &card.example,
                 style.small(),
@@ -300,22 +303,18 @@ impl Screen for ReviewScreen {
         let count = self.queue.len() + usize::from(self.current.is_some());
         let left = env.i18n.plural("vocabulary.review.left", count as i64, &[]);
         let note = self.current.is_some().then_some(left.as_str());
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            note,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, note, None);
         let area = self.content(env);
         let Some((_, card)) = &self.current else {
-            ui::draw_message(canvas, env, &style, area, &self.message);
+            ui.message(area, &self.message);
             return;
         };
-        self.draw_card(canvas, env, area, card);
+        self.draw_card(&mut ui, area, card);
         let buttons = self.buttons(env);
         if !self.revealed {
             let label = env.i18n.tr("vocabulary.review.show");
-            ui::draw_button(canvas, env, &style, buttons[0], label, false, true);
+            ui.button(buttons[0], label, false, true);
             return;
         }
         let waits = &self.waits;
@@ -325,7 +324,7 @@ impl Screen for ReviewScreen {
         let small = font.line_metrics(style.small()).line_height as u16;
         for (i, rect) in buttons.iter().enumerate() {
             let label = env.i18n.tr(ANSWER_KEYS[i]);
-            ui::draw_button(canvas, env, &style, *rect, label, false, i == self.focus);
+            ui.button(*rect, label, false, i == self.focus);
             // When it would come again, above its button.
             let wait = ui::fit(&font, style.small(), &waits[i], f32::from(rect.width));
             let x = f32::from(rect.x)
@@ -336,15 +335,10 @@ impl Screen for ReviewScreen {
                 rect.width,
                 small,
             );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                x,
-                above,
-                &wait,
-                style.faint(ui::Ink::Note),
-            );
+            ui::Label::new(&wait)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(&mut ui, x, above);
         }
     }
 
