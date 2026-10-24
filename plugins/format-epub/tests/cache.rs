@@ -99,7 +99,10 @@ fn a_chapter_converted_halfway_is_converted_again() {
     let doc = EpubDocument::open(&storage, PATH).unwrap();
     let first = blocks(&doc, &storage);
     let cache = files(&storage, ".paperpaw/plugins/format-epub");
-    let end = cache.iter().find(|p| p.ends_with("/sections/1/end")).unwrap();
+    let end = cache
+        .iter()
+        .find(|p| p.ends_with("/sections/1/end"))
+        .unwrap();
     let text_file = end.replace("/end", "/txt");
     storage.remove(end).unwrap();
     let mut half = storage.get(&text_file).unwrap();
