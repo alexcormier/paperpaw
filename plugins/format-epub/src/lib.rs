@@ -23,6 +23,7 @@
 
 extern crate alloc;
 
+mod cache_paths;
 mod cached;
 mod cbz;
 mod convert;
