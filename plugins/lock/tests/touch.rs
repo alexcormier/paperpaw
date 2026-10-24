@@ -292,7 +292,7 @@ fn with_buttons_only_nothing_changes() {
     assert!(!t.locked());
 }
 
-const LOCKED_TEXT: &str = "Touch is locked. To unlock, tap the screen twice";
+const LOCKED_TEXT: &str = "Touch is locked. To unlock, tap twice";
 const UNLOCKED_TEXT: &str = "Touch is unlocked.";
 
 /// However touch is locked (Settings or the quick panel, which set the
