@@ -240,6 +240,7 @@ pub fn text_cut(scene: &Scene<'_>) -> Vec<Issue> {
 pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
     let fields: Vec<_> = scene.parts(&[Role::Field]).map(|f| f.area).collect();
+    let buttons: Vec<_> = scene.parts(&[Role::Button]).map(|b| b.area).collect();
     for d in scene.parts(&[Role::Text, Role::Heading, Role::Button]) {
         let label = d.label.trim_end();
         if !label.ends_with('…') || !says_something(label) {
@@ -271,8 +272,13 @@ pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
             continue;
         };
         // A text of several lines cut short: an explanation, which must be
-        // read whole, wherever its last line ends.
-        if run.height > height + height / 2 {
+        // read whole, wherever its last line ends. Not a button's label
+        // (the ink of a button filled is no lines of text).
+        let on_button = d.role == Role::Button
+            || buttons
+                .iter()
+                .any(|b| b.intersection(&d.area) == Some(d.area));
+        if run.height > height + height / 2 && !on_button {
             let message = format!(
                 "{} is cut short: an explanation shows whole; give it the room there is, or a \
                  way to read all of it (a row that opens it)",
