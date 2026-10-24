@@ -562,6 +562,9 @@ file to your report.
 - SDK: `ui::Chips` and `ui::Segments` keep their labels: they are given
   once when the part is made (`Segments::new` takes the labels, not
   their count) and `draw` no longer takes them; `label(index)` reads one.
+  A label is a translation key (or text that is none), kept as a
+  `Cow<'static, str>` without a copy and translated where it is measured
+  and drawn.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

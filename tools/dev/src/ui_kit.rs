@@ -512,19 +512,14 @@ fn controls(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect)
 /// Segments as tabs and as a choice of sizes, one focused.
 fn segments(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, style.margin());
     // Side by side where every word fits, else in more rows: never cut.
-    let tabs = [
-        tr("ui-kit.tab.books"),
-        tr("ui-kit.tab.shelves"),
-        tr("ui-kit.tab.notes"),
-    ];
+    let tabs = ["ui-kit.tab.books", "ui-kit.tab.shelves", "ui-kit.tab.notes"];
     let row = stack.take(ui::Segments::height_for(env, style, width, &tabs));
-    ui::Segments::fitted(env, style, row, &tabs).draw(canvas, env, style, 0, None);
+    ui::Segments::fitted(env, style, row, tabs).draw(canvas, env, style, 0, None);
     let sizes = ["S", "M", "L", "XL"];
     let row = stack.take(ui::Segments::height_for(env, style, width, &sizes));
-    ui::Segments::fitted(env, style, row, &sizes).draw(canvas, env, style, 1, Some(3));
+    ui::Segments::fitted(env, style, row, sizes).draw(canvas, env, style, 1, Some(3));
 }
 
 /// Cards in each frame, and a grid with the focus on one cell.
@@ -662,20 +657,19 @@ fn ticks(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
 fn chips(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let margin = style.margin();
     let width = area.width;
-    let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, 0);
     let labels = [
-        tr("ui-kit.chip.all"),
-        tr("ui-kit.chip.reading"),
-        tr("ui-kit.chip.unread"),
-        tr("ui-kit.chip.finished"),
-        tr("ui-kit.chip.shelves"),
+        "ui-kit.chip.all",
+        "ui-kit.chip.reading",
+        "ui-kit.chip.unread",
+        "ui-kit.chip.finished",
+        "ui-kit.chip.shelves",
     ];
     let inner = width.saturating_sub(2 * margin);
     let chips_height = ui::Chips::height_for(env, style, inner, &labels);
     let chips_row = stack.take(chips_height + 2 * margin);
     let inside = Rect::new(margin, chips_row.y + margin, inner, chips_height);
-    ui::Chips::new(env, style, inside, &labels).draw(canvas, env, style, 1, Some(2));
+    ui::Chips::new(env, style, inside, labels).draw(canvas, env, style, 1, Some(2));
     let rest = stack.rest();
     let text_area = Rect::new(
         margin,
@@ -683,7 +677,7 @@ fn chips(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         rest.width.saturating_sub(2 * margin),
         rest.height.saturating_sub(2 * margin),
     );
-    let text = tr("ui-kit.long-text");
+    let text = env.i18n.tr("ui-kit.long-text");
     let mut view = ui::TextView::new(env, style, text_area, text);
     view.scroll(1);
     view.draw(canvas, env, style, text);

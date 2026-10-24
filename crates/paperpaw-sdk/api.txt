@@ -3622,7 +3622,7 @@ pub fn paperpaw_sdk::ui::Chips::height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::Chips::height_for(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &[&str]) -> u16
 pub fn paperpaw_sdk::ui::Chips::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::Chips::label(&self, usize) -> core::option::Option<&str>
-pub fn paperpaw_sdk::ui::Chips::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &[&str]) -> Self
+pub fn paperpaw_sdk::ui::Chips::new<L: core::convert::Into<alloc::borrow::Cow<'static, str>>>(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, impl core::iter::traits::collect::IntoIterator<Item = L>) -> Self
 pub fn paperpaw_sdk::ui::Chips::shown(&self) -> usize
 pub fn paperpaw_sdk::ui::Chips::step(&self, usize, &paperpaw_sdk::Id) -> core::option::Option<usize>
 pub struct paperpaw_sdk::ui::DatePicker
@@ -3750,12 +3750,12 @@ pub struct paperpaw_sdk::ui::Segments
 impl paperpaw_sdk::ui::Segments
 pub fn paperpaw_sdk::ui::Segments::cell(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::Segments::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, usize, core::option::Option<usize>)
-pub fn paperpaw_sdk::ui::Segments::fitted(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &[&str]) -> Self
+pub fn paperpaw_sdk::ui::Segments::fitted<L: core::convert::Into<alloc::borrow::Cow<'static, str>>>(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, impl core::iter::traits::collect::IntoIterator<Item = L>) -> Self
 pub fn paperpaw_sdk::ui::Segments::height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::Segments::height_for(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &[&str]) -> u16
 pub fn paperpaw_sdk::ui::Segments::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::Segments::label(&self, usize) -> core::option::Option<&str>
-pub fn paperpaw_sdk::ui::Segments::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &[&str]) -> Self
+pub fn paperpaw_sdk::ui::Segments::new<L: core::convert::Into<alloc::borrow::Cow<'static, str>>>(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, impl core::iter::traits::collect::IntoIterator<Item = L>) -> Self
 pub fn paperpaw_sdk::ui::Segments::step(&self, usize, &paperpaw_sdk::Id) -> core::option::Option<usize>
 pub struct paperpaw_sdk::ui::Stack
 impl paperpaw_sdk::ui::Stack

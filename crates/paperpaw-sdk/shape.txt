@@ -576,7 +576,7 @@ enum paperpaw_sdk::widgets::WidgetInput { Swipe(0: paperpaw_sdk::gesture::Direct
 enum paperpaw_sdk::widgets::grid::What { Widget(0: alloc::string::String), Tool(0: paperpaw_sdk::id::Id) }
 enum paperpaw_sdk::widgets::grid::view::GridResponse { Ignored, Handled, Changed(0: alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>), Editing(0: bool), Button(0: u16), Option { item: paperpaw_sdk::widgets::grid::Item, option: alloc::string::String } }
 enum paperpaw_sdk::widgets::grid::view::Mode { Choose, Move, Resize }
-enum paperpaw_sdk::widgets::grid::view::Target { Run(0: paperpaw_sdk::command::Command, 1: core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::Command>>), Item(0: usize), Button(0: u16) }
+enum paperpaw_sdk::widgets::grid::view::Target { Run(0: alloc::boxed::Box<paperpaw_sdk::command::Command>, 1: core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::Command>>), Item(0: usize), Button(0: u16) }
 enum paperpaw_sdk::widgets::look::Frame { None, Line, Card, Dark }
 enum paperpaw_sdk::widgets::look::Padding { Auto, None, Small, Normal, Large }
 enum paperpaw_sdk::widgets::look::TextSize { Small, Medium, Large, Fit }
@@ -812,7 +812,7 @@ struct paperpaw_sdk::time::Rule { day: paperpaw_sdk::time::Day, time: i32 }
 struct paperpaw_sdk::time::Summer { offset: i32, start: paperpaw_sdk::time::Rule, end: paperpaw_sdk::time::Rule }
 struct paperpaw_sdk::time::Time { hour: u8, minute: u8, second: u8 }
 struct paperpaw_sdk::time::TimeZone { standard: i32, summer: core::option::Option<paperpaw_sdk::time::Summer> }
-struct paperpaw_sdk::ui::chips::Chips { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::string::String> }
+struct paperpaw_sdk::ui::chips::Chips { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::borrow::Cow<'static, str>> }
 struct paperpaw_sdk::ui::choice::Choice { style: paperpaw_sdk::ui::style::UiStyle, region: paperpaw_platform::geometry::Rect, title: paperpaw_platform::geometry::Rect, list: paperpaw_sdk::ui::list::ListView, pager: core::option::Option<paperpaw_sdk::ui::header::Pager>, title_text: alloc::string::String, path: alloc::string::String, reply: core::option::Option<paperpaw_sdk::id::Id>, labels: alloc::string::String, options: alloc::vec::Vec<alloc::string::String> }
 struct paperpaw_sdk::ui::choice::Picked { path: alloc::string::String, option: alloc::string::String }
 struct paperpaw_sdk::ui::confirm::Confirm { style: paperpaw_sdk::ui::style::UiStyle, dialog: paperpaw_sdk::ui::dialog::Dialog, focus: usize, labels: [alloc::string::String; 2], params: paperpaw_sdk::params::Params, reply: core::option::Option<paperpaw_sdk::id::Id> }
@@ -822,7 +822,7 @@ struct paperpaw_sdk::ui::header::Header { area: paperpaw_platform::geometry::Rec
 struct paperpaw_sdk::ui::header::Pager { area: paperpaw_platform::geometry::Rect, arrows: bool }
 struct paperpaw_sdk::ui::items::ItemsScreen { setting: core::option::Option<paperpaw_sdk::id::Id>, items: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::string::String)>, style: paperpaw_sdk::ui::style::UiStyle, header: paperpaw_sdk::ui::header::Header, list: paperpaw_sdk::ui::list::ListView, reorder: paperpaw_sdk::ui::reorder::Reorder, moving: bool }
 struct paperpaw_sdk::ui::layout::CellGrid { area: paperpaw_platform::geometry::Rect, columns: u16, cell_height: u16, gap: u16 }
-struct paperpaw_sdk::ui::layout::Segments { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::string::String> }
+struct paperpaw_sdk::ui::layout::Segments { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect>, labels: alloc::vec::Vec<alloc::borrow::Cow<'static, str>> }
 struct paperpaw_sdk::ui::layout::Stack { area: paperpaw_platform::geometry::Rect, gap: u16, top: u16, bottom: u16, taken_top: bool, taken_bottom: bool }
 struct paperpaw_sdk::ui::list::ListView { area: paperpaw_platform::geometry::Rect, row: u32, focus: usize, active: bool, shown: bool, columns: u32, before: usize }
 struct paperpaw_sdk::ui::look::ButtonPart { rect: paperpaw_platform::geometry::Rect, on: bool, focused: bool }
