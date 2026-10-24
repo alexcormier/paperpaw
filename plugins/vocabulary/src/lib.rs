@@ -677,7 +677,7 @@ mod tests {
     /// and is in the reader's menu.
     #[test]
     fn marking_is_off_at_first() {
-        use paperpaw_sdk::contribution::Contribution;
+        use paperpaw_sdk::Contribution;
         use paperpaw_sdk::{Plugin, Registrar, SettingValue};
 
         let plugin = super::Vocabulary;

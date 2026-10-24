@@ -900,7 +900,7 @@ mod layout {
         crate::Capabilities,
         crate::Metrics,
         crate::Registrar,
-        crate::Contribution,
+        crate::contribution::item::Contribution,
         crate::Command,
         crate::Cx<'static, 'static>,
         crate::screen::Output,

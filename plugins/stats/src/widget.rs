@@ -474,7 +474,7 @@ mod tests {
     /// widget (its group): the plugin loads, the widgets read them.
     #[test]
     fn the_widgets_register() {
-        use paperpaw_sdk::contribution::Contribution;
+        use paperpaw_sdk::Contribution;
         let mut r = Registrar::new(crate::PLUGIN);
         assert!(register(&mut r).is_ok());
         let mut ids: Vec<&str> = r

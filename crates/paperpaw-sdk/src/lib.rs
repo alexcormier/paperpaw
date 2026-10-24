@@ -125,7 +125,12 @@ pub use command::{HttpParts, ResponseParts};
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use command::{http_params, server_params, socket_params, speech_params};
 pub use commands::Commands;
-pub use contribution::{Contribution, Registrar};
+pub use contribution::Registrar;
+/// What a plugin added, for the kernel to apply: opaque to plugins, which
+/// add through [`Registrar`]'s methods.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use contribution::item::Contribution;
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use env::EnvParts;
