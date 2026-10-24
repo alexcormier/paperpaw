@@ -1224,3 +1224,53 @@ fn looking_for_updates_is_chosen_and_weekly_at_a_cheap_moment() {
     device.charge(start + 8 * DAY + 10);
     let _ = device.request();
 }
+
+/// Another firmware's app image (CrossPoint's), not signed, as its
+/// maker's build ends: header, one segment, checksum, hash.
+fn other_firmware() -> Vec<u8> {
+    let mut image = vec![0u8; 24];
+    image[0] = 0xE9;
+    image[1] = 1;
+    image[12..14].copy_from_slice(&CHIP.to_le_bytes());
+    image[23] = 1;
+    let mut data = vec![0u8; 400];
+    data[..4].copy_from_slice(&0xABCD_5432u32.to_le_bytes());
+    data[16..21].copy_from_slice(b"1.2.3");
+    data[48..58].copy_from_slice(b"crosspoint");
+    image.extend_from_slice(&0x4200_0000u32.to_le_bytes());
+    image.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    let xor = data.iter().fold(0xEF, |x, b| x ^ b);
+    image.extend_from_slice(&data);
+    while image.len() % 16 != 15 {
+        image.push(0);
+    }
+    image.push(xor);
+    let hash = paperpaw_digest::sha256::digest(&image);
+    image.extend_from_slice(&hash);
+    image
+}
+
+#[test]
+fn another_firmware_installs_only_as_chosen() {
+    let storage = Shared::default();
+    storage.write("firmware.bin", &other_firmware()).unwrap();
+    let mut device = Device::new(storage);
+    // Never offered at start.
+    assert!(!device.shown().contains("crosspoint"));
+    device.run(OPEN);
+    let shown = device.shown();
+    assert!(
+        shown.contains("Other firmware: crosspoint 1.2.3"),
+        "{shown}"
+    );
+    assert!(shown.contains("not PaperPaw and not signed"), "{shown}");
+    // *Not now* first: closing installs nothing.
+    assert!(shown.contains("Not now"), "{shown}");
+    assert!(shown.contains("Install anyway"), "{shown}");
+    device.run(actions::DOWN);
+    device.run(actions::CONFIRM);
+    assert_eq!(
+        device.install(),
+        FirmwareCommand::install_foreign("firmware.bin")
+    );
+}

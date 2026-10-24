@@ -544,10 +544,11 @@ enum paperpaw_sdk::filters::InputVerdict { Pass, Take, Run(0: paperpaw_sdk::id::
 enum paperpaw_sdk::filters::RefreshCause { Other, PageTurn, Screens, Notice, Status }
 enum paperpaw_sdk::filters::RefreshVerdict { Keep, Mode(0: paperpaw_platform::display::RefreshMode), Grays(0: bool), Defer }
 enum paperpaw_sdk::filters::Verdict { Keep, Drop }
-enum paperpaw_sdk::firmware::FirmwareCommand { Install { path: alloc::string::String, key: core::option::Option<[u8; 32]>, older: bool }, Restart }
+enum paperpaw_sdk::firmware::FirmwareCommand { Install { path: alloc::string::String, key: core::option::Option<[u8; 32]>, older: bool }, Restart, InstallForeign { path: alloc::string::String } }
 enum paperpaw_sdk::firmware::FirmwareState { Idle, Installing { done: u64, total: u64 }, Installed, Failed(0: paperpaw_sdk::firmware::InstallFailure) }
 enum paperpaw_sdk::firmware::InstallFailure { Unreadable, NotAnUpdate, NewerFormat, OtherDevice, TooLarge, Untrusted, NotNewer, Damaged, Write }
 enum paperpaw_sdk::firmware::Signer { PaperPaw, Unknown }
+enum paperpaw_sdk::firmware::foreign::Walk { Header, Head(0: usize), Data(0: u32), Tail, Done }
 enum paperpaw_sdk::gesture::Direction { Left, Right, Up, Down }
 enum paperpaw_sdk::gesture::GestureKind { Tap, LongPress, Swipe(0: paperpaw_sdk::gesture::Direction), Pinch { out: bool }, DoubleTap, TwoFingerTap }
 enum paperpaw_sdk::help::Input { Any, Touch, Buttons }
@@ -750,6 +751,8 @@ struct paperpaw_sdk::filters::TextFilterSpec { id: paperpaw_sdk::id::Id, title: 
 struct paperpaw_sdk::filters::TextFilters { filters: alloc::vec::Vec<paperpaw_sdk::filters::TextFilterSpec> }
 struct paperpaw_sdk::firmware::Firmware { version: alloc::string::String, project: alloc::string::String, chip: u16, keys: alloc::vec::Vec<[u8; 32]>, room: u64, undone: bool, state: paperpaw_sdk::firmware::FirmwareState, plugins: paperpaw_update::plugins::Plugins }
 struct paperpaw_sdk::firmware::Update { path: alloc::string::String, info: paperpaw_update::AppInfo, trailer: paperpaw_update::Trailer, plugins: core::option::Option<paperpaw_update::plugins::Plugins> }
+struct paperpaw_sdk::firmware::foreign::ForeignCheck { chip: u16, board: &'static str, len: u64, at: u64, first: [u8; 36], walk: paperpaw_sdk::firmware::foreign::Walk, segments: u8, head: [u8; 8], xor: u8, body_end: u64, checksum: core::option::Option<bool>, sha: paperpaw_digest::sha256::Sha256, hash: [u8; 32], tag_at: usize, name: core::option::Option<alloc::string::String>, tagged: core::option::Option<alloc::string::String>, problem: core::option::Option<paperpaw_sdk::firmware::InstallFailure> }
+struct paperpaw_sdk::firmware::foreign::ForeignImage { path: alloc::string::String, info: paperpaw_update::AppInfo, len: u64 }
 struct paperpaw_sdk::fonts::Entry { id: paperpaw_sdk::id::Id, font: core::option::Option<paperpaw_text::font::Font>, family: core::option::Option<alloc::borrow::Cow<'static, str>>, bold: bool, italic: bool, weight: u16, file: core::option::Option<alloc::string::String>, extends: core::option::Option<paperpaw_sdk::id::Id>, face: bool }
 struct paperpaw_sdk::fonts::FontFace { id: paperpaw_sdk::id::Id, path: alloc::string::String, family: alloc::borrow::Cow<'static, str>, bold: bool, italic: bool }
 struct paperpaw_sdk::fonts::FontHandle<'a> { id: &'a paperpaw_sdk::id::Id, font: &'a paperpaw_text::font::Font, cache: &'a core::cell::RefCell<paperpaw_text::cache::GlyphCache>, describing: &'a core::cell::Cell<bool>, index: u16, others: [core::option::Option<(&'a paperpaw_text::font::Font, u16)>; 4], display: bool }

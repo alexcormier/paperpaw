@@ -2055,6 +2055,7 @@ name = "paperpaw-plugin-update"
 version = "1.0.0"
 dependencies = [
  "paperpaw-core",
+ "paperpaw-digest",
  "paperpaw-i18n",
  "paperpaw-platform",
  "paperpaw-plugin-fonts-default",

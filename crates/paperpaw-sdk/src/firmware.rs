@@ -32,6 +32,12 @@ pub use paperpaw_update::{
     PluginCrate, Plugins, Problem, TRAILER_LEN, Trailer, fingerprint, key_hex, parse_key,
 };
 
+#[cfg(any(test, feature = "kernel"))]
+mod foreign;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use foreign::{ForeignCheck, ForeignImage};
+
 /// The folder on the card where update files are looked for.
 pub const UPDATE_DIR: &str = "updates";
 
@@ -58,6 +64,14 @@ pub enum FirmwareCommand {
     /// Restarts the device, e.g. into the new firmware once
     /// [`FirmwareState::Installed`]. What plugins keep is saved first.
     Restart,
+    /// Installs another firmware's app image at this storage path (the
+    /// way back to CrossPoint, say), which is not signed: checked as the
+    /// bootloader would start it (`ForeignImage`, `ForeignCheck`),
+    /// written beside the running firmware and made the one to start
+    /// next. Sent only for a file the reader chose as such, told that it
+    /// is not PaperPaw. Asked for by `FirmwareCommand::install_foreign`.
+    #[non_exhaustive]
+    InstallForeign { path: String },
 }
 
 impl FirmwareCommand {
@@ -72,6 +86,14 @@ impl FirmwareCommand {
             key,
             older,
         }
+    }
+
+    /// Installs another firmware's image at `path`, which the reader chose
+    /// as such.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn install_foreign(path: impl Into<String>) -> Self {
+        FirmwareCommand::InstallForeign { path: path.into() }
     }
 }
 

@@ -4,7 +4,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::firmware::{Firmware, InstallFailure, UPDATE_DIR, Update, compare_versions};
+use paperpaw_sdk::firmware::{
+    Firmware, ForeignImage, InstallFailure, UPDATE_DIR, Update, compare_versions,
+};
 use paperpaw_sdk::{Storage, files};
 
 /// The newest update for this device in [`UPDATE_DIR`]; without one, why
@@ -34,6 +36,37 @@ pub(crate) fn find(storage: &dyn Storage, firmware: &Firmware) -> Result<Update,
         }
     }
     best.ok_or(failure)
+}
+
+/// Another firmware's image for this device, in [`UPDATE_DIR`] or at the
+/// card's top (where CrossPoint's installer looks too), the first by
+/// name: no update file, and not PaperPaw itself (whose install file
+/// lies there after coming from CrossPoint). Never offered: the page
+/// shows it when the reader opens it.
+pub(crate) fn foreign(storage: &dyn Storage, firmware: &Firmware) -> Option<ForeignImage> {
+    let mut paths: Vec<String> = Vec::new();
+    for dir in [UPDATE_DIR, ""] {
+        let _ = storage.list(dir, &mut |entry| {
+            if !entry.is_dir
+                && !entry.name.starts_with('.')
+                && files::has_extension(entry.name, "bin")
+            {
+                paths.push(if dir.is_empty() {
+                    String::from(entry.name)
+                } else {
+                    format!("{dir}/{}", entry.name)
+                });
+            }
+        });
+    }
+    paths.sort();
+    paths.into_iter().find_map(|path| {
+        if Update::read(storage, &path).is_ok() {
+            return None;
+        }
+        let image = ForeignImage::read(storage, &path).ok()?;
+        (image.info.project != firmware.project && image.fits(firmware).is_ok()).then_some(image)
+    })
 }
 
 #[cfg(test)]
@@ -75,6 +108,41 @@ mod tests {
         let found = find(&storage, &firmware()).unwrap();
         assert_eq!(found.path, "updates/new.BIN");
         assert_eq!(found.info.version, "0.10.0");
+    }
+
+    /// An app image of another firmware, not signed.
+    fn other_firmware(project: &[u8]) -> Vec<u8> {
+        let mut image = alloc::vec![0u8; 2000];
+        image[0] = 0xE9;
+        image[12..14].copy_from_slice(&CHIP.to_le_bytes());
+        image[32..36].copy_from_slice(&0xABCD_5432u32.to_le_bytes());
+        image[48..53].copy_from_slice(b"1.2.3");
+        image[80..80 + project.len()].copy_from_slice(project);
+        image
+    }
+
+    #[test]
+    fn another_firmware_on_the_card() {
+        use super::foreign;
+        let storage = MemoryStorage::new()
+            .with("updates/new.bin", update(b"paperpaw-xteink", b"0.10.0"))
+            .with("firmware.bin", other_firmware(b"crosspoint"))
+            .with(
+                "updates/paperpaw-x4-install.bin",
+                other_firmware(b"paperpaw-xteink"),
+            )
+            .with("updates/a.bin", other_firmware(b"paperpaw-xteink-pro"));
+        let found = foreign(&storage, &firmware()).unwrap();
+        assert_eq!(found.path, "firmware.bin");
+        assert_eq!(found.info.project, "crosspoint");
+        // PaperPaw itself, its updates and others' builds of it are none.
+        let own = MemoryStorage::new()
+            .with("updates/new.bin", update(b"paperpaw-xteink", b"0.10.0"))
+            .with(
+                "paperpaw-x4-install.bin",
+                other_firmware(b"paperpaw-xteink"),
+            );
+        assert_eq!(foreign(&own, &firmware()), None);
     }
 
     #[test]

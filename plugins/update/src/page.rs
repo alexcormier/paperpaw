@@ -14,6 +14,11 @@
 //! says what stops working) or to ask again; the page shown counts as the
 //! reader having looked.
 //!
+//! Another firmware's image on the card (CrossPoint's, to go back) shows
+//! where no PaperPaw update is ready: it is not PaperPaw and not signed,
+//! which the page says; *Not now* comes first, and installing it is the
+//! reader's choice alone.
+//!
 //! Buttons: up and down (or left and right) move between the buttons,
 //! *Select* chooses, *Back* closes (not while installing). Touch: tap.
 
@@ -23,7 +28,8 @@ use core::cmp::Ordering;
 
 use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::firmware::{
-    FirmwareCommand, FirmwareState, InstallFailure, Signer, Update, compare_versions, fingerprint,
+    FirmwareCommand, FirmwareState, ForeignImage, InstallFailure, Signer, Update, compare_versions,
+    fingerprint,
 };
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
@@ -57,6 +63,9 @@ enum View {
         leaves: Vec<String>,
         age: Ordering,
     },
+    /// Another firmware's image on the card, to install in PaperPaw's
+    /// place.
+    Foreign(ForeignImage),
     /// Asking the update server.
     Checking,
     /// The server knows no newer update.
@@ -98,6 +107,7 @@ enum View {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Button {
     Install,
+    InstallForeign,
     Check,
     Download,
     Transfer,
@@ -238,6 +248,12 @@ impl UpdatePage {
         let card = found::find(env.storage(), firmware);
         let offer = online::offer(env.storage(), firmware);
         let age = |update: &Update| compare_versions(&update.info.version, &firmware.version);
+        // Another firmware the reader put on the card, where no update of
+        // PaperPaw is ready.
+        let ready = matches!(&card, Ok(update) if offer.is_none() || age(update).is_gt());
+        if !ready && let Some(image) = found::foreign(env.storage(), firmware) {
+            return View::Foreign(image);
+        }
         match (card, offer) {
             // A newer update online comes before going back or installing
             // the same again.
@@ -361,6 +377,14 @@ impl UpdatePage {
                 alloc::vec![Button::Install, Button::Check, Button::Close]
             }
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
+            // Not installing is the way on; searching online stays.
+            View::Foreign(_) => {
+                let mut buttons = alloc::vec![Button::Close, Button::InstallForeign];
+                if env.caps().network {
+                    buttons.push(Button::Check);
+                }
+                buttons
+            }
             // Chosen anyway while it waits: not downloading is the safe
             // way on, which a second press does not pass by.
             View::Offer { anyway: true, .. } => alloc::vec![Button::Close, Button::Download],
@@ -403,6 +427,7 @@ impl UpdatePage {
                 "update.install-without"
             }
             (Button::Install, _) => "update.install",
+            (Button::InstallForeign, _) => "update.install-foreign",
             // Chosen anyway: right whether plugins stay off or are gone.
             (Button::Download, View::Offer { anyway: true, .. }) => "update.download-anyway",
             (Button::Download, View::Offer { leaves, .. }) if !leaves.is_empty() => {
@@ -415,7 +440,9 @@ impl UpdatePage {
             (Button::Check, _) => "update.check",
             (Button::Transfer, _) => "update.transfer",
             (Button::Close, View::Waiting { .. }) => "update.keep-waiting",
-            (Button::Close, View::Ready { .. } | View::Offer { .. }) => "update.later",
+            (Button::Close, View::Ready { .. } | View::Offer { .. } | View::Foreign(_)) => {
+                "update.later"
+            }
             (Button::Close, _) => "update.ok",
         })
     }
@@ -466,6 +493,17 @@ impl UpdatePage {
                     help.push_str(&with("update.older.note", current));
                 }
                 (title, self.with_leaves(env, help, leaves))
+            }
+            View::Foreign(image) => {
+                let name = alloc::format!("{} {}", image.info.project, image.info.version);
+                let name = match name.trim() {
+                    "" => image.path.as_str(),
+                    name => name,
+                };
+                (
+                    with("update.foreign.title", &[("name", Arg::Str(name))]),
+                    with("update.foreign.help", &[("file", Arg::Str(&image.path))]),
+                )
             }
             View::Checking => (
                 tr("update.checking.title"),
@@ -671,6 +709,22 @@ impl UpdatePage {
                 self.view = View::Installing {
                     done: 0,
                     total: u64::from(update.trailer.image_len),
+                };
+                self.focus = 0;
+                self.redraw(cx, RefreshMode::Partial);
+            }
+            // What the reader chose, told it is not PaperPaw. Nothing is
+            // kept to say after the restart: another firmware starts.
+            Button::InstallForeign => {
+                let View::Foreign(image) = &self.view else {
+                    return;
+                };
+                cx.command(Command::Firmware(FirmwareCommand::install_foreign(
+                    image.path.clone(),
+                )));
+                self.view = View::Installing {
+                    done: 0,
+                    total: image.len,
                 };
                 self.focus = 0;
                 self.redraw(cx, RefreshMode::Partial);
@@ -964,7 +1018,7 @@ impl Screen for UpdatePage {
                 } else {
                     match self.look_noted(&env) {
                         View::Ready { age, .. } if !age.is_gt() => View::UpToDate,
-                        View::Nothing | View::Unfit(_) => View::UpToDate,
+                        View::Nothing | View::Unfit(_) | View::Foreign(_) => View::UpToDate,
                         view => view,
                     }
                 };

@@ -308,6 +308,14 @@ impl Firmware {
                 let effects = self.kernel.firmware_state(now(), state);
                 self.apply(effects);
             }
+            FirmwareCommand::InstallForeign { path, .. } => {
+                let state = match &mut self.ota {
+                    Some(ota) => ota.begin_foreign(self.kernel.storage(), &path),
+                    None => FirmwareState::Failed(InstallFailure::Write),
+                };
+                let effects = self.kernel.firmware_state(now(), state);
+                self.apply(effects);
+            }
             FirmwareCommand::Restart => self.restart(),
             // A command this firmware does not know: nothing done.
             _ => {}

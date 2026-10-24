@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- Back to CrossPoint without a computer: *Update* installs another
+  firmware's image from the card (not signed, only as chosen, with a
+  warning), checked whole for this device first. SDK:
+  `FirmwareCommand::InstallForeign`, `firmware::ForeignImage` and
+  `firmware::ForeignCheck`.
 - Bluetooth Low Energy for plugins (ADR 0027): `paperpaw_sdk::bluetooth`
   scans, connects and reads, writes and subscribes to a device's
   characteristics, pairs (always confirmed by the reader in the kernel's

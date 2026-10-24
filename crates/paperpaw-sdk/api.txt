@@ -1825,6 +1825,8 @@ pub use paperpaw_sdk::firmware::parse_key
 pub paperpaw_sdk::firmware::FirmwareCommand::Install::key: core::option::Option<[u8; 32]>
 pub paperpaw_sdk::firmware::FirmwareCommand::Install::older: bool
 pub paperpaw_sdk::firmware::FirmwareCommand::Install::path: alloc::string::String
+#[non_exhaustive] pub paperpaw_sdk::firmware::FirmwareCommand::InstallForeign
+pub paperpaw_sdk::firmware::FirmwareCommand::InstallForeign::path: alloc::string::String
 pub paperpaw_sdk::firmware::FirmwareCommand::Restart
 #[non_exhaustive] pub enum paperpaw_sdk::firmware::FirmwareState
 pub paperpaw_sdk::firmware::FirmwareState::Failed(paperpaw_sdk::firmware::InstallFailure)
