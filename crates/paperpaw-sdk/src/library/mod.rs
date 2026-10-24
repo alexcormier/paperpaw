@@ -1046,6 +1046,100 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
     update_list(storage, &favourites_file(), MAX_FAVOURITES, replace);
 }
 
+/// Tells the plugins that what was at `from` (a file or a folder) is at
+/// `to` now, moved or renamed on the storage, so that the data they keep
+/// by a book's path (where it is read, notes, statistics) goes along
+/// ([`BOOK_MOVED`](crate::builtin::events::BOOK_MOVED)): for a folder, of
+/// each book in it (each file a format opens), up to `most`; for a file,
+/// whatever its name now (`a.epub.bak` may be named back). The reading
+/// apps chosen for the folder go along, and settings that hold the folder
+/// moved, or one in it (the library folder, say), follow it. Whether
+/// there were more books than `most`, whose data stays where it was.
+pub fn tell_moved(
+    env: &Env<'_>,
+    from: &str,
+    to: &str,
+    most: usize,
+    out: &mut dyn FnMut(crate::Command),
+) -> bool {
+    use crate::builtin::events;
+    follow_folders(env, from, to, out);
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a reading app chosen for a folder is a convenience: chosen again where it did not move"
+    )]
+    let _ = crate::readers::folder_moved(env.storage(), from, to);
+    let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
+    if !crate::files::is_dir(env.storage(), to) {
+        out(events::BOOK_MOVED.emit(events::BookMoved::new(from.into(), to.into())));
+        return false;
+    }
+    let mut told = 0;
+    let mut more = false;
+    books_in(env.storage(), env.formats(), to, &mut |book| {
+        let Some(rest) = book.strip_prefix(to) else {
+            return;
+        };
+        if told == most {
+            more = true;
+            return;
+        }
+        told += 1;
+        out(events::BOOK_MOVED.emit(events::BookMoved::new(
+            format!("{from}{rest}"),
+            book.to_string(),
+        )));
+    });
+    more
+}
+
+/// Folder `value` (a setting's), after folder `from` moved to `to`: where
+/// it is `from` or in it, as the storage names entries (`Books` is `books`
+/// on the memory card), the same folder at `to`.
+pub fn moved_folder(storage: &dyn Storage, value: &str, from: &str, to: &str) -> Option<String> {
+    let (value, from, to) = (
+        value.trim_matches('/'),
+        from.trim_matches('/'),
+        to.trim_matches('/'),
+    );
+    if from.is_empty() || !crate::files::is_within(storage, value, from) {
+        return None;
+    }
+    let rest = value.split('/').skip(from.split('/').count());
+    Some(
+        core::iter::once(to)
+            .chain(rest)
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
+}
+
+/// Settings that name folder `from` or one in it, chosen as folders (with
+/// the folder chooser or the folder editor), name it at `to` now.
+fn follow_folders(env: &Env<'_>, from: &str, to: &str, out: &mut dyn FnMut(crate::Command)) {
+    use crate::builtin::{screens, slots};
+    for spec in env.settings().specs() {
+        let folder = spec
+            .extra()
+            .editor
+            .as_ref()
+            .is_some_and(|editor| match editor {
+                crate::Editor::Slot(slot) => *slot == slots::CHOOSE_FOLDER,
+                crate::Editor::Screen(screen) => *screen == screens::FOLDER_EDITOR,
+            });
+        if !folder {
+            continue;
+        }
+        let value = env.settings().text(spec.id.as_str());
+        if let Some(moved) = moved_folder(env.storage(), value, from, to) {
+            out(crate::Command::SetSetting(
+                spec.id.clone(),
+                crate::SettingValue::Text(moved.into()),
+            ));
+        }
+    }
+}
+
 /// Forgets the book at `path`, deleted: its details, its cover made
 /// small, its place among the recently opened and the favourites.
 #[expect(

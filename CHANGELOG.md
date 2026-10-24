@@ -249,6 +249,11 @@ file to your report.
 
 ### Wi-Fi, sync and the store
 
+- Wi-Fi transfer opens in the library folder (there from the first
+  start) and says where uploads go; books sent elsewhere are pointed to
+  the library, gently. Files and folders can be moved and renamed there,
+  their books' progress and notes going along, and each file sent shows
+  how far it is, can be tried again alone, and is in the list at once.
 - Wi-Fi goes off as soon as you are back home or in a book and nothing
   uses the network, not a minute later. On the X4 this frees its memory
   before a book opens: a book opened right after the store could run
@@ -783,6 +788,10 @@ breaking again.
 - `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).
+- `library::tell_moved` tells the plugins that a file or folder moved
+  (its books' progress, notes and statistics go along, settings holding
+  the folder follow), as the file manager and Wi-Fi transfer do;
+  `library::moved_folder` gives a folder's new path after a move.
 - `ui::shown_step`, `ui::shown_number` and `ui::shown_slider_value`
   give the value a number setting steps or slides to: for the size of
   book text the next one the reading font draws differently.

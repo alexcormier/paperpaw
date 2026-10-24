@@ -1,5 +1,6 @@
 //! The requests of the web page: the page itself, and listing,
-//! downloading, uploading, making folders and deleting.
+//! downloading, uploading, making folders, moving and renaming, and
+//! deleting.
 //!
 //! Every request carries the key shown on the device (`k=`); without it
 //! the answer is *403*, and after a few wrong keys *429* for a while (see
@@ -30,6 +31,8 @@ pub enum Done {
     Deleted(String),
     /// A folder deleted with everything in it.
     DeletedFolder(String),
+    /// A file or folder moved or renamed: from, to.
+    Moved(String, String),
     /// An upload that failed: said on the device too, so the last success
     /// is not taken for it.
     NotReceived(String),
@@ -186,6 +189,43 @@ pub fn answer(
             }
             match storage.create_dir(&at) {
                 Ok(()) => ok(Some(Done::Folder(files::name(&at).to_string()))),
+                Err(e) => failed(e),
+            }
+        }
+        ("POST", "/api/move") => {
+            // From where it is to a folder there, under its name or a new
+            // one: a rename on the card, never a copy, and never over
+            // what is there (`name (2)` then).
+            let from = match find(storage, &wanted, false) {
+                Ok(found) if found.path.is_empty() => return text(404, "not found"),
+                Ok(found) if read_only(&found.path) => return read_only_answer(),
+                Ok(found) => found.path,
+                Err(e) => return refused(e),
+            };
+            let folder = match find(storage, &param(query, "to").unwrap_or_default(), false) {
+                Ok(Found {
+                    path,
+                    is_dir: Some(true),
+                }) => path,
+                Ok(_) => return text(404, "not found"),
+                Err(e) => return refused(e),
+            };
+            let name = param(query, "name").unwrap_or_else(|| files::name(&from).to_string());
+            if !files::is_plain_name(&name) {
+                return text(400, "bad name");
+            }
+            if files::same_path(storage, &files::join(&folder, &name), &from) {
+                return ok(None);
+            }
+            if files::is_within(storage, &folder, &from) {
+                return text(400, "a folder cannot go into itself");
+            }
+            let to = files::free_path(storage, &folder, &name);
+            if read_only(&to) {
+                return read_only_answer();
+            }
+            match files::move_to(storage, &from, &to) {
+                Ok(()) => ok(Some(Done::Moved(from, to))),
                 Err(e) => failed(e),
             }
         }
