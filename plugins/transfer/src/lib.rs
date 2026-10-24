@@ -542,7 +542,12 @@ impl Screen for TransferScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("transfer.title");
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            None,
+        );
         let area = self.content(env);
         let own_button = self.own_button(env);
         let (url, qr) = match &mut self.state {
@@ -594,7 +599,9 @@ impl Screen for TransferScreen {
                 }
                 return;
             }
-            State::Offline(offer) => return offer.draw(canvas, env, &style, area),
+            State::Offline(offer) => {
+                return offer.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), area);
+            }
             State::Serving { url, qr } => (url, qr),
         };
         // Without a router: first the code to join the reader's network.

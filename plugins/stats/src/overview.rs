@@ -157,14 +157,22 @@ impl Overview {
         let tiles = self.tiles(env);
         let totals = self.totals_text(env);
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             self.entries.len(),
-            |canvas, index, rect, focused| match self.entries[index] {
+            |ui, index, rect, focused| match self.entries[index] {
                 Entry::Tile(i) => {
                     if let Some((label, value, note)) = tiles.as_ref().and_then(|t| t.get(i)) {
                         let label = env.i18n.tr(label);
-                        ui::draw_noted_row(canvas, env, &style, rect, focused, label, value, note);
+                        ui::draw_noted_row(
+                            ui.canvas(),
+                            env,
+                            &style,
+                            rect,
+                            focused,
+                            label,
+                            value,
+                            note,
+                        );
                     }
                 }
                 Entry::Chart => {
@@ -176,10 +184,10 @@ impl Overview {
                         rect.width.saturating_sub(2 * margin),
                         rect.height.saturating_sub(2 * gap),
                     );
-                    self.draw_chart(canvas, env, area);
+                    self.draw_chart(ui.canvas(), env, area);
                 }
-                Entry::Totals => ui::draw_message(canvas, env, &style, rect, &totals),
-                Entry::Go(row) => draw_way(canvas, env, &style, rect, focused, row),
+                Entry::Totals => ui::draw_message(ui.canvas(), env, &style, rect, &totals),
+                Entry::Go(row) => draw_way(ui.canvas(), env, &style, rect, focused, row),
             },
         );
     }
@@ -443,10 +451,20 @@ impl Screen for Overview {
         let title = env.i18n.tr("stats.title");
         if self.stacked {
             let paging = self.list.paging(self.entries.len());
-            self.header.draw(canvas, env, &style, title, None, paging);
+            self.header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+                title,
+                None,
+                paging,
+            );
             return self.draw_stacked(canvas, env);
         }
-        self.header.draw(canvas, env, &style, title, None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            None,
+        );
         if self.today.is_some() {
             self.draw_tiles(canvas, env);
             self.draw_chart(canvas, env, self.chart);
@@ -466,10 +484,10 @@ impl Screen for Overview {
         }
         let entries = &self.entries;
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             entries.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 if let Entry::Go(row) = entries[index] {
                     draw_way(canvas, env, &style, rect, focused, row);
                 }

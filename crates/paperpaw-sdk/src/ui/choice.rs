@@ -229,17 +229,17 @@ impl Screen for Choice {
         }
         let (options, labels) = (&self.options, &self.labels);
         self.list.draw(
-            canvas,
-            &style,
+            &mut crate::ui::Ui::new(canvas, env, &style),
             options.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let label = label(env, labels, &options[index]);
                 ui::draw_value_row(canvas, env, &style, rect, focused, &label, "");
             },
         );
         if let Some(pager) = &self.pager {
             let page = ui::Paging::new(self.list.page(), self.list.pages(options.len()));
-            pager.draw(canvas, env, &style, page);
+            pager.draw(&mut crate::ui::Ui::new(canvas, env, &style), page);
         }
     }
 

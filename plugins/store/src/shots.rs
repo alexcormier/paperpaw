@@ -119,7 +119,12 @@ impl Screen for ShotsScreen {
         let style = self.style;
         let title = env.i18n.tr("store.shots");
         let paging = Some(ui::Paging::new(self.at, self.urls.len()));
-        self.header.draw(canvas, env, &style, title, None, paging);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            paging,
+        );
         match &self.picture {
             Picture::Here(image) => {
                 let (w, h) = ui::fit_image(image, self.area.width, self.area.height);

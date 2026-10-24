@@ -629,6 +629,12 @@ file to your report.
   before shortened), `.lines(n)` or `.wrap()`; `width`, `height` and
   `draw(&mut ui, area)`. It borrows its text and allocates only the words
   of a line it shortens.
+- SDK: the interface's parts draw with a `ui::Ui`: `Chips`, `Segments`,
+  `Dialog`, `Header`, `Pager`, `TextView`, `DatePicker`, `TimePicker`,
+  `offline::OfflineOffer` and `reorder::Reorder` take `&mut Ui` in place
+  of canvas, environment and style, and the rows `ListView`, `Rows` and
+  `sections::Sections` draw are given the `Ui` (`|ui, index, rect,
+  focused|`; its canvas is `ui.canvas()`).
 - SDK: `ui::Row`, a row of a list as a value: `Row::value(title, v)`,
   `Row::plain(title)`, `Row::switch(title, on)`, `Row::number(title, v,
   room)` (or `Row::of(title, RowKind::..)`), with `.note(..)`,

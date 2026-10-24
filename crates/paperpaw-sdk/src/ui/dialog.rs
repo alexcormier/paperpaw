@@ -21,7 +21,6 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_graphics::Canvas;
 use paperpaw_platform::{Color, Point, Rect};
 
 use crate::Id;
@@ -427,13 +426,9 @@ impl Dialog {
 
     /// Draws it, white with a frame (as the look draws frames), the
     /// button `focus` focused.
-    pub fn draw(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        style: &UiStyle,
-        focus: Option<usize>,
-    ) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>, focus: Option<usize>) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         canvas.fill(self.panel, Color::WHITE);
         let inside = super::draw_card(canvas, style, self.panel, Frame::Line);
         let _ = inside;

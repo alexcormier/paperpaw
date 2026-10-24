@@ -384,16 +384,16 @@ impl Screen for BrowseScreen {
             &self.feed.title
         };
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             title,
             None,
             self.list.paging(rows.len()),
         );
         if self.offering(env) {
             let area = self.list.area();
-            return self.offer.draw(canvas, env, &style, area);
+            return self
+                .offer
+                .draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), area);
         }
         let entries = &self.feed.entries;
         let covers = &self.covers;
@@ -405,10 +405,10 @@ impl Screen for BrowseScreen {
         };
         let readable = |ext: &str| env.formats.supports(&format!("book.{ext}"));
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (title, value, note) = match rows[index] {
                     Row::Search => (
                         env.i18n.tr("opds.search").to_string(),

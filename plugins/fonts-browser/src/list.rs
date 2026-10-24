@@ -217,8 +217,12 @@ impl Screen for ListScreen {
         let style = self.style;
         let len = self.fonts.len();
         let title = env.i18n.tr("fonts-browser.title");
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
         if len == 0 {
             let (icon, title, text) = match self.trouble {
                 Trouble::Offline => (
@@ -251,8 +255,11 @@ impl Screen for ListScreen {
         }
         let (fonts, samples, job) = (&self.fonts, &self.samples, self.job.as_ref());
         let size = samples.size as f32;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let font = &fonts[index];
                 let state = ListScreen::state(env, job, font);
                 // The name in its own font, once its sample is here, in the
@@ -274,7 +281,8 @@ impl Screen for ListScreen {
                 let name = ui::fit(&face, size, &font.name, room);
                 ui::draw_label(canvas, &face, size, x, band, &name, ink);
                 ui::draw_note(canvas, env, &style, rect, focused, &describe(env, font));
-            });
+            },
+        );
         canvas.fill(self.status, Color::WHITE);
         let note = ui::tr_input(env, "fonts-browser.hint");
         ui::draw_note_line(canvas, env, &style, self.status, note);

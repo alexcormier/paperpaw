@@ -198,9 +198,7 @@ impl Screen for EditScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             &self.catalog.name,
             None,
             self.list.paging(FIELDS.len()),
@@ -209,10 +207,10 @@ impl Screen for EditScreen {
         let (on, webdav) = (self.catalog.sync, self.catalog.webdav);
         let catalog = &self.catalog;
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             FIELDS.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let field = FIELDS[index];
                 let title = env.i18n.tr(field.key());
                 let note = env.i18n.tr(field.help(catalog));

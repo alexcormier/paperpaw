@@ -295,22 +295,22 @@ impl ListView {
     /// content in black, or white when focused.
     pub fn draw(
         &self,
-        canvas: &mut Canvas<'_>,
-        style: &UiStyle,
+        ui: &mut super::Ui<'_>,
         len: usize,
-        mut draw_row: impl FnMut(&mut Canvas<'_>, usize, Rect, bool),
+        mut draw_row: impl FnMut(&mut super::Ui<'_>, usize, Rect, bool),
     ) {
+        let style = ui.style();
         let first = self.page() * self.rows();
         for (slot, index) in (first..len).take(self.rows()).enumerate() {
             let rect = self.row_rect(slot);
             let focused = self.active && self.shown && index == self.focus;
-            canvas.describe(Role::Row, "", rect).focused(focused);
+            ui.canvas().describe(Role::Row, "", rect).focused(focused);
             if focused {
-                draw_focus(canvas, style, rect);
+                draw_focus(ui.canvas(), style, rect);
             } else if self.columns == 1 {
-                draw_separator(canvas, style, rect, 0);
+                draw_separator(ui.canvas(), style, rect, 0);
             }
-            draw_row(canvas, index, rect, focused);
+            draw_row(ui, index, rect, focused);
         }
     }
 }

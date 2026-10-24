@@ -81,8 +81,12 @@ impl Screen for SecretList {
         let style = self.style;
         let len = env.secrets.listed().count();
         let title = env.i18n.tr("settings.secrets");
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
         if len == 0 {
             let area = self.list.area();
             ui::draw_message(
@@ -95,11 +99,15 @@ impl Screen for SecretList {
             return;
         }
         let secrets: Vec<_> = env.secrets.listed().collect();
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let label = env.i18n.tr(secrets[index].label);
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, HIDDEN);
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -216,22 +224,24 @@ impl Screen for SecretPage {
         let style = self.style;
         let len = self.choices.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             &self.title,
             None,
             self.list.paging(len),
         );
         let choices = &self.choices;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let key = match choices[index] {
                     Choice::Change => "settings.secret.change",
                     Choice::Remove => "settings.secret.remove",
                 };
                 ui::draw_value_row(canvas, env, &style, rect, focused, env.i18n.tr(key), "");
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

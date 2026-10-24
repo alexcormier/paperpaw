@@ -474,7 +474,9 @@ impl TextView {
     /// Draws the lines shown of `text` (the text it was made of), and on
     /// the right a thin bar where they are in the whole, where there is
     /// more than a page.
-    pub fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, text: &str) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>, text: &str) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         let Some(font) = style.font(env) else {
             return;
         };

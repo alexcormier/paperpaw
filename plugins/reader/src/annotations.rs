@@ -172,9 +172,7 @@ impl Screen for AnnotationsScreen {
         let style = self.style;
         let len = self.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("reader.annotations"),
             None,
             self.list.paging(len),
@@ -192,8 +190,11 @@ impl Screen for AnnotationsScreen {
             return;
         }
         let annotations = &self.annotations;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let Some(a) = annotations.get(index) else {
                     let title = env.i18n.tr("reader.export");
                     let note = env.i18n.tr("reader.export.help");
@@ -218,7 +219,8 @@ impl Screen for AnnotationsScreen {
                 };
                 let note = format!("{what} · {} %", a.percent);
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, "", &note);
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

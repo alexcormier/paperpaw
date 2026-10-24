@@ -518,8 +518,11 @@ impl Screen for MenuScreen {
             return;
         }
         let items = &self.items;
-        self.rows
-            .draw(canvas, &style, self.keys, |canvas, index, rect, focused| {
+        self.rows.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            self.keys,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let item = &items[index];
                 if item.heading {
                     ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(&item.title));
@@ -527,9 +530,13 @@ impl Screen for MenuScreen {
                     let laid = self.lines.get(index).and_then(Option::as_ref);
                     self.draw_entry(canvas, env, (item, laid), rect, focused);
                 }
-            });
+            },
+        );
         if let Some(pager) = &self.pager {
-            pager.draw(canvas, env, &style, self.rows.paging());
+            pager.draw(
+                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+                self.rows.paging(),
+            );
         }
     }
 

@@ -5,7 +5,6 @@
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
-use paperpaw_graphics::Canvas;
 use paperpaw_platform::{Point, Rect};
 
 use crate::Id;
@@ -135,14 +134,9 @@ impl Chips {
 
     /// Draws the chips shown, `chosen` on and `focus` (where the focus is
     /// on them) focused.
-    pub fn draw(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        style: &UiStyle,
-        chosen: usize,
-        focus: Option<usize>,
-    ) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>, chosen: usize, focus: Option<usize>) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         for (i, (cell, label)) in self.cells.iter().zip(&self.labels).enumerate() {
             if cell.width == 0 {
                 break;

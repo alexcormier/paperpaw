@@ -457,16 +457,17 @@ impl Screen for PluginList {
         }
         self.list.set_active(self.focus == Focus::List);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("plugin-manager.title"),
             None,
             self.list.paging(len),
         );
         let (more, plugins, origins) = (&self.more, &self.plugins, &self.origins);
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 if let Some(action) = more.get(index) {
                     // Named by its action, told by the plugin that added it.
                     let name = env.actions.get(action.as_str()).map_or("", |a| &a.title);
@@ -486,7 +487,8 @@ impl Screen for PluginList {
                     let note = details(env, info, origin);
                     ui::draw_noted_row(canvas, env, &style, rect, focused, name, value, &note);
                 }
-            });
+            },
+        );
         // The bar: a line above it, the hint or what a restart does, and
         // the button.
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));

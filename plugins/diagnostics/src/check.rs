@@ -518,8 +518,12 @@ impl Screen for Check {
                 .step
                 .map(|s| format!("{} / {}", s.index() + 1, Step::ALL.len()));
             let title = env.i18n.tr("diagnostics.check.title");
-            self.header
-                .draw(canvas, env, &style, title, step.as_deref(), None);
+            self.header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+                title,
+                step.as_deref(),
+                None,
+            );
         }
         let l = &self.layout;
         let (title, help) = texts(env, self.step);

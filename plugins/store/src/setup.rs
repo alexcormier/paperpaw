@@ -194,16 +194,17 @@ impl Screen for OfferScreen {
         self.on_button &= button.is_some();
         self.list.set_active(!self.on_button);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("store.offer.title"),
             None,
             self.list.paging(len),
         );
         let rows = &self.rows;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (id, on) = rows[index];
                 let (name, note) = (
                     alloc::format!("store.offer.{id}"),
@@ -211,7 +212,8 @@ impl Screen for OfferScreen {
                 );
                 let (name, note) = (env.i18n.tr(&name), env.i18n.tr(&note));
                 ui::draw_switch_row(canvas, env, &style, rect, focused, name, note, on);
-            });
+            },
+        );
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
         canvas.fill(line, Color::gray(150));
         if let Some(button) = button {

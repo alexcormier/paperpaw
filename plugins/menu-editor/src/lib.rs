@@ -225,10 +225,17 @@ impl Frame {
         movable: usize,
     ) {
         let style = self.style;
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (label, value) = row(index);
                 let rect = if index < movable {
                     Reorder::draw_grip(canvas, env, &style, rect, focused);
@@ -237,8 +244,12 @@ impl Frame {
                     rect
                 };
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, value);
-            });
-        self.reorder.draw(canvas, &style, &self.list);
+            },
+        );
+        self.reorder.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &self.list,
+        );
     }
 
     /// Follows a finger dragging one of the first `movable` rows: where
@@ -698,10 +709,10 @@ impl Screen for EntryScreen {
             return;
         }
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             OPTIONS.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let label = env.i18n.tr(OPTIONS[index]);
                 let color = style.focus_ink(focused);
                 ui::draw_label(canvas, &font, style.text(), x, rect, label, color);

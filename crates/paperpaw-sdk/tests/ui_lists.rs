@@ -208,7 +208,9 @@ proptest! {
         list.set_focus(focus.min(len.saturating_sub(1)));
         let mut frame = frame(560, 1000);
         let mut focused_rows = Vec::new();
-        list.draw(&mut frame.canvas(), &style(), len, |_, index, rect, focused| {
+        let harness = support::Harness::new(support::Device::BUTTONS);
+        let env = harness.env();
+        list.draw(&mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style()), len, |_, index, rect, focused| {
             assert!(inside(rect, list.area()));
             if focused {
                 focused_rows.push((index, rect));
@@ -235,9 +237,13 @@ fn an_empty_list_has_one_page_and_nothing_to_focus_or_hit() {
     assert_eq!(list.focus(), 0);
     assert_eq!(list.hit(Point::new(10, 10), 0), None);
     let mut rows = 0;
-    list.draw(&mut frame(400, 300).canvas(), &style(), 0, |_, _, _, _| {
-        rows += 1
-    });
+    let harness = support::Harness::new(support::Device::BUTTONS);
+    let env = harness.env();
+    list.draw(
+        &mut paperpaw_sdk::ui::Ui::new(&mut frame(400, 300).canvas(), &env, &style()),
+        0,
+        |_, _, _, _| rows += 1,
+    );
     assert_eq!(rows, 0);
 }
 
@@ -261,9 +267,11 @@ fn a_hidden_focus_shows_on_the_first_step_and_stays_hidden_while_paging() {
     let mut hidden = ListView::new(Rect::new(0, 0, 400, 300), 100).focus_on_keys(&env);
     hidden.set_focus(1);
     let mut focused = 0;
-    hidden.draw(&mut frame(400, 300).canvas(), &style(), 3, |_, _, _, f| {
-        focused += usize::from(f)
-    });
+    hidden.draw(
+        &mut paperpaw_sdk::ui::Ui::new(&mut frame(400, 300).canvas(), &env, &style()),
+        3,
+        |_, _, _, f| focused += usize::from(f),
+    );
     assert_eq!(focused, 0);
 
     // Without touch it shows from the start.
@@ -441,7 +449,9 @@ proptest! {
         }
         let mut frame = frame(400, 300);
         let mut focused = Vec::new();
-        rows.draw(&mut frame.canvas(), &style(), true, |_, index, _, f| {
+        let harness = support::Harness::new(support::Device::BUTTONS);
+        let env = harness.env();
+        rows.draw(&mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style()), true, |_, index, _, f| {
             if f {
                 focused.push(index);
             }
@@ -637,7 +647,9 @@ proptest! {
         }
         let mut frame = frame(400, 300);
         let mut focused = Vec::new();
-        list.draw(&mut frame.canvas(), &style(), true, |_, item, _, f| {
+        let harness = support::Harness::new(support::Device::BUTTONS);
+        let env = harness.env();
+        list.draw(&mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style()), true, |_, item, _, f| {
             if f {
                 focused.push(item);
             }

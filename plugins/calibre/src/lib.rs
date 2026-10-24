@@ -689,16 +689,16 @@ impl Screen for CalibreScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("calibre.title"),
             None,
             None,
         );
         if self.state == State::Offline {
             let area = self.content(env);
-            return self.offer.draw(canvas, env, &style, area);
+            return self
+                .offer
+                .draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), area);
         }
         let Some(font) = style.font(env) else {
             return;

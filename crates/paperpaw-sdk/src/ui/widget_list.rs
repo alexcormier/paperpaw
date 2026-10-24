@@ -215,9 +215,7 @@ impl Screen for ListScreen {
         let rows = self.rows(env);
         let title = self.target.title(env);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut crate::ui::Ui::new(canvas, env, &style),
             &title,
             None,
             self.list.paging(rows.len()),
@@ -225,10 +223,10 @@ impl Screen for ListScreen {
         let list = self.target.widgets(env);
         let room = ui::icon_room(env, &style, true);
         self.list.draw(
-            canvas,
-            &style,
+            &mut crate::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let ink = style.focus_ink(focused);
                 let (icon, title, value) = match rows[index] {
                     Row::Widget(at) => {
@@ -252,7 +250,8 @@ impl Screen for ListScreen {
                 ui::draw_value_row(canvas, env, &style, rect, focused, &title, value);
             },
         );
-        self.reorder.draw(canvas, &style, &self.list);
+        self.reorder
+            .draw(&mut crate::ui::Ui::new(canvas, env, &style), &self.list);
     }
 
     /// Widgets are moved by dragging their grip.
@@ -399,9 +398,7 @@ impl Screen for AddScreen {
         let style = self.style;
         let len = self.widgets.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut crate::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("core.widgets.edit.add"),
             None,
             self.list.paging(len),
@@ -417,15 +414,19 @@ impl Screen for AddScreen {
             return;
         }
         let widgets = &self.widgets;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut crate::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 // Its kind beside it, so that widgets of a kind are seen
                 // together.
                 let (id, title) = &widgets[index];
                 let kind = env.widgets.category(id.as_str()).unwrap_or_default();
                 let title = env.i18n.tr(title);
                 ui::draw_value_row(canvas, env, &style, rect, focused, title, env.i18n.tr(kind));
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

@@ -105,15 +105,22 @@ impl Screen for Chooser {
             .spec
             .as_ref()
             .map_or("", |spec| env.i18n.tr(&spec.title));
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
         let (options, more) = (&self.options, &self.more);
         let current = self
             .spec
             .as_ref()
             .map_or("", |spec| env.settings.text(spec.id.as_str()));
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 // Lined up with the options, leading on.
                 if let Some((_, name)) = index.checked_sub(options.len()).map(|i| &more[i]) {
                     ui::draw_value_row(canvas, env, &style, rect, focused, name, "›");
@@ -122,7 +129,8 @@ impl Screen for Chooser {
                 let (value, name) = &options[index];
                 let mark = if value == current { "•" } else { "" };
                 ui::draw_value_row(canvas, env, &style, rect, focused, name, mark);
-            });
+            },
+        );
     }
 
     fn on_event(&mut self, event: &Id, _params: &Params, cx: &mut Cx<'_, '_>) {

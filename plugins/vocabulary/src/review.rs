@@ -300,7 +300,12 @@ impl Screen for ReviewScreen {
         let count = self.queue.len() + usize::from(self.current.is_some());
         let left = env.i18n.plural("vocabulary.review.left", count as i64, &[]);
         let note = self.current.is_some().then_some(left.as_str());
-        self.header.draw(canvas, env, &style, title, note, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            note,
+            None,
+        );
         let area = self.content(env);
         let Some((_, card)) = &self.current else {
             ui::draw_message(canvas, env, &style, area, &self.message);

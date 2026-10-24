@@ -645,7 +645,7 @@ proptest! {
         prop_assert_eq!(header.tap(&env, &style, Point::new(5, a.bottom() as i32 + 1), paging), None);
         // Drawn inside the header, the title shortened before the arrows.
         let (described, mut frame) = describe(480, 800, |c| {
-            header.draw(c, &env, &style, &title, Some("by title"), paging);
+            header.draw(&mut paperpaw_sdk::ui::Ui::new(c, &env, &style), &title, Some("by title"), paging);
         });
         prop_assert_eq!(drawn_outside(&mut frame, a), None);
         prop_assert_eq!(described[0].role, Role::Heading);
@@ -669,7 +669,7 @@ proptest! {
             prop_assert_eq!(header.tap(&env, &style, p, paging), None);
         }
         let (described, mut frame) = describe(480, 800, |c| {
-            header.draw(c, &env, &style, "Library", None, paging);
+            header.draw(&mut paperpaw_sdk::ui::Ui::new(c, &env, &style), "Library", None, paging);
         });
         prop_assert_eq!(drawn_outside(&mut frame, header.area()), None);
         let label = format!("{} / {}", page % pages + 1, pages);
@@ -704,9 +704,7 @@ fn the_header_keeps_to_the_content_margins() {
         let middle = area.y + area.height / 4..area.y + area.height * 3 / 4;
         let mut arrows = frame(480, 800);
         header.draw(
-            &mut arrows.canvas(),
-            &env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(&mut arrows.canvas(), &env, &style),
             "",
             None,
             Some(Paging::new(1, 3)),
@@ -738,7 +736,12 @@ fn the_header_keeps_to_the_content_margins() {
         );
         // The title where the label after the icon begins.
         let (described, _) = describe(480, 800, |c| {
-            header.draw(c, &env, &style, "Library", None, None);
+            header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(c, &env, &style),
+                "Library",
+                None,
+                None,
+            );
         });
         let title = described
             .iter()
@@ -777,7 +780,12 @@ fn header_titles_are_centred_by_their_capitals() {
         let height = header.area().height;
         let title = |text: &str| {
             let mut shot = frame(480, 800);
-            header.draw(&mut shot.canvas(), &env, &style, text, None, None);
+            header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(&mut shot.canvas(), &env, &style),
+                text,
+                None,
+                None,
+            );
             ink_rows(&shot, 0..240)
         };
         let (caps, base) = title("HELL");
@@ -800,7 +808,12 @@ fn a_focused_header_note_is_told_as_a_focused_button() {
     let style = UiStyle::new(&env);
     let header = Header::new(&env, &style, true).note_focused(true);
     let (described, _) = describe(480, 800, |c| {
-        header.draw(c, &env, &style, "Library", Some("by author"), None);
+        header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(c, &env, &style),
+            "Library",
+            Some("by author"),
+            None,
+        );
     });
     let note = described.iter().find(|d| d.role == Role::Button).unwrap();
     assert_eq!(note.label, "by author");
@@ -817,7 +830,12 @@ fn a_header_note_is_a_button_only_where_it_does_something() {
     let mut header = Header::new(&env, &style, true);
     let note = |header: &Header| {
         let (described, _) = describe(480, 800, |c| {
-            header.draw(c, &env, &style, "Search", Some("3 hits"), None);
+            header.draw(
+                &mut paperpaw_sdk::ui::Ui::new(c, &env, &style),
+                "Search",
+                Some("3 hits"),
+                None,
+            );
         });
         described
     };
@@ -869,7 +887,10 @@ fn the_pager_turns_by_halves_on_touch_screens_only() {
         for (page, pages) in [(0, 1), (0, 3), (2, 3), (9, 3)] {
             let page = Paging::new(page, pages);
             let mut frame = frame(480, 800);
-            pager.draw(&mut frame.canvas(), &env, &style, page);
+            pager.draw(
+                &mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &style),
+                page,
+            );
             assert_eq!(drawn_outside(&mut frame, area), None, "{page:?}");
         }
     }
@@ -1033,7 +1054,12 @@ fn the_page_number_is_hit_where_it_is_drawn() {
     let header = Header::new(&env, &style, true);
     let page = Some(Paging::new(1, 30));
     let (described, _) = describe(480, 800, |c| {
-        header.draw(c, &env, &style, "Reading", None, page);
+        header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(c, &env, &style),
+            "Reading",
+            None,
+            page,
+        );
     });
     let number = described
         .iter()

@@ -311,9 +311,7 @@ impl Screen for TocScreen {
         let style = self.style;
         let len = self.len;
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("reader.toc"),
             None,
             self.list.paging(len),
@@ -331,8 +329,11 @@ impl Screen for TocScreen {
             return;
         };
         let (first, visible) = (self.first, &self.visible);
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let Some(entry) = index.checked_sub(first).and_then(|i| visible.get(i)) else {
                     return;
                 };
@@ -341,7 +342,8 @@ impl Screen for TocScreen {
                 let width = f32::from(rect.width) - indent - style.margin() as f32;
                 let title = ui::fit(&font, style.text(), &entry.title, width);
                 ui::draw_label(canvas, &font, style.text(), indent, rect, &title, color);
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

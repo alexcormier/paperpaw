@@ -169,17 +169,18 @@ impl Screen for PlaceScreen {
         let style = self.style;
         let len = self.len(env);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("weather.setting.place"),
             None,
             self.list.paging(len),
         );
         let places = &self.places;
         let note = self.note(env);
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, row, rect, focused| {
+                let canvas = ui.canvas();
                 if row == 0 {
                     let title = env.i18n.tr("weather.place.search");
                     ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", &note);
@@ -191,7 +192,8 @@ impl Screen for PlaceScreen {
                     let note = env.i18n.tr("weather.place.none.help");
                     ui::draw_noted_row(canvas, env, &style, rect, focused, title, "", note);
                 }
-            });
+            },
+        );
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

@@ -269,9 +269,7 @@ impl Screen for ListScreen {
         let style = self.style;
         let rows = self.rows();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("opds.title"),
             None,
             self.list.paging(rows.len()),
@@ -279,10 +277,10 @@ impl Screen for ListScreen {
         let catalogs = &self.catalogs;
         let running = self.sync.borrow().running();
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (title, value, note) = match rows[index] {
                     Row::Sync if running => (
                         env.i18n.tr("opds.stop").to_string(),

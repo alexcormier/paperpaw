@@ -316,7 +316,12 @@ impl Screen for ViewScreen {
         let style = self.style;
         let title = self.title(env);
         let paging = self.list.paging(self.len());
-        self.header.draw(canvas, env, &style, &title, None, paging);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &title,
+            None,
+            paging,
+        );
         if self.len() == 0 {
             let (icon, title, text) = match self.view {
                 View::Search(_) => ("search", "store.search.none", "store.search.none.help"),
@@ -347,8 +352,11 @@ impl Screen for ViewScreen {
         let top = &self.top;
         let order = self.order;
         let len = self.len();
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, row, rect, focused| {
+                let canvas = ui.canvas();
                 if let Some(&top) = top.get(row) {
                     let ink = style.focus_ink(focused);
                     let (icon, name, value) = match top {
@@ -387,7 +395,8 @@ impl Screen for ViewScreen {
                         canvas, env, &style, rect, focused, plugin, job, queued, origins,
                     );
                 }
-            });
+            },
+        );
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

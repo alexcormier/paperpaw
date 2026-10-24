@@ -74,9 +74,7 @@ impl Screen for DrawerScreen {
         let style = self.style;
         let len = self.tools.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("home.drawer"),
             None,
             self.list.paging(len),

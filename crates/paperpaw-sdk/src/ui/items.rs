@@ -188,13 +188,20 @@ impl Screen for ItemsScreen {
                 .map_or(String::new(), |spec| env.i18n.tr(&spec.title).to_string())
         });
         let len = self.items.len();
-        self.header
-            .draw(canvas, env, &style, &title, None, self.list.paging(len));
+        self.header.draw(
+            &mut crate::ui::Ui::new(canvas, env, &style),
+            &title,
+            None,
+            self.list.paging(len),
+        );
         let chosen = self.chosen(env);
         let order = self.order(env);
         let items = &self.items;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+        self.list.draw(
+            &mut crate::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, row, rect, focused| {
+                let canvas = ui.canvas();
                 let (id, name) = &items[order[row]];
                 let on = chosen.iter().position(|c| *c == id.as_str());
                 let rect = if on.is_some() {
@@ -220,8 +227,10 @@ impl Screen for ItemsScreen {
                     env.i18n.tr(name),
                     &value,
                 );
-            });
-        self.reorder.draw(canvas, &style, &self.list);
+            },
+        );
+        self.reorder
+            .draw(&mut crate::ui::Ui::new(canvas, env, &style), &self.list);
         if self.moving {
             // The item the buttons move: a frame inside its focus, in the
             // focus's own ink (white on a dark bar, dark in a ring or on a

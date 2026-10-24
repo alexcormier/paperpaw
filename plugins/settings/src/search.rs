@@ -159,9 +159,7 @@ impl Screen for SearchScreen {
         let style = self.style;
         let len = self.hits.len();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             &self.title,
             None,
             self.list.paging(len),
@@ -172,13 +170,17 @@ impl Screen for SearchScreen {
             return;
         }
         let hits = &self.hits;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let hit = &hits[index];
                 ui::draw_noted_row(
                     canvas, env, &style, rect, focused, &hit.title, "›", &hit.note,
                 );
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

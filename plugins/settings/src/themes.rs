@@ -182,12 +182,19 @@ impl Screen for Themes {
         let style = self.style;
         let len = self.themes.len();
         let title = env.i18n.tr(self.chooser.title());
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
         let current = applied(env, self.chooser);
         let themes = &self.themes;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (id, name, about) = &themes[index];
                 let mark = if Some(id) == current.as_ref() {
                     "•"
@@ -195,7 +202,8 @@ impl Screen for Themes {
                     ""
                 };
                 ui::draw_noted_row(canvas, env, &style, rect, focused, name, mark, about);
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

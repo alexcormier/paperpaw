@@ -312,10 +312,10 @@ impl Screen for BookSheet {
             let at = Rect::new(margin, area.y + gap, width, question.height(env).min(room));
             question.draw(canvas, env, at, widgets::Align::Left, Color::BLACK);
             answers.draw(
-                canvas,
-                &style,
+                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
                 ANSWERS.len(),
-                |canvas, index, rect, focused| {
+                |ui, index, rect, focused| {
+                    let canvas = ui.canvas();
                     let label = env.i18n.tr(ANSWERS[index].0);
                     ui::draw_value_row(canvas, env, &style, rect, focused, label, "");
                 },
@@ -324,16 +324,16 @@ impl Screen for BookSheet {
         }
         let actions = &self.actions;
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             actions.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let label = &actions[index].1;
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, "");
             },
         );
         if let (Some(pager), Some(page)) = (&self.pager, self.list.paging(actions.len())) {
-            pager.draw(canvas, env, &style, page);
+            pager.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), page);
         }
     }
 

@@ -406,16 +406,24 @@ impl Screen for Picker {
         let style = self.style;
         let len = self.rows.len();
         let title = env.i18n.tr("sleep.setting.overlay-picture");
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
         let on = env.i18n.tr("core.state.on");
         let chosen: Vec<bool> = (0..len).map(|row| self.chosen(env, row)).collect();
         let rows = &self.rows;
-        self.list
-            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, row, rect, focused| {
+                let canvas = ui.canvas();
                 let value = if chosen[row] { on } else { "" };
                 ui::draw_value_row(canvas, env, &style, rect, focused, &rows[row].1, value);
-            });
+            },
+        );
         if let Some((text, area)) = &self.failed {
             ui::draw_note_line(canvas, env, &style, *area, text);
         }

@@ -147,8 +147,12 @@ impl Screen for ShelfScreen {
         let style = self.style;
         let len = self.names.len();
         let title = env.i18n.tr(self.title());
-        self.header
-            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            self.list.paging(len),
+        );
         if len == 0 {
             let area = self.list.area();
             // An empty view says what would be in it.
@@ -167,8 +171,11 @@ impl Screen for ShelfScreen {
             return;
         }
         let names = &self.names;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (name, count) = &names[index];
                 let name = if name.is_empty() {
                     env.i18n.tr("files.unknown-author")
@@ -177,7 +184,8 @@ impl Screen for ShelfScreen {
                 };
                 let note = env.i18n.plural("files.books", *count as i64, &[]);
                 ui::draw_noted_row(canvas, env, &style, rect, focused, name, "›", &note);
-            });
+            },
+        );
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

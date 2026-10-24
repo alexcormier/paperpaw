@@ -112,8 +112,9 @@ long presses and swipes; `on_event` to events while it is open:
 ```rust
 impl Screen for HelloScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let title = env.i18n().tr("hello.title");
-        self.header.draw(canvas, env, &self.style, title, None, None);
+        // What the screen draws with: canvas, environment and style.
+        let mut ui = ui::Ui::new(canvas, env, &self.style);
+        self.header.draw(&mut ui, env.i18n().tr("hello.title"), None, None);
         // … the greeting, centred below
     }
 
@@ -227,7 +228,10 @@ shortened.
 | Parts one below the other, from the top and the bottom | `ui::Stack` (`take`, `take_bottom`, `rest`) |
 | Equal columns side by side, e.g. two buttons | `ui::columns(area, count, gap)` |
 | A list that pages and holds the focus | `ui::ListView`, `ui::list_step` |
-| Rows of a list or of settings | `ui::draw_value_row`, `ui::draw_noted_row`, `ui::draw_switch_row`, `ui::draw_setting_row`, `ui::draw_stepper`, `ui::slider::Slider` |
+| What a screen draws with | `ui::Ui` (`Ui::new(canvas, env, &style)`; the parts below are its methods: `ui.button(..)`, `ui.message(..)` …) |
+| Text, on a line or wrapped | `ui::Label` (`Label::new(text).role(TextRole::Small).align(..).wrap()`) |
+| Rows of a list | `ui::Row` (`Row::value`, `Row::switch`, `Row::number`, with `.note(..)`; `height`, `draw`, `hit`) |
+| Rows of settings | `ui::draw_setting_row`, `ui::draw_stepper`, `ui::slider::Slider` |
 | Sections with headings | `ui::sections::Sections`, `ui::draw_heading` |
 | A grid of cells (covers, tiles) | `ui::CellGrid` (`cell`, `hit`, `step`) |
 | A group on a card or in a frame | `ui::draw_card(canvas, &style, area, Frame::Card)` returns where its parts go |
@@ -258,8 +262,10 @@ let margin = style.margin();
 let screen = Rect::new(margin, 0, display.width - 2 * margin, display.height - margin);
 let row = Stack::new(screen, margin).take_bottom(ui::Segments::height(&style));
 let [ok, cancel] = ui::columns(row, 2, margin)[..] else { return };
-ui::draw_button(canvas, env, &style, ok, "OK", false, focus == 0);
-ui::draw_button(canvas, env, &style, cancel, "Cancel", false, focus == 1);
+let mut ui = ui::Ui::new(canvas, env, &style);
+let shown = ui.focus_shown();
+ui.button(ok, "OK", false, shown && focus == 0);
+ui.button(cancel, "Cancel", false, shown && focus == 1);
 ```
 
 Tabs over a page, the chosen one on, moved with left and right:
@@ -268,7 +274,7 @@ Tabs over a page, the chosen one on, moved with left and right:
 // Made with the layout; it keeps its words.
 let area = Rect::new(margin, top, width, ui::Segments::height(&style));
 let tabs = ui::Segments::new(&style, area, ["hello.books", "hello.shelves", "hello.notes"]);
-tabs.draw(canvas, env, &style, self.tab, self.focus_on_tabs.then_some(self.tab));
+tabs.draw(&mut ui, self.tab, self.focus_on_tabs.then_some(self.tab));
 // on_action: if let Some(tab) = tabs.step(self.tab, action) { self.tab = tab; }
 // on_gesture: if let Some(tab) = tabs.hit(gesture.start) { self.tab = tab; }
 ```
@@ -278,7 +284,7 @@ A dialog in the middle of the screen:
 ```rust
 let mut dialog = ui::Dialog::new(env, &style, "Delete the book?", &["It goes for good."], &["Delete", "Keep"]);
 dialog.place((display.height - dialog.height()) / 2);
-dialog.draw(canvas, env, &style, Some(self.focus));
+dialog.draw(&mut ui, Some(self.focus));
 ```
 
 ### Settings

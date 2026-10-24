@@ -226,16 +226,17 @@ impl Screen for GroupList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("settings.title"),
             None,
             paging(&self.rows),
         );
         let (entries, room) = (&self.entries, self.icon_room);
-        self.rows
-            .draw(canvas, &style, self.keys, |canvas, index, rect, focused| {
+        self.rows.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            self.keys,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let entry = &entries[index];
                 let Some(link) = &entry.link else {
                     ui::draw_heading(canvas, env, &style, rect, &entry.title);
@@ -252,7 +253,8 @@ impl Screen for GroupList {
                 } else {
                     ui::draw_value_row(canvas, env, &style, rect, focused, &entry.title, "›");
                 }
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

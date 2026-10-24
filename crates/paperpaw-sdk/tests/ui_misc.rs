@@ -115,9 +115,14 @@ fn a_drawn_list_tells_its_rows_and_their_texts() {
     let mut list = ListView::new(Rect::new(0, 100, 480, 600), u32::from(style.row()));
     list.set_focus(1);
     let (described, _) = describe(480, 800, |canvas| {
-        list.draw(canvas, &style, rows.len(), |canvas, i, rect, focused| {
-            ui::draw_value_row(canvas, &env, &style, rect, focused, rows[i].0, rows[i].1);
-        });
+        list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, &env, &style),
+            rows.len(),
+            |ui, i, rect, focused| {
+                let canvas = ui.canvas();
+                ui::draw_value_row(canvas, &env, &style, rect, focused, rows[i].0, rows[i].1);
+            },
+        );
     });
     let parts = semantics::parts(described);
     let told: Vec<(&str, Role, bool)> = parts

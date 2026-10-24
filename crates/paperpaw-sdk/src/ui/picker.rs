@@ -466,7 +466,9 @@ impl DatePicker {
     }
 
     /// Draws the picker.
-    pub fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         let font = style.font(env);
         for (i, field) in self.fields().into_iter().enumerate() {
             let number = match field {
@@ -616,7 +618,9 @@ impl TimePicker {
     }
 
     /// Draws the picker, with a `:` between hour and minute.
-    pub fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
+    pub fn draw(&self, ui: &mut super::Ui<'_>) {
+        let (env, style) = (ui.env(), ui.style());
+        let canvas = ui.canvas();
         let font = style.font(env);
         let (hour, mark) = if self.twelve {
             let shown = match self.hour % 12 {

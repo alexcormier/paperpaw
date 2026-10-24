@@ -88,16 +88,17 @@ impl Screen for AboutScreen {
         let len = self.rows.len();
         self.list.set_len(len);
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("about.title"),
             None,
             self.list.paging(len),
         );
         let rows = &self.rows;
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let tr = |key| env.i18n.tr(key);
                 match rows[index] {
                     Row::Version => ui::draw_noted_row(
@@ -157,7 +158,8 @@ impl Screen for AboutScreen {
                         tr("about.licences.help"),
                     ),
                 }
-            });
+            },
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

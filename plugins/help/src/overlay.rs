@@ -202,7 +202,10 @@ impl Screen for Overlay {
                 y += small;
             }
         }
-        self.dialog.draw(canvas, env, &style, Some(self.focus));
+        self.dialog.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            Some(self.focus),
+        );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

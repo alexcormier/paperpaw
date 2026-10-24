@@ -354,8 +354,11 @@ impl AddScreen {
         let len = self.rows.len();
         let rows = &self.rows;
         let room = ui::icon_room(env, &style, true);
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let ink = style.focus_ink(focused);
                 let (icon, title, value) = match &rows[index] {
                     Row::Kind(kind, count) => (
@@ -382,7 +385,8 @@ impl AddScreen {
                 };
                 let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
                 ui::draw_value_row(canvas, env, &style, rect, focused, &title, &value);
-            });
+            },
+        );
     }
 
     /// The gallery's page with the focus: each widget's name, and the
@@ -458,7 +462,12 @@ impl Screen for AddScreen {
         let style = self.style;
         let paging = self.paging();
         let title = self.header_title(env);
-        self.header.draw(canvas, env, &style, &title, None, paging);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &title,
+            None,
+            paging,
+        );
         if self.is_gallery() {
             self.draw_gallery(canvas, env);
         } else {

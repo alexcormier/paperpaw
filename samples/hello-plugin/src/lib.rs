@@ -121,8 +121,12 @@ impl HelloScreen {
 impl Screen for HelloScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let title = env.i18n().tr("hello.title");
-        self.header
-            .draw(canvas, env, &self.style, title, None, None);
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &self.style),
+            title,
+            None,
+            None,
+        );
         let display = env.device().display;
         let top = self.header.area().height;
         // A header taller than a tiny screen leaves no room, not an

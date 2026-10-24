@@ -961,7 +961,12 @@ impl Screen for ListScreen {
         let len = self.len();
         let paging = (len > 0).then(|| ui::Paging::new(self.page_of(self.focus), self.pages()));
         let title = env.i18n.tr("files.title");
-        layout.header.draw(canvas, env, &style, title, None, paging);
+        layout.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            title,
+            None,
+            paging,
+        );
         let has_books = self.index.has_books();
         let focused_filter = self.shown && self.filter_focused;
         if let Some(row) = layout.filter_row {
@@ -996,9 +1001,7 @@ impl Screen for ListScreen {
                 };
                 let chosen = Filter::ALL.iter().position(|f| *f == shown);
                 layout.chips.draw(
-                    canvas,
-                    env,
-                    &style,
+                    &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
                     chosen.unwrap_or(usize::MAX),
                     chosen.filter(|_| focused_filter),
                 );

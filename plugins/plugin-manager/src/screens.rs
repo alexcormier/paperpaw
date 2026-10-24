@@ -253,13 +253,20 @@ impl Screen for Screens {
         let len = self.rows.len();
         self.list.set_len(len);
         let title = self.title(env);
-        self.header
-            .draw(canvas, env, &style, &title, None, self.list.paging(len));
+        self.header.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &title,
+            None,
+            self.list.paging(len),
+        );
         let (rows, slot) = (&self.rows, &self.slot);
         let chosen = slot.as_ref().and_then(|s| env.slot_choice(s.as_str()));
         let mark = env.i18n.tr("plugin-manager.screens.chosen");
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+        self.list.draw(
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            len,
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (title, value, note) = match &rows[index] {
                     Row::Slot(slot) => {
                         let place = env.i18n.tr(env.slot_title(slot.as_str()).unwrap_or(""));
@@ -294,7 +301,8 @@ impl Screen for Screens {
                     }
                 };
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
-            });
+            },
+        );
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

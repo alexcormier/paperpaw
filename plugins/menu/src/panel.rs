@@ -872,9 +872,7 @@ impl Screen for PanelScreen {
         }
         if let Some(pager) = &self.pager {
             pager.draw(
-                canvas,
-                env,
-                &style,
+                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
                 ui::Paging::new(self.page, self.pages()),
             );
         }

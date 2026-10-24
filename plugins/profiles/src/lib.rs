@@ -327,19 +327,16 @@ impl Screen for ListScreen {
         let style = self.style;
         let rows = self.rows();
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             env.i18n.tr("profiles.title"),
             None,
             self.list.paging(rows.len()),
         );
         let (profiles, in_use) = (&self.profiles, &self.in_use);
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| match rows[index] {
+            |ui, index, rect, focused| match rows[index] {
                 Row::Profile(i) => {
                     let p = &profiles[i];
                     let value = if in_use.get(i).copied().unwrap_or(false) {
@@ -350,12 +347,21 @@ impl Screen for ListScreen {
                     let note = env
                         .i18n
                         .plural("profiles.settings", p.values.len() as i64, &[]);
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, &p.name, &value, &note);
+                    ui::draw_noted_row(
+                        ui.canvas(),
+                        env,
+                        &style,
+                        rect,
+                        focused,
+                        &p.name,
+                        &value,
+                        &note,
+                    );
                 }
                 Row::Add => {
                     let title = env.i18n.tr("profiles.add");
                     let note = env.i18n.tr("profiles.add.help");
-                    ui::draw_noted_row(canvas, env, &style, rect, focused, title, "+", note);
+                    ui::draw_noted_row(ui.canvas(), env, &style, rect, focused, title, "+", note);
                 }
             },
         );

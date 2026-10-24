@@ -608,9 +608,7 @@ impl Screen for PageScreen {
         let rows = self.rows(env);
         let title = self.plugin.as_ref().map_or("", |p| p.name.as_str());
         self.header.draw(
-            canvas,
-            env,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             title,
             None,
             self.list.paging(rows.len()),
@@ -702,10 +700,10 @@ impl Screen for PageScreen {
             .map(|&row| self.row_text(env, plugin, row))
             .collect();
         self.list.draw(
-            canvas,
-            &style,
+            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
             rows.len(),
-            |canvas, index, rect, focused| {
+            |ui, index, rect, focused| {
+                let canvas = ui.canvas();
                 let (name, value) = &texts[index];
                 ui::draw_value_row(canvas, env, &style, rect, focused, name, value);
             },
