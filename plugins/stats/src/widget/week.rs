@@ -205,7 +205,8 @@ fn label(env: &Env<'_>, days: &[Shown]) -> alloc::string::String {
 )]
 fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[Shown]) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -213,7 +214,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[
     let (full, time) = (label(env, days), total(env, days));
     let caption = super::caption(env, id, look.area, &[&full, &time]);
     let area = super::below_caption(env, caption, look.area);
-    let area = super::captioned(canvas, env, id, look, caption, area.height);
+    let area = super::captioned(ui.canvas(), env, id, look, caption, area.height);
     let small = line(&font, style.small());
     let labels = labels_height(env, &font, &style);
     // Where the bars would be low, the weekdays go.
@@ -276,9 +277,9 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[
                 look.ink
             };
             if color == look.ink {
-                canvas.fill_round(bar, radius.min(h / 4), color);
+                ui.canvas().fill_round(bar, radius.min(h / 4), color);
             } else {
-                canvas.fill_round_shaded(bar, radius.min(h / 4), color);
+                ui.canvas().fill_round_shaded(bar, radius.min(h / 4), color);
             }
         } else if !day.to_come {
             // A day without reading: a light stub on the base; where the
@@ -291,11 +292,12 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[
                     bar_w as u16,
                     thin as u16,
                 );
-                canvas.fill(stub, look.faint);
+                ui.canvas().fill(stub, look.faint);
             } else {
                 let h = (thin * 2).max(3);
                 let stub = Rect::new(bx as u16, (base - h as i32) as u16, bar_w as u16, h as u16);
-                canvas.fill_round_shaded(stub, radius.min(h / 2), shade(look, 1));
+                ui.canvas()
+                    .fill_round_shaded(stub, radius.min(h / 2), shade(look, 1));
             }
         }
         if labels > 0 && (every || day.today || day.weekday == first_day) {
@@ -320,17 +322,21 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[
             } else {
                 look.faint
             };
-            ui::draw_label(canvas, &font, style.small(), at, row, name, color);
+            ui::Label::new(name)
+                .px(style.small())
+                .color(color)
+                .draw_from(&mut ui, at, row);
             if day.today && mark_today {
                 // Underlined: seen also where faint text is drawn black.
                 let y = i32::from(row.y + row.height) - thin as i32;
-                canvas.fill_rect(at as i32, y, w as u32, thin, look.ink);
+                ui.canvas()
+                    .fill_rect(at as i32, y, w as u32, thin, look.ink);
             }
         }
     }
     if let Some(goal) = goal {
         let y = base - (u64::from(chart.height) * goal / most) as i32;
         let end = i32::from(area.x + area.width);
-        super::dashed(canvas, i32::from(area.x), end, y, thin, look.faint);
+        super::dashed(ui.canvas(), i32::from(area.x), end, y, thin, look.faint);
     }
 }

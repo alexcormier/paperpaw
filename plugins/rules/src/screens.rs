@@ -288,39 +288,33 @@ impl RulesScreen {
 impl Screen for RulesScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let rows = self.rows();
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("rules.title"),
             None,
             self.list.paging(rows.len()),
         );
         let rules = &self.rules;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| match rows[index] {
-                Row::Rule(i) => {
-                    let rule = &rules[i];
-                    let title = when_text(env, rule);
-                    let note = effect_text(env, &rule.effect);
-                    ui::draw_switch_row(
-                        ui.canvas(),
-                        env,
-                        &style,
-                        rect,
-                        focused,
-                        &title,
-                        &note,
-                        rule.on,
-                    );
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
+                match rows[index] {
+                    Row::Rule(i) => {
+                        let rule = &rules[i];
+                        let title = when_text(env, rule);
+                        let note = effect_text(env, &rule.effect);
+                        ui::Row::switch(&title, rule.on)
+                            .note(&note)
+                            .focused(focused)
+                            .draw(ui, rect);
+                    }
+                    Row::Add => {
+                        let title = env.i18n.tr("rules.add");
+                        ui::Row::value(title, "+").focused(focused).draw(ui, rect);
+                    }
                 }
-                Row::Add => {
-                    let title = env.i18n.tr("rules.add");
-                    ui::draw_noted_row(ui.canvas(), env, &style, rect, focused, title, "+", "");
-                }
-            },
-        );
+            });
         if self.rules.is_empty() {
             // Below the row that adds one: what rules are for.
             let top = self.list.area().y + self.list.row() as u16;
@@ -330,10 +324,7 @@ impl Screen for RulesScreen {
                 self.list.area().width,
                 self.status.y.saturating_sub(top),
             );
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 area,
                 "automation",
                 env.i18n.tr("rules.empty.title"),
@@ -343,12 +334,12 @@ impl Screen for RulesScreen {
                 return;
             }
         }
-        canvas.fill(self.status, Color::WHITE);
+        ui.canvas().fill(self.status, Color::WHITE);
         let text = self
             .message
             .clone()
             .unwrap_or_else(|| ui::tr_input(env, "rules.hint").to_string());
-        ui::draw_note_line(canvas, env, &style, self.status, &text);
+        ui.note_line(self.status, &text);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -820,22 +811,16 @@ impl PickScreen {
 impl Screen for PickScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.entries.len();
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &self.title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, &self.title, None, self.list.paging(len));
         let entries = &self.entries;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                ui::draw_value_row(canvas, env, &style, rect, focused, &entries[index].1, "");
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            ui::Row::value(&entries[index].1, "")
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

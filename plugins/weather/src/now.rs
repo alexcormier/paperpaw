@@ -618,7 +618,8 @@ fn draw_now(
     laid: &Laid,
 ) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let area = look.area;
@@ -676,7 +677,7 @@ fn draw_now(
                 side,
                 side,
             );
-            symbol::draw(canvas, at, symbol, current.day, symbol_style, look.ink);
+            symbol::draw(ui.canvas(), at, symbol, current.day, symbol_style, look.ink);
             let text_x = x as u16 + ink_w + gap;
             (
                 Rect::new(text_x, plan.text.y, draw::ceil(widest), plan.text.height),
@@ -696,7 +697,7 @@ fn draw_now(
                 side,
                 side,
             );
-            symbol::draw(canvas, at, symbol, current.day, symbol_style, look.ink);
+            symbol::draw(ui.canvas(), at, symbol, current.day, symbol_style, look.ink);
             let below = top + ink_h + gap;
             (
                 Rect::new(
@@ -719,16 +720,19 @@ fn draw_now(
         let x = group_x.unwrap_or_else(|| align.x(text, width));
         match line {
             Some(line) => {
-                ui::draw_label(canvas, &font, line.size, x, row, &line.text, color(line));
+                ui::Label::new(&line.text)
+                    .px(line.size)
+                    .color(color(line))
+                    .draw_from(&mut ui, x, row);
             }
             None => {
                 if inline > 0 {
                     let top = row.y + row.height.saturating_sub(inline) / 2;
                     let at = Rect::new(x as u16, top, inline, inline);
-                    draw::draw_symbol(canvas, at, mark, symbol_style, look.ink);
+                    draw::draw_symbol(ui.canvas(), at, mark, symbol_style, look.ink);
                 }
                 let x = x + f32::from(inline + inline_gap);
-                draw_digits(canvas, &font, plan.size, x, row, temperature, look.ink);
+                draw_digits(&mut ui, &font, plan.size, x, row, temperature, look.ink);
             }
         }
         y += height;

@@ -152,27 +152,22 @@ impl Overview {
     }
 
     /// One column: the list of tiles, chart, totals and ways on.
-    fn draw_stacked(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw_stacked(&self, ui: &mut ui::Ui<'_>) {
         let style = self.style;
+        let env = ui.env();
         let tiles = self.tiles(env);
         let totals = self.totals_text(env);
         self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            ui,
             self.entries.len(),
             |ui, index, rect, focused| match self.entries[index] {
                 Entry::Tile(i) => {
                     if let Some((label, value, note)) = tiles.as_ref().and_then(|t| t.get(i)) {
                         let label = env.i18n.tr(label);
-                        ui::draw_noted_row(
-                            ui.canvas(),
-                            env,
-                            &style,
-                            rect,
-                            focused,
-                            label,
-                            value,
-                            note,
-                        );
+                        ui::Row::value(label, value)
+                            .note(note)
+                            .focused(focused)
+                            .draw(ui, rect);
                     }
                 }
                 Entry::Chart => {
@@ -184,10 +179,10 @@ impl Overview {
                         rect.width.saturating_sub(2 * margin),
                         rect.height.saturating_sub(2 * gap),
                     );
-                    self.draw_chart(ui.canvas(), env, area);
+                    self.draw_chart(ui, area);
                 }
-                Entry::Totals => ui::draw_message(ui.canvas(), env, &style, rect, &totals),
-                Entry::Go(row) => draw_way(ui.canvas(), env, &style, rect, focused, row),
+                Entry::Totals => ui.message(rect, &totals),
+                Entry::Go(row) => draw_way(ui, rect, focused, row),
             },
         );
     }
@@ -273,9 +268,10 @@ impl Overview {
         });
     }
 
-    fn draw_tiles(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw_tiles(&self, ui: &mut ui::Ui<'_>) {
         let style = self.style;
-        let (Some(font), Some(tiles)) = (style.font(env), self.tiles(env)) else {
+        let env = ui.env();
+        let (Some(font), Some(tiles)) = (ui.font(), self.tiles(env)) else {
             return;
         };
         let t = self.tiles;
@@ -308,10 +304,13 @@ impl Overview {
             ];
             for (row, (text, size, least, color)) in lines.into_iter().enumerate() {
                 let (size, line) = widgets::fit_line(&font, size, least, text, room);
-                ui::draw_label(canvas, &font, size, left, cell(row as u16), &line, color);
+                ui::Label::new(&line)
+                    .px(size)
+                    .color(color)
+                    .draw_from(ui, left, cell(row as u16));
             }
             if i > 0 {
-                canvas.fill_tint(
+                ui.canvas().fill_tint(
                     Rect::new(x, t.y, u32::from(style.line()).max(1) as u16, t.height),
                     Color::gray(190),
                 );
@@ -319,26 +318,22 @@ impl Overview {
         }
     }
 
-    fn draw_chart(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, c: Rect) {
+    fn draw_chart(&self, ui: &mut ui::Ui<'_>, c: Rect) {
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let env = ui.env();
+        if ui.font().is_none() {
             return;
-        };
+        }
         let title_h = (style.small() * 1.6) as u16;
         let title = Rect::new(c.x, c.y, c.width, title_h);
         let label = env.i18n.format(
             "stats.last-days",
             &[("count", Arg::Int(i64::from(CHART_DAYS)))],
         );
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            f32::from(c.x),
-            title,
-            &label,
-            style.faint(ui::Ink::Muted),
-        );
+        ui::Label::new(&label)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Muted))
+            .draw_from(ui, f32::from(c.x), title);
         let Some(today) = self.today else {
             return;
         };
@@ -359,15 +354,7 @@ impl Overview {
             c.width,
             c.height.saturating_sub(title_h),
         );
-        chart::bars(
-            canvas,
-            env,
-            &style,
-            area,
-            &values,
-            &names,
-            (Some(values.len() - 1), &top),
-        );
+        chart::bars(ui, area, &values, &names, (Some(values.len() - 1), &top));
     }
 
     /// All reading: the time, the books and the days.
@@ -393,42 +380,32 @@ impl Overview {
     }
 
     /// The totals on a line below the chart.
-    fn draw_totals(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw_totals(&self, ui: &mut ui::Ui<'_>) {
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
-        let text = self.totals_text(env);
+        let text = self.totals_text(ui.env());
         let w = font.measure(style.small(), &text);
         let x = (f32::from(self.totals.width) - w).max(0.0) / 2.0;
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            x,
-            self.totals,
-            &text,
-            style.faint(ui::Ink::Note),
-        );
+        ui::Label::new(&text)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Note))
+            .draw_from(ui, x, self.totals);
     }
 }
 
 /// A way on in `rect`: its name and "›".
-fn draw_way(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    rect: Rect,
-    focused: bool,
-    row: Row,
-) {
+fn draw_way(ui: &mut ui::Ui<'_>, rect: Rect, focused: bool, row: Row) {
     let key = match row {
         Row::ThisBook(_) => "stats.this-book",
         Row::Calendar => "stats.calendar",
         Row::Books => "stats.books",
         Row::Sync => "stats.sync.title",
     };
-    ui::draw_value_row(canvas, env, style, rect, focused, env.i18n.tr(key), "›");
+    ui::Row::value(ui.tr(key), "›")
+        .focused(focused)
+        .draw(ui, rect);
 }
 
 /// Distinct pages read on local day `day`.
@@ -449,25 +426,16 @@ impl Screen for Overview {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("stats.title");
+        let mut ui = ui::Ui::new(canvas, env, &style);
         if self.stacked {
             let paging = self.list.paging(self.entries.len());
-            self.header.draw(
-                &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-                title,
-                None,
-                paging,
-            );
-            return self.draw_stacked(canvas, env);
+            self.header.draw(&mut ui, title, None, paging);
+            return self.draw_stacked(&mut ui);
         }
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        self.header.draw(&mut ui, title, None, None);
         if self.today.is_some() {
-            self.draw_tiles(canvas, env);
-            self.draw_chart(canvas, env, self.chart);
+            self.draw_tiles(&mut ui);
+            self.draw_chart(&mut ui, self.chart);
         } else {
             // Without the time no day is today: what needs it gives way to
             // a hint (and the totals, if anything was read).
@@ -477,22 +445,18 @@ impl Screen for Overview {
                 self.tiles.width,
                 self.totals.y - self.tiles.y,
             );
-            ui::draw_message(canvas, env, &style, area, env.i18n.tr("stats.no-clock"));
+            ui.message(area, env.i18n.tr("stats.no-clock"));
         }
         if self.today.is_some() || !self.days.is_empty() {
-            self.draw_totals(canvas, env);
+            self.draw_totals(&mut ui);
         }
         let entries = &self.entries;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            entries.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, entries.len(), |ui, index, rect, focused| {
                 if let Entry::Go(row) = entries[index] {
-                    draw_way(canvas, env, &style, rect, focused, row);
+                    draw_way(ui, rect, focused, row);
                 }
-            },
-        );
+            });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

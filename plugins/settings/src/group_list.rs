@@ -225,36 +225,39 @@ impl GroupList {
 impl Screen for GroupList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("settings.title"),
             None,
             paging(&self.rows),
         );
         let (entries, room) = (&self.entries, self.icon_room);
-        self.rows.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            self.keys,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.rows
+            .draw(&mut ui, self.keys, |ui, index, rect, focused| {
                 let entry = &entries[index];
                 let Some(link) = &entry.link else {
-                    ui::draw_heading(canvas, env, &style, rect, &entry.title);
+                    ui.heading(rect, &entry.title);
                     return;
                 };
                 let ink = style.focus_ink(focused);
                 let icon = entry.icon.as_deref();
-                let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
+                let rect = ui.row_icon(rect, room, icon, ink);
                 if *link == Link::Advanced {
                     let on = env.settings.read(&ADVANCED);
-                    ui::draw_switch_row(canvas, env, &style, rect, focused, &entry.title, "", on);
+                    ui::Row::switch(&entry.title, on)
+                        .focused(focused)
+                        .draw(ui, rect);
                 } else if *link == Link::Search || *link == Link::Reset {
-                    ui::draw_value_row(canvas, env, &style, rect, focused, &entry.title, "");
+                    ui::Row::value(&entry.title, "")
+                        .focused(focused)
+                        .draw(ui, rect);
                 } else {
-                    ui::draw_value_row(canvas, env, &style, rect, focused, &entry.title, "›");
+                    ui::Row::value(&entry.title, "›")
+                        .focused(focused)
+                        .draw(ui, rect);
                 }
-            },
-        );
+            });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

@@ -219,9 +219,10 @@ impl Calendar {
         }
     }
 
-    fn draw_grid(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw_grid(&self, ui: &mut ui::Ui<'_>) {
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let env = ui.env();
+        let Some(font) = ui.font() else {
             return;
         };
         let size = self.grid.width / 7;
@@ -235,15 +236,10 @@ impl Calendar {
                 size / 2,
             );
             let x = f32::from(area.x) + (f32::from(size) - font.measure(style.small(), name)) / 2.0;
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                x,
-                area,
-                name,
-                style.faint(ui::Ink::Muted),
-            );
+            ui::Label::new(name)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Muted))
+                .draw_from(ui, x, area);
         }
         let first = self.first_shown(env);
         let (year, month) = month_of(self.day);
@@ -270,7 +266,7 @@ impl Calendar {
                 _ => Some(40),
             };
             if let Some(gray) = shade {
-                canvas.fill(inner, Color::gray(gray));
+                ui.canvas().fill(inner, Color::gray(gray));
                 // And as a bar, an hour long at most: visible on displays
                 // without grays too.
                 let full = u32::from(inner.width) * 3 / 4;
@@ -281,7 +277,7 @@ impl Calendar {
                 } else {
                     Color::BLACK
                 };
-                canvas.fill_rect(
+                ui.canvas().fill_rect(
                     i32::from(inner.x) + (i32::from(inner.width) - len as i32) / 2,
                     i32::from(inner.y + inner.height) - thick as i32 * 2,
                     len,
@@ -296,7 +292,7 @@ impl Calendar {
             };
             let number = format!("{}", fmt::date_of(day).day);
             // Each day a part to choose, the chosen one focused.
-            canvas
+            ui.canvas()
                 .describe(paperpaw_sdk::semantics::Role::Button, &number, r)
                 .focused(day == self.day);
             let x = f32::from(inner.x)
@@ -313,19 +309,24 @@ impl Calendar {
                 inner.width,
                 inner.height.saturating_sub(bar_room),
             );
-            ui::draw_label(canvas, &font, style.small(), x, text, &number, ink);
+            ui::Label::new(&number)
+                .px(style.small())
+                .color(ink)
+                .draw_from(ui, x, text);
             let border = ui::button_border(&style);
             if day == self.day {
-                canvas.stroke(r, border * 2, Color::BLACK);
+                ui.canvas().stroke(r, border * 2, Color::BLACK);
             } else if Some(day) == self.today {
-                canvas.stroke(inner, border, style.faint(ui::Ink::Muted));
+                ui.canvas()
+                    .stroke(inner, border, style.faint(ui::Ink::Muted));
             }
         }
     }
 
-    fn draw_detail(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw_detail(&self, ui: &mut ui::Ui<'_>) {
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let env = ui.env();
+        let Some(font) = ui.font() else {
             return;
         };
         let d = self.detail;
@@ -344,47 +345,27 @@ impl Calendar {
             )
         };
         let title = fmt::long_date(env, self.day);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.text(),
-            margin,
-            line(0),
-            &title,
-            Color::BLACK,
-        );
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            margin,
-            line(1),
-            &summary,
-            style.faint(ui::Ink::Note),
-        );
+        ui::Label::new(&title)
+            .px(style.text())
+            .color(Color::BLACK)
+            .draw_from(ui, margin, line(0));
+        ui::Label::new(&summary)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Note))
+            .draw_from(ui, margin, line(1));
         for (n, (book, s)) in self.day_books.iter().take(DAY_BOOKS).enumerate() {
             let value = fmt::duration(env, u64::from(*s));
             let width = f32::from(d.width) - 2.0 * margin;
             let (book, value, vw) = ui::fit_pair(&font, style.small(), book, &value, width, margin);
             let r = line(n as u16 + 2);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                margin,
-                r,
-                &book,
-                style.faint(ui::Ink::Note),
-            );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small(),
-                f32::from(d.width) - margin - vw,
-                r,
-                &value,
-                style.faint(ui::Ink::Note),
-            );
+            ui::Label::new(&book)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(ui, margin, r);
+            ui::Label::new(&value)
+                .px(style.small())
+                .color(style.faint(ui::Ink::Note))
+                .draw_from(ui, f32::from(d.width) - margin - vw, r);
         }
     }
 }
@@ -407,12 +388,8 @@ impl Screen for Calendar {
             .map_or(0, |today| totals::streak(&self.days, today));
         let note =
             (streak > 1).then(|| env.i18n.plural("stats.streak-note", i64::from(streak), &[]));
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            note.as_deref(),
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header.draw(&mut ui, title, note.as_deref(), None);
         if self.today.is_none() && self.days.is_empty() {
             // No day to show: neither today nor one read.
             let area = Rect::new(
@@ -421,13 +398,13 @@ impl Screen for Calendar {
                 self.nav.width,
                 (self.detail.y + self.detail.height).saturating_sub(self.nav.y),
             );
-            ui::draw_message(canvas, env, &style, area, env.i18n.tr("stats.no-clock"));
+            ui.message(area, env.i18n.tr("stats.no-clock"));
             return;
         }
         let (left, right) = self.arrows();
-        ui::draw_button(canvas, env, &style, left, "‹", false, false);
-        ui::draw_button(canvas, env, &style, right, "›", false, false);
-        if let Some(font) = style.font(env) {
+        ui.button(left, "‹", false, false);
+        ui.button(right, "›", false, false);
+        if let Some(font) = ui.font() {
             let (year, month) = month_of(self.day);
             let name = format!("{} {year}", fmt::month(env, month));
             // Between the arrows, a gap from each: smaller where it does
@@ -469,11 +446,14 @@ impl Screen for Calendar {
                 } else {
                     self.nav
                 };
-                ui::draw_label(canvas, &font, size, x, at, &part, Color::BLACK);
+                ui::Label::new(&part)
+                    .px(size)
+                    .color(Color::BLACK)
+                    .draw_from(&mut ui, x, at);
             }
         }
-        self.draw_grid(canvas, env);
-        self.draw_detail(canvas, env);
+        self.draw_grid(&mut ui);
+        self.draw_detail(&mut ui);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

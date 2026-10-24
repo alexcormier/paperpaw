@@ -247,22 +247,16 @@ impl Screen for PhoneScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("transfer.phone.title");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        self.header.draw(&mut ui, title, None, None);
         let area = self.content(env);
         match &self.state {
-            State::Starting => {
-                ui::draw_message(canvas, env, &style, area, env.i18n.tr("transfer.starting"))
-            }
-            State::Failed(message) => ui::draw_message(canvas, env, &style, area, message),
+            State::Starting => ui.message(area, env.i18n.tr("transfer.starting")),
+            State::Failed(message) => ui.message(area, message),
             State::Serving { url, qr } => {
                 let hint = env.i18n.tr("transfer.phone.hint");
-                ui::draw_address(canvas, env, &style, area, url, qr.as_ref(), hint, None);
+                ui::draw_address(ui.canvas(), env, &style, area, url, qr.as_ref(), hint, None);
             }
         }
     }

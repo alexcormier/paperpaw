@@ -325,46 +325,43 @@ fn clean(name: &str) -> Option<String> {
 impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let rows = self.rows();
         self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
+            &mut ui,
             env.i18n.tr("profiles.title"),
             None,
             self.list.paging(rows.len()),
         );
         let (profiles, in_use) = (&self.profiles, &self.in_use);
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| match rows[index] {
-                Row::Profile(i) => {
-                    let p = &profiles[i];
-                    let value = if in_use.get(i).copied().unwrap_or(false) {
-                        env.i18n.tr("profiles.in-use").to_string()
-                    } else {
-                        String::new()
-                    };
-                    let note = env
-                        .i18n
-                        .plural("profiles.settings", p.values.len() as i64, &[]);
-                    ui::draw_noted_row(
-                        ui.canvas(),
-                        env,
-                        &style,
-                        rect,
-                        focused,
-                        &p.name,
-                        &value,
-                        &note,
-                    );
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
+                match rows[index] {
+                    Row::Profile(i) => {
+                        let p = &profiles[i];
+                        let value = if in_use.get(i).copied().unwrap_or(false) {
+                            env.i18n.tr("profiles.in-use").to_string()
+                        } else {
+                            String::new()
+                        };
+                        let note = env
+                            .i18n
+                            .plural("profiles.settings", p.values.len() as i64, &[]);
+                        ui::Row::value(&p.name, &value)
+                            .note(&note)
+                            .focused(focused)
+                            .draw(ui, rect);
+                    }
+                    Row::Add => {
+                        let title = env.i18n.tr("profiles.add");
+                        let note = env.i18n.tr("profiles.add.help");
+                        ui::Row::value(title, "+")
+                            .note(note)
+                            .focused(focused)
+                            .draw(ui, rect);
+                    }
                 }
-                Row::Add => {
-                    let title = env.i18n.tr("profiles.add");
-                    let note = env.i18n.tr("profiles.add.help");
-                    ui::draw_noted_row(ui.canvas(), env, &style, rect, focused, title, "+", note);
-                }
-            },
-        );
+            });
         if self.profiles.is_empty() {
             // Below the row that saves one: what profiles are for.
             let top = self.list.area().y + self.list.row() as u16;
@@ -374,10 +371,7 @@ impl Screen for ListScreen {
                 self.list.area().width,
                 self.status.y.saturating_sub(top),
             );
-            ui::draw_empty(
-                canvas,
-                env,
-                &style,
+            ui.empty(
                 area,
                 "stack-2",
                 env.i18n.tr("profiles.empty.title"),
@@ -385,14 +379,8 @@ impl Screen for ListScreen {
             );
             return;
         }
-        canvas.fill(self.status, Color::WHITE);
-        ui::draw_note_line(
-            canvas,
-            env,
-            &style,
-            self.status,
-            ui::tr_input(env, "profiles.hint"),
-        );
+        ui.canvas().fill(self.status, Color::WHITE);
+        ui.note_line(self.status, ui::tr_input(env, "profiles.hint"));
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

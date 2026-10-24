@@ -183,9 +183,10 @@ impl Screen for ConfirmScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
@@ -194,20 +195,12 @@ impl Screen for ConfirmScreen {
         );
         let row = self.button_row();
         let text = Rect::new(r.x, r.y, r.width, row.y - r.y);
-        ui::draw_message(canvas, env, &style, text, &self.text);
+        ui.message(text, &self.text);
         for (index, key) in self.buttons.iter().enumerate() {
             // With buttons, the frame shows which one confirm takes.
             let focused = ui::focus_shown(env) && index == self.focus && self.buttons.len() > 1;
             let rect = self.button(index);
-            ui::draw_button(
-                canvas,
-                env,
-                &style,
-                rect,
-                env.i18n.tr(key),
-                index == 0,
-                focused,
-            );
+            ui.button(rect, env.i18n.tr(key), index == 0, focused);
         }
     }
 

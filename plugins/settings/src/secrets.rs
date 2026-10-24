@@ -79,35 +79,23 @@ impl SecretList {
 impl Screen for SecretList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = env.secrets.listed().count();
         let title = env.i18n.tr("settings.secrets");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
             let area = self.list.area();
-            ui::draw_message(
-                canvas,
-                env,
-                &style,
-                area,
-                env.i18n.tr("settings.secrets.none"),
-            );
+            ui.message(area, env.i18n.tr("settings.secrets.none"));
             return;
         }
         let secrets: Vec<_> = env.secrets.listed().collect();
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let label = env.i18n.tr(secrets[index].label);
-                ui::draw_value_row(canvas, env, &style, rect, focused, label, HIDDEN);
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let label = env.i18n.tr(secrets[index].label);
+            ui::Row::value(label, HIDDEN)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -222,26 +210,20 @@ impl SecretPage {
 impl Screen for SecretPage {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let len = self.choices.len();
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &self.title,
-            None,
-            self.list.paging(len),
-        );
+        self.header
+            .draw(&mut ui, &self.title, None, self.list.paging(len));
         let choices = &self.choices;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let key = match choices[index] {
-                    Choice::Change => "settings.secret.change",
-                    Choice::Remove => "settings.secret.remove",
-                };
-                ui::draw_value_row(canvas, env, &style, rect, focused, env.i18n.tr(key), "");
-            },
-        );
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let key = match choices[index] {
+                Choice::Change => "settings.secret.change",
+                Choice::Remove => "settings.secret.remove",
+            };
+            ui::Row::value(env.i18n.tr(key), "")
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

@@ -219,7 +219,8 @@ fn draw_forecast(
     days: &[Day],
 ) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let mut caption = Vec::new();
@@ -232,7 +233,7 @@ fn draw_forecast(
     let area = if caption.is_empty() {
         look.area
     } else {
-        widgets::draw_caption(canvas, env, ID.as_str(), look, &caption.join(" · "))
+        widgets::draw_caption(ui.canvas(), env, ID.as_str(), look, &caption.join(" · "))
     };
     let days = if as_list(env, area, days.len()) {
         days
@@ -252,9 +253,9 @@ fn draw_forecast(
         today: shown.today,
     };
     if as_list(env, area, days.len()) {
-        context.list(canvas, area, days);
+        context.list(&mut ui, area, days);
     } else {
-        context.row(canvas, area, days);
+        context.row(&mut ui, area, days);
     }
 }
 
@@ -303,7 +304,7 @@ impl Context<'_, '_> {
         clippy::too_many_lines,
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
-    fn row(&self, canvas: &mut Canvas<'_>, area: Rect, days: &[Day]) {
+    fn row(&self, ui: &mut ui::Ui<'_>, area: Rect, days: &[Day]) {
         let style = self.style;
         let font = self.font;
         let count = days.len().max(1) as u16;
@@ -405,14 +406,10 @@ impl Context<'_, '_> {
                 self.look.faint
             };
             let row = Rect::new(cell.x, y, cell.width, name_h);
-            ui::draw_label(
-                canvas,
-                font,
-                name,
+            ui::Label::new(&label).px(name).color(color).draw_from(
+                ui,
                 centre(font.measure(name, &label)),
                 row,
-                &label,
-                color,
             );
             y += name_h;
             if side > 0 {
@@ -420,7 +417,7 @@ impl Context<'_, '_> {
                 let x = cell.x + (cell.width - side) / 2;
                 let (_, symbol) = data::condition(day.code);
                 let at = Rect::new(x, y, side, side);
-                draw::draw_symbol(canvas, at, (symbol, true), self.symbols, self.look.ink);
+                draw::draw_symbol(ui.canvas(), at, (symbol, true), self.symbols, self.look.ink);
                 y += side + gap;
             }
             let text = self.degrees(day.high);
@@ -431,32 +428,27 @@ impl Context<'_, '_> {
             let beside_w = font.measure(low, &beside);
             if low_beside && high_w + space + beside_w <= f32::from(column) * 0.95 {
                 let x = centre(high_w + space + beside_w);
-                draw_digits(canvas, font, high, x, row, &text, self.look.ink);
+                draw_digits(ui, font, high, x, row, &text, self.look.ink);
                 let x = x + high_w + space;
-                draw_digits(canvas, font, low, x, row, &beside, self.look.faint);
+                draw_digits(ui, font, low, x, row, &beside, self.look.faint);
             } else {
-                draw_digits(
-                    canvas,
-                    font,
-                    high,
-                    centre(high_w),
-                    row,
-                    &text,
-                    self.look.ink,
-                );
+                draw_digits(ui, font, high, centre(high_w), row, &text, self.look.ink);
             }
             y += high_h;
             if with_low {
                 let text = self.degrees(day.low);
                 let row = Rect::new(cell.x, y, cell.width, low_h);
                 let x = centre(font.measure(low, &text));
-                draw_digits(canvas, font, low, x, row, &text, self.look.faint);
+                draw_digits(ui, font, low, x, row, &text, self.look.faint);
                 y += low_h;
             }
             if let Some(rain) = self.rain(day) {
                 let row = Rect::new(cell.x, y, cell.width, rain_h);
                 let x = centre(font.measure(style.small(), &rain));
-                ui::draw_label(canvas, font, style.small(), x, row, &rain, self.look.faint);
+                ui::Label::new(&rain)
+                    .px(style.small())
+                    .color(self.look.faint)
+                    .draw_from(ui, x, row);
             }
             if self.shows("lines") && i > 0 {
                 let inset = total / 8;
@@ -466,7 +458,7 @@ impl Context<'_, '_> {
                     u32::from(style.line()).max(1) as u16,
                     total - 2 * inset,
                 );
-                self.rule(canvas, line);
+                self.rule(ui.canvas(), line);
             }
         }
     }
@@ -477,7 +469,7 @@ impl Context<'_, '_> {
         clippy::too_many_lines,
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
-    fn list(&self, canvas: &mut Canvas<'_>, area: Rect, days: &[Day]) {
+    fn list(&self, ui: &mut ui::Ui<'_>, area: Rect, days: &[Day]) {
         let style = self.style;
         let font = self.font;
         let env = self.env;
@@ -598,30 +590,36 @@ impl Context<'_, '_> {
             } else {
                 self.look.faint
             };
-            ui::draw_label(canvas, font, size, f32::from(area.x), row, &names[i], color);
+            ui::Label::new(&names[i])
+                .px(size)
+                .color(color)
+                .draw_from(ui, f32::from(area.x), row);
             if side > 0 {
                 let at = Rect::new(symbol_x, row.y + (height - side) / 2, side, side);
                 let (_, symbol) = data::condition(day.code);
-                draw::draw_symbol(canvas, at, (symbol, true), self.symbols, self.look.ink);
+                draw::draw_symbol(ui.canvas(), at, (symbol, true), self.symbols, self.look.ink);
             }
             if let Some(rain) = rains[i].as_ref().filter(|_| rain_w > 0) {
                 let w = font.measure(small, rain);
                 let x = f32::from(rain_x + rain_w) - w;
-                ui::draw_label(canvas, font, small, x, row, rain, self.look.faint);
+                ui::Label::new(rain)
+                    .px(small)
+                    .color(self.look.faint)
+                    .draw_from(ui, x, row);
             }
             if low_w > 0 {
                 let w = font.measure(size, &lows[i]);
                 let x = f32::from(low_x + low_w) - w;
-                draw_digits(canvas, font, size, x, row, &lows[i], self.look.faint);
+                draw_digits(ui, font, size, x, row, &lows[i], self.look.faint);
             }
             let w = font.measure(size, &highs[i]);
             let x = f32::from(high_x + high_w) - w;
-            draw_digits(canvas, font, size, x, row, &highs[i], self.look.ink);
+            draw_digits(ui, font, size, x, row, &highs[i], self.look.ink);
             if bars {
                 let mid = i32::from(row.y) + i32::from(row.height) / 2;
                 let track = u32::from(style.line()).max(1) as u16;
                 let y = (mid - i32::from(track) / 2) as u16;
-                self.rule(canvas, Rect::new(bar_x, y, bar_w, track));
+                self.rule(ui.canvas(), Rect::new(bar_x, y, bar_w, track));
                 let thick = (draw::cap(size) * 0.25).max(3.0) as u32;
                 let from = place(day.low) as i32;
                 let to = (place(day.high) as i32).max(from + thick as i32);
@@ -631,7 +629,7 @@ impl Context<'_, '_> {
                     (to - from) as u16,
                     thick as u16,
                 );
-                canvas.fill_round(bar, thick / 2, self.look.ink);
+                ui.canvas().fill_round(bar, thick / 2, self.look.ink);
             }
             if self.shows("lines") && i > 0 {
                 let line = Rect::new(
@@ -640,7 +638,7 @@ impl Context<'_, '_> {
                     area.width,
                     u32::from(style.line()).max(1) as u16,
                 );
-                self.rule(canvas, line);
+                self.rule(ui.canvas(), line);
             }
         }
     }

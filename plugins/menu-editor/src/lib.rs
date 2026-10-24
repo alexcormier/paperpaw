@@ -225,31 +225,20 @@ impl Frame {
         movable: usize,
     ) {
         let style = self.style;
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(len),
-        );
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let (label, value) = row(index);
-                let rect = if index < movable {
-                    Reorder::draw_grip(canvas, env, &style, rect, focused);
-                    Reorder::content(rect)
-                } else {
-                    rect
-                };
-                ui::draw_value_row(canvas, env, &style, rect, focused, label, value);
-            },
-        );
-        self.reorder.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            &self.list,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (label, value) = row(index);
+            let rect = if index < movable {
+                Reorder::draw_grip(ui.canvas(), env, &style, rect, focused);
+                Reorder::content(rect)
+            } else {
+                rect
+            };
+            ui::Row::value(label, value).focused(focused).draw(ui, rect);
+        });
+        self.reorder.draw(&mut ui, &self.list);
     }
 
     /// Follows a finger dragging one of the first `movable` rows: where
@@ -677,16 +666,17 @@ impl Screen for EntryScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
             (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         let id = entries(env, &self.menu).get(self.index).cloned();
@@ -694,30 +684,24 @@ impl Screen for EntryScreen {
         let title_area = Rect::new(r.x, r.y + style.gap(), r.width, style.row());
         let x = style.margin() as f32;
         let title = ui::fit(&font, style.title(), &title, f32::from(r.width) - 2.0 * x);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title(),
-            x,
-            title_area,
-            &title,
-            Color::BLACK,
-        );
+        ui::Label::new(&title)
+            .px(style.title())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, x, title_area);
         if self.refused {
             let message = env.i18n.tr("menu-editor.locked");
-            ui::draw_message(canvas, env, &style, self.list.area(), message);
+            ui.message(self.list.area(), message);
             return;
         }
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            OPTIONS.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, OPTIONS.len(), |ui, index, rect, focused| {
                 let label = env.i18n.tr(OPTIONS[index]);
                 let color = style.focus_ink(focused);
-                ui::draw_label(canvas, &font, style.text(), x, rect, label, color);
-            },
-        );
+                ui::Label::new(label)
+                    .px(style.text())
+                    .color(color)
+                    .draw_from(ui, x, rect);
+            });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

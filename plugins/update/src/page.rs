@@ -684,21 +684,14 @@ impl UpdatePage {
         self.redraw(cx, RefreshMode::Fast);
     }
 
-    fn draw_progress(
-        &self,
-        canvas: &mut Canvas<'_>,
-        env: &Env<'_>,
-        area: Rect,
-        done: u64,
-        total: u64,
-    ) {
+    fn draw_progress(&self, ui: &mut ui::Ui<'_>, area: Rect, done: u64, total: u64) {
         let style = &self.style;
         let percent = (done * 100).checked_div(total).unwrap_or(0).min(100);
         let permille = (done * 1000).checked_div(total).unwrap_or(0).min(1000) as u16;
-        ui::draw_progress(canvas, style, area, permille, Color::BLACK);
+        ui.progress(area, permille, Color::BLACK);
         let text = alloc::format!("{percent} %");
-        canvas.describe(Role::Text, &text, area);
-        if let Some(font) = style.font(env) {
+        ui.canvas().describe(Role::Text, &text, area);
+        if let Some(font) = ui.font() {
             let label = Rect::new(
                 area.x,
                 area.y + area.height + style.gap(),
@@ -707,7 +700,10 @@ impl UpdatePage {
             );
             let tx = f32::from(area.x)
                 + (f32::from(area.width) - font.measure(style.text(), &text)) / 2.0;
-            ui::draw_label(canvas, &font, style.text(), tx, label, &text, Color::BLACK);
+            ui::Label::new(&text)
+                .px(style.text())
+                .color(Color::BLACK)
+                .draw_from(ui, tx, label);
         }
     }
 }
@@ -739,16 +735,14 @@ fn paragraph_fits(
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
 fn paragraph(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
+    ui: &mut ui::Ui<'_>,
     area: Rect,
     size: f32,
     text: &str,
     max: usize,
     color: Color,
 ) -> u16 {
-    let Some(font) = style.font(env) else {
+    let Some(font) = ui.font() else {
         return 0;
     };
     let width = f32::from(area.width);
@@ -766,7 +760,7 @@ fn paragraph(
     let lines = font.wrap(size, text, width);
     let cut = lines.len() > max;
     let used = height * lines.len().min(max) as u16;
-    canvas.describe(
+    ui.canvas().describe(
         Role::Text,
         text,
         Rect::new(area.x, area.y, area.width, used),
@@ -781,7 +775,10 @@ fn paragraph(
         } else {
             alloc::borrow::Cow::Borrowed(&text[range])
         };
-        ui::draw_label(canvas, &font, size, f32::from(area.x), row, &line, color);
+        ui::Label::new(&line)
+            .px(size)
+            .color(color)
+            .draw_from(ui, f32::from(area.x), row);
         top += height;
     }
     top - area.y
@@ -791,12 +788,9 @@ impl Screen for UpdatePage {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
         let style = self.style;
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            env.i18n.tr("update.title"),
-            None,
-            None,
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, env.i18n.tr("update.title"), None, None);
         // Within the margins other pages keep, below the header as their
         // content.
         let margin = style.margin();
@@ -810,16 +804,7 @@ impl Screen for UpdatePage {
             width,
             env.device.display.height.saturating_sub(y),
         );
-        y += paragraph(
-            canvas,
-            env,
-            &style,
-            area,
-            style.title(),
-            &title,
-            3,
-            Color::BLACK,
-        ) + gap;
+        y += paragraph(&mut ui, area, style.title(), &title, 3, Color::BLACK) + gap;
         let buttons = self.buttons(env);
         let rects = self.button_rects(env, &buttons);
         // The words keep clear of the buttons.
@@ -830,9 +815,7 @@ impl Screen for UpdatePage {
         if paragraph_fits(env, &style, area, style.small(), &help, HELP_LINES) {
             self.help = None;
             y += paragraph(
-                canvas,
-                env,
-                &style,
+                &mut ui,
                 area,
                 style.small(),
                 &help,
@@ -846,18 +829,18 @@ impl Screen for UpdatePage {
                 self.help = Some((ui::TextView::new(env, &style, area, &help), area));
             }
             if let Some((view, _)) = &self.help {
-                view.draw(&mut paperpaw_sdk::ui::Ui::new(canvas, env, &style), &help);
+                view.draw(&mut ui, &help);
             }
             y += area.height + gap * 2;
         }
         if let View::Installing { done, total } = self.view {
             let bar = Rect::new(margin, y, width, gap * 3);
-            self.draw_progress(canvas, env, bar, done, total);
+            self.draw_progress(&mut ui, bar, done, total);
         }
         for (i, (button, rect)) in buttons.iter().zip(rects).enumerate() {
             let label = self.label(env, *button);
             let focused = self.shown && self.focus == i;
-            ui::draw_button(canvas, env, &style, rect, label, i == 0, focused);
+            ui.button(rect, label, i == 0, focused);
         }
     }
 

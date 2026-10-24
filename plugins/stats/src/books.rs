@@ -57,54 +57,34 @@ impl Screen for BookList {
         let style = self.style;
         let len = self.books.len();
         let title = env.i18n.tr("stats.books");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            self.list.paging(len),
-        );
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        self.header
+            .draw(&mut ui, title, None, self.list.paging(len));
         if len == 0 {
-            ui::draw_message(
-                canvas,
-                env,
-                &style,
-                self.list.area(),
-                env.i18n.tr("stats.no-books"),
-            );
+            ui.message(self.list.area(), env.i18n.tr("stats.no-books"));
             return;
         }
         let books = &self.books;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            len,
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
-                let (book, seconds) = &books[index];
-                let mut note = authors(&book.authors);
-                if book.last_open > 0 {
-                    let day = fmt::day_of(env, book.last_open as u32);
-                    let last = env.i18n.format(
-                        "stats.last-read",
-                        &[("date", Arg::Str(&fmt::date(env, day)))],
-                    );
-                    if !note.is_empty() {
-                        note.push_str(" · ");
-                    }
-                    note.push_str(&last);
-                }
-                let value = fmt::duration(env, *seconds);
-                ui::draw_noted_row(
-                    canvas,
-                    env,
-                    &style,
-                    rect,
-                    focused,
-                    &book.title,
-                    &value,
-                    &note,
+        self.list.draw(&mut ui, len, |ui, index, rect, focused| {
+            let (book, seconds) = &books[index];
+            let mut note = authors(&book.authors);
+            if book.last_open > 0 {
+                let day = fmt::day_of(env, book.last_open as u32);
+                let last = env.i18n.format(
+                    "stats.last-read",
+                    &[("date", Arg::Str(&fmt::date(env, day)))],
                 );
-            },
-        );
+                if !note.is_empty() {
+                    note.push_str(" · ");
+                }
+                note.push_str(&last);
+            }
+            let value = fmt::duration(env, *seconds);
+            ui::Row::value(&book.title, &value)
+                .note(&note)
+                .focused(focused)
+                .draw(ui, rect);
+        });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

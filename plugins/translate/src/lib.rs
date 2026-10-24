@@ -399,16 +399,17 @@ impl Screen for Panel {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.fill_rect(
+        ui.canvas().fill(r, Color::WHITE);
+        ui.canvas().fill_rect(
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
             (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        let Some(font) = ui.font() else {
             return;
         };
         // The original on the left, the service on the right.
@@ -416,24 +417,14 @@ impl Screen for Panel {
         let margin = style.margin() as f32;
         let source = env.i18n.tr("translate.source");
         let right = self.source_x(env);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            right,
-            header,
-            source,
-            style.faint(ui::Ink::Detail),
-        );
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title(),
-            margin,
-            header,
-            &self.heading,
-            Color::BLACK,
-        );
+        ui::Label::new(source)
+            .px(style.small())
+            .color(style.faint(ui::Ink::Detail))
+            .draw_from(&mut ui, right, header);
+        ui::Label::new(&self.heading)
+            .px(style.title())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, margin, header);
         let height = self.line_height(env);
         let ascent = font.line_metrics(style.text()).ascent;
         let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
@@ -441,7 +432,7 @@ impl Screen for Panel {
         for (n, &(start, end)) in self.lines.iter().skip(self.top).take(rows).enumerate() {
             let baseline = top + height * n as f32 + ascent;
             font.draw(
-                canvas,
+                ui.canvas(),
                 style.text(),
                 margin,
                 baseline as i32,

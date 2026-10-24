@@ -824,18 +824,11 @@ impl SetupScreen {
 impl Screen for SetupScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n.tr("wallabag.title");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            ROWS.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.header.draw(&mut ui, title, None, None);
+        self.list
+            .draw(&mut ui, ROWS.len(), |ui, index, rect, focused| {
                 let row = ROWS[index];
                 let kept = |id: &str| {
                     if env.secrets.get(id).is_some() {
@@ -856,10 +849,11 @@ impl Screen for SetupScreen {
                     Row::Fetch => String::from("›"),
                 };
                 let title = env.i18n.tr(row.title());
-                ui::draw_value_row(canvas, env, &style, rect, focused, title, &value);
-            },
-        );
-        ui::draw_message(canvas, env, &style, self.note, &self.message);
+                ui::Row::value(title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
+        ui.message(self.note, &self.message);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

@@ -36,7 +36,8 @@ impl Screen for GoalSleep {
         let screen = Rect::new(0, 0, display.width, display.height);
         canvas.fill(screen, Color::WHITE);
         let style = UiStyle::new(env);
-        let Some(font) = style.font(env) else {
+        let mut ui = ui::Ui::new(canvas, env, &style);
+        let Some(font) = ui.font() else {
             return;
         };
         let margin = style.margin();
@@ -56,14 +57,17 @@ impl Screen for GoalSleep {
         let top = display.height.saturating_sub(h + gap + line) / 2;
         if let Some(image) = &self.image {
             let area = Rect::new((display.width - w) / 2, top, w, h);
-            ui::draw_image(canvas, env.storage, image, area);
-            canvas.describe(Role::Image, &self.described, area);
+            ui::draw_image(ui.canvas(), env.storage, image, area);
+            ui.canvas().describe(Role::Image, &self.described, area);
         }
         let width = f32::from(room_w);
         let text = ui::fit(&font, style.text(), &self.text, width);
         let x = f32::from(margin) + (width - font.measure(style.text(), &text)).max(0.0) / 2.0;
         let row = Rect::new(margin, top + h + gap, room_w, line);
-        ui::draw_label(canvas, &font, style.text(), x, row, &text, Color::BLACK);
+        ui::Label::new(&text)
+            .px(style.text())
+            .color(Color::BLACK)
+            .draw_from(&mut ui, x, row);
     }
 
     /// Buttons are the sleep screen's (it shows this one in its place).

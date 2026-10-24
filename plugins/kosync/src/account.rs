@@ -261,21 +261,14 @@ impl AccountScreen {
 impl Screen for AccountScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        let mut ui = ui::Ui::new(canvas, env, &style);
         let rows = self.rows(env);
         self.list.set_len(rows.len());
         let title = env.i18n.tr("kosync.group");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            title,
-            None,
-            None,
-        );
+        self.header.draw(&mut ui, title, None, None);
         let i18n = env.i18n;
-        self.list.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &style),
-            rows.len(),
-            |ui, index, rect, focused| {
-                let canvas = ui.canvas();
+        self.list
+            .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let url = server(env);
                 let (title, value) = match rows[index] {
                     Row::Server => (i18n.tr("kosync.server"), server_label(&url).to_string()),
@@ -293,18 +286,13 @@ impl Screen for AccountScreen {
                     Row::SignOut => (i18n.tr("kosync.sign-out"), "›".to_string()),
                     Row::More => (i18n.tr("kosync.more"), "›".to_string()),
                 };
-                ui::draw_value_row(canvas, env, &style, rect, focused, title, &value);
-            },
-        );
+                ui::Row::value(title, &value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
         // Whole, or not at all: then *More about this* shows it.
         if !rows.contains(&Row::More) {
-            ui::draw_message(
-                canvas,
-                env,
-                &style,
-                self.note(env, rows.len()),
-                &self.message,
-            );
+            ui.message(self.note(env, rows.len()), &self.message);
         }
     }
 

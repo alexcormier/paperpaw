@@ -312,7 +312,8 @@ fn notes(env: &Env<'_>, shown: &Shown) -> Vec<(String, bool)> {
 )]
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let mut ui = ui::Ui::new(canvas, env, &style);
+    let Some(font) = ui.font() else {
         return;
     };
     let id = NAME;
@@ -338,7 +339,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
             .filter(|(note, cut)| *cut || font.measure(style.small(), note) <= width)
             .map(|(note, _)| note)
             .collect();
-        draw_ring(canvas, env, (look, caption), area, shown, progress, &notes);
+        draw_ring(&mut ui, (look, caption), area, shown, progress, &notes);
         return;
     }
     // The notes on two lines where they need them (shortened where even
@@ -392,7 +393,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
     } else {
         band
     };
-    let block = super::captioned(canvas, env, id, look, caption, big + band + notes_h);
+    let block = super::captioned(ui.canvas(), env, id, look, caption, big + band + notes_h);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     // Too wide: "3 / 12", or the number alone.
     let short = goal.map(|g| alloc::format!("{} / {g}", shown.done));
@@ -403,35 +404,30 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
     let headline = super::number_if_narrow(&font, size, &headline, area.width);
     let headline = ui::fit(&font, size, headline, f32::from(area.width));
     let x = align.x(area, font.measure(size, &headline));
-    ui::draw_label(
-        canvas,
-        &font,
-        size,
-        x,
-        row(block.y, big),
-        &headline,
-        look.ink,
-    );
+    ui::Label::new(&headline)
+        .px(size)
+        .color(look.ink)
+        .draw_from(&mut ui, x, row(block.y, big));
     let mut y = block.y + big;
     if let Some(goal) = goal {
         if dots {
-            draw_dots(canvas, env, look, row(y, band), shown.done, goal);
+            draw_dots(&mut ui, look, row(y, band), shown.done, goal);
         } else {
             let height = env.metrics.mm(1).max(4) as u16;
             let track = Rect::new(area.x, y + (band - height) / 2, area.width, height);
             let radius = u32::from(height / 2);
-            canvas.fill_round_shaded(track, radius, shade(look, 1));
+            ui.canvas().fill_round_shaded(track, radius, shade(look, 1));
             let filled = (u32::from(area.width) * progress.unwrap_or(0) / 1000) as u16;
             if filled > 0 {
                 let bar = Rect::new(track.x, track.y, filled.max(height), height);
-                canvas.fill_round(bar, radius, look.ink);
+                ui.canvas().fill_round(bar, radius, look.ink);
             }
         }
         y += band;
     }
     for note in &notes {
         let h = note.height(env);
-        note.draw(canvas, env, row(y, h), align, look.faint);
+        note.draw(ui.canvas(), env, row(y, h), align, look.faint);
         y += h;
     }
 }
@@ -439,16 +435,16 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown
 /// The goal as a ring with the books read inside, the notes beside it
 /// (or below, where it is not wide).
 fn draw_ring(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
+    ui: &mut ui::Ui<'_>,
     (look, caption): (&WidgetLook, Option<&str>),
     area: Rect,
     shown: &Shown,
     progress: Option<u32>,
     notes: &[String],
 ) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let env = ui.env();
+    let style = *ui.style();
+    let Some(font) = ui.font() else {
         return;
     };
     let small = line(&font, style.small());
@@ -460,7 +456,7 @@ fn draw_ring(
     } else {
         area.width.min(area.height.saturating_sub(notes_h))
     };
-    let block = super::captioned(canvas, env, NAME, look, caption, d + notes_h);
+    let block = super::captioned(ui.canvas(), env, NAME, look, caption, d + notes_h);
     let gap = style.gap();
     // Wide: the ring and the notes beside it placed together, as the
     // alignment says.
@@ -481,7 +477,7 @@ fn draw_ring(
     };
     let at = Rect::new(x, block.y, d, d);
     let thick = (u32::from(d) / 12).max(3);
-    super::draw_arc(canvas, env, look, at, progress, thick, false);
+    super::draw_arc(ui.canvas(), env, look, at, progress, thick, false);
     // The count inside, "of 12" below it.
     let inner = d.saturating_sub(2 * thick as u16 + 4);
     let count = alloc::format!("{}", shown.done);
@@ -502,19 +498,17 @@ fn draw_ring(
     let cx = f32::from(at.x) + f32::from(d) / 2.0;
     let w = font.measure(size, &count);
     let r = Rect::new(at.x, inside.y, d, big);
-    ui::draw_label(canvas, &font, size, cx - w / 2.0, r, &count, look.ink);
+    ui::Label::new(&count)
+        .px(size)
+        .color(look.ink)
+        .draw_from(ui, cx - w / 2.0, r);
     if let Some(of) = of.filter(|_| of_h > 0) {
         let w = font.measure(style.small(), &of);
         let r = Rect::new(at.x, inside.y + big, d, small);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small(),
-            cx - w / 2.0,
-            r,
-            &of,
-            look.faint,
-        );
+        ui::Label::new(&of)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(ui, cx - w / 2.0, r);
     }
     // The notes.
     let (text, top) = if wide {
@@ -537,21 +531,18 @@ fn draw_ring(
             align.x(text, font.measure(style.small(), &note))
         };
         let r = Rect::new(text.x, top + n as u16 * small, text.width, small);
-        ui::draw_label(canvas, &font, style.small(), x, r, &note, look.faint);
+        ui::Label::new(&note)
+            .px(style.small())
+            .color(look.faint)
+            .draw_from(ui, x, r);
     }
 }
 
 /// A dot for each book of the goal in `band`, filled for those read, in
 /// as few rows as let them be large.
-fn draw_dots(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    look: &WidgetLook,
-    band: Rect,
-    done: u32,
-    goal: u32,
-) {
-    let style = UiStyle::new(env);
+fn draw_dots(ui: &mut ui::Ui<'_>, look: &WidgetLook, band: Rect, done: u32, goal: u32) {
+    let env = ui.env();
+    let style = *ui.style();
     let n = goal.clamp(1, MOST_DOTS);
     let (w, h) = (u32::from(band.width), u32::from(band.height));
     // The rows that give the largest dots.
@@ -578,9 +569,9 @@ fn draw_dots(
             top + (row * size + size / 2) as i32,
         );
         if i < done {
-            canvas.fill_circle(center, radius, look.ink);
+            ui.canvas().fill_circle(center, radius, look.ink);
         } else {
-            canvas.stroke_circle(center, radius, thin, look.faint);
+            ui.canvas().stroke_circle(center, radius, thin, look.faint);
         }
     }
 }
