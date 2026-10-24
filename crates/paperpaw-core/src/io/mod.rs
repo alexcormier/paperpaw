@@ -19,7 +19,9 @@ use alloc::vec::Vec;
 use paperpaw_sdk::firmware::FirmwareCommand;
 use paperpaw_sdk::wifi::{JoinFailure, WifiCommand, WifiNetwork, WifiState};
 
-pub use bluetooth::{Bond, BtCall, BtReport, PairQuestion, ServedService};
+pub use bluetooth::{
+    Advert, Bond, BtCall, BtReport, Found, PairQuestion, ServedCharacteristic, ServedService,
+};
 pub use http::{HttpCall, HttpResponse, MAX_FILE, MAX_RESPONSE};
 pub use servers::{ServedFile, ServerCall, ServerEvent};
 pub use sockets::{SOCKET_PART, SocketCall, SocketEvent};

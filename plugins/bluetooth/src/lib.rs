@@ -22,12 +22,12 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 
 use paperpaw_sdk::bluetooth::{self, BtEvent, DeviceId};
-use paperpaw_sdk::builtin::events;
+use paperpaw_sdk::builtin::{events, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingSpec, StatusItemSpec, StatusValue, Uses,
+    ActionSpec, Command, Commands, Env, Id, Manifest, MenuNeed, Params, Plugin, Priority,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, StatusItemSpec, StatusValue, Uses,
 };
 
 pub const PLUGIN: Id = Id::new_static("bluetooth");
@@ -47,6 +47,8 @@ const ICON: &str = "bluetooth";
 pub(crate) const FOUND: Event<BtEvent> = Event::new("bluetooth.found");
 /// What happens with a device being added.
 pub(crate) const LINK: Event<BtEvent> = Event::new("bluetooth.link");
+/// The answers to forgetting, giving and switching a remote's keys.
+pub(crate) const DONE: Event<BtEvent> = Event::new("bluetooth.done");
 
 /// When a remote's or a keyboard's keys go to the key maps.
 pub const REMOTES: Setting<Text> = Setting::new("bluetooth.remotes");
@@ -80,9 +82,8 @@ pub(crate) type Shared = Rc<State>;
 pub(crate) fn remotes(env: &Env<'_>) -> Vec<DeviceId> {
     env.bluetooth()
         .map(|b| {
-            b.bonded
-                .iter()
-                .filter(|d| d.kind.types())
+            b.bonded()
+                .filter(|d| d.kind.can_type())
                 .map(|d| d.id)
                 .collect()
         })
@@ -93,9 +94,9 @@ pub(crate) fn remotes(env: &Env<'_>) -> Vec<DeviceId> {
 fn all_remotes(env: &Env<'_>, on: bool, out: &mut Commands) {
     for device in remotes(env) {
         out.push(if on {
-            bluetooth::keys(device)
+            bluetooth::remote_keys(device, &DONE)
         } else {
-            bluetooth::keys_off(device)
+            bluetooth::remote_keys_off(device, &DONE)
         });
     }
 }
@@ -137,7 +138,7 @@ impl Plugin for Bluetooth {
                 "bluetooth.status.item",
                 Box::new(|env, _| {
                     env.bluetooth()
-                        .is_some_and(|b| b.bonded.iter().any(|d| d.connected))
+                        .is_some_and(|b| b.bonded().any(|d| d.connected))
                         .then_some(StatusValue::Icon(Cow::Borrowed(ICON)))
                 }),
             )
@@ -154,6 +155,8 @@ impl Plugin for Bluetooth {
             "bluetooth.title",
             Box::new(|env, _| Box::new(page::BluetoothPage::new(env))),
         ))?;
+        // The Bluetooth manager: it sees every bond and connects remotes.
+        r.bind_slot(slots::BLUETOOTH, PAGE, Priority::DEFAULT)?;
         r.add_screen(ScreenSpec::new(
             SEARCH,
             "bluetooth.add",

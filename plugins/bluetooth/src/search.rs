@@ -5,7 +5,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::bluetooth::{self, BtError, BtEvent, Device, DeviceId};
+use paperpaw_sdk::bluetooth::{self, BtError, BtEvent, BtFailure, Device, DeviceId, ScanPower};
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
@@ -16,8 +16,9 @@ use paperpaw_sdk::{
 use crate::page::kind_text;
 use crate::{FOUND, LINK};
 
-/// How long a search runs.
-const SEARCH_MS: u32 = 30_000;
+/// How long a search runs: the reader's own, so half the time, asking
+/// devices for their names.
+const SEARCH: core::time::Duration = core::time::Duration::from_secs(30);
 
 /// Where adding the chosen device is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +69,13 @@ impl Search {
     fn search(&mut self, cx: &mut Cx<'_, '_>) {
         self.searching = true;
         self.problem = None;
-        cx.command(bluetooth::scan(&FOUND).for_ms(SEARCH_MS).command());
+        cx.command(
+            bluetooth::scan(&FOUND)
+                .lasting(SEARCH)
+                .power(ScanPower::Balanced)
+                .active()
+                .command(),
+        );
         Self::changed(cx);
     }
 
@@ -87,7 +94,7 @@ impl Search {
         self.problem = None;
         self.adding = Some(Adding::Connecting(id));
         cx.command(bluetooth::stop_scan(&FOUND));
-        cx.command(bluetooth::connect(id, &LINK));
+        cx.command(bluetooth::connect(id, &LINK).command());
         Self::changed(cx);
     }
 
@@ -95,21 +102,21 @@ impl Search {
     fn link(&mut self, event: BtEvent, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         match (event, self.adding) {
-            (BtEvent::Connected { device }, Some(Adding::Connecting(adding)))
+            (BtEvent::Connected { device, .. }, Some(Adding::Connecting(adding)))
                 if device == adding =>
             {
                 self.adding = Some(Adding::Pairing(device));
                 cx.command(bluetooth::pair(device));
             }
-            (BtEvent::Paired { device }, _) => {
+            (BtEvent::Paired { device, .. }, _) => {
                 self.adding = None;
                 let typing = self
                     .found
                     .iter()
                     .find(|d| d.id == device)
-                    .is_some_and(|d| d.kind.types());
+                    .is_some_and(|d| d.kind.can_type());
                 if typing {
-                    cx.command(bluetooth::keys(device));
+                    cx.command(bluetooth::remote_keys(device, &crate::DONE));
                 }
                 cx.command(bluetooth::disconnect(device));
                 let name = self.name_of(&env, device);
@@ -119,7 +126,7 @@ impl Search {
                 ));
                 cx.command(Command::Back);
             }
-            (BtEvent::Failed { error, .. }, Some(_))
+            (BtEvent::Failed(BtFailure { error, .. }), Some(_))
             | (
                 BtEvent::Disconnected {
                     reason: Some(error),
@@ -129,7 +136,7 @@ impl Search {
             ) => {
                 self.adding = None;
                 let key = match error {
-                    BtError::Refused => "bluetooth.refused",
+                    BtError::Declined => "bluetooth.refused",
                     _ => "bluetooth.failed",
                 };
                 self.problem = Some(env.i18n().tr(key).to_string());
@@ -212,10 +219,10 @@ impl Screen for Search {
                     self.found.push(device);
                     // The strongest first.
                     self.found
-                        .sort_by_key(|d| core::cmp::Reverse(d.rssi.unwrap_or(i8::MIN)));
+                        .sort_by_key(|d| core::cmp::Reverse(d.signal.unwrap_or(i8::MIN)));
                 }
                 BtEvent::ScanEnded => self.searching = false,
-                BtEvent::Failed { error, .. } => {
+                BtEvent::Failed(BtFailure { error, .. }) => {
                     self.searching = false;
                     let key = match error {
                         BtError::Off => "bluetooth.off",

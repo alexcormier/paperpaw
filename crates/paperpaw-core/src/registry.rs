@@ -352,7 +352,7 @@ pub(crate) struct Staging {
     pub(crate) voices: Vec<paperpaw_sdk::voices::VoiceSpec>,
     pub(crate) readers: Vec<paperpaw_sdk::readers::ReaderSpec>,
     pub(crate) input_filters: Vec<paperpaw_sdk::filters::InputFilterSpec>,
-    pub(crate) gatt_services: Vec<paperpaw_sdk::bluetooth::GattServiceSpec>,
+    pub(crate) gatt_services: Vec<paperpaw_sdk::bluetooth::ServiceSpec>,
     pub(crate) refresh_filters: Vec<paperpaw_sdk::filters::RefreshFilterSpec>,
     pub(crate) chromes: Vec<paperpaw_sdk::chrome::ChromeSpec>,
     pub(crate) inputs: Vec<paperpaw_sdk::keys::InputSpec>,

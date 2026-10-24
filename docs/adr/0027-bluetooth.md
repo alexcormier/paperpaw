@@ -58,33 +58,42 @@ constructor (rule 1), errors are typed (rule 2), and builders take
   Bluetooth command of a plugin without it (`BtError::NotAllowed`).
 - **Where**: `Capabilities::bluetooth` (the device has a radio the
   kernel may use), `MenuNeed::Bluetooth` for settings and menu entries.
-  `Env::bluetooth()` is `Some` only there, with what every plugin may
-  know: the radio's state (`Off`, `On`), whether something uses it, the
-  most links the device keeps (`max_links`), and the bonded devices'
-  names and kinds (no addresses).
+  `Env::bluetooth()` is `Some` only there, a `BluetoothView` with what
+  the plugin may know: the radio's state (`Off`, `On`), whether
+  something uses it, the most links the device keeps (`max_links`), and
+  the names and kinds of the bonded devices given to it (no addresses).
+  The Bluetooth manager (the plugin whose screen is bound to
+  `slots::BLUETOOTH`) sees every bond and whom it is given to.
 - **Values**:
   - `Uuid`: 128 bits, with `Uuid::sig(0x180D)` for the Bluetooth SIG's
     16-bit numbers and `Uuid::parse`.
   - `DeviceId`: an opaque number the kernel gives a device. It is
     stable across starts for a bonded device; plugins never see
     addresses, which may be random and change.
-  - `Device`: id, name, signal (`rssi`), the services it advertises,
-    `bonded`, `DeviceKind` (`Keyboard`, `Remote`, `Sensor`, `Phone`,
-    `Other`, from its appearance and services).
-  - `Service`, `Characteristic` (uuid, a `Handle`, `Properties`: read,
-    write, write without response, notify, indicate).
+  - `Device`: id, name, `signal`, the services and the manufacturer's
+    and services' data it advertises, its transmit power and
+    appearance, `bonded`, `DeviceKind` (`Keyboard`, `Remote`, `Sensor`,
+    `Phone`, `Other`, from its appearance and services).
+  - `GattService`, `GattCharacteristic` (uuid, a `Handle`, `Properties`:
+    read, write, write without response, notify, indicate), with their
+    descriptors.
   - Values are bytes (`Vec<u8>`), carried in events as typed values
     (`Params::carrying`), as `HttpReply`'s body is.
-- **Commands**: `Command::Bluetooth(Box<BtCommand>)`, written with
-  builders:
+- **Commands**: `Command::Bluetooth(Box<BtRequest>)`, the kernel
+  stamping the sender, written with builders:
 
   ```rust
   bluetooth::scan(&FOUND)            // results come as FOUND events
-      .service(Uuid::sig(0x180D))    // filters: services, name prefix
-      .for_ms(10_000)                // a scan always ends
+      .service(Uuid::sig(0x180D))    // filters: services, name prefix,
+                                     // manufacturer
+      .lasting(Duration::from_secs(10))  // a scan always ends
       .command()
   bluetooth::connect(device, &LINK)  // all about the link: LINK events
-  bluetooth::discover(device)        // services and characteristics
+      .power(LinkPower::Low)         // the default
+      .idle(Duration::from_secs(60)) // let go when nothing was asked
+      .command()
+  bluetooth::discover(device).command()  // services, characteristics
+  bluetooth::subscribe_to(device, service, characteristic)
   bluetooth::read(device, handle)
   bluetooth::write(device, handle, bytes).without_response()
   bluetooth::subscribe(device, handle)    // notifications or indications
@@ -94,33 +103,47 @@ constructor (rule 1), errors are typed (rule 2), and builders take
   bluetooth::advertise(&SEEN)        // be seen, see below
       .name("PaperPaw")
       .service(MY_SERVICE)
-      .for_ms(60_000)
+      .lasting(Duration::from_secs(60))
       .command()
-  bluetooth::notify(handle, bytes)   // to the centrals subscribed
-  bluetooth::respond(request, bytes) // to a central's read
+  bluetooth::notify_centrals(service, characteristic, bytes)
+  bluetooth::respond(request, bytes) // to a central's read or write
+  bluetooth::refuse(request, AttError::READ_NOT_PERMITTED)
+  bluetooth::remote_keys(device, &DONE)  // a remote's keys, see 2.
+  bluetooth::forget(device, &DONE)   // the reader's or the manager's
   ```
 
 - **Events**: one event of the plugin's per request or link
   (`scan(&FOUND)`, `connect(device, &LINK)`), as sockets have, each a
-  `BtEvent`: `Found(Device)`, `ScanEnded`, `Connected { device }`,
-  `Disconnected { device, reason }`, `Discovered { device, services }`,
-  `Value { device, handle, bytes }` (a read or a notification),
-  `Written { device, handle }`, `Paired { device }`, `Failed(BtError)`. `BtError`: `Off`, `NotAllowed`, `NotFound`,
-  `Busy` (no link left), `Timeout`, `Refused` (by the user), `Att(code)`
-  (the device's GATT error), `Unsupported`. Each command a plugin sends
-  is answered, as declared work is: nothing is refused silently.
-- **A GATT server**: `Registrar::add_gatt_service(GattServiceSpec)`,
+  `BtEvent`: `Found(Device)`, `ScanEnded`, `Connected { device, mtu,
+  security }`, `Disconnected { device, reason }`, `Discovered { device,
+  services }`, `ServicesChanged`, `Value { device, handle, kind, bytes }`
+  (a read, a notification or an indication), `Written`, `Sent`,
+  `Paired`, `Done { op, device }`, `Failed(BtFailure)`, and the GATT
+  server's and advertising's events; `Extended { key, params }` leaves
+  room for more without raising the interface. `BtFailure` says which
+  command failed (`BtOp`), for which device and handle, and why
+  (`BtError`: `Off`, `NotAllowed`, `NotFound`, `Busy` (no link left),
+  `Timeout`, `Declined` (by the reader), `Lost`, `Att(AttError)` (the
+  device's GATT error), `Held(Refusal)` (not now, with when to try
+  again), `Unsupported`). Each command a plugin sends is answered, as
+  declared work is: nothing is refused silently.
+- **A GATT server**: `Registrar::add_gatt_service(ServiceSpec)`,
   declared at registration with its characteristics and their
   properties, so the kernel builds one attribute table for all plugins.
   A central's reads, writes and subscriptions come as the plugin's
   events (`BtEvent::ReadRequest`, `WriteRequest`, `Subscribed`); it
-  answers with `respond` and sends with `notify`. Advertising is asked
+  answers with `respond` or `refuse` and sends with `notify_centrals`.
+  A characteristic needs an encrypted link unless its `Access` says
+  otherwise. Advertising is asked
   for with a duration and ends with it or with the screen that asked,
   whichever is first; the kernel merges what several plugins ask into
   one advertisement.
-- **Background work**: `Work::bluetooth()`, beside `Work::network()`,
-  for work that needs the radio (reading a sensor every hour), done at
-  cheap moments like the network's ([ADR 0025](0025-power-saving.md)).
+- **Background work**: `Work::bluetooth(id)`, its `needs` holding
+  `Needs::BLUETOOTH` beside `Needs::NETWORK` and `Needs::CHARGING`, for
+  work that needs the radio (reading a sensor every hour), done at
+  cheap moments like the network's ([ADR 0025](0025-power-saving.md)),
+  with `Moments::BLUETOOTH_ON` and `Reason::BluetoothOff`.
+- **Energy**: see 8.
 
 ### 2. Input: keyboards and page-turners
 
@@ -155,7 +178,7 @@ constructor (rule 1), errors are typed (rule 2), and builders take
   asks the user in its own prompt (a core screen, not the plugin's):
   the device's name, and the code to compare or type where the device
   wants one (numeric comparison, passkey display or entry). Just Works
-  pairing still needs a confirmation. A refusal is `BtError::Refused`.
+  pairing still needs a confirmation. A refusal is `BtError::Declined`.
 - **A plugin sees only its devices**: those its own scans found, and
   bonded devices the user gave it (on the device's page in the
   Bluetooth settings, "Used by"; asked once when a plugin pairs one).
@@ -164,8 +187,8 @@ constructor (rule 1), errors are typed (rule 2), and builders take
   plugin getting only the results that pass its filters.
 - **Bonds are secrets.** The keys a bond makes (LTK, IRK) are kept with
   the passwords and keys as `bluetooth.<device>`, under `.paperpaw` like
-  them, and the user sees and removes them there or on the Bluetooth
-  page. The kernel hands them to the shell at start and takes new ones
+  them (`core.bluetooth.<n>`), and the user sees and removes them there
+  or on the Bluetooth page. The kernel hands them to the shell at start and takes new ones
   from it. Forgetting a device removes its keys and its grants.
 - **Links end**: a plugin's scans, advertising and links end with the
   screen that was showing when it asked (as sockets do), unless they
@@ -238,7 +261,8 @@ constructor (rule 1), errors are typed (rule 2), and builders take
 ### 6. The interface
 
 The typed design adds a variant to `Command` and `MenuNeed`, a field to
-`Capabilities` and `Work`, and a way from `Env` to the state: changes of
+`Capabilities` and `Usage`, `Work`'s `network` and `charging` become one
+`needs`, and a way from `Env` to the state: changes of
 types that cross, so the plugin interface is raised once (2 to 3).
 Everything else (the module and its types, `Uses::BLUETOOTH`, the
 `hid.*` names) is new and free. The raise lands with the first step
@@ -275,6 +299,35 @@ and connecting, reading and subscribing, being seen, keys of a remote,
 testing with the emulator's devices), and the skill for community
 plugins learns it once step 1 is released.
 
+### 8. Energy
+
+Bluetooth must cost no more than Wi-Fi does, so every default is the
+cheap one and the kernel never spends more than someone asked for:
+
+- **The radio is off** unless a scan, a link or advertising needs it,
+  and goes off three seconds after the last; it has no wake-ups of its
+  own, and everything ends before the device sleeps.
+- **Scans end**: 10 seconds by default, a minute at most, passive and
+  seldom (`ScanPower::Low`). `ScanPower::Fast` only as the reader's own
+  doing and for 5 seconds at most; a plugin scans again only a minute
+  after its last scan, unless the reader asked (else
+  `BtError::Held`). Longer scans belong to declared work.
+- **Links are slow**: long intervals with peripheral latency
+  (`LinkPower::Low`) unless asked; `.idle(...)` lets a link go when
+  nothing was asked for a while. A remote's link is responsive while
+  keys come and slows down a minute after the last.
+- **Advertising ends**: a minute by default, ten at most, `Fast` only as
+  the reader's own doing and for 30 seconds.
+- **The cheapest that serves all**: where plugins ask for different
+  powers, the scan, each link and the advertisement run at the highest
+  power someone asks for right now, and drop again when they stop.
+- **Counted**: the time the radio was on goes into
+  `Usage::bluetooth_ms`, for the battery's statistics.
+
+The X4 Pro measures a bonded remote's current, idle and while keys
+come, and light sleep with the radio on works before the Remotes
+"while reading" default is switched on (7., step 3).
+
 ### The example a plugin author writes
 
 A heart-rate reader: it scans for the standard heart-rate service,
@@ -289,7 +342,7 @@ const MEASUREMENT: Uuid = Uuid::sig(0x2A37);
 
 fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_action(ActionSpec::new(START, "pulse.start").handler(|_, _, out| {
-        out.push(bluetooth::scan(&FOUND).service(HEART_RATE).for_ms(10_000).command());
+        out.push(bluetooth::scan(&FOUND).service(HEART_RATE).first().command());
     }))?;
     r.on(FOUND, |_, event, out| {
         if let BtEvent::Found(device) = event {
@@ -297,11 +350,8 @@ fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         }
     })?;
     r.on(LINK, |env, event, out| match event {
-        BtEvent::Connected { device } => out.push(bluetooth::discover(device).command()),
-        BtEvent::Discovered { device, services } => {
-            if let Some(c) = services.characteristic(HEART_RATE, MEASUREMENT) {
-                out.push(bluetooth::subscribe(device, c.handle).command());
-            }
+        BtEvent::Connected { device, .. } => {
+            out.push(bluetooth::subscribe_to(*device, HEART_RATE, MEASUREMENT));
         }
         BtEvent::Value { bytes, .. } => {
             // Flags first; the rate is a byte, or two where flag 0 says so.

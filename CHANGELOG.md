@@ -15,7 +15,10 @@ change the plugin SDK.
   declare `Uses::BLUETOOTH`. The kernel owns the radio, shares it
   between plugins, lets each see only the devices it found or was given,
   keeps bonds with the passwords and keys and switches the radio off
-  when nothing needs it. A bonded remote's or keyboard's keys are
+  when nothing needs it. Cheap by default: scans and advertising end
+  after a while, passive and seldom unless asked, links at long
+  intervals, the radio at the cheapest power that serves every plugin,
+  and its time on counted (`Usage::bluetooth_ms`). A bonded remote's or keyboard's keys are
   buttons of the key maps (`button.hid.right`, `button.hid.page-down` …,
   pages turned by default). The emulator has made-up devices for the X4
   Pro's profile: a page-turner (`ble-key:right` in scripts) and a
@@ -26,7 +29,9 @@ change the plugin SDK.
   plugins may use a sensor, and Remotes: when a remote's or a keyboard's
   keys work (when switched on, while reading, or always).
 - Plugin interface 3: code plugins are built again for it (`Command`,
-  `Env`, `Capabilities`, `MenuNeed` and `Work` changed for Bluetooth).
+  `Env`, `Capabilities`, `MenuNeed`, `Usage` and `Work` changed for
+  Bluetooth). `Work`'s `network` and `charging` became `needs`
+  (`Needs::NETWORK | Needs::CHARGING`).
 
 ## [0.5.0-beta.6] - 2026-10-25
 

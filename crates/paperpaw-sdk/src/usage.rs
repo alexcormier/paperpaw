@@ -62,6 +62,8 @@ pub struct Usage {
     /// Time the panel took for its refreshes, where the shell says
     /// (the kernel's `panel_busy`).
     pub panel_ms: u64,
+    /// Time the Bluetooth radio was on.
+    pub bluetooth_ms: u64,
 }
 
 /// What a plugin took ([`Env::plugin_usage`](crate::Env::plugin_usage)).

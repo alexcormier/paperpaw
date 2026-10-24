@@ -14,14 +14,16 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use paperpaw_core::sdk::bluetooth::{self, BtEvent, DeviceId, Handle, Uuid};
+use paperpaw_core::sdk::bluetooth::{
+    self, BtEvent, DeviceId, Handle, ScanPower, Security, Uuid, ValueKind,
+};
 use paperpaw_core::sdk::builtin::{actions, slots};
 use paperpaw_core::sdk::replies::Confirmed;
 use paperpaw_core::sdk::{
     ActionSpec, Canvas, Command, Cx, Env, Event, EventData, Handled, Id, Manifest, MemoryStorage,
     Params, Plugin, Priority, RegisterError, Registrar, Screen, ScreenSpec, Uses, Version,
 };
-use paperpaw_core::{BtCall, BtReport, Io, Kernel, PairQuestion};
+use paperpaw_core::{BtCall, BtReport, Found, Io, Kernel, PairQuestion};
 use paperpaw_platform::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
 };
@@ -216,14 +218,18 @@ language = en
             GO,
             [bluetooth::scan(&FOUND).service(Uuid::sig(0x180D)).command()],
         );
-        assert!(self.calls().contains(&BtCall::Scan { on: true }));
-        self.report(BtReport::Found {
+        assert!(self.calls().contains(&BtCall::Scan {
+            on: true,
+            power: ScanPower::Low,
+            active: false,
+        }));
+        self.report(BtReport::Found(Found {
             address: "11:22".into(),
             name: Some("Belt".into()),
-            rssi: Some(-60),
+            signal: Some(-60),
             services: vec![Uuid::sig(0x180D)],
-            appearance: None,
-        });
+            ..Found::default()
+        }));
         let heard = self.heard();
         assert!(
             heard
@@ -236,7 +242,7 @@ language = en
 
     /// pulse's link to `device`, connected.
     fn link(&mut self, device: DeviceId) -> u32 {
-        self.run(GO, [bluetooth::connect(device, &LINK)]);
+        self.run(GO, [bluetooth::connect(device, &LINK).command()]);
         let link = self
             .calls()
             .into_iter()
@@ -245,7 +251,11 @@ language = en
                 _ => None,
             })
             .expect("a connection asked");
-        self.report(BtReport::Connected { link });
+        self.report(BtReport::Connected {
+            link,
+            mtu: 23,
+            security: Security::None,
+        });
         assert!(self.heard().iter().any(|h| h.contains("Connected")));
         link
     }
@@ -274,6 +284,7 @@ fn a_plugin_scans_connects_and_subscribes() {
     test.report(BtReport::Value {
         link,
         handle: 0x2a,
+        kind: ValueKind::Notified,
         bytes: vec![0, 72],
     });
     let heard = test.heard();
@@ -289,13 +300,15 @@ fn a_plugin_scans_connects_and_subscribes() {
     let calls = test.calls();
     assert!(calls.contains(&BtCall::Radio { on: false }), "{calls:?}");
     assert!(test.heard().iter().any(|h| h.contains("Disconnected")));
+    // The time it was on is counted, for the battery's statistics.
+    assert_eq!(test.kernel.usage().bluetooth_ms, at.0 - 10);
 }
 
 #[test]
 fn another_plugin_cannot_use_a_device_it_did_not_find() {
     let mut test = Test::new();
     let belt = test.belt();
-    test.run(OTHER_GO, [bluetooth::connect(belt, &OTHER_FOUND)]);
+    test.run(OTHER_GO, [bluetooth::connect(belt, &OTHER_FOUND).command()]);
     assert!(
         !test
             .calls()
@@ -375,7 +388,7 @@ fn a_bonded_remotes_keys_run_what_the_key_maps_bind() {
         .set_secret(paperpaw_core::sdk::secrets::SecretChange::keep(
             "core.bluetooth.5",
             "Remote",
-            "aa:bb\tRemote\tremote\t0\t\tkeys",
+            "aa:bb\tRemote\tremote\t0\tpulse\tkeys",
         ));
     // Read at start, as after a restart.
     let mut test = {
@@ -408,16 +421,20 @@ fn a_bonded_remotes_keys_run_what_the_key_maps_bind() {
         );
         test
     };
-    test.run(GO, [bluetooth::keys(DeviceId::new(5))]);
+    test.run(GO, [bluetooth::remote_keys(DeviceId::new(5), &LINK)]);
     let link = test
         .calls()
         .into_iter()
         .find_map(|c| match c {
-            BtCall::Connect { link, address } if address == "aa:bb" => Some(link),
+            BtCall::Connect { link, address, .. } if address == "aa:bb" => Some(link),
             _ => None,
         })
         .expect("the remote connected");
-    test.report(BtReport::Connected { link });
+    test.report(BtReport::Connected {
+        link,
+        mtu: 23,
+        security: Security::Encrypted,
+    });
     assert!(test.calls().contains(&BtCall::Hid { link, on: true }));
     test.heard();
     // Page down, pressed and let go: a page turned.

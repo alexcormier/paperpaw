@@ -97,9 +97,9 @@ use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
 pub use crate::io::cable::PREFIX as CABLE_PREFIX;
 pub use crate::io::{
-    Bond, BtCall, BtReport, HttpCall, HttpResponse, Io, MAX_FILE, MAX_RESPONSE, PairQuestion,
-    SOCKET_PART, ServedFile, ServedService, ServerCall, ServerEvent, SocketCall, SocketEvent,
-    SpeechCall, WifiEvent,
+    Advert, Bond, BtCall, BtReport, Found, HttpCall, HttpResponse, Io, MAX_FILE, MAX_RESPONSE,
+    PairQuestion, SOCKET_PART, ServedCharacteristic, ServedFile, ServedService, ServerCall,
+    ServerEvent, SocketCall, SocketEvent, SpeechCall, WifiEvent,
 };
 use crate::keymap::{InputKey, Keymap, Origin, Zone};
 use crate::refresh::RefreshPolicy;

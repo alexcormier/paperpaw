@@ -16,8 +16,11 @@
 
 use std::collections::VecDeque;
 
-use paperpaw_core::sdk::bluetooth::{BtError, Characteristic, Handle, Properties, Service, Uuid};
-use paperpaw_core::{BtCall, BtReport, PairQuestion};
+use paperpaw_core::sdk::bluetooth::{
+    AttError, BtError, BtOp, GattCharacteristic, GattService, Handle, Properties, Security, Uuid,
+    ValueKind,
+};
+use paperpaw_core::{BtCall, BtReport, Found, PairQuestion};
 use paperpaw_platform::Instant;
 
 /// How long the pretend radio takes to start, find a device and connect.
@@ -34,20 +37,16 @@ pub const BELT: &str = "fa:ke:00:00:00:02";
 const MEASUREMENT: u16 = 0x0010;
 const LOCATION: u16 = 0x0012;
 
-fn belt_services() -> Vec<Service> {
-    vec![Service::new(
+fn belt_services() -> Vec<GattService> {
+    vec![GattService::new(
         Uuid::sig(0x180D),
         vec![
-            Characteristic::new(
+            GattCharacteristic::new(
                 Uuid::sig(0x2A37),
                 Handle::new(MEASUREMENT),
-                Properties::NONE.notify(),
+                Properties::NOTIFY,
             ),
-            Characteristic::new(
-                Uuid::sig(0x2A38),
-                Handle::new(LOCATION),
-                Properties::NONE.read(),
-            ),
+            GattCharacteristic::new(Uuid::sig(0x2A38), Handle::new(LOCATION), Properties::READ),
         ],
     )]
 }
@@ -102,31 +101,42 @@ impl Bluetooth {
                 }
                 self.report(after(START_MS), BtReport::Radio { on });
             }
-            BtCall::Scan { on: true } if self.on => {
+            BtCall::Scan { on: true, .. } if self.on => {
                 for (address, name, services, appearance) in [
                     (REMOTE, "PaperPaw Remote", vec![Uuid::sig(0x1812)], 0x03C1),
                     (BELT, "Pulse HR", vec![Uuid::sig(0x180D)], 0x0341),
                 ] {
-                    let found = BtReport::Found {
+                    let found = BtReport::Found(Found {
                         address: String::from(address),
                         name: Some(String::from(name)),
-                        rssi: Some(-55),
+                        signal: Some(-55),
                         services,
                         appearance: Some(appearance),
-                    };
+                        ..Found::default()
+                    });
                     self.report(after(FOUND_MS), found);
                 }
             }
-            BtCall::Connect { link, address } => {
+            BtCall::Connect { link, address, .. } => {
                 let known = [REMOTE, BELT].into_iter().find(|a| *a == address);
                 match known {
                     Some(address) if self.on => {
                         self.links.push((link, address));
-                        self.report(after(CONNECT_MS), BtReport::Connected { link });
+                        let connected = BtReport::Connected {
+                            link,
+                            mtu: 23,
+                            security: Security::None,
+                        };
+                        self.report(after(CONNECT_MS), connected);
                     }
                     _ => {
-                        let error = BtError::Timeout;
-                        self.report(after(CONNECT_MS), BtReport::Failed { link, error });
+                        let failed = BtReport::Failed {
+                            link,
+                            op: BtOp::Connect,
+                            handle: None,
+                            error: BtError::Timeout,
+                        };
+                        self.report(after(CONNECT_MS), failed);
                     }
                 }
             }
@@ -150,7 +160,7 @@ impl Bluetooth {
             links.iter().find(|(l, _)| *l == link).map(|(_, a)| *a)
         };
         match call {
-            BtCall::Discover { link } => {
+            BtCall::Discover { link, .. } => {
                 let services = match address(&self.links, link) {
                     Some(BELT) => belt_services(),
                     _ => Vec::new(),
@@ -162,20 +172,33 @@ impl Bluetooth {
                     let value = BtReport::Value {
                         link,
                         handle,
+                        kind: ValueKind::Read,
                         bytes: vec![1],
                     };
                     self.report(after(ANSWER_MS), value);
                 } else {
-                    let error = BtError::Att(0x01);
-                    self.report(after(ANSWER_MS), BtReport::Failed { link, error });
+                    let failed = BtReport::Failed {
+                        link,
+                        op: BtOp::Read,
+                        handle: Some(handle),
+                        error: BtError::Att(AttError::INVALID_HANDLE),
+                    };
+                    self.report(after(ANSWER_MS), failed);
                 }
             }
             BtCall::Write {
                 link,
                 handle,
-                response: true,
+                response,
                 ..
-            } => self.report(after(ANSWER_MS), BtReport::Written { link, handle }),
+            } => {
+                let report = if response {
+                    BtReport::Written { link, handle }
+                } else {
+                    BtReport::Sent { link, handle }
+                };
+                self.report(after(ANSWER_MS), report);
+            }
             BtCall::Subscribe { link, handle, on } if handle == MEASUREMENT => {
                 self.beats = on.then(|| (link, after(BEAT_MS)));
             }
@@ -203,7 +226,9 @@ impl Bluetooth {
                     } else {
                         BtReport::Failed {
                             link,
-                            error: BtError::Refused,
+                            op: BtOp::Pair,
+                            handle: None,
+                            error: BtError::Declined,
                         }
                     };
                     self.report(after(ANSWER_MS), report);
@@ -221,7 +246,8 @@ impl Bluetooth {
                     self.report(after(ANSWER_MS), map);
                 }
             }
-            BtCall::Advertise { on, .. } => {
+            BtCall::Advertise(advert) => {
+                let on = advert.on;
                 self.report(after(START_MS), BtReport::Advertising { on });
             }
             // Bonds, the server, notifying, answering, forgetting and the
@@ -286,6 +312,7 @@ impl Bluetooth {
             return Some(BtReport::Value {
                 link,
                 handle: MEASUREMENT,
+                kind: ValueKind::Notified,
                 bytes: vec![0, 70 + self.beat],
             });
         }
@@ -308,6 +335,7 @@ mod tests {
             BtCall::Connect {
                 link: 1,
                 address: String::from(BELT),
+                power: paperpaw_core::sdk::bluetooth::LinkPower::Low,
             },
             Instant(0),
         );
@@ -339,6 +367,7 @@ mod tests {
             BtCall::Connect {
                 link: 3,
                 address: String::from(REMOTE),
+                power: paperpaw_core::sdk::bluetooth::LinkPower::Low,
             },
             Instant(0),
         );

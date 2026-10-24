@@ -137,7 +137,7 @@ pub struct Env<'a> {
     pub(crate) wifi: Option<&'a crate::wifi::Wifi>,
     /// Bluetooth, where the kernel uses a radio (see
     /// [`bluetooth`](crate::bluetooth)).
-    pub(crate) bluetooth: Option<&'a crate::bluetooth::Bluetooth>,
+    pub(crate) bluetooth: Option<crate::bluetooth::BluetoothView<'a>>,
     /// Firmware updates, where PaperPaw is the device's firmware (see
     /// [`firmware`](crate::firmware)); `None` where it is an app.
     pub(crate) firmware: Option<&'a crate::firmware::Firmware>,
@@ -384,7 +384,7 @@ impl<'a> Env<'a> {
 
     /// Bluetooth, where the kernel uses a radio (see
     /// [`bluetooth`](crate::bluetooth)); `None` elsewhere.
-    pub fn bluetooth(&self) -> Option<&'a crate::bluetooth::Bluetooth> {
+    pub fn bluetooth(&self) -> Option<crate::bluetooth::BluetoothView<'a>> {
         self.bluetooth
     }
 
@@ -707,7 +707,9 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             look: p.look,
             caps: p.caps,
             wifi: p.wifi,
-            bluetooth: p.bluetooth,
+            bluetooth: p
+                .bluetooth
+                .map(|all| crate::bluetooth::BluetoothView::new(all, p.running)),
             firmware: p.firmware,
             native: p.native,
             power: p.power,

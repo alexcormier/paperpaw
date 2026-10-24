@@ -3,53 +3,92 @@
 //! may use a radio ([`Capabilities::bluetooth`](crate::Capabilities)).
 //!
 //! A plugin that declares [`Uses::BLUETOOTH`](crate::Uses::BLUETOOTH)
-//! sends [`Command::Bluetooth`], written with
-//! the functions here, and hears what happens as its own events, each a
-//! [`BtEvent`]: one event for a scan ([`scan`]), one for a link
-//! ([`connect`]), one for being seen ([`advertise`]). Every command is
-//! answered, by its result or a [`BtEvent::Failed`].
+//! asks with the functions of this module, which write
+//! [`Command::Bluetooth`], and hears everything as its own events, each a
+//! [`BtEvent`]: a scan's on the event it names ([`scan`]), a link's on the
+//! link's ([`connect`]), being seen on its own ([`advertise`]), a GATT
+//! service's on the service's ([`ServiceSpec`]). Every command is
+//! answered, by its result or a [`BtEvent::Failed`] that says which
+//! command failed and why.
 //!
-//! - **Scanning**: [`scan`] with filters and a duration finds devices in
-//!   reach ([`BtEvent::Found`]). Several plugins' scans are one scan of
-//!   the radio, each plugin hearing what passes its own filters.
-//! - **A GATT client**: [`connect`], [`discover`] the services and their
-//!   characteristics, [`read`], [`write()`], [`subscribe`] to notifications
-//!   ([`BtEvent::Value`]).
+//! - **Scanning**: [`scan`] finds devices in reach ([`BtEvent::Found`]),
+//!   always for a while ([`Scan::lasting`]), by default passively and
+//!   seldom ([`ScanPower::Low`]). Several plugins' scans are one scan of
+//!   the radio at the cheapest power that serves them all, each plugin
+//!   hearing only what passes its own filters.
+//! - **A GATT client**: [`connect`] (by default at [`LinkPower::Low`]),
+//!   [`discover`] the services, [`read`], [`write()`], [`subscribe`] to
+//!   notifications ([`BtEvent::Value`]), or [`subscribe_to`] a service's
+//!   characteristic by its UUIDs, handles found by the kernel.
 //! - **Pairing** ([`pair`]) is always confirmed by the reader, in the
-//!   kernel's own prompt: a plugin only asks.
+//!   kernel's own question: a plugin only asks.
 //! - **Being seen**: [`advertise`] for a while, and a GATT server of
 //!   services declared at registration
 //!   ([`Registrar::add_gatt_service`](crate::Registrar::add_gatt_service)):
-//!   centrals' reads and writes come as events ([`BtEvent::ReadRequest`],
-//!   [`BtEvent::WriteRequest`]), answered with [`respond`], and [`notify`]
-//!   sends to those subscribed.
-//! - **Keys of a remote or a keyboard**: a bonded device that types is
-//!   the kernel's: [`keys`] connects it and its keys arrive as inputs of
-//!   the key maps (`hid.right`, `hid.page-down`, `hid.volume-up` …), with
-//!   no plugin parsing its reports. A plugin that wants the reports
-//!   themselves asks with [`hid_reports`].
+//!   centrals' reads and writes come as events, answered with [`respond`]
+//!   or [`refuse`], and [`notify_centrals`] sends to those subscribed.
+//! - **Keys of a remote or a keyboard**: a bonded device that types is the
+//!   kernel's: [`remote_keys`] connects it and its keys arrive as buttons
+//!   of the key maps (`button.hid.right`, `button.hid.page-down` …), with
+//!   no plugin parsing its reports. A plugin a device is given to may ask
+//!   for the reports themselves ([`hid_reports`]).
 //!
 //! A plugin sees only devices its own scans found and bonded devices the
-//! reader gave it; commands about others fail with [`BtError::NotFound`].
-//! Devices are known by a [`DeviceId`], never by their address. The keys
-//! of a bond are kept with the passwords and keys. Scans and advertising
-//! always end; scans, advertising and links end with the screen that was
-//! showing when they were asked for, and all before the device sleeps.
-//! The kernel switches the radio on for the first request and off once
-//! none is left.
+//! reader gave it; anything else fails with [`BtError::NotFound`].
+//! Devices are known by a [`DeviceId`], never by their address. The
+//! Bluetooth manager (the plugin whose screen is bound to
+//! [`slots::BLUETOOTH`](crate::builtin::slots::BLUETOOTH)) sees every
+//! bond; forgetting and giving otherwise count only as the reader's own
+//! doing. Events written out for others (observers, rules) carry no
+//! payloads. Scans, links and advertising end with the screen that was
+//! showing when they were asked for (unless declared work asked for
+//! them), and all before the device sleeps; the radio is off whenever
+//! nothing needs it.
+//!
+//! ```
+//! use paperpaw_sdk::bluetooth::{self, BtEvent, Uuid};
+//! use paperpaw_sdk::{Event, Registrar, RegisterError};
+//!
+//! const FOUND: Event<BtEvent> = Event::new("pulse.found");
+//! const LINK: Event<BtEvent> = Event::new("pulse.link");
+//! const HEART_RATE: Uuid = Uuid::sig(0x180D);
+//! const MEASUREMENT: Uuid = Uuid::sig(0x2A37);
+//!
+//! fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+//!     // A scan for the first heart-rate belt, then its measurements.
+//!     r.on(FOUND, |_, event: &BtEvent, out| {
+//!         if let BtEvent::Found(device) = event {
+//!             out.push(bluetooth::connect(device.id, &LINK).command());
+//!         }
+//!     })?;
+//!     r.on(LINK, |_, event: &BtEvent, out| match event {
+//!         BtEvent::Connected { device, .. } => {
+//!             out.push(bluetooth::subscribe_to(*device, HEART_RATE, MEASUREMENT));
+//!         }
+//!         BtEvent::Value { bytes, .. } => {
+//!             // Flags first; the rate is one byte, or two where flag 0 is set.
+//!             let bpm = match bytes.as_slice() {
+//!                 [flags, low, high, ..] if flags & 1 == 1 => u16::from_le_bytes([*low, *high]),
+//!                 [_, rate, ..] => u16::from(*rate),
+//!                 _ => return,
+//!             };
+//!             let _ = bpm;
+//!         }
+//!         _ => {}
+//!     })
+//! }
+//! # let _ = bluetooth::scan(&FOUND).service(HEART_RATE).first().command();
+//! ```
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::time::Duration;
 
 use crate::event::{Event, EventData, ParamValue};
+use crate::work::Refusal;
 use crate::{Command, Id, Params};
-
-/// The longest a scan runs; a longer one is cut to it.
-pub const SCAN_MOST_MS: u32 = 60_000;
-/// The longest a plugin is advertised at a time; a longer one is cut to it.
-pub const ADVERTISE_MOST_MS: u32 = 10 * 60_000;
 
 /// A Bluetooth UUID: of a service, a characteristic or a descriptor.
 /// Those of the Bluetooth SIG are 16-bit numbers in a base UUID
@@ -116,14 +155,14 @@ impl core::fmt::Display for Uuid {
 }
 
 /// A device as the kernel knows it: a number of its own, stable across
-/// starts for a bonded device. Its address is never shown to plugins: it
-/// may be random and change.
+/// starts for a bonded device (a plugin may keep it, e.g. in a setting).
+/// Its address is never shown to plugins: it may be random and change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DeviceId(u32);
 
 impl DeviceId {
     /// The device numbered `number` by the kernel.
-    #[cfg(any(feature = "kernel", test))]
+    #[cfg(any(feature = "kernel", feature = "testing", test))]
     pub const fn new(number: u32) -> DeviceId {
         DeviceId(number)
     }
@@ -133,14 +172,23 @@ impl DeviceId {
     }
 }
 
-/// A characteristic's place in a device's attribute table, from
-/// [`BtEvent::Discovered`], or in the device's own GATT server.
+impl ParamValue for DeviceId {
+    fn to_param(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn from_param(text: &str) -> Option<Self> {
+        text.parse().ok().map(DeviceId)
+    }
+}
+
+/// An attribute's place in a device's attribute table (a characteristic's
+/// value or a descriptor), from [`BtEvent::Discovered`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Handle(u16);
 
 impl Handle {
-    /// The attribute at `handle`.
-    #[cfg(any(feature = "kernel", test))]
+    #[cfg(any(feature = "kernel", feature = "testing", test))]
     pub const fn new(handle: u16) -> Handle {
         Handle(handle)
     }
@@ -151,18 +199,86 @@ impl Handle {
 }
 
 /// A central's read or write of the device's GATT server, to answer with
-/// [`respond`].
+/// [`respond`] or [`refuse`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Request(u32);
+pub struct GattRequest(u32);
 
-impl Request {
-    #[cfg(any(feature = "kernel", test))]
-    pub const fn new(number: u32) -> Request {
-        Request(number)
+impl GattRequest {
+    #[cfg(any(feature = "kernel", feature = "testing", test))]
+    pub const fn new(number: u32) -> GattRequest {
+        GattRequest(number)
     }
 
     pub const fn number(self) -> u32 {
         self.0
+    }
+}
+
+/// An ATT error (Core Specification Vol 3, Part F, 3.4.1.1): what a
+/// device answered, or what the plugin's GATT server answers
+/// ([`refuse`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AttError(u8);
+
+impl AttError {
+    pub const INVALID_HANDLE: AttError = AttError(0x01);
+    pub const READ_NOT_PERMITTED: AttError = AttError(0x02);
+    pub const WRITE_NOT_PERMITTED: AttError = AttError(0x03);
+    pub const INSUFFICIENT_AUTHENTICATION: AttError = AttError(0x05);
+    pub const REQUEST_NOT_SUPPORTED: AttError = AttError(0x06);
+    pub const INVALID_OFFSET: AttError = AttError(0x07);
+    pub const INVALID_LENGTH: AttError = AttError(0x0D);
+    pub const UNLIKELY: AttError = AttError(0x0E);
+    pub const INSUFFICIENT_ENCRYPTION: AttError = AttError(0x0F);
+    /// The value is not one the service takes (the first of the codes
+    /// left to applications).
+    pub const VALUE_NOT_ALLOWED: AttError = AttError(0x80);
+
+    pub const fn new(code: u8) -> AttError {
+        AttError(code)
+    }
+
+    pub const fn code(self) -> u8 {
+        self.0
+    }
+}
+
+/// What can be done with a characteristic: a set of the bits of its
+/// declaration (Core Specification Vol 3, Part G, 3.3.1.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Properties(u8);
+
+impl Properties {
+    pub const NONE: Properties = Properties(0);
+    pub const BROADCAST: Properties = Properties(0x01);
+    pub const READ: Properties = Properties(0x02);
+    pub const WRITE_WITHOUT_RESPONSE: Properties = Properties(0x04);
+    pub const WRITE: Properties = Properties(0x08);
+    pub const NOTIFY: Properties = Properties(0x10);
+    pub const INDICATE: Properties = Properties(0x20);
+
+    pub const fn contains(self, other: Properties) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    pub const fn from_bits(bits: u8) -> Properties {
+        Properties(bits)
+    }
+
+    const fn with(self, other: Properties) -> Properties {
+        Properties(self.0 | other.0)
+    }
+}
+
+impl core::ops::BitOr for Properties {
+    type Output = Properties;
+
+    fn bitor(self, other: Properties) -> Properties {
+        self.with(other)
     }
 }
 
@@ -204,128 +320,124 @@ impl DeviceKind {
         }
     }
 
-    /// Whether its keys can go to the key maps ([`keys`]).
-    pub const fn types(self) -> bool {
+    /// Whether its keys can go to the key maps ([`remote_keys`]).
+    pub const fn can_type(self) -> bool {
         matches!(self, DeviceKind::Keyboard | DeviceKind::Remote)
     }
 }
 
-/// What can be done with a characteristic.
+/// How a link is protected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
-pub struct Properties {
-    pub read: bool,
-    pub write: bool,
-    pub write_without_response: bool,
-    pub notify: bool,
-    pub indicate: bool,
+pub enum Security {
+    #[default]
+    None,
+    /// Encrypted, with keys from pairing.
+    Encrypted,
+    /// Encrypted, and pairing compared or typed a number.
+    Authenticated,
 }
 
-impl Properties {
-    /// Nothing; add with the methods.
-    pub const NONE: Properties = Properties {
-        read: false,
-        write: false,
-        write_without_response: false,
-        notify: false,
-        indicate: false,
-    };
-
-    pub const fn read(mut self) -> Self {
-        self.read = true;
-        self
-    }
-
-    pub const fn write(mut self) -> Self {
-        self.write = true;
-        self
-    }
-
-    pub const fn write_without_response(mut self) -> Self {
-        self.write_without_response = true;
-        self
-    }
-
-    pub const fn notify(mut self) -> Self {
-        self.notify = true;
-        self
-    }
-
-    pub const fn indicate(mut self) -> Self {
-        self.indicate = true;
-        self
-    }
-
-    /// The bits of the characteristic declaration (Core Specification
-    /// Vol 3, Part G, 3.3.1.1).
-    pub const fn bits(self) -> u8 {
-        (self.read as u8) << 1
-            | (self.write_without_response as u8) << 2
-            | (self.write as u8) << 3
-            | (self.notify as u8) << 4
-            | (self.indicate as u8) << 5
-    }
-
-    pub const fn from_bits(bits: u8) -> Properties {
-        Properties {
-            read: bits & 0x02 != 0,
-            write_without_response: bits & 0x04 != 0,
-            write: bits & 0x08 != 0,
-            notify: bits & 0x10 != 0,
-            indicate: bits & 0x20 != 0,
-        }
-    }
+/// Who may read or write a characteristic of the plugin's GATT server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Access {
+    /// Anyone in reach.
+    Open,
+    /// A central paired with the device (pairing the reader confirmed).
+    #[default]
+    Encrypted,
+    /// A central paired with a number compared or typed.
+    Authenticated,
 }
 
-/// A characteristic of a device's service.
+/// How a value came: read, or sent by the device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ValueKind {
+    Read,
+    Notified,
+    Indicated,
+}
+
+/// How much a scan may cost: the kernel scans at the highest power any
+/// plugin asks for, never more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[non_exhaustive]
+pub enum ScanPower {
+    /// Passive, a small part of the time: finds what advertises often.
+    #[default]
+    Low,
+    /// Half the time.
+    Balanced,
+    /// All the time, for a few seconds (at most 5): only as the reader's
+    /// own doing.
+    Fast,
+}
+
+/// How much a link may cost: the kernel keeps a link at the highest power
+/// any of its users asks for, never more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[non_exhaustive]
+pub enum LinkPower {
+    /// Long intervals, the device allowed to skip some: for values that
+    /// come now and then.
+    #[default]
+    Low,
+    /// Short intervals: keys, a reading while it is shown.
+    Responsive,
+    /// The shortest, while data flows; back to [`LinkPower::Low`] when it
+    /// stops.
+    Burst,
+}
+
+/// How much being seen may cost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[non_exhaustive]
+pub enum AdvertisePower {
+    /// About once a second.
+    #[default]
+    Low,
+    /// A few times a second.
+    Balanced,
+    /// As often as allowed, for at most 30 seconds.
+    Fast,
+}
+
+/// Data a device advertises for its maker: the company's number
+/// (assigned by the Bluetooth SIG), then the bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Characteristic {
-    pub uuid: Uuid,
-    /// Where it is read, written and subscribed to.
-    pub handle: Handle,
-    pub properties: Properties,
+pub struct ManufacturerData {
+    pub company: u16,
+    pub bytes: Vec<u8>,
 }
 
-impl Characteristic {
-    pub fn new(uuid: Uuid, handle: Handle, properties: Properties) -> Self {
+impl ManufacturerData {
+    pub fn new(company: u16, bytes: impl Into<Vec<u8>>) -> Self {
         Self {
-            uuid,
-            handle,
-            properties,
+            company,
+            bytes: bytes.into(),
         }
     }
 }
 
-/// A service of a device, with its characteristics.
+/// Data a device advertises for one of its services, e.g. a broadcast
+/// sensor's readings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Service {
-    pub uuid: Uuid,
-    pub characteristics: Vec<Characteristic>,
+pub struct ServiceData {
+    pub service: Uuid,
+    pub bytes: Vec<u8>,
 }
 
-impl Service {
-    pub fn new(uuid: Uuid, characteristics: Vec<Characteristic>) -> Self {
+impl ServiceData {
+    pub fn new(service: Uuid, bytes: impl Into<Vec<u8>>) -> Self {
         Self {
-            uuid,
-            characteristics,
+            service,
+            bytes: bytes.into(),
         }
     }
-}
-
-/// Characteristic `characteristic` of service `service` among `services`
-/// (those [`BtEvent::Discovered`] lists).
-pub fn characteristic(
-    services: &[Service],
-    service: Uuid,
-    characteristic: Uuid,
-) -> Option<&Characteristic> {
-    services
-        .iter()
-        .filter(|s| s.uuid == service)
-        .flat_map(|s| s.characteristics.iter())
-        .find(|c| c.uuid == characteristic)
 }
 
 /// A device found by a scan.
@@ -336,50 +448,117 @@ pub struct Device {
     /// The name it gives, where it gives one.
     pub name: Option<String>,
     /// Its signal, in dBm (e.g. -50 strong, -90 weak), where known.
-    pub rssi: Option<i8>,
+    pub signal: Option<i8>,
     /// The services it says it offers.
     pub services: Vec<Uuid>,
-    /// It is bonded with this device.
+    pub manufacturer_data: Vec<ManufacturerData>,
+    pub service_data: Vec<ServiceData>,
+    /// The power it sends at, in dBm, where it says.
+    pub tx_power: Option<i8>,
+    /// Its GAP appearance, where it gives one.
+    pub appearance: Option<u16>,
+    /// It is bonded with this device (and given to the plugin).
     pub bonded: bool,
     pub kind: DeviceKind,
 }
 
 impl Device {
+    /// A device found, for a plugin's own tests.
+    #[cfg(any(feature = "kernel", feature = "testing", test))]
     pub fn new(id: DeviceId) -> Self {
         Self {
             id,
             name: None,
-            rssi: None,
+            signal: None,
             services: Vec::new(),
+            manufacturer_data: Vec::new(),
+            service_data: Vec::new(),
+            tx_power: None,
+            appearance: None,
             bonded: false,
             kind: DeviceKind::Other,
         }
     }
 
-    pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = Some(name.into());
-        self
+    /// Its signal in bars, 1 to 4, as for Wi-Fi networks.
+    pub fn bars(&self) -> u8 {
+        match self.signal {
+            Some(s) if s >= -60 => 4,
+            Some(s) if s >= -70 => 3,
+            Some(s) if s >= -80 => 2,
+            _ => 1,
+        }
     }
+}
 
-    pub fn rssi(mut self, rssi: i8) -> Self {
-        self.rssi = Some(rssi);
-        self
-    }
+/// A descriptor of a characteristic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct GattDescriptor {
+    pub uuid: Uuid,
+    pub handle: Handle,
+}
 
-    pub fn service(mut self, service: Uuid) -> Self {
-        self.services.push(service);
-        self
-    }
+/// A characteristic of a device's service.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct GattCharacteristic {
+    pub uuid: Uuid,
+    /// Where its value is read, written and subscribed to.
+    pub handle: Handle,
+    pub properties: Properties,
+    pub descriptors: Vec<GattDescriptor>,
+}
 
-    pub fn bonded(mut self) -> Self {
-        self.bonded = true;
-        self
-    }
+/// A service of a device, with its characteristics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct GattService {
+    pub uuid: Uuid,
+    pub characteristics: Vec<GattCharacteristic>,
+}
 
-    pub fn kind(mut self, kind: DeviceKind) -> Self {
-        self.kind = kind;
-        self
+#[cfg(any(feature = "kernel", feature = "testing", test))]
+impl GattDescriptor {
+    pub fn new(uuid: Uuid, handle: Handle) -> Self {
+        Self { uuid, handle }
     }
+}
+
+#[cfg(any(feature = "kernel", feature = "testing", test))]
+impl GattCharacteristic {
+    pub fn new(uuid: Uuid, handle: Handle, properties: Properties) -> Self {
+        Self {
+            uuid,
+            handle,
+            properties,
+            descriptors: Vec::new(),
+        }
+    }
+}
+
+#[cfg(any(feature = "kernel", feature = "testing", test))]
+impl GattService {
+    pub fn new(uuid: Uuid, characteristics: Vec<GattCharacteristic>) -> Self {
+        Self {
+            uuid,
+            characteristics,
+        }
+    }
+}
+
+/// Characteristic `characteristic` of service `service` among `services`
+/// (those [`BtEvent::Discovered`] lists).
+pub fn characteristic(
+    services: &[GattService],
+    service: Uuid,
+    characteristic: Uuid,
+) -> Option<&GattCharacteristic> {
+    services
+        .iter()
+        .filter(|s| s.uuid == service)
+        .flat_map(|s| s.characteristics.iter())
+        .find(|c| c.uuid == characteristic)
 }
 
 /// Why something with Bluetooth did not happen.
@@ -389,54 +568,184 @@ pub enum BtError {
     /// There is no radio here, or it could not be switched on.
     Off,
     /// The plugin does not declare [`Uses::BLUETOOTH`](crate::Uses), or
-    /// asked what only the reader may (forgetting, giving).
+    /// asked what only the reader or the Bluetooth manager may.
     NotAllowed,
-    /// The device is not one of the plugin's, or not in reach; the handle
-    /// is not the device's.
+    /// The device is not one of the plugin's, not in reach or not
+    /// connected; the handle or the UUIDs are not the device's.
     NotFound,
-    /// No link is left ([`Bluetooth::max_links`]), or the device's memory
-    /// cannot take the radio now.
+    /// No link is left ([`BluetoothView::max_links`]), or the device's
+    /// memory cannot take the radio now.
     Busy,
     /// The device did not answer in time.
     Timeout,
     /// The reader said no (to pairing).
-    Refused,
+    Declined,
     /// The link was lost.
     Lost,
-    /// The device answered with this ATT error (Core Specification Vol 3,
-    /// Part F, 3.4.1.1), e.g. `0x05`, insufficient authentication.
-    Att(u8),
+    /// The device answered with this ATT error.
+    Att(AttError),
+    /// Not now: asked again too soon, or the mode holds it; it says when
+    /// to try again.
+    Held(Refusal),
     /// Not done here (e.g. advertising on a shell that cannot).
     Unsupported,
 }
 
 impl BtError {
-    pub fn to_text(self) -> String {
+    /// Its name, e.g. `not-found` (an ATT error and a hold by their kind
+    /// alone).
+    pub const fn as_str(self) -> &'static str {
         match self {
-            BtError::Off => "off".to_string(),
-            BtError::NotAllowed => "not-allowed".to_string(),
-            BtError::NotFound => "not-found".to_string(),
-            BtError::Busy => "busy".to_string(),
-            BtError::Timeout => "timeout".to_string(),
-            BtError::Refused => "refused".to_string(),
-            BtError::Lost => "lost".to_string(),
-            BtError::Att(code) => alloc::format!("att-{code:02x}"),
-            BtError::Unsupported => "unsupported".to_string(),
+            BtError::Off => "off",
+            BtError::NotAllowed => "not-allowed",
+            BtError::NotFound => "not-found",
+            BtError::Busy => "busy",
+            BtError::Timeout => "timeout",
+            BtError::Declined => "declined",
+            BtError::Lost => "lost",
+            BtError::Att(_) => "att",
+            BtError::Held(_) => "held",
+            BtError::Unsupported => "unsupported",
         }
     }
+}
 
-    pub fn parse(text: &str) -> Option<BtError> {
+impl core::fmt::Display for BtError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            BtError::Att(error) => write!(f, "att-{:02x}", error.code()),
+            other => f.write_str(other.as_str()),
+        }
+    }
+}
+
+impl ParamValue for BtError {
+    fn to_param(&self) -> String {
+        self.to_string()
+    }
+
+    fn from_param(text: &str) -> Option<Self> {
         Some(match text {
             "off" => BtError::Off,
             "not-allowed" => BtError::NotAllowed,
             "not-found" => BtError::NotFound,
             "busy" => BtError::Busy,
             "timeout" => BtError::Timeout,
-            "refused" => BtError::Refused,
+            "declined" => BtError::Declined,
             "lost" => BtError::Lost,
             "unsupported" => BtError::Unsupported,
-            other => BtError::Att(u8::from_str_radix(other.strip_prefix("att-")?, 16).ok()?),
+            "held" => BtError::Held(Refusal::new(
+                crate::work::Reason::TooOften,
+                crate::work::Retry::WhenAllowed,
+            )),
+            other => BtError::Att(AttError(
+                u8::from_str_radix(other.strip_prefix("att-")?, 16).ok()?,
+            )),
         })
+    }
+}
+
+/// Which command a [`BtFailure`] is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum BtOp {
+    Scan,
+    Connect,
+    Disconnect,
+    Discover,
+    Read,
+    Write,
+    Subscribe,
+    Unsubscribe,
+    Pair,
+    Forget,
+    Give,
+    Keys,
+    HidReports,
+    Advertise,
+    Notify,
+    Respond,
+    Extended,
+}
+
+const OPS: [BtOp; 17] = [
+    BtOp::Scan,
+    BtOp::Connect,
+    BtOp::Disconnect,
+    BtOp::Discover,
+    BtOp::Read,
+    BtOp::Write,
+    BtOp::Subscribe,
+    BtOp::Unsubscribe,
+    BtOp::Pair,
+    BtOp::Forget,
+    BtOp::Give,
+    BtOp::Keys,
+    BtOp::HidReports,
+    BtOp::Advertise,
+    BtOp::Notify,
+    BtOp::Respond,
+    BtOp::Extended,
+];
+
+impl BtOp {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            BtOp::Scan => "scan",
+            BtOp::Connect => "connect",
+            BtOp::Disconnect => "disconnect",
+            BtOp::Discover => "discover",
+            BtOp::Read => "read",
+            BtOp::Write => "write",
+            BtOp::Subscribe => "subscribe",
+            BtOp::Unsubscribe => "unsubscribe",
+            BtOp::Pair => "pair",
+            BtOp::Forget => "forget",
+            BtOp::Give => "give",
+            BtOp::Keys => "keys",
+            BtOp::HidReports => "hid-reports",
+            BtOp::Advertise => "advertise",
+            BtOp::Notify => "notify",
+            BtOp::Respond => "respond",
+            BtOp::Extended => "extended",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<BtOp> {
+        OPS.into_iter().find(|op| op.as_str() == text)
+    }
+}
+
+/// A command that failed: which, about what, and why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct BtFailure {
+    pub op: BtOp,
+    pub device: Option<DeviceId>,
+    pub handle: Option<Handle>,
+    pub error: BtError,
+}
+
+impl BtFailure {
+    pub const fn new(op: BtOp, error: BtError) -> Self {
+        Self {
+            op,
+            device: None,
+            handle: None,
+            error,
+        }
+    }
+
+    #[must_use]
+    pub const fn device(mut self, device: DeviceId) -> Self {
+        self.device = Some(device);
+        self
+    }
+
+    #[must_use]
+    pub const fn handle(mut self, handle: Handle) -> Self {
+        self.handle = Some(handle);
+        self
     }
 }
 
@@ -445,326 +754,554 @@ impl BtError {
 #[non_exhaustive]
 pub enum BtEvent {
     /// A scan found `device` (each device once a scan, again where its
-    /// name or services come later).
+    /// name, services or data change and [`Scan::updates`] asked so).
     Found(Device),
-    /// The scan ended (its time was up, it was stopped, or its screen
-    /// closed).
+    /// The scan ended (its time was up, it found what it was to find, it
+    /// was stopped, or its screen closed).
     ScanEnded,
+    #[non_exhaustive]
     Connected {
         device: DeviceId,
+        /// The most bytes a value carries at once on the link.
+        mtu: u16,
+        security: Security,
     },
     /// The link ended; `reason` where it was not asked for.
+    #[non_exhaustive]
     Disconnected {
         device: DeviceId,
         reason: Option<BtError>,
     },
     /// The device's services, after [`discover`].
+    #[non_exhaustive]
     Discovered {
         device: DeviceId,
-        services: Vec<Service>,
+        services: Vec<GattService>,
     },
-    /// A value read ([`read`]) or notified ([`subscribe`]).
+    /// The device's services changed: discover them again.
+    #[non_exhaustive]
+    ServicesChanged { device: DeviceId },
+    /// A value read ([`read`]) or sent by the device ([`subscribe`]).
+    #[non_exhaustive]
     Value {
         device: DeviceId,
         handle: Handle,
+        kind: ValueKind,
         bytes: Vec<u8>,
     },
     /// A [`write()`] with a response was done.
-    Written {
-        device: DeviceId,
-        handle: Handle,
-    },
+    #[non_exhaustive]
+    Written { device: DeviceId, handle: Handle },
+    /// A write without response went out: the next may follow.
+    #[non_exhaustive]
+    Sent { device: DeviceId, handle: Handle },
     /// Pairing ([`pair`]) is done: the device is bonded and given to the
     /// plugin that asked.
-    Paired {
-        device: DeviceId,
-    },
-    /// A command could not be done; `device` where it was about one.
-    Failed {
-        device: Option<DeviceId>,
-        error: BtError,
-    },
+    #[non_exhaustive]
+    Paired { device: DeviceId },
+    /// A command without a result of its own was done (forgetting,
+    /// giving, a remote's keys).
+    #[non_exhaustive]
+    Done { op: BtOp, device: DeviceId },
+    /// A command could not be done.
+    Failed(BtFailure),
     /// The device is advertised ([`advertise`]).
     Advertising,
     /// Advertising ended (its time was up, it was stopped, its screen
     /// closed).
     AdvertisingEnded,
-    /// A central reads characteristic `handle` of the plugin's service:
-    /// answer with [`respond`].
+    /// A central reads a characteristic of the plugin's service: answer
+    /// with [`respond`] or [`refuse`].
+    #[non_exhaustive]
     ReadRequest {
-        request: Request,
-        handle: Handle,
+        request: GattRequest,
+        service: Uuid,
+        characteristic: Uuid,
+        central: DeviceId,
     },
-    /// A central wrote `bytes` to characteristic `handle` of the plugin's
-    /// service.
+    /// A central wrote `bytes` to a characteristic of the plugin's
+    /// service; `request` where it waits for an answer.
+    #[non_exhaustive]
     WriteRequest {
-        handle: Handle,
+        request: Option<GattRequest>,
+        service: Uuid,
+        characteristic: Uuid,
+        central: DeviceId,
         bytes: Vec<u8>,
     },
-    /// A central subscribed to characteristic `handle` (or no longer).
+    /// A central subscribed to a characteristic of the plugin's service.
+    #[non_exhaustive]
     Subscribed {
-        handle: Handle,
-        on: bool,
+        service: Uuid,
+        characteristic: Uuid,
+        central: DeviceId,
     },
+    /// A central no longer subscribes.
+    #[non_exhaustive]
+    Unsubscribed {
+        service: Uuid,
+        characteristic: Uuid,
+        central: DeviceId,
+    },
+    /// An HID device's report map ([`hid_reports`]), once.
+    #[non_exhaustive]
+    HidReportMap { device: DeviceId, bytes: Vec<u8> },
     /// An input report of an HID device ([`hid_reports`]), as it came,
     /// with its report id where the device numbers its reports.
+    #[non_exhaustive]
     HidReport {
         device: DeviceId,
         report: Option<u8>,
         bytes: Vec<u8>,
     },
+    /// What a later feature tells (see [`extended`]).
+    #[non_exhaustive]
+    Extended { key: Id, params: Params },
 }
 
-/// The parameters of a [`BtEvent`] written out (for observers and rules).
+/// The parameters of a [`BtEvent`] written out for observers and rules:
+/// what happened, never a payload.
 pub mod bt_params {
     pub const KIND: &str = "kind";
     pub const DEVICE: &str = "device";
-    pub const NAME: &str = "name";
-    pub const RSSI: &str = "rssi";
-    pub const SERVICES: &str = "services";
-    pub const BONDED: &str = "bonded";
-    pub const DEVICE_KIND: &str = "device-kind";
     pub const HANDLE: &str = "handle";
-    pub const BYTES: &str = "bytes";
+    pub const OP: &str = "op";
     pub const ERROR: &str = "error";
-    pub const REQUEST: &str = "request";
-    pub const ON: &str = "on";
-    pub const REPORT: &str = "report";
-    /// A discovered service's characteristics:
-    /// `<service uuid>` → `<uuid>/<handle>/<property bits>,…`.
-    pub const SERVICE: &str = "service.";
+    /// How many bytes a value or a report carried (not the bytes).
+    pub const LENGTH: &str = "length";
+    pub const SERVICE: &str = "service";
+    pub const CHARACTERISTIC: &str = "characteristic";
 }
 
-fn hex(bytes: &[u8]) -> String {
-    crate::digest::hex::encode(bytes)
-}
-
-fn write_device(params: &mut Params, device: &Device) {
-    use bt_params as p;
-    params.set(p::DEVICE, device.id.0.to_param());
-    if let Some(name) = &device.name {
-        params.set(p::NAME, name.clone());
+impl BtEvent {
+    /// Its kind, as written out.
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            BtEvent::Found(_) => "found",
+            BtEvent::ScanEnded => "scan-ended",
+            BtEvent::Connected { .. } => "connected",
+            BtEvent::Disconnected { .. } => "disconnected",
+            BtEvent::Discovered { .. } => "discovered",
+            BtEvent::ServicesChanged { .. } => "services-changed",
+            BtEvent::Value { .. } => "value",
+            BtEvent::Written { .. } => "written",
+            BtEvent::Sent { .. } => "sent",
+            BtEvent::Paired { .. } => "paired",
+            BtEvent::Done { .. } => "done",
+            BtEvent::Failed(_) => "failed",
+            BtEvent::Advertising => "advertising",
+            BtEvent::AdvertisingEnded => "advertising-ended",
+            BtEvent::ReadRequest { .. } => "read-request",
+            BtEvent::WriteRequest { .. } => "write-request",
+            BtEvent::Subscribed { .. } => "subscribed",
+            BtEvent::Unsubscribed { .. } => "unsubscribed",
+            BtEvent::HidReportMap { .. } => "hid-report-map",
+            BtEvent::HidReport { .. } => "hid-report",
+            BtEvent::Extended { .. } => "extended",
+        }
     }
-    if let Some(rssi) = device.rssi {
-        params.set(p::RSSI, rssi.to_string());
+
+    /// The device it is about, where it is about one.
+    pub const fn device(&self) -> Option<DeviceId> {
+        match self {
+            BtEvent::Found(device) => Some(device.id),
+            BtEvent::Connected { device, .. }
+            | BtEvent::Disconnected { device, .. }
+            | BtEvent::Discovered { device, .. }
+            | BtEvent::ServicesChanged { device }
+            | BtEvent::Value { device, .. }
+            | BtEvent::Written { device, .. }
+            | BtEvent::Sent { device, .. }
+            | BtEvent::Paired { device }
+            | BtEvent::Done { device, .. }
+            | BtEvent::HidReportMap { device, .. }
+            | BtEvent::HidReport { device, .. } => Some(*device),
+            BtEvent::ReadRequest { central, .. }
+            | BtEvent::WriteRequest { central, .. }
+            | BtEvent::Subscribed { central, .. }
+            | BtEvent::Unsubscribed { central, .. } => Some(*central),
+            BtEvent::Failed(failure) => failure.device,
+            _ => None,
+        }
     }
-    let services: Vec<String> = device.services.iter().map(Uuid::to_string).collect();
-    params.set(p::SERVICES, services.join(","));
-    params.set(p::BONDED, device.bonded.to_param());
-    params.set(p::DEVICE_KIND, device.kind.as_str());
+
+    /// The service and characteristic of the plugin's GATT server it is
+    /// about, where it is about one.
+    const fn served(&self) -> Option<(Uuid, Uuid)> {
+        match self {
+            BtEvent::ReadRequest {
+                service,
+                characteristic,
+                ..
+            }
+            | BtEvent::WriteRequest {
+                service,
+                characteristic,
+                ..
+            }
+            | BtEvent::Subscribed {
+                service,
+                characteristic,
+                ..
+            }
+            | BtEvent::Unsubscribed {
+                service,
+                characteristic,
+                ..
+            } => Some((*service, *characteristic)),
+            _ => None,
+        }
+    }
 }
 
-fn write_services(params: &mut Params, services: &[Service]) {
-    for service in services {
-        let list: Vec<String> = service
-            .characteristics
-            .iter()
-            .map(|c| alloc::format!("{}/{}/{}", c.uuid, c.handle.0, c.properties.bits()))
-            .collect();
-        params.set(
-            alloc::format!("{}{}", bt_params::SERVICE, service.uuid),
-            list.join(","),
-        );
+/// Makers of the events, for the kernel and a plugin's own tests.
+#[cfg(any(feature = "kernel", feature = "testing", test))]
+impl BtEvent {
+    pub fn connected(device: DeviceId, mtu: u16, security: Security) -> Self {
+        BtEvent::Connected {
+            device,
+            mtu,
+            security,
+        }
+    }
+
+    pub fn disconnected(device: DeviceId, reason: Option<BtError>) -> Self {
+        BtEvent::Disconnected { device, reason }
+    }
+
+    pub fn discovered(device: DeviceId, services: Vec<GattService>) -> Self {
+        BtEvent::Discovered { device, services }
+    }
+
+    pub fn services_changed(device: DeviceId) -> Self {
+        BtEvent::ServicesChanged { device }
+    }
+
+    pub fn value(device: DeviceId, handle: Handle, kind: ValueKind, bytes: Vec<u8>) -> Self {
+        BtEvent::Value {
+            device,
+            handle,
+            kind,
+            bytes,
+        }
+    }
+
+    pub fn written(device: DeviceId, handle: Handle) -> Self {
+        BtEvent::Written { device, handle }
+    }
+
+    pub fn sent(device: DeviceId, handle: Handle) -> Self {
+        BtEvent::Sent { device, handle }
+    }
+
+    pub fn paired(device: DeviceId) -> Self {
+        BtEvent::Paired { device }
+    }
+
+    pub fn done(op: BtOp, device: DeviceId) -> Self {
+        BtEvent::Done { op, device }
+    }
+
+    pub fn read_request(
+        request: GattRequest,
+        service: Uuid,
+        characteristic: Uuid,
+        central: DeviceId,
+    ) -> Self {
+        BtEvent::ReadRequest {
+            request,
+            service,
+            characteristic,
+            central,
+        }
+    }
+
+    pub fn write_request(
+        request: Option<GattRequest>,
+        service: Uuid,
+        characteristic: Uuid,
+        central: DeviceId,
+        bytes: Vec<u8>,
+    ) -> Self {
+        BtEvent::WriteRequest {
+            request,
+            service,
+            characteristic,
+            central,
+            bytes,
+        }
+    }
+
+    pub fn subscribed(service: Uuid, characteristic: Uuid, central: DeviceId) -> Self {
+        BtEvent::Subscribed {
+            service,
+            characteristic,
+            central,
+        }
+    }
+
+    pub fn unsubscribed(service: Uuid, characteristic: Uuid, central: DeviceId) -> Self {
+        BtEvent::Unsubscribed {
+            service,
+            characteristic,
+            central,
+        }
+    }
+
+    pub fn hid_report_map(device: DeviceId, bytes: Vec<u8>) -> Self {
+        BtEvent::HidReportMap { device, bytes }
+    }
+
+    pub fn hid_report(device: DeviceId, report: Option<u8>, bytes: Vec<u8>) -> Self {
+        BtEvent::HidReport {
+            device,
+            report,
+            bytes,
+        }
+    }
+
+    pub fn extended(key: Id, params: Params) -> Self {
+        BtEvent::Extended { key, params }
     }
 }
 
 impl EventData for BtEvent {
-    /// Written out as text; a value's bytes in hex.
+    /// What happened, for observers and rules: its kind, the device, the
+    /// command and the error, the length of a payload but never the
+    /// payload (keys typed, readings, what a phone sent).
     fn to_params(&self) -> Params {
         use bt_params as p;
-        let mut params = Params::new();
-        let kind = match self {
-            BtEvent::Found(device) => {
-                write_device(&mut params, device);
-                "found"
+        let mut params = Params::new().with(p::KIND, self.kind());
+        if let Some(device) = self.device() {
+            params.set(p::DEVICE, device.to_param());
+        }
+        match self {
+            BtEvent::Value { handle, bytes, .. } => {
+                params.set(p::HANDLE, handle.0.to_param());
+                params.set(p::LENGTH, bytes.len().to_param());
             }
-            BtEvent::ScanEnded => "scan-ended",
-            BtEvent::Connected { device } => {
-                params.set(p::DEVICE, device.0.to_param());
-                "connected"
+            BtEvent::HidReport { bytes, .. }
+            | BtEvent::HidReportMap { bytes, .. }
+            | BtEvent::WriteRequest { bytes, .. } => {
+                params.set(p::LENGTH, bytes.len().to_param());
             }
-            BtEvent::Disconnected { device, reason } => {
-                params.set(p::DEVICE, device.0.to_param());
-                if let Some(reason) = reason {
-                    params.set(p::ERROR, reason.to_text());
+            BtEvent::Written { handle, .. } | BtEvent::Sent { handle, .. } => {
+                params.set(p::HANDLE, handle.0.to_param());
+            }
+            BtEvent::Done { op, .. } => params.set(p::OP, op.as_str()),
+            BtEvent::Failed(failure) => {
+                params.set(p::OP, failure.op.as_str());
+                params.set(p::ERROR, failure.error.to_param());
+                if let Some(handle) = failure.handle {
+                    params.set(p::HANDLE, handle.0.to_param());
                 }
-                "disconnected"
             }
-            BtEvent::Discovered { device, services } => {
-                params.set(p::DEVICE, device.0.to_param());
-                write_services(&mut params, services);
-                "discovered"
-            }
-            BtEvent::Value {
-                device,
-                handle,
-                bytes,
-            } => {
-                params.set(p::DEVICE, device.0.to_param());
-                params.set(p::HANDLE, handle.0.to_param());
-                params.set(p::BYTES, hex(bytes));
-                "value"
-            }
-            BtEvent::Written { device, handle } => {
-                params.set(p::DEVICE, device.0.to_param());
-                params.set(p::HANDLE, handle.0.to_param());
-                "written"
-            }
-            BtEvent::Paired { device } => {
-                params.set(p::DEVICE, device.0.to_param());
-                "paired"
-            }
-            BtEvent::Failed { device, error } => {
-                if let Some(device) = device {
-                    params.set(p::DEVICE, device.0.to_param());
-                }
-                params.set(p::ERROR, error.to_text());
-                "failed"
-            }
-            BtEvent::Advertising => "advertising",
-            BtEvent::AdvertisingEnded => "advertising-ended",
-            BtEvent::ReadRequest { request, handle } => {
-                params.set(p::REQUEST, request.0.to_param());
-                params.set(p::HANDLE, handle.0.to_param());
-                "read-request"
-            }
-            BtEvent::WriteRequest { handle, bytes } => {
-                params.set(p::HANDLE, handle.0.to_param());
-                params.set(p::BYTES, hex(bytes));
-                "write-request"
-            }
-            BtEvent::Subscribed { handle, on } => {
-                params.set(p::HANDLE, handle.0.to_param());
-                params.set(p::ON, on.to_param());
-                "subscribed"
-            }
-            BtEvent::HidReport {
-                device,
-                report,
-                bytes,
-            } => {
-                params.set(p::DEVICE, device.0.to_param());
-                if let Some(report) = report {
-                    params.set(p::REPORT, report.to_param());
-                }
-                params.set(p::BYTES, hex(bytes));
-                "hid-report"
-            }
-        };
-        params.set(p::KIND, kind);
+            BtEvent::Disconnected {
+                reason: Some(reason),
+                ..
+            } => params.set(p::ERROR, reason.to_param()),
+            _ => {}
+        }
+        if let Some((service, characteristic)) = self.served() {
+            params.set(p::SERVICE, service.to_string());
+            params.set(p::CHARACTERISTIC, characteristic.to_string());
+        }
         params
     }
 
-    /// Its bytes go along as they are, not copied.
+    /// The event itself goes along, payloads and all, for the plugin it
+    /// is for.
     fn into_params(self) -> Params {
         self.to_params().carrying(self)
     }
 
+    /// What can be read back from the written-out parameters: events
+    /// without a payload.
     fn from_params(params: &Params) -> Option<Self> {
         use bt_params as p;
-        let device = || {
-            params
-                .get(p::DEVICE)
-                .and_then(u32::from_param)
-                .map(DeviceId)
-        };
+        let device = || params.get(p::DEVICE).and_then(DeviceId::from_param);
         let handle = || params.get(p::HANDLE).and_then(u16::from_param).map(Handle);
-        let bytes = || crate::digest::hex::decode(params.get(p::BYTES).unwrap_or_default());
-        let error = || params.get(p::ERROR).and_then(BtError::parse);
         Some(match params.get(p::KIND)? {
-            "found" => BtEvent::Found(Device {
-                id: device()?,
-                name: params.get(p::NAME).map(String::from),
-                rssi: params.get(p::RSSI).and_then(|r| r.parse().ok()),
-                services: params
-                    .get(p::SERVICES)
-                    .unwrap_or_default()
-                    .split(',')
-                    .filter_map(Uuid::parse)
-                    .collect(),
-                bonded: params.get(p::BONDED) == Some("true"),
-                kind: DeviceKind::parse(params.get(p::DEVICE_KIND).unwrap_or_default()),
-            }),
             "scan-ended" => BtEvent::ScanEnded,
-            "connected" => BtEvent::Connected { device: device()? },
             "disconnected" => BtEvent::Disconnected {
                 device: device()?,
-                reason: error(),
+                reason: params.get(p::ERROR).and_then(BtError::from_param),
             },
-            "discovered" => BtEvent::Discovered {
-                device: device()?,
-                services: params
-                    .iter()
-                    .filter_map(|(key, list)| {
-                        let uuid = Uuid::parse(key.strip_prefix(p::SERVICE)?)?;
-                        let characteristics = list
-                            .split(',')
-                            .filter_map(|c| {
-                                let mut parts = c.split('/');
-                                let uuid = Uuid::parse(parts.next()?)?;
-                                let handle = Handle(parts.next()?.parse().ok()?);
-                                let bits = parts.next()?.parse().ok()?;
-                                Some(Characteristic::new(
-                                    uuid,
-                                    handle,
-                                    Properties::from_bits(bits),
-                                ))
-                            })
-                            .collect();
-                        Some(Service::new(uuid, characteristics))
-                    })
-                    .collect(),
-            },
-            "value" => BtEvent::Value {
-                device: device()?,
-                handle: handle()?,
-                bytes: bytes()?,
-            },
+            "services-changed" => BtEvent::ServicesChanged { device: device()? },
             "written" => BtEvent::Written {
                 device: device()?,
                 handle: handle()?,
             },
-            "paired" => BtEvent::Paired { device: device()? },
-            "failed" => BtEvent::Failed {
-                device: device(),
-                error: error()?,
+            "sent" => BtEvent::Sent {
+                device: device()?,
+                handle: handle()?,
             },
+            "paired" => BtEvent::Paired { device: device()? },
+            "done" => BtEvent::Done {
+                op: BtOp::parse(params.get(p::OP)?)?,
+                device: device()?,
+            },
+            "failed" => BtEvent::Failed(BtFailure {
+                op: BtOp::parse(params.get(p::OP)?)?,
+                device: device(),
+                handle: handle(),
+                error: params.get(p::ERROR).and_then(BtError::from_param)?,
+            }),
             "advertising" => BtEvent::Advertising,
             "advertising-ended" => BtEvent::AdvertisingEnded,
-            "read-request" => BtEvent::ReadRequest {
-                request: Request(params.get(p::REQUEST).and_then(u32::from_param)?),
-                handle: handle()?,
-            },
-            "write-request" => BtEvent::WriteRequest {
-                handle: handle()?,
-                bytes: bytes()?,
-            },
-            "subscribed" => BtEvent::Subscribed {
-                handle: handle()?,
-                on: params.get(p::ON) == Some("true"),
-            },
-            "hid-report" => BtEvent::HidReport {
-                device: device()?,
-                report: params.get(p::REPORT).and_then(u8::from_param),
-                bytes: bytes()?,
-            },
             _ => return None,
         })
     }
 }
 
-/// How a [`write()`] is made.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub enum WriteKind {
-    /// Answered with [`BtEvent::Written`].
-    #[default]
-    WithResponse,
-    /// Not answered (faster; nothing says it arrived).
-    WithoutResponse,
+/// The commands as the kernel gets them (plugins write them with the
+/// functions of this module).
+mod request {
+    use super::*;
+
+    /// What a plugin asks of the radio, as the kernel gets it; plugins write
+    /// it with the functions of this module.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[non_exhaustive]
+    pub enum BtCommand {
+        Scan(Scan),
+        StopScan {
+            events: Id,
+        },
+        Connect(Connect),
+        Disconnect {
+            device: DeviceId,
+        },
+        Discover(Discover),
+        Read {
+            device: DeviceId,
+            handle: Handle,
+        },
+        Write {
+            device: DeviceId,
+            handle: Handle,
+            bytes: Vec<u8>,
+            response: Response,
+        },
+        Subscribe {
+            device: DeviceId,
+            handle: Handle,
+        },
+        SubscribeTo {
+            device: DeviceId,
+            service: Uuid,
+            characteristic: Uuid,
+        },
+        Unsubscribe {
+            device: DeviceId,
+            handle: Handle,
+        },
+        Pair {
+            device: DeviceId,
+        },
+        Forget {
+            device: DeviceId,
+            events: Id,
+        },
+        Give {
+            device: DeviceId,
+            plugin: Id,
+            events: Id,
+        },
+        TakeBack {
+            device: DeviceId,
+            plugin: Id,
+            events: Id,
+        },
+        KeysOn {
+            device: DeviceId,
+            events: Id,
+        },
+        KeysOff {
+            device: DeviceId,
+            events: Id,
+        },
+        HidReports {
+            device: DeviceId,
+            events: Id,
+        },
+        Advertise(Advertising),
+        StopAdvertising,
+        NotifyCentrals {
+            service: Uuid,
+            characteristic: Uuid,
+            bytes: Vec<u8>,
+        },
+        Respond {
+            request: GattRequest,
+            bytes: Vec<u8>,
+        },
+        Refuse {
+            request: GattRequest,
+            error: AttError,
+        },
+        Extended {
+            key: Id,
+            params: Params,
+        },
+    }
+
+    /// Whether a write waits for the device's answer.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    #[non_exhaustive]
+    pub enum Response {
+        /// Answered with [`BtEvent::Written`].
+        #[default]
+        Wanted,
+        /// Not answered; [`BtEvent::Sent`] says the next may follow.
+        NotWanted,
+    }
 }
 
-/// A scan: what it looks for, for how long, and where its results go.
+#[cfg(feature = "kernel")]
+pub use request::{BtCommand, Response};
+#[cfg(not(feature = "kernel"))]
+use request::{BtCommand, Response};
+
+impl BtCommand {
+    fn command(self) -> Command {
+        Command::Bluetooth(Box::new(BtRequest {
+            command: self,
+            from: None,
+        }))
+    }
+}
+
+/// A Bluetooth command on its way to the kernel, with the plugin that
+/// sent it (filled in by the kernel).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BtRequest {
+    command: BtCommand,
+    from: Option<Id>,
+}
+
+#[cfg(feature = "kernel")]
+impl BtRequest {
+    pub fn command(&self) -> &BtCommand {
+        &self.command
+    }
+
+    /// Says that plugin `plugin` sent it.
+    pub fn set_from(&mut self, plugin: Id) {
+        self.from = Some(plugin);
+    }
+
+    pub fn into_parts(self) -> (BtCommand, Option<Id>) {
+        (self.command, self.from)
+    }
+}
+
+/// The longest a scan runs ([`Scan::lasting`]).
+const SCAN_MOST: Duration = Duration::from_secs(60);
+/// The longest a fast scan runs.
+const FAST_SCAN_MOST: Duration = Duration::from_secs(5);
+
+/// A scan being written ([`scan`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Scan {
@@ -773,8 +1310,19 @@ pub struct Scan {
     pub services: Vec<Uuid>,
     /// Only devices whose name begins so.
     pub name_prefix: Option<String>,
-    /// How long it runs, at most [`SCAN_MOST_MS`].
-    pub ms: u32,
+    /// Only devices with data of this company.
+    pub manufacturer: Option<u16>,
+    pub power: ScanPower,
+    /// Asks devices for more (their names): it costs them and this device
+    /// a little.
+    pub active: bool,
+    /// Ends at the first device found.
+    pub first: bool,
+    /// Tells a device found again where its name, services or data
+    /// changed (a broadcast sensor's readings).
+    pub updates: bool,
+    /// How long it runs (at most a minute; a fast scan at most 5 seconds).
+    pub lasting: Duration,
 }
 
 impl Scan {
@@ -788,22 +1336,71 @@ impl Scan {
                 .as_deref()
                 .is_some_and(|name| name.starts_with(prefix))
         });
-        service && name
+        let maker = self.manufacturer.is_none_or(|company| {
+            device
+                .manufacturer_data
+                .iter()
+                .any(|m| m.company == company)
+        });
+        service && name && maker
     }
 
+    #[must_use]
     pub fn service(mut self, service: Uuid) -> Self {
         self.services.push(service);
         self
     }
 
+    #[must_use]
     pub fn name_prefix(mut self, prefix: impl Into<String>) -> Self {
         self.name_prefix = Some(prefix.into());
         self
     }
 
-    pub fn for_ms(mut self, ms: u32) -> Self {
-        self.ms = ms.min(SCAN_MOST_MS);
+    #[must_use]
+    pub fn manufacturer(mut self, company: u16) -> Self {
+        self.manufacturer = Some(company);
         self
+    }
+
+    #[must_use]
+    pub fn power(mut self, power: ScanPower) -> Self {
+        self.power = power;
+        self.lasting = self.limited(self.lasting);
+        self
+    }
+
+    #[must_use]
+    pub fn active(mut self) -> Self {
+        self.active = true;
+        self
+    }
+
+    #[must_use]
+    pub fn first(mut self) -> Self {
+        self.first = true;
+        self
+    }
+
+    #[must_use]
+    pub fn updates(mut self) -> Self {
+        self.updates = true;
+        self
+    }
+
+    #[must_use]
+    pub fn lasting(mut self, lasting: Duration) -> Self {
+        self.lasting = self.limited(lasting);
+        self
+    }
+
+    fn limited(&self, lasting: Duration) -> Duration {
+        let most = if self.power == ScanPower::Fast {
+            FAST_SCAN_MOST
+        } else {
+            SCAN_MOST
+        };
+        lasting.min(most)
     }
 
     pub fn command(self) -> Command {
@@ -811,32 +1408,161 @@ impl Scan {
     }
 }
 
-/// Being seen: the name and services advertised, for how long, and where
-/// what happens goes.
+/// A link being asked for ([`connect`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Connect {
+    pub device: DeviceId,
+    pub events: Id,
+    pub power: LinkPower,
+    /// Let go when nothing went over it this long.
+    pub idle: Option<Duration>,
+}
+
+impl Connect {
+    #[must_use]
+    pub fn power(mut self, power: LinkPower) -> Self {
+        self.power = power;
+        self
+    }
+
+    #[must_use]
+    pub fn idle(mut self, idle: Duration) -> Self {
+        self.idle = Some(idle);
+        self
+    }
+
+    pub fn command(self) -> Command {
+        BtCommand::Connect(self).command()
+    }
+}
+
+/// A discovery being asked for ([`discover`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Discover {
+    pub device: DeviceId,
+    /// Only these services (all, where empty): less to find, less radio.
+    pub services: Vec<Uuid>,
+}
+
+impl Discover {
+    #[must_use]
+    pub fn service(mut self, service: Uuid) -> Self {
+        self.services.push(service);
+        self
+    }
+
+    pub fn command(self) -> Command {
+        BtCommand::Discover(self).command()
+    }
+}
+
+/// A write being written ([`write()`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Write {
+    device: DeviceId,
+    handle: Handle,
+    bytes: Vec<u8>,
+    response: Response,
+}
+
+impl Write {
+    #[must_use]
+    pub fn without_response(mut self) -> Self {
+        self.response = Response::NotWanted;
+        self
+    }
+
+    pub fn command(self) -> Command {
+        BtCommand::Write {
+            device: self.device,
+            handle: self.handle,
+            bytes: self.bytes,
+            response: self.response,
+        }
+        .command()
+    }
+}
+
+/// Being seen, being written ([`advertise`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Advertising {
     pub events: Id,
     pub name: Option<Cow<'static, str>>,
     pub services: Vec<Uuid>,
-    /// How long, at most [`ADVERTISE_MOST_MS`].
-    pub ms: u32,
+    pub manufacturer_data: Vec<ManufacturerData>,
+    pub service_data: Vec<ServiceData>,
+    pub appearance: Option<u16>,
+    /// Centrals may connect (to the plugin's GATT server).
+    pub connectable: bool,
+    pub power: AdvertisePower,
+    /// How long, at most 10 minutes (a fast one at most 30 seconds).
+    pub lasting: Duration,
 }
 
+/// The longest a plugin is advertised at a time.
+const ADVERTISE_MOST: Duration = Duration::from_secs(600);
+const FAST_ADVERTISE_MOST: Duration = Duration::from_secs(30);
+
 impl Advertising {
+    #[must_use]
     pub fn name(mut self, name: impl Into<Cow<'static, str>>) -> Self {
         self.name = Some(name.into());
         self
     }
 
+    #[must_use]
     pub fn service(mut self, service: Uuid) -> Self {
         self.services.push(service);
         self
     }
 
-    pub fn for_ms(mut self, ms: u32) -> Self {
-        self.ms = ms.min(ADVERTISE_MOST_MS);
+    #[must_use]
+    pub fn manufacturer_data(mut self, data: ManufacturerData) -> Self {
+        self.manufacturer_data.push(data);
         self
+    }
+
+    #[must_use]
+    pub fn service_data(mut self, data: ServiceData) -> Self {
+        self.service_data.push(data);
+        self
+    }
+
+    #[must_use]
+    pub fn appearance(mut self, appearance: u16) -> Self {
+        self.appearance = Some(appearance);
+        self
+    }
+
+    #[must_use]
+    pub fn connectable(mut self) -> Self {
+        self.connectable = true;
+        self
+    }
+
+    #[must_use]
+    pub fn power(mut self, power: AdvertisePower) -> Self {
+        self.power = power;
+        self.lasting = self.limited(self.lasting);
+        self
+    }
+
+    #[must_use]
+    pub fn lasting(mut self, lasting: Duration) -> Self {
+        self.lasting = self.limited(lasting);
+        self
+    }
+
+    fn limited(&self, lasting: Duration) -> Duration {
+        let most = if self.power == AdvertisePower::Fast {
+            FAST_ADVERTISE_MOST
+        } else {
+            ADVERTISE_MOST
+        };
+        lasting.min(most)
     }
 
     pub fn command(self) -> Command {
@@ -844,128 +1570,21 @@ impl Advertising {
     }
 }
 
-/// What a plugin asks of the radio ([`Command::Bluetooth`]); written with
-/// the functions of this module.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum BtCommand {
-    Scan(Scan),
-    /// Ends the plugin's scan whose results go to `events`.
-    StopScan {
-        events: Id,
-    },
-    Connect {
-        device: DeviceId,
-        events: Id,
-    },
-    Disconnect {
-        device: DeviceId,
-    },
-    Discover {
-        device: DeviceId,
-    },
-    Read {
-        device: DeviceId,
-        handle: Handle,
-    },
-    Write {
-        device: DeviceId,
-        handle: Handle,
-        bytes: Vec<u8>,
-        kind: WriteKind,
-    },
-    Subscribe {
-        device: DeviceId,
-        handle: Handle,
-    },
-    Unsubscribe {
-        device: DeviceId,
-        handle: Handle,
-    },
-    Pair {
-        device: DeviceId,
-    },
-    /// Removes the bond and what the device was given; the reader's own
-    /// doing only.
-    Forget {
-        device: DeviceId,
-    },
-    /// Gives bonded `device` to plugin `plugin` (or takes it back); the
-    /// reader's own doing only.
-    Give {
-        device: DeviceId,
-        plugin: Id,
-        given: bool,
-    },
-    /// The bonded device's keys go to the key maps (connecting it), or no
-    /// longer (letting it go).
-    Keys {
-        device: DeviceId,
-        on: bool,
-    },
-    HidReports {
-        device: DeviceId,
-        events: Id,
-    },
-    Advertise(Advertising),
-    StopAdvertising,
-    Notify {
-        handle: Handle,
-        bytes: Vec<u8>,
-    },
-    Respond {
-        request: Request,
-        bytes: Vec<u8>,
-    },
-}
-
-impl BtCommand {
-    pub fn command(self) -> Command {
-        Command::Bluetooth(Box::new(BtRequest {
-            command: self,
-            from: None,
-        }))
-    }
-}
-
-/// A [`BtCommand`] on its way to the kernel, with the plugin that sent it
-/// (filled in by the kernel).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BtRequest {
-    command: BtCommand,
-    from: Option<Id>,
-}
-
-impl BtRequest {
-    pub fn command(&self) -> &BtCommand {
-        &self.command
-    }
-
-    /// The plugin that sent it, where the kernel said.
-    pub fn from(&self) -> Option<&Id> {
-        self.from.as_ref()
-    }
-
-    /// Says that plugin `plugin` sent it.
-    #[cfg(feature = "kernel")]
-    pub fn set_from(&mut self, plugin: Id) {
-        self.from = Some(plugin);
-    }
-
-    #[cfg(feature = "kernel")]
-    pub fn into_parts(self) -> (BtCommand, Option<Id>) {
-        (self.command, self.from)
-    }
-}
-
-/// Looks for devices for a while; each found comes as `events`
-/// ([`BtEvent::Found`]), then [`BtEvent::ScanEnded`].
+/// Looks for devices for a while (10 seconds unless [`Scan::lasting`]
+/// says otherwise), passively and seldom unless [`Scan::power`] says
+/// otherwise; each found comes as `events` ([`BtEvent::Found`]), then
+/// [`BtEvent::ScanEnded`].
 pub fn scan(events: &Event<BtEvent>) -> Scan {
     Scan {
         events: events.id().clone(),
         services: Vec::new(),
         name_prefix: None,
-        ms: 10_000,
+        manufacturer: None,
+        power: ScanPower::Low,
+        active: false,
+        first: false,
+        updates: false,
+        lasting: Duration::from_secs(10),
     }
 }
 
@@ -977,13 +1596,16 @@ pub fn stop_scan(events: &Event<BtEvent>) -> Command {
     .command()
 }
 
-/// Connects to `device`; all about the link comes as `events`.
-pub fn connect(device: DeviceId, events: &Event<BtEvent>) -> Command {
-    BtCommand::Connect {
+/// Connects to `device`, at [`LinkPower::Low`] unless
+/// [`Connect::power`] says otherwise; all about the link comes as
+/// `events`, the answers of the commands on it too.
+pub fn connect(device: DeviceId, events: &Event<BtEvent>) -> Connect {
+    Connect {
         device,
         events: events.id().clone(),
+        power: LinkPower::Low,
+        idle: None,
     }
-    .command()
 }
 
 pub fn disconnect(device: DeviceId) -> Command {
@@ -991,111 +1613,115 @@ pub fn disconnect(device: DeviceId) -> Command {
 }
 
 /// Finds the services of a connected device and their characteristics
-/// ([`BtEvent::Discovered`]).
-pub fn discover(device: DeviceId) -> Command {
-    BtCommand::Discover { device }.command()
+/// ([`BtEvent::Discovered`]); [`Discover::service`] finds only those
+/// needed.
+pub fn discover(device: DeviceId) -> Discover {
+    Discover {
+        device,
+        services: Vec::new(),
+    }
 }
 
-/// Reads characteristic `handle` ([`BtEvent::Value`]).
+/// Reads the value or descriptor at `handle` ([`BtEvent::Value`]).
 pub fn read(device: DeviceId, handle: Handle) -> Command {
     BtCommand::Read { device, handle }.command()
 }
 
-/// Writes `bytes` to characteristic `handle`, with a response
-/// ([`BtEvent::Written`]) unless [`Write::without_response`].
+/// Writes `bytes` at `handle`, with a response ([`BtEvent::Written`])
+/// unless [`Write::without_response`]. Values longer than the link
+/// carries at once are written in parts by the kernel.
 pub fn write(device: DeviceId, handle: Handle, bytes: impl Into<Vec<u8>>) -> Write {
     Write {
         device,
         handle,
         bytes: bytes.into(),
-        kind: WriteKind::WithResponse,
+        response: Response::Wanted,
     }
 }
 
-/// A [`write()`] being written.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Write {
-    device: DeviceId,
-    handle: Handle,
-    bytes: Vec<u8>,
-    kind: WriteKind,
-}
-
-impl Write {
-    pub fn without_response(mut self) -> Self {
-        self.kind = WriteKind::WithoutResponse;
-        self
-    }
-
-    pub fn command(self) -> Command {
-        BtCommand::Write {
-            device: self.device,
-            handle: self.handle,
-            bytes: self.bytes,
-            kind: self.kind,
-        }
-        .command()
-    }
-}
-
-/// Notifications (or indications) of characteristic `handle` come as
-/// [`BtEvent::Value`].
+/// Notifications (or indications) of the characteristic at `handle` come
+/// as [`BtEvent::Value`].
 pub fn subscribe(device: DeviceId, handle: Handle) -> Command {
     BtCommand::Subscribe { device, handle }.command()
+}
+
+/// [`subscribe`] to characteristic `characteristic` of service `service`,
+/// found by the kernel: no discovery and no handle needed.
+pub fn subscribe_to(device: DeviceId, service: Uuid, characteristic: Uuid) -> Command {
+    BtCommand::SubscribeTo {
+        device,
+        service,
+        characteristic,
+    }
+    .command()
 }
 
 pub fn unsubscribe(device: DeviceId, handle: Handle) -> Command {
     BtCommand::Unsubscribe { device, handle }.command()
 }
 
-/// Asks the reader to pair with `device` ([`BtEvent::Paired`], or
-/// [`BtError::Refused`]).
+/// Asks the reader to pair with connected `device` ([`BtEvent::Paired`],
+/// or [`BtError::Declined`]).
 pub fn pair(device: DeviceId) -> Command {
     BtCommand::Pair { device }.command()
 }
 
-/// Forgets bonded `device`: its keys and what it was given. Only as the
-/// reader's own doing (a page's row they chose).
-pub fn forget(device: DeviceId) -> Command {
-    BtCommand::Forget { device }.command()
-}
-
-/// Gives bonded `device` to `plugin`: it may connect to it. Only as the
-/// reader's own doing.
-pub fn give(device: DeviceId, plugin: impl Into<Id>) -> Command {
-    BtCommand::Give {
+/// Forgets bonded `device`: its keys and what it was given. The reader's
+/// own doing, or the Bluetooth manager's.
+pub fn forget(device: DeviceId, events: &Event<BtEvent>) -> Command {
+    BtCommand::Forget {
         device,
-        plugin: plugin.into(),
-        given: true,
+        events: events.id().clone(),
     }
     .command()
 }
 
-/// Takes bonded `device` back from `plugin`. Only as the reader's own
-/// doing.
-pub fn take_back(device: DeviceId, plugin: impl Into<Id>) -> Command {
+/// Gives bonded `device` to `plugin`: it may connect to it. The reader's
+/// own doing, or the Bluetooth manager's.
+pub fn give(device: DeviceId, plugin: impl Into<Id>, events: &Event<BtEvent>) -> Command {
     BtCommand::Give {
         device,
         plugin: plugin.into(),
-        given: false,
+        events: events.id().clone(),
     }
     .command()
 }
 
-/// The keys of bonded `device` go to the key maps from now on: the kernel
-/// connects it.
-pub fn keys(device: DeviceId) -> Command {
-    BtCommand::Keys { device, on: true }.command()
+/// Takes bonded `device` back from `plugin`. The reader's own doing, or
+/// the Bluetooth manager's.
+pub fn take_back(device: DeviceId, plugin: impl Into<Id>, events: &Event<BtEvent>) -> Command {
+    BtCommand::TakeBack {
+        device,
+        plugin: plugin.into(),
+        events: events.id().clone(),
+    }
+    .command()
+}
+
+/// The keys of bonded `device` go to the key maps: the kernel connects
+/// it, responsively. The Bluetooth manager's, a plugin's the device is
+/// given to, or the reader's own doing.
+pub fn remote_keys(device: DeviceId, events: &Event<BtEvent>) -> Command {
+    BtCommand::KeysOn {
+        device,
+        events: events.id().clone(),
+    }
+    .command()
 }
 
 /// The keys of `device` no longer go to the key maps: the kernel lets it
 /// go.
-pub fn keys_off(device: DeviceId) -> Command {
-    BtCommand::Keys { device, on: false }.command()
+pub fn remote_keys_off(device: DeviceId, events: &Event<BtEvent>) -> Command {
+    BtCommand::KeysOff {
+        device,
+        events: events.id().clone(),
+    }
+    .command()
 }
 
-/// The input reports of HID `device` (given to the plugin) come as
-/// `events` ([`BtEvent::HidReport`]).
+/// The report map and input reports of HID `device` (given to the
+/// plugin) come as `events` ([`BtEvent::HidReportMap`],
+/// [`BtEvent::HidReport`]).
 pub fn hid_reports(device: DeviceId, events: &Event<BtEvent>) -> Command {
     BtCommand::HidReports {
         device,
@@ -1104,13 +1730,20 @@ pub fn hid_reports(device: DeviceId, events: &Event<BtEvent>) -> Command {
     .command()
 }
 
-/// Advertises the device for a while; what happens comes as `events`.
+/// Advertises the device for a while (a minute unless
+/// [`Advertising::lasting`] says otherwise), about once a second unless
+/// [`Advertising::power`] says otherwise; what happens comes as `events`.
 pub fn advertise(events: &Event<BtEvent>) -> Advertising {
     Advertising {
         events: events.id().clone(),
         name: None,
         services: Vec::new(),
-        ms: 60_000,
+        manufacturer_data: Vec::new(),
+        service_data: Vec::new(),
+        appearance: None,
+        connectable: false,
+        power: AdvertisePower::Low,
+        lasting: Duration::from_secs(60),
     }
 }
 
@@ -1118,23 +1751,108 @@ pub fn stop_advertising() -> Command {
     BtCommand::StopAdvertising.command()
 }
 
-/// Sends `bytes` of the plugin's characteristic `handle` to the centrals
-/// subscribed to it.
-pub fn notify(handle: Handle, bytes: impl Into<Vec<u8>>) -> Command {
-    BtCommand::Notify {
-        handle,
+/// Sends `bytes` of characteristic `characteristic` of the plugin's
+/// service `service` to the centrals subscribed to it.
+pub fn notify_centrals(service: Uuid, characteristic: Uuid, bytes: impl Into<Vec<u8>>) -> Command {
+    BtCommand::NotifyCentrals {
+        service,
+        characteristic,
         bytes: bytes.into(),
     }
     .command()
 }
 
-/// Answers a central's read ([`BtEvent::ReadRequest`]).
-pub fn respond(request: Request, bytes: impl Into<Vec<u8>>) -> Command {
+/// Answers a central's read or write ([`BtEvent::ReadRequest`],
+/// [`BtEvent::WriteRequest`]).
+pub fn respond(request: GattRequest, bytes: impl Into<Vec<u8>>) -> Command {
     BtCommand::Respond {
         request,
         bytes: bytes.into(),
     }
     .command()
+}
+
+/// Refuses a central's read or write with `error`.
+pub fn refuse(request: GattRequest, error: AttError) -> Command {
+    BtCommand::Refuse { request, error }.command()
+}
+
+/// A command of a feature to come, named by `key`: answered by
+/// [`BtEvent::Extended`], or [`BtError::Unsupported`] where the kernel
+/// does not know it. Later features come as functions writing it, so
+/// they need no new plugin interface.
+pub fn extended(key: impl Into<Id>, params: Params) -> Command {
+    BtCommand::Extended {
+        key: key.into(),
+        params,
+    }
+    .command()
+}
+
+/// A characteristic of a service of the device's own GATT server.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CharacteristicSpec {
+    pub uuid: Uuid,
+    pub properties: Properties,
+    pub access: Access,
+    /// The longest value it takes.
+    pub max_len: u16,
+}
+
+impl CharacteristicSpec {
+    /// Characteristic `uuid`, nothing allowed yet, open to paired centrals
+    /// only ([`Access::Encrypted`]), up to 20 bytes.
+    pub const fn new(uuid: Uuid) -> Self {
+        Self {
+            uuid,
+            properties: Properties::NONE,
+            access: Access::Encrypted,
+            max_len: 20,
+        }
+    }
+
+    #[must_use]
+    pub const fn read(mut self) -> Self {
+        self.properties = self.properties.with(Properties::READ);
+        self
+    }
+
+    #[must_use]
+    pub const fn write(mut self) -> Self {
+        self.properties = self.properties.with(Properties::WRITE);
+        self
+    }
+
+    #[must_use]
+    pub const fn write_without_response(mut self) -> Self {
+        self.properties = self.properties.with(Properties::WRITE_WITHOUT_RESPONSE);
+        self
+    }
+
+    #[must_use]
+    pub const fn notify(mut self) -> Self {
+        self.properties = self.properties.with(Properties::NOTIFY);
+        self
+    }
+
+    #[must_use]
+    pub const fn indicate(mut self) -> Self {
+        self.properties = self.properties.with(Properties::INDICATE);
+        self
+    }
+
+    #[must_use]
+    pub const fn access(mut self, access: Access) -> Self {
+        self.access = access;
+        self
+    }
+
+    #[must_use]
+    pub const fn max_len(mut self, max_len: u16) -> Self {
+        self.max_len = max_len;
+        self
+    }
 }
 
 /// A service of the device's own GATT server, declared at registration
@@ -1143,13 +1861,13 @@ pub fn respond(request: Request, bytes: impl Into<Vec<u8>>) -> Command {
 /// as `events`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct GattServiceSpec {
+pub struct ServiceSpec {
     pub uuid: Uuid,
-    pub characteristics: Vec<(Uuid, Properties)>,
+    pub characteristics: Vec<CharacteristicSpec>,
     pub events: Id,
 }
 
-impl GattServiceSpec {
+impl ServiceSpec {
     pub fn new(uuid: Uuid, events: &Event<BtEvent>) -> Self {
         Self {
             uuid,
@@ -1158,8 +1876,9 @@ impl GattServiceSpec {
         }
     }
 
-    pub fn characteristic(mut self, uuid: Uuid, properties: Properties) -> Self {
-        self.characteristics.push((uuid, properties));
+    #[must_use]
+    pub fn characteristic(mut self, characteristic: CharacteristicSpec) -> Self {
+        self.characteristics.push(characteristic);
         self
     }
 }
@@ -1182,13 +1901,14 @@ pub struct Bonded {
     pub kind: DeviceKind,
     /// A link to it is up.
     pub connected: bool,
-    /// Its keys go to the key maps ([`keys`]).
+    /// Its keys go to the key maps ([`remote_keys`]).
     pub keys: bool,
-    /// The plugins it is given to.
-    pub given: Vec<Id>,
+    /// The plugins it is given to (seen by the Bluetooth manager alone).
+    given: Vec<Id>,
 }
 
 impl Bonded {
+    #[cfg(any(feature = "kernel", feature = "testing", test))]
     pub fn new(id: DeviceId, name: impl Into<String>, kind: DeviceKind) -> Self {
         Self {
             id,
@@ -1199,9 +1919,17 @@ impl Bonded {
             given: Vec::new(),
         }
     }
+
+    #[cfg(any(feature = "kernel", feature = "testing", test))]
+    #[must_use]
+    pub fn given_to(mut self, plugins: Vec<Id>) -> Self {
+        self.given = plugins;
+        self
+    }
 }
 
-/// What every plugin may know about Bluetooth ([`Env::bluetooth`](crate::Env::bluetooth)).
+/// Bluetooth as the kernel keeps it, for every plugin's view
+/// ([`BluetoothView`]).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub struct Bluetooth {
@@ -1210,9 +1938,12 @@ pub struct Bluetooth {
     pub busy: bool,
     /// The most links the device keeps at once.
     pub max_links: u8,
-    pub bonded: Vec<Bonded>,
+    bonded: Vec<Bonded>,
+    /// The Bluetooth manager's plugin.
+    manager: Option<Id>,
 }
 
+#[cfg(any(feature = "kernel", test))]
 impl Bluetooth {
     pub fn new(max_links: u8) -> Self {
         Self {
@@ -1221,117 +1952,87 @@ impl Bluetooth {
         }
     }
 
-    /// Bonded device `id`, where it is one.
-    pub fn bond(&self, id: DeviceId) -> Option<&Bonded> {
-        self.bonded.iter().find(|b| b.id == id)
+    pub fn set_bonded(&mut self, bonded: Vec<Bonded>) {
+        self.bonded = bonded;
+    }
+
+    pub fn set_manager(&mut self, manager: Option<Id>) {
+        self.manager = manager;
+    }
+}
+
+/// Bluetooth as the plugin running sees it ([`Env::bluetooth`](crate::Env::bluetooth)):
+/// the radio, and the bonded devices given to it (all of them, for the
+/// Bluetooth manager).
+#[derive(Clone, Copy)]
+pub struct BluetoothView<'a> {
+    all: &'a Bluetooth,
+    running: &'a dyn crate::secrets::Running,
+}
+
+impl core::fmt::Debug for BluetoothView<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("BluetoothView")
+            .field("state", &self.all.state)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a> BluetoothView<'a> {
+    pub(crate) fn new(all: &'a Bluetooth, running: &'a dyn crate::secrets::Running) -> Self {
+        Self { all, running }
+    }
+
+    pub fn state(&self) -> RadioState {
+        self.all.state
+    }
+
+    /// Something uses the radio.
+    pub fn busy(&self) -> bool {
+        self.all.busy
+    }
+
+    /// The most links the device keeps at once.
+    pub fn max_links(&self) -> u8 {
+        self.all.max_links
+    }
+
+    /// The plugin running is the Bluetooth manager.
+    pub fn manager(&self) -> bool {
+        self.all
+            .manager
+            .as_ref()
+            .is_some_and(|m| self.running.runs(m.as_str()))
+    }
+
+    /// The bonded devices the plugin running may use (all of them for the
+    /// Bluetooth manager).
+    pub fn bonded(&self) -> impl Iterator<Item = &'a Bonded> + '_ {
+        let manager = self.manager();
+        self.all
+            .bonded
+            .iter()
+            .filter(move |b| manager || b.given.iter().any(|g| self.running.runs(g.as_str())))
+    }
+
+    /// Bonded device `id`, where the plugin running may use it.
+    pub fn bond(&self, id: DeviceId) -> Option<&'a Bonded> {
+        self.bonded().find(|b| b.id == id)
+    }
+
+    /// The plugins bonded device `id` is given to: for the Bluetooth
+    /// manager alone (empty for others).
+    pub fn given(&self, id: DeviceId) -> &'a [Id] {
+        if !self.manager() {
+            return &[];
+        }
+        self.all
+            .bonded
+            .iter()
+            .find(|b| b.id == id)
+            .map_or(&[], |b| b.given.as_slice())
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn uuids_of_the_sig_and_in_full() {
-        let hr = Uuid::sig(0x180D);
-        assert_eq!(hr.to_string(), "0000180d-0000-1000-8000-00805f9b34fb");
-        assert_eq!(hr.short(), Some(0x180D));
-        assert_eq!(Uuid::parse("0x180D"), Some(hr));
-        assert_eq!(Uuid::parse("180d"), Some(hr));
-        assert_eq!(Uuid::parse(&hr.to_string()), Some(hr));
-        let own = Uuid::parse("6e400001-b5a3-f393-e0a9-e50e24dcca9e").unwrap();
-        assert_eq!(own.short(), None);
-        assert_eq!(own.to_string(), "6e400001-b5a3-f393-e0a9-e50e24dcca9e");
-        assert_eq!(Uuid::parse("6e400001b5a3f393e0a9e50e24dcca9e"), None);
-        assert_eq!(Uuid::parse("nope"), None);
-    }
-
-    #[test]
-    fn events_survive_being_written_out() {
-        let device = DeviceId::new(7);
-        let handle = Handle::new(0x2a);
-        let hr = Uuid::sig(0x180D);
-        let all = [
-            BtEvent::Found(
-                Device::new(device)
-                    .name("Pulse")
-                    .rssi(-60)
-                    .service(hr)
-                    .kind(DeviceKind::Sensor),
-            ),
-            BtEvent::ScanEnded,
-            BtEvent::Connected { device },
-            BtEvent::Disconnected {
-                device,
-                reason: Some(BtError::Lost),
-            },
-            BtEvent::Discovered {
-                device,
-                services: alloc::vec![Service::new(
-                    hr,
-                    alloc::vec![Characteristic::new(
-                        Uuid::sig(0x2A37),
-                        handle,
-                        Properties::NONE.notify()
-                    )]
-                )],
-            },
-            BtEvent::Value {
-                device,
-                handle,
-                bytes: alloc::vec![0, 72],
-            },
-            BtEvent::Written { device, handle },
-            BtEvent::Paired { device },
-            BtEvent::Failed {
-                device: None,
-                error: BtError::Att(0x05),
-            },
-            BtEvent::Advertising,
-            BtEvent::AdvertisingEnded,
-            BtEvent::ReadRequest {
-                request: Request::new(3),
-                handle,
-            },
-            BtEvent::WriteRequest {
-                handle,
-                bytes: alloc::vec![1, 2],
-            },
-            BtEvent::Subscribed { handle, on: true },
-            BtEvent::HidReport {
-                device,
-                report: Some(1),
-                bytes: alloc::vec![0, 0, 0x4f],
-            },
-        ];
-        for event in all {
-            let written = event.to_params();
-            assert_eq!(
-                BtEvent::from_params(&written),
-                Some(event.clone()),
-                "{written:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn scans_filter_by_service_and_name() {
-        let found = Device::new(DeviceId::new(1))
-            .name("Remote 2")
-            .service(Uuid::sig(0x1812));
-        let events: Event<BtEvent> = Event::new("a.found");
-        assert!(scan(&events).passes(&found));
-        assert!(scan(&events).service(Uuid::sig(0x1812)).passes(&found));
-        assert!(!scan(&events).service(Uuid::sig(0x180D)).passes(&found));
-        assert!(scan(&events).name_prefix("Remote").passes(&found));
-        assert!(!scan(&events).name_prefix("Pulse").passes(&found));
-        assert_eq!(scan(&events).for_ms(u32::MAX).ms, SCAN_MOST_MS);
-    }
-
-    #[test]
-    fn properties_as_the_declaration_has_them() {
-        let p = Properties::NONE.read().notify();
-        assert_eq!(p.bits(), 0x12);
-        assert_eq!(Properties::from_bits(0x12), p);
-    }
-}
+mod tests;

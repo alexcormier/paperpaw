@@ -149,7 +149,7 @@ pub enum Contribution {
     RefreshFilter(RefreshFilterSpec),
     /// A service of the device's own GATT server (see
     /// [`bluetooth`](crate::bluetooth)).
-    GattService(Box<crate::bluetooth::GattServiceSpec>),
+    GattService(Box<crate::bluetooth::ServiceSpec>),
     /// A bar along an edge of the screen (see [`chrome`](crate::chrome)).
     Chrome(Box<crate::chrome::ChromeSpec>),
     /// A named input (see [`keys::InputSpec`](crate::keys::InputSpec)).

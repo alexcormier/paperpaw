@@ -15,7 +15,7 @@ use paperpaw_sdk::{
     RefreshMode, Screen, Uses,
 };
 
-use crate::{REMOTES, REMOTES_CHOICES, SEARCH};
+use crate::{DONE, REMOTES, REMOTES_CHOICES, SEARCH};
 
 /// A row of the page.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,14 +94,11 @@ impl BluetoothPage {
     fn rows(env: &Env<'_>) -> Vec<Row> {
         let mut rows = Vec::new();
         let users = users(env);
-        for device in env
-            .bluetooth()
-            .map(|b| b.bonded.as_slice())
-            .unwrap_or_default()
-        {
+        let view = env.bluetooth();
+        for device in view.iter().flat_map(|b| b.bonded()) {
             rows.push(Row::Device(device.id));
             // Sensors and the like are for plugins: given to one or more.
-            if !device.kind.types() {
+            if !device.kind.can_type() {
                 for (plugin, _) in &users {
                     rows.push(Row::Give(device.id, plugin.clone()));
                 }
@@ -127,21 +124,23 @@ impl BluetoothPage {
         match row {
             Row::Device(id) => {
                 if let Some(device) = bond(id)
-                    && device.kind.types()
+                    && device.kind.can_type()
                 {
                     cx.command(if device.keys {
-                        bluetooth::keys_off(id)
+                        bluetooth::remote_keys_off(id, &DONE)
                     } else {
-                        bluetooth::keys(id)
+                        bluetooth::remote_keys(id, &DONE)
                     });
                 }
             }
             Row::Give(id, plugin) => {
-                let given = bond(id).is_some_and(|d| d.given.contains(&plugin));
+                let given = env
+                    .bluetooth()
+                    .is_some_and(|b| b.given(id).contains(&plugin));
                 cx.command(if given {
-                    bluetooth::take_back(id, plugin)
+                    bluetooth::take_back(id, plugin, &DONE)
                 } else {
-                    bluetooth::give(id, plugin)
+                    bluetooth::give(id, plugin, &DONE)
                 });
             }
             Row::Add => {
@@ -169,7 +168,7 @@ impl BluetoothPage {
             .and_then(|b| b.bond(id))
             .map(|d| d.name.clone())
             .unwrap_or_default();
-        cx.command(bluetooth::forget(id));
+        cx.command(bluetooth::forget(id, &DONE));
         cx.command(Command::Notify(
             env.i18n()
                 .format("bluetooth.forgotten", &[("name", Arg::Str(&name))]),
@@ -196,7 +195,7 @@ impl Screen for BluetoothPage {
                 Row::Device(id) => {
                     let Some(device) = bond(*id) else { return };
                     let note = device_note(env, device);
-                    if device.kind.types() {
+                    if device.kind.can_type() {
                         ui::Row::switch(&device.name, device.keys)
                             .note(&note)
                             .focused(focused)
@@ -216,7 +215,9 @@ impl Screen for BluetoothPage {
                     let title = env
                         .i18n()
                         .format("bluetooth.give", &[("plugin", Arg::Str(name))]);
-                    let given = bond(*id).is_some_and(|d| d.given.contains(plugin));
+                    let given = env
+                        .bluetooth()
+                        .is_some_and(|b| b.given(*id).contains(plugin));
                     ui::Row::switch(&title, given)
                         .focused(focused)
                         .draw(ui, rect);

@@ -665,7 +665,7 @@ impl Registrar {
     /// [`bluetooth`](crate::bluetooth)).
     pub fn add_gatt_service(
         &mut self,
-        service: crate::bluetooth::GattServiceSpec,
+        service: crate::bluetooth::ServiceSpec,
     ) -> Result<(), RegisterError> {
         self.add_checked(Contribution::GattService(Box::new(service)))
     }

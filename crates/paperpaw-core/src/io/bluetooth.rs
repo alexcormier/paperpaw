@@ -1,18 +1,25 @@
 //! Bluetooth (see [ADR 0027](../../../docs/adr/0027-bluetooth.md)): the
 //! radio the shell drives, shared by plugins. The kernel keeps each
 //! plugin's scans, links and advertising, numbers links for the shell,
-//! lets a plugin see only devices it found or was given, turns a bonded
-//! remote's reports into keys, and switches the radio on for the first
-//! request and off a little after the last.
+//! lets a plugin see only devices it found or was given, answers every
+//! command, turns a bonded remote's reports into keys, runs the radio at
+//! the cheapest power that serves everyone, and switches it on for the
+//! first request and off a little after the last.
+
+mod commands;
+mod reports;
+
+pub use commands::Asked;
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_hid::{Decoder, ReportMap};
+use paperpaw_hid::Decoder;
 use paperpaw_platform::Instant;
 use paperpaw_sdk::bluetooth::{
-    Advertising, Bluetooth, Bonded, BtCommand, BtError, BtEvent, Device, DeviceId, DeviceKind,
-    GattServiceSpec, Handle, Properties, RadioState, Request, Scan, Service, Uuid,
+    Access, AdvertisePower, Advertising, Bluetooth, Bonded, BtError, BtEvent, BtFailure, BtOp,
+    Device, DeviceId, DeviceKind, GattService, LinkPower, ManufacturerData, Properties, RadioState,
+    Scan, ScanPower, Security, ServiceData, ServiceSpec, Uuid, ValueKind,
 };
 use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::{Command, Id};
@@ -21,6 +28,11 @@ use paperpaw_sdk::{Command, Id};
 pub const RADIO_GRACE_MS: u64 = 3_000;
 /// The secrets that keep the bonds: `core.bluetooth.<device number>`.
 pub const BOND_PREFIX: &str = "core.bluetooth.";
+/// How long after a plugin's scan its next one waits, unless the reader
+/// asked for it.
+pub const SCAN_COOLDOWN_MS: u64 = 60_000;
+/// How long a remote's link stays responsive after its last key.
+pub const KEYS_IDLE_MS: u64 = 60_000;
 
 /// What the shell is to do with the radio ([`Io::Bluetooth`](super::Io)).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,20 +44,31 @@ pub enum BtCall {
     /// The bonds kept (at start and whenever they change), for the
     /// shell's host to know the devices again.
     Bonds(Vec<Bond>),
-    /// Scan for devices, or no longer; report each one as `Found`.
+    /// Scan for devices at `power` (asking them for more where
+    /// `active`), or no longer; report each one as `Found`.
     Scan {
         on: bool,
+        power: ScanPower,
+        active: bool,
     },
     Connect {
         link: u32,
         address: String,
+        power: LinkPower,
+    },
+    /// The link's power changed.
+    LinkPower {
+        link: u32,
+        power: LinkPower,
     },
     Disconnect {
         link: u32,
     },
-    /// Find the services and characteristics; report `Discovered`.
+    /// Find the services (only these, where some are named) and their
+    /// characteristics; report `Discovered`.
     Discover {
         link: u32,
+        services: Vec<Uuid>,
     },
     Read {
         link: u32,
@@ -80,11 +103,7 @@ pub enum BtCall {
     },
     /// The device's own GATT server: its services and their handles.
     Server(Vec<ServedService>),
-    Advertise {
-        name: Option<String>,
-        services: Vec<Uuid>,
-        on: bool,
-    },
+    Advertise(Advert),
     Notify {
         handle: u16,
         bytes: Vec<u8>,
@@ -93,10 +112,27 @@ pub enum BtCall {
         request: u32,
         bytes: Vec<u8>,
     },
+    Refuse {
+        request: u32,
+        error: u8,
+    },
     /// Forget the bond with the device at `address`.
     Forget {
         address: String,
     },
+}
+
+/// What is advertised, for everyone asking; `on` false for nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Advert {
+    pub on: bool,
+    pub name: Option<String>,
+    pub services: Vec<Uuid>,
+    pub manufacturer_data: Vec<ManufacturerData>,
+    pub service_data: Vec<ServiceData>,
+    pub appearance: Option<u16>,
+    pub connectable: bool,
+    pub power: AdvertisePower,
 }
 
 /// A bond: the device's address and the keys the shell's host keeps for
@@ -107,12 +143,22 @@ pub struct Bond {
     pub keys: String,
 }
 
-/// A service of the device's own GATT server, its characteristics with
-/// the handles the kernel gave them.
+/// A characteristic of the device's own GATT server, with the handle the
+/// kernel gave it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServedCharacteristic {
+    pub uuid: Uuid,
+    pub properties: Properties,
+    pub access: Access,
+    pub max_len: u16,
+    pub handle: u16,
+}
+
+/// A service of the device's own GATT server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServedService {
     pub uuid: Uuid,
-    pub characteristics: Vec<(Uuid, Properties, u16)>,
+    pub characteristics: Vec<ServedCharacteristic>,
 }
 
 /// What a pairing asks of the reader.
@@ -126,22 +172,30 @@ pub enum PairQuestion {
     Show(u32),
 }
 
+/// A device a scan found, as the shell saw it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Found {
+    pub address: String,
+    pub name: Option<String>,
+    pub signal: Option<i8>,
+    pub services: Vec<Uuid>,
+    pub manufacturer_data: Vec<ManufacturerData>,
+    pub service_data: Vec<ServiceData>,
+    pub tx_power: Option<i8>,
+    pub appearance: Option<u16>,
+}
+
 /// What the shell reports ([`Kernel::bluetooth_event`](crate::Kernel)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BtReport {
     Radio {
         on: bool,
     },
-    Found {
-        address: String,
-        name: Option<String>,
-        rssi: Option<i8>,
-        services: Vec<Uuid>,
-        /// Its GAP appearance, where it gives one.
-        appearance: Option<u16>,
-    },
+    Found(Found),
     Connected {
         link: u32,
+        mtu: u16,
+        security: Security,
     },
     Disconnected {
         link: u32,
@@ -149,19 +203,31 @@ pub enum BtReport {
     },
     Discovered {
         link: u32,
-        services: Vec<Service>,
+        services: Vec<GattService>,
+    },
+    ServicesChanged {
+        link: u32,
     },
     Value {
         link: u32,
         handle: u16,
+        kind: ValueKind,
         bytes: Vec<u8>,
     },
     Written {
         link: u32,
         handle: u16,
     },
+    /// A write without response went out.
+    Sent {
+        link: u32,
+        handle: u16,
+    },
+    /// What was asked on the link failed.
     Failed {
         link: u32,
+        op: BtOp,
+        handle: Option<u16>,
         error: BtError,
     },
     Ask {
@@ -184,13 +250,17 @@ pub enum BtReport {
     ReadRequest {
         request: u32,
         handle: u16,
+        central: String,
     },
     WriteRequest {
+        request: Option<u32>,
         handle: u16,
+        central: String,
         bytes: Vec<u8>,
     },
     Subscribed {
         handle: u16,
+        central: String,
         on: bool,
     },
     Advertising {
@@ -203,10 +273,8 @@ pub enum BtReport {
 struct Known {
     id: DeviceId,
     address: String,
-    name: Option<String>,
+    found: Found,
     kind: DeviceKind,
-    services: Vec<Uuid>,
-    rssi: Option<i8>,
     /// The plugins whose scans found it.
     found_by: Vec<String>,
     /// The bond's keys, where it is bonded.
@@ -217,25 +285,35 @@ struct Known {
 }
 
 impl Known {
-    fn device(&self) -> Device {
-        let mut device = Device::new(self.id).kind(self.kind);
-        if let Some(name) = &self.name {
-            device = device.name(name.clone());
-        }
-        if let Some(rssi) = self.rssi {
-            device = device.rssi(rssi);
-        }
-        for service in &self.services {
-            device = device.service(*service);
-        }
-        if self.bond.is_some() {
-            device = device.bonded();
-        }
+    fn name(&self) -> Option<&str> {
+        self.found.name.as_deref()
+    }
+
+    /// The device as `plugin` may see it.
+    fn device(&self, plugin: &str) -> Device {
+        let mut device = Device::new(self.id);
+        device.name.clone_from(&self.found.name);
+        device.signal = self.found.signal;
+        device.services.clone_from(&self.found.services);
+        device
+            .manufacturer_data
+            .clone_from(&self.found.manufacturer_data);
+        device.service_data.clone_from(&self.found.service_data);
+        device.tx_power = self.found.tx_power;
+        device.appearance = self.found.appearance;
+        device.bonded = self.bond.is_some() && self.given_to(plugin);
+        device.kind = self.kind;
         device
     }
 
+    fn given_to(&self, plugin: &str) -> bool {
+        self.given.iter().any(|g| g.as_str() == plugin)
+    }
+
+    /// Whether `plugin` may use it: found by its scan (and nobody's bond),
+    /// or given to it.
     fn mine(&self, plugin: &str) -> bool {
-        self.found_by.iter().any(|p| p == plugin) || self.given.iter().any(|g| g.as_str() == plugin)
+        self.given_to(plugin) || (self.bond.is_none() && self.found_by.iter().any(|p| p == plugin))
     }
 
     /// The text kept as its bond's secret.
@@ -244,7 +322,7 @@ impl Known {
         alloc::format!(
             "{}\t{}\t{}\t{}\t{}\t{}",
             self.address,
-            self.name.as_deref().unwrap_or_default().replace('\t', " "),
+            self.name().unwrap_or_default().replace('\t', " "),
             self.kind.as_str(),
             u8::from(self.keys),
             given.join(","),
@@ -267,10 +345,11 @@ impl Known {
         Some(Known {
             id: DeviceId::new(number),
             address,
-            name,
+            found: Found {
+                name,
+                ..Found::default()
+            },
             kind,
-            services: Vec::new(),
-            rssi: None,
             found_by: Vec::new(),
             bond,
             given,
@@ -301,25 +380,66 @@ struct AdvertRequest {
     until: Instant,
 }
 
+/// A plugin using a link.
+#[derive(Debug, Clone)]
+struct User {
+    asker: Asker,
+    power: LinkPower,
+    /// Let go when nothing went over the link this long.
+    idle: Option<u64>,
+}
+
 #[derive(Debug)]
 struct Link {
     number: u32,
     device: DeviceId,
     up: bool,
-    users: Vec<Asker>,
-    /// The kernel's own, for the device's keys.
-    keys: bool,
+    users: Vec<User>,
+    /// The kernel's own, for the device's keys: when the last key came.
+    keys: Option<Instant>,
     decoder: Option<Decoder>,
     /// Plugins hearing its HID reports as they are.
     raw: Vec<Asker>,
     /// Who waits for what: a read of a handle (`Some`), a discovery
-    /// (`None`), a write's answer.
+    /// (`None`).
     reads: Vec<(Option<u16>, Id)>,
     writes: Vec<(u16, Id)>,
     /// Who subscribed to which handle.
     subscribed: Vec<(u16, Id)>,
+    /// Subscriptions by UUID waiting for the services: service,
+    /// characteristic, events.
+    pending: Vec<(Uuid, Uuid, Id)>,
+    /// The services found last.
+    services: Vec<GattService>,
     /// Pairing asked by this plugin's events.
     pairing: Option<Id>,
+    /// The power the shell was told.
+    power: LinkPower,
+    /// When something last went over it.
+    active: Instant,
+    /// What the shell said of it once up.
+    mtu: u16,
+    security: Security,
+}
+
+impl Link {
+    /// The events of `plugin`'s use of it.
+    fn events_of(&self, plugin: &str) -> Option<Id> {
+        self.users
+            .iter()
+            .find(|u| u.asker.plugin == plugin)
+            .map(|u| u.asker.events.clone())
+    }
+}
+
+/// A characteristic of the device's own GATT server: its handle, service,
+/// UUID and the plugin's events.
+#[derive(Debug, Clone)]
+struct Served {
+    handle: u16,
+    service: Uuid,
+    characteristic: Uuid,
+    events: Id,
 }
 
 /// Bluetooth, as the kernel keeps it.
@@ -330,17 +450,23 @@ pub(crate) struct Radio {
     scans: Vec<ScanRequest>,
     adverts: Vec<AdvertRequest>,
     links: Vec<Link>,
-    /// The device's own GATT server: each characteristic's handle, the
-    /// plugin's events.
-    served: Vec<(u16, Id)>,
+    served: Vec<Served>,
     services: Vec<ServedService>,
-    /// Reads of the server waiting for their answer: request, events.
+    /// Reads and writes of the server waiting for their answer: request,
+    /// events.
     requests: Vec<(u32, Id)>,
     radio_on: bool,
-    scanning: bool,
-    advertised: Option<(Option<String>, Vec<Uuid>)>,
+    /// The scan the shell was told: power, active.
+    scanning: Option<(ScanPower, bool)>,
+    advertised: Option<Advert>,
     /// Since when nothing uses the radio.
     idle_since: Option<Instant>,
+    /// Since when the radio is on, for the time it is on.
+    on_since: Option<Instant>,
+    /// The time it was on, not yet counted.
+    on_ms: u64,
+    /// When each plugin's last scan ended.
+    scanned: Vec<(String, Instant)>,
     next_device: u32,
     next_link: u32,
     calls: Vec<BtCall>,
@@ -350,11 +476,18 @@ pub(crate) struct Radio {
     bonds_changed: bool,
     /// A pairing asks the reader: device, question.
     asking: Option<(DeviceId, PairQuestion)>,
+    /// The Bluetooth manager's plugin.
+    manager: Option<String>,
 }
 
 /// The command that tells `events` of `event`.
 fn tell(events: &Id, event: BtEvent) -> Command {
     Command::Emit(events.clone(), event.into_params())
+}
+
+/// The command that tells `events` that a command failed.
+fn fail(events: &Id, failure: BtFailure) -> Command {
+    tell(events, BtEvent::Failed(failure))
 }
 
 /// The device kind from a GAP appearance and the services.
@@ -397,14 +530,34 @@ impl Radio {
         }
     }
 
+    /// The Bluetooth manager: the plugin whose screen the slot shows.
+    pub fn set_manager(&mut self, manager: Option<String>) {
+        self.manager = manager;
+    }
+
+    fn manager_is(&self, plugin: &str) -> bool {
+        self.manager.as_deref() == Some(plugin)
+    }
+
     /// A service of the device's own GATT server, from a plugin's
     /// registration.
-    pub fn add_service(&mut self, spec: &GattServiceSpec) {
-        let first = self.served.last().map_or(1, |(h, _)| h + 1);
+    pub fn add_service(&mut self, spec: &ServiceSpec) {
+        let first = self.served.last().map_or(1, |s| s.handle + 1);
         let mut characteristics = Vec::new();
-        for (handle, (uuid, properties)) in (first..).zip(&spec.characteristics) {
-            characteristics.push((*uuid, *properties, handle));
-            self.served.push((handle, spec.events.clone()));
+        for (handle, c) in (first..).zip(&spec.characteristics) {
+            characteristics.push(ServedCharacteristic {
+                uuid: c.uuid,
+                properties: c.properties,
+                access: c.access,
+                max_len: c.max_len,
+                handle,
+            });
+            self.served.push(Served {
+                handle,
+                service: spec.uuid,
+                characteristic: c.uuid,
+                events: spec.events.clone(),
+            });
         }
         self.services.push(ServedService {
             uuid: spec.uuid,
@@ -441,6 +594,15 @@ impl Radio {
         core::mem::take(&mut self.keys_out)
     }
 
+    /// The time the radio was on since this was last asked.
+    pub fn take_on_ms(&mut self, now: Instant) -> u64 {
+        if let Some(since) = self.on_since {
+            self.on_ms += now.since(since);
+            self.on_since = Some(now);
+        }
+        core::mem::take(&mut self.on_ms)
+    }
+
     /// The bonds as secrets to keep (id, label, value; an empty value to
     /// remove), where they changed.
     pub fn take_bonds(&mut self, all: &[(String, String)]) -> Vec<(String, String, String)> {
@@ -453,7 +615,7 @@ impl Radio {
             .filter(|k| k.bond.is_some())
             .map(|k| {
                 let id = alloc::format!("{BOND_PREFIX}{}", k.id.number());
-                let label = k.name.clone().unwrap_or_else(|| k.address.clone());
+                let label = k.name().map_or_else(|| k.address.clone(), String::from);
                 (id, label, k.written())
             })
             .collect();
@@ -472,12 +634,12 @@ impl Radio {
             .known
             .iter()
             .find(|k| k.id == device)
-            .and_then(|k| k.name.clone())
+            .and_then(|k| k.name().map(String::from))
             .unwrap_or_default();
         Some((device, question, name))
     }
 
-    /// What every plugin may know.
+    /// What every plugin's view is made of.
     pub fn state(&self) -> Bluetooth {
         let mut state = Bluetooth::new(self.max_links);
         state.state = if self.radio_on {
@@ -486,22 +648,20 @@ impl Radio {
             RadioState::Off
         };
         state.busy = self.wanted();
-        state.bonded = self
-            .known
-            .iter()
-            .filter(|k| k.bond.is_some())
-            .map(|k| {
-                let mut bonded = Bonded::new(
-                    k.id,
-                    k.name.clone().unwrap_or_else(|| k.address.clone()),
-                    k.kind,
-                );
-                bonded.connected = self.links.iter().any(|l| l.device == k.id && l.up);
-                bonded.keys = k.keys;
-                bonded.given.clone_from(&k.given);
-                bonded
-            })
-            .collect();
+        state.set_manager(self.manager.as_deref().and_then(|m| Id::parse(m).ok()));
+        state.set_bonded(
+            self.known
+                .iter()
+                .filter(|k| k.bond.is_some())
+                .map(|k| {
+                    let name = k.name().map_or_else(|| k.address.clone(), String::from);
+                    let mut bonded = Bonded::new(k.id, name, k.kind).given_to(k.given.clone());
+                    bonded.connected = self.links.iter().any(|l| l.device == k.id && l.up);
+                    bonded.keys = k.keys;
+                    bonded
+                })
+                .collect(),
+        );
         state
     }
 
@@ -511,80 +671,191 @@ impl Radio {
     }
 
     /// When something it waits for is due: a scan's or advertising's end,
-    /// the radio's going off.
+    /// a link idle long enough, the radio's going off.
     pub fn deadline(&self) -> Option<Instant> {
         let ends = self.scans.iter().map(|s| s.until);
         let adverts = self.adverts.iter().map(|a| a.until);
+        let idle = self.links.iter().filter_map(|l| {
+            let users = l
+                .users
+                .iter()
+                .filter_map(|u| u.idle)
+                .min()
+                .map(|ms| l.active.add_millis(ms));
+            let keys = l
+                .keys
+                .filter(|_| l.power > LinkPower::Low)
+                .map(|last| last.add_millis(KEYS_IDLE_MS));
+            users.into_iter().chain(keys).min()
+        });
         let off = self
             .idle_since
             .filter(|_| self.radio_on)
             .map(|since| since.add_millis(RADIO_GRACE_MS));
-        ends.chain(adverts).chain(off).min()
+        ends.chain(adverts).chain(idle).chain(off).min()
     }
 
-    /// Time passed: scans and advertising ended, the radio off.
+    /// Time passed: scans and advertising ended, idle links let go or
+    /// slowed, the radio off.
     pub fn tick(&mut self, now: Instant, out: &mut Vec<Command>) {
         let (ended, kept): (Vec<_>, Vec<_>) = self.scans.drain(..).partition(|s| s.until <= now);
         self.scans = kept;
         for scan in ended {
-            out.push(tell(&scan.asker.events, BtEvent::ScanEnded));
+            self.scan_ended(&scan.asker, now, out);
         }
         let (ended, kept): (Vec<_>, Vec<_>) = self.adverts.drain(..).partition(|a| a.until <= now);
         self.adverts = kept;
         for advert in ended {
             out.push(tell(&advert.asker.events, BtEvent::AdvertisingEnded));
         }
+        self.idle_links(now, out);
         self.settle(now);
     }
 
-    /// The radio, the scan and advertising as what is asked needs them.
+    fn scan_ended(&mut self, asker: &Asker, now: Instant, out: &mut Vec<Command>) {
+        out.push(tell(&asker.events, BtEvent::ScanEnded));
+        self.scanned.retain(|(p, _)| *p != asker.plugin);
+        self.scanned.push((asker.plugin.clone(), now));
+    }
+
+    /// Users idle longer than they allow let go; a remote's link slowed
+    /// once no key came for a while.
+    fn idle_links(&mut self, now: Instant, out: &mut Vec<Command>) {
+        let mut at = 0;
+        while at < self.links.len() {
+            let link = &mut self.links[at];
+            let quiet = now.since(link.active);
+            let device = link.device;
+            let (gone, kept): (Vec<_>, Vec<_>) = link
+                .users
+                .drain(..)
+                .partition(|u| u.idle.is_some_and(|ms| quiet >= ms));
+            link.users = kept;
+            for user in gone {
+                let event = BtEvent::disconnected(device, None);
+                out.push(tell(&user.asker.events, event));
+            }
+            if self.keep_or_drop(at, now) {
+                at += 1;
+            }
+        }
+    }
+
+    /// Link `at` let go where nothing uses it any more, else at the power
+    /// it needs now; whether it is still there.
+    fn keep_or_drop(&mut self, at: usize, now: Instant) -> bool {
+        let link = &self.links[at];
+        if link.users.is_empty() && link.raw.is_empty() && link.keys.is_none() {
+            self.calls.push(BtCall::Disconnect { link: link.number });
+            self.links.remove(at);
+            return false;
+        }
+        self.power_link(at, now);
+        true
+    }
+
+    /// The power link `at` needs now: the highest its users ask, a remote
+    /// responsive while keys come; the shell told where it changed.
+    fn power_link(&mut self, at: usize, now: Instant) {
+        let link = &mut self.links[at];
+        let keys = link
+            .keys
+            .filter(|last| now.since(*last) < KEYS_IDLE_MS)
+            .map(|_| LinkPower::Responsive);
+        let power = link
+            .users
+            .iter()
+            .map(|u| u.power)
+            .chain(keys)
+            .max()
+            .unwrap_or(LinkPower::Low);
+        if power != link.power {
+            link.power = power;
+            if link.up {
+                self.calls.push(BtCall::LinkPower {
+                    link: link.number,
+                    power,
+                });
+            }
+        }
+    }
+
+    /// The radio, the scan and advertising as what is asked needs them, at
+    /// the cheapest power that serves everyone.
     fn settle(&mut self, now: Instant) {
-        let wanted = self.wanted();
-        if wanted {
+        if self.wanted() {
             self.idle_since = None;
             if !self.radio_on {
                 self.radio_on = true;
+                self.on_since = Some(now);
                 self.calls.push(BtCall::Radio { on: true });
             }
         } else if self.radio_on {
             let since = *self.idle_since.get_or_insert(now);
             if now.since(since) >= RADIO_GRACE_MS {
-                self.radio_on = false;
-                self.scanning = false;
-                self.advertised = None;
-                self.idle_since = None;
-                self.calls.push(BtCall::Radio { on: false });
+                self.radio_off(now);
                 return;
             }
         }
-        let scan = !self.scans.is_empty();
-        if scan != self.scanning && self.radio_on {
-            self.scanning = scan;
-            self.calls.push(BtCall::Scan { on: scan });
+        if !self.radio_on {
+            return;
         }
-        let advert = (!self.adverts.is_empty()).then(|| {
-            let name = self
-                .adverts
-                .iter()
-                .find_map(|a| a.advertising.name.as_deref().map(String::from));
-            let mut services: Vec<Uuid> = Vec::new();
-            for a in &self.adverts {
-                for s in &a.advertising.services {
-                    if !services.contains(s) {
-                        services.push(*s);
-                    }
-                }
-            }
-            (name, services)
+        let scan = (!self.scans.is_empty()).then(|| {
+            let power = self.scans.iter().map(|s| s.scan.power).max();
+            let active = self.scans.iter().any(|s| s.scan.active);
+            (power.unwrap_or_default(), active)
         });
-        if advert != self.advertised && self.radio_on {
-            self.advertised.clone_from(&advert);
-            let (name, services, on) = match advert {
-                Some((name, services)) => (name, services, true),
-                None => (None, Vec::new(), false),
-            };
-            self.calls.push(BtCall::Advertise { name, services, on });
+        if scan != self.scanning {
+            self.scanning = scan;
+            let (power, active) = scan.unwrap_or_default();
+            self.calls.push(BtCall::Scan {
+                on: scan.is_some(),
+                power,
+                active,
+            });
         }
+        let advert = self.advertising();
+        if advert != self.advertised {
+            self.advertised.clone_from(&advert);
+            self.calls
+                .push(BtCall::Advertise(advert.unwrap_or_default()));
+        }
+    }
+
+    /// What is advertised for everyone asking: the first name, every
+    /// service and datum, the highest power asked.
+    fn advertising(&self) -> Option<Advert> {
+        if self.adverts.is_empty() {
+            return None;
+        }
+        let all = || self.adverts.iter().map(|a| &a.advertising);
+        let mut services: Vec<Uuid> = Vec::new();
+        for s in all().flat_map(|a| a.services.iter()) {
+            if !services.contains(s) {
+                services.push(*s);
+            }
+        }
+        Some(Advert {
+            on: true,
+            name: all().find_map(|a| a.name.as_deref().map(String::from)),
+            services,
+            manufacturer_data: all().flat_map(|a| a.manufacturer_data.clone()).collect(),
+            service_data: all().flat_map(|a| a.service_data.clone()).collect(),
+            appearance: all().find_map(|a| a.appearance),
+            connectable: all().any(|a| a.connectable),
+            power: all().map(|a| a.power).max().unwrap_or_default(),
+        })
+    }
+
+    fn radio_off(&mut self, now: Instant) {
+        self.radio_on = false;
+        self.scanning = None;
+        self.advertised = None;
+        self.idle_since = None;
+        if let Some(since) = self.on_since.take() {
+            self.on_ms += now.since(since);
+        }
+        self.calls.push(BtCall::Radio { on: false });
     }
 
     fn known_mut(&mut self, device: DeviceId) -> Option<&mut Known> {
@@ -593,7 +864,7 @@ impl Radio {
 
     /// The link to `device`, made where there is none (and a link is
     /// left).
-    fn link_to(&mut self, device: DeviceId) -> Result<usize, BtError> {
+    fn link_to(&mut self, device: DeviceId, now: Instant) -> Result<usize, BtError> {
         if let Some(at) = self.links.iter().position(|l| l.device == device) {
             return Ok(at);
         }
@@ -613,383 +884,26 @@ impl Radio {
             device,
             up: false,
             users: Vec::new(),
-            keys: false,
+            keys: None,
             decoder: None,
             raw: Vec::new(),
             reads: Vec::new(),
             writes: Vec::new(),
             subscribed: Vec::new(),
+            pending: Vec::new(),
+            services: Vec::new(),
             pairing: None,
+            power: LinkPower::Low,
+            active: now,
+            mtu: 23,
+            security: Security::None,
         });
         self.calls.push(BtCall::Connect {
             link: number,
             address,
+            power: LinkPower::Low,
         });
         Ok(self.links.len() - 1)
-    }
-
-    /// The plugin's link to `device`: its number, where it is up and the
-    /// plugin one of its users.
-    fn plugin_link(&self, plugin: &str, device: DeviceId) -> Result<usize, BtError> {
-        let at = self
-            .links
-            .iter()
-            .position(|l| l.device == device && l.users.iter().any(|u| u.plugin == plugin))
-            .ok_or(BtError::NotFound)?;
-        if self.links[at].up {
-            Ok(at)
-        } else {
-            Err(BtError::NotFound)
-        }
-    }
-
-    /// Plugin `plugin`'s command (allowed to use Bluetooth: the kernel
-    /// checked), with `screens` open and `reader` its own doing.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm a command, each short; split, it reads worse"
-    )]
-    pub fn command(
-        &mut self,
-        plugin: &str,
-        command: BtCommand,
-        screens: usize,
-        reader: bool,
-        now: Instant,
-        out: &mut Vec<Command>,
-    ) -> Result<(), (Option<DeviceId>, BtError)> {
-        let mine = |radio: &Radio, device: DeviceId| {
-            radio.known.iter().any(|k| k.id == device && k.mine(plugin))
-        };
-        match command {
-            BtCommand::Scan(scan) => {
-                let asker = Asker {
-                    plugin: plugin.to_string(),
-                    events: scan.events.clone(),
-                    screens,
-                };
-                self.scans.retain(|s| s.asker.events != scan.events);
-                let until = now.add_millis(u64::from(scan.ms));
-                // What was found before, for this scan too.
-                for known in &mut self.known {
-                    if known.rssi.is_some() && scan.passes(&known.device()) {
-                        if !known.found_by.iter().any(|p| p == plugin) {
-                            known.found_by.push(plugin.to_string());
-                        }
-                        out.push(tell(&asker.events, BtEvent::Found(known.device())));
-                    }
-                }
-                self.scans.push(ScanRequest { asker, scan, until });
-            }
-            BtCommand::StopScan { events } => {
-                let before = self.scans.len();
-                self.scans
-                    .retain(|s| !(s.asker.events == events && s.asker.plugin == plugin));
-                if self.scans.len() < before {
-                    out.push(tell(&events, BtEvent::ScanEnded));
-                }
-            }
-            BtCommand::Connect { device, events } => {
-                if !mine(self, device) {
-                    return Err((Some(device), BtError::NotFound));
-                }
-                let at = self.link_to(device).map_err(|e| (Some(device), e))?;
-                let link = &mut self.links[at];
-                link.users.retain(|u| u.plugin != plugin);
-                link.users.push(Asker {
-                    plugin: plugin.to_string(),
-                    events: events.clone(),
-                    screens,
-                });
-                if link.up {
-                    out.push(tell(&events, BtEvent::Connected { device }));
-                }
-            }
-            BtCommand::Disconnect { device } => self.leave(plugin, device, out),
-            BtCommand::Discover { device } => {
-                let at = self
-                    .plugin_link(plugin, device)
-                    .map_err(|e| (Some(device), e))?;
-                let link = &mut self.links[at];
-                let events = link
-                    .users
-                    .iter()
-                    .find(|u| u.plugin == plugin)
-                    .map(|u| u.events.clone());
-                if let Some(events) = events {
-                    link.reads.push((None, events));
-                }
-                self.calls.push(BtCall::Discover { link: link.number });
-            }
-            BtCommand::Read { device, handle } => {
-                let at = self
-                    .plugin_link(plugin, device)
-                    .map_err(|e| (Some(device), e))?;
-                let link = &mut self.links[at];
-                if let Some(u) = link.users.iter().find(|u| u.plugin == plugin) {
-                    link.reads.push((Some(handle.get()), u.events.clone()));
-                }
-                self.calls.push(BtCall::Read {
-                    link: link.number,
-                    handle: handle.get(),
-                });
-            }
-            BtCommand::Write {
-                device,
-                handle,
-                bytes,
-                kind,
-            } => {
-                let at = self
-                    .plugin_link(plugin, device)
-                    .map_err(|e| (Some(device), e))?;
-                let link = &mut self.links[at];
-                let response = kind == paperpaw_sdk::bluetooth::WriteKind::WithResponse;
-                if response && let Some(u) = link.users.iter().find(|u| u.plugin == plugin) {
-                    link.writes.push((handle.get(), u.events.clone()));
-                }
-                self.calls.push(BtCall::Write {
-                    link: link.number,
-                    handle: handle.get(),
-                    bytes,
-                    response,
-                });
-            }
-            BtCommand::Subscribe { device, handle } => {
-                let at = self
-                    .plugin_link(plugin, device)
-                    .map_err(|e| (Some(device), e))?;
-                let link = &mut self.links[at];
-                let events = link
-                    .users
-                    .iter()
-                    .find(|u| u.plugin == plugin)
-                    .map(|u| u.events.clone());
-                if let Some(events) = events {
-                    let first = !link.subscribed.iter().any(|(h, _)| *h == handle.get());
-                    link.subscribed
-                        .retain(|(h, e)| !(*h == handle.get() && *e == events));
-                    link.subscribed.push((handle.get(), events));
-                    if first {
-                        self.calls.push(BtCall::Subscribe {
-                            link: link.number,
-                            handle: handle.get(),
-                            on: true,
-                        });
-                    }
-                }
-            }
-            BtCommand::Unsubscribe { device, handle } => {
-                let at = self
-                    .plugin_link(plugin, device)
-                    .map_err(|e| (Some(device), e))?;
-                let link = &mut self.links[at];
-                let users = &link.users;
-                link.subscribed.retain(|(h, e)| {
-                    !(*h == handle.get()
-                        && users.iter().any(|u| u.plugin == plugin && u.events == *e))
-                });
-                if !link.subscribed.iter().any(|(h, _)| *h == handle.get()) {
-                    self.calls.push(BtCall::Subscribe {
-                        link: link.number,
-                        handle: handle.get(),
-                        on: false,
-                    });
-                }
-            }
-            other => return self.command_more(plugin, other, screens, reader, now, out),
-        }
-        self.settle(now);
-        Ok(())
-    }
-
-    /// [`Radio::command`] for pairing, bonds, keys and being seen.
-    fn command_more(
-        &mut self,
-        plugin: &str,
-        command: BtCommand,
-        screens: usize,
-        reader: bool,
-        now: Instant,
-        out: &mut Vec<Command>,
-    ) -> Result<(), (Option<DeviceId>, BtError)> {
-        match command {
-            BtCommand::Pair { device } => {
-                let ours = self.known.iter().any(|k| k.id == device && k.mine(plugin));
-                if !ours {
-                    return Err((Some(device), BtError::NotFound));
-                }
-                let at = self
-                    .plugin_link(plugin, device)
-                    .map_err(|e| (Some(device), e))?;
-                let link = &mut self.links[at];
-                link.pairing = link
-                    .users
-                    .iter()
-                    .find(|u| u.plugin == plugin)
-                    .map(|u| u.events.clone());
-                self.calls.push(BtCall::Pair { link: link.number });
-            }
-            BtCommand::Forget { device } | BtCommand::Give { device, .. } if !reader => {
-                return Err((Some(device), BtError::NotAllowed));
-            }
-            BtCommand::Forget { device } => {
-                let Some(at) = self
-                    .known
-                    .iter()
-                    .position(|k| k.id == device && k.bond.is_some())
-                else {
-                    return Err((Some(device), BtError::NotFound));
-                };
-                let address = self.known[at].address.clone();
-                self.known.remove(at);
-                if let Some(link) = self.links.iter().position(|l| l.device == device) {
-                    let link = self.links.remove(link);
-                    self.calls.push(BtCall::Disconnect { link: link.number });
-                }
-                self.calls.push(BtCall::Forget { address });
-                self.calls.push(BtCall::Bonds(self.bonds()));
-                self.bonds_changed = true;
-            }
-            BtCommand::Give {
-                device,
-                plugin: to,
-                given,
-            } => {
-                let known = self
-                    .known_mut(device)
-                    .filter(|k| k.bond.is_some())
-                    .ok_or((Some(device), BtError::NotFound))?;
-                known.given.retain(|g| *g != to);
-                if given {
-                    known.given.push(to);
-                }
-                self.bonds_changed = true;
-            }
-            BtCommand::Keys { device, on } => {
-                self.keys(device, on).map_err(|e| (Some(device), e))?
-            }
-            BtCommand::HidReports { device, events } => {
-                let ours = self.known.iter().any(|k| k.id == device && k.mine(plugin));
-                if !ours {
-                    return Err((Some(device), BtError::NotFound));
-                }
-                let at = self.link_to(device).map_err(|e| (Some(device), e))?;
-                let link = &mut self.links[at];
-                link.raw.retain(|r| r.plugin != plugin);
-                link.raw.push(Asker {
-                    plugin: plugin.to_string(),
-                    events,
-                    screens,
-                });
-                if link.up {
-                    self.calls.push(BtCall::Hid {
-                        link: link.number,
-                        on: true,
-                    });
-                }
-            }
-            other => return self.command_served(plugin, other, screens, now, out),
-        }
-        self.settle(now);
-        Ok(())
-    }
-
-    /// [`Radio::command`] for being seen: advertising, the GATT server.
-    fn command_served(
-        &mut self,
-        plugin: &str,
-        command: BtCommand,
-        screens: usize,
-        now: Instant,
-        out: &mut Vec<Command>,
-    ) -> Result<(), (Option<DeviceId>, BtError)> {
-        match command {
-            BtCommand::Advertise(advertising) => {
-                let asker = Asker {
-                    plugin: plugin.to_string(),
-                    events: advertising.events.clone(),
-                    screens,
-                };
-                self.adverts.retain(|a| a.asker.plugin != plugin);
-                let until = now.add_millis(u64::from(advertising.ms));
-                out.push(tell(&asker.events, BtEvent::Advertising));
-                self.adverts.push(AdvertRequest {
-                    asker,
-                    advertising,
-                    until,
-                });
-            }
-            BtCommand::StopAdvertising => {
-                let (ended, kept): (Vec<_>, Vec<_>) = self
-                    .adverts
-                    .drain(..)
-                    .partition(|a| a.asker.plugin == plugin);
-                self.adverts = kept;
-                for advert in ended {
-                    out.push(tell(&advert.asker.events, BtEvent::AdvertisingEnded));
-                }
-            }
-            BtCommand::Notify { handle, bytes } => {
-                let own = self
-                    .served
-                    .iter()
-                    .any(|(h, e)| *h == handle.get() && e.namespace() == plugin);
-                if !own {
-                    return Err((None, BtError::NotFound));
-                }
-                self.calls.push(BtCall::Notify {
-                    handle: handle.get(),
-                    bytes,
-                });
-            }
-            BtCommand::Respond { request, bytes } => {
-                let at = self
-                    .requests
-                    .iter()
-                    .position(|(r, e)| *r == request.number() && e.namespace() == plugin)
-                    .ok_or((None, BtError::NotFound))?;
-                self.requests.remove(at);
-                self.calls.push(BtCall::Respond {
-                    request: request.number(),
-                    bytes,
-                });
-            }
-            _ => return Err((None, BtError::Unsupported)),
-        }
-        self.settle(now);
-        Ok(())
-    }
-
-    /// The keys of bonded `device` go to the key maps (`on`), or no
-    /// longer.
-    fn keys(&mut self, device: DeviceId, on: bool) -> Result<(), BtError> {
-        let known = self
-            .known_mut(device)
-            .filter(|k| k.bond.is_some() && k.kind.types())
-            .ok_or(BtError::NotFound)?;
-        if known.keys != on {
-            known.keys = on;
-            self.bonds_changed = true;
-        }
-        if on {
-            let at = self.link_to(device)?;
-            let link = &mut self.links[at];
-            if !link.keys {
-                link.keys = true;
-                if link.up {
-                    self.calls.push(BtCall::Hid {
-                        link: link.number,
-                        on: true,
-                    });
-                }
-            }
-        } else if let Some(at) = self.links.iter().position(|l| l.device == device) {
-            self.links[at].keys = false;
-            self.release_keys(at);
-            self.drop_unused(at);
-        }
-        Ok(())
     }
 
     /// The keys still down on link `at`, released.
@@ -999,36 +913,6 @@ impl Radio {
                 self.keys_out.push((change.key.name(), false));
             }
         }
-    }
-
-    /// Link `at` let go where nothing uses it any more.
-    fn drop_unused(&mut self, at: usize) {
-        let link = &self.links[at];
-        if link.users.is_empty() && link.raw.is_empty() && !link.keys {
-            self.calls.push(BtCall::Disconnect { link: link.number });
-            self.links.remove(at);
-        }
-    }
-
-    /// Plugin `plugin` lets go of its link to `device`.
-    fn leave(&mut self, plugin: &str, device: DeviceId, out: &mut Vec<Command>) {
-        let Some(at) = self.links.iter().position(|l| l.device == device) else {
-            return;
-        };
-        let link = &mut self.links[at];
-        let (gone, kept): (Vec<_>, Vec<_>) = link.users.drain(..).partition(|u| u.plugin == plugin);
-        link.users = kept;
-        link.raw.retain(|r| r.plugin != plugin);
-        for user in gone {
-            out.push(tell(
-                &user.events,
-                BtEvent::Disconnected {
-                    device,
-                    reason: None,
-                },
-            ));
-        }
-        self.drop_unused(at);
     }
 
     /// Fewer screens are open than `screens`: what was asked while more
@@ -1045,7 +929,7 @@ impl Radio {
             .partition(|s| s.asker.screens > screens);
         self.scans = kept;
         for scan in ended {
-            out.push(tell(&scan.asker.events, BtEvent::ScanEnded));
+            self.scan_ended(&scan.asker, now, out);
         }
         let (ended, kept): (Vec<_>, Vec<_>) = self
             .adverts
@@ -1059,22 +943,17 @@ impl Radio {
         while at < self.links.len() {
             let device = self.links[at].device;
             let link = &mut self.links[at];
-            let (gone, kept): (Vec<_>, Vec<_>) =
-                link.users.drain(..).partition(|u| u.screens > screens);
+            let (gone, kept): (Vec<_>, Vec<_>) = link
+                .users
+                .drain(..)
+                .partition(|u| u.asker.screens > screens);
             link.users = kept;
             link.raw.retain(|r| r.screens <= screens);
             for user in gone {
-                out.push(tell(
-                    &user.events,
-                    BtEvent::Disconnected {
-                        device,
-                        reason: None,
-                    },
-                ));
+                let event = BtEvent::disconnected(device, None);
+                out.push(tell(&user.asker.events, event));
             }
-            let before = self.links.len();
-            self.drop_unused(at);
-            if self.links.len() == before {
+            if self.keep_or_drop(at, now) {
                 at += 1;
             }
         }
@@ -1082,8 +961,8 @@ impl Radio {
     }
 
     /// The device goes to sleep: everything ends, the radio off.
-    pub fn suspend(&mut self, out: &mut Vec<Command>) {
-        for scan in self.scans.drain(..) {
+    pub fn suspend(&mut self, now: Instant, out: &mut Vec<Command>) {
+        for scan in core::mem::take(&mut self.scans) {
             out.push(tell(&scan.asker.events, BtEvent::ScanEnded));
         }
         for advert in self.adverts.drain(..) {
@@ -1093,22 +972,13 @@ impl Radio {
             self.release_keys(at);
             let link = self.links.remove(at);
             for user in link.users {
-                out.push(tell(
-                    &user.events,
-                    BtEvent::Disconnected {
-                        device: link.device,
-                        reason: None,
-                    },
-                ));
+                let event = BtEvent::disconnected(link.device, None);
+                out.push(tell(&user.asker.events, event));
             }
         }
         if self.radio_on {
-            self.calls.push(BtCall::Radio { on: false });
+            self.radio_off(now);
         }
-        self.radio_on = false;
-        self.scanning = false;
-        self.advertised = None;
-        self.idle_since = None;
     }
 
     /// The reader answered the pairing question about `device`.
@@ -1125,296 +995,25 @@ impl Radio {
         self.links.iter().position(|l| l.number == number)
     }
 
-    /// What the shell reported.
-    pub fn report(&mut self, report: BtReport, now: Instant, out: &mut Vec<Command>) {
-        match report {
-            BtReport::Radio { on } => {
-                if !on && self.radio_on {
-                    // Off by itself: what used it fails.
-                    self.suspend(out);
-                }
-            }
-            BtReport::Found {
-                address,
-                name,
-                rssi,
-                services,
-                appearance,
-            } => self.found(address, name, rssi, services, appearance, out),
-            BtReport::Connected { link } => self.connected(link, out),
-            BtReport::Disconnected { link, reason } => self.disconnected(link, reason, out),
-            BtReport::Discovered { link, services } => {
-                let Some(at) = self.link_at(link) else { return };
-                let device = self.links[at].device;
-                let waiting: Vec<Id> = take_where(&mut self.links[at].reads, |(h, _)| h.is_none())
-                    .into_iter()
-                    .map(|(_, e)| e)
-                    .collect();
-                for events in waiting {
-                    let event = BtEvent::Discovered {
-                        device,
-                        services: services.clone(),
-                    };
-                    out.push(tell(&events, event));
-                }
-            }
-            BtReport::Value {
-                link,
-                handle,
-                bytes,
-            } => self.value(link, handle, bytes, out),
-            BtReport::Written { link, handle } => {
-                let Some(at) = self.link_at(link) else { return };
-                let device = self.links[at].device;
-                let writes = &mut self.links[at].writes;
-                if let Some(i) = writes.iter().position(|(h, _)| *h == handle) {
-                    let (_, events) = writes.remove(i);
-                    let handle = Handle::new(handle);
-                    out.push(tell(&events, BtEvent::Written { device, handle }));
-                }
-            }
-            BtReport::Failed { link, error } => self.failed(link, error, out),
-            other => self.report_more(other, now, out),
+    /// The device numbered for `address`, made known where it is not.
+    fn device_at(&mut self, address: &str) -> DeviceId {
+        if let Some(known) = self.known.iter().find(|k| k.address == address) {
+            return known.id;
         }
-        self.settle(now);
+        let id = DeviceId::new(self.next_device);
+        self.next_device += 1;
+        self.known.push(Known {
+            id,
+            address: address.to_string(),
+            found: Found::default(),
+            kind: DeviceKind::Other,
+            found_by: Vec::new(),
+            bond: None,
+            given: Vec::new(),
+            keys: false,
+        });
+        id
     }
-
-    /// [`Radio::report`] for pairing, HID and the GATT server.
-    fn report_more(&mut self, report: BtReport, now: Instant, out: &mut Vec<Command>) {
-        match report {
-            BtReport::Ask { link, question } => {
-                if let Some(at) = self.link_at(link) {
-                    self.asking = Some((self.links[at].device, question));
-                }
-            }
-            BtReport::Paired { link, keys } => {
-                let Some(at) = self.link_at(link) else { return };
-                let device = self.links[at].device;
-                let events = self.links[at].pairing.take();
-                if let Some(known) = self.known_mut(device) {
-                    known.bond = Some(keys);
-                    if let Some(events) = &events
-                        && let Ok(plugin) = Id::parse(events.namespace())
-                        && !known.given.contains(&plugin)
-                    {
-                        known.given.push(plugin);
-                    }
-                }
-                self.bonds_changed = true;
-                self.calls.push(BtCall::Bonds(self.bonds()));
-                if let Some(events) = events {
-                    out.push(tell(&events, BtEvent::Paired { device }));
-                }
-            }
-            BtReport::HidMap { link, map } => {
-                let Some(at) = self.link_at(link) else { return };
-                let decoder =
-                    ReportMap::parse(&map).map_or_else(|_| Decoder::boot_keyboard(), Decoder::new);
-                self.links[at].decoder = Some(decoder);
-            }
-            BtReport::HidReport {
-                link,
-                report,
-                bytes,
-            } => {
-                let Some(at) = self.link_at(link) else { return };
-                let device = self.links[at].device;
-                for user in &self.links[at].raw {
-                    let event = BtEvent::HidReport {
-                        device,
-                        report,
-                        bytes: bytes.clone(),
-                    };
-                    out.push(tell(&user.events, event));
-                }
-                if self.links[at].keys {
-                    let decoder = self.links[at]
-                        .decoder
-                        .get_or_insert_with(Decoder::boot_keyboard);
-                    for change in decoder.report(report, &bytes) {
-                        self.keys_out.push((change.key.name(), change.pressed));
-                    }
-                }
-            }
-            BtReport::ReadRequest { request, handle } => {
-                if let Some((_, events)) = self.served.iter().find(|(h, _)| *h == handle) {
-                    self.requests.push((request, events.clone()));
-                    let event = BtEvent::ReadRequest {
-                        request: Request::new(request),
-                        handle: Handle::new(handle),
-                    };
-                    out.push(tell(events, event));
-                }
-            }
-            BtReport::WriteRequest { handle, bytes } => {
-                if let Some((_, events)) = self.served.iter().find(|(h, _)| *h == handle) {
-                    let handle = Handle::new(handle);
-                    out.push(tell(events, BtEvent::WriteRequest { handle, bytes }));
-                }
-            }
-            BtReport::Subscribed { handle, on } => {
-                if let Some((_, events)) = self.served.iter().find(|(h, _)| *h == handle) {
-                    let handle = Handle::new(handle);
-                    out.push(tell(events, BtEvent::Subscribed { handle, on }));
-                }
-            }
-            BtReport::Advertising { on: false } => {
-                for advert in self.adverts.drain(..) {
-                    out.push(tell(&advert.asker.events, BtEvent::AdvertisingEnded));
-                }
-                self.advertised = None;
-            }
-            _ => {}
-        }
-        let _ = now;
-    }
-
-    fn found(
-        &mut self,
-        address: String,
-        name: Option<String>,
-        rssi: Option<i8>,
-        services: Vec<Uuid>,
-        appearance: Option<u16>,
-        out: &mut Vec<Command>,
-    ) {
-        let at = match self.known.iter().position(|k| k.address == address) {
-            Some(at) => at,
-            None => {
-                let id = DeviceId::new(self.next_device);
-                self.next_device += 1;
-                self.known.push(Known {
-                    id,
-                    address,
-                    name: None,
-                    kind: DeviceKind::Other,
-                    services: Vec::new(),
-                    rssi: None,
-                    found_by: Vec::new(),
-                    bond: None,
-                    given: Vec::new(),
-                    keys: false,
-                });
-                self.known.len() - 1
-            }
-        };
-        let known = &mut self.known[at];
-        let new = known.rssi.is_none()
-            || name.is_some() && known.name != name
-            || services.iter().any(|s| !known.services.contains(s));
-        if name.is_some() {
-            known.name = name;
-        }
-        for service in services {
-            if !known.services.contains(&service) {
-                known.services.push(service);
-            }
-        }
-        known.rssi = rssi.or(known.rssi).or(Some(-100));
-        if known.kind == DeviceKind::Other || appearance.is_some() {
-            known.kind = kind_of(appearance, &known.services);
-        }
-        if !new {
-            return;
-        }
-        let device = known.device();
-        for scan in &self.scans {
-            if scan.scan.passes(&device) {
-                if !known.found_by.contains(&scan.asker.plugin) {
-                    known.found_by.push(scan.asker.plugin.clone());
-                }
-                out.push(tell(&scan.asker.events, BtEvent::Found(device.clone())));
-            }
-        }
-    }
-
-    fn connected(&mut self, link: u32, out: &mut Vec<Command>) {
-        let Some(at) = self.link_at(link) else { return };
-        let link = &mut self.links[at];
-        link.up = true;
-        let device = link.device;
-        for user in &link.users {
-            out.push(tell(&user.events, BtEvent::Connected { device }));
-        }
-        if link.keys || !link.raw.is_empty() {
-            let number = link.number;
-            self.calls.push(BtCall::Hid {
-                link: number,
-                on: true,
-            });
-        }
-    }
-
-    fn disconnected(&mut self, link: u32, reason: Option<BtError>, out: &mut Vec<Command>) {
-        let Some(at) = self.link_at(link) else { return };
-        self.release_keys(at);
-        let link = self.links.remove(at);
-        let reason = reason.or(Some(BtError::Lost));
-        let pairing = link.pairing.iter().cloned();
-        for events in link.users.iter().map(|u| u.events.clone()).chain(pairing) {
-            out.push(tell(
-                &events,
-                BtEvent::Disconnected {
-                    device: link.device,
-                    reason,
-                },
-            ));
-        }
-    }
-
-    fn value(&mut self, link: u32, handle: u16, bytes: Vec<u8>, out: &mut Vec<Command>) {
-        let Some(at) = self.link_at(link) else { return };
-        let device = self.links[at].device;
-        let link = &mut self.links[at];
-        // A read's answer to who read, else a notification to who
-        // subscribed.
-        let to: Vec<Id> = match link.reads.iter().position(|(h, _)| *h == Some(handle)) {
-            Some(i) => alloc::vec![link.reads.remove(i).1],
-            None => link
-                .subscribed
-                .iter()
-                .filter(|(h, _)| *h == handle)
-                .map(|(_, e)| e.clone())
-                .collect(),
-        };
-        for events in to {
-            let event = BtEvent::Value {
-                device,
-                handle: Handle::new(handle),
-                bytes: bytes.clone(),
-            };
-            out.push(tell(&events, event));
-        }
-    }
-
-    fn failed(&mut self, link: u32, error: BtError, out: &mut Vec<Command>) {
-        let Some(at) = self.link_at(link) else { return };
-        let device = self.links[at].device;
-        let l = &mut self.links[at];
-        let mut told: Vec<Id> = l.users.iter().map(|u| u.events.clone()).collect();
-        told.extend(l.pairing.take());
-        l.reads.clear();
-        l.writes.clear();
-        told.dedup();
-        for events in told {
-            let event = BtEvent::Failed {
-                device: Some(device),
-                error,
-            };
-            out.push(tell(&events, event));
-        }
-        if !self.links[at].up {
-            // Never connected: the link is gone.
-            self.links.remove(at);
-        }
-    }
-}
-
-/// The items of `list` where `keep` holds, taken out.
-fn take_where<T>(list: &mut Vec<T>, keep: impl Fn(&T) -> bool) -> Vec<T> {
-    let (taken, kept): (Vec<T>, Vec<T>) = list.drain(..).partition(|item| keep(item));
-    *list = kept;
-    taken
 }
 
 #[cfg(test)]

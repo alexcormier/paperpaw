@@ -53,6 +53,9 @@ unstable = []
 # `Env`. Adds only functions, never a field or variant: a plugin's
 # fingerprint does not change with it.
 kernel = []
+# Makers of what the kernel hands plugins (Bluetooth devices, handles),
+# for a plugin's own tests with made-up events. Adds only functions.
+testing = []
 # Scalable OpenType/TrueType fonts (see paperpaw-text).
 outline = ["paperpaw-text/outline"]
 
