@@ -259,6 +259,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The history and the tags, for the plugins' versions.
+          fetch-depth: 0
       - name: Plugins depend on the SDK only
         # Their tests may run them in a kernel (dev-dependencies).
         run: |
@@ -272,6 +275,10 @@ jobs:
           exit $status
       - name: The store's first-party folders carry How it works
         run: python3 -m unittest discover -s tools/plugin-files
+      # Devices update a plugin only to a newer version: one changed since
+      # the last release has one (or says no reader sees the change).
+      - name: A store plugin that changed has a newer version
+        run: python3 tools/plugin-files/versions.py
       - name: The handbook holds the SDK and PaperPaw's own plugins, without tests
         run: python3 -m unittest discover -s tools -p "test_handbook.py"
       - name: Android takes each version over the ones before it, as the update plugin orders them
