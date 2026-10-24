@@ -40,6 +40,11 @@ pub fn set_route(route: Option<Box<dyn Route>>) {
     ROUTE.with_borrow_mut(|set| *set = route);
 }
 
+/// Whether this thread's requests go to a route ([`set_route`]).
+pub fn routed() -> bool {
+    ROUTE.with_borrow(Option::is_some)
+}
+
 /// Requests in flight and their answers.
 #[derive(Debug)]
 pub struct Http {

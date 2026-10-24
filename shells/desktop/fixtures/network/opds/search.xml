@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<id>search</id>
+<title>Search</title>
+<link rel="next" type="application/atom+xml;profile=opds-catalog" href="/ebooks/search.opds/?sort_order=downloads&amp;start_index=26"/>
+<entry><id>urn:gutenberg:5200</id><title>Die Verwandlung</title>
+<author><name>Kafka, Franz</name></author>
+<content type="text">Als Gregor Samsa eines Morgens aus unruhigen Träumen erwachte.</content>
+<link rel="http://opds-spec.org/image/thumbnail" type="image/png" href="/cache/epub/5200/cover.png"/>
+<link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/ebooks/5200.epub3.images"/></entry>
+<entry><id>urn:gutenberg:11</id><title>Alice's Adventures in Wonderland</title>
+<author><name>Carroll, Lewis</name></author>
+<link rel="http://opds-spec.org/image/thumbnail" type="image/png" href="/cache/epub/11/cover.png"/>
+<link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/ebooks/11.epub3.images"/></entry>
+<entry><id>urn:gutenberg:2701</id><title>Moby Dick; Or, The Whale, with a title far longer than a line on any of the devices</title>
+<author><name>Melville, Herman</name></author>
+<link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/ebooks/2701.epub3.images"/></entry>
+</feed>

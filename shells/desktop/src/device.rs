@@ -338,12 +338,24 @@ impl Device {
         }
     }
 
+    /// Whether network work is under way that the emulated time brings to
+    /// an end: requests not answered yet (waiting for the network or in
+    /// flight), or the pretend radio starting, scanning or joining. With
+    /// the fixtures (answered at once), a tool lets time pass until it
+    /// ends, as a reader would wait.
+    pub fn network_settling(&self) -> bool {
+        self.http.in_flight > 0 || self.kernel.holds_sleep() || self.wifi.next_due().is_some()
+    }
+
     /// Answers plugins' requests from the emulator's fixtures from now on
-    /// ([`crate::offline`], on this thread), and, where PaperPaw manages
-    /// Wi-Fi, knows the pretend radio's test network from each start, so
-    /// that what waits for the network gets it, offline.
+    /// ([`crate::offline`], on this thread; a route set already, such as
+    /// a tool's network that fails on purpose, stays), and, where
+    /// PaperPaw manages Wi-Fi, knows the pretend radio's test network from
+    /// each start, so that what waits for the network gets it, offline.
     pub fn use_fixtures(&mut self) {
-        crate::http::set_route(Some(Box::new(crate::offline::Offline)));
+        if !crate::http::routed() {
+            crate::http::set_route(Some(Box::new(crate::offline::Offline)));
+        }
         self.fixtures = true;
     }
 
