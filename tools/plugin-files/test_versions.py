@@ -126,6 +126,16 @@ class Repository(unittest.TestCase):
         self.commit("test(vocabulary): a comment\n\nPlugin-unchanged: vocabulary")
         self.assertTrue(self.check())
 
+    def test_the_fix_alone_picked_over_passes(self):
+        # The fix on main as a commit of its own, its tag beside it.
+        self.git("reset", "-q", "--hard", "HEAD^1")
+        self.git("cherry-pick", "vocabulary-v1.0.1")
+        self.assertTrue(self.check())
+        # A change after it still needs a newer version.
+        self.write("plugins/vocabulary/src/lib.rs", "// three\n")
+        self.commit("fix(vocabulary): another")
+        self.assertFalse(self.check())
+
     def test_a_version_older_than_one_published_fails(self):
         # The fix released alone, not merged back yet.
         self.git("reset", "-q", "--hard", "HEAD^1")

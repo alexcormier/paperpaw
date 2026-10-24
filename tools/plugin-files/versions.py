@@ -118,6 +118,12 @@ def is_ancestor(tag):
     return done.returncode == 0
 
 
+def same_files(tag, paths):
+    """Whether `paths` are at `tag` as they are at HEAD."""
+    done = subprocess.run(["git", "diff", "--quiet", tag, "HEAD", "--", *paths], cwd=ROOT)
+    return done.returncode == 0
+
+
 def main():
     since = sys.argv[1] if len(sys.argv) > 1 else git(
         "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD").strip()
@@ -135,9 +141,15 @@ def main():
             continue  # new since the release
         before = max(versions.values(), key=semver)
         now = version_in((ROOT / manifest).read_text(encoding="utf-8"), workspace_now)
+        paths = [f"plugins/{plugin}", f"tools/plugin-files/src/bin/{plugin}.rs"]
+        # A plugin released alone from a branch beside this one (its tag
+        # not in HEAD's history) with the files HEAD has: nothing new.
+        if now == before and any(
+                v == now and not is_ancestor(tag) and same_files(tag, paths)
+                for tag, v in versions.items()):
+            continue
         had = [f"^{tag}" for tag in versions if is_ancestor(tag)]
-        log = git("log", "--no-merges", "--format=%B%x00", "HEAD", *had, "--",
-                  f"plugins/{plugin}", f"tools/plugin-files/src/bin/{plugin}.rs")
+        log = git("log", "--no-merges", "--format=%B%x00", "HEAD", *had, "--", *paths)
         changes = [m.strip() for m in log.split("\0") if m.strip()]
         found = problem(plugin, before, now, changes)
         if found:
