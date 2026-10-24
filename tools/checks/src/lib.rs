@@ -80,7 +80,7 @@ const LENDING: [&str; 5] = ["borrow_mut", "unwrap", "expect", "lock", "extra"];
 /// method that returns a copy makes the assignment change nothing, and
 /// neither the compiler nor clippy says so. Calls of methods that lend the
 /// value itself are left out: those ending in `_mut` and those of
-/// [`LENDING`].
+/// `LENDING`.
 pub fn assigned_through_calls(text: &str) -> Vec<(usize, String)> {
     let mut found = Vec::new();
     for (at, line) in text.lines().enumerate() {
