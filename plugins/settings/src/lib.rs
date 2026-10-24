@@ -80,6 +80,9 @@ pub const ADVANCED: Setting<bool> = Setting::new("settings.advanced");
 /// The answer: the group reset (its id; empty for all) and the option.
 const CHOSEN: Event<choice::Picked> = Event::new("settings.chosen");
 
+/// What a choice is about when it asks whether to restart.
+const RESTART: &str = "restart";
+
 const ID: &str = "id";
 /// A setting to focus on its group's page (parameter of [`SCREEN`] and
 /// [`GROUP_SCREEN`]).

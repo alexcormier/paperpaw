@@ -17,6 +17,8 @@ pub(super) enum Link {
     Search,
     /// Resetting all settings to their defaults.
     Reset,
+    /// Restarting PaperPaw, once asked.
+    Restart,
 }
 
 #[derive(Debug)]
@@ -141,6 +143,16 @@ impl GroupList {
                 icon: Some(String::from("refresh")),
             },
         ));
+        // Last: what plugins saved goes along, as when the device goes off.
+        placed.push((
+            i32::MAX,
+            true,
+            Entry {
+                link: Some(Link::Restart),
+                title: env.i18n().tr("settings.restart").to_string(),
+                icon: Some(String::from("power")),
+            },
+        ));
         placed.sort_by_cached_key(|(order, entry, _)| (*order, *entry));
         let mut entries: Vec<Entry> = placed.into_iter().map(|(_, _, entry)| entry).collect();
         // Headings with nothing under them go.
@@ -217,6 +229,15 @@ impl GroupList {
                 let env = *cx.env();
                 cx.command(ask_reset(&env, None));
             }
+            Some(Link::Restart) => {
+                let question = cx.env().i18n().tr("settings.restart.question");
+                cx.command(
+                    paperpaw_sdk::ask::choice(question, &CHOSEN)
+                        .about(RESTART)
+                        .options("settings.option.", &["restart", "cancel"])
+                        .command(),
+                );
+            }
             None => {}
         }
     }
@@ -248,7 +269,7 @@ impl Screen for GroupList {
                     ui::Row::switch(&entry.title, on)
                         .focused(focused)
                         .draw(ui, rect);
-                } else if *link == Link::Search || *link == Link::Reset {
+                } else if matches!(link, Link::Search | Link::Reset | Link::Restart) {
                     ui::Row::value(&entry.title, "")
                         .focused(focused)
                         .draw(ui, rect);
@@ -295,7 +316,11 @@ impl Screen for GroupList {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         if let Some(picked) = CHOSEN.read(event, params) {
-            if picked.path.is_empty() {
+            if picked.path == RESTART {
+                if picked.option == "restart" {
+                    cx.command(Command::Restart);
+                }
+            } else if picked.path.is_empty() {
                 let env = *cx.env();
                 reset(&env, &picked, cx);
             }

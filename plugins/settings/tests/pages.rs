@@ -476,6 +476,35 @@ library-folder = Books/Mine
     }
 }
 
+/// *Restart now*, last in the settings, asks first: *Cancel* leaves
+/// things as they are, *Restart* restarts.
+#[test]
+fn restart_now_asks_then_restarts() {
+    for device in DEVICES {
+        let mut app = settings(device, "");
+        choose(&mut app, "Restart now");
+        assert!(app.shows("Restart PaperPaw now?"), "{}", app.described());
+        choose(&mut app, "Cancel");
+        assert!(!app.restarted);
+        choose(&mut app, "Restart now");
+        choose(&mut app, "Restart");
+        assert!(app.restarted, "{}", app.described());
+    }
+    // The last of the settings' rows: the one before the focus goes round
+    // to the first.
+    let mut app = settings(X4, "");
+    let mut last = None;
+    for _ in 0..200 {
+        app.run(actions::DOWN);
+        let focused = app.focused();
+        if focused.as_deref() == Some("Search the settings") && last.is_some() {
+            break;
+        }
+        last = focused;
+    }
+    assert_eq!(last.as_deref(), Some("Restart now"));
+}
+
 #[test]
 fn the_settings_open_on_a_setting_focused() {
     let mut app = settings(X4, "");
