@@ -222,7 +222,10 @@ fn a_code_plugins_folder_names_its_codes_version() {
         )];
         run(&context)
     };
-    let report = folder("version-same", &version.to_string());
+    // As the release writes it: a beta's plugin.ini names its numbers only.
+    let release = version.to_string();
+    let release = release.split('-').next().unwrap_or_default();
+    let report = folder("version-same", release);
     assert!(!has(&report, "package.version", "plugin.ini", Level::Error));
     let report = folder("version-other", "9.9.9");
     assert!(
