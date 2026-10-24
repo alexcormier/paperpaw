@@ -422,13 +422,20 @@ fn draw_moon(
     } else {
         canvas.fill_circle(center, radius, dark);
     }
-    // The lit part of each eighth of a row: from the terminator to the
-    // edge, in eighths of a pixel from the centre.
+    let spans = lit_spans(radius, degrees, south);
+    lit_part(canvas, &spans, center, radius, lit_color);
+    let ring = (radius / 30).max(1);
+    canvas.stroke_circle(center, radius, ring, look.ink);
+}
+
+/// The lit part of each eighth of a row of a moon of `radius`: from the
+/// terminator to the edge, in eighths of a pixel from the centre.
+fn lit_spans(radius: u32, degrees: i32, south: bool) -> Vec<(i32, i32)> {
     let (_, cos) = sin_cos(degrees);
     let waxing = degrees.rem_euclid(360) < 180;
     let right = waxing != south;
     let r8 = 8 * i64::from(radius);
-    let spans: Vec<(i32, i32)> = (0..2 * r * 4)
+    (0..2 * 4 * radius as i32)
         .map(|sub| {
             let y8 = 2 * i64::from(sub) + 1 - r8;
             let w = (r8 * r8 - y8 * y8).max(0).isqrt();
@@ -440,19 +447,59 @@ fn draw_moon(
             };
             (lo as i32, hi as i32)
         })
-        .collect();
+        .collect()
+}
+
+/// How much of the pixel at `left` (in eighths from the centre) the
+/// `spans` of its row light, 0 to 255.
+fn lit_share(spans: &[(i32, i32)], left: i32) -> u8 {
+    let covered: i32 = spans
+        .iter()
+        .map(|&(lo, hi)| (hi.min(left + 8) - lo.max(left)).max(0))
+        .sum();
+    (covered * 255 / 32) as u8
+}
+
+/// Draws the lit part, given as `spans` for each eighth of a row: row by
+/// row, what is lit through its whole width as a stretch, only the
+/// pixels at its ends by how much of them is lit.
+fn lit_part(
+    canvas: &mut Canvas<'_>,
+    spans: &[(i32, i32)],
+    center: Point,
+    radius: u32,
+    color: Color,
+) {
+    let r = radius as i32;
     let size = 2 * radius;
-    canvas.draw_mask(center.x - r, center.y - r, size, size, lit_color, |x, y| {
-        let left = 8 * x as i32 - r * 8;
-        let mut covered = 0;
-        for sub in 0..4 {
-            let (lo, hi) = spans[(y * 4 + sub) as usize];
-            covered += (hi.min(left + 8) - lo.max(left)).max(0);
+    for row in 0..size as i32 {
+        let sub = &spans[row as usize * 4..row as usize * 4 + 4];
+        let (lo_min, lo_max) = sub.iter().fold((i32::MAX, i32::MIN), |(a, b), &(lo, _)| {
+            (a.min(lo), b.max(lo))
+        });
+        let (hi_min, hi_max) = sub.iter().fold((i32::MAX, i32::MIN), |(a, b), &(_, hi)| {
+            (a.min(hi), b.max(hi))
+        });
+        // The pixels any of the four lights, and those they all do
+        // through the whole width.
+        let from = (lo_min + 8 * r).div_euclid(8).max(0);
+        let to = (hi_max + 8 * r + 7).div_euclid(8).min(size as i32);
+        let whole_from = (lo_max + 8 * r + 7).div_euclid(8).clamp(from, to);
+        let whole_to = (hi_min + 8 * r).div_euclid(8).clamp(whole_from, to);
+        let (x, y) = (center.x - r, center.y - r + row);
+        let ends = |canvas: &mut Canvas<'_>, a: i32, b: i32| {
+            if a < b {
+                canvas.draw_mask(x + a, y, (b - a) as u32, 1, color, |dx, _| {
+                    lit_share(sub, 8 * (a + dx as i32) - 8 * r)
+                });
+            }
+        };
+        ends(canvas, from, whole_from);
+        if whole_from < whole_to {
+            canvas.fill_rect(x + whole_from, y, (whole_to - whole_from) as u32, 1, color);
         }
-        (covered * 255 / 32) as u8
-    });
-    let ring = (radius / 30).max(1);
-    canvas.stroke_circle(center, radius, ring, look.ink);
+        ends(canvas, whole_to, to);
+    }
 }
 
 #[cfg(test)]
@@ -525,5 +572,55 @@ mod tests {
         assert_eq!(lit(0), 0);
         assert_eq!(lit(90), 50);
         assert_eq!(lit(180), 100);
+    }
+
+    /// The lit part drawn by stretches is the one drawn pixel by pixel.
+    #[test]
+    fn the_lit_part_by_stretches_is_the_one_by_pixels() {
+        use paperpaw_graphics::Framebuffer;
+        use paperpaw_sdk::PixelFormat;
+        for format in [PixelFormat::Gray4, PixelFormat::Mono1] {
+            for radius in [5_u32, 17, 40, 101] {
+                for degrees in (0..360).step_by(23) {
+                    for south in [false, true] {
+                        let spans = lit_spans(radius, degrees, south);
+                        let size = 2 * radius as u16 + 8;
+                        let center = Point::new(i32::from(size / 2), i32::from(size / 2));
+                        let draw = |by_pixels: bool| {
+                            let mut fb = Framebuffer::new(size, size, format).unwrap();
+                            let mut canvas = fb.canvas();
+                            canvas.clear(Color::gray(40));
+                            if by_pixels {
+                                let r = radius as i32;
+                                canvas.draw_mask(
+                                    center.x - r,
+                                    center.y - r,
+                                    2 * radius,
+                                    2 * radius,
+                                    Color::WHITE,
+                                    |x, y| {
+                                        super::lit_share(
+                                            &spans[y as usize * 4..y as usize * 4 + 4],
+                                            8 * x as i32 - 8 * r,
+                                        )
+                                    },
+                                );
+                            } else {
+                                lit_part(&mut canvas, &spans, center, radius, Color::WHITE);
+                            }
+                            let view = fb.view();
+                            (0..size)
+                                .flat_map(|y| (0..size).map(move |x| (x, y)))
+                                .map(|(x, y)| view.pixel(x, y))
+                                .collect::<Vec<_>>()
+                        };
+                        assert!(
+                            draw(true) == draw(false),
+                            "{format:?} r{radius} {degrees} south {south}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }
