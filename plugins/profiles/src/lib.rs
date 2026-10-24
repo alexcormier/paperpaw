@@ -137,6 +137,17 @@ struct ListScreen {
     in_use: Vec<bool>,
 }
 
+/// The height of the row that adds a profile, `width` wide.
+fn add_row_height(env: &Env<'_>, style: &UiStyle, width: u16) -> u32 {
+    let title = env.i18n().tr("profiles.add");
+    let note = env.i18n().tr("profiles.add.help");
+    u32::from(
+        ui::Row::value(title, "+")
+            .note(note)
+            .height(env, style, width),
+    )
+}
+
 impl ListScreen {
     fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
@@ -156,7 +167,10 @@ impl ListScreen {
         );
         let loaded = profile::load(env.storage());
         let mut screen = Self {
-            list: ListView::new(area, style.noted_row()).focus_on_keys(env),
+            // As high as the row that adds one needs, its note whole (the
+            // largest text).
+            list: ListView::new(area, add_row_height(env, &style, display.width))
+                .focus_on_keys(env),
             status,
             readable: loaded.is_some(),
             profiles: loaded.unwrap_or_default(),

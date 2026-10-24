@@ -175,7 +175,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-keys"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -203,7 +203,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-news"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -253,7 +253,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-vocabulary"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]

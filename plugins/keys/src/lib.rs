@@ -538,12 +538,42 @@ impl ListScreen {
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let focus = self.rows.focus();
         self.entries = rows(env, self.place().everywhere());
+        // Rows as high as their notes need (the largest text); an input's
+        // note is the name of what it does, short.
+        let layers = self.place().layer_refs();
+        let noted = |title: &str, value: &str, note: &str| {
+            ui::Row::value(title, value)
+                .note(note)
+                .height(env, &self.style, display.width)
+        };
         let heights = self
             .entries
             .iter()
             .map(|row| match row {
                 Row::Heading(_) => ui::heading_height(env, &self.style),
-                _ => self.style.noted_row() as u16,
+                Row::Place => noted(
+                    env.i18n().tr("keys.place"),
+                    &self.place().title,
+                    ui::tr_input(env, "keys.place.help"),
+                ),
+                Row::Policy => {
+                    let now = env.keys().bound(&layers, POLICY);
+                    let value = now
+                        .as_ref()
+                        .filter(|id| POLICIES.contains(&id.as_str()))
+                        .map_or(POLICIES[0], Id::as_str);
+                    noted(
+                        env.i18n().tr("keys.policy"),
+                        env.i18n().tr(&format!("keys.{value}")),
+                        env.i18n().tr(&format!("keys.{value}.help")),
+                    )
+                }
+                Row::Reset => noted(
+                    env.i18n().tr("keys.reset"),
+                    "",
+                    env.i18n().tr("keys.reset.help"),
+                ),
+                Row::Input(_) => self.style.noted_row() as u16,
             })
             .collect();
         let headings = self

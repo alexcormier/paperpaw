@@ -38,7 +38,17 @@ impl AboutScreen {
         let top = header.area().height + style.gap();
         let area =
             paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
+        // Rows as high as their notes need (the largest text); the names of
+        // the plugins built in open whole from their row.
+        let native = crate::native(env).unwrap_or_default().1;
+        let notes = [
+            env.i18n().tr("about.summary"),
+            crate::SOURCE.trim_start_matches("https://"),
+            native.as_str(),
+            env.i18n().tr("about.licences.help"),
+        ];
+        let row = style.noted_row_for(env, display.width, notes);
+        let list = ListView::new(area, row).focus_on_keys(env);
         let mut rows = Vec::from([Row::Version, Row::Source]);
         if env.firmware().is_some_and(|f| !f.plugins.is_empty()) {
             rows.push(Row::BuiltIn);

@@ -197,6 +197,11 @@ impl EditScreen {
 impl Screen for EditScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
+        // Rows as high as their notes need (the largest text); a note
+        // changes with the catalog's kind.
+        let notes = FIELDS.iter().map(|f| env.i18n().tr(f.help(&self.catalog)));
+        let row = style.noted_row_for(env, self.list.area().width, notes);
+        self.list.set_row(row);
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(
             &mut ui,

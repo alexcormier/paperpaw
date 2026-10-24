@@ -73,6 +73,20 @@ impl DecksScreen {
             })
             .collect();
         self.due = due_now(env);
+        // Rows as high as the phone's note needs (the largest text).
+        let key = if self.decks.is_empty() {
+            "vocabulary.cards.phone.first"
+        } else {
+            "vocabulary.cards.phone.help"
+        };
+        let width = self.list.area().width;
+        let title = env.i18n().tr("vocabulary.cards.phone");
+        let row =
+            ui::Row::value(title, "›")
+                .note(env.i18n().tr(key))
+                .height(env, &self.style, width);
+        self.list
+            .set_row(u32::from(row).max(self.style.noted_row()));
         let len = self.len();
         if self.list.focus() >= len {
             self.list.set_focus(len - 1);

@@ -196,6 +196,26 @@ impl PluginList {
                 )
             })
             .collect();
+        // Rows as high as their notes need (the largest text).
+        let mut notes: Vec<String> = self
+            .more
+            .iter()
+            .filter_map(|action| env.plugins().owner(action))
+            .map(|p| p.description(env.i18n()).to_string())
+            .collect();
+        notes.extend(plugins.iter().map(|info| {
+            let origin = self
+                .origins
+                .iter()
+                .find(|(id, _)| *id == info.manifest.id)
+                .map(|(_, origin)| *origin);
+            details(env, info, origin)
+        }));
+        let width = self.list.area().width;
+        let row = self
+            .style
+            .noted_row_for(env, width, notes.iter().map(String::as_str));
+        self.list.set_row(row);
     }
 
     /// The *Restart now* button, while a change waits for a restart.

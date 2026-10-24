@@ -238,6 +238,22 @@ impl Screen for WifiPage {
         let rows = Self::rows(env);
         let len = rows.len();
         let title = env.i18n().tr("wifi.title");
+        // Rows as high as the notes of the radio and the settings need
+        // (the largest text); a network's note is short.
+        let state = env
+            .wifi()
+            .map(|w| state_text(env, &w.state, w.scanning))
+            .unwrap_or_default();
+        let tr = |key| env.i18n().tr(key);
+        let notes = [
+            state.as_str(),
+            tr("wifi.phone.note"),
+            tr("wifi.setting.on-demand.help"),
+            tr("wifi.setting.while-charging.help"),
+            tr("wifi.setting.idle-off.help"),
+        ];
+        let row = style.noted_row_for(env, self.list.area().width, notes);
+        self.list.set_row(row);
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));

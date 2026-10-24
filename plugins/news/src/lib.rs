@@ -498,8 +498,14 @@ impl FeedsScreen {
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let feeds = load(env.storage());
+        // Rows as high as the help notes need (the largest text).
+        let fetch = env
+            .i18n()
+            .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))]);
+        let notes = [fetch.as_str(), env.i18n().tr("news.add.help")];
+        let row = style.noted_row_for(env, display.width, notes);
         Self {
-            list: ListView::new(area, style.noted_row()).focus_on_keys(env),
+            list: ListView::new(area, row).focus_on_keys(env),
             style,
             header,
             readable: feeds.is_ok(),
