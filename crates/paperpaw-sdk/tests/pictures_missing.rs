@@ -2,6 +2,8 @@
 //! is drawn as a frame with a note in its place, not as nothing; one that
 //! was decoded is drawn as always.
 
+// The reading functions come with the `unstable` feature.
+#![cfg(feature = "unstable")]
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
