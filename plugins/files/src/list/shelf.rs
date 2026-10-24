@@ -340,6 +340,12 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
 }
 
 impl Screen for ShelfScreen {
+    /// Its covers in black and white, as the library's: the focus moves
+    /// over them (see `ListScreen`).
+    fn pictures_in_grays(&self) -> bool {
+        false
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.entries.len();

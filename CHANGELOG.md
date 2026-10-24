@@ -18,6 +18,10 @@ change the plugin SDK.
 - Reading a long book on the X4 no longer stalls for seconds every few
   pages while its pages are counted in the background: a new chapter's
   cache took 4 to 8 seconds, now under one.
+- Moving through the library and its shelves on the X4 takes a fast
+  refresh of the two rows or covers that changed (some 0.6 s), not a
+  frame in grays or a full refresh of the screen (1.7 to 2 s). Covers
+  there show in black and white.
 
 ## [0.5.0-beta.1] - 2026-10-24
 
