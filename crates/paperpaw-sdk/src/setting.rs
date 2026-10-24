@@ -121,11 +121,8 @@ impl<T: SettingType> Setting<T> {
     /// [`SettingSpec::fixed`](crate::SettingSpec::fixed)). Takes the
     /// setting, so it can be used in `const` and `static` items.
     pub const fn static_str(self) -> &'static str {
-        let text = match &self.id.0 {
-            Cow::Borrowed(id) => id,
-            // Settings are only made by `new`, from text in the program.
-            Cow::Owned(_) => "",
-        };
+        // Settings are only made by `new`, from text in the program.
+        let text = self.id.static_text();
         core::mem::forget(self);
         text
     }
