@@ -54,7 +54,34 @@ Read, in this order, and skim what is relevant to the task:
   the table in `docs/plugins.md` lists them).
 - **Read through `Env`, change through `Command`s.** Plugins never change
   the kernel's state directly; the kernel runs the commands after the
-  plugin's code returns. This keeps plugins testable.
+  plugin's code returns. This keeps plugins testable. Read `Env`
+  through its methods (`env.settings()`, `env.i18n()`, `env.device()`,
+  `env.storage()`, `env.caps()`, `env.services()`, `env.now()`, one for
+  each part), never through its fields: the fields are being made
+  private so that `Env` can carry more without a change to plugins.
+- **Handlers queue their commands in a `Commands`**, never a
+  `&mut Vec<Command>`: an action's `.handler(|env, params, out| ..)`,
+  an event's `r.on(EVENT, |env, data, out| ..)`, work steps. `out` has
+  `push`, `extend` and `emit` and reads as a slice. An action always has
+  params (empty from a button or a gesture): `Command::run(id)` runs
+  one without, `Command::RunAction(id, params)` with, and a screen reads
+  them with `cx.params()` in `on_action`. Commands come with builders
+  where they are many-fielded: `Command::set(&SETTING, value)`,
+  `Command::http(HttpRequest::get(url, &REPLY))`.
+- **Settings, services and answers are typed.** A setting is a
+  `Setting<bool | i64 | Text>` constant, its spec an entry of a `static`
+  list built with the `const` constructors of `SettingSpec` (`switch`,
+  `number`, `choice`, `text`, `language`, `list`; what few need goes
+  into a `static SettingExtra`, taken with `with_extra`), registered
+  with `r.add_settings(&SETTINGS)`; groups are `static SettingGroupSpec`s.
+  A service type names its contract with `service_type!(Type, "plugin.name/1")`
+  (its key changes when its fields do), is provided with
+  `r.provide(id, value, version)` and found with
+  `env.services().get::<Type>(id, min_version)`; wrap a trait object in
+  a struct of your own. Answers come as typed events: a plugin names the
+  `Event<HttpReply>` (or `Typed`, `Picked`, `Confirmed` of `ask::*`) it
+  wants and passes it with the request; the answer's fields are read
+  from the event's data, never from strings.
 - **Screens** draw, react to actions (buttons, gestures bound to actions),
   gestures and events. **Slots** are roles (home, reader, library, menu,
   …) that screens fill: binding to a slot is how a plugin replaces
@@ -79,20 +106,31 @@ Read, in this order, and skim what is relevant to the task:
   (`CONTRIBUTING.md`), not part of writing a plugin.
 
 - **Screens are drawn with the SDK's `ui` building blocks**, never with
-  positions computed by hand: `ui::Stack` (parts one below the other),
-  `ui::columns` (equal columns, e.g. two buttons), `ui::CellGrid` (cells
-  with taps and focus), `ui::Segments` (a few options or tabs),
-  `ui::Dialog` (a box with a title, text and buttons), `ui::ListView`
-  with `ui::Row` (`Row::value`, `Row::switch`, `Row::number`) and
-  `Slider`, `ui::Label` for text, and what a `ui::Ui` (made in `draw`
-  with `Ui::new(canvas, env, &style)`) draws: `ui.card(..)`,
-  `ui.button(..)`, `ui.header(..)`, `ui.message(..)`, `ui.empty(..)`;
-  `ask::text` and `ask::choice`. Sizes come from `UiStyle::new(env)` (`margin`,
-  `gap`, `row`, text sizes), so the screen follows the reader's text size
-  and look and works by touch and with buttons alone. The table "Which
-  building block for what" in `docs/plugins.md` says which for what;
-  `paperpaw-dev ui-kit` shows them all. Use those the SDK release you
-  build against has.
+  positions computed by hand. In `draw`, make a `ui::Ui` from the canvas,
+  the environment and the style (`let mut ui = ui::Ui::new(canvas, env,
+  &self.style)`): its methods draw the parts (`ui.card(..)`,
+  `ui.button(..)`, `ui.header(..)`, `ui.message(..)`, `ui.empty(..)`,
+  `ui.focus(..)`), and the other blocks take `&mut ui`: `ui::Header`,
+  `ui::ListView` with `ui::Row` (`Row::value`, `Row::plain`,
+  `Row::switch`, `Row::number`, each one value that gives `height`,
+  `draw` and `hit`, so they cannot disagree), `ui::Label` for text
+  (`Label::new(text).role(TextRole::Small).align(..).wrap()`),
+  `ui::Segments` and `ui::Chips` (given their labels once, when made),
+  `ui::Dialog`, `ui::TextView`, `ui::DatePicker` and `ui::TimePicker`
+  (with `time::Date` and `time::Time`). Layout comes from `ui::Stack`,
+  `ui::columns` and `ui::CellGrid`; asking the reader from `ask::text`,
+  `ask::choice`, `ask::confirm`. Sizes are read from `UiStyle::new(env)`
+  with its methods (`style.margin()`, `gap()`, `row()`, `text()`,
+  `small()`), so the screen follows the reader's text size and look and
+  works by touch and with buttons alone. The building blocks that take
+  `on_action` and `on_gesture` answer with a `ui::Response` (`Ignored`
+  is the screen's, `Same`, `Changed` to draw again, `Done` with a
+  result): handle `Ignored` yourself. Show a focus only where
+  `ui::focus_shown(env)` says so. The table
+  "Which building block for what" in `docs/plugins.md` says which for
+  what; `paperpaw-dev ui-kit` shows them all. Use those the SDK release
+  you build against has, and look up a name in `api.txt` before using
+  it.
 
 ## 3. Rules that matter on small devices
 
@@ -145,12 +183,21 @@ section of `docs/plugins.md`. A plugin that should run there:
 - Follow PaperPaw's code guidelines (`CONTRIBUTING.md`, *Code
   guidelines*): length limits, errors on user data never dropped,
   memory, and comments in plain English.
-- Build against a released SDK version and say it in the manifest
-  (`sdk`): the kernel loads the plugin only where its SDK fits. When
-  moving to a newer SDK, read the CHANGELOG for what changed. Until
-  PaperPaw 1.0, a plugin file (`.ppn`) runs only on the release it was
-  built for (its fingerprint holds the SDK's version and the compiler):
-  build it again, and publish it again, for every release.
+- Build against a released SDK version. The manifest names no SDK
+  (`Manifest::new(id, name, version)`): a plugin with code is loaded by
+  its file's fingerprint, a data plugin by its `formats`. When moving
+  to a newer SDK, read the CHANGELOG for what changed. Until PaperPaw
+  1.0, a plugin file (`.ppn`) runs only on the release it was built for
+  (its fingerprint holds the SDK's version and the compiler): build it
+  again, and publish it again, for every release.
+- Give the plugin a version PaperPaw can read: `Version::new(1, 2, 0)`,
+  or `package_version!()` for the crate's own. A pre-release is
+  `alpha`, `beta`, `dev`, `pre` or `rc` with an optional number up to
+  8190 (`0.5.0-beta.2`), ordered as SemVer orders them, so a later beta
+  is an update. Any other pre-release (`-gamma`, `-beta.01`) is no
+  version: a data plugin with one is refused with that message,
+  `paperpaw-dev package` says so (`package.version`), and a crate's
+  `package_version!()` stops the build.
 - Test plugins with the real kernel and in-memory storage, as the sample
   does: build a kernel with the plugin, send input, look at the screen
   shown, the settings, the files, the network requests, and answer them.
