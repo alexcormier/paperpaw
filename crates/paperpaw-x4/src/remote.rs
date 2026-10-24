@@ -120,10 +120,11 @@
 //!   first point, moved to the second in `steps` steps `ms` apart and
 //!   lifted, read as the touch controller's readings are (in their
 //!   interrupt, also while the main loop is busy); `PP:OK` at once;
-//! - `clicks <button> <count> <every ms> <held ms>`: the button clicked
-//!   `count` times, read as its own readings are (in their interrupt,
-//!   also while the main loop is busy), to try how presses get through
-//!   while PaperPaw works; `PP:OK` at once;
+//! - `clicks <button> <count> <every ms> <held ms> [<jitter ms>]`: the
+//!   button clicked `count` times, read as its own readings are (in their
+//!   interrupt, also while the main loop is busy), to try how presses get
+//!   through while PaperPaw works; with a jitter the gaps vary by up to so
+//!   much either way, as a person's do ([`click_gap`]); `PP:OK` at once;
 //! - `time set <unix ms>`: the clock set (`PP:OK`);
 //! - `restart`: what plugins keep saved, then the X4 starts again
 //!   (`PP:OK` first; the connection comes back by itself);
@@ -261,17 +262,30 @@ pub enum Command {
         ms: u16,
     },
     /// Button `button` (of [`crate::buttons::ALL`]) clicked `count`
-    /// times, `every` ms apart, held `held` ms each.
+    /// times, `every` ms apart (give or take `jitter`, see
+    /// [`click_gap`]), held `held` ms each.
     Clicks {
         button: &'static str,
         count: u16,
         every: u16,
         held: u16,
+        jitter: u16,
     },
     /// The clock set, to milliseconds since 1970.
     SetTime(i64),
     Restart,
     Panic(String),
+}
+
+/// The gap before the next of the remote's clicks: `every` ms, give or
+/// take up to `jitter` ms, from the pseudo-random `seed` (a linear
+/// congruential generator, which x4-remote reckons the same way, seed 1
+/// first, to know when each click began).
+pub fn click_gap(every: u16, jitter: u16, seed: &mut u32) -> u16 {
+    *seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+    let span = 2 * u32::from(jitter) + 1;
+    let step = (*seed >> 16) % span;
+    (u32::from(every) - u32::from(jitter) + step) as u16
 }
 
 /// What a finger does.
@@ -394,7 +408,11 @@ pub fn parse(line: &str) -> Option<Command> {
             let button = *crate::buttons::ALL.iter().find(|b| **b == name)?;
             let mut number = || words.next()?.parse::<u16>().ok();
             let (count, every, held) = (number()?, number()?, number()?);
-            if held == 0 || held >= every {
+            let jitter = match words.next() {
+                Some(word) => word.parse::<u16>().ok()?,
+                None => 0,
+            };
+            if held == 0 || u32::from(held) + u32::from(jitter) >= u32::from(every) {
                 return None;
             }
             Command::Clicks {
@@ -402,6 +420,7 @@ pub fn parse(line: &str) -> Option<Command> {
                 count,
                 every,
                 held,
+                jitter,
             }
         }
         "touch" => Command::Touch {
@@ -751,17 +770,6 @@ mod tests {
             })
         );
         assert_eq!(parse("drag 1 2 3 4 0 10"), None);
-        assert_eq!(
-            parse("clicks right 30 800 100"),
-            Some(Command::Clicks {
-                button: crate::buttons::ALL[3],
-                count: 30,
-                every: 800,
-                held: 100,
-            })
-        );
-        assert_eq!(parse("clicks right 30 100 100"), None);
-        assert_eq!(parse("clicks nose 30 800 100"), None);
         assert_eq!(parse("drag 1 2 3"), None);
         assert_eq!(
             parse("emit core.book-opened path=2f61"),
@@ -808,6 +816,37 @@ mod tests {
             Some(Command::Panic(String::from("oh")))
         );
         assert_eq!(parse("restart now"), None);
+    }
+
+    #[test]
+    fn clicks_and_their_gaps() {
+        assert_eq!(
+            parse("clicks right 30 800 100"),
+            Some(Command::Clicks {
+                button: crate::buttons::ALL[3],
+                count: 30,
+                every: 800,
+                held: 100,
+                jitter: 0,
+            })
+        );
+        assert_eq!(
+            parse("clicks right 20 800 100 500"),
+            Some(Command::Clicks {
+                button: crate::buttons::ALL[3],
+                count: 20,
+                every: 800,
+                held: 100,
+                jitter: 500,
+            })
+        );
+        assert_eq!(parse("clicks right 20 800 100 700"), None);
+        // The gaps of a seed, as tools reckon them too.
+        let mut seed = 1;
+        let gaps: Vec<u16> = (0..4).map(|_| click_gap(800, 500, &mut seed)).collect();
+        assert_eq!(gaps, [1122, 788, 403, 533]);
+        assert_eq!(parse("clicks right 30 100 100"), None);
+        assert_eq!(parse("clicks nose 30 800 100"), None);
     }
 
     #[test]

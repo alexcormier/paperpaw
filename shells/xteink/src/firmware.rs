@@ -1096,8 +1096,9 @@ impl Firmware {
                 count,
                 every,
                 held,
+                jitter,
             } => {
-                input::clicks(button, count, every, held);
+                input::clicks(button, count, every, held, jitter);
                 remote::ok();
             }
             Command::Touch { phase, x, y } => {

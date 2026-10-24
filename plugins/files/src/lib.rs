@@ -60,6 +60,18 @@ pub const ARCHIVE: Setting<Text> = Setting::new("files.archive");
 pub const VIEW: Setting<Text> = Setting::new("files.view");
 pub const VIEW_LIST: &str = "files.view.list";
 pub const VIEW_COVERS: &str = "files.view.covers";
+/// How the library's covers show: in black and white ([`COVERS_MONO`]),
+/// which a focus moves over fast, or in grays ([`COVERS_GRAY`]), finer
+/// where the panel shows grays with a refresh of its own (the X4s: the
+/// first step after such a page refreshes it whole).
+pub const COVERS: Setting<Text> = Setting::new("files.covers");
+pub const COVERS_MONO: &str = "files.covers.mono";
+pub const COVERS_GRAY: &str = "files.covers.gray";
+
+/// Whether the library's covers show in grays ([`COVERS`]).
+pub(crate) fn covers_in_grays(env: &Env<'_>) -> bool {
+    env.settings().read(&COVERS) == COVERS_GRAY
+}
 /// Chooses a folder for the setting named by the parameter `id`.
 pub const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 /// The library's menu.
@@ -90,7 +102,7 @@ static FOLDER: paperpaw_sdk::SettingExtra =
 
 /// Where the archive is, and how the library shows the books (the
 /// library folder is the kernel's, [`ROOT`]).
-static SETTINGS: [SettingSpec; 3] = [
+static SETTINGS: [SettingSpec; 4] = [
     SettingSpec::text(
         ARCHIVE.static_str(),
         "files.setting.archive",
@@ -109,6 +121,14 @@ static SETTINGS: [SettingSpec; 3] = [
         groups::LIBRARY,
     )
     .description("files.setting.view.help"),
+    SettingSpec::choice(
+        COVERS.static_str(),
+        "files.setting.covers",
+        &[COVERS_MONO, COVERS_GRAY],
+        COVERS_MONO,
+        groups::LIBRARY,
+    )
+    .description("files.setting.covers.help"),
     SettingSpec::choice(
         SORT.static_str(),
         "files.setting.sort",

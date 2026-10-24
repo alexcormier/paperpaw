@@ -75,6 +75,10 @@ const PAGES_PER_STEP_SMALL: usize = 1;
 
 /// Pause between background steps.
 const STEP_DELAY_MS: u64 = 2;
+/// After a press or a tap, how long the status lines wait to be refreshed
+/// on their own: a page turned meanwhile draws them with it, in one
+/// refresh, and a refresh of their own would hold up the next press.
+const STATUS_QUIET_MS: u64 = 2_000;
 
 /// On small devices a rest as long as a step: the CPU rests (and the X4
 /// sleeps lightly) half the time while pages are counted, instead of
@@ -116,6 +120,8 @@ pub(crate) struct ReaderScreen {
     last_search: String,
     /// What the status lines showed when last drawn.
     status_shown: Option<u64>,
+    /// When the last press or tap came.
+    input_at: Option<paperpaw_sdk::Instant>,
     /// The sentence being read aloud.
     aloud: Option<Aloud>,
     /// Where reading aloud was paused: the page and its word.
@@ -157,6 +163,7 @@ impl ReaderScreen {
             linking: None,
             last_search: String::new(),
             status_shown: None,
+            input_at: None,
             aloud: None,
             resume: None,
             auto_turn: None,
@@ -252,7 +259,15 @@ impl ReaderScreen {
             return;
         }
         let signature = status::signature(&env, &book.status_context(&env), &book.status_lines);
-        if Some(signature) != self.status_shown {
+        if Some(signature) != self.status_shown
+            && let Some(quiet) = self
+                .input_at
+                .map(|at| at.add_millis(STATUS_QUIET_MS))
+                .filter(|quiet| *quiet > env.now())
+        {
+            // Pages turned a moment ago: later, or with the next page.
+            cx.wake_at(quiet);
+        } else if Some(signature) != self.status_shown {
             self.status_shown = Some(signature);
             for (area, _) in book.status_areas() {
                 cx.request_redraw_area(area);
@@ -472,6 +487,7 @@ impl Screen for ReaderScreen {
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        self.input_at = Some(cx.env().now());
         // A button pressed while the book is being prepared waits for it.
         self.prepare(cx);
         // Any button pauses reading aloud (also "Read aloud"), and does
@@ -655,6 +671,7 @@ impl Screen for ReaderScreen {
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        self.input_at = Some(cx.env().now());
         // As does any tap.
         if self.aloud.is_some() {
             self.pause_aloud(cx);
@@ -835,7 +852,10 @@ impl ReaderScreen {
         }
         book.draw_note_signs(&mut ui, words);
         book.draw_back(&mut ui);
-        book.draw_status(ui.canvas(), env);
+        if let Some(drawn) = book.draw_status(ui.canvas(), env) {
+            // Shown with the page: not refreshed again on their own.
+            self.status_shown = Some(drawn);
+        }
         if book.bookmarked() {
             book.draw_ribbon(ui.canvas(), env);
         }

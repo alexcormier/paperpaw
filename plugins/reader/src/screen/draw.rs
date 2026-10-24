@@ -302,15 +302,14 @@ impl Book {
 
     /// Draws the status lines in the canvas's band; in the others what
     /// they show is not even asked (the X4 draws a page in eight bands).
-    pub(super) fn draw_status(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    /// What they show ([`status::signature`]) where drawn.
+    pub(super) fn draw_status(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) -> Option<u64> {
         let clip = canvas.clip();
         let mut areas = self
             .status_areas()
             .filter(|(area, _)| area.intersection(&clip).is_some())
             .peekable();
-        if areas.peek().is_none() {
-            return;
-        }
+        areas.peek()?;
         let context = self.status_context(env);
         for (area, top) in areas {
             canvas.fill(area, Color::WHITE);
@@ -318,6 +317,7 @@ impl Book {
             let frame = status::frame(env, area, top, &context);
             env.status_items().draw_line(id, canvas, env, &frame);
         }
+        Some(status::signature(env, &context, &self.status_lines))
     }
 }
 

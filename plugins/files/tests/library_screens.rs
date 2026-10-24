@@ -219,6 +219,47 @@ fn page_buttons_turn_whole_pages_and_come_back() {
 }
 
 #[test]
+fn a_focus_moved_on_a_page_refreshes_its_rows_fast() {
+    let _turn = turn();
+    // The first press shows the focus, the next ones move it on the page
+    // and up to the row above the books: in the list down and back, in
+    // the grid along its first row of covers and back.
+    let (down, up) = (actions::DOWN, actions::UP);
+    let (right, left) = (actions::RIGHT, actions::LEFT);
+    let list = [
+        down.clone(),
+        down.clone(),
+        up.clone(),
+        up.clone(),
+        up.clone(),
+    ];
+    let grid = [right.clone(), right, left.clone(), left, up];
+    // Covers in grays too: a step is no page in grays.
+    let gray = "[files]\nview = files.view.covers\ncovers = files.covers.gray\n";
+    for (config, moves) in [
+        ("", list),
+        ("[files]\nview = files.view.covers\n", grid.clone()),
+        (gray, grid),
+    ] {
+        let mut app = library(X4, config, &many(30));
+        app.run(down.clone());
+        let screen = X4.display;
+        let half = u32::from(screen.width) * u32::from(screen.height) / 2;
+        for action in moves {
+            app.now += 100;
+            let effects = app.kernel.run_action(Instant(app.now), action.clone());
+            let (area, mode) = effects.refresh().expect("a refresh");
+            app.settle(effects);
+            // Only what changed, however far apart: not most of the screen
+            // and its covers, refreshed in full.
+            assert_eq!(mode, paperpaw_sdk::RefreshMode::Fast, "{config:?} {action}");
+            let rows = u32::from(area.width) * u32::from(area.height);
+            assert!(rows <= half, "{config:?} {action}: {area:?}");
+        }
+    }
+}
+
+#[test]
 fn the_grid_of_covers_reaches_every_book_too() {
     let _turn = turn();
     let books = many(23);

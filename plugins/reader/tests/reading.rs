@@ -925,7 +925,7 @@ fn a_position_that_cannot_be_laid_out_opens_the_book_at_its_start() {
         )
         .unwrap();
     // Its third part cannot be read (a damaged card, say).
-    storage.2.set(Some("/2.txt"));
+    storage.2.set(Some("/sections/2/txt"));
     reading.open();
     reading.run(core_actions::NEXT_PAGE);
     assert_eq!(reading.kept(), second);

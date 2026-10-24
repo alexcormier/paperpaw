@@ -110,10 +110,12 @@ impl Kernel {
                 requested = RefreshMode::Full;
             }
             // A screen with pictures drawn whole, or most of it, in grays
-            // too where asked; not when drawn again after grays, and not
-            // what changes on it after.
+            // too where asked; not when drawn again after grays, not what
+            // changes on it after, and not where the screen set its
+            // refresh exactly (a focus moved far: the parts apart).
             let grays = grays
                 || (whole
+                    && set.is_none()
                     && pictures
                     && !again
                     && area(dirty) * 2 >= area(screen)

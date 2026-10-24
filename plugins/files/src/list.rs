@@ -246,6 +246,8 @@ struct Layout {
     area: Rect,
     /// The covers' grid, where books show as covers ([`crate::VIEW`]).
     grid: Option<grid::Grid>,
+    /// Covers in grays ([`crate::COVERS`]).
+    grays: bool,
 }
 
 impl Layout {
@@ -288,6 +290,7 @@ impl Layout {
             filter_row,
             area,
             grid,
+            grays: crate::covers_in_grays(env),
         }
     }
 }
@@ -752,6 +755,7 @@ impl ListScreen {
     fn step(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.len();
         let before = self.focus;
+        let was_filter = self.shown && self.filter_focused;
         if !self.index.has_books() {
             // Nothing to move to: no books, no filter shown.
             return;
@@ -770,22 +774,30 @@ impl ListScreen {
                 self.focus = next as usize;
             }
         }
-        self.moved(before, cx);
+        self.moved(before, was_filter, cx);
     }
 
-    /// Draws what a moved focus changed: the two entries on one page, else
-    /// the new page.
-    fn moved(&mut self, before: usize, cx: &mut Cx<'_, '_>) {
+    /// Draws what a moved focus changed: the entries it left and reached
+    /// (the filter's row among them where it was or is focused) on one
+    /// page, in a fast refresh as menus move theirs, else the new page.
+    /// Set exactly: the parts lie apart, and joined they may cover most
+    /// of the screen and its covers, where the kernel would refresh it
+    /// all (only the full refreshes the ghosting asks for are still
+    /// made).
+    fn moved(&mut self, before: usize, was_filter: bool, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        let is_filter = self.shown && self.filter_focused;
         if self.page_of(before) == self.page_of(self.focus) {
-            cx.request_redraw_area(self.filter_area());
-            if before < self.len() {
+            if was_filter || is_filter {
+                cx.request_redraw_area(self.filter_area());
+            }
+            if !was_filter && before < self.len() {
                 cx.request_redraw_area(self.place(before));
             }
-            if self.focus < self.len() {
+            if !is_filter && self.focus < self.len() {
                 cx.request_redraw_area(self.place(self.focus));
             }
-            cx.request_refresh(RefreshMode::Fast);
+            cx.set_refresh(RefreshMode::Fast);
         } else {
             self.load_page(&env);
             self.find = self.find_button(&env);
@@ -948,6 +960,14 @@ impl ListScreen {
 }
 
 impl Screen for ListScreen {
+    /// Its covers in black and white unless set otherwise
+    /// ([`crate::COVERS`]): the focus moves over them all the time, and
+    /// after a frame in grays the next change refreshes the whole screen
+    /// (see [`Screen::pictures_in_grays`]).
+    fn pictures_in_grays(&self) -> bool {
+        self.layout.grays
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         if self.covered {
             // Below an overlay left open before it showed again: nothing

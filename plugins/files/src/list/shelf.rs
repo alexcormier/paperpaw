@@ -92,6 +92,8 @@ struct Entry {
 
 pub(crate) struct ShelfScreen {
     style: UiStyle,
+    /// Covers in grays ([`crate::COVERS`]).
+    grays: bool,
     sizes: Sizes,
     header: ui::Header,
     kind: Kind,
@@ -131,6 +133,7 @@ impl ShelfScreen {
         let top = summary.y + summary.height;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
+            grays: crate::covers_in_grays(env),
             list: ListView::new(area, u32::from(sizes.row)).focus_on_keys(env),
             entries: find(env, kind, &name),
             next: None,
@@ -340,6 +343,11 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
 }
 
 impl Screen for ShelfScreen {
+    /// Its covers as the library's ([`crate::COVERS`]).
+    fn pictures_in_grays(&self) -> bool {
+        self.grays
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.entries.len();
@@ -390,6 +398,7 @@ impl Screen for ShelfScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.grays = crate::covers_in_grays(cx.env());
         if core::mem::take(&mut self.fresh) {
             return;
         }
