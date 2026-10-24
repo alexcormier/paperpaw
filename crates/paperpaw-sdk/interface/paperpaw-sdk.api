@@ -5162,6 +5162,57 @@ pub fn paperpaw_sdk::Env<'_>::plugin_dir(&str) -> alloc::string::String
 pub fn paperpaw_sdk::Env<'_>::plugin_usage(&self) -> alloc::vec::Vec<paperpaw_sdk::usage::PluginUsage>
 pub fn paperpaw_sdk::Env<'_>::top(&self) -> core::option::Option<&paperpaw_sdk::StackEntry>
 impl<'a> paperpaw_sdk::Env<'a>
+pub fn paperpaw_sdk::Env<'a>::actions(&self) -> &'a paperpaw_sdk::Actions
+pub fn paperpaw_sdk::Env<'a>::book_badges(&self) -> &'a [paperpaw_sdk::library::service::BookBadge]
+pub fn paperpaw_sdk::Env<'a>::book_data(&self) -> &'a [paperpaw_sdk::library::BookData]
+pub fn paperpaw_sdk::Env<'a>::book_fields(&self) -> &'a [paperpaw_sdk::library::service::BookField]
+pub fn paperpaw_sdk::Env<'a>::caps(&self) -> paperpaw_sdk::Capabilities
+pub fn paperpaw_sdk::Env<'a>::catalog_device(&self) -> core::option::Option<&'a str>
+pub fn paperpaw_sdk::Env<'a>::clipboard(&self) -> bool
+pub fn paperpaw_sdk::Env<'a>::clock(&self) -> paperpaw_sdk::time::Clock
+pub fn paperpaw_sdk::Env<'a>::content(&self) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::Env<'a>::decorators(&self) -> &'a paperpaw_sdk::decorations::Decorators
+pub fn paperpaw_sdk::Env<'a>::device(&self) -> &'a paperpaw_platform::DeviceInfo
+pub fn paperpaw_sdk::Env<'a>::firmware(&self) -> core::option::Option<&'a paperpaw_sdk::firmware::Firmware>
+pub fn paperpaw_sdk::Env<'a>::font_dirs(&self) -> &'a [alloc::string::String]
+pub fn paperpaw_sdk::Env<'a>::fonts(&self) -> &'a paperpaw_sdk::Fonts
+pub fn paperpaw_sdk::Env<'a>::formats(&self) -> &'a paperpaw_sdk::Formats
+pub fn paperpaw_sdk::Env<'a>::hyphenation(&self) -> &'a paperpaw_sdk::Hyphenation
+pub fn paperpaw_sdk::Env<'a>::i18n(&self) -> &'a paperpaw_i18n::Translator
+pub fn paperpaw_sdk::Env<'a>::inputs(&self) -> &'a [paperpaw_sdk::keys::InputSpec]
+pub fn paperpaw_sdk::Env<'a>::keys(&self) -> &'a dyn paperpaw_sdk::keys::KeyBindings
+pub fn paperpaw_sdk::Env<'a>::last_input(&self) -> paperpaw_sdk::keys::InputMode
+pub fn paperpaw_sdk::Env<'a>::look(&self) -> paperpaw_sdk::ui::look::Look
+pub fn paperpaw_sdk::Env<'a>::lookup(&self) -> &'a paperpaw_sdk::lookup::LookupProviders
+pub fn paperpaw_sdk::Env<'a>::memory(&self) -> paperpaw_sdk::memory::Memory
+pub fn paperpaw_sdk::Env<'a>::menus(&self) -> &'a paperpaw_sdk::Menus
+pub fn paperpaw_sdk::Env<'a>::metrics(&self) -> paperpaw_sdk::Metrics
+pub fn paperpaw_sdk::Env<'a>::native(&self) -> core::option::Option<&'a paperpaw_sdk::native::Native>
+pub fn paperpaw_sdk::Env<'a>::now(&self) -> paperpaw_platform::input::Instant
+pub fn paperpaw_sdk::Env<'a>::page_layers(&self) -> &'a paperpaw_sdk::layers::PageLayers
+pub fn paperpaw_sdk::Env<'a>::plugins(&self) -> &'a paperpaw_sdk::Plugins
+pub fn paperpaw_sdk::Env<'a>::power(&self) -> &'a paperpaw_sdk::power::Power
+pub fn paperpaw_sdk::Env<'a>::random(&self) -> paperpaw_sdk::random::Random
+pub fn paperpaw_sdk::Env<'a>::reader(&self) -> bool
+pub fn paperpaw_sdk::Env<'a>::readers(&self) -> &'a paperpaw_sdk::readers::Readers
+pub fn paperpaw_sdk::Env<'a>::screens(&self) -> &'a [(paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)]
+pub fn paperpaw_sdk::Env<'a>::secrets(&self) -> paperpaw_sdk::secrets::Visible<'a>
+pub fn paperpaw_sdk::Env<'a>::services(&self) -> &'a paperpaw_sdk::services::Services
+pub fn paperpaw_sdk::Env<'a>::settings(&self) -> &'a paperpaw_sdk::Settings
+pub fn paperpaw_sdk::Env<'a>::setup(&self) -> &'a paperpaw_sdk::setup::SetupSteps
+pub fn paperpaw_sdk::Env<'a>::slots(&self) -> &'a [paperpaw_sdk::Id]
+pub fn paperpaw_sdk::Env<'a>::stack(&self) -> &'a [paperpaw_sdk::StackEntry]
+pub fn paperpaw_sdk::Env<'a>::started(&self) -> paperpaw_sdk::power::Start
+pub fn paperpaw_sdk::Env<'a>::status(&self) -> &'a paperpaw_platform::status::SystemStatus
+pub fn paperpaw_sdk::Env<'a>::status_items(&self) -> &'a paperpaw_sdk::status::StatusItems
+pub fn paperpaw_sdk::Env<'a>::storage(&self) -> &'a dyn paperpaw_platform::storage::Storage
+pub fn paperpaw_sdk::Env<'a>::stylesheets(&self) -> &'a [alloc::borrow::Cow<'static, str>]
+pub fn paperpaw_sdk::Env<'a>::text_filters(&self) -> &'a paperpaw_sdk::filters::TextFilters
+pub fn paperpaw_sdk::Env<'a>::usage(&self) -> &'a paperpaw_sdk::usage::Usage
+pub fn paperpaw_sdk::Env<'a>::widgets(&self) -> &'a paperpaw_sdk::widgets::Widgets
+pub fn paperpaw_sdk::Env<'a>::wifi(&self) -> core::option::Option<&'a paperpaw_sdk::wifi::Wifi>
+pub fn paperpaw_sdk::Env<'a>::work(&self) -> &'a paperpaw_sdk::work::WorkStates
+impl<'a> paperpaw_sdk::Env<'a>
 pub fn paperpaw_sdk::Env<'a>::device_name(&self) -> alloc::string::String
 pub fn paperpaw_sdk::Env<'a>::device_within(&self, paperpaw_platform::geometry::Rect) -> paperpaw_platform::DeviceInfo
 pub fn paperpaw_sdk::Env<'a>::screen_title(&self, &paperpaw_sdk::Id) -> core::option::Option<&'a str>

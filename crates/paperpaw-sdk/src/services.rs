@@ -29,7 +29,7 @@
 //! # let mut services = Services::new();
 //! # services.insert(WEATHER, Service::new(Box::new(Sunny) as Box<dyn Weather>));
 //!
-//! // Any plugin, with an `Env`: `env.services.get::<…>(…)`.
+//! // Any plugin, with an `Env`: `env.services().get::<…>(…)`.
 //! let weather = services.get::<Box<dyn Weather>>(WEATHER.as_str());
 //! assert_eq!(weather.map(|w| w.today()), Some("sunny"));
 //! ```

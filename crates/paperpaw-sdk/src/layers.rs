@@ -237,7 +237,7 @@ impl PageLayerSpec {
     }
 
     /// Room at a side of the text, `None` for none, in pixels (from
-    /// millimetres with `env.metrics`). Pages are laid out anew when it
+    /// millimetres with `env.metrics()`). Pages are laid out anew when it
     /// changes: it depends on settings only, not on the page.
     pub fn reserve(mut self, reserve: impl Fn(&Env<'_>) -> Option<(Side, u16)> + 'static) -> Self {
         self.reserve = Some(Box::new(reserve));

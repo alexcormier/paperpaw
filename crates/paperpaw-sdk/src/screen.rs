@@ -645,7 +645,7 @@ impl<'a, 'e> Cx<'a, 'e> {
     }
 
     /// Requests a call to [`Screen::on_timer`] of this screen at `at` (the
-    /// earliest request wins). Use `cx.env().now` for "as soon as
+    /// earliest request wins). Use `cx.env().now()` for "as soon as
     /// possible". It comes while the screen is on top: covered by another
     /// (a menu, a keyboard), the time waits until it is on top again. It
     /// is kept when the screen is made anew for another size.

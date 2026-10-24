@@ -21,7 +21,7 @@
 //! impl Board {
 //!     fn layout(&mut self, env: &Env<'_>) {
 //!         let geometry = Geometry::new(env, area, 4, 0);
-//!         let items = grid::parse(env.settings.read(&LAYOUT));
+//!         let items = grid::parse(env.settings().read(&LAYOUT));
 //!         self.grid.layout(env, geometry, &items, &[]);
 //!     }
 //!
@@ -49,7 +49,7 @@
 //!         if self.grid.update_widgets(&env, cx) {
 //!             cx.request_refresh(RefreshMode::Fast);
 //!         }
-//!         cx.wake_at(env.now.add_millis(60_000));
+//!         cx.wake_at(env.now().add_millis(60_000));
 //!     }
 //!     // on_pointer, on_gesture, on_event, hint, holds_edges as on_action
 //! }

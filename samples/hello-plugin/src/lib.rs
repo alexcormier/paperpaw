@@ -106,12 +106,12 @@ impl HelloScreen {
     }
 
     fn greeting(&self, env: &Env<'_>) -> alloc::string::String {
-        let name = match env.settings.read(&NAME).trim() {
-            "" => env.i18n.tr("hello.someone"),
+        let name = match env.settings().read(&NAME).trim() {
+            "" => env.i18n().tr("hello.someone"),
             name => name,
         };
         let count = i64::from(self.opened);
-        env.i18n.plural(
+        env.i18n().plural(
             "hello.greeting",
             count,
             &[("name", Arg::Str(name)), ("count", Arg::Int(count))],
@@ -121,10 +121,10 @@ impl HelloScreen {
 
 impl Screen for HelloScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let title = env.i18n.tr("hello.title");
+        let title = env.i18n().tr("hello.title");
         self.header
             .draw(canvas, env, &self.style, title, None, None);
-        let display = env.device.display;
+        let display = env.device().display;
         let top = self.header.area().height;
         // A header taller than a tiny screen leaves no room, not an
         // overflow.

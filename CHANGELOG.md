@@ -442,6 +442,10 @@ file to your report.
 
 #### For developers
 
+- SDK: `Env`'s parts are read through methods (`env.settings()`,
+  `env.i18n()`, `env.now()`, one for each part), so what it carries can
+  change without a change to plugins. The docs and samples use them; the
+  fields stay public until every plugin reads through the methods.
 - The SDK's design rules ([Designing the plugin SDK](docs/sdk-design.md)):
   how it grows without breaking plugins. Tests check four of them over
   the crates whose types cross: growing types are `#[non_exhaustive]`,
