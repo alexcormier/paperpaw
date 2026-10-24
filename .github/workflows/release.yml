@@ -356,13 +356,21 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
       # The plugins' folders and their entries for the plugin library,
       # each file named by its address in this release.
+      # A plugin's version is published once (published.py): one that did
+      # not change since a release keeps the bytes it was published with
+      # where its firmware's fingerprint did not change either.
       - name: The first-party plugins' folders and catalogue entries
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p dist/plugins
           mv dist/*.ppn dist/plugins/
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases" > "$RUNNER_TEMP/releases.json"
+          python3 tools/plugin-files/published.py files dist/plugins "$RUNNER_TEMP/releases.json"
           python3 tools/plugin-files/catalogue.py dist/plugins "$VERSION" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
             --date "$(date -u +%F)"
+          python3 tools/plugin-files/published.py folders dist/plugins "$RUNNER_TEMP/releases.json"
           (cd dist/plugins && zip -q -X -r "../paperpaw-$VERSION-catalogue.zip" catalogue)
           mv dist/plugins/SHA256SUMS "dist/paperpaw-$VERSION-plugins.sha256"
       # The emulators, the handbook, the web emulator and the ESP32-S3's
