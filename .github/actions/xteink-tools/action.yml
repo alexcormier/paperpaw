@@ -21,6 +21,17 @@ runs:
     - name: The versions
       shell: bash
       run: grep -E '^[A-Z_]+=' shells/xteink/versions.env >> "$GITHUB_ENV"
+    - name: What builds mbedTLS
+      shell: bash
+      run: |
+        # CMake and Ninja for every device; clang compiles it for the X4
+        # (the ESP32-S3's with espup's Xtensa GCC).
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build "$MBEDTLS_CLANG_PACKAGE"
+        {
+          echo "CMAKE_GENERATOR=Ninja"
+          echo "CLANG_PATH=$(command -v "$MBEDTLS_CLANG_PACKAGE")"
+        } >> "$GITHUB_ENV"
     - name: The X4's Rust
       if: inputs.device == 'x4'
       shell: bash

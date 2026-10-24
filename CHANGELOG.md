@@ -316,6 +316,10 @@ file to your report.
 
 #### Devices and updates
 
+- On the X4 and X4 Pro, a secure (HTTPS) connection takes about 15 KB
+  less memory and the firmware about 180 KB less flash: mbedTLS is now
+  built with the firmware, with only what its client uses and 4 KB for
+  what it sends.
 - Transfer over USB, further: a plugin's files are put together in a
   folder of the cable's own and installed only if they are those
   offered, each with the SHA-256 offered; the cable and the open Wi-Fi
