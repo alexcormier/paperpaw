@@ -382,7 +382,7 @@ const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "cod
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = CROSSING
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 2u16
-const paperpaw_sdk::native::LAYOUT: u64 = 7_181_479_799_679_054_301u64
+const paperpaw_sdk::native::LAYOUT: u64 = 12_643_962_171_688_460_231u64
 const paperpaw_sdk::native::TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") { "rustc 1.99.0, riscv32imc-unknown-none-elf" } else if cfg!(target_arch = "xtensa") { "esp 1.97.0.0, xtensa-esp32s3-none-elf" } else { "the compiler of PaperPaw's release, for this computer" }
 const paperpaw_sdk::numbers::DECIMAL_MARK: &str = "core.decimal"
 const paperpaw_sdk::pattern::MAX_PATTERN: usize = 256usize
@@ -437,7 +437,8 @@ const paperpaw_sdk::ui::style::UiStyle::PLAIN: paperpaw_sdk::ui::style::UiStyle 
 const paperpaw_sdk::ui::text::ICON_SCALE: f32 = 1.25f32
 const paperpaw_sdk::ui::text::NOTE_LINES: usize = 2usize
 const paperpaw_sdk::version::DATA_FORMATS: u32 = 3u32
-const paperpaw_sdk::version::SDK_VERSION: paperpaw_sdk::version::Version = Version::new(0, 4, 0)
+const paperpaw_sdk::version::MAX_PRE_NUMBER: u16 = 8_190u16
+const paperpaw_sdk::version::SDK_VERSION: paperpaw_sdk::version::Version = crate::package_version!()
 const paperpaw_sdk::web::USER_AGENT: &str = "PaperPaw/0.4.0-dev (e-reader)"
 const paperpaw_sdk::widgets::ALIGNMENTS: &[&str] = &["core.align.left", "core.align.center", "core.align.right"]
 const paperpaw_sdk::widgets::FILL: &str = "core.fill"
@@ -573,6 +574,7 @@ enum paperpaw_sdk::ui::style::Separators { Line, Inset, None }
 enum paperpaw_sdk::ui::style::TextRole { Caption, Small, Body, Title, Head, Headline, Display, Numeral }
 enum paperpaw_sdk::ui::thumbnail::Depth { MonoGrays, Gray, Rgb }
 enum paperpaw_sdk::ui::widget_list::Target { Setting(0: alloc::string::String) }
+enum paperpaw_sdk::version::VersionError { Numbers, PreRelease }
 enum paperpaw_sdk::widgets::Align { Left, Center, Right }
 enum paperpaw_sdk::widgets::PlaceKind { Stack, Grid }
 enum paperpaw_sdk::widgets::Refresh { Nothing, Remake, Read, ReadOne(0: paperpaw_sdk::id::Id), Live }
@@ -747,7 +749,7 @@ struct paperpaw_sdk::params::Params { values: alloc::vec::Vec<(alloc::borrow::Co
 struct paperpaw_sdk::pattern::Class { negated: bool, items: alloc::vec::Vec<paperpaw_sdk::pattern::Item> }
 struct paperpaw_sdk::pattern::Matches<'p, 't> { pattern: &'p paperpaw_sdk::pattern::Pattern, text: &'t str, at: usize, budget: u32 }
 struct paperpaw_sdk::pattern::Pattern { alternatives: alloc::vec::Vec<alloc::vec::Vec<paperpaw_sdk::pattern::Node>>, fold: bool, source: alloc::string::String }
-struct paperpaw_sdk::plugin::Manifest { id: paperpaw_sdk::id::Id, name: alloc::borrow::Cow<'static, str>, description: alloc::borrow::Cow<'static, str>, version: paperpaw_sdk::version::Version, sdk: paperpaw_sdk::version::Version, uses: paperpaw_sdk::plugin::Uses, how: &'static [(&'static str, &'static str)] }
+struct paperpaw_sdk::plugin::Manifest { id: paperpaw_sdk::id::Id, name: alloc::borrow::Cow<'static, str>, description: alloc::borrow::Cow<'static, str>, version: paperpaw_sdk::version::Version, uses: paperpaw_sdk::plugin::Uses, how: &'static [(&'static str, &'static str)] }
 struct paperpaw_sdk::plugin::Priority(0: i16)
 struct paperpaw_sdk::plugin::SlotSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str> }
 struct paperpaw_sdk::plugin::Uses(0: u8)
@@ -873,7 +875,7 @@ struct paperpaw_sdk::ui::widget_list::ListScreen { style: paperpaw_sdk::ui::styl
 struct paperpaw_sdk::usage::PluginUsage { plugin: paperpaw_sdk::id::Id, busy_us: u64, calls: u32, shown_ms: u64, refreshes: paperpaw_sdk::usage::Refreshes, pixels: u64, read: u64, written: u64, requests: u32, refused: u32 }
 struct paperpaw_sdk::usage::Refreshes { fast: u32, partial: u32, full: u32 }
 struct paperpaw_sdk::usage::Usage { refreshes: paperpaw_sdk::usage::Refreshes, pixels: u64, inputs: u32, sleeps: u32, panel_ms: u64 }
-struct paperpaw_sdk::version::Version { major: u16, minor: u16, patch: u16 }
+struct paperpaw_sdk::version::Version { major: u16, minor: u16, patch: u16, pre: u16 }
 struct paperpaw_sdk::voices::VoiceSpec { id: paperpaw_sdk::id::Id, languages: alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, speak: paperpaw_sdk::voices::SpeakFn, stop: paperpaw_sdk::voices::StopFn }
 struct paperpaw_sdk::voices::Voices { list: alloc::vec::Vec<paperpaw_sdk::voices::VoiceSpec> }
 struct paperpaw_sdk::widgets::CellsHint { w: u8, h: u8, min_w: u8, min_h: u8, square: bool }
