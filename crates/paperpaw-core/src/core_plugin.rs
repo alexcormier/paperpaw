@@ -649,6 +649,24 @@ impl Catalog {
 
 /// The library service and what plugins keep for books, which follow
 /// the books.
+/// The library's folder is there from the first start on: made where it
+/// is not (never removed), so that books copied onto the card or sent
+/// over Wi-Fi have their place from the start.
+fn make_library_folder(env: &Env<'_>) {
+    let folder = env.settings().read(&settings::LIBRARY_FOLDER);
+    let folder = folder.trim_matches('/');
+    if folder.is_empty() || paperpaw_sdk::files::is_dir(env.storage(), folder) {
+        return;
+    }
+    let mut made = String::new();
+    for part in folder.split('/') {
+        made = paperpaw_sdk::files::join(&made, part);
+        if !paperpaw_sdk::files::is_dir(env.storage(), &made) {
+            let _ = env.storage().create_dir(&made);
+        }
+    }
+}
+
 fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     use alloc::rc::Rc;
     use paperpaw_sdk::work::WorkSpec;
@@ -656,6 +674,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     // The catalog, made anew or caught up as a job: a few books a step,
     // after the frame and while no input waits; views hear
     // CATALOG_CHANGED.
+    r.on(events::STARTED, |env, _, _| make_library_folder(env))?;
     let catalog = Rc::new(Catalog::default());
     {
         let catalog = Rc::clone(&catalog);
