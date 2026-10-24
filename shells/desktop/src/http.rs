@@ -45,11 +45,17 @@ pub fn routed() -> bool {
     ROUTE.with_borrow(Option::is_some)
 }
 
+/// How much of an answer's body came: the request's id, the bytes so
+/// far, and in all where the answer said.
+pub type Progress = (u32, u64, Option<u64>);
+
 /// Requests in flight and their answers.
 #[derive(Debug)]
 pub struct Http {
     sender: Sender<HttpResponse>,
     receiver: Receiver<HttpResponse>,
+    /// How far the answers that ask for it have come.
+    progress: (Sender<Progress>, Receiver<Progress>),
     pub in_flight: usize,
 }
 
@@ -65,6 +71,7 @@ impl Http {
         Self {
             sender,
             receiver,
+            progress: channel(),
             in_flight: 0,
         }
     }
@@ -89,8 +96,9 @@ impl Http {
     #[cfg(not(target_arch = "wasm32"))]
     fn system(&mut self, call: HttpCall) {
         let sender = self.sender.clone();
+        let progress = call.progress.then(|| self.progress.0.clone());
         thread::spawn(move || {
-            let _ = sender.send(run(call));
+            let _ = sender.send(run(call, progress.as_ref()));
         });
     }
 
@@ -101,6 +109,12 @@ impl Http {
         let reason = "no network in the browser's emulator";
         let failed = HttpResponse::failed(call.id, HttpError::NoNetwork, reason);
         let _ = self.sender.send(failed);
+    }
+
+    /// How far an answer that asks for it has come since the last call,
+    /// if it did.
+    pub fn next_progress(&mut self) -> Option<Progress> {
+        self.progress.1.try_recv().ok()
     }
 
     /// An answer that has arrived, if any; waits up to `wait`.
@@ -123,7 +137,7 @@ impl Http {
 
 /// Makes the request with `curl`; status 0 with the reason if it fails.
 #[cfg(not(target_arch = "wasm32"))]
-fn run(call: HttpCall) -> HttpResponse {
+fn run(call: HttpCall, progress: Option<&Sender<Progress>>) -> HttpResponse {
     let failed = |error, reason: String| HttpResponse::failed(call.id, error, &reason);
     let mut command = Command::new("curl");
     let seconds = call.timeout_ms.div_ceil(1000).max(1).to_string();
@@ -144,6 +158,18 @@ fn run(call: HttpCall) -> HttpResponse {
     if call.body.is_some() {
         command.args(["--data-binary", "@-"]);
     }
+    // Where its progress is told: the headers in a file of their own,
+    // read for the size while the body comes.
+    let headers = progress.map(|_| {
+        std::env::temp_dir().join(format!(
+            "paperpaw-emu-{}-{}.headers",
+            std::process::id(),
+            call.id
+        ))
+    });
+    if let Some(path) = &headers {
+        command.arg("-D").arg(path);
+    }
     command
         .arg(&call.url)
         .stdin(Stdio::piped())
@@ -162,7 +188,18 @@ fn run(call: HttpCall) -> HttpResponse {
     if let (Some(body), Some(mut stdin)) = (&call.body, child.stdin.take()) {
         let _ = stdin.write_all(body);
     }
-    let output = match child.wait_with_output() {
+    let output = match (progress, headers, child.stdout.take()) {
+        (Some(progress), Some(headers), Some(stdout)) => {
+            let counted = counting(child, stdout, (call.id, &headers), progress);
+            let _ = std::fs::remove_file(&headers);
+            counted
+        }
+        (_, _, stdout) => {
+            child.stdout = stdout;
+            child.wait_with_output()
+        }
+    };
+    let output = match output {
         Ok(output) => output,
         Err(e) => return failed(HttpError::Io, format!("curl: {e}")),
     };
@@ -174,6 +211,51 @@ fn run(call: HttpCall) -> HttpResponse {
         );
     }
     answer(&call, output.stdout)
+}
+
+/// What `curl` writes, read as it comes: how much came (with the size
+/// from the headers it wrote to `headers`, once there) told to
+/// `progress` after each piece.
+#[cfg(not(target_arch = "wasm32"))]
+fn counting(
+    child: std::process::Child,
+    mut stdout: std::process::ChildStdout,
+    (id, headers): (u32, &std::path::Path),
+    progress: &Sender<Progress>,
+) -> std::io::Result<std::process::Output> {
+    use std::io::Read as _;
+    let mut body = Vec::new();
+    let mut piece = vec![0; 16 << 10];
+    let mut total = None;
+    loop {
+        let n = stdout.read(&mut piece)?;
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&piece[..n]);
+        if total.is_none() {
+            total = std::fs::read_to_string(headers)
+                .ok()
+                .and_then(|text| content_length(&text));
+        }
+        let _ = progress.send((id, body.len() as u64, total));
+    }
+    let mut output = child.wait_with_output()?;
+    output.stdout = body;
+    Ok(output)
+}
+
+/// The size of the body that the last answer of `headers` names (after
+/// redirects, each answer's headers follow the one before).
+#[cfg(not(target_arch = "wasm32"))]
+fn content_length(headers: &str) -> Option<u64> {
+    let last = headers.rsplit("HTTP/").next()?;
+    last.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim()
+            .eq_ignore_ascii_case("content-length")
+            .then(|| value.trim().parse().ok())?
+    })
 }
 
 /// The answer to `call` from what `curl` wrote: the body, then lines with
@@ -248,6 +330,14 @@ mod tests {
             save_to: save_to.map(String::from),
             progress: false,
         }
+    }
+
+    #[test]
+    fn the_size_is_the_last_answers() {
+        let headers = "HTTP/1.1 302 Found\r\nContent-Length: 5\r\nLocation: /b\r\n\r\n\
+                       HTTP/2 200\r\ncontent-length: 1234\r\n\r\n";
+        assert_eq!(content_length(headers), Some(1234));
+        assert_eq!(content_length("HTTP/2 200\r\nserver: x\r\n\r\n"), None);
     }
 
     /// An answer longer than wanted is cut, unless it is a file: then it

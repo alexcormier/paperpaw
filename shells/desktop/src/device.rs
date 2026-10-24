@@ -508,6 +508,11 @@ impl Device {
     /// Delivers HTTP answers that have arrived; with `wait`, waits that
     /// long for the requests still in flight.
     pub fn poll_http(&mut self, wait: Option<std::time::Duration>) {
+        while let Some((id, received, total)) = self.http.next_progress() {
+            let now = self.now();
+            let effects = budget::track(|| self.kernel.http_progress(now, id, received, total));
+            self.execute(effects);
+        }
         while self.http.in_flight > 0 {
             let Some(response) = self.http.next(wait) else {
                 break;

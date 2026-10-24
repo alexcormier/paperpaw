@@ -174,6 +174,9 @@ impl Network {
                     effects.push(kernel.http_response(now, answer));
                 }
             }
+            for (id, received, total) in self.calls.progress() {
+                effects.push(kernel.http_progress(now, id, received, total));
+            }
         }
         effects
     }
