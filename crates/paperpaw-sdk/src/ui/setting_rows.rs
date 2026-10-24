@@ -108,8 +108,10 @@ fn title_band_of(style: &UiStyle, rect: Rect, band: Rect, high: u16) -> Rect {
 /// the title wrapped across the row and the value on a line of its own
 /// below it, at the right.
 pub(super) struct ValueLines {
-    /// The title's lines.
+    /// The title's lines, and how wide they are from the row's left: a
+    /// margin and the width they were wrapped to.
     pub title: Vec<core::ops::Range<usize>>,
+    pub title_width: u16,
     /// The value: whole, unless longer than the whole row.
     pub value: String,
     pub value_width: f32,
@@ -149,6 +151,7 @@ impl ValueLines {
         let room = inner - gap - value_width;
         let beside = |title: Vec<core::ops::Range<usize>>| Self {
             title,
+            title_width: (margin + room) as u16,
             value: value.to_string(),
             value_width,
             below: false,
@@ -167,6 +170,7 @@ impl ValueLines {
         let value = fit(font, size, value, inner + 1.0);
         Self {
             title: font.wrap(size, title, inner),
+            title_width: (margin + inner) as u16,
             value_width: font.measure(size, &value),
             below: !value.is_empty(),
             value,
@@ -392,12 +396,12 @@ pub(crate) fn draw_value_row(
     let draw_lines = |canvas: &mut Canvas<'_>, lines: ValueLines| {
         let (height, line, size) = (lines.height(), lines.line, lines.size);
         let top = rect.y + (rect.height - height) / 2;
-        let count = lines.title.len() as u16;
-        for (i, range) in lines.title.into_iter().enumerate() {
-            let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
+        for (i, range) in lines.title.iter().cloned().enumerate() {
+            let at = Rect::new(rect.x, top + i as u16 * line, lines.title_width, line);
             draw_label(canvas, &font, size, title_x, at, title[range].trim(), color);
         }
         let at = if lines.below {
+            let count = lines.title.len() as u16;
             Rect::new(rect.x, top + count * line, rect.width, line)
         } else {
             rect
@@ -451,8 +455,9 @@ pub(crate) fn draw_value_row(
             color,
         );
         let top = rect.y + (rect.height - 2 * line) / 2;
+        let title_width = up_to(rect, title_x + room);
         for (i, range) in lines.into_iter().enumerate() {
-            let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
+            let at = Rect::new(rect.x, top + i as u16 * line, title_width, line);
             draw_label(
                 canvas,
                 &font,
@@ -486,6 +491,12 @@ pub(crate) fn draw_value_row(
         color,
     );
     draw_label(canvas, &font, style.text, title_x, rect, &title_text, color);
+}
+
+/// How wide a part of `rect` from its left to `end` is: the place a
+/// title's line takes where it ends before what stands beside it.
+fn up_to(rect: Rect, end: f32) -> u16 {
+    (end - f32::from(rect.x)).max(0.0) as u16
 }
 
 /// Room a number's value always gets between its − and +, so the
