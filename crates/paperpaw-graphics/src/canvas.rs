@@ -674,10 +674,27 @@ impl<'a> Canvas<'a> {
         let r = i64::from(radius);
         let size = 2 * u64::from(radius);
         let (x, y) = (i64::from(center.x) - r, i64::from(center.y) - r);
-        // Smooth edges where the panel has grays.
-        self.mask_wide(x, y, size, size, color, |dx, dy| {
-            ring.coverage(dx - r, dy - r)
-        });
+        // Row by row, only the stretches the ring may cover (the box
+        // round it is mostly outside it or in its hole), with smooth
+        // edges where the panel has grays.
+        let Some(shown) = self.clip_wide(x, y, size, size) else {
+            return;
+        };
+        let top = y + i64::from(self.origin.1);
+        for row in i64::from(shown.y)..i64::from(shown.bottom()) {
+            let dy = row - top;
+            for (first, last) in ring.stretches(dy - r).into_iter().flatten() {
+                // In the box's columns.
+                let (first, last) = (first + r, last + r);
+                let from = first.max(0);
+                let width = (last + 1).min(size as i64) - from;
+                if width > 0 {
+                    self.mask_wide(x + from, y + dy, width as u64, 1, color, |dx, _| {
+                        ring.coverage(dx + from - r, dy - r)
+                    });
+                }
+            }
+        }
     }
 
     /// Draws a hand from `center` towards `degrees` (clockwise from
@@ -868,6 +885,68 @@ fn signed(area: Rect) -> (i32, i32, u32, u32) {
 mod tests {
     use super::*;
     use paperpaw_platform::PixelFormat;
+
+    /// A ring drawn by its stretches of each row comes out as drawn over
+    /// its whole box, pixel by pixel: rings thick, thin and partial, a
+    /// disc, at the edges of a canvas and cut by a clip.
+    #[test]
+    fn a_ring_drawn_by_stretches_is_the_ring_drawn_by_pixels() {
+        let cases = [
+            (60, 60, 20, 6, 0, 360),
+            (30, 30, 25, 1, 0, 360),
+            (30, 30, 25, 2, 0, 100),
+            (10, 50, 30, 30, 0, 360),
+            (50, 20, 18, 5, 40, 250),
+            (5, 5, 12, 3, 0, 360),
+            (58, 58, 9, 9, 0, 360),
+            (30, 30, 1, 1, 0, 360),
+            (30, 30, 3, 1, 0, 90),
+        ];
+        for (cx, cy, radius, thickness, from, sweep) in cases {
+            let mut by_stretches = Framebuffer::new(64, 64, PixelFormat::Gray4).unwrap();
+            let mut by_pixels = Framebuffer::new(64, 64, PixelFormat::Gray4).unwrap();
+            for fb in [&mut by_stretches, &mut by_pixels] {
+                let mut canvas = fb.canvas();
+                canvas.clear(Color::WHITE);
+            }
+            {
+                let mut canvas = by_stretches.canvas();
+                let mut canvas = canvas.clipped(Rect::new(4, 3, 55, 58));
+                canvas.fill_ring(
+                    Point::new(cx, cy),
+                    radius,
+                    thickness,
+                    from,
+                    sweep,
+                    Color::BLACK,
+                );
+            }
+            {
+                let ring = round::Ring::new(radius, thickness, round::Arc::new(from, sweep));
+                let r = i64::from(radius);
+                let mut canvas = by_pixels.canvas();
+                let mut canvas = canvas.clipped(Rect::new(4, 3, 55, 58));
+                canvas.mask_wide(
+                    i64::from(cx) - r,
+                    i64::from(cy) - r,
+                    2 * r as u64,
+                    2 * r as u64,
+                    Color::BLACK,
+                    |dx, dy| ring.coverage(dx - r, dy - r),
+                );
+            }
+            let (a, b) = (by_stretches.view(), by_pixels.view());
+            for y in 0..64 {
+                for x in 0..64 {
+                    assert_eq!(
+                        a.pixel(x, y),
+                        b.pixel(x, y),
+                        "ring {radius}/{thickness} {from}+{sweep} at {cx},{cy}: pixel {x},{y}"
+                    );
+                }
+            }
+        }
+    }
 
     /// Drawn on a canvas moved by an offset, everything lands moved, cut
     /// by the clip where it was, and is described where it shows.

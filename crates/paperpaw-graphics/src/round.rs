@@ -159,13 +159,56 @@ impl Ring {
         d <= self.outer * self.outer && d > self.inner * self.inner && self.arc.holds(east, north)
     }
 
+    /// The columns of row `y` (pixels below the centre) that the ring may
+    /// cover, as `coverage` tells: the others cover nothing. Up to two
+    /// stretches `(first, last)`, of pixels right of the centre; two
+    /// where the row crosses the ring's hole.
+    pub(crate) fn stretches(&self, y: i64) -> [Option<(i64, i64)>; 2] {
+        let north = -(8 * y + 4);
+        // The columns whose centre is at most `reach` eighths from the
+        // middle.
+        let columns = |reach: i64| (-((reach + 4).div_euclid(8)), (reach - 4).div_euclid(8));
+        let beyond = self.outer + HALF_DIAGONAL + 1;
+        let outer = beyond * beyond - north * north;
+        if outer < 1 {
+            return [None, None];
+        }
+        let (first, last) = columns((outer - 1).isqrt());
+        let within = self.inner - HALF_DIAGONAL + 1;
+        let hole = within * within - north * north;
+        if within <= 0 || hole < 1 {
+            return [(first <= last).then_some((first, last)), None];
+        }
+        let (hole_first, hole_last) = columns((hole - 1).isqrt());
+        if hole_first > hole_last {
+            return [(first <= last).then_some((first, last)), None];
+        }
+        [
+            (first < hole_first).then_some((first, (hole_first - 1).min(last))),
+            (hole_last < last).then_some(((hole_last + 1).max(first), last)),
+        ]
+    }
+
     /// How much of the pixel `x`, `y` pixels right of and below the
     /// centre (the corner between four pixels) the ring covers, 0 to 255:
     /// pixels on its edges sampled sixteen times.
     pub(crate) fn coverage(&self, x: i64, y: i64) -> u8 {
         let east = 8 * x + 4;
         let north = -(8 * y + 4);
-        let distance = (east * east + north * north).isqrt();
+        let square = east * east + north * north;
+        // Far outside or inside the band: told by squares, without the
+        // square root (the most of a ring's box, which the root would
+        // take a long while to say no to on a device without a
+        // floating-point unit). `distance - HALF_DIAGONAL > outer` is
+        // `square >= (outer + HALF_DIAGONAL + 1)²`, and `distance +
+        // HALF_DIAGONAL <= inner` is `square < (inner - HALF_DIAGONAL +
+        // 1)²`.
+        let beyond = self.outer + HALF_DIAGONAL + 1;
+        let within = self.inner - HALF_DIAGONAL + 1;
+        if square >= beyond * beyond || (within > 0 && square < within * within) {
+            return 0;
+        }
+        let distance = square.isqrt();
         if distance - HALF_DIAGONAL > self.outer
             || (self.inner > 0 && distance + HALF_DIAGONAL <= self.inner)
         {
@@ -244,6 +287,65 @@ mod tests {
         assert!(!half.holds(5, 10));
         assert!(Arc::new(0, 360).holds(-1, 1));
         assert!(!Arc::new(0, 0).holds(1, 1));
+    }
+
+    /// What `coverage` said before it told far pixels by squares: the same
+    /// everywhere.
+    #[test]
+    fn coverage_is_what_the_square_root_says() {
+        fn plain(ring: &Ring, x: i64, y: i64) -> u8 {
+            let east = 8 * x + 4;
+            let north = -(8 * y + 4);
+            let distance = (east * east + north * north).isqrt();
+            if distance - HALF_DIAGONAL > ring.outer
+                || (ring.inner > 0 && distance + HALF_DIAGONAL <= ring.inner)
+            {
+                return 0;
+            }
+            let radial = distance + HALF_DIAGONAL <= ring.outer
+                && (ring.inner == 0 || distance - HALF_DIAGONAL > ring.inner);
+            let corners = [(-4, -4), (-4, 4), (4, -4), (4, 4)]
+                .iter()
+                .filter(|(dx, dy)| ring.arc.holds(east + dx, north + dy))
+                .count();
+            if corners == 0 && !ring.arc.full() {
+                return 0;
+            }
+            if radial && (corners == 4 || ring.arc.full()) {
+                return 255;
+            }
+            let mut inside = 0u32;
+            for sy in [-3, -1, 1, 3] {
+                for sx in [-3, -1, 1, 3] {
+                    if ring.holds(east + sx, north + sy) {
+                        inside += 1;
+                    }
+                }
+            }
+            (inside * 255 / 16) as u8
+        }
+        for (radius, thickness, from, sweep) in [
+            (10, 10, 0, 360),
+            (10, 2, 0, 360),
+            (37, 5, 0, 120),
+            (80, 1, 30, 270),
+            (80, 8, 0, 200),
+            (3, 1, 0, 360),
+            (1, 1, 0, 360),
+            (5, 9, 0, 360),
+        ] {
+            let ring = Ring::new(radius, thickness, Arc::new(from, sweep));
+            let r = i64::from(radius);
+            for y in -r - 3..r + 3 {
+                for x in -r - 3..r + 3 {
+                    assert_eq!(
+                        ring.coverage(x, y),
+                        plain(&ring, x, y),
+                        "ring {radius}/{thickness} at {x},{y}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
