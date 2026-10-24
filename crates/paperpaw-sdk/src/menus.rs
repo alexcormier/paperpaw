@@ -636,7 +636,8 @@ impl Menus {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add_section(&mut self, section: MenuSection) {
-        self.titles.insert(section.id.clone(), Text::new(section.title));
+        self.titles
+            .insert(section.id.clone(), Text::new(section.title));
         self.sections.push(section.id.clone());
         self.entries.push(MenuEntry {
             menu: section.menu,

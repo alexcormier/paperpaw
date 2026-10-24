@@ -1086,7 +1086,12 @@ impl Kernel {
 
     /// The ids of every screen plugins added, whether open or not.
     pub fn known_screens(&self) -> impl Iterator<Item = &Id> {
-        self.shared.registry.screens.titles().iter().map(|(id, _)| id)
+        self.shared
+            .registry
+            .screens
+            .titles()
+            .iter()
+            .map(|(id, _)| id)
     }
 
     /// What the device did since start (see [`paperpaw_sdk::usage`]).

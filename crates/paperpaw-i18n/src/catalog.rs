@@ -405,23 +405,32 @@ mod tests {
     /// is found, plain or quoted, before and after unloading.
     #[test]
     fn a_large_catalog_finds_every_message() {
-        let mut source = String::from("[meta]
+        let mut source = String::from(
+            "[meta]
 language = en
 [messages]
-");
+",
+        );
         for n in 0..3000 {
-            source.push_str(&alloc::format!("message.{n:04} = The text of message {n}.
-"));
+            source.push_str(&alloc::format!(
+                "message.{n:04} = The text of message {n}.
+"
+            ));
         }
-        source.push_str("quoted.last = \"  far \"
-");
+        source.push_str(
+            "quoted.last = \"  far \"
+",
+        );
         assert!(source.len() > 64 * 1024);
         let mut catalog = Catalog::parse(source).unwrap();
         assert!(catalog.wide);
         for _ in 0..2 {
             assert_eq!(catalog.len(), 3001);
             assert_eq!(catalog.get("message.0000"), Some("The text of message 0."));
-            assert_eq!(catalog.get("message.2999"), Some("The text of message 2999."));
+            assert_eq!(
+                catalog.get("message.2999"),
+                Some("The text of message 2999.")
+            );
             assert_eq!(catalog.get("quoted.last"), Some("  far "));
             assert_eq!(catalog.get("message.3000"), None);
             assert_eq!(catalog.keys().next(), Some("message.0000"));
