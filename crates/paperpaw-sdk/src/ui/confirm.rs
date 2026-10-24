@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 use crate::builtin::{actions, params};
 use crate::event::EventData;
 use crate::replies::Confirmed;
-use crate::ui::{Dialog, UiStyle};
+use crate::ui::{Dialog, Ui, UiStyle};
 use crate::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Rect, RefreshMode,
     Screen,
@@ -140,10 +140,8 @@ impl Screen for Confirm {
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        self.dialog.draw(
-            &mut crate::ui::Ui::new(canvas, env, &self.style),
-            Some(self.focus),
-        );
+        let mut ui = Ui::new(canvas, env, &self.style);
+        self.dialog.draw(&mut ui, Some(self.focus));
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

@@ -120,19 +120,16 @@ impl HelloScreen {
 
 impl Screen for HelloScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        // What the screen draws with: canvas, environment and style.
+        let mut ui = ui::Ui::new(canvas, env, &self.style);
         let title = env.i18n().tr("hello.title");
-        self.header.draw(
-            &mut paperpaw_sdk::ui::Ui::new(canvas, env, &self.style),
-            title,
-            None,
-            None,
-        );
+        self.header.draw(&mut ui, title, None, None);
         let display = env.device().display;
         let top = self.header.area().height;
         // A header taller than a tiny screen leaves no room, not an
         // overflow.
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        ui::draw_message(canvas, env, &self.style, area, &self.greeting(env));
+        ui.message(area, &self.greeting(env));
     }
 
     /// Buttons: *confirm* or *back* close it; other actions (e.g. the
