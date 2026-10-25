@@ -78,11 +78,11 @@ change the plugin SDK.
 
 ### Fixed
 
-- Updates over the air on the X4 Pro and the X4 Classic: the firmware
-  could not tell which half of the flash it runs from and took no
-  updates at all ("OTA: no partitions for updates"). **X4 Pro and X4
-  Classic readers on 0.5.0-beta.6 or earlier need the web flasher once
-  to get 0.5.0-beta.7; later updates come over the air.**
+- Test builds for the X4 Pro and the X4 Classic (with remote control
+  over USB) took no updates over the air ("OTA: no partitions for
+  updates"): their image's two data segments hid which half of the
+  flash runs. The firmware now finds it either way. Released firmware
+  was not affected.
 
 ## [0.5.0-beta.6] - 2026-10-25
 
