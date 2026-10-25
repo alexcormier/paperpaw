@@ -104,7 +104,14 @@ static API: Api = Api {
     panic,
     micros,
     icon,
+    alloc_in,
 };
+
+/// One heap here: wherever asked, as `alloc`.
+unsafe extern "C" fn alloc_in(size: usize, align: usize, _placement: u32) -> *mut u8 {
+    // SAFETY: as `alloc`.
+    unsafe { alloc(size, align) }
+}
 
 /// Loads code plugins built for this computer.
 #[derive(Debug, Default)]

@@ -4,7 +4,8 @@
 //! device would. Here the main flows run headless on the X4 profiles: a
 //! book opened (EPUB and TXT), 30 pages forward and 30 back, home, the
 //! library (with many books) opened and scrolled, the main menu, the
-//! settings and a page of them.
+//! settings and a page of them; and the store, online with the
+//! emulator's own catalogue.
 //!
 //! Each flow runs twice, under the profile's budget and without one. The
 //! runs are deterministic (simulated time, a fixed clock), so the same
@@ -245,6 +246,27 @@ fn reading_an_epub_stays_within_the_x4_budget() {
 #[test]
 fn reading_a_txt_stays_within_the_x4_budget() {
     stays_within_budget("x4-txt", "xteink-x4", "books/die-verwandlung.txt");
+}
+
+/// The store on the X4, online with the emulator's own catalogue: its
+/// list, a group and a plugin's page, then home.
+#[test]
+fn the_store_stays_within_the_x4_budget() {
+    let flow = [
+        "run:store.open,wait:3000",
+        "run:core.down,run:core.down,run:core.confirm,wait:2000",
+        "run:core.down,run:core.confirm,wait:3000",
+        "run:core.back,run:core.back,run:core.back,run:core.home,wait:300",
+    ]
+    .join(",");
+    flow_stays_within_budget(
+        "x4-store",
+        "xteink-x4",
+        "books/die-verwandlung.txt",
+        &flow,
+        &[],
+        &["--network", "fixtures", "--wifi", "online"],
+    );
 }
 
 /// The X4 Pro: its own panel (four grays, other bands), touch beside

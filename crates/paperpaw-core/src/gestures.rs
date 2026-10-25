@@ -790,9 +790,9 @@ impl Kernel {
         };
         let env = self.shared.env(self.now);
         let _running = self.shared.meter.enter(action.namespace());
-        if let Some(handler) = &spec.handler {
-            commands::handing(out, |out| handler(&env, params, out));
-        }
+        commands::handing(out, |out| {
+            spec.run(&env, params, out);
+        });
     }
 
     /// Runs the handler of `action` with `params`: one put in its place
@@ -861,9 +861,9 @@ impl Kernel {
                 Some(spec) if spec.runs_itself() => {
                     let _running = self.shared.meter.enter(action.namespace());
                     let out = &mut self.output.commands;
-                    if let Some(handler) = &spec.handler {
-                        commands::handing(out, |out| handler(&env, params, out));
-                    }
+                    commands::handing(out, |out| {
+                        spec.run(&env, params, out);
+                    });
                     let owner = action.namespace();
                     work::quiet(reader, top, now, from, owner, out, &mut self.works);
                     let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);

@@ -225,14 +225,14 @@ pub fn registered(
         }
     }
     for action in kernel.actions().iter() {
-        if let Some(plugin) = ours(action.id.as_str())
-            && !action.title.is_empty()
+        if let Some(plugin) = ours(action.id().as_str())
+            && !action.title().is_empty()
         {
             used.push(Used {
                 plugin,
-                place: action.id.to_string(),
+                place: action.id().to_string(),
                 what: "title",
-                key: action.title.to_string(),
+                key: action.title().to_string(),
                 plural: false,
             });
         }

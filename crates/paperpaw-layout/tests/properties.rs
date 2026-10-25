@@ -3,8 +3,9 @@
 //! spaces), headings, bold runs, book sizes and alignments, laid out at
 //! random widths and heights, with and without hyphenation.
 //!
-//! Checked: no line is wider than its box (except a line of a single
-//! glyph that is wider by itself), every character of the book is on
+//! Checked, also with pairs of characters kerned as fonts kern them: no
+//! line is wider than its box (except a line of a single glyph that is
+//! wider by itself), measured as its words are drawn, every character of the book is on
 //! exactly one line of exactly one page and in order, no page is taller
 //! than its box, a page laid out again from a kept position is the same,
 //! and a position kept at one width is on the page shown at another.
@@ -34,6 +35,8 @@ struct Para {
     size: Option<u16>,
     /// The book's first-line indent, hundredths of an em.
     indent: Option<i16>,
+    /// The book's margins at the sides, hundredths of an em.
+    margins: (u16, u16),
 }
 
 /// Sections of paragraphs; in the source every paragraph ends with `\n`,
@@ -84,6 +87,7 @@ impl Document for Book {
                         .runs(para.runs.clone())
                         .align(para.align)
                         .indent(para.indent)
+                        .margins(para.margins.0, para.margins.1)
                         .size(para.size),
                 ));
             }
@@ -95,14 +99,25 @@ impl Document for Book {
 
 /// Widths by face size (book sizes, headings) and, if `varied`, also by
 /// character and style: CJK twice as wide, soft hyphens without width,
-/// bold wider.
+/// bold wider; if `kerned`, pairs closer and wider as fonts kern them.
 #[derive(Clone, Copy)]
 struct Widths {
     varied: bool,
+    kerned: bool,
 }
 
-const EVEN: Widths = Widths { varied: false };
-const VARIED: Widths = Widths { varied: true };
+const EVEN: Widths = Widths {
+    varied: false,
+    kerned: false,
+};
+const VARIED: Widths = Widths {
+    varied: true,
+    kerned: false,
+};
+const KERNED: Widths = Widths {
+    varied: true,
+    kerned: true,
+};
 
 fn scale(face: Face) -> f32 {
     let size = if face.size == 0 {
@@ -134,6 +149,21 @@ impl Typesetter for Widths {
     fn line(&self, face: Face) -> (f32, f32) {
         let h = 10.0 * scale(face);
         (0.8 * h, h)
+    }
+
+    fn kern(&self, face: Face, left: char, right: char) -> f32 {
+        if !self.kerned {
+            return 0.0;
+        }
+        let pair = match (left, right) {
+            ('a' | 'e' | 'o', 'v' | 'w' | 'y') | ('v' | 'w' | 'y' | 't', 'a' | 'e' | 'o') => -0.3,
+            ('f', 'f' | 'i' | 'l') => -0.15,
+            (c, '-') if c.is_alphabetic() => 0.2,
+            ('-', c) if c.is_alphabetic() => 0.1,
+            ('\u{4e00}'..='\u{9fff}', _) => -0.05,
+            _ => 0.0,
+        };
+        pair * scale(face)
     }
 }
 
@@ -174,8 +204,11 @@ fn para() -> impl Strategy<Value = Para> {
         0u8..10,
         0u8..5,
         prop_oneof![4 => Just(None), 1 => (50u16..200).prop_map(Some)],
+        // Now and then the book's margins at the sides, and a hanging
+        // indent into them.
+        prop_oneof![3 => Just(((0u16, 0u16), None)), 1 => ((0u16..400, 0u16..400), -300i16..100).prop_map(|(m, i)| (m, Some(i)))],
     )
-        .prop_map(|(words, kind, align, size)| {
+        .prop_map(|(words, kind, align, size, (margins, indent))| {
             let mut text = String::new();
             let mut runs = Vec::new();
             for (i, (word, bold, gap)) in words.iter().enumerate() {
@@ -203,7 +236,8 @@ fn para() -> impl Strategy<Value = Para> {
                 runs,
                 align: Align::from_bits(align),
                 size,
-                indent: None,
+                indent,
+                margins,
             }
         })
 }
@@ -218,9 +252,11 @@ fn book() -> impl Strategy<Value = Book> {
 }
 
 fn style() -> impl Strategy<Value = Style> {
-    (0.0f32..6.0, 0.0f32..4.0, any::<bool>()).prop_map(|(paragraph_spacing, indent, justify)| {
-        Style::new(paragraph_spacing, indent, 10.0, justify)
-    })
+    (0.0f32..6.0, 0.0f32..4.0, any::<bool>(), any::<bool>()).prop_map(
+        |(paragraph_spacing, indent, justify, balanced)| {
+            Style::new(paragraph_spacing, indent, 10.0, justify).balanced(balanced)
+        },
+    )
 }
 
 fn context<'a>(
@@ -255,18 +291,26 @@ fn paginate(cx: &LayoutContext<'_>, height: f32, book: &Book) -> Vec<Page> {
     pages
 }
 
-/// The width a line takes: its characters in their faces plus the extra
-/// space of justification.
+/// The width a line takes as it is drawn, word by word and each run of a
+/// face at once: its characters in their faces with the pairs inside
+/// each, plus the extra space of justification.
 fn line_width(line: &paperpaw_layout::PageLine, widths: Widths) -> f32 {
-    let glyphs: f32 = line
-        .runs
-        .iter()
-        .flat_map(|run| {
-            line.text[run.start..run.end]
-                .chars()
-                .map(move |c| widths.advance(run.face, c))
-        })
-        .sum();
+    let mut glyphs = 0.0;
+    for run in &line.runs {
+        for word in line.text[run.start..run.end].split(' ') {
+            let mut before = None;
+            for c in word.chars() {
+                if let Some(left) = before {
+                    glyphs += widths.kern(run.face, left, c);
+                }
+                glyphs += widths.advance(run.face, c);
+                before = Some(c);
+            }
+        }
+        // The spaces between the words.
+        let spaces = line.text[run.start..run.end].matches(' ').count();
+        glyphs += spaces as f32 * widths.advance(run.face, ' ');
+    }
     glyphs + line.word_spacing * line.text.matches(' ').count() as f32
 }
 
@@ -482,6 +526,22 @@ proptest! {
             positions_survive(&book, &style, width, height, hyphenate, VARIED, &picks);
         }
     }
+
+    #[test]
+    fn kerned_lines_fit_as_drawn_and_positions_survive(
+        book in book(),
+        style in style(),
+        widths in (3.0f32..60.0, 3.0f32..60.0),
+        lines in 1.0f32..15.0,
+        hyphenate in any::<bool>(),
+        picks in proptest::collection::vec((any::<usize>(), any::<usize>()), 1..8),
+    ) {
+        let height = lines * 10.0 * MAX_SCALE;
+        for width in [widths.0, widths.1] {
+            pages_fit(&book, &style, width, height, hyphenate, KERNED);
+            positions_survive(&book, &style, width, height, hyphenate, KERNED, &picks);
+        }
+    }
 }
 
 fn one_paragraph(text: &str, align: Align) -> Book {
@@ -493,6 +553,7 @@ fn one_paragraph(text: &str, align: Align) -> Book {
             align,
             size: None,
             indent: None,
+            margins: (0, 0),
         }]],
         metadata: Metadata::default(),
     }
@@ -547,17 +608,22 @@ fn a_word_moved_to_the_next_line_still_fits_it() {
     }
 }
 
-/// A book's negative indent (a hanging first line) makes the first line
-/// wider than the others; what does not fit it is carried to the second
-/// line, which must still fit the box. Here "aaaaaaaaaaa" (11) comes on a
-/// line of 10.
+/// A book's negative indent (a hanging first line) hangs into the book's
+/// margin, never out of the box: the first line is wider than the
+/// others; what does not fit it is carried to the second line, which
+/// must still fit the box. Here "aaaaaaaaaaa" (11) comes on a line of 10.
 #[test]
 fn lines_after_a_hanging_first_line_fit_the_box() {
     let mut book = one_paragraph("aaaa-aaaaaaaaaaa", Align::Auto);
     book.sections[0][0].indent = Some(-50);
+    book.sections[0][0].margins = (50, 0);
     let cx = context(&book, 10.0, &PLAIN, false, &EVEN);
     let pages = paginate(&cx, 100.0, &book);
-    assert_eq!(pages[0].lines[0].x, -5.0, "the first line hangs");
+    assert_eq!(pages[0].lines[0].x, 0.0, "the first line hangs");
+    assert!(
+        pages[0].lines[1..].iter().all(|l| l.x > 0.0),
+        "the others in the margin"
+    );
     for line in &pages[0].lines[1..] {
         let right = line.x + line_width(line, EVEN);
         assert!(right <= cx.width, "{:?} ends at {right}", line.text);

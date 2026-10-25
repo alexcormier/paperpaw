@@ -26,8 +26,8 @@ use paperpaw_sdk::builtin::{events, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, Manifest, MenuNeed, Params, Plugin, Priority,
-    RegisterError, Registrar, ScreenSpec, SettingSpec, StatusItemSpec, StatusValue, Uses,
+    Command, Commands, Env, FixedAction, FixedScreen, Id, Manifest, MenuNeed, Params, Plugin,
+    Priority, RegisterError, Registrar, SettingSpec, StatusItemSpec, StatusValue, Uses,
 };
 
 pub const PLUGIN: Id = Id::new_static("bluetooth");
@@ -126,6 +126,21 @@ static HOW: [(&str, &str); 2] = [
 #[derive(Debug)]
 pub struct Bluetooth;
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "bluetooth.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(PAGE, Params::new())))];
+static ICONS: [(Id, &str); 2] = [(GROUP, ICON), (OPEN, ICON)];
+
+static SCREENS: [FixedScreen; 2] = [
+    FixedScreen::new(PAGE, "bluetooth.title", |env, _| {
+        Box::new(page::BluetoothPage::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+    FixedScreen::new(SEARCH, "bluetooth.add", |env, _| {
+        Box::new(search::Search::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+];
+
 impl Plugin for Bluetooth {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Bluetooth", paperpaw_sdk::package_version!())
@@ -143,7 +158,7 @@ impl Plugin for Bluetooth {
                     .page(PAGE);
             &SPEC
         })?;
-        r.add_icon(GROUP, Cow::Borrowed(ICON))?;
+        r.add_icons(&ICONS)?;
         r.set_menu_need(GROUP, MenuNeed::Bluetooth)?;
         r.add_settings(&SETTINGS)?;
         for spec in &SETTINGS {
@@ -161,24 +176,10 @@ impl Plugin for Bluetooth {
             )
             .tap(OPEN),
         )?;
-        r.add_action(ActionSpec::new(OPEN, "bluetooth.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(PAGE, Params::new()));
-            },
-        ))?;
-        r.add_icon(OPEN, Cow::Borrowed(ICON))?;
-        r.add_screen(ScreenSpec::new(
-            PAGE,
-            "bluetooth.title",
-            Box::new(|env, _| Box::new(page::BluetoothPage::new(env))),
-        ))?;
+        r.add_actions(&ACTIONS)?;
+        r.add_screens(&SCREENS)?;
         // The Bluetooth manager: it sees every bond and connects remotes.
         r.bind_slot(slots::BLUETOOTH, PAGE, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec::new(
-            SEARCH,
-            "bluetooth.add",
-            Box::new(|env, _| Box::new(search::Search::new(env))),
-        ))?;
         // When remotes connect.
         let s = state.clone();
         r.on(events::BOOK_OPENED, move |env, _, out| {

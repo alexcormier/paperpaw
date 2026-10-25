@@ -12,13 +12,13 @@ Bundled fonts (plugins/fonts-default/fonts) are licensed under the SIL Open Font
 
 The icon font (plugins/fonts-default/fonts/PaperPawIcons.ttf) is a subset of Tabler Icons, Copyright 2020-2025 Paweł Kuna (https://tabler.io/icons), licensed under the MIT License (fonts/TablerIcons-MIT.txt).
 
-Bundled hyphenation patterns (plugins/hyphenation/patterns) come from the hyph-utf8 project (https://github.com/hyphenation/tex-hyphen):
+Hyphenation patterns (plugins/hyphenation/patterns, built in, and plugins/hyphenation-de/patterns, a plugin of the store) come from the hyph-utf8 project (https://github.com/hyphenation/tex-hyphen):
 
 - German, reformed spelling, Copyright (c) 2013-2024 Stephan Hennig, Werner Lemberg, Günter Milde, Sander van Geloven, Georg Pfeiffer, Gisbert W. Selke, Tobias Wendorf, Keno Wehr, licensed under the MIT License.
 
 - American English, Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken, under an all-permissive license.
 
-Their notices are in plugins/hyphenation/patterns/README.md.
+Their notices are in the patterns' README.md files.
 
 The firmware of the Xteink readers also contains:
 

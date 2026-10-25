@@ -13,6 +13,8 @@
 //!   made by).
 //! - A bundle the web flasher wrote behind the image (`PPNB`) is left
 //!   alone: the region is used once the bundle is installed.
+//! - Hot code runs from internal RAM (`hot`): each image is relocated for
+//!   its part of the arena, and its hot code copied there at every start.
 
 use alloc::vec::Vec;
 
@@ -20,7 +22,7 @@ use esp_bootloader_esp_idf::partitions::FlashStorage;
 use esp_hal::peripherals::MMU_TABLE;
 use log::{info, warn};
 use paperpaw_native::bundle::BUNDLE_MAGIC;
-use paperpaw_native::index::{Index, Layout, Region, SECTOR};
+use paperpaw_native::index::{Index, Layout, Placement, Region, SECTOR};
 use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, LINK_BASE, Relocator};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::PluginProblem;
@@ -83,6 +85,7 @@ impl Flash {
                     region,
                     firmware,
                     &API as *const _ as u32,
+                    super::hot::arena(),
                     found,
                 ))
             }
@@ -96,14 +99,16 @@ impl Flash {
     }
 
     /// Writes the image of the plugin file at `path` into the region,
-    /// relocated, unless it lies there already; its data address.
+    /// relocated, unless it lies there already, and copies its hot code
+    /// into the arena; its data address and where its hot code runs (0:
+    /// in place). `words` follow the image in the file.
     pub fn put(
         &mut self,
         storage: &dyn Storage,
         path: &str,
         header: &Header,
         words: &[u32],
-    ) -> Result<u32, PluginProblem> {
+    ) -> Result<(u32, u32), PluginProblem> {
         let flash = &self.flash;
         let layout = self
             .layout
@@ -114,7 +119,7 @@ impl Flash {
         self.placed += 1;
         if placement.present {
             info!("native: {path} lies in flash at {:#x}", placement.at);
-            return Ok(placement.base);
+            return copy_hot(header, &placement).map(|hot| (placement.base, hot));
         }
         // A sector at a time, for checking and for writing; written only
         // once checked whole, so a damaged file never gets into the index.
@@ -142,8 +147,11 @@ impl Flash {
             .borrow_mut()
             .erase(placement.at, end)
             .map_err(|e| written_not(path, e))?;
-        let relocator = Relocator::new(header, words, placement.base, &API as *const _ as u32)
+        let mut relocator = Relocator::new(header, words, placement.base, &API as *const _ as u32)
             .map_err(super::problem)?;
+        if placement.hot != 0 {
+            relocator = relocator.hot_at(placement.hot).map_err(super::problem)?;
+        }
         let mut done = 0;
         while done < header.image_len {
             crate::power::feed();
@@ -174,7 +182,7 @@ impl Flash {
             placement.at,
             header.image_len.div_ceil(SECTOR)
         );
-        Ok(placement.base)
+        copy_hot(header, &placement).map(|hot| (placement.base, hot))
     }
 
     /// The room for plugins at this start: the region they were placed
@@ -200,11 +208,14 @@ impl Flash {
         Some(CodeRoom::in_flash(start, end, images_end, self.placed))
     }
 
-    /// Writes the index, if what lies in the region changed.
+    /// Writes the index, if what lies in the region changed, and gives
+    /// what hot code did not take of the arena to the heap.
     pub fn finish(&mut self) {
         let Some(Some(layout)) = &self.layout else {
+            super::hot::release(0);
             return;
         };
+        super::hot::release(layout.hot_used());
         let Some(index) = layout.index() else {
             return;
         };
@@ -223,6 +234,23 @@ impl Flash {
             ),
             Err(e) => warn!("native: the index: {e:?}"),
         }
+    }
+}
+
+/// Copies the hot code of the image placed as `placement` says, relocated
+/// for its part of the arena, from the image mapped there; where it runs
+/// (0: in place, from flash).
+fn copy_hot(header: &Header, placement: &Placement) -> Result<u32, PluginProblem> {
+    if placement.hot == 0 {
+        return Ok(0);
+    }
+    let from = placement.base + header.hot_at;
+    // SAFETY: the image's hot code, in the region mapped (its data
+    // address), written and its cache lines invalidated before.
+    if unsafe { super::hot::copy(from, placement.hot, header.hot_len) } {
+        Ok(placement.hot)
+    } else {
+        Err(PluginProblem::NoRoom)
     }
 }
 

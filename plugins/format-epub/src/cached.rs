@@ -85,7 +85,7 @@ pub(crate) fn read_block(
             .map(|r| Run {
                 start: u32::from(u16::from_le_bytes([r[0], r[1]])),
                 end: u32::from(u16::from_le_bytes([r[2], r[3]])),
-                style: TextStyle::from_bits(r[4]),
+                style: TextStyle::from_bits(u16::from_le_bytes([r[4], r[5]])),
             })
             .collect();
     }
@@ -112,6 +112,11 @@ pub(crate) fn read_block(
         .indent(Some(i16::from_le_bytes([entry[4], entry[5]])).filter(|&i| i != convert::NO_INDENT))
         .space(Some(u16::from_le_bytes([entry[6], entry[7]])).filter(|&s| s != convert::NO_SPACE))
         .size(Some(u16::from_le_bytes([entry[8], entry[9]])).filter(|&s| s != 0))
+        .margins(
+            u16::from_le_bytes([entry[10], entry[11]]),
+            u16::from_le_bytes([entry[12], entry[13]]),
+        )
+        .line_height(Some(u16::from_le_bytes([entry[14], entry[15]])).filter(|&h| h != 0))
         .image(image))
 }
 

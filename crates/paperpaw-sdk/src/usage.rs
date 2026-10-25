@@ -90,6 +90,11 @@ pub struct PluginUsage {
     /// [`work`](crate::work)).
     pub requests: u32,
     pub refused: u32,
+    /// Time its holds kept the device from going to sleep by itself
+    /// ([`WakeHold`](crate::power::WakeHold)), in milliseconds, and the
+    /// reason of its last hold.
+    pub awake_ms: u64,
+    pub awake_reason: alloc::borrow::Cow<'static, str>,
 }
 
 impl Default for PluginUsage {
@@ -112,6 +117,8 @@ impl PluginUsage {
             written: 0,
             requests: 0,
             refused: 0,
+            awake_ms: 0,
+            awake_reason: alloc::borrow::Cow::Borrowed(""),
         }
     }
 }

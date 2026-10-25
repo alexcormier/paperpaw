@@ -4,7 +4,7 @@ use paperpaw_sdk::MemoryStorage;
 const SHA1: &str = "0123456789abcdef0123456789abcdef01234567";
 const SHA256: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const KEY: &str = "1111111111111111111111111111111111111111111111111111111111111111";
-const FILES: [&str; 3] = ["i.txt", "i.bin", "i.head"];
+const FILES: [&str; 4] = ["i.txt", "i.bin", "i.head", "i.sections"];
 /// The X4 running a PaperPaw that loads code plugins of this build.
 const X4: Device<'static> = Device {
     name: "x4",
@@ -457,7 +457,7 @@ fn long_lists_are_sorted_in_runs_on_the_storage() {
         .collect();
     let storage = list(&plugins);
     let index = take(&storage, "p.json", &X4).unwrap();
-    let mut expected: Vec<(u32, u32)> = (0..count).map(|i| (day(i), i as u32)).collect();
+    let mut expected: Vec<(u64, u32)> = (0..count).map(|i| (u64::from(day(i)), i as u32)).collect();
     expected.sort_by(|a, b| order_of(*a, *b));
     for most in [usize::MAX, RUN + 1, 30] {
         let picked = index.pick(&storage, |_, _| Some(0), Order::Added, most);
@@ -485,4 +485,54 @@ fn the_groups_are_the_plugin_stores() {
     // in its order.
     let rules = paperpaw_publish::Rules::built_in();
     assert_eq!(GROUPS.as_slice(), rules.groups.as_slice());
+}
+
+#[test]
+fn names_sort_from_a_to_z_by_their_letters() {
+    let mut names = [
+        "Zebra", "äpfel", "Apples", "2048", "Être", "eule", "Ωmega", "a b",
+    ];
+    names.sort_by_key(|name| name_key(name));
+    assert_eq!(
+        names,
+        [
+            "2048", "a b", "äpfel", "Apples", "Être", "eule", "Zebra", "Ωmega"
+        ]
+    );
+    // Case and accents left aside, signs passed over.
+    assert_eq!(name_key("ABC"), name_key("abc"));
+    assert_eq!(name_key("Ab-c"), name_key("abc"));
+    assert_eq!(name_key("Äb"), name_key("ab"));
+    // A name of one letter: where that letter's names begin.
+    assert!(name_key("m") <= name_key("Maps") && name_key("Maps") < name_key("n"));
+}
+
+#[test]
+fn a_fair_list_says_so_and_keeps_its_picks() {
+    let storage = MemoryStorage::new().with(
+        "p.json",
+        format!(
+            r#"{{"format": 2, "plugins": [{}, {}],
+              "sections": {{"recommended": ["b", "a"], "new": [], "trending": ["a"],
+                "updated": [], "discover": ["../x"]}}}}"#,
+            plugin("a", "look", ""),
+            plugin("b", "look", "")
+        ),
+    );
+    let index = take(&storage, "p.json", &X4).unwrap();
+    assert!(index.fair());
+    assert_eq!(index.orders()[0], Order::Fair);
+    assert_eq!(index.order("added"), Order::Added);
+    assert_eq!(index.order("nonsense"), Order::Fair);
+    assert_eq!(index.section(&storage, 0), ["b", "a"]);
+    assert_eq!(index.section_len(0), 2);
+    assert!(index.section(&storage, 1).is_empty());
+    assert_eq!(index.section(&storage, 2), ["a"]);
+    // No plugin's id: left out.
+    assert_eq!(index.section_len(4), 0);
+    // A list without picks is by name, as before.
+    let storage = list(&[plugin("a", "look", "")]);
+    let index = take(&storage, "p.json", &X4).unwrap();
+    assert!(!index.fair());
+    assert_eq!(index.order("fair"), Order::Name);
 }

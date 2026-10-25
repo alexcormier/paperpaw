@@ -60,12 +60,15 @@ fn groups(env: &Env<'_>) -> Vec<(i32, bool, Entry)> {
     let mut found: Vec<(i32, bool, Entry)> = env
         .settings()
         .groups()
-        // A widget's own settings are opened where it is edited.
-        .filter(|group| !env.widgets().has(group.id.as_str()))
+        // A widget's own settings are opened where it is edited; a part of
+        // a group on that group's page.
+        .filter(|group| !env.widgets().has(group.id.as_str()) && group.parent.is_none())
         .filter(|group| {
-            env.settings()
-                .specs()
-                .any(|spec| env.settings().group_of(spec) == group.id && visible(env, spec))
+            env.settings().specs().any(|spec| {
+                env.settings()
+                    .within(&env.settings().group_of(spec), &group.id)
+                    && visible(env, spec)
+            })
         })
         .map(|group| {
             let order = if group.order == 0 {

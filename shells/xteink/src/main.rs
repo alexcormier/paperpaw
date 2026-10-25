@@ -45,6 +45,8 @@ mod card;
 #[cfg(feature = "esp32s3")]
 #[path = "card_pro.rs"]
 mod card;
+#[cfg(feature = "remote")]
+mod bench;
 mod clock;
 mod crash;
 mod device;
@@ -141,8 +143,10 @@ esp_bootloader_esp_idf::esp_app_desc!(
 );
 
 /// Heap for PaperPaw: what the emulator's X4 profile allows, less what
-/// Bluetooth takes of the same memory for good.
-const HEAP_SIZE: usize = (192 - BLUETOOTH_KB) * 1024;
+/// Bluetooth takes of the same memory for good, and less the X4's arena
+/// for plugins' hot code, which the heap gets once plugins are loaded as
+/// far as they did not take it (`native::HOT_ARENA_LEN`).
+const HEAP_SIZE: usize = (192 - BLUETOOTH_KB) * 1024 - native::HOT_ARENA_LEN;
 /// Bluetooth's fixed share of the internal RAM, in KB, as measured: its
 /// controller's code in IRAM (20.6 KB) and statics (4.4 KB). The stack,
 /// after them, would lose it: the heap gives it back (`build.rs` checks
@@ -418,7 +422,12 @@ fn prepare() -> Ready {
     // The heap before the board: the board keeps its bus there.
     esp_alloc::heap_allocator!(size: HEAP_SIZE);
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: RECLAIMED_SIZE);
+    // Plugins choose internal RAM or PSRAM for their data (ADR 0030).
+    paperpaw_sdk::memory::set_placer(native::api::alloc_in);
     esp_println::logger::init_logger_from_env();
+    // What hot code in internal RAM gains on this chip (test builds).
+    #[cfg(feature = "remote")]
+    bench::run();
     power::note_start();
     let (place, naps, reason) = power::last_run();
     info!("PaperPaw starting (reset: {reason:?}, last at {place}, naps {naps})");
@@ -578,6 +587,7 @@ impl paperpaw_core::CodeLoader for NoCode {
 fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
     if ota.is_some_and(ota::Ota::on_trial) {
         info!("native: an update on trial starts without code plugins");
+        native::no_hot_code();
         return CodePlugins::None;
     }
     if let Some(safe_mode) = safe_mode::check(input::held(safe_mode::KEY)) {
@@ -585,6 +595,7 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
             "native: safe mode ({:?}), without code plugins",
             safe_mode.reason
         );
+        native::no_hot_code();
         return CodePlugins::SafeMode(safe_mode);
     }
     #[cfg(feature = "esp32s3")]
@@ -636,6 +647,9 @@ fn kernel(
         .random(random)
         .memory(memory)
         .started(started())
+        // Black and white, frames drawn and sent while none refreshes; the
+        // refreshes' times as they are measured (ADR 0030).
+        .panel(paperpaw_sdk::realtime::PanelInfo::new(2))
         // The panel refreshes on its own: a mark shows at once while slow
         // work goes on.
         .busy_mark(true)
@@ -710,6 +724,8 @@ fn kernel(
         paperpaw_app::StorePlugins::Left,
     )
     .plugin(device::X4);
+    #[cfg(feature = "frame-test")]
+    let builder = builder.plugin(paperpaw_sample_frame_test::FrameTest);
     // Its warnings are logged as the main loop starts: taken here, the
     // kernel would be one more copy on the stack.
     builder.build().expect("kernel")

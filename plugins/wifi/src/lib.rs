@@ -296,6 +296,11 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [paperpaw_sdk::FixedAction; 1] =
+    [paperpaw_sdk::FixedAction::new(OPEN, "wifi.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(PAGE, Params::new())))];
+static ICONS: [(Id, &str); 2] = [(GROUP, "wifi"), (OPEN, "wifi")];
+
 impl Plugin for Wifi {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Wi-Fi", paperpaw_sdk::package_version!())
@@ -320,7 +325,6 @@ impl Plugin for Wifi {
                     .page(PAGE);
             &SPEC
         })?;
-        r.add_icon(GROUP, Cow::Borrowed("wifi"))?;
         // Tapped, the Wi-Fi page.
         r.add_status_item(
             StatusItemSpec::new(
@@ -334,28 +338,30 @@ impl Plugin for Wifi {
             )
             .tap(OPEN),
         )?;
-        r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "wifi.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(PAGE, Params::new()));
-            },
-        ))?;
-        r.add_icon(OPEN, Cow::Borrowed("wifi"))?;
+        r.add_actions(&ACTIONS)?;
+        r.add_icons(&ICONS)?;
         r.add_settings(&SETTINGS)?;
         for spec in &SETTINGS {
             r.set_menu_need(spec.id.clone(), MenuNeed::Wifi)?;
         }
         let p = policy.clone();
-        r.add_screen(ScreenSpec::new(
-            PAGE,
-            "wifi.title",
-            Box::new(move |env, _| Box::new(page::WifiPage::new(env, p.clone()))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                PAGE,
+                "wifi.title",
+                Box::new(move |env, _| Box::new(page::WifiPage::new(env, p.clone()))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         let p = policy.clone();
-        r.add_screen(ScreenSpec::new(
-            PHONE,
-            "wifi.phone.title",
-            Box::new(move |env, _| Box::new(phone::PhoneScreen::new(env, p.clone()))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                PHONE,
+                "wifi.phone.title",
+                Box::new(move |env, _| Box::new(phone::PhoneScreen::new(env, p.clone()))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         // Networks put on the card: kept, the file removed once they are.
         r.on(events::STARTED, |env, (), out| {
             if env.wifi().is_some() {

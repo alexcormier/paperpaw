@@ -216,6 +216,7 @@ fn groups_are_ordered_and_unknown_groups_fall_back() {
             title: Cow::Borrowed(""),
             order,
             page: None,
+            parent: None,
         })
         .unwrap();
     }
@@ -360,4 +361,24 @@ fn previews_show_values_without_keeping_them() {
     assert!(s.bool("widgets.clock.date"));
     assert!(s.is_set("widgets.clock@2.date"));
     assert!(!s.is_set("widgets.clock.date"));
+}
+
+#[test]
+fn groups_within_groups_know_their_parents() {
+    let mut s = settings();
+    let (reading, text, other) = (
+        Id::new_static("core.group.reading"),
+        Id::new_static("core.group.reading-text"),
+        Id::new_static("core.group.other"),
+    );
+    s.add_group(SettingGroupSpec::new(reading.clone(), ""))
+        .unwrap();
+    s.add_group(SettingGroupSpec::new(text.clone(), "").within(reading.clone()))
+        .unwrap();
+    assert_eq!(s.parent_of(&text), Some(&reading));
+    assert_eq!(s.parent_of(&reading), None);
+    assert!(s.within(&text, &reading));
+    assert!(s.within(&reading, &reading));
+    assert!(!s.within(&reading, &text));
+    assert!(!s.within(&text, &other));
 }

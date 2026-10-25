@@ -37,9 +37,9 @@ use paperpaw_sdk::builtin::{actions, fonts, groups, menus};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, MenuNeed, Metrics, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec, SettingSpec,
+    Arg, Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled,
+    Id, Manifest, MenuEntry, MenuNeed, Metrics, Params, Plugin, Rect, RefreshMode, RegisterError,
+    Registrar, Screen, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("diagnostics");
@@ -71,6 +71,22 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(RESET, "diagnostics.action.reset"),
+    FixedAction::new(OPEN_CHECK, "diagnostics.check.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(CHECK, Params::new()))),
+];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN_CHECK).order(99)];
+static ICONS: [(Id, &str); 1] = [(OPEN_CHECK, "list-check")];
+
+static SCREENS: [FixedScreen; 2] = [
+    FixedScreen::new(CHECK, "diagnostics.check.title", |env, _| check::make(env)),
+    FixedScreen::new(SCREEN, "diagnostics.title", |env, _| {
+        Box::new(DiagnosticsScreen::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+];
+
 impl Plugin for Diagnostics {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Diagnostics", paperpaw_sdk::package_version!())
@@ -80,27 +96,13 @@ impl Plugin for Diagnostics {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "diagnostics.title",
-            Box::new(|env, _| Box::new(DiagnosticsScreen::new(env))),
-        ))?;
-        r.add_action(ActionSpec::new(RESET, "diagnostics.action.reset"))?;
-        r.add_screen(ScreenSpec::new(
-            CHECK,
-            "diagnostics.check.title",
-            Box::new(|env, _| check::make(env)),
-        ))?;
-        r.add_action(
-            ActionSpec::new(OPEN_CHECK, "diagnostics.check.title").handler(|_, _, out| {
-                out.push(Command::OpenScreen(CHECK, Params::new()));
-            }),
-        )?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN_CHECK).order(99))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
         // Apps with this plugin built in (Android) keep their Tools for
         // readers.
         r.set_menu_need(OPEN_CHECK, MenuNeed::Firmware)?;
-        r.add_icon(OPEN_CHECK, Cow::Borrowed("list-check"))?;
+        r.add_icons(&ICONS)?;
         r.add_settings(&SETTINGS)?;
         r.add_keymap(Cow::Borrowed(include_str!("../keymap.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

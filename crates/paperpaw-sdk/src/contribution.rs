@@ -113,9 +113,13 @@ impl Registrar {
             });
         }
         if let Contribution::ActionOverride(over) = &contribution {
-            let sealed = self.contributions.iter().any(
-                |c| matches!(c, Contribution::Action(a) if a.id == over.action && a.is_sealed()),
-            );
+            let sealed = self.contributions.iter().any(|c| match c {
+                Contribution::Action(a) => a.id == over.action && a.is_sealed(),
+                Contribution::FixedActions(list) => {
+                    list.iter().any(|a| *a.id() == over.action && a.is_sealed())
+                }
+                _ => false,
+            });
             if sealed {
                 return Err(RegisterError::Invalid {
                     message: Cow::Owned(alloc::format!("`{}` is sealed", over.action)),
@@ -162,6 +166,35 @@ impl Registrar {
 
     pub fn add_screen(&mut self, screen: ScreenSpec) -> Result<(), RegisterError> {
         self.add_checked(Contribution::Screen(screen))
+    }
+
+    /// Adds screens kept in the program (a `static` list of
+    /// [`FixedScreen`](crate::FixedScreen)s): they take next to no memory,
+    /// where each added with [`add_screen`](Self::add_screen) takes some
+    /// 60 bytes.
+    pub fn add_screens(
+        &mut self,
+        screens: &'static [crate::screen::FixedScreen],
+    ) -> Result<(), RegisterError> {
+        // Each in the plugin's namespace, and once.
+        let added = |id: &Id| {
+            self.contributions.iter().any(|c| match c {
+                Contribution::Screen(s) => s.id == *id,
+                Contribution::FixedScreens(list) => list.iter().any(|s| s.id() == id),
+                _ => false,
+            })
+        };
+        for (n, screen) in screens.iter().enumerate() {
+            let id = screen.id();
+            if !id.is_owned_by(&self.plugin) {
+                return Err(RegisterError::Namespace { id: id.clone() });
+            }
+            if added(id) || screens[..n].iter().any(|s| s.id() == id) {
+                return Err(RegisterError::Duplicate { id: id.clone() });
+            }
+        }
+        self.contributions.push(Contribution::FixedScreens(screens));
+        Ok(())
     }
 
     pub fn add_slot(&mut self, slot: SlotSpec) -> Result<(), RegisterError> {
@@ -242,6 +275,21 @@ impl Registrar {
     /// long.back = core.home
     /// tap.center = core.menu
     /// ```
+    /// Adds a contribution of a kind that comes after this release, by its
+    /// key: what PaperPaw takes from plugins later can be given by plugins
+    /// built now, without a new plugin interface. A kernel that does not
+    /// know the key leaves it.
+    pub fn add_extended(
+        &mut self,
+        key: impl Into<Id>,
+        params: crate::Params,
+    ) -> Result<(), RegisterError> {
+        self.add_checked(Contribution::Extended {
+            key: key.into(),
+            params,
+        })
+    }
+
     pub fn add_keymap(
         &mut self,
         source: impl Into<Cow<'static, str>>,
@@ -411,8 +459,55 @@ impl Registrar {
 
     /// Puts an action into a menu. Menus can be extended by any plugin and
     /// redefined by the user.
+    /// Adds actions kept in the program (a `static` list of
+    /// [`FixedAction`](crate::FixedAction)s): they take next to no memory,
+    /// where each added with [`add_action`](Self::add_action) takes some
+    /// 90 bytes.
+    pub fn add_actions(
+        &mut self,
+        actions: &'static [crate::action::FixedAction],
+    ) -> Result<(), RegisterError> {
+        // Each in the plugin's namespace, and once.
+        let added = |id: &Id| {
+            self.contributions.iter().any(|c| match c {
+                Contribution::Action(a) => a.id == *id,
+                Contribution::FixedActions(list) => list.iter().any(|a| a.id() == id),
+                _ => false,
+            })
+        };
+        for (n, action) in actions.iter().enumerate() {
+            let id = action.id();
+            if !id.is_owned_by(&self.plugin) {
+                return Err(RegisterError::Namespace { id: id.clone() });
+            }
+            if added(id) || actions[..n].iter().any(|a| a.id() == id) {
+                return Err(RegisterError::Duplicate { id: id.clone() });
+            }
+            // No handler in place of a sealed action of one's own.
+            let overridden = self
+                .contributions
+                .iter()
+                .any(|c| matches!(c, Contribution::ActionOverride(over) if over.action == *id));
+            if action.is_sealed() && overridden {
+                return Err(RegisterError::Invalid {
+                    message: Cow::Owned(alloc::format!("`{id}` is sealed")),
+                });
+            }
+        }
+        self.contributions.push(Contribution::FixedActions(actions));
+        Ok(())
+    }
+
     pub fn add_menu_entry(&mut self, entry: MenuEntry) -> Result<(), RegisterError> {
         self.add_checked(Contribution::MenuEntry(entry))
+    }
+
+    /// Puts actions into menus from a list kept in the program (a
+    /// `static` list, [`MenuEntry::new`] being `const`): it takes next to
+    /// no memory, where each added with
+    /// [`add_menu_entry`](Self::add_menu_entry) takes some 50 bytes.
+    pub fn add_menu_entries(&mut self, entries: &'static [MenuEntry]) -> Result<(), RegisterError> {
+        self.add_checked(Contribution::FixedMenuEntries(entries))
     }
 
     /// Puts `item` into `menu` at `place`, beside other entries (e.g.
@@ -490,6 +585,14 @@ impl Registrar {
             item: item.into(),
             icon,
         })
+    }
+
+    /// Gives items icons from a list kept in the program (a `static` list
+    /// of items and icon names): next to no memory, where each added with
+    /// [`add_icon`](Self::add_icon) takes some 30 bytes. Icons added with
+    /// [`add_icon`](Self::add_icon) win over these (an icon theme's).
+    pub fn add_icons(&mut self, icons: &'static [(Id, &'static str)]) -> Result<(), RegisterError> {
+        self.add_checked(Contribution::FixedIcons(icons))
     }
 
     /// Offers an action or setting in menus only on devices that meet
@@ -638,10 +741,11 @@ impl Registrar {
         if !reader.screen.is_owned_by(&self.plugin) {
             return Err(RegisterError::Namespace { id: reader.screen });
         }
-        let added = self
-            .contributions
-            .iter()
-            .any(|c| matches!(c, Contribution::Screen(s) if s.id == reader.screen));
+        let added = self.contributions.iter().any(|c| match c {
+            Contribution::Screen(s) => s.id == reader.screen,
+            Contribution::FixedScreens(list) => list.iter().any(|s| *s.id() == reader.screen),
+            _ => false,
+        });
         if !added {
             return Err(RegisterError::Invalid {
                 message: Cow::Owned(alloc::format!(

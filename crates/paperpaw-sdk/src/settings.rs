@@ -677,6 +677,10 @@ pub struct SettingGroupSpec {
     /// group), e.g. Wi-Fi with its networks; it shows the group's
     /// settings itself.
     pub page: Option<Id>,
+    /// The group it is a part of, shown on that group's page (a page of
+    /// its own one level down), not on the main page; `None` for a group
+    /// of the main page.
+    pub parent: Option<Id>,
 }
 
 impl SettingGroupSpec {
@@ -691,6 +695,7 @@ impl SettingGroupSpec {
             title: Cow::Borrowed(title),
             order: 0,
             page: None,
+            parent: None,
         }
     }
 
@@ -703,6 +708,13 @@ impl SettingGroupSpec {
     /// Screen `page` shows the group instead of the generated page.
     pub const fn page(mut self, page: Id) -> Self {
         core::mem::forget(self.page.replace(page));
+        self
+    }
+
+    /// A part of group `parent`: shown on its page, one level down, by
+    /// order among its other parts.
+    pub const fn within(mut self, parent: Id) -> Self {
+        core::mem::forget(self.parent.replace(parent));
         self
     }
 }
@@ -967,6 +979,31 @@ impl Settings {
     /// Groups by order.
     pub fn groups(&self) -> impl Iterator<Item = &SettingGroupSpec> {
         self.groups.iter().map(|g| &**g)
+    }
+
+    /// The group `group` is a part of, if it is one
+    /// ([`SettingGroupSpec::within`]).
+    pub fn parent_of(&self, group: &Id) -> Option<&Id> {
+        self.groups
+            .iter()
+            .find(|g| g.id == *group)
+            .and_then(|g| g.parent.as_ref())
+    }
+
+    /// Whether `group` is `ancestor` or one of its parts, at any depth.
+    pub fn within(&self, group: &Id, ancestor: &Id) -> bool {
+        let mut at = group;
+        // Groups name their parents; a loop of them is no part of any.
+        for _ in 0..8 {
+            if at == ancestor {
+                return true;
+            }
+            match self.parent_of(at) {
+                Some(parent) => at = parent,
+                None => return false,
+            }
+        }
+        false
     }
 
     /// The group a setting is shown in: its own if registered, else

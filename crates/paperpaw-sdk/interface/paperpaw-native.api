@@ -40,6 +40,11 @@ pub const fn paperpaw_native::compiler::id(&str) -> u32
 pub fn paperpaw_native::compiler::named_in(&[u8]) -> alloc::vec::Vec<&str>
 pub fn paperpaw_native::compiler::release(&str) -> core::option::Option<&str>
 pub mod paperpaw_native::index
+#[non_exhaustive] pub struct paperpaw_native::index::Arena
+pub paperpaw_native::index::Arena::len: u32
+pub paperpaw_native::index::Arena::start: u32
+impl paperpaw_native::index::Arena
+pub const fn paperpaw_native::index::Arena::new(u32, u32) -> Self
 pub struct paperpaw_native::index::Index
 pub paperpaw_native::index::Index::firmware: [u8; 32]
 pub paperpaw_native::index::Index::placed: alloc::vec::Vec<paperpaw_native::index::Placed>
@@ -49,8 +54,9 @@ pub fn paperpaw_native::index::Index::to_bytes(&self) -> alloc::vec::Vec<u8>
 pub struct paperpaw_native::index::Layout
 impl paperpaw_native::index::Layout
 pub fn paperpaw_native::index::Layout::end(&self) -> u32
+pub fn paperpaw_native::index::Layout::hot_used(&self) -> u32
 pub fn paperpaw_native::index::Layout::index(&self) -> core::option::Option<paperpaw_native::index::Index>
-pub fn paperpaw_native::index::Layout::new(paperpaw_native::index::Region, [u8; 32], u32, core::option::Option<paperpaw_native::index::Index>) -> Self
+pub fn paperpaw_native::index::Layout::new(paperpaw_native::index::Region, [u8; 32], u32, paperpaw_native::index::Arena, core::option::Option<paperpaw_native::index::Index>) -> Self
 pub fn paperpaw_native::index::Layout::place(&mut self, &paperpaw_native::Header) -> core::result::Result<paperpaw_native::index::Placement, paperpaw_native::index::NoRoom>
 pub fn paperpaw_native::index::Layout::region(&self) -> paperpaw_native::index::Region
 pub struct paperpaw_native::index::NoRoom
@@ -58,12 +64,14 @@ pub struct paperpaw_native::index::Placed
 pub paperpaw_native::index::Placed::api: u32
 pub paperpaw_native::index::Placed::at: u32
 pub paperpaw_native::index::Placed::base: u32
+pub paperpaw_native::index::Placed::hot: u32
 pub paperpaw_native::index::Placed::len: u32
 pub paperpaw_native::index::Placed::sha256: [u8; 32]
 pub struct paperpaw_native::index::Placement
 pub paperpaw_native::index::Placement::at: u32
 pub paperpaw_native::index::Placement::base: u32
 pub paperpaw_native::index::Placement::erase_index: bool
+pub paperpaw_native::index::Placement::hot: u32
 pub paperpaw_native::index::Placement::present: bool
 pub struct paperpaw_native::index::Region
 pub paperpaw_native::index::Region::base: u32
@@ -72,6 +80,7 @@ pub paperpaw_native::index::Region::start: u32
 impl paperpaw_native::index::Region
 pub fn paperpaw_native::index::Region::new(u32, u32, u32) -> core::option::Option<paperpaw_native::index::Region>
 pub const paperpaw_native::index::FORMAT: u16
+pub const paperpaw_native::index::HOT_MAX: u32
 pub const paperpaw_native::index::MAGIC: [u8; 4]
 pub const paperpaw_native::index::MAX_PLACED: usize
 pub const paperpaw_native::index::SECTOR: u32
@@ -110,6 +119,14 @@ pub const fn paperpaw_native::Chip::id(self) -> u16
 pub const fn paperpaw_native::Chip::target(self) -> &'static str
 impl core::fmt::Display for paperpaw_native::Chip
 pub fn paperpaw_native::Chip::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum paperpaw_native::PatchKind
+pub paperpaw_native::PatchKind::Hi20 = 1
+pub paperpaw_native::PatchKind::Lo12I = 2
+pub paperpaw_native::PatchKind::Lo12S = 3
+impl paperpaw_native::PatchKind
+pub const paperpaw_native::PatchKind::SITES: u32
+pub const fn paperpaw_native::PatchKind::of(u32) -> core::option::Option<(paperpaw_native::PatchKind, u32)>
+pub const fn paperpaw_native::PatchKind::record(self, u32) -> u32
 pub enum paperpaw_native::Problem
 pub paperpaw_native::Problem::Damaged
 pub paperpaw_native::Problem::Length
@@ -125,6 +142,7 @@ impl core::fmt::Display for paperpaw_native::Problem
 pub fn paperpaw_native::Problem::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[repr(C)] pub struct paperpaw_native::Api
 pub paperpaw_native::Api::alloc: fn(usize, usize) -> *mut u8
+pub paperpaw_native::Api::alloc_in: fn(usize, usize, u32) -> *mut u8
 pub paperpaw_native::Api::dealloc: fn(*mut u8, usize, usize)
 pub paperpaw_native::Api::icon: fn(*const u8, usize) -> u32
 pub paperpaw_native::Api::micros: fn() -> u64
@@ -145,7 +163,10 @@ pub paperpaw_native::Header::code_at: u32
 pub paperpaw_native::Header::compiler: u32
 pub paperpaw_native::Header::entry: u32
 pub paperpaw_native::Header::fingerprint: u64
+pub paperpaw_native::Header::hot_at: u32
+pub paperpaw_native::Header::hot_len: u32
 pub paperpaw_native::Header::image_len: u32
+pub paperpaw_native::Header::patches: u32
 pub paperpaw_native::Header::relocs: u32
 pub paperpaw_native::Header::sha256: [u8; 32]
 impl paperpaw_native::Header
@@ -153,10 +174,12 @@ pub fn paperpaw_native::Header::check_file(&[u8]) -> core::result::Result<(paper
 pub fn paperpaw_native::Header::digest(&self) -> paperpaw_digest::sha256::Sha256
 pub fn paperpaw_native::Header::file_len(&self) -> u64
 pub fn paperpaw_native::Header::holds(&self, paperpaw_digest::sha256::Sha256) -> bool
+pub fn paperpaw_native::Header::in_hot(&self, u32) -> bool
 pub fn paperpaw_native::Header::read(&[u8]) -> core::result::Result<paperpaw_native::Header, paperpaw_native::Problem>
 pub fn paperpaw_native::Header::relocs_at(&self) -> u64
 pub fn paperpaw_native::Header::signed(&self, u64) -> core::result::Result<bool, paperpaw_native::Problem>
-pub fn paperpaw_native::Header::to_bytes(&self) -> [u8; 80]
+pub fn paperpaw_native::Header::tail_words(&self) -> usize
+pub fn paperpaw_native::Header::to_bytes(&self) -> [u8; 92]
 pub struct paperpaw_native::ImageExtent
 pub paperpaw_native::ImageExtent::len: u32
 pub paperpaw_native::ImageExtent::sha256: bool
@@ -165,6 +188,7 @@ pub fn paperpaw_native::ImageExtent::read(&mut dyn core::ops::function::FnMut(u3
 pub struct paperpaw_native::Relocator<'a>
 impl<'a> paperpaw_native::Relocator<'a>
 pub fn paperpaw_native::Relocator<'a>::apply(&self, u32, &mut [u8]) -> core::result::Result<(), paperpaw_native::Problem>
+pub fn paperpaw_native::Relocator<'a>::hot_at(self, u32) -> core::result::Result<Self, paperpaw_native::Problem>
 pub fn paperpaw_native::Relocator<'a>::new(&'a paperpaw_native::Header, &'a [u32], u32, u32) -> core::result::Result<Self, paperpaw_native::Problem>
 pub struct paperpaw_native::Signature
 pub paperpaw_native::Signature::key: [u8; 32]
@@ -184,4 +208,4 @@ pub const paperpaw_native::HEADER_LEN: usize
 pub const paperpaw_native::LINK_BASE: u32
 pub const paperpaw_native::MAGIC: [u8; 4]
 pub const paperpaw_native::MAX_IMAGE_LEN: u32
-pub fn paperpaw_native::check_relocations(&paperpaw_native::Header, impl core::iter::traits::collect::IntoIterator<Item = u32>) -> core::result::Result<(), paperpaw_native::Problem>
+pub fn paperpaw_native::check_relocations(&paperpaw_native::Header, &[u32]) -> core::result::Result<(), paperpaw_native::Problem>

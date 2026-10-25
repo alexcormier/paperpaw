@@ -2267,6 +2267,7 @@ name = "paperpaw-app"
 version = "0.5.0-beta.7"
 dependencies = [
  "paperpaw-core",
+ "paperpaw-i18n",
  "paperpaw-plugin-about",
  "paperpaw-plugin-bluetooth",
  "paperpaw-plugin-diagnostics",
@@ -2413,7 +2414,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-diagnostics"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2486,7 +2487,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -2603,6 +2604,13 @@ name = "paperpaw-qr"
 version = "0.5.0-beta.7"
 
 [[package]]
+name = "paperpaw-sample-frame-test"
+version = "0.5.0-beta.6"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
 name = "paperpaw-sdk"
 version = "0.5.0-beta.7"
 dependencies = [
@@ -2694,6 +2702,7 @@ dependencies = [
  "paperpaw-native",
  "paperpaw-platform",
  "paperpaw-plugin-wifi",
+ "paperpaw-sample-frame-test",
  "paperpaw-sdk",
  "paperpaw-update",
  "paperpaw-x4",

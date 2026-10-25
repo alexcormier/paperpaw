@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::Widget;
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
@@ -434,7 +434,7 @@ impl Screen for Picker {
         if *action == actions::CONFIRM {
             match self.list.confirm() {
                 Some(row) => self.pick(row, cx),
-                None => self.list.request(ListChange::Focus, cx),
+                None => self.list.focus_change().request(cx),
             }
             return Handled::Yes;
         }

@@ -76,6 +76,14 @@ const PIECES: &[&str] = &[
     "margin: 1em 2em 3em",
     "margin-top: 1e30px",
     "padding-bottom: 12pt",
+    "margin-left: 1e30%",
+    "padding-right: -5em",
+    "margin: 0 99999999em 0 inf%",
+    "line-height: 1e30",
+    "line-height: -2",
+    "line-height: 0.0001%",
+    "vertical-align: super",
+    "text-decoration: underline line-through",
     "font-size: 999999%",
     "font-size: 0.001em",
     "font-size: inf%",
@@ -106,10 +114,14 @@ proptest! {
     fn values_stay_within_their_bounds(css in stylesheet()) {
         let rules = whole(&css);
         for (_, props) in &rules.rules {
-            prop_assert!(props.indent.is_none_or(|i| (0..=MAX_INDENT as i16).contains(&i)));
+            prop_assert!(props.indent.is_none_or(|i| (-MAX_INDENT as i16..=MAX_INDENT as i16).contains(&i)));
             for space in [props.margin_top, props.margin_bottom, props.padding_top, props.padding_bottom] {
                 prop_assert!(space.is_none_or(|s| s <= MAX_SPACE as u16));
             }
+            for side in [props.margin_left, props.margin_right, props.padding_left, props.padding_right] {
+                prop_assert!(side.is_none_or(|s| s <= MAX_SIDE as u16));
+            }
+            prop_assert!(props.line_height.is_none_or(|h| (50..=400).contains(&h)));
             if let Some(size) = props.size {
                 let of = size.of(300);
                 prop_assert!((MIN_SIZE as u16..=MAX_SIZE as u16).contains(&of));

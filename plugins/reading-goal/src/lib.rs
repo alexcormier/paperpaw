@@ -47,7 +47,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, Plugin, RegisterError, Registrar, ScreenSpec, SettingExtra,
+    Command, Env, FixedScreen, Id, Manifest, Plugin, RegisterError, Registrar, SettingExtra,
     SettingSpec, Storage,
 };
 
@@ -207,6 +207,12 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    SLEEP_SCREEN,
+    "reading-goal.sleep",
+    |env, _| Box::new(sleep::GoalSleep::new(env)),
+)];
+
 impl Plugin for ReadingGoal {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Reading goal", paperpaw_sdk::package_version!())
@@ -238,11 +244,7 @@ impl Plugin for ReadingGoal {
             }
         })?;
         widget::register(r)?;
-        r.add_screen(ScreenSpec::new(
-            SLEEP_SCREEN,
-            "reading-goal.sleep",
-            Box::new(|env, _| Box::new(sleep::GoalSleep::new(env))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.add_choice(SLEEP_SHOW, SLEEP_NAME)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

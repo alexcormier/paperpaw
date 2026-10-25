@@ -40,8 +40,8 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingSpec, time,
+    ActionSpec, Command, Commands, Env, FixedAction, FixedScreen, HttpRequest, Id, Instant,
+    Manifest, Params, Plugin, RegisterError, Registrar, SettingSpec, time,
 };
 
 use data::{Temperature, Wind};
@@ -468,6 +468,16 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(CHOOSE_PLACE, "weather.setting.place")
+    .handler(|_, _, out| out.push(Command::OpenScreen(PLACE_SCREEN, Params::new())))];
+static ICONS: [(Id, &str); 2] = [(GROUP, "sun"), (REFRESH, "refresh")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    PLACE_SCREEN,
+    "weather.setting.place",
+    |env, _| Box::new(place::PlaceScreen::new(env)),
+)];
+
 impl Plugin for Weather {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Weather", paperpaw_sdk::package_version!())
@@ -488,21 +498,11 @@ impl Plugin for Weather {
                 paperpaw_sdk::SettingGroupSpec::new(GROUP, "weather.title").order(88);
             &SPEC
         })?;
-        r.add_icon(GROUP, Cow::Borrowed("sun"))?;
+        r.add_icons(&ICONS)?;
         r.add_settings(&PLACE_SETTING)?;
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            PLACE_SCREEN,
-            "weather.setting.place",
-            Box::new(|env, _| Box::new(place::PlaceScreen::new(env))),
-        ))?;
-        r.add_action(
-            ActionSpec::new(CHOOSE_PLACE, "weather.setting.place").handler(
-                |_: &Env<'_>, _, out: &mut Commands| {
-                    out.push(Command::OpenScreen(PLACE_SCREEN, Params::new()));
-                },
-            ),
-        )?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
         let s = state.clone();
         r.add_action(ActionSpec::new(REFRESH, "weather.refresh").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
@@ -513,7 +513,6 @@ impl Plugin for Weather {
                 }
             },
         ))?;
-        r.add_icon(REFRESH, Cow::Borrowed("refresh"))?;
 
         // When to look: at the start, on waking, once in a network, by
         // the timer, and when a widget is placed or the place changes.

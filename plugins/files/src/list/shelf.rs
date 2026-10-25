@@ -439,7 +439,7 @@ impl Screen for ShelfScreen {
                 let env = *cx.env();
                 self.load_page(&env);
             }
-            self.list.request(change, cx);
+            change.request(cx);
         } else if *a == actions::CONFIRM {
             self.open_book(self.list.focus(), cx);
         } else if *a == actions::MENU {

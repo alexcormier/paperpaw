@@ -76,12 +76,24 @@ impl core::fmt::Debug for StorePlugins<'_> {
 
 /// The ids of the plugins the store offers as files too: built in only
 /// with the feature `store-plugins`.
-pub const STORE_PLUGINS: [&str; 21] = [
+pub const STORE_PLUGINS: [&str; 33] = [
     "aids",
     "battery",
     "browser",
     "calibre",
     "fonts-browser",
+    "hyphenation-da",
+    "hyphenation-de",
+    "hyphenation-es",
+    "hyphenation-fr",
+    "hyphenation-it",
+    "hyphenation-nb",
+    "hyphenation-nl",
+    "hyphenation-pl",
+    "hyphenation-pt",
+    "hyphenation-ru",
+    "hyphenation-sv",
+    "hyphenation-uk",
     "joplin",
     "keys",
     "koreader",
@@ -153,6 +165,12 @@ pub static NETWORK_SETTINGS: &[paperpaw_core::NetworkSettings] = paperpaw_core::
     "wikipedia",
 );
 
+/// The indexes of the first-party plugins' translation catalogs, made
+/// when the program was built (see `build.rs`): their catalogs keep none
+/// on the heap.
+pub static CATALOG_INDEXES: &[(u64, &[u16])] =
+    include!(concat!(env!("OUT_DIR"), "/catalog_indexes.rs"));
+
 /// Adds the first-party plugins to `builder`, those the store offers as
 /// files too as `store` says.
 pub fn install_with(
@@ -160,7 +178,9 @@ pub fn install_with(
     fonts: Fonts,
     store: StorePlugins<'_>,
 ) -> KernelBuilder {
-    let builder = builder.network_settings(NETWORK_SETTINGS);
+    let builder = builder
+        .network_settings(NETWORK_SETTINGS)
+        .catalog_indexes(CATALOG_INDEXES);
     let builder = match fonts {
         #[cfg(feature = "outline")]
         Fonts::Outline => builder.plugin(paperpaw_plugin_fonts_default::DefaultFonts),
@@ -192,6 +212,7 @@ pub fn install_with(
         b = offered(b, store, paperpaw_plugin_stats::Stats);
         b = offered(b, store, paperpaw_plugin_reading_goal::ReadingGoal);
         b = offered(b, store, paperpaw_plugin_battery::Battery);
+        b = offer_hyphenation(b, store);
     }
     b = b
         .plugin(paperpaw_plugin_wifi::Wifi)
@@ -251,6 +272,25 @@ pub fn install_with(
         .plugin(paperpaw_plugin_about::About)
         .plugin(paperpaw_plugin_setup::Setup)
         .plugin(paperpaw_plugin_help::Help)
+}
+
+/// Adds the hyphenation plugins of the languages the store offers, one
+/// each, as `store` says.
+#[cfg(feature = "store-plugins")]
+fn offer_hyphenation(mut b: KernelBuilder, store: StorePlugins<'_>) -> KernelBuilder {
+    b = offered(b, store, paperpaw_plugin_hyphenation_da::Danish);
+    b = offered(b, store, paperpaw_plugin_hyphenation_de::German);
+    b = offered(b, store, paperpaw_plugin_hyphenation_es::Spanish);
+    b = offered(b, store, paperpaw_plugin_hyphenation_fr::French);
+    b = offered(b, store, paperpaw_plugin_hyphenation_it::Italian);
+    b = offered(b, store, paperpaw_plugin_hyphenation_nb::Norwegian);
+    b = offered(b, store, paperpaw_plugin_hyphenation_nl::Dutch);
+    b = offered(b, store, paperpaw_plugin_hyphenation_pl::Polish);
+    b = offered(b, store, paperpaw_plugin_hyphenation_pt::Portuguese);
+    b = offered(b, store, paperpaw_plugin_hyphenation_ru::Russian);
+    b = offered(b, store, paperpaw_plugin_hyphenation_sv::Swedish);
+    b = offered(b, store, paperpaw_plugin_hyphenation_uk::Ukrainian);
+    b
 }
 
 /// Adds `plugin`, one the store offers as a file too, as `store` says.

@@ -23,7 +23,107 @@
 //! [`presets`](crate::presets)) with its level among its values
 //! (`power.level = saving`), so plugins and data plugins can bring more.
 
+use alloc::borrow::Cow;
+use core::time::Duration;
+
 use crate::id::Id;
+
+/// The longest a [`WakeHold`] lasts: one wanted longer is renewed before
+/// it ends, so that a hold forgotten cannot empty the battery.
+pub const MAX_HOLD: Duration = Duration::from_secs(30 * 60);
+
+/// Bits of [`WakeHold`]'s flags.
+mod hold_flags {
+    /// The front light kept on too, where it would go off by itself.
+    pub const LIGHT: u32 = 1;
+}
+
+/// Keeps the device from going to sleep by itself for a while
+/// ([`Command::KeepAwake`](crate::Command::KeepAwake), or
+/// [`Cx::keep_awake`](crate::Cx::keep_awake) for a screen): a clock or a
+/// timer shown, a slideshow, a game watched, a long download. It holds
+/// only the sleep after
+/// [`settings::SLEEP_AFTER`](crate::builtin::settings::SLEEP_AFTER)
+/// without input: the processor still naps between events, and the power
+/// button or a battery nearly empty still put the device to sleep. The
+/// reader can let no plugin hold it (*Let plugins keep the device
+/// awake*).
+///
+/// Holds of the same id are one: the latest counts. Each ends after
+/// [`WakeHold::lasting`] (at most [`MAX_HOLD`]) unless renewed, when
+/// let go ([`Command::LetSleep`](crate::Command::LetSleep)), and, for a
+/// screen's, when the screen closes; a screen's counts only while it is
+/// on top.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WakeHold {
+    id: Id,
+    reason: Cow<'static, str>,
+    /// Milliseconds it lasts.
+    lasting: u32,
+    flags: u32,
+    /// The screen it is for, set by `Cx::keep_awake`.
+    screen: Option<crate::ScreenKey>,
+    /// Room for numbers to come.
+    numbers: [u32; 2],
+}
+
+impl WakeHold {
+    /// A hold named `id` (in the plugin's namespace, like every id), for
+    /// `reason` (a translation key or text, for the usage and
+    /// diagnostics), lasting [`MAX_HOLD`].
+    pub fn new(id: impl Into<Id>, reason: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            id: id.into(),
+            reason: reason.into(),
+            lasting: MAX_HOLD.as_millis() as u32,
+            flags: 0,
+            screen: None,
+            numbers: [0; 2],
+        }
+    }
+
+    /// Lasting `lasting` unless renewed (at most [`MAX_HOLD`]).
+    pub fn lasting(mut self, lasting: Duration) -> Self {
+        let most = MAX_HOLD.as_millis() as u32;
+        self.lasting = u32::try_from(lasting.as_millis()).unwrap_or(most).min(most);
+        self
+    }
+
+    /// Keeps the front light on too, where it would go off by itself.
+    pub fn light(mut self) -> Self {
+        self.flags |= hold_flags::LIGHT;
+        self
+    }
+
+    /// For the screen of `key` (see `Cx::keep_awake`).
+    pub(crate) fn of_screen(mut self, key: Option<crate::ScreenKey>) -> Self {
+        self.screen = key;
+        self
+    }
+
+    pub fn id(&self) -> &Id {
+        &self.id
+    }
+
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    /// How long it lasts unless renewed.
+    pub fn duration(&self) -> Duration {
+        Duration::from_millis(u64::from(self.lasting))
+    }
+
+    /// Whether it keeps the front light on too.
+    pub fn keeps_light(&self) -> bool {
+        self.flags & hold_flags::LIGHT != 0
+    }
+
+    /// The screen it is for, if a screen holds it.
+    pub fn screen(&self) -> Option<crate::ScreenKey> {
+        self.screen
+    }
+}
 
 /// How much energy to spend, as plugins see it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

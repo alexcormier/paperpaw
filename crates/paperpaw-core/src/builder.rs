@@ -44,8 +44,10 @@ struct BuilderParts {
     random: paperpaw_sdk::random::Random,
     memory: paperpaw_sdk::memory::Memory,
     started: paperpaw_sdk::power::Start,
+    panel: paperpaw_sdk::realtime::PanelInfo,
     /// Network settings kept in the program, by plugin.
     network_settings: &'static [crate::NetworkSettings],
+    catalog_indexes: paperpaw_i18n::FixedIndexes,
     /// The most Bluetooth links the shell keeps; none without a radio.
     bluetooth_links: u8,
 }
@@ -87,6 +89,14 @@ impl KernelBuilder {
     /// other networked plugin are made as before.
     pub fn network_settings(mut self, settings: &'static [crate::NetworkSettings]) -> Self {
         self.0.network_settings = settings;
+        self
+    }
+
+    /// The indexes of the translation catalogs built in, made when the
+    /// program was built: such catalogs keep no index on the heap (see
+    /// [`FixedIndexes`](paperpaw_i18n::FixedIndexes)).
+    pub fn catalog_indexes(mut self, indexes: paperpaw_i18n::FixedIndexes) -> Self {
+        self.0.catalog_indexes = indexes;
         self
     }
 
@@ -191,6 +201,15 @@ impl KernelBuilder {
     /// watchdog. Without, it is not known.
     pub fn started(mut self, start: paperpaw_sdk::power::Start) -> Self {
         self.0.started = start;
+        self
+    }
+
+    /// What the panel can do ([`paperpaw_sdk::realtime::PanelInfo`]): its
+    /// grays, refresh times known beforehand, whether frames overlap.
+    /// Refreshes shown add their times ([`Kernel::panel_busy`]). Without,
+    /// a panel of the display's grays, its times not known.
+    pub fn panel(mut self, panel: paperpaw_sdk::realtime::PanelInfo) -> Self {
+        self.0.panel = panel;
         self
     }
 
@@ -418,7 +437,6 @@ impl BuilderParts {
         }
         // The power mode worn before, over the reader's settings.
         kernel.restore_power();
-        kernel.set_menu_titles();
         kernel.apply_reading_font();
         kernel.apply_status_font();
         kernel.validate();
@@ -465,14 +483,17 @@ impl BuilderParts {
         caps.black_and_white = display.format == paperpaw_platform::PixelFormat::Mono1;
         caps.firmware = self.firmware.is_some();
         caps.button_row = !self.button_row.is_empty();
+        caps = with_buttons(caps, &self.device.input);
         let links = self.bluetooth_links;
+        let mut translator = Translator::new();
+        translator.fixed_indexes(self.catalog_indexes);
         Kernel {
             shared: Shared {
                 registry: Registry::default(),
                 meter,
                 device: self.device,
                 settings: Settings::new(),
-                translator: Translator::new(),
+                translator,
                 fonts: Fonts::new(self.glyph_cache),
                 formats: Formats::new(),
                 hyphenation: Hyphenation::new(),
@@ -522,6 +543,9 @@ impl BuilderParts {
                 random: self.random,
                 memory: self.memory,
                 started: self.started,
+                panel: self.panel,
+                keys_held: Vec::new(),
+                room: paperpaw_sdk::realtime::Room::default(),
                 storage,
                 recall,
                 keymap: Keymap::default(),
@@ -610,6 +634,9 @@ impl BuilderParts {
             shown_since: Instant(0),
             scope: None,
             screens_changed: false,
+            raw: crate::realtime::RawKeys::default(),
+            lease: None,
+            holds: crate::awake::Holds::default(),
             preview_owner: None,
             next_serial: 0,
             task: None,
@@ -939,7 +966,7 @@ impl Kernel {
                 "",
                 paperpaw_sdk::SettingKind::Choice(choices.into()),
                 paperpaw_sdk::SettingValue::Text(Cow::Borrowed(core_settings::READING_APP_DEFAULT)),
-                paperpaw_sdk::builtin::groups::READING,
+                paperpaw_sdk::builtin::groups::READING_BEHAVIOUR,
             )
             .description("core.setting.reading-app.format.help")
             .with_extra(&READING_APPS);
@@ -952,6 +979,16 @@ impl Kernel {
     /// a theme installed for larger print enlarges it on a device whose
     /// own default is small too.
     pub(crate) fn apply_defaults(&mut self, device: &[(String, String)]) {
+        // The kernel's own for this panel first, the device's after.
+        let format = self.shared.device.display.format;
+        if let Some(value) =
+            crate::core_plugin::text_look::smooth_text_default(format.gray_levels())
+        {
+            let id = core_settings::SMOOTH_TEXT.static_str();
+            if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
+                self.warn_runtime(format!("default `{id}`: {error}"));
+            }
+        }
         for (id, value) in device {
             if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
                 self.warn_runtime(format!("device default `{id}`: {error}"));
@@ -1040,8 +1077,48 @@ impl Kernel {
             random: paperpaw_sdk::random::Random::NONE,
             memory: paperpaw_sdk::memory::Memory::NONE,
             started: paperpaw_sdk::power::Start::Unknown,
+            panel: paperpaw_sdk::realtime::PanelInfo::new(
+                device
+                    .display
+                    .format
+                    .gray_levels()
+                    .map_or(255, |l| l.min(255) as u8),
+            ),
             network_settings: &[],
+            catalog_indexes: &[],
             bluetooth_links: 0,
         }))
     }
+}
+
+/// What the device's buttons are good for ([`Capability::PAGE_KEYS`],
+/// [`Capability::BUTTONS`]), of the buttons the shell lists; a shell that
+/// lists none but has buttons has a full set.
+///
+/// [`Capability::PAGE_KEYS`]: paperpaw_sdk::Capability::PAGE_KEYS
+/// [`Capability::BUTTONS`]: paperpaw_sdk::Capability::BUTTONS
+fn with_buttons(
+    caps: paperpaw_sdk::Capabilities,
+    input: &paperpaw_platform::InputCaps,
+) -> paperpaw_sdk::Capabilities {
+    use paperpaw_platform::buttons as b;
+    use paperpaw_sdk::Capability;
+    if !input.buttons {
+        return caps;
+    }
+    if input.keys.is_empty() {
+        return caps.with(Capability::PAGE_KEYS).with(Capability::BUTTONS);
+    }
+    let has = |name: &str| input.keys.contains(&name);
+    let sideways = has(b::LEFT) && has(b::RIGHT);
+    let pages = (has(b::PAGE_FORWARD) && has(b::PAGE_BACK)) || sideways;
+    let moves = (has(b::UP) && has(b::DOWN)) || sideways;
+    let mut caps = caps;
+    if pages {
+        caps = caps.with(Capability::PAGE_KEYS);
+    }
+    if has(b::BACK) && has(b::CONFIRM) && moves {
+        caps = caps.with(Capability::BUTTONS);
+    }
+    caps
 }

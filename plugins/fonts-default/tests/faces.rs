@@ -192,6 +192,20 @@ fn icon_names_in_plugins() -> Vec<(String, String)> {
                     }
                 }
             }
+            // Icons in `static` lists of items and icons (`add_icons`): the
+            // quoted name on each row.
+            for (at, _) in text.match_indices("[(Id, &str); ") {
+                let rest = &text[at..];
+                let table = &rest[..rest.find("];").unwrap_or(rest.len())];
+                let rows = table.split_once("= [").map_or("", |(_, rows)| rows);
+                for row in rows.split(')') {
+                    if row.matches('"').count() >= 2
+                        && let Some(name) = row.rsplit('"').nth(1)
+                    {
+                        found.push((name.to_string(), path.display().to_string()));
+                    }
+                }
+            }
         }
     }
     found

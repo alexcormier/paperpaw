@@ -37,12 +37,12 @@ use paperpaw_sdk::json::stream::{self, Event as Json};
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, encode};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
-    HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError,
-    Registrar, Screen, ScreenSpec, SettingSpec, Storage, StorageError,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, FixedAction, FixedScreen, Gesture,
+    GestureKind, Handled, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode,
+    RegisterError, Registrar, Screen, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
@@ -624,27 +624,33 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "wallabag.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(48)];
+static ICONS: [(Id, &str); 2] = [(OPEN, "article"), (FETCH, "refresh")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "wallabag.title", |env, _| {
+    Box::new(SetupScreen::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for Wallabag {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Wallabag", paperpaw_sdk::package_version!())
-            .description("Articles saved in Wallabag, fetched as books.")
-            .how(&HOW)
-            .uses(paperpaw_sdk::Uses::NETWORK)
+        Manifest::new(
+            PLUGIN,
+            "Wallabag articles",
+            paperpaw_sdk::package_version!(),
+        )
+        .description("Articles saved in Wallabag, fetched as books.")
+        .how(&HOW)
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::default();
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "wallabag.title",
-            Box::new(|env, _| Box::new(SetupScreen::new(env))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "wallabag.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
         let s = state.clone();
         r.add_action(ActionSpec::new(FETCH, "wallabag.fetch").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
@@ -663,9 +669,8 @@ impl Plugin for Wallabag {
         r.on(FETCH_DUE, move |env, (), out| {
             s.borrow_mut().start(env, out)
         })?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(48))?;
-        r.add_icon(OPEN, Cow::Borrowed("article"))?;
-        r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Commands);
         let steps: [(Event<HttpReply>, Step); 5] = [
             (TOKEN, Fetch::token),
@@ -869,10 +874,7 @@ impl Screen for SetupScreen {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, ROWS.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area());
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, ROWS.len()).request(cx);
         Handled::Yes
     }
 

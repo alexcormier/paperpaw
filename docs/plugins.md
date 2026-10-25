@@ -137,6 +137,14 @@ Screens are made by a factory each time they open
 `Handled::No` for what a screen does not handle: the kernel then runs
 the action's own handler (e.g. the menu button opens the menu).
 
+A screen opened again while it is open is not made twice: the kernel
+goes back to the open one, closing the screens above it, and gives it
+the params in `on_reopen`, so *Back* leaves it in one press. By default
+that is one for each set of params (the details of another book open
+above those of the first); `.instances(Instances::SINGLE)` keeps one at
+most whatever the params (a transfer screen, a page of settings
+roots), and `Instances::MANY` opens each time.
+
 An action can be run with params: `Command::RunAction(id, params)`, or
 `Command::run(id)` without. Its handler gets them as its second argument
 (`.handler(|env, params, out| ..)`), and a screen reads them with
@@ -173,7 +181,15 @@ Some rules every screen should follow:
   standard app.
 - **Ask for redraws.** After a change, `cx.request_redraw()` (or a part
   of the screen) and `cx.request_refresh(mode)`: `Fast` for a moving
-  focus, `Partial` for new content, `Full` to clear ghosting.
+  focus, `Partial` for new content, `Full` to clear ghosting. A focus
+  that moves asks for the two items it left and came to, never the
+  whole screen: on the X4 a step then takes a fraction of a frame. The
+  lists do it themselves (`ListChange::request` after `ListView`,
+  `Rows` or `Sections` moved it); a focus of a screen's own asks with
+  `ListChange::focus(left, reached)` (for buttons with
+  `ui::button_reach`, as a focus frame goes round them). Where the focus
+  changes more, such as a line about the focused item, ask for that
+  part too.
 - **Overlays** are screens with a `region`. One that takes the reader's
   attention (a menu, a question) washes out what lies below it
   (`dims_below`); one looked through (a keyboard over the field it
@@ -834,7 +850,7 @@ that their choices go along; a shell opens a book with
 | Text chosen, and the action chosen for it | `menus::SELECTION`, `events::TEXT_CHOSEN` | add an action to the menu, hear the event |
 | Notes exported as Markdown | `events::NOTES_EXPORTED` | for notes apps and syncs |
 | The reader's menus | `menus::READER`, `READER_MORE`, `READER_PANEL` | add entries there |
-| The type of pages | `settings::FONT_SIZE`, `FONT_WEIGHT`, `WORD_SPACING`, `LINE_SPACING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`, `INDENT`, `PARAGRAPH_SPACING`, `WIDOWS`, `ORPHANS`, `PUBLISHER_STYLES`, `FOOTNOTES` | the kernel's settings (each book may have its own), which readers read |
+| The type of pages | `settings::FONT_SIZE`, `FONT_WEIGHT`, `TEXT_CONTRAST`, `SMOOTH_TEXT`, `WORD_SPACING`, `LETTER_SPACING`, `KERNING`, `LIGATURES`, `LINE_SPACING`, `LINE_BREAKING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`, `HYPHEN_MIN_LEFT`, `HYPHEN_MIN_RIGHT`, `INDENT`, `INDENT_SIZE`, `PARAGRAPH_SPACING`, `PARAGRAPH_SPACE`, `WIDOWS`, `ORPHANS`, `PUBLISHER_STYLES`, `BOOK_ALIGN` and the other `BOOK_*`, `FOOTNOTES` | the kernel's settings (each book may have its own), which readers read |
 | The page's words | `events::PAGE_WORDS_WANTED`, `reading::PageWords` | readers answer `reading::ask_page_words` |
 | Where a book was left | `positions::{load, save}`, `Reading::xpointer` with `BOOK_CLOSED` | readers keep it; syncs and lists read it without opening the book |
 | The contents, search, the marks, a footnote, skimming | `slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`, `SKIM`, `events::FOLLOW_LINK`, `SKIM`, `SKIMMED` | bind a screen of one's own; readers open the slots, follow the links and go where skimming asks |
@@ -883,7 +899,14 @@ least `Style::widows` lines of a paragraph at the top of a page and
 `orphans` at the bottom (`Style::lines_kept`, from the settings
 `WIDOWS` and `ORPHANS`; a paragraph that goes on whole takes its
 heading along), and
-`layout::wrap_lines_hyphenated` breaks lines of one's own as pages do.
+`layout::wrap_lines_kerned` breaks lines of one's own as pages do, with
+the pairs `Typesetter::kern` gives (`ReadingFaces` kerns as it draws;
+`FontHandle::kern`, `unkerned` and `ligatures` for text of one's own).
+`PageType::patterns` gives the patterns of the page's language with the
+letters the reader keeps before and after a hyphen (`HYPHEN_MIN_LEFT`,
+`HYPHEN_MIN_RIGHT`; 0: the table's own, see
+`hyphen::Patterns::with_minimums`); a reader of one's own hyphenates
+with them.
 
 A text filter that needs to know where a block is, or leaves blocks out
 (a web page's adverts, printed page numbers in a book), is a block
@@ -1441,6 +1464,75 @@ script presses with `ble-key:right` (or `left`, `page-down`,
 heart-rate belt that answers the example above, notifying a rate each
 second.
 
+### Screens that run in real time
+
+Games, emulators and animations draw many frames a second and want
+every button as it goes down. Such a screen says so in one place,
+[`Screen::mode`], with a `realtime::ScreenMode`
+([ADR 0030](adr/0030-real-time-screens.md)):
+
+```rust
+fn mode(&self) -> ScreenMode {
+    ScreenMode::new()
+        .full_screen()     // no row of hints, no bars
+        .raw_keys()        // buttons pressed and released, in on_key
+        .cleans_itself()   // no full refresh every few pages
+        .fastest()         // the fastest refresh the panel has
+        .grays(2)          // black and white is enough
+        .frame_every(Duration::from_millis(100))
+        .awake_for(Duration::from_secs(600))
+}
+```
+
+Each option asks for an intent; every device meets it as well as it
+can. With `raw_keys`, `on_key` gets each button pressed and let go,
+with its time, and `env.keys_held()` says which are down. The power
+button stays the device's, and holding *Back* for two seconds always
+leaves the screen. With `frame_every`, the screen asks for its timer as
+usual (`cx.wake_at`); the X4 then goes on while the panel refreshes, and
+shows the next frame as soon as the panel is free.
+
+The device says what it can do and what it did: `env.panel()` has the
+fastest time of each refresh mode as measured, its grays, and the last
+frame shown (`last_frame()`: when, how long it took, how many frames
+were merged into it). Pace yourself by these numbers rather than by
+your own: faster panels then make your plugin faster without a new
+build.
+
+Draw pictures that change every frame with `canvas.blit`: a packed
+`Bitmap` of 1, 2, 4 or 8 bits a pixel with a palette of grays, at a
+whole scale, dithered or not. A 160×144 picture at three times its size
+costs a fraction of drawing it pixel by pixel.
+
+Keep what a loop reads all the time in internal RAM and large data in
+PSRAM (`memory::vec_in(Placement::FAST, n)` and `Placement::LARGE`);
+devices with one kind of memory keep both alike. In a code plugin, mark
+the few functions that run every frame with `paperpaw_sdk::hot! { … }`:
+the X4 runs them from internal RAM instead of flash, a bounded part of
+its heap; what does not fit runs from flash as before.
+
+A screen that needs much memory says so (`.memory(bytes)`, and
+`.needs_network()` or `.needs_bluetooth()` where it does): as it shows,
+the kernel lets caches go, holds background work back, switches off
+the radios it does not need, asks the screens below to let go of what
+they can make again (`on_squeeze`; the reader lets its book go and
+keeps its place) and closes them where that is not enough, until there
+is enough, and gives everything back once it closes. Read what you got
+with `env.room()` in `on_show`, and make the large buffer there. A
+screen of yours that keeps much (pictures, a long list) lets it go in
+`on_squeeze` and makes it again in `on_show`.
+
+To keep the device from going to sleep by itself for a while (a clock,
+a slideshow, a long download), hold it: `cx.keep_awake(WakeHold::new(id,
+reason).lasting(...))` on a screen (it ends when the screen closes), or
+`Command::KeepAwake` from work and services; renew it before it ends,
+let go with `Command::LetSleep`. The reader can switch holds off.
+
+`samples/frame-test` does all of this and shows what it measures (frames
+a second, the work as hot and as ordinary code, the drawing, the heap):
+`cargo run -p paperpaw-emulator --features frame-test`, then *Frame
+test* in the tools.
+
 ### Work in the background
 
 What a plugin does on its own, not because the reader just asked for
@@ -1521,12 +1613,17 @@ chip, segments, checksum and hash, and CrossPoint's board tag).
 PaperPaw's code guidelines ([CONTRIBUTING.md](../CONTRIBUTING.md#code-guidelines)) hold for plugins too: length limits, errors on user data, memory, comments.
 
 The smallest device, the Xteink X4, has 256 KiB of heap for everything.
-PaperPaw's standard app holds some 168 KiB of it once it has started
-with the sample books, 201 KiB at its peak (the emulator, `--profile
+PaperPaw's standard app holds some 90 KiB of it once it has started
+with the sample books, 130 KiB at its peak (the emulator, `--profile
 xteink-x4 --headless --script wait:500`). A plugin that should run
 there:
 
 - keeps little in memory: lists in files, read as they are needed;
+- registers what does not change as `static` lists, which stay in flash:
+  actions (`FixedAction`, `r.add_actions`), screens (`FixedScreen`,
+  `r.add_screens`), menu entries (`r.add_menu_entries`), icons
+  (`r.add_icons`) and settings (`r.add_settings`); an `ActionSpec` or a
+  `ScreenSpec` is for a handler or factory that keeps state of its own;
 - reads files a piece at a time (`Storage::read_at`), never whole books;
 - writes downloads straight to storage (`HttpRequest::save_to`);
 - reserves large buffers with `try_reserve` and copes when that fails;
@@ -1857,19 +1954,37 @@ change a setting that keeps the device safe, such as the lock's.
 Packs for other scripts are read a glyph at a time, so devices with
 little memory can use them ([ADR 0018](adr/0018-font-packs-for-other-scripts.md)).
 `tools/script-pack.py` builds Cyrillic and Greek for Literata.
+A pack that extends a face with sizes larger than its own draws text
+asked that large, and the font size goes as far: the X4's firmware has
+Literata up to 32 px, and `tools/literata-packs.py` builds its larger
+sizes (and its bold italic face) as plugins for the font library.
 Icon packs are such packs for the icon font: `tools/icons/pack.py` builds
 one with the Tabler icons named
 (`[extends] icons.ppfp = fonts-default.icons`).
 
-A family of its own needs a name and a regular face; its faces are
-packs, drawn on every device and read a glyph at a time, or font files,
-drawn where scalable fonts are, a variable font at its style's weight:
+A family needs a name and a face, a family of its own a regular face;
+its faces are packs, drawn on every device and read a glyph at a time,
+or font files, drawn where scalable fonts are, a variable font at its
+style's weight:
 
 ```ini
 [family]
 name = Fredoka
 regular = regular.ppfp
 bold = bold.ppfp
+```
+
+A plugin may also bring a face of a family that is there without it,
+bound to its role: the X4's firmware has no Literata Bold Italic, which
+such a plugin brings back:
+
+```ini
+[family]
+name = Literata
+bold-italic = literata-bold-italic.ppfp
+
+[fonts]
+core.font-reading-bold-italic = literata-bold-italic.bold-italic
 ```
 
 A logo of its own takes the place of PaperPaw's (on the sleep screen,

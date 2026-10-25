@@ -33,14 +33,14 @@ fn commands_open_screens_set_settings_and_say_what_is_shown() {
     );
     assert_eq!(run(&mut x4, "run core.settings").unwrap(), "{}");
     assert!(x4.shows("settings.list"), "by its id");
-    assert!(x4.shows("Display"), "by what it shows");
+    assert!(x4.shows("Library"), "by what it shows");
     assert!(!x4.shows("No such words"));
     let described = run(&mut x4, "describe").unwrap();
     assert!(
         described.starts_with(r#"{"screen":"settings.list","parts":[{"role":"#),
         "{described}"
     );
-    assert!(described.contains(r#""label":"Display""#), "{described}");
+    assert!(described.contains(r#""label":"Library""#), "{described}");
     assert!(described.contains(r#""state":"focused""#), "{described}");
     let screens = run(&mut x4, "screens").unwrap();
     assert!(screens.contains(r#""settings.list""#), "{screens}");

@@ -51,8 +51,8 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{PlaceKind, WidgetPlace, WidgetStack};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
-    Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, ShowsThrough,
+    Canvas, Color, Command, Cx, Env, FixedScreen, Handled, Id, Manifest, MenuNeed, Params, Plugin,
+    Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, SettingSpec, ShowsThrough,
 };
 
 pub const PLUGIN: Id = Id::new_static("sleep");
@@ -204,6 +204,18 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 2] = [
+    FixedScreen::new(
+        overlay::PICK,
+        "sleep.setting.overlay-picture",
+        |env, params| Box::new(overlay::Picker::new(env, params)),
+    ),
+    FixedScreen::new(SCREEN, "sleep.title", |env, _| {
+        Box::new(SleepScreen::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+];
+
 impl Plugin for Sleep {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Sleep screen", paperpaw_sdk::package_version!())
@@ -238,18 +250,9 @@ impl Plugin for Sleep {
         for item in items {
             r.set_menu_need(item, MenuNeed::Sleep)?;
         }
-        r.add_screen(ScreenSpec::new(
-            overlay::PICK,
-            "sleep.setting.overlay-picture",
-            Box::new(|env, params| Box::new(overlay::Picker::new(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         // Asleep, the buttons do nothing but wake the device.
         r.set_screen_hints(SCREEN, paperpaw_sdk::HintVisibility::Hidden)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "sleep.title",
-            Box::new(|env, _| Box::new(SleepScreen::new(env))),
-        ))?;
         r.bind_slot(slots::SLEEP, SCREEN, Priority::DEFAULT)?;
         r.add_widget_place(PLACE)?;
         r.add_widget_place(OVERLAY_PLACE)?;

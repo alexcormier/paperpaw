@@ -61,6 +61,7 @@ mod commands;
 pub mod contribution;
 pub mod data;
 pub mod decorations;
+pub mod developer;
 pub mod device_name;
 mod env;
 pub mod event;
@@ -101,6 +102,7 @@ pub mod presets;
 pub mod random;
 pub mod readers;
 pub mod reading;
+pub mod realtime;
 pub mod replies;
 mod screen;
 pub mod secrets;
@@ -123,7 +125,8 @@ pub mod words;
 pub mod work;
 
 pub use action::{
-    ActionHandler, ActionHint, ActionOverride, ActionSpec, Actions, Observer, ObserverSpec,
+    Action, ActionHandler, ActionHint, ActionOverride, ActionSpec, Actions, FixedAction,
+    FixedHandler, Observer, ObserverSpec,
 };
 pub use command::{
     Broadcast, Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
@@ -146,7 +149,7 @@ pub use contribution::item::Contribution;
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use env::EnvParts;
-pub use env::{Capabilities, Env, Metrics};
+pub use env::{Capabilities, Capability, Env, Metrics};
 pub use event::{Event, EventData, EventHandler};
 pub use fonts::{FontFace, FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{
@@ -157,7 +160,7 @@ pub use hyphenation::{Hyphenation, HyphenationSpec};
 pub use id::{Id, InvalidId};
 pub use memory_storage::{MemoryStorage, read_file};
 pub use menus::{
-    ItemState, ItemStateFn, MenuEntry, MenuItem, MenuNeed, MenuPlace, MenuSection, Menus,
+    ItemState, ItemStateFn, MenuEntry, MenuItem, MenuNeed, MenuPlace, MenuSection, MenuView, Menus,
 };
 pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
@@ -166,8 +169,8 @@ pub use replies::{
     FolderChosen, HttpError, HttpProgress, HttpReply, ServerNotice, SocketNotice, Typed,
 };
 pub use screen::{
-    CloseCause, Cx, Handled, Hint, HintVisibility, Output, Outside, Screen, ScreenFactory,
-    ScreenKey, ScreenSpec, ShowsThrough, StackEntry,
+    CloseCause, Cx, FixedFactory, FixedScreen, Handled, Hint, HintVisibility, Instances, Output,
+    Outside, Screen, ScreenFactory, ScreenKey, ScreenList, ScreenSpec, ShowsThrough, StackEntry,
 };
 pub use setting::{Setting, Text};
 pub use settings::{
@@ -176,10 +179,10 @@ pub use settings::{
 };
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 
-pub use paperpaw_graphics::Canvas;
 /// Round shapes' geometry: angles as on a clock face, points around a
 /// centre (see [`Canvas::fill_ring`], [`Canvas::draw_hand`]).
 pub use paperpaw_graphics::round;
+pub use paperpaw_graphics::{Bitmap, BitmapError, BitmapFormat, Blit, Canvas, Dither};
 pub use paperpaw_i18n::{Arg, Translator};
 pub use paperpaw_platform::{Battery, SystemStatus, WallClock};
 pub use paperpaw_platform::{
@@ -220,12 +223,12 @@ pub mod document {
 #[cfg(feature = "unstable")]
 pub mod layout {
     pub use paperpaw_layout::{
-        Face, Hyphenate, LayoutContext, LineRun, Page, PageImage, PageLine, Style, Typesetter,
-        VERSION, layout_page, line_start,
+        BookStyles, Face, Hyphenate, LayoutContext, LineRun, Page, PageImage, PageLine, Style,
+        Typesetter, VERSION, layout_page, line_start,
     };
     /// Lines broken as the layout breaks them (see `paperpaw-text`): for
     /// laying out text of one's own the way pages are, e.g. a note.
-    pub use paperpaw_text::{Line, wrap_lines, wrap_lines_hyphenated};
+    pub use paperpaw_text::{Line, wrap_lines, wrap_lines_hyphenated, wrap_lines_kerned};
 }
 
 /// Streaming XML/XHTML tokenizer (see `paperpaw-xml`) for format plugins.
@@ -373,9 +376,9 @@ pub mod image {
 }
 
 /// Text and font helpers (see `paperpaw-text`), e.g. reading a font
-/// file's family.
+/// file's family, or how glyphs are inked ([`ToneCurve`](text::ToneCurve)).
 pub mod text {
-    pub use paperpaw_text::{OUTLINES, sfnt};
+    pub use paperpaw_text::{OUTLINES, ToneCurve, sfnt};
 }
 
 /// Hyphenation with compiled patterns (see `paperpaw-hyphen`).

@@ -15,6 +15,14 @@ pub const LATIN: &[RangeInclusive<char>] = &[
     '\u{fffd}'..='\u{fffd}', // replacement character
 ];
 
+/// The ligatures ff, fi, fl, ffi and ffl, drawn in place of their letters
+/// where a font has them (see `FontHandle::ligatures` in the SDK).
+#[allow(
+    clippy::single_range_in_vec_init,
+    reason = "a set of ranges, of one here"
+)]
+pub const LIGATURES: &[RangeInclusive<char>] = &['\u{fb00}'..='\u{fb04}'];
+
 /// Cyrillic (Russian, Ukrainian, Bulgarian, Serbian and more), for packs
 /// added to fonts made for Latin.
 #[allow(
@@ -53,10 +61,11 @@ pub fn stand_in(ch: char) -> Option<char> {
     })
 }
 
-/// A character set by name: `latin`, `cyrillic` or `greek`.
+/// A character set by name: `latin`, `ligatures`, `cyrillic` or `greek`.
 pub fn named(name: &str) -> Option<&'static [RangeInclusive<char>]> {
     match name {
         "latin" => Some(LATIN),
+        "ligatures" => Some(LIGATURES),
         "cyrillic" => Some(CYRILLIC),
         "greek" => Some(GREEK),
         _ => None,

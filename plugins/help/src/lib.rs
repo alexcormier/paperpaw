@@ -23,7 +23,7 @@ use paperpaw_sdk::builtin::{events, groups, params};
 use paperpaw_sdk::help;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    Command, Commands, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, ScreenSpec,
+    Command, Commands, Env, FixedScreen, Id, Manifest, Params, Plugin, RegisterError, Registrar,
     SettingExtra, SettingSpec, Storage,
 };
 
@@ -93,6 +93,15 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 2] = [
+    FixedScreen::new(OVERLAY, "help.title", |env, params| {
+        Box::new(overlay::Overlay::new(env, params))
+    }),
+    FixedScreen::new(AGAIN, "help.setting.again", |env, _| {
+        Box::new(overlay::Again::new(env))
+    }),
+];
+
 impl Plugin for Help {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Hints", paperpaw_sdk::package_version!())
@@ -112,16 +121,7 @@ impl Plugin for Help {
         r.on(help::READY, |env, ready, out| {
             explain(env, &ready.screen, out)
         })?;
-        r.add_screen(ScreenSpec::new(
-            OVERLAY,
-            "help.title",
-            Box::new(|env, params| Box::new(overlay::Overlay::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            AGAIN,
-            "help.setting.again",
-            Box::new(|env, _| Box::new(overlay::Again::new(env))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

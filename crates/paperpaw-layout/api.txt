@@ -2,6 +2,21 @@ pub mod paperpaw_layout
 pub use paperpaw_layout::Hyphenate
 pub use paperpaw_layout::ImageRef
 pub use paperpaw_layout::TextStyle
+pub struct paperpaw_layout::BookStyles(_)
+impl paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::ALIGN: paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::ALL: paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::FONTS: paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::INDENT: paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::LINE_HEIGHT: paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::MARGINS: paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::NONE: paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::SIZE: paperpaw_layout::BookStyles
+pub const paperpaw_layout::BookStyles::SPACING: paperpaw_layout::BookStyles
+pub const fn paperpaw_layout::BookStyles::bits(self) -> u16
+pub const fn paperpaw_layout::BookStyles::has(self, paperpaw_layout::BookStyles) -> bool
+pub const fn paperpaw_layout::BookStyles::with(self, paperpaw_layout::BookStyles) -> paperpaw_layout::BookStyles
+pub const fn paperpaw_layout::BookStyles::without(self, paperpaw_layout::BookStyles) -> paperpaw_layout::BookStyles
 pub struct paperpaw_layout::Face
 pub paperpaw_layout::Face::heading: u8
 pub paperpaw_layout::Face::size: u16
@@ -46,6 +61,8 @@ pub paperpaw_layout::PageLine::word_spacing: f32
 pub paperpaw_layout::PageLine::words: alloc::vec::Vec<(u32, u32)>
 pub paperpaw_layout::PageLine::x: f32
 #[non_exhaustive] pub struct paperpaw_layout::Style
+pub paperpaw_layout::Style::balanced: bool
+pub paperpaw_layout::Style::book: paperpaw_layout::BookStyles
 pub paperpaw_layout::Style::em: f32
 pub paperpaw_layout::Style::indent: f32
 pub paperpaw_layout::Style::justify: bool
@@ -53,11 +70,14 @@ pub paperpaw_layout::Style::orphans: u8
 pub paperpaw_layout::Style::paragraph_spacing: f32
 pub paperpaw_layout::Style::widows: u8
 impl paperpaw_layout::Style
+pub const fn paperpaw_layout::Style::balanced(self, bool) -> Self
+pub const fn paperpaw_layout::Style::book(self, paperpaw_layout::BookStyles) -> Self
 pub const fn paperpaw_layout::Style::lines_kept(self, u8, u8) -> Self
 pub const fn paperpaw_layout::Style::new(f32, f32, f32, bool) -> Self
 pub const paperpaw_layout::VERSION: u32
 pub trait paperpaw_layout::Typesetter
 pub fn paperpaw_layout::Typesetter::advance(&self, paperpaw_layout::Face, char) -> f32
+pub fn paperpaw_layout::Typesetter::kern(&self, paperpaw_layout::Face, char, char) -> f32
 pub fn paperpaw_layout::Typesetter::line(&self, paperpaw_layout::Face) -> (f32, f32)
 pub fn paperpaw_layout::layout_page(&paperpaw_layout::LayoutContext<'_>, paperpaw_document::Locator, f32) -> core::result::Result<paperpaw_layout::Page, paperpaw_document::DocumentError>
 pub fn paperpaw_layout::line_start(&paperpaw_layout::LayoutContext<'_>, paperpaw_document::Locator) -> core::result::Result<paperpaw_document::Locator, paperpaw_document::DocumentError>

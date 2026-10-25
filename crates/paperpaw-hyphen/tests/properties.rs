@@ -159,6 +159,33 @@ proptest! {
         }
     }
 
+    /// Minimums given (as a reader's setting does) replace the table's
+    /// where they are above 0, and the breaks are those of the patterns
+    /// with them.
+    #[test]
+    fn given_minimums_replace_the_tables(
+        patterns in proptest::collection::vec(pattern(), 0..60),
+        words in proptest::collection::vec(word(), 1..10),
+        (left_min, right_min) in (0u8..4, 0u8..4),
+        (left, right) in (0usize..7, 0usize..7),
+    ) {
+        let table = compile(&patterns.join(" "), "", left_min, right_min);
+        let compiled = Patterns::new(&table).unwrap().with_minimums(left, right);
+        let (left_used, right_used) = (
+            if left > 0 { left } else { left_min.into() },
+            if right > 0 { right } else { right_min.into() },
+        );
+        prop_assert_eq!(
+            compiled.minimums(),
+            (left_used.max(1), right_used.max(1))
+        );
+        for word in &words {
+            let found = breaks(&compiled, word);
+            prop_assert_eq!(&found, &oracle(&patterns, word, left_used, right_used), "{}", word);
+            check_breaks(word, &found, left_used.max(1), right_used.max(1));
+        }
+    }
+
     #[test]
     fn random_tables_are_refused_or_used_safely(
         header in proptest::collection::vec(any::<u8>(), 0..24),

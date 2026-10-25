@@ -56,6 +56,54 @@ pub struct Capabilities {
     pub frontlight: bool,
     /// The panel shows black and white alone (no grays), e.g. the X4.
     pub black_and_white: bool,
+    /// More of what the device can do, by [`Capability`] (new ones come as
+    /// constants, without a new plugin interface).
+    pub(crate) more: u64,
+}
+
+/// What a device can do beyond [`Capabilities`]' fields
+/// ([`Capabilities::has`]): constants of one type, so more can come
+/// without a new plugin interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Capability(u64);
+
+impl Capability {
+    /// Sound can be played.
+    pub const AUDIO: Self = Self(1);
+    /// The front light's warmth can be set.
+    pub const WARMTH: Self = Self(1 << 1);
+    /// Charging can be stopped at a limit.
+    pub const CHARGE_LIMIT: Self = Self(1 << 2);
+    /// A keyboard of keys (not one on the screen) is there.
+    pub const KEYBOARD: Self = Self(1 << 3);
+    /// Code plugins can mark hot code that runs from internal RAM
+    /// (`paperpaw_sdk::hot!`).
+    pub const HOT_CODE: Self = Self(1 << 4);
+    /// Keys that turn pages (page forward and back, or left and right).
+    pub const PAGE_KEYS: Self = Self(1 << 5);
+    /// Buttons enough for every screen without touch: *Back*, *Confirm*
+    /// and keys to move the focus (up and down, or left and right). Where
+    /// a device has page keys alone, screens offer by touch what they
+    /// would by buttons.
+    pub const BUTTONS: Self = Self(1 << 6);
+    /// A USB link to a computer that developer tools may use
+    /// ([`developer`](crate::developer)), once the reader allows them.
+    pub const USB_LINK: Self = Self(1 << 7);
+}
+
+impl Capabilities {
+    /// Whether the device can do `capability`.
+    pub const fn has(&self, capability: Capability) -> bool {
+        self.more & capability.0 == capability.0
+    }
+
+    /// With `capability` too (the kernel and shells say so).
+    #[cfg(feature = "kernel")]
+    #[must_use]
+    pub const fn with(mut self, capability: Capability) -> Self {
+        self.more |= capability.0;
+        self
+    }
 }
 
 /// Read-only view of the environment a plugin runs in.
@@ -184,7 +232,7 @@ pub struct Env<'a> {
     pub(crate) slots: &'a [crate::Id],
     /// Every screen: its id and the translation key of its name, e.g. for
     /// settings that differ per screen (what gestures do there).
-    pub(crate) screens: &'a [(crate::Id, alloc::borrow::Cow<'static, str>)],
+    pub(crate) screens: crate::screen::ScreenList<'a>,
     /// The folders reading fonts are found in at start-up, the first one
     /// PaperPaw's own (where new fonts go); empty where the device has
     /// only its built-in fonts.
@@ -208,6 +256,14 @@ pub struct Env<'a> {
     /// How PaperPaw started this time, where the shell can tell (see
     /// [`power::Start`](crate::power::Start)).
     pub(crate) started: crate::power::Start,
+    /// What the panel can do and how the last frame went (see
+    /// [`realtime`](crate::realtime)).
+    pub(crate) panel: crate::realtime::PanelInfo,
+    /// The buttons held down now, in the order they went down.
+    pub(crate) keys_held: &'a [&'static str],
+    /// The room the screen on top asked for and got (see
+    /// [`realtime::Room`](crate::realtime::Room)).
+    pub(crate) room: crate::realtime::Room,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub(crate) storage: &'a dyn Storage,
@@ -256,9 +312,9 @@ impl<'a> Env<'a> {
         self.hyphenation
     }
 
-    /// Its `menus`.
-    pub fn menus(&self) -> &'a Menus {
-        self.menus
+    /// Its menus, labelled by its actions and settings.
+    pub fn menus(&self) -> crate::menus::MenuView<'a> {
+        crate::menus::MenuView::new(self.menus, self.actions, self.settings)
     }
 
     /// Every action, e.g. to offer them in a menu editor.
@@ -463,7 +519,7 @@ impl<'a> Env<'a> {
 
     /// Every screen: its id and the translation key of its name, e.g. for
     /// settings that differ per screen (what gestures do there).
-    pub fn screens(&self) -> &'a [(crate::Id, alloc::borrow::Cow<'static, str>)] {
+    pub fn screens(&self) -> crate::screen::ScreenList<'a> {
         self.screens
     }
 
@@ -509,6 +565,26 @@ impl<'a> Env<'a> {
     /// [`power::Start`](crate::power::Start)).
     pub fn started(&self) -> crate::power::Start {
         self.started
+    }
+
+    /// What the panel can do, and how the last frame went (see
+    /// [`realtime`](crate::realtime)): for screens that pace themselves.
+    pub fn panel(&self) -> crate::realtime::PanelInfo {
+        self.panel
+    }
+
+    /// The buttons held down now: for screens that take raw keys
+    /// ([`ScreenMode::raw_keys`](crate::realtime::ScreenMode::raw_keys)),
+    /// also for the others.
+    pub fn keys_held(&self) -> crate::realtime::KeysHeld<'a> {
+        crate::realtime::KeysHeld::of(self.keys_held)
+    }
+
+    /// The memory the screen on top asked for
+    /// ([`ScreenMode::memory`](crate::realtime::ScreenMode::memory)) and
+    /// what it got.
+    pub fn room(&self) -> crate::realtime::Room {
+        self.room
     }
 
     /// The device's storage. Plugins keep their own files below
@@ -641,7 +717,7 @@ pub struct EnvParts<'a> {
     pub slots: &'a [crate::Id],
     /// Every screen: its id and the translation key of its name, e.g. for
     /// settings that differ per screen (what gestures do there).
-    pub screens: &'a [(crate::Id, alloc::borrow::Cow<'static, str>)],
+    pub screens: crate::screen::ScreenList<'a>,
     /// The folders reading fonts are found in at start-up, the first one
     /// PaperPaw's own (where new fonts go); empty where the device has
     /// only its built-in fonts.
@@ -668,6 +744,14 @@ pub struct EnvParts<'a> {
     /// How PaperPaw started this time, where the shell can tell (see
     /// [`power::Start`](crate::power::Start)).
     pub started: crate::power::Start,
+    /// What the panel can do and how the last frame went (see
+    /// [`realtime`](crate::realtime)).
+    pub panel: crate::realtime::PanelInfo,
+    /// The buttons held down now, in the order they went down.
+    pub keys_held: &'a [&'static str],
+    /// The room the screen on top asked for and got (see
+    /// [`realtime::Room`](crate::realtime::Room)).
+    pub room: crate::realtime::Room,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -730,6 +814,9 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             memory: p.memory,
             clock: p.clock,
             started: p.started,
+            panel: p.panel,
+            keys_held: p.keys_held,
+            room: p.room,
             storage: p.storage,
         }
     }

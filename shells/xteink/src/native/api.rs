@@ -14,6 +14,7 @@ pub static API: Api = Api {
     panic,
     micros,
     icon,
+    alloc_in,
 };
 
 unsafe extern "C" fn alloc(size: usize, align: usize) -> *mut u8 {
@@ -22,6 +23,35 @@ unsafe extern "C" fn alloc(size: usize, align: usize) -> *mut u8 {
         Ok(layout) if size > 0 => unsafe { alloc::alloc::alloc(layout) },
         _ => core::ptr::null_mut(),
     }
+}
+
+/// Allocates where `placement` says (`paperpaw_sdk::memory::Placement`):
+/// 1 internal RAM, 2 PSRAM, where the device has it; where that has no
+/// room, anywhere, so the plugin runs, more slowly.
+pub unsafe extern "C" fn alloc_in(size: usize, align: usize, placement: u32) -> *mut u8 {
+    use esp_alloc::MemoryCapability;
+    let Ok(layout) = Layout::from_size_align(size, align) else {
+        return core::ptr::null_mut();
+    };
+    if size == 0 {
+        return core::ptr::null_mut();
+    }
+    let caps = match placement {
+        1 => Some(MemoryCapability::Internal),
+        #[cfg(feature = "esp32s3")]
+        2 => Some(MemoryCapability::External),
+        _ => None,
+    };
+    if let Some(caps) = caps {
+        // SAFETY: not zero-sized; freed by the global allocator, which
+        // frees blocks of any region.
+        let ptr = unsafe { esp_alloc::HEAP.alloc_caps(caps.into(), layout) };
+        if !ptr.is_null() {
+            return ptr;
+        }
+    }
+    // SAFETY: not zero-sized; as `GlobalAlloc::alloc`.
+    unsafe { alloc::alloc::alloc(layout) }
 }
 
 unsafe extern "C" fn dealloc(ptr: *mut u8, size: usize, align: usize) {

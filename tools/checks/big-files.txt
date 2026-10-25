@@ -3,7 +3,7 @@
 # and one split below the limit leaves this list.
 6958 crates/paperpaw-sdk/src/icon_table.rs
 3307 crates/paperpaw-core/src/tests.rs
-2162 crates/paperpaw-core/src/core_plugin.rs
+1948 crates/paperpaw-core/src/core_plugin.rs
 1891 plugins/format-epub/src/convert.rs
 1925 crates/paperpaw-sdk/src/widgets/grid/view.rs
 1874 crates/paperpaw-sdk/src/library/catalog.rs

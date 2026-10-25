@@ -56,6 +56,13 @@ pub fn button_border(style: &UiStyle) -> u32 {
     style.line.max(2)
 }
 
+/// Where a button at `rect` draws: a focus goes round it, a little
+/// outside. A screen moving a focus between buttons asks for these drawn
+/// again (see [`ListChange::focus`](super::ListChange::focus)).
+pub fn button_reach(style: &UiStyle, rect: Rect) -> Rect {
+    rect.grow((button_border(style) * 3) as u16)
+}
+
 /// A button: outlined, or filled when `on`; `focused` (chosen with
 /// buttons) draws a frame around it. Labels of one character (e.g. `+`)
 /// are set larger.
@@ -72,10 +79,30 @@ pub(crate) fn draw_button(
     on: bool,
     focused: bool,
 ) {
+    draw_button_said(canvas, env, style, rect, label, on, on, focused);
+}
+
+/// [`draw_button`], filled where `filled`, said to be on where `on`: a
+/// key filled to show the focus is not on.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
+pub(crate) fn draw_button_said(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    label: &str,
+    filled: bool,
+    on: bool,
+    focused: bool,
+) {
     canvas
         .describe(Role::Button, label, rect)
         .focused(focused)
         .on(on.then_some(true));
+    let on = filled;
     let Some(ink) = button_frame(canvas, style, rect, on, focused) else {
         return;
     };
@@ -118,11 +145,24 @@ pub(crate) fn draw_icon_button(
     on: bool,
     focused: bool,
 ) -> Color {
+    draw_icon_button_said(canvas, style, rect, name, on, on, focused)
+}
+
+/// [`draw_icon_button`], filled where `filled`, said to be on where `on`.
+pub(crate) fn draw_icon_button_said(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    name: &str,
+    filled: bool,
+    on: bool,
+    focused: bool,
+) -> Color {
     canvas
         .describe(Role::Button, name, rect)
         .focused(focused)
         .on(on.then_some(true));
-    button_frame(canvas, style, rect, on, focused).unwrap_or(Color::BLACK)
+    button_frame(canvas, style, rect, filled, focused).unwrap_or(Color::BLACK)
 }
 
 /// A button's background, border and focus frame; the ink for what goes

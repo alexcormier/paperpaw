@@ -24,11 +24,11 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, menus};
 use paperpaw_sdk::ui::reorder::Reorder;
 use paperpaw_sdk::ui::reorder::ReorderStep;
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec,
+    Screen,
 };
 
 pub const PLUGIN: Id = Id::new_static("menu-editor");
@@ -48,9 +48,6 @@ const INDEX: &str = "index";
 /// What must stay reachable from every menu that reaches it by default.
 const PROTECTED: [Id; 2] = [actions::SETTINGS, OPEN];
 
-/// Creates one of the editor's screens.
-type OpenScreen = fn(&Env<'_>, &Params) -> Box<dyn Screen>;
-
 /// The menu editor plugin.
 #[derive(Debug, Default)]
 pub struct MenuEditor;
@@ -59,6 +56,26 @@ pub struct MenuEditor;
 static HOW: [(&str, &str); 2] = [
     ("en", include_str!("../how/en.txt")),
     ("de", include_str!("../how/de.txt")),
+];
+
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "menu-editor.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(MENUS_SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, OPEN).order(210)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "menu-2")];
+
+static SCREENS: [FixedScreen; 4] = [
+    FixedScreen::new(MENUS_SCREEN, "menu-editor.title", |env, _| {
+        Box::new(MenusScreen::open(env))
+    }),
+    FixedScreen::new(ENTRIES_SCREEN, "menu-editor.title", |env, p| {
+        Box::new(EntriesScreen::open(env, p))
+    }),
+    FixedScreen::new(ENTRY_SCREEN, "menu-editor.title", |env, p| {
+        Box::new(EntryScreen::open(env, p))
+    }),
+    FixedScreen::new(ADD_SCREEN, "menu-editor.title", |env, p| {
+        Box::new(AddScreen::open(env, p))
+    }),
 ];
 
 impl Plugin for MenuEditor {
@@ -70,24 +87,10 @@ impl Plugin for MenuEditor {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        let screens: [(Id, OpenScreen); 4] = [
-            (MENUS_SCREEN, |env, _| Box::new(MenusScreen::open(env))),
-            (ENTRIES_SCREEN, |env, p| {
-                Box::new(EntriesScreen::open(env, p))
-            }),
-            (ENTRY_SCREEN, |env, p| Box::new(EntryScreen::open(env, p))),
-            (ADD_SCREEN, |env, p| Box::new(AddScreen::open(env, p))),
-        ];
-        for (id, open) in screens {
-            r.add_screen(ScreenSpec::new(id, "menu-editor.title", Box::new(open)))?;
-        }
-        r.add_action(ActionSpec::new(OPEN, "menu-editor.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(MENUS_SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(210))?;
-        r.add_icon(OPEN, Cow::Borrowed("menu-2"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -103,7 +106,7 @@ fn is_menu(env: &Env<'_>, id: &str) -> bool {
 
 /// The display name of an entry: an action, a setting or a submenu.
 fn name(env: &Env<'_>, id: &str) -> String {
-    let key = env.actions().get(id).map(|a| a.title.as_ref()).or_else(|| {
+    let key = env.actions().get(id).map(|a| a.title()).or_else(|| {
         env.settings()
             .specs()
             .find(|s| s.id.as_str() == id)
@@ -414,7 +417,7 @@ fn name_of_menu(env: &Env<'_>, menu: &str) -> String {
     }
     let settings = env.settings();
     let Some(spec) = settings.spec(menu) else {
-        let key = env.actions().get(menu).map_or(menu, |a| a.title.as_ref());
+        let key = env.actions().get(menu).map_or(menu, |a| a.title());
         return env.i18n().tr(key).to_string();
     };
     let group = settings.group_of(spec);
@@ -751,10 +754,7 @@ impl Screen for EntryScreen {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, OPTIONS.len()) != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, OPTIONS.len()).request(cx);
         Handled::Yes
     }
 
@@ -810,7 +810,7 @@ struct Candidate {
 fn sources<'e>(env: &'e Env<'_>, menus: &'e [Id]) -> impl Iterator<Item = (&'e Id, &'e str)> {
     env.actions()
         .iter()
-        .map(|a| (&a.id, a.title.as_ref()))
+        .map(|a| (a.id(), a.title()))
         .chain(env.settings().specs().map(|s| (&s.id, s.title.as_ref())))
         .chain(menus.iter().map(|m| (m, m.as_str())))
 }

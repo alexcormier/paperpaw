@@ -134,6 +134,9 @@ fn ppn_of(byte: u8) -> Vec<u8> {
         relocs: 0,
         align: 16,
         compiler: 1,
+        hot_at: 0,
+        hot_len: 0,
+        patches: 0,
         sha256: [0; 32],
     };
     let mut digest = header.digest();
@@ -445,7 +448,7 @@ fn code_changed_while_asked_about_is_not_installed() {
 
 /// The SHA-256 a code file's header holds, as installers name its code.
 fn code_name(file: &[u8]) -> [u8; 32] {
-    file[48..80].try_into().unwrap()
+    Header::read(file).unwrap().sha256
 }
 
 /// An update that the kernel refuses (one of its files does not load)

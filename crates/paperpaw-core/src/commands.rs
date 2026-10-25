@@ -83,9 +83,13 @@ impl Kernel {
         });
         let grays = whole && grays;
         let again = mem::take(&mut self.frame.again);
+        // How the screen on top runs (ADR 0030): its own refreshes, the
+        // fastest, a pace.
+        let mode = self.top_mode();
         let mut effects = Effects {
             restart: mem::take(&mut self.restart),
             sleep: mem::take(&mut self.sleep),
+            pace: mode.frame_interval(),
             ..Effects::default()
         };
         if let Some(dirty) = self.frame.pending.take() {
@@ -96,17 +100,28 @@ impl Kernel {
                 .deferred
                 .take()
                 .map_or(dirty, |d| d.union(&dirty));
-            let interval = self
-                .shared
-                .settings
-                .int(core_settings::FULL_REFRESH_INTERVAL.as_str())
-                .clamp(0, i64::from(u32::MAX)) as u32;
+            let interval = match mode.does_clean_itself() {
+                // Cleaned when the screen asks, never every few frames.
+                true => 0,
+                false => self
+                    .shared
+                    .settings
+                    .int(core_settings::FULL_REFRESH_INTERVAL.as_str())
+                    .clamp(0, i64::from(u32::MAX)) as u32,
+            };
             let screen = self.framebuffer.bounds();
-            let mut requested = requested.unwrap_or(RefreshMode::Partial);
+            let mut requested = match mode.wants_fastest() && set.is_none() {
+                true => Self::fastest_mode(&mode, requested),
+                false => requested.unwrap_or(RefreshMode::Partial),
+            };
             // Leaving large pictures: a fast refresh would keep their ghost
             // (not where the mode was set exactly).
             let area = |r: Rect| u32::from(r.width) * u32::from(r.height);
-            if set.is_none() && self.frame.pictures_shown && area(dirty) * 2 >= area(screen) {
+            if set.is_none()
+                && !mode.does_clean_itself()
+                && self.frame.pictures_shown
+                && area(dirty) * 2 >= area(screen)
+            {
                 requested = RefreshMode::Full;
             }
             // A screen with pictures drawn whole, or most of it, in grays
@@ -116,6 +131,7 @@ impl Kernel {
             let grays = grays
                 || (whole
                     && set.is_none()
+                    && !mode.does_clean_itself()
                     && pictures
                     && !again
                     && area(dirty) * 2 >= area(screen)
@@ -164,6 +180,7 @@ impl Kernel {
                         .done(refresh.mode, refresh.region, screen);
                     effects.refresh = Some((refresh.region, refresh.mode));
                     effects.grays = refresh.grays;
+                    self.frame_asked();
                     self.shared.usage.refreshed(refresh.mode, refresh.region);
                     let top = self.stack.last().map_or(meter::CORE, |s| s.id.namespace());
                     self.shared
@@ -211,13 +228,19 @@ impl Kernel {
             shot,
             self.network_deadline(),
             self.bluetooth_deadline(),
+            self.escape_due(),
         ]
         .into_iter()
         .flatten()
         .min();
-        // A screen came or went: presses until it shows are dropped.
+        if self.lease.is_some() {
+            self.note_room();
+        }
+        // A screen came or went: presses until it shows are dropped, and
+        // those the one before took as raw keys are its no more.
         if mem::take(&mut self.screens_changed) {
             self.input.settling = true;
+            self.forget_raw();
         }
         // What was read is kept for the frame the call drew, if any, then
         // forgotten (see `render`).
@@ -240,6 +263,10 @@ impl Kernel {
                 if !mem::take(&mut self.show_pending) {
                     return;
                 }
+                // Room made for it where it needs memory, given back where
+                // the screen that had it is gone (ADR 0030).
+                self.sync_room();
+                self.hint_escape();
                 self.with_top(|screen, cx| {
                     screen.on_show(cx);
                     Handled::Yes
@@ -328,7 +355,7 @@ impl Kernel {
             Command::SetKeyLayer(..) => {
                 self.warn_runtime("a key map layer is laid by its screen alone; not laid");
             }
-            Command::OpenScreen(screen, params) => self.open(screen, None, &params),
+            Command::OpenScreen(screen, params) => self.open_once(screen, None, &params),
             // Not past a screen that guards the device, but from it: a
             // screen above it closes itself (the sleep screen on waking).
             Command::Back
@@ -354,6 +381,10 @@ impl Kernel {
             Command::RemovePlugin(id) => self.remove_plugin(&id),
             Command::InstallPlugin(id, folder) => self.install_plugin(&id, &folder),
             Command::Sleep => self.sleep = self.shared.caps.sleep,
+            Command::KeepAwake(hold) => self.keep_awake(hold),
+            Command::LetSleep(id) => self.let_sleep(&id),
+            // Keys of later releases: none known yet, left as they are.
+            Command::Extended { .. } => {}
             command @ (Command::SetSetting(..)
             | Command::ResetSetting(_)
             | Command::PreviewSettings(_)
@@ -438,7 +469,7 @@ impl Kernel {
             }
         }
         match screen.or_else(|| self.shared.registry.resolve_slot(slot.as_str()).cloned()) {
-            Some(screen) => self.open(screen, Some(slot), &params),
+            Some(screen) => self.open_once(screen, Some(slot), &params),
             None => self.warn_runtime(format!("no screen for slot `{slot}`")),
         }
     }
@@ -772,6 +803,20 @@ impl Kernel {
                 }
             }
             Command::Bluetooth(request) => self.apply_bluetooth(*request),
+            // Reserved (ADR 0031): no link in this release, said as such.
+            Command::Developer(request) => {
+                if let paperpaw_sdk::developer::DevCommand::Open { link, events } =
+                    request.command()
+                {
+                    let failed = paperpaw_sdk::developer::DevEvent::Failed {
+                        link: link.clone(),
+                        error: paperpaw_sdk::developer::DevError::NotAvailable,
+                    };
+                    self.output
+                        .commands
+                        .push(Command::Emit(events.clone(), failed.into_params()));
+                }
+            }
             Command::Wifi(command) => match &mut self.shared.wifi {
                 Some(wifi) => {
                     if command == WifiCommand::Scan {

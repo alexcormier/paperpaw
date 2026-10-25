@@ -186,13 +186,13 @@ proptest! {
             let delta = list_step(&buttons[m], list.rows() as isize).unwrap();
             prop_assert_eq!(list.focus(), step_focus(before.0, delta, len));
             let expected = if list.focus() == before.0 {
-                ListChange::None
+                Kind::None
             } else if list.page() == before.1 {
-                ListChange::Focus
+                Kind::Focus
             } else {
-                ListChange::Page
+                Kind::Page
             };
-            prop_assert_eq!(change, expected);
+            prop_assert_eq!(kind(change), expected);
             prop_assert_eq!(list.page(), list.focus() / list.rows());
             prop_assert!(list.page() < list.pages(len));
         }
@@ -258,10 +258,10 @@ fn a_hidden_focus_shows_on_the_first_step_and_stays_hidden_while_paging() {
     assert_eq!(list.focus(), 3);
     assert!(!list.shown());
     // The first step shows where it is, without moving it.
-    assert_eq!(list.move_focus(1, 10), ListChange::Focus);
+    assert!(list.move_focus(1, 10).is_focus());
     assert!(list.shown());
     assert_eq!(list.focus(), 3);
-    assert_eq!(list.move_focus(1, 10), ListChange::Focus);
+    assert!(list.move_focus(1, 10).is_focus());
     assert_eq!(list.focus(), 4);
     // A hidden focus is not drawn.
     let mut hidden = ListView::new(Rect::new(0, 0, 400, 300), 100).focus_on_keys(&env);
@@ -393,13 +393,13 @@ proptest! {
             let change = rows.step(forward);
             prop_assert!(!headings[rows.focus()]);
             let expected = if entries.len() == 1 {
-                ListChange::None
+                Kind::None
             } else if rows.paging().page == page {
-                ListChange::Focus
+                Kind::Focus
             } else {
-                ListChange::Page
+                Kind::Page
             };
-            prop_assert_eq!(change, expected);
+            prop_assert_eq!(kind(change), expected);
             visited.push(rows.focus());
         }
         prop_assert_eq!(visited.first(), visited.last(), "back where it began");
@@ -684,6 +684,22 @@ fn a_long_list_turns_to_its_last_page_and_back_to_its_first() {
 
 // ---- What a move asks to be drawn ---------------------------------------
 
+/// What kind of change a move made, whatever rows it concerns.
+#[derive(Debug, PartialEq, Eq)]
+enum Kind {
+    None,
+    Focus,
+    Page,
+}
+
+fn kind(change: ListChange) -> Kind {
+    match change {
+        ListChange::Focus { .. } => Kind::Focus,
+        ListChange::Page => Kind::Page,
+        _ => Kind::None,
+    }
+}
+
 /// What `request` asked for: the area drawn again (`None` for all of the
 /// screen) and the refresh.
 fn asked(
@@ -705,18 +721,18 @@ fn a_step_redraws_only_the_two_rows_it_concerns() {
     // ListView: rows 100 high.
     let mut list = ListView::new(Rect::new(0, 100, 400, 500), 100);
     let change = list.move_focus(2, 12);
-    assert_eq!(change, ListChange::Focus);
-    let (area, all, refresh) = asked(&h, |cx| list.request(change, cx));
+    assert!(change.is_focus());
+    let (area, all, refresh) = asked(&h, |cx| change.request(cx));
     assert_eq!(area, Some(list.row_rect(0).union(&list.row_rect(2))));
     assert!(!all);
     assert_eq!(refresh, Some(RefreshMode::Fast));
     let change = list.move_focus(5, 12);
     assert_eq!(change, ListChange::Page);
-    let (_, all, refresh) = asked(&h, |cx| list.request(change, cx));
+    let (_, all, refresh) = asked(&h, |cx| change.request(cx));
     assert!(all);
     assert_eq!(refresh, Some(RefreshMode::Partial));
     assert_eq!(
-        asked(&h, |cx| list.request(ListChange::None, cx)),
+        asked(&h, |cx| ListChange::None.request(cx)),
         (None, false, None)
     );
 
@@ -727,8 +743,8 @@ fn a_step_redraws_only_the_two_rows_it_concerns() {
         vec![true, false, false, true, false],
     );
     let change = rows.step(true);
-    assert_eq!(change, ListChange::Focus);
-    let (area, all, _) = asked(&h, |cx| rows.request(change, cx));
+    assert!(change.is_focus());
+    let (area, all, _) = asked(&h, |cx| change.request(cx));
     assert_eq!(
         area,
         Some(rows.rect_of(1).unwrap().union(&rows.rect_of(2).unwrap()))
@@ -746,7 +762,7 @@ fn a_step_redraws_only_the_two_rows_it_concerns() {
         }],
     );
     let change = list.step(true);
-    let (area, all, _) = asked(&h, |cx| list.request(change, cx));
+    let (area, all, _) = asked(&h, |cx| change.request(cx));
     assert_eq!(
         area,
         Some(list.rect_of(0).unwrap().union(&list.rect_of(1).unwrap()))

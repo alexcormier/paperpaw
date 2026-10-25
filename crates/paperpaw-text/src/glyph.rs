@@ -19,16 +19,22 @@ impl GlyphRef<'_> {
     /// Coverage of a pixel, 0 (empty) to 255 (full). Out-of-range reads and
     /// truncated data read as empty.
     pub fn coverage(&self, x: u16, y: u16) -> u8 {
+        self.level(x, y) * 17
+    }
+
+    /// Coverage of a pixel as stored, 0 (empty) to 15 (full); read as
+    /// [`GlyphRef::coverage`] reads it.
+    #[inline]
+    pub(crate) fn level(&self, x: u16, y: u16) -> u8 {
         let stride = usize::from(self.width).div_ceil(2);
         let Some(&byte) = self.data.get(usize::from(y) * stride + usize::from(x) / 2) else {
             return 0;
         };
-        let nibble = if x.is_multiple_of(2) {
+        if x.is_multiple_of(2) {
             byte >> 4
         } else {
             byte & 0x0f
-        };
-        nibble * 17
+        }
     }
 
     pub fn is_empty(&self) -> bool {

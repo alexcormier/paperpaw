@@ -47,6 +47,12 @@ pub fn pack(elf: &str, out: &str, key_file: Option<&str>) -> Result<(), String> 
         header.chip,
         packed.compiler
     );
+    if header.hot_len > 0 {
+        println!(
+            "{out}: {} bytes of hot code at {}, {} patches",
+            header.hot_len, header.hot_at, header.patches
+        );
+    }
     if let Some(signed) = signed {
         print_signer(&signed);
     }
@@ -75,6 +81,10 @@ pub fn show(path: &str) -> Result<(), String> {
         header.entry, header.api
     );
     println!("relocations: {} words", header.relocs);
+    println!(
+        "hot code:    {} bytes at {}, {} patches",
+        header.hot_len, header.hot_at, header.patches
+    );
     println!(
         "file:        {} bytes, SHA-256 {}",
         file.len(),

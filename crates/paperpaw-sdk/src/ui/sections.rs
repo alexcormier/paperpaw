@@ -268,19 +268,11 @@ impl Sections {
         }
     }
 
-    /// Asks for what `change` needs: a focus moved within the page draws
-    /// the entry it left and the one it came to again, nothing else;
-    /// otherwise as [`ListChange::request`].
-    pub fn request(&self, change: ListChange, cx: &mut crate::Cx<'_, '_>) {
-        if change != ListChange::Focus {
-            return change.request(cx);
-        }
-        for entry in [self.before, self.focus] {
-            if let Some(rect) = self.rect_of(entry) {
-                cx.request_redraw_area(rect);
-            }
-        }
-        cx.request_refresh(crate::RefreshMode::Fast);
+    /// The focus as it last moved within the page: from the entry
+    /// focused before to the one focused now.
+    pub fn focus_change(&self) -> ListChange {
+        let rect = |entry| self.rect_of(entry).unwrap_or(self.area);
+        ListChange::focus(rect(self.before), rect(self.focus))
     }
 
     /// Puts the focus on entry `focus`; what that changed on the screen.
@@ -292,7 +284,7 @@ impl Sections {
         self.before = self.focus;
         self.focus = focus;
         if self.page_of(focus).0 == page {
-            ListChange::Focus
+            self.focus_change()
         } else {
             ListChange::Page
         }
@@ -389,7 +381,7 @@ mod tests {
         assert_eq!(list.focus, 3);
         assert_eq!(list.step(true), ListChange::Page);
         assert_eq!(list.focus, 0);
-        assert_eq!(list.step(true), ListChange::Focus);
+        assert!(list.step(true).is_focus());
         assert_eq!(list.page_entries(), 0..2);
         assert_eq!(list.hit(Point::new(5, 35)), Some(1));
         assert_eq!(list.hit(Point::new(5, 5)), None);

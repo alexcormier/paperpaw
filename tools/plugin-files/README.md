@@ -23,6 +23,7 @@ folders and their entries for the plugin library:
 | `catalogue.py <dist> <release> <base-url>` | makes each plugin's folder as a ZIP with its `plugin.ini` and its How it works, `how/<lang>.txt`, which the store shows. It also makes the entry `catalogue/<id>.toml` for the plugin library, and `SHA256SUMS`. It takes `--date YYYY-MM-DD` too, `--only <id>` for one plugin alone and `--tag <tag>` for the tag the files are at (`v<release>` where not given). `test_catalogue.py` tests it: `python3 -m unittest discover -s tools/plugin-files`. |
 | `versions.py [<since>]` | checks that each plugin that changed since the last release, or its own, has a newer version (CI runs it; see below) |
 | `published.py files\|folders <dir> <releases.json>` | in a release, takes a plugin's file as published where its version and firmware were (`files`), and checks that a published version's folder is the same (`folders`) |
+| `data.toml`, `data.py <dir>` | PaperPaw's own data plugins (no code), such as the Literata packs the X4's firmware leaves out: their versions, groups, devices and texts, and the builder and inputs of each. `data.py` runs the builders into `<dir>`; `catalogue.py --data <dir>` makes their folders' ZIPs and entries (kind `data`, the folder alone) beside the others. `versions.py` asks a newer version of one whose builder or inputs changed. |
 
 A plugin added to `plugins.txt` gets a binary here (`src/bin/<id>.rs`),
 a dependency in `Cargo.toml`, and its place among the optional plugins

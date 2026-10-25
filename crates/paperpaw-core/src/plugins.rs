@@ -131,26 +131,6 @@ impl Kernel {
         });
     }
 
-    /// Gives the menus the labels of the actions and settings they list,
-    /// and only those: every label costs memory.
-    pub(crate) fn set_menu_titles(&mut self) {
-        let referenced: Vec<Id> = self.shared.menus.referenced_items().cloned().collect();
-        for id in referenced {
-            let title = match self.shared.actions.get(id.as_str()) {
-                Some(action) => Some(action.title.clone()),
-                None => self
-                    .shared
-                    .settings
-                    .specs()
-                    .find(|spec| spec.id == id)
-                    .map(|spec| spec.title.clone()),
-            };
-            if let Some(title) = title {
-                self.shared.menus.set_title(id, title);
-            }
-        }
-    }
-
     /// Marks plugins that alone fill a standard slot or provide all fonts:
     /// switching one of them off would leave the user without e.g.
     /// settings, a menu or text, and no way back.
@@ -307,7 +287,7 @@ impl Kernel {
                 .shared
                 .actions
                 .get(action.as_str())
-                .is_some_and(paperpaw_sdk::ActionSpec::is_sealed)
+                .is_some_and(paperpaw_sdk::Action::is_sealed)
             {
                 self.warn_runtime(format!("{plugin}: `{action}` is sealed; not overridden"));
                 continue;
@@ -332,6 +312,12 @@ impl Kernel {
         );
         for entry in staging.menu_entries.drain(..) {
             self.shared.menus.add(entry);
+        }
+        for list in staging.fixed_menu_entries.drain(..) {
+            self.shared.menus.add_fixed(list);
+        }
+        for list in staging.fixed_icons.drain(..) {
+            self.shared.menus.add_fixed_icons(list);
         }
         for section in staging.menu_sections.drain(..) {
             self.shared.menus.add_section(section);
@@ -530,8 +516,6 @@ impl Kernel {
             }
             None => self.shared.menus.reset(menu.as_str()),
         }
-        // New entries need their labels.
-        self.set_menu_titles();
         self.update_config(&format_args!("menu `{menu}`"), |source| match &value {
             Some(value) => {
                 let source = paperpaw_config::set(source, "menus", menu.as_str(), value);
@@ -958,7 +942,6 @@ impl Kernel {
     fn plugins_changed(&mut self) {
         self.offer_choices();
         self.keep_offered_choices();
-        self.set_menu_titles();
         self.apply_reading_font();
         self.apply_status_font();
         self.rebuild_keymap();

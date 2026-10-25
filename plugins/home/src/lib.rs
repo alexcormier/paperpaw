@@ -53,9 +53,9 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, What};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Commands, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry,
-    Params, Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec,
+    Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Gesture, Handled, Hint, Id,
+    Manifest, MenuEntry, Params, Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError,
+    Registrar, Screen,
 };
 
 pub const PLUGIN: Id = Id::new_static("home");
@@ -86,6 +86,34 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static FIXED: [FixedAction; 2] = [
+    FixedAction::new(ALL_TOOLS, "home.drawer")
+        .handler(|_, _, out| out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()))),
+    // Shown, the home screen edits itself; from elsewhere it opens
+    // editing.
+    FixedAction::new(EDIT_PAGES, "home.edit-pages").handler(|_, _, out| {
+        let params = Params::new().with(params::MODE, "edit");
+        out.push(Command::OpenSlot(slots::HOME, params));
+    }),
+];
+static FIXED_ENTRIES: [MenuEntry; 2] = [
+    MenuEntry::new(paperpaw_sdk::builtin::menus::MAIN, EDIT_PAGES).order(40),
+    MenuEntry::new(ACTIONS, actions::LIBRARY).order(10),
+];
+static FIXED_ICONS: [(Id, &str); 2] = [(ALL_TOOLS, "apps"), (EDIT_PAGES, "pencil")];
+
+static SCREENS: [FixedScreen; 3] = [
+    FixedScreen::new(SCREEN, "home.title", |env, params| {
+        Box::new(Dashboard::new(env, params))
+    }),
+    FixedScreen::new(ADD_SCREEN, "home.edit.add", |env, params| {
+        Box::new(add::AddScreen::new(env, params))
+    }),
+    FixedScreen::new(DRAWER_SCREEN, "home.drawer", |env, _| {
+        Box::new(drawer::DrawerScreen::new(env))
+    }),
+];
+
 impl Plugin for Home {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Home screen", paperpaw_sdk::package_version!())
@@ -97,16 +125,7 @@ impl Plugin for Home {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "home.title",
-            Box::new(|env, params| Box::new(Dashboard::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            ADD_SCREEN,
-            "home.edit.add",
-            Box::new(|env, params| Box::new(add::AddScreen::new(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.bind_slot(slots::HOME, SCREEN, Priority::DEFAULT)?;
         // The grid's columns or rows changed: the pages fitted to it,
         // what has no room moved to the next page, nothing lost.
@@ -119,31 +138,8 @@ impl Plugin for Home {
                 out.extend(pages::store_all(&fitted));
             }
         })?;
-        r.add_screen(ScreenSpec::new(
-            DRAWER_SCREEN,
-            "home.drawer",
-            Box::new(|env, _| Box::new(drawer::DrawerScreen::new(env))),
-        ))?;
-        r.add_action(
-            paperpaw_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
-                |_: &Env<'_>, _, out: &mut Commands| {
-                    out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()));
-                },
-            ),
-        )?;
-        r.add_icon(ALL_TOOLS, Cow::Borrowed("apps"))?;
-        // Shown, the home screen edits itself; from elsewhere it opens
-        // editing.
-        r.add_action(
-            paperpaw_sdk::ActionSpec::new(EDIT_PAGES, "home.edit-pages").handler(
-                |_: &Env<'_>, _, out: &mut Commands| {
-                    let params = Params::new().with(params::MODE, "edit");
-                    out.push(Command::OpenSlot(slots::HOME, params));
-                },
-            ),
-        )?;
-        r.add_icon(EDIT_PAGES, Cow::Borrowed("pencil"))?;
-        r.add_menu_entry(MenuEntry::new(paperpaw_sdk::builtin::menus::MAIN, EDIT_PAGES).order(40))?;
+        r.add_actions(&FIXED)?;
+        r.add_icons(&FIXED_ICONS)?;
         // As on phones: up on the home screen shows every tool.
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.home]\nswipe.up = home.all-tools\n",
@@ -164,7 +160,7 @@ impl Plugin for Home {
                 help::HelpHint::buttons("home.tips.panel"),
             ],
         )?;
-        r.add_menu_entry(MenuEntry::new(ACTIONS, actions::LIBRARY).order(10))?;
+        r.add_menu_entries(&FIXED_ENTRIES)?;
         pages::register(r)?;
         blocks::register(r)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
@@ -473,6 +469,14 @@ impl Dashboard {
 }
 
 impl Screen for Dashboard {
+    /// A screen above needs the memory: the widgets go (covers made
+    /// small, what they read), made again when the page is drawn next.
+    fn on_squeeze(&mut self, _: &paperpaw_sdk::realtime::Squeeze, _: &mut Cx<'_, '_>) -> Handled {
+        self.grid.let_go();
+        self.stale = true;
+        Handled::Yes
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         if self.stale {
             self.layout(env);

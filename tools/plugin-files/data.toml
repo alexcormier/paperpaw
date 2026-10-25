@@ -1,0 +1,38 @@
+# PaperPaw's own data plugins the store offers, beside the plugins with
+# code of plugins.txt: built by the release (data.py runs `build`, which
+# writes the folder `<dir>/<id>`) and published with their entries in the
+# release's catalogue ZIP (catalogue.py --data), as the plugins with code
+# are. A change to `build` or to an input needs a newer `version`
+# (versions.py checks it, as for the plugins with code).
+#
+# Each: version, group (one of the store's), licence (SPDX), the devices
+# it is for, whether the store and the flasher leave it unchosen at first
+# (off_by_default), the builder and its inputs, and its name and
+# description in English and German (the builder writes them into the
+# folder, catalogue.py into the entry).
+
+[literata-large]
+version = "1.0.0"
+group = "look"
+licence = "OFL-1.1"
+devices = ["x4", "x4-pro", "x4-classic"]
+off_by_default = true
+build = "tools/literata-packs.py"
+inputs = ["plugins/fonts-default/fonts/Literata.ttf", "plugins/fonts-default/fonts/Literata-Italic.ttf", "tools/fontgen"]
+name = "Literata, larger sizes"
+description = "Book text in Literata larger than the firmware's sizes."
+de.name = "Literata, größere Schriftgrade"
+de.description = "Buchtext in Literata größer als in der Firmware."
+
+[literata-bold-italic]
+version = "1.0.0"
+group = "look"
+licence = "OFL-1.1"
+devices = ["x4", "x4-pro", "x4-classic"]
+off_by_default = true
+build = "tools/literata-packs.py"
+inputs = ["plugins/fonts-default/fonts/Literata-Italic.ttf", "tools/fontgen"]
+name = "Literata Bold Italic"
+description = "Bold italic book text in Literata, where bold stands in for it."
+de.name = "Literata Fett Kursiv"
+de.description = "Fett-kursiver Buchtext in Literata, wo sonst Fett dafür steht."

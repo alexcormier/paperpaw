@@ -26,7 +26,8 @@ pub fn setting(default: String) -> SettingSpec {
         "core.setting.device-name",
         SettingKind::Text,
         SettingValue::Text(Cow::Owned(default)),
-        crate::builtin::groups::SYSTEM,
+        // The Wi-Fi plugin's: the name others see the device by.
+        crate::Id::new_static("wifi.group"),
     )
     .description("core.setting.device-name.help")
 }

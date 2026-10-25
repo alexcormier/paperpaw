@@ -698,6 +698,17 @@ pub enum Command {
     /// Redraws the current screen completely; with
     /// [`RefreshMode::Full`] the whole screen, flashing.
     Redraw(RefreshMode),
+    /// Keeps the device from going to sleep by itself for a while (see
+    /// [`WakeHold`](crate::power::WakeHold)); the same id again renews
+    /// it.
+    KeepAwake(crate::power::WakeHold),
+    /// Lets go of the hold of this id ([`Command::KeepAwake`]).
+    LetSleep(Id),
+    /// A command that comes after this release, by its key: what PaperPaw
+    /// adds later reaches plugins built now without a new plugin
+    /// interface. A kernel that does not know the key leaves it.
+    #[non_exhaustive]
+    Extended { key: Id, params: Params },
     /// Notifies all subscribers of an event, then every open screen.
     Emit(Id, Params),
     /// Runs action `.0` as if the user had triggered it (e.g. from a
@@ -788,6 +799,11 @@ pub enum Command {
     /// Bluetooth, for plugins declaring [`Uses::BLUETOOTH`](crate::Uses):
     /// written with the functions of [`bluetooth`](crate::bluetooth).
     Bluetooth(alloc::boxed::Box<crate::bluetooth::BtRequest>),
+    /// The developer link over USB, for plugins declaring
+    /// [`Uses::DEVELOPER`](crate::Uses): written with the functions of
+    /// [`developer`](crate::developer). Reserved: answered as not
+    /// available in this release.
+    Developer(alloc::boxed::Box<crate::developer::DevRequest>),
     /// Tells the radio what to do, where PaperPaw manages Wi-Fi
     /// ([`Env::wifi`](crate::Env)); see [`wifi`](crate::wifi). Ignored
     /// elsewhere.

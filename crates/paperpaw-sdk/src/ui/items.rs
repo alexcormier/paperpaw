@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 use crate::builtin::{actions, params};
 use crate::status::item_ids;
 use crate::ui::reorder::{Reorder, ReorderStep};
-use crate::ui::{self, ListChange, ListView, UiStyle};
+use crate::ui::{self, ListView, UiStyle};
 use crate::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, PointerEvent, Rect,
     RefreshMode, Screen, SettingValue,
@@ -293,7 +293,7 @@ impl Screen for ItemsScreen {
         if *a == actions::CONFIRM {
             match self.list.confirm() {
                 Some(row) => self.toggle(row, cx),
-                None => self.list.request(ListChange::Focus, cx),
+                None => self.list.focus_change().request(cx),
             }
             return Handled::Yes;
         }

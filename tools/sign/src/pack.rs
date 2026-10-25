@@ -18,6 +18,8 @@
 //! - a plugin that does not say which compiler built it, or says more
 //!   than one (its `.comment`): it runs only on firmware built by the
 //!   same, so its file names it.
+//!
+//! The hot code and the patches that move it come from [`crate::hot`].
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -29,6 +31,7 @@ use crate::elf::{
     EM_RISCV, EM_XTENSA, ET_EXEC, ET_REL, Elf, SHN_ABS, SHN_UNDEF, SHT_REL, SHT_RELA, STT_SECTION,
     Section, Symbol, le32,
 };
+use crate::hot::Hot;
 use crate::relocation::{self, Kind};
 
 /// The bytes an [`Entry`](paperpaw_native::Entry) takes.
@@ -76,6 +79,7 @@ pub fn pack(elf: &[u8]) -> Result<Packed, String> {
             "`{API_SYMBOL}` has a relocation: nothing may be linked into it"
         ));
     }
+    let hot = Hot::of(&elf, &image, chip, &symbols, &words)?;
 
     let compiler = compiler(&elf)?;
     let fingerprint = u64::from(image.word(entry)) | (u64::from(image.word(entry + 4)) << 32);
@@ -85,7 +89,7 @@ pub fn pack(elf: &[u8]) -> Result<Packed, String> {
         .unwrap_or(4)
         .min(4096);
     let mut rest = image.bytes;
-    for word in &words {
+    for word in words.iter().chain(hot.patches.iter().flatten()) {
         rest.extend_from_slice(&word.to_le_bytes());
     }
     let mut header = Header {
@@ -99,6 +103,9 @@ pub fn pack(elf: &[u8]) -> Result<Packed, String> {
         relocs: words.len() as u32,
         align,
         compiler: paperpaw_native::compiler::id(&compiler),
+        hot_at: hot.at,
+        hot_len: hot.len,
+        patches: hot.patches.len() as u32,
         sha256: [0; 32],
     };
     let mut sha = header.digest();
@@ -140,19 +147,19 @@ fn compiler(elf: &Elf<'_>) -> Result<String, String> {
 }
 
 /// The image: `.rodata`, then `.text`.
-struct Image<'e> {
-    rodata: &'e Section,
-    rodata_index: usize,
-    text: &'e Section,
-    text_index: usize,
-    bytes: Vec<u8>,
-    code_at: u32,
-    len: u32,
+pub(crate) struct Image<'e> {
+    pub(crate) rodata: &'e Section,
+    pub(crate) rodata_index: usize,
+    pub(crate) text: &'e Section,
+    pub(crate) text_index: usize,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) code_at: u32,
+    pub(crate) len: u32,
 }
 
 /// Where what a relocation refers to lies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Place {
+pub(crate) enum Place {
     /// In the image: it moves with it.
     Image,
     /// Somewhere that stays (the ROM, for instance).
@@ -259,6 +266,27 @@ impl<'e> Image<'e> {
         le32(&self.bytes, at as usize)
     }
 
+    /// The image offset of `value`, an address in the image as linked:
+    /// by data in the read-only data, by code in the code (its end
+    /// included).
+    pub(crate) fn offset_of(&self, value: u32) -> Option<u32> {
+        let data = value.wrapping_sub(LINK_BASE);
+        let code = value.wrapping_sub(LINK_BASE + CODE_OFFSET);
+        if data < self.code_at {
+            Some(data)
+        } else {
+            (self.code_at..=self.len).contains(&code).then_some(code)
+        }
+    }
+
+    /// Image offset `at` as a section and the offset into it.
+    pub(crate) fn at_section(&self, at: u32) -> String {
+        match at.checked_sub(self.code_at) {
+            Some(offset) => format!("{}+{offset:#x}", self.text.name),
+            None => format!("{}+{at:#x}", self.rodata.name),
+        }
+    }
+
     /// Whether `value` is an address in the image as linked, by data or by
     /// code (its end included), as the loader takes it.
     fn points_inside(&self, value: u32) -> bool {
@@ -268,7 +296,7 @@ impl<'e> Image<'e> {
 
     /// Where `symbol` lies (`None`: a relocation without a symbol, its
     /// addend an absolute value).
-    fn place(&self, symbol: Option<&Symbol>) -> Place {
+    pub(crate) fn place(&self, symbol: Option<&Symbol>) -> Place {
         let Some(symbol) = symbol else {
             return Place::Outside;
         };
@@ -578,6 +606,9 @@ pub(crate) mod tests {
         b.symbol(ENTRY_SYMBOL, LINK_BASE, 16, ro as u16, false);
         b.symbol(API_SYMBOL, LINK_BASE + 16, 0, SHN_ABS, false);
         let make = b.symbol("make", TEXT, 8, tx as u16, false);
+        // No hot code.
+        b.symbol("PAPERPAW_HOT", TEXT + 32, 0, tx as u16, false);
+        b.symbol("PAPERPAW_HOT_END", TEXT + 32, 0, tx as u16, false);
         let rom = b.symbol("rom_fn", ROM, 0, SHN_ABS, false);
         b.rela(ro, LINK_BASE + 8, make, k.word);
         b.rela(ro, LINK_BASE + 20, data, k.word);

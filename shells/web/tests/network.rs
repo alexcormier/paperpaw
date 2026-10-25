@@ -46,7 +46,7 @@ fn requests_get_recorded_answers_or_fail_or_go_to_the_page() {
     boox.advance(6_100);
     let told = boox.requests();
     assert!(
-        told.contains(r#""url":"https://paperpaw.org/api/v1/plugins.json?device=android&lang=en""#),
+        told.contains(r#""url":"https://paperpaw.org/api/v1/plugins.json?device=android&lang=en&order=fair""#),
         "{told}"
     );
     assert!(

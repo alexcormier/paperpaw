@@ -47,6 +47,9 @@ fn ppn() -> Vec<u8> {
         relocs: 0,
         align: 16,
         compiler: 1,
+        hot_at: 0,
+        hot_len: 0,
+        patches: 0,
         sha256: [0; 32],
     };
     let mut sha = header.digest();
@@ -121,7 +124,7 @@ fn the_plugins_chosen_are_installed_and_said_once() {
     for name in [
         "Reading statistics",
         "Home widgets",
-        "Calibre",
+        "Calibre connection",
         "KOReader sync",
     ] {
         assert!(shown.contains(name), "{shown}");
@@ -129,7 +132,7 @@ fn the_plugins_chosen_are_installed_and_said_once() {
     // *Done* there with nothing chosen too.
     assert!(shown.contains("| Done"), "{shown}");
     shopping.choose("Reading statistics");
-    shopping.choose("Calibre");
+    shopping.choose("Calibre connection");
     // Past KOReader sync to *Done*.
     shopping.run(actions::DOWN);
     shopping.run(actions::DOWN);

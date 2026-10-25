@@ -40,3 +40,10 @@ it with `cargo run -p paperpaw-emulator --features hello`.
 at their start, without a new firmware, in a workspace of its own with a
 CI job for a plugin's repository; see its [README](hello-native/README.md)
 and [Plugins as files](../docs/plugins.md#plugins-as-files).
+
+`frame-test` runs in real time ([ADR 0030](../docs/adr/0030-real-time-screens.md)):
+a moving pattern at a fixed pace, drawn with the blit, and work done for
+every frame as hot code and as ordinary code, each measured and shown
+with the frames a second and the heap free. Try it with `cargo run -p
+paperpaw-emulator --features frame-test`; `hello-native` builds it as a
+file too (`PLUGIN=frame-test`).

@@ -33,24 +33,37 @@ pub mod check;
 mod format;
 mod plural;
 
-pub use catalog::{Catalog, CatalogError};
+pub use catalog::{Catalog, CatalogError, FixedIndexes, fingerprint};
 pub use format::Arg;
 pub use plural::{PluralCategory, PluralRule};
 
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use catalog::Parked;
+
 /// The language every message must exist in; the last fallback.
 pub const FALLBACK_LANGUAGE: &str = "en";
 
 /// Looks up messages in all loaded catalogs, following the fallback chain of
 /// the selected language.
+///
+/// Only the languages of the chain are kept as catalogs; the others are
+/// parked, their source and little more, until their language is chosen.
+/// Where the language is not English, an English catalog whose every
+/// message the others of the chain have drops its index
+/// ([`Translator::shrink_to_fit`]).
 #[derive(Debug, Default)]
 pub struct Translator {
     catalogs: Vec<Catalog>,
+    parked: Vec<Parked>,
     language: String,
     /// Catalog indices in lookup order.
     order: Vec<u16>,
+    /// Catalogs added so far.
+    added: u32,
+    /// Indexes of the catalogs built in, kept in the program.
+    fixed: FixedIndexes,
 }
 
 impl Translator {
@@ -60,23 +73,50 @@ impl Translator {
         translator
     }
 
-    /// Adds a catalog. For the same language, catalogs added later take
-    /// precedence, so user overrides can be loaded last.
-    pub fn add(&mut self, catalog: Catalog) {
-        self.catalogs.push(catalog);
-        self.rebuild_order();
+    /// The indexes of the catalogs built in, kept in the program: such
+    /// catalogs keep no index on the heap.
+    pub fn fixed_indexes(&mut self, fixed: FixedIndexes) {
+        self.fixed = fixed;
+        for catalog in &mut self.catalogs {
+            catalog.use_fixed(fixed);
+        }
     }
 
-    /// Releases unused capacity once all catalogs are added.
+    /// Adds a catalog. For the same language, catalogs added later take
+    /// precedence, so user overrides can be loaded last.
+    pub fn add(&mut self, mut catalog: Catalog) {
+        catalog.added = self.added;
+        self.added = self.added.wrapping_add(1);
+        if self.chain().contains(&catalog.language()) {
+            catalog.load();
+            catalog.use_fixed(self.fixed);
+            self.catalogs.push(catalog);
+            self.rebuild_order();
+            return;
+        }
+        match catalog.park() {
+            Ok(parked) => self.parked.push(parked),
+            Err(mut catalog) => {
+                catalog.unload();
+                self.catalogs.push(catalog);
+            }
+        }
+    }
+
+    /// Releases unused capacity once all catalogs are added: English
+    /// catalogs the language chosen covers drop their index.
     pub fn shrink_to_fit(&mut self) {
+        self.drop_covered();
         self.catalogs.shrink_to_fit();
+        self.parked.shrink_to_fit();
     }
 
     /// Selects the UI language, e.g. `de` or `pt-BR`.
     pub fn set_language(&mut self, language: &str) {
         self.language.clear();
         self.language.push_str(language);
-        self.rebuild_order();
+        self.repark();
+        self.drop_covered();
     }
 
     pub fn language(&self) -> &str {
@@ -87,9 +127,19 @@ impl Translator {
     /// PaperPaw's own language, first, then the others by tag.
     pub fn languages(&self) -> Vec<(&str, &str)> {
         let mut languages: Vec<(&str, &str)> = Vec::new();
-        for catalog in &self.catalogs {
-            if !languages.iter().any(|(tag, _)| *tag == catalog.language()) {
-                languages.push((catalog.language(), catalog.name()));
+        let live = self
+            .catalogs
+            .iter()
+            .map(|c| (c.added, c.language(), c.name()));
+        let parked = self
+            .parked
+            .iter()
+            .map(|p| (p.added, p.language(), p.name()));
+        let mut all: Vec<(u32, &str, &str)> = live.chain(parked).collect();
+        all.sort_unstable_by_key(|(added, ..)| *added);
+        for (_, tag, name) in all {
+            if !languages.iter().any(|(t, _)| *t == tag) {
+                languages.push((tag, name));
             }
         }
         let english = |tag: &str| tag == "en" || tag.starts_with("en-");
@@ -97,11 +147,20 @@ impl Translator {
         languages
     }
 
+    /// The bytes the catalogs' indexes take on the heap (see
+    /// [`Translator::fixed_indexes`]).
+    pub fn indexes_on_heap(&self) -> usize {
+        self.catalogs.iter().map(Catalog::index_on_heap).sum()
+    }
+
     /// Every catalog added, in the order added, for tools that check
-    /// translations. Catalogs of languages not in use have dropped their
-    /// messages: such a tool clones one and [`Catalog::load`]s the clone.
-    pub fn catalogs(&self) -> &[Catalog] {
-        &self.catalogs
+    /// translations: copies, those of languages not in use without their
+    /// messages (such a tool [`Catalog::load`]s it).
+    pub fn catalogs(&self) -> Vec<Catalog> {
+        let mut all: Vec<Catalog> = self.catalogs.clone();
+        all.extend(self.parked.iter().cloned().map(Parked::unpark));
+        all.sort_unstable_by_key(|c| c.added);
+        all
     }
 
     /// The message for `key`, if a catalog has it.
@@ -146,7 +205,9 @@ impl Translator {
         self.order.iter().map(|&i| &self.catalogs[i as usize])
     }
 
-    fn rebuild_order(&mut self) {
+    /// The languages looked in, in turn: the one chosen, its base
+    /// language, English.
+    fn chain(&self) -> Vec<&str> {
         let base = self.language.split('-').next().unwrap_or_default();
         let mut chain: Vec<&str> = Vec::with_capacity(3);
         for language in [self.language.as_str(), base, FALLBACK_LANGUAGE] {
@@ -154,26 +215,88 @@ impl Translator {
                 chain.push(language);
             }
         }
-        // Only catalogs in the chain keep their message index.
-        for catalog in &mut self.catalogs {
-            if chain.contains(&catalog.language()) {
-                catalog.load();
+        chain
+    }
+
+    /// Catalogs of the chain's languages made and loaded, the others
+    /// parked, in the order added.
+    fn repark(&mut self) {
+        let chain: Vec<String> = self.chain().into_iter().map(String::from).collect();
+        let in_chain = |language: &str| chain.iter().any(|c| c == language);
+        let mut at = 0;
+        while at < self.parked.len() {
+            if in_chain(self.parked[at].language()) {
+                let catalog = self.parked.swap_remove(at).unpark();
+                self.catalogs.push(catalog);
             } else {
+                at += 1;
+            }
+        }
+        let mut kept = Vec::with_capacity(self.catalogs.len());
+        for mut catalog in core::mem::take(&mut self.catalogs) {
+            if in_chain(catalog.language()) {
+                catalog.load();
+                catalog.use_fixed(self.fixed);
+                kept.push(catalog);
+                continue;
+            }
+            match catalog.park() {
+                Ok(parked) => self.parked.push(parked),
+                Err(mut catalog) => {
+                    catalog.unload();
+                    kept.push(catalog);
+                }
+            }
+        }
+        kept.sort_unstable_by_key(|c| c.added);
+        self.catalogs = kept;
+        self.rebuild_order();
+    }
+
+    /// Where the language is not English: English catalogs whose every
+    /// message the chain's other languages have drop their index, never
+    /// looked in.
+    fn drop_covered(&mut self) {
+        let english = |language: &str| language == FALLBACK_LANGUAGE;
+        if english(self.language.split('-').next().unwrap_or_default()) {
+            return;
+        }
+        let covered: Vec<bool> = self
+            .catalogs
+            .iter()
+            .map(|catalog| {
+                english(catalog.language())
+                    && catalog.is_loaded()
+                    && catalog.keys().all(|key| {
+                        self.ordered()
+                            .filter(|other| !english(other.language()))
+                            .any(|other| other.get(key).is_some())
+                    })
+            })
+            .collect();
+        for (catalog, covered) in self.catalogs.iter_mut().zip(covered) {
+            if covered {
                 catalog.unload();
             }
         }
-        self.order.clear();
+        self.rebuild_order();
+    }
+
+    fn rebuild_order(&mut self) {
+        let chain = self.chain();
+        let mut order = Vec::new();
         for language in chain {
             let matching = self
                 .catalogs
                 .iter()
                 .enumerate()
                 .rev()
-                .filter(|(_, catalog)| catalog.language() == language)
+                .filter(|(_, catalog)| catalog.language() == language && catalog.is_loaded())
                 .map(|(i, _)| i as u16);
-            self.order.extend(matching);
+            order.extend(matching);
         }
-        self.order.shrink_to_fit();
+        order.shrink_to_fit();
+        self.order = order;
     }
 }
 
@@ -235,17 +358,68 @@ mod tests {
     #[test]
     fn catalogs_of_other_languages_load_when_cloned() {
         let t = translator("de");
-        let en = t.catalogs().iter().find(|c| c.language() == "en").unwrap();
+        let all = t.catalogs();
+        let en = all.iter().find(|c| c.language() == "en").unwrap();
         assert!(en.keys().any(|k| k == "hello"));
-        let at = t
-            .catalogs()
-            .iter()
-            .find(|c| c.language() == "de-AT")
-            .unwrap();
+        let at = all.iter().find(|c| c.language() == "de-AT").unwrap();
         assert!(at.is_empty());
         let mut at = at.clone();
         at.load();
         assert_eq!(at.get("hello"), Some("Servus, {name}!"));
+    }
+
+    /// Languages not in use are parked and come back when chosen; an
+    /// English catalog the language chosen covers drops its index, one
+    /// it does not cover keeps it.
+    #[test]
+    fn only_the_languages_in_use_are_kept() {
+        const EN_ALL: &str = "[meta]\nlanguage = en\n[messages]\nall = All\n";
+        const DE_ALL: &str = "[meta]\nlanguage = de\n[messages]\nall = Alle\n";
+        let mut t = translator("de");
+        t.add(Catalog::parse(EN_ALL).unwrap());
+        t.add(Catalog::parse(DE_ALL).unwrap());
+        t.shrink_to_fit();
+        assert_eq!(t.parked.len(), 1, "de-AT");
+        let loaded: Vec<(&str, bool)> = t
+            .catalogs
+            .iter()
+            .map(|c| (c.language(), c.is_loaded()))
+            .collect();
+        assert_eq!(
+            loaded,
+            [("en", true), ("de", true), ("en", false), ("de", true)]
+        );
+        assert_eq!(t.tr("only-en"), "English only");
+        assert_eq!(t.tr("all"), "Alle");
+        t.set_language("de-AT");
+        assert_eq!(t.tr("hello"), "Servus, {name}!");
+        t.set_language("en");
+        assert_eq!(t.parked.len(), 3);
+        assert_eq!(t.tr("all"), "All");
+        assert_eq!(t.tr("hello"), "Hello, {name}!");
+    }
+
+    /// A catalog whose index the program holds (made when it was built)
+    /// keeps none on the heap; one whose source differs makes its own.
+    #[test]
+    fn indexes_kept_in_the_program_are_used() {
+        use alloc::boxed::Box;
+        let made = Catalog::parse(EN).unwrap();
+        let index: &'static [u16] = Box::leak(made.narrow_index().unwrap().into());
+        let fixed: &'static [(u64, &'static [u16])] =
+            Box::leak(Box::new([(fingerprint(EN), index)]));
+        let mut t = Translator::new();
+        t.fixed_indexes(fixed);
+        t.add(Catalog::parse(EN).unwrap());
+        assert_eq!(t.indexes_on_heap(), 0);
+        assert_eq!(t.tr("only-en"), "English only");
+        t.add(Catalog::parse(DE_OVERRIDE).unwrap());
+        t.set_language("de");
+        assert!(t.indexes_on_heap() > 0, "the German one is its own");
+        assert_eq!(
+            t.format("hello", &[("name", Arg::Str("Ada"))]),
+            "Moin, Ada!"
+        );
     }
 
     #[test]

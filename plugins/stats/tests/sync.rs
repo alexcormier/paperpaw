@@ -79,6 +79,12 @@ impl Device {
 
     /// *Sync now* on the sync page: the download asked for.
     fn sync(&mut self) -> Vec<HttpCall> {
+        // From the start of the page: one open is gone back to as it was.
+        if self.kernel.active_screen().map(Id::as_str) == Some("stats.sync") {
+            let at = self.at();
+            self.kernel
+                .run_action(at, paperpaw_sdk::builtin::actions::BACK);
+        }
         let at = self.at();
         self.kernel
             .open_screen(at, Id::new_static("stats.sync"), Params::new());

@@ -11,14 +11,20 @@
 //! ([`Layout`]). The index is erased before the first image is written
 //! and written last, so a start cut short leaves no index that lies.
 //!
+//! A plugin's hot code runs from an arena of internal RAM, whose place is
+//! the same at every start of a firmware: each plugin takes its part
+//! after those before it, at most [`HOT_MAX`], as long as the arena holds
+//! it; what does not fit runs in place, from flash. The index records
+//! each one's part, as its image is relocated for it.
+//!
 //! | Bytes | What |
 //! |-------|------|
 //! | 0..4 | `PPNX` |
-//! | 4..6 | the format, 1 |
+//! | 4..6 | the format, 2 |
 //! | 6..8 | how many plugins are placed |
 //! | 8..40 | the firmware (the SHA-256 its image ends with) |
 //! | 40..72 | SHA-256 of bytes 0..40 and of the entries |
-//! | 72.. | 48 bytes a plugin: its file's SHA-256 (its header's), where its image lies in flash, its length, the data address it was relocated for, the address of the table written into it |
+//! | 72.. | 52 bytes a plugin: its file's SHA-256 (its header's), where its image lies in flash, its length, the data address it was relocated for, the address of the table written into it, the instruction address its hot code runs at (0: in place) |
 
 use alloc::vec::Vec;
 
@@ -28,15 +34,17 @@ use crate::header::Header;
 
 /// The index's first bytes.
 pub const MAGIC: [u8; 4] = *b"PPNX";
-/// The index's format this crate reads and writes.
-pub const FORMAT: u16 = 1;
+/// The index's format this crate reads and writes: 2 places hot code.
+pub const FORMAT: u16 = 2;
 /// The flash's erase sector: the index takes one, each image begins at
 /// one.
 pub const SECTOR: u32 = 4096;
 const HEAD_LEN: usize = 72;
-const ENTRY_LEN: usize = 48;
+const ENTRY_LEN: usize = 52;
 /// The most plugins one index holds.
 pub const MAX_PLACED: usize = (SECTOR as usize - HEAD_LEN) / ENTRY_LEN;
+/// The most hot code one plugin runs from the arena: more runs in place.
+pub const HOT_MAX: u32 = 16 * 1024;
 
 /// A plugin placed in flash.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +59,9 @@ pub struct Placed {
     pub base: u32,
     /// The address of the firmware's table written into it.
     pub api: u32,
+    /// The instruction address its hot code was relocated for in the
+    /// arena (0: in place).
+    pub hot: u32,
 }
 
 /// What lies in the plugins' region (see the [module documentation](self)).
@@ -92,6 +103,7 @@ impl Index {
                     len: word(36),
                     base: word(40),
                     api: word(44),
+                    hot: word(48),
                 }
             })
             .collect();
@@ -109,7 +121,7 @@ impl Index {
         bytes.extend_from_slice(&[0; 32]);
         for placed in &self.placed[..count] {
             bytes.extend_from_slice(&placed.sha256);
-            for value in [placed.at, placed.len, placed.base, placed.api] {
+            for value in [placed.at, placed.len, placed.base, placed.api, placed.hot] {
                 bytes.extend_from_slice(&value.to_le_bytes());
             }
         }
@@ -147,6 +159,21 @@ impl Region {
     }
 }
 
+/// The internal RAM hot code runs from: its first instruction address
+/// (a multiple of 4) and its length.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Arena {
+    pub start: u32,
+    pub len: u32,
+}
+
+impl Arena {
+    pub const fn new(start: u32, len: u32) -> Self {
+        Self { start, len }
+    }
+}
+
 /// There is no room left for a plugin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NoRoom;
@@ -158,6 +185,9 @@ pub struct Placement {
     pub at: u32,
     /// The data address it is mapped at, to relocate it for.
     pub base: u32,
+    /// The instruction address in the arena its hot code runs at, to
+    /// relocate it for and copy it to (0: in place).
+    pub hot: u32,
     /// The flash already holds it so: it only needs mapping.
     pub present: bool,
     /// It is the first written at this start: the index is to be erased
@@ -172,6 +202,9 @@ pub struct Layout {
     region: Region,
     firmware: [u8; 32],
     api: u32,
+    arena: Arena,
+    /// The arena's bytes given to hot code so far.
+    hot_used: u32,
     /// What the index found says, if it is this firmware's.
     old: Vec<Placed>,
     placed: Vec<Placed>,
@@ -183,8 +216,15 @@ pub struct Layout {
 
 impl Layout {
     /// Begins placing plugins in `region` for the `firmware` whose table
-    /// lies at `api`, `found` the index read from the region.
-    pub fn new(region: Region, firmware: [u8; 32], api: u32, found: Option<Index>) -> Self {
+    /// lies at `api` and whose hot code runs from `arena`, `found` the
+    /// index read from the region.
+    pub fn new(
+        region: Region,
+        firmware: [u8; 32],
+        api: u32,
+        arena: Arena,
+        found: Option<Index>,
+    ) -> Self {
         let old = found
             .filter(|index| index.firmware == firmware)
             .map(|index| index.placed)
@@ -193,6 +233,8 @@ impl Layout {
             region,
             firmware,
             api,
+            arena,
+            hot_used: 0,
             old,
             placed: Vec::new(),
             same: true,
@@ -219,12 +261,14 @@ impl Layout {
         if !base.is_multiple_of(header.align) {
             return Err(NoRoom);
         }
+        let hot = self.hot(header.hot_len);
         let placed = Placed {
             sha256: header.sha256,
             at,
             len: header.image_len,
             base,
             api: self.api,
+            hot,
         };
         let present = self.same && self.old.get(self.placed.len()) == Some(&placed);
         self.same &= present;
@@ -234,9 +278,32 @@ impl Layout {
         Ok(Placement {
             at,
             base,
+            hot,
             present,
             erase_index,
         })
+    }
+
+    /// The arena's part for `len` bytes of hot code, after those given
+    /// before: 0 if there is none or it does not fit.
+    fn hot(&mut self, len: u32) -> u32 {
+        let fits = len > 0
+            && len <= HOT_MAX
+            && self
+                .hot_used
+                .checked_add(len)
+                .is_some_and(|end| end <= self.arena.len);
+        if !fits {
+            return 0;
+        }
+        let hot = self.arena.start + self.hot_used;
+        self.hot_used = (self.hot_used + len).next_multiple_of(4);
+        hot
+    }
+
+    /// The arena's bytes given to hot code.
+    pub fn hot_used(&self) -> u32 {
+        self.hot_used
     }
 
     /// The region plugins are placed in.
@@ -271,6 +338,10 @@ mod tests {
 
     const FIRMWARE: [u8; 32] = [7; 32];
     const API: u32 = 0x3FC8_0000;
+    const ARENA: Arena = Arena {
+        start: 0x4039_0000,
+        len: 20 * 1024,
+    };
 
     fn region() -> Region {
         Region::new(
@@ -290,7 +361,7 @@ mod tests {
 
     /// Places `headers` after an index `found`, as a start would.
     fn start(found: Option<Index>, headers: &[Header]) -> (Vec<Placement>, Option<Index>) {
-        let mut layout = Layout::new(region(), FIRMWARE, API, found);
+        let mut layout = Layout::new(region(), FIRMWARE, API, ARENA, found);
         let placements = headers.iter().map(|h| layout.place(h).unwrap()).collect();
         (placements, layout.index())
     }
@@ -351,7 +422,7 @@ mod tests {
         assert!(!placements[0].present);
         assert!(again.is_some());
         // Another table address (another build) is a change too.
-        let mut layout = Layout::new(region(), FIRMWARE, API + 4, start(None, &headers).1);
+        let mut layout = Layout::new(region(), FIRMWARE, API + 4, ARENA, start(None, &headers).1);
         assert!(!layout.place(&headers[0]).unwrap().present);
     }
 
@@ -359,7 +430,7 @@ mod tests {
     fn the_region_has_its_end() {
         let region = region();
         let room = region.end - region.start - SECTOR;
-        let mut layout = Layout::new(region, FIRMWARE, API, None);
+        let mut layout = Layout::new(region, FIRMWARE, API, ARENA, None);
         assert_eq!(layout.place(&header(room + 4, 1)), Err(NoRoom));
         assert!(layout.place(&header(room - 2 * SECTOR, 1)).is_ok());
         assert_eq!(layout.place(&header(3 * SECTOR, 2)), Err(NoRoom));
@@ -371,6 +442,60 @@ mod tests {
             None,
             "only an index"
         );
+    }
+
+    fn hot(len: u32, hot_len: u32, sha: u8) -> Header {
+        Header {
+            hot_at: len - hot_len,
+            hot_len,
+            ..header(len, sha)
+        }
+    }
+
+    #[test]
+    fn hot_code_takes_the_arena_in_turn_while_it_fits() {
+        let headers = [
+            hot(5000, 400, 1),
+            header(100, 2),
+            hot(20_000, HOT_MAX + 4, 3),
+            hot(20_000, HOT_MAX, 4),
+            hot(5000, 3700, 5),
+            hot(5000, 8, 6),
+        ];
+        let mut layout = Layout::new(region(), FIRMWARE, API, ARENA, None);
+        let hot: Vec<u32> = headers
+            .iter()
+            .map(|h| layout.place(h).unwrap().hot)
+            .collect();
+        let arena = ARENA.start;
+        // None, too much for one plugin, more than the arena has left.
+        assert_eq!(hot, [arena, 0, 0, arena + 400, 0, arena + 400 + HOT_MAX]);
+        assert_eq!(layout.hot_used(), 400 + HOT_MAX + 8);
+        let index = layout.index().unwrap();
+        assert_eq!(Index::read(&index.to_bytes()), Some(index.clone()));
+        assert_eq!(index.placed[3].hot, arena + 400);
+    }
+
+    #[test]
+    fn a_plugin_is_the_same_only_with_its_hot_code_where_it_was() {
+        let (_, index) = start(None, &[hot(5000, 400, 1), hot(5000, 400, 2)]);
+        // The first's hot code grew (another file): the second's moves.
+        let (placements, again) = start(index.clone(), &[hot(5000, 404, 9), hot(5000, 400, 2)]);
+        assert!(placements.iter().all(|p| !p.present));
+        assert_eq!(placements[1].hot, ARENA.start + 404);
+        assert!(again.is_some());
+        // Another arena (another firmware's, the same index): all anew.
+        let mut layout = Layout::new(
+            region(),
+            FIRMWARE,
+            API,
+            Arena {
+                start: ARENA.start + 16,
+                ..ARENA
+            },
+            index,
+        );
+        assert!(!layout.place(&hot(5000, 400, 1)).unwrap().present);
     }
 
     #[test]

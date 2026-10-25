@@ -70,6 +70,9 @@ pub struct ScreenSpec {
     /// choice (a full refresh, or a partial one where the user turned
     /// flashing off): e.g. [`RefreshMode::Fast`] for a quick sheet.
     pub refresh_on_open: Option<RefreshMode>,
+    /// How many of it may be open at once: one for each set of params
+    /// unless it says otherwise ([`Instances`]).
+    pub instances: Instances,
 }
 
 impl ScreenSpec {
@@ -80,6 +83,7 @@ impl ScreenSpec {
             title: title.into(),
             factory,
             refresh_on_open: None,
+            instances: Instances::PER_PARAMS,
         }
     }
 
@@ -87,6 +91,139 @@ impl ScreenSpec {
     pub fn refresh_on_open(mut self, mode: RefreshMode) -> Self {
         self.refresh_on_open = Some(mode);
         self
+    }
+
+    /// How many of it may be open at once.
+    #[must_use]
+    pub fn instances(mut self, instances: Instances) -> Self {
+        self.instances = instances;
+        self
+    }
+}
+
+/// What makes a screen kept in the program ([`FixedScreen`]): a
+/// function, not a closure.
+pub type FixedFactory = fn(&Env<'_>, &Params) -> Box<dyn Screen>;
+
+/// A screen contribution kept in the program: as a [`ScreenSpec`], in a
+/// `static` list ([`Registrar::add_screens`](crate::Registrar::add_screens)),
+/// so it takes next to no memory where a [`ScreenSpec`] takes some 60
+/// bytes. Its factory is a function ([`FixedFactory`]); a screen whose
+/// factory needs state of its own is a [`ScreenSpec`].
+#[derive(Debug)]
+pub struct FixedScreen {
+    id: Id,
+    title: &'static str,
+    factory: FixedFactory,
+    refresh_on_open: Option<RefreshMode>,
+    instances: Instances,
+}
+
+impl FixedScreen {
+    /// Screen `id`, called `title` (a translation key), made by `factory`.
+    pub const fn new(id: Id, title: &'static str, factory: FixedFactory) -> Self {
+        Self {
+            id,
+            title,
+            factory,
+            refresh_on_open: None,
+            instances: Instances::PER_PARAMS,
+        }
+    }
+
+    /// How the panel is refreshed when it opens ([`ScreenSpec::refresh_on_open`]).
+    pub const fn refresh_on_open(mut self, mode: RefreshMode) -> Self {
+        self.refresh_on_open = Some(mode);
+        self
+    }
+
+    /// How many of it may be open at once ([`ScreenSpec::instances`]).
+    pub const fn instances(mut self, instances: Instances) -> Self {
+        self.instances = instances;
+        self
+    }
+
+    pub const fn id(&self) -> &Id {
+        &self.id
+    }
+
+    /// Translation key of its name.
+    pub const fn title(&self) -> &'static str {
+        self.title
+    }
+
+    /// The screen, made with `params`.
+    pub fn make(&self, env: &Env<'_>, params: &Params) -> Box<dyn Screen> {
+        (self.factory)(env, params)
+    }
+
+    /// How the panel is refreshed when it opens, if it says.
+    pub const fn refresh(&self) -> Option<RefreshMode> {
+        self.refresh_on_open
+    }
+
+    /// How many of it may be open at once.
+    pub const fn how_many(&self) -> Instances {
+        self.instances
+    }
+}
+
+/// Every screen plugins added, with the translation key of its name
+/// ([`Env::screens`](crate::Env::screens)): those kept in the program
+/// and the others.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ScreenList<'a> {
+    added: &'a [(Id, Cow<'static, str>)],
+    fixed: &'a [&'static FixedScreen],
+}
+
+impl<'a> ScreenList<'a> {
+    /// The screens of `added` and `fixed`, each by id.
+    #[cfg(feature = "kernel")]
+    pub fn new(added: &'a [(Id, Cow<'static, str>)], fixed: &'a [&'static FixedScreen]) -> Self {
+        Self { added, fixed }
+    }
+
+    /// Each screen's id and the translation key of its name.
+    pub fn iter(self) -> impl Iterator<Item = (&'a Id, &'a str)> + 'a {
+        let added = self.added.iter().map(|(id, title)| (id, title.as_ref()));
+        let fixed = self.fixed.iter().map(|f| (f.id(), f.title()));
+        added.chain(fixed)
+    }
+
+    pub fn len(&self) -> usize {
+        self.added.len() + self.fixed.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// How many of a screen may be open at once ([`ScreenSpec::instances`]).
+/// Opening one that is open already goes back to it: the screens above it
+/// close, as with [`Command::BackTo`], and it hears the params it was
+/// opened with ([`Screen::on_reopen`]). *Back* then leaves it in one
+/// press, as if it had been opened once. Constants of one type, so more
+/// can come without a new plugin interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Instances(u8);
+
+impl Instances {
+    /// One for each set of params (the default): opened again with the
+    /// same params, the open one is shown; with others, another opens
+    /// above (the details of another book, a folder in a folder).
+    pub const PER_PARAMS: Self = Self(0);
+    /// One at most, whatever the params: opened again, the open one is
+    /// shown with the new params (a transfer screen, a settings root).
+    pub const SINGLE: Self = Self(1);
+    /// As many as are opened, each above the last.
+    pub const MANY: Self = Self(2);
+}
+
+impl Default for Instances {
+    fn default() -> Self {
+        Self::PER_PARAMS
     }
 }
 
@@ -156,6 +293,13 @@ impl ScreenKey {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub const fn new(serial: u32) -> Self {
         Self(serial)
+    }
+
+    /// Its number, as the kernel gave it.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub const fn serial(self) -> u32 {
+        self.0
     }
 }
 
@@ -441,6 +585,37 @@ pub trait Screen {
         Handled::No
     }
 
+    /// How the screen runs while it is on top
+    /// ([`ScreenMode`](crate::realtime::ScreenMode)): full screen, raw
+    /// keys, its own refreshes, a pace. Read whenever it counts (each
+    /// input, each frame), so it may change as the screen goes on; whether
+    /// it is full screen counts when the screen is made. By default a
+    /// screen of pages.
+    fn mode(&self) -> crate::realtime::ScreenMode {
+        crate::realtime::ScreenMode::new()
+    }
+
+    /// A button pressed or let go, for a screen that takes raw keys
+    /// ([`ScreenMode::raw_keys`](crate::realtime::ScreenMode::raw_keys)),
+    /// before the key map. A press it takes ([`Handled::Yes`]) brings its
+    /// release here too; one it does not goes to the key map with its
+    /// release, as on other screens. The power button never comes, and
+    /// holding *Back* for [`ESCAPE_HOLD`](crate::realtime::ESCAPE_HOLD)
+    /// leaves the screen.
+    fn on_key(&mut self, key: &crate::realtime::KeyEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = (key, cx);
+        Handled::No
+    }
+
+    /// A call that comes after this release, by its key (see
+    /// [`Command::Extended`]): what PaperPaw asks of screens later reaches
+    /// screens built now, which answer [`Handled::No`] to keys they do not
+    /// know.
+    fn on_extended(&mut self, key: &Id, params: &Params, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = (key, params, cx);
+        Handled::No
+    }
+
     /// How the row of hints below the screen labels the button that runs
     /// `action` here, on devices with buttons in a row under the screen
     /// ([`settings::BUTTON_HINTS`](crate::builtin::settings::BUTTON_HINTS)):
@@ -456,6 +631,29 @@ pub trait Screen {
     /// start background work with [`Cx::wake_at`].
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let _ = cx;
+    }
+
+    /// Called when the screen is opened again while it is open (see
+    /// [`Instances`]), after the screens above it were closed (it then
+    /// hears [`Screen::on_show`] after this): `params` are those it was
+    /// opened with now, the same, or others for a screen of
+    /// [`Instances::SINGLE`], which shows them as if it had been opened
+    /// with them.
+    fn on_reopen(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+        let _ = (params, cx);
+    }
+
+    /// Called while a screen above it needs memory
+    /// ([`ScreenMode::memory`](crate::realtime::ScreenMode::memory)): it
+    /// lets go of what it can make again (a book its pages laid out and
+    /// its chapter read, pictures, lists), keeping what the user would
+    /// miss (the place in the book, what was typed), and makes it again
+    /// as it shows next ([`Screen::on_show`]). `Handled::Yes` where it let
+    /// go of something. Screens that do not are closed where there is
+    /// still too little, and opened again with their params later.
+    fn on_squeeze(&mut self, squeeze: &crate::realtime::Squeeze, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = (squeeze, cx);
+        Handled::No
     }
 
     /// Called for every emitted event (after its subscribers), on every
@@ -650,6 +848,19 @@ impl<'a, 'e> Cx<'a, 'e> {
     /// possible". It comes while the screen is on top: covered by another
     /// (a menu, a keyboard), the time waits until it is on top again. It
     /// is kept when the screen is made anew for another size.
+    /// Keeps the device from going to sleep by itself while this screen
+    /// is on top, for as long as `hold` lasts (renew it before it ends):
+    /// a clock, a timer, a slideshow. It ends when the screen closes.
+    pub fn keep_awake(&mut self, hold: crate::power::WakeHold) {
+        let hold = hold.of_screen(self.key);
+        self.output.commands.push(Command::KeepAwake(hold));
+    }
+
+    /// Lets go of the hold of `id`.
+    pub fn let_sleep(&mut self, id: impl Into<Id>) {
+        self.output.commands.push(Command::LetSleep(id.into()));
+    }
+
     pub fn wake_at(&mut self, at: Instant) {
         self.output.wake_at = Some(self.output.wake_at.map_or(at, |w| w.min(at)));
     }

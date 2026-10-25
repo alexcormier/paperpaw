@@ -266,6 +266,8 @@ fn day_detail(app: &mut App, back: u32) -> String {
         app.press("left");
     }
     let shown = app.shown();
+    // Closed again: opened once more, it would be shown as it was left.
+    app.press("back");
     let at = shown
         .lines()
         .position(|l| l.contains(", "))

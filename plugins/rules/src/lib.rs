@@ -45,7 +45,7 @@ use core::cell::{Cell, RefCell};
 use paperpaw_sdk::builtin::{events, menus, settings};
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin,
+    Arg, Command, Commands, Env, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params, Plugin,
     RegisterError, Registrar, ScreenSpec, SettingValue, time,
 };
 
@@ -329,7 +329,7 @@ fn effect_text(env: &Env<'_>, effect: &Effect) -> String {
             let title = env
                 .actions()
                 .get(id.as_str())
-                .map_or(id.as_str(), |a| a.title.as_ref());
+                .map_or(id.as_str(), |a| a.title());
             env.i18n().tr(title).to_string()
         }
         Effect::Switch(id, on) => {
@@ -365,6 +365,17 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "rules.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(LIST_SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, OPEN).order(230)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "automation")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    PICK_SCREEN,
+    "rules.title",
+    |env, params| Box::new(screens::PickScreen::new(env, params)),
+)];
+
 impl Plugin for Rules {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Rules", paperpaw_sdk::package_version!())
@@ -380,23 +391,18 @@ impl Plugin for Rules {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(State::default());
         let shared = state.clone();
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "rules.title",
-            Box::new(move |env, _| Box::new(screens::RulesScreen::new(env, shared.clone()))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            PICK_SCREEN,
-            "rules.title",
-            Box::new(|env, params| Box::new(screens::PickScreen::new(env, params))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "rules.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(230))?;
-        r.add_icon(OPEN, Cow::Borrowed("automation"))?;
+        r.add_screen(
+            ScreenSpec::new(
+                LIST_SCREEN,
+                "rules.title",
+                Box::new(move |env, _| Box::new(screens::RulesScreen::new(env, shared.clone()))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         let started = state.clone();
         r.on(events::STARTED, move |env, _, out| {
             started.run(env, 0, out, |t| *t == Trigger::Start);

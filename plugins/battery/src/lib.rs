@@ -21,8 +21,8 @@ use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingSpec, time,
+    Command, Env, FixedAction, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
+    ScreenSpec, SettingSpec, time,
 };
 
 use log::{Kind, Reading};
@@ -157,6 +157,11 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "battery.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(37)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "battery")];
+
 impl Plugin for Battery {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Battery use", paperpaw_sdk::package_version!())
@@ -202,21 +207,20 @@ impl Plugin for Battery {
 
         // The view.
         let s = state.clone();
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "battery.title",
-            Box::new(move |env, _| {
-                let now = reading(env, &s.borrow());
-                Box::new(view::BatteryView::new(env, now, &dir()))
-            }),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "battery.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(37))?;
-        r.add_icon(OPEN, Cow::Borrowed("battery"))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "battery.title",
+                Box::new(move |env, _| {
+                    let now = reading(env, &s.borrow());
+                    Box::new(view::BatteryView::new(env, now, &dir()))
+                }),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

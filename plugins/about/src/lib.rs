@@ -31,8 +31,8 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::menus;
 use paperpaw_sdk::logo;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec,
+    Arg, Command, Env, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar,
 };
 
 pub const PLUGIN: Id = Id::new_static("about");
@@ -239,6 +239,17 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "about.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+/// In the device's part of the settings, last.
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, OPEN).order(99)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "info-circle")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "about.title", |env, _| {
+    Box::new(screen::AboutScreen::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for About {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "About", paperpaw_sdk::package_version!())
@@ -248,19 +259,10 @@ impl Plugin for About {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "about.title",
-            Box::new(|env, _| Box::new(screen::AboutScreen::new(env))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "about.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
-        // In the device's part of the settings, last.
-        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(99))?;
-        r.add_icon(OPEN, Cow::Borrowed("info-circle"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

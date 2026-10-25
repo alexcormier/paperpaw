@@ -21,8 +21,8 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::setup::{SetupPage, SetupStepSpec};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    Canvas, CloseCause, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, ItemState,
-    PluginKind, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Canvas, CloseCause, Color, Command, Cx, Env, FixedScreen, Gesture, GestureKind, Handled, Id,
+    ItemState, PluginKind, Rect, RefreshMode, RegisterError, Registrar, Screen,
 };
 
 use crate::{queue, trust};
@@ -33,12 +33,12 @@ pub(crate) const OFFERED: [&str; 4] = ["stats", "widgets", "calibre", "kosync"];
 const SCREEN: Id = Id::new_static("store.offer");
 const STEP: Id = Id::new_static("store.setup");
 
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "store.offer.title", |env, _| {
+    Box::new(OfferScreen::new(env))
+})];
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_screen(ScreenSpec::new(
-        SCREEN,
-        "store.offer.title",
-        Box::new(|env, _| Box::new(OfferScreen::new(env))),
-    ))?;
+    r.add_screens(&SCREENS)?;
     r.add_setup_step(
         SetupStepSpec::new(STEP, "store.offer.title", SetupPage::Screen(SCREEN))
             .help("store.offer.help")
@@ -179,6 +179,18 @@ impl OfferScreen {
         ))
     }
 
+    /// The focus went from the last row to the button below, or back:
+    /// the two drawn again.
+    fn button_left(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
+        let row = self.list.row_rect(self.list.focus() % self.list.rows());
+        match self.button(env) {
+            Some(button) => {
+                ui::ListChange::focus(row, ui::button_reach(&self.style, button)).request(cx);
+            }
+            None => Self::redraw(cx),
+        }
+    }
+
     fn redraw(cx: &mut Cx<'_, '_>) {
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
@@ -304,7 +316,7 @@ impl Screen for OfferScreen {
                 self.done(cx);
             } else if back {
                 self.on_button = false;
-                Self::redraw(cx);
+                self.button_left(&env, cx);
             } else if !forward {
                 return Handled::No;
             }
@@ -312,7 +324,7 @@ impl Screen for OfferScreen {
         }
         if forward && self.list.focus() + 1 >= len && self.button(&env).is_some() {
             self.on_button = true;
-            Self::redraw(cx);
+            self.button_left(&env, cx);
             return Handled::Yes;
         }
         let delta = if back {

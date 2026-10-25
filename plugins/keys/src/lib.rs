@@ -38,9 +38,8 @@ use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
-    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec,
+    Arg, Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled,
+    Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
 };
 
 pub const PLUGIN: Id = Id::new_static("keys");
@@ -401,7 +400,7 @@ fn action_name(env: &Env<'_>, id: &Id) -> String {
     env.actions()
         .get(id.as_str())
         .map_or(id.as_str().to_string(), |a| {
-            env.i18n().tr(&a.title).to_string()
+            env.i18n().tr(a.title()).to_string()
         })
 }
 
@@ -413,6 +412,24 @@ pub struct Keys;
 static HOW: [(&str, &str); 2] = [
     ("en", include_str!("../how/en.txt")),
     ("de", include_str!("../how/de.txt")),
+];
+
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "keys.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(LIST_SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, OPEN).order(75)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "hand-finger")];
+
+static SCREENS: [FixedScreen; 3] = [
+    FixedScreen::new(PICK_SCREEN, "keys.title", |env, params| {
+        Box::new(PickScreen::new(env, params))
+    }),
+    FixedScreen::new(PLACE_SCREEN, "keys.place", |env, params| {
+        Box::new(PlaceScreen::new(env, params))
+    }),
+    FixedScreen::new(LIST_SCREEN, "keys.title", |env, _| {
+        Box::new(ListScreen::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
 ];
 
 impl Plugin for Keys {
@@ -428,28 +445,10 @@ impl Plugin for Keys {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "keys.title",
-            Box::new(|env, _| Box::new(ListScreen::new(env))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            PICK_SCREEN,
-            "keys.title",
-            Box::new(|env, params| Box::new(PickScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            PLACE_SCREEN,
-            "keys.place",
-            Box::new(|env, params| Box::new(PlaceScreen::new(env, params))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "keys.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(75))?;
-        r.add_icon(OPEN, Cow::Borrowed("hand-finger"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -465,10 +464,7 @@ fn navigate(list: &mut ListView, len: usize, action: &Id, cx: &mut Cx<'_, '_>) -
     } else {
         return false;
     };
-    if list.move_focus(delta, len) != ListChange::None {
-        cx.request_redraw();
-        cx.request_refresh(RefreshMode::Fast);
-    }
+    list.move_focus(delta, len).request(cx);
     true
 }
 
@@ -748,10 +744,7 @@ impl Screen for ListScreen {
         } else {
             return Handled::No;
         };
-        if self.rows.step(delta > 0) != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.rows.step(delta > 0).request(cx);
         Handled::Yes
     }
 
@@ -1022,12 +1015,12 @@ impl PickScreen {
         let mut found: Vec<(usize, Id, String)> = env
             .actions()
             .iter()
-            .filter(|a| !hidden(&a.id))
+            .filter(|a| !hidden(a.id()))
             .map(|a| {
                 (
-                    group_of(env, &a.id),
-                    a.id.clone(),
-                    env.i18n().tr(&a.title).to_string(),
+                    group_of(env, a.id()),
+                    a.id().clone(),
+                    env.i18n().tr(a.title()).to_string(),
                 )
             })
             .filter(|(_, _, name)| {
@@ -1149,10 +1142,7 @@ impl Screen for PickScreen {
         } else {
             return Handled::No;
         };
-        if self.rows.step(delta > 0) != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.rows.step(delta > 0).request(cx);
         Handled::Yes
     }
 

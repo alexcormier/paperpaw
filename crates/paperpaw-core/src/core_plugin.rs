@@ -4,6 +4,7 @@
 
 mod clean_up;
 mod finishing;
+mod reading;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -19,13 +20,17 @@ use paperpaw_sdk::library;
 use paperpaw_sdk::time::{self, AUTO, CLOCK_12H, CLOCK_24H, TIME_ZONES};
 use paperpaw_sdk::widgets::{self, Drawn, WidgetSpec};
 use paperpaw_sdk::{
-    ActionHandler, ActionHint, ActionSpec, Canvas, Color, Command, Commands, Cx, Env, Handled, Id,
-    Manifest, MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, Screen, ScreenSpec,
-    SettingExtra, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, SlotSpec,
-    StatusItemSpec, StatusValue,
+    ActionHint, Canvas, Color, Command, Commands, Cx, Env, FixedAction, FixedScreen, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, Screen, SettingExtra,
+    SettingGroupSpec, SettingKind, SettingSpec, SettingValue, SlotSpec, StatusItemSpec,
+    StatusValue,
 };
 
 pub(crate) const CORE: Id = Id::new_static("core");
+
+/// Settings the menus list beside actions, by their ids.
+const NIGHT_MODE: Id = Id::new_static(settings::NIGHT_MODE.static_str());
+const ROTATION: Id = Id::new_static(settings::ROTATION.static_str());
 
 #[derive(Debug)]
 pub(crate) struct CorePlugin(pub(crate) String);
@@ -51,8 +56,8 @@ impl Plugin for CorePlugin {
         register_device_settings(r)?;
         register_spaces(r)?;
         register_colors(r)?;
-        register_reading_settings(r)?;
-        register_marks(r)?;
+        reading::register(r)?;
+        marks::register(r)?;
         register_time_and_battery(r)?;
         register_keymaps_and_setup(r)?;
         r.add_presets(&POWER_MODES)?;
@@ -84,9 +89,12 @@ impl Plugin for CorePlugin {
         })?;
         // Each plugin's network (its settings made by the kernel).
         static NETWORK: SettingGroupSpec =
-            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87);
+            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network")
+                .order(87)
+                .within(groups::PLUGINS);
         r.add_setting_group(&NETWORK)?;
-        r.add_icon(crate::work::NETWORK_GROUP, Cow::Borrowed("world"))?;
+        static NETWORK_ICON: [(Id, &str); 1] = [(crate::work::NETWORK_GROUP, "world")];
+        r.add_icons(&NETWORK_ICON)?;
         Ok(())
     }
 }
@@ -137,12 +145,13 @@ const ALWAYS: &str = "core.reading-app.always";
 fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
     use paperpaw_sdk::readers::{self, Choice};
     // What it does is asked once the book is known (`BOOK_CHOSEN` below).
-    r.add_action(
-        ActionSpec::new(actions::OPEN_WITH, "core.action.open-with")
-            .handler(|_: &Env<'_>, _, _: &mut Commands| {}),
-    )?;
-    r.add_menu_entry(MenuEntry::new(menus::BOOK, actions::OPEN_WITH))?;
-    r.add_icon(actions::OPEN_WITH, Cow::Borrowed("apps"))?;
+    static OPEN_WITH: [FixedAction; 1] =
+        [FixedAction::new(actions::OPEN_WITH, "core.action.open-with").handler(|_, _, _| {})];
+    static OPEN_WITH_ENTRY: [MenuEntry; 1] = [MenuEntry::new(menus::BOOK, actions::OPEN_WITH)];
+    static OPEN_WITH_ICON: [(Id, &str); 1] = [(actions::OPEN_WITH, "apps")];
+    r.add_actions(&OPEN_WITH)?;
+    r.add_menu_entries(&OPEN_WITH_ENTRY)?;
+    r.add_icons(&OPEN_WITH_ICON)?;
     // Where there is something to choose: another reading app, or another
     // way to open books.
     r.set_item_state(actions::OPEN_WITH, |env| {
@@ -233,217 +242,111 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The actions screens give a meaning of their own (with their hints in
 /// the row), and how a screen takes gestures.
 fn register_screen_actions(r: &mut Registrar) -> Result<(), RegisterError> {
-    let screen_actions = [
-        (
-            actions::NEXT_PAGE,
-            "core.action.next-page",
-            ActionHint::Icon("chevron-down"),
+    static SCREEN_ACTIONS: [FixedAction; 10] = [
+        FixedAction::new(actions::NEXT_PAGE, "core.action.next-page")
+            .hint(ActionHint::Icon("chevron-down")),
+        FixedAction::new(actions::PREV_PAGE, "core.action.prev-page")
+            .hint(ActionHint::Icon("chevron-up")),
+        FixedAction::new(actions::UP, "core.action.up").hint(ActionHint::Icon("chevron-up")),
+        FixedAction::new(actions::DOWN, "core.action.down").hint(ActionHint::Icon("chevron-down")),
+        FixedAction::new(actions::LEFT, "core.action.left").hint(ActionHint::Icon("chevron-left")),
+        FixedAction::new(actions::RIGHT, "core.action.right")
+            .hint(ActionHint::Icon("chevron-right")),
+        FixedAction::new(actions::CONFIRM, "core.action.confirm")
+            .hint(label("core.hint.core.confirm")),
+        // How a screen takes gestures (`gestures.policy` in key maps):
+        // ids to bind, nothing to run.
+        FixedAction::new(
+            Id::new_static("core.gestures.standard"),
+            "core.gestures.standard",
         ),
-        (
-            actions::PREV_PAGE,
-            "core.action.prev-page",
-            ActionHint::Icon("chevron-up"),
-        ),
-        (
-            actions::UP,
-            "core.action.up",
-            ActionHint::Icon("chevron-up"),
-        ),
-        (
-            actions::DOWN,
-            "core.action.down",
-            ActionHint::Icon("chevron-down"),
-        ),
-        (
-            actions::LEFT,
-            "core.action.left",
-            ActionHint::Icon("chevron-left"),
-        ),
-        (
-            actions::RIGHT,
-            "core.action.right",
-            ActionHint::Icon("chevron-right"),
-        ),
-        (
-            actions::CONFIRM,
-            "core.action.confirm",
-            label("core.hint.core.confirm"),
-        ),
+        FixedAction::new(Id::new_static("core.gestures.own"), "core.gestures.own"),
+        FixedAction::new(Id::new_static("core.gestures.off"), "core.gestures.off"),
     ];
-    for (id, title, hint) in screen_actions {
-        r.add_action(ActionSpec::new(id, title).hint(hint))?;
-    }
-    // How a screen takes gestures (`gestures.policy` in key maps): ids
-    // to bind, nothing to run.
-    for (id, title) in [
-        ("core.gestures.standard", "core.gestures.standard"),
-        ("core.gestures.own", "core.gestures.own"),
-        ("core.gestures.off", "core.gestures.off"),
-    ] {
-        r.add_action(ActionSpec::new(Id::new_static(id), title))?;
-    }
-    Ok(())
+    r.add_actions(&SCREEN_ACTIONS)
 }
 
 /// The actions screens are moved and left with, and what opens the
 /// kernel's slots and menus.
 fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
-    let open = |slot: Id| -> ActionHandler {
-        Box::new(move |_: &Env<'_>, _: &Params, out: &mut Commands| {
-            out.push(Command::open_slot(slot.clone()));
-        })
-    };
-    let forward = |target: Id| -> ActionHandler {
-        Box::new(move |_: &Env<'_>, _: &Params, out: &mut Commands| {
-            out.push(Command::run(target.clone()));
-        })
-    };
-    let handled: [(Id, &'static str, ActionHandler); 11] = [
-        (
-            actions::REFRESH_SCREEN,
-            "core.action.refresh-screen",
-            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
+    static MOVING: [FixedAction; 11] = [
+        FixedAction::new(actions::REFRESH_SCREEN, "core.action.refresh-screen").handler(
+            |_, _, out| {
                 out.push(Command::Redraw(paperpaw_sdk::RefreshMode::Full));
-            }),
+            },
         ),
-        (
-            actions::QUICK_PANEL,
-            "core.action.quick-panel",
-            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
-                out.push(Command::OpenSlot(
-                    slots::PANEL,
-                    Params::new()
-                        .with(params::MENU, String::from(menus::QUICK.as_str()))
-                        .with(params::MODE, "top"),
-                ));
-            }),
-        ),
+        FixedAction::new(actions::QUICK_PANEL, "core.action.quick-panel").handler(|_, _, out| {
+            out.push(Command::OpenSlot(
+                slots::PANEL,
+                Params::new()
+                    .with(params::MENU, String::from(menus::QUICK.as_str()))
+                    .with(params::MODE, "top"),
+            ));
+        }),
         // Screens without their own meaning of next/previous turn pages.
-        (
-            actions::NEXT,
-            "core.action.next",
-            forward(actions::NEXT_PAGE),
-        ),
-        (
-            actions::PREVIOUS,
-            "core.action.previous",
-            forward(actions::PREV_PAGE),
-        ),
-        (
-            actions::MENU,
-            "core.action.menu",
-            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
+        FixedAction::new(actions::NEXT, "core.action.next")
+            .handler(|_, _, out| out.push(Command::run(actions::NEXT_PAGE))),
+        FixedAction::new(actions::PREVIOUS, "core.action.previous")
+            .handler(|_, _, out| out.push(Command::run(actions::PREV_PAGE))),
+        FixedAction::new(actions::MENU, "core.action.menu")
+            .hint(label("core.hint.core.menu"))
+            .handler(|_, _, out| {
                 out.push(Command::OpenSlot(
                     slots::MENU,
                     Params::new().with(params::MENU, menus::MAIN.as_str()),
                 ));
             }),
-        ),
         // Select held: the menu, where no screen takes it for a long
         // press of its own.
-        (
-            actions::LONG_CONFIRM,
-            "core.action.long-confirm",
-            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
-                out.push(Command::run(actions::MENU));
-            }),
-        ),
-        (
-            actions::LIBRARY,
-            "core.action.library",
-            open(slots::LIBRARY),
-        ),
-        (
-            actions::SETTINGS,
-            "core.action.settings",
-            open(slots::SETTINGS),
-        ),
-        (
-            actions::BACK,
-            "core.action.back",
-            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| out.push(Command::Back)),
-        ),
-        (
-            actions::NOTHING,
-            "core.action.nothing",
-            Box::new(|_: &Env<'_>, _: &Params, _: &mut Commands| {}),
-        ),
-        (
-            actions::HOME,
-            "core.action.home",
-            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
-                out.push(Command::open_slot(slots::HOME));
-            }),
-        ),
+        FixedAction::new(actions::LONG_CONFIRM, "core.action.long-confirm")
+            .handler(|_, _, out| out.push(Command::run(actions::MENU))),
+        FixedAction::new(actions::LIBRARY, "core.action.library")
+            .handler(|_, _, out| out.push(Command::open_slot(slots::LIBRARY))),
+        FixedAction::new(actions::SETTINGS, "core.action.settings")
+            .handler(|_, _, out| out.push(Command::open_slot(slots::SETTINGS))),
+        FixedAction::new(actions::BACK, "core.action.back")
+            .hint(label("core.hint.core.back"))
+            .handler(|_, _, out| out.push(Command::Back)),
+        FixedAction::new(actions::NOTHING, "core.action.nothing")
+            .hint(ActionHint::Hidden)
+            .handler(|_, _, _| {}),
+        FixedAction::new(actions::HOME, "core.action.home")
+            .hint(label("core.hint.core.home"))
+            .handler(|_, _, out| out.push(Command::open_slot(slots::HOME))),
     ];
-    add_handled(r, handled)
+    r.add_actions(&MOVING)
 }
 
 /// The actions of the device: cleaning up, screenshots, the tools,
 /// sleep and night mode.
 fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
-    let handled: [(Id, &'static str, ActionHandler); 5] = [
-        (
-            actions::CLEAN_UP,
-            "core.action.clean-up",
-            Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| ask_clean_up(env, out)),
-        ),
-        (
-            actions::SCREENSHOT,
-            "core.action.screenshot",
-            Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| {
-                out.push(Command::Screenshot(screenshot_path(env)));
-            }),
-        ),
-        (
-            actions::TOOLS,
-            "core.action.tools",
-            Box::new(|_: &Env<'_>, _: &Params, out: &mut Commands| {
-                out.push(Command::OpenSlot(
-                    slots::MENU,
-                    Params::new().with(params::MENU, menus::TOOLS.as_str()),
-                ));
-            }),
-        ),
-        (
-            actions::SLEEP,
-            "core.action.sleep",
-            Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| {
-                // The sleep screen first, if there is one, then sleep.
-                if env.caps().sleep && env.has_slot(&slots::SLEEP) {
-                    out.push(Command::open_slot(slots::SLEEP));
-                }
-                out.push(Command::Sleep);
-            }),
-        ),
-        (
-            actions::TOGGLE_NIGHT_MODE,
-            "core.action.toggle-night-mode",
-            Box::new(|env: &Env<'_>, _: &Params, out: &mut Commands| {
+    static DEVICE: [FixedAction; 5] = [
+        FixedAction::new(actions::CLEAN_UP, "core.action.clean-up")
+            .handler(|env, _, out| ask_clean_up(env, out)),
+        FixedAction::new(actions::SCREENSHOT, "core.action.screenshot").handler(|env, _, out| {
+            out.push(Command::Screenshot(screenshot_path(env)));
+        }),
+        FixedAction::new(actions::TOOLS, "core.action.tools").handler(|_, _, out| {
+            out.push(Command::OpenSlot(
+                slots::MENU,
+                Params::new().with(params::MENU, menus::TOOLS.as_str()),
+            ));
+        }),
+        FixedAction::new(actions::SLEEP, "core.action.sleep").handler(|env, _, out| {
+            // The sleep screen first, if there is one, then sleep.
+            if env.caps().sleep && env.has_slot(&slots::SLEEP) {
+                out.push(Command::open_slot(slots::SLEEP));
+            }
+            out.push(Command::Sleep);
+        }),
+        FixedAction::new(actions::TOGGLE_NIGHT_MODE, "core.action.toggle-night-mode").handler(
+            |env, _, out| {
                 let night = env.settings().read(&settings::NIGHT_MODE);
                 out.push(Command::set(&settings::NIGHT_MODE, !night));
-            }),
+            },
         ),
     ];
-    add_handled(r, handled)
-}
-
-/// Actions with their handlers, the hint each shows.
-fn add_handled<const N: usize>(
-    r: &mut Registrar,
-    handled: [(Id, &'static str, ActionHandler); N],
-) -> Result<(), RegisterError> {
-    for (id, title, handler) in handled {
-        let hint = match &id {
-            id if *id == actions::BACK => label("core.hint.core.back"),
-            id if *id == actions::MENU => label("core.hint.core.menu"),
-            id if *id == actions::HOME => label("core.hint.core.home"),
-            id if *id == actions::NOTHING => ActionHint::Hidden,
-            _ => ActionHint::Title,
-        };
-        r.add_action(ActionSpec::new(id, title).handler(handler).hint(hint))?;
-    }
-    Ok(())
+    r.add_actions(&DEVICE)
 }
 
 /// The work that makes the library's catalog anew or catches it up
@@ -849,76 +752,66 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
         // Lowest possible priority: any real screen wins.
         r.bind_slot(id, screens::PLACEHOLDER, Priority(i16::MIN))?;
     }
-    // Choosing the items or lines of a status line, for any setting.
-    r.add_screen(ScreenSpec::new(
-        screens::STATUS_ITEMS,
-        "core.status.choose",
-        Box::new(|env, params| Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, params))),
-    ))?;
-    r.add_screen(ScreenSpec::new(
-        screens::STATUS_LINES,
-        "core.status.choose",
-        Box::new(|env, params| {
-            let params = params
-                .clone()
-                .with(params::MODE, paperpaw_sdk::ui::items::LINES);
-            Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, &params))
+    // Choosing the items or lines of a status line, for any setting;
+    // lists of widgets above each other (the sleep screen's) edited,
+    // unless a plugin fills the slot; the choice and the yes or no
+    // question every plugin asks (`ask::choice`, `ask::confirm`), unless
+    // another screen fills the slot; a folder for a setting: the folder
+    // chooser's, whichever plugin fills its slot.
+    static SCREENS: [FixedScreen; 9] = [
+        FixedScreen::new(
+            screens::STATUS_ITEMS,
+            "core.status.choose",
+            |env, params| Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, params)),
+        ),
+        FixedScreen::new(
+            screens::STATUS_LINES,
+            "core.status.choose",
+            |env, params| {
+                let params = params
+                    .clone()
+                    .with(params::MODE, paperpaw_sdk::ui::items::LINES);
+                Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, &params))
+            },
+        ),
+        FixedScreen::new(
+            screens::WIDGET_LIST,
+            "core.widgets.edit.screen",
+            |env, params| Box::new(paperpaw_sdk::ui::widget_list::ListScreen::open(env, params)),
+        ),
+        FixedScreen::new(
+            screens::ADD_WIDGET,
+            "core.widgets.edit.add-to-list",
+            |env, params| Box::new(paperpaw_sdk::ui::widget_list::AddScreen::open(env, params)),
+        ),
+        FixedScreen::new(screens::CHOICE, "core.choice", |env, params| {
+            Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))
         }),
-    ))?;
-    // Lists of widgets above each other (the sleep screen's) edited,
-    // unless a plugin fills the slot.
-    r.add_screen(ScreenSpec::new(
-        screens::WIDGET_LIST,
-        "core.widgets.edit.screen",
-        Box::new(|env, params| {
-            Box::new(paperpaw_sdk::ui::widget_list::ListScreen::open(env, params))
+        FixedScreen::new(screens::CONFIRM, "core.confirm.screen", |env, params| {
+            Box::new(paperpaw_sdk::ui::confirm::Confirm::new(env, params))
         }),
-    ))?;
-    r.add_screen(ScreenSpec::new(
-        screens::ADD_WIDGET,
-        "core.widgets.edit.add-to-list",
-        Box::new(|env, params| {
-            Box::new(paperpaw_sdk::ui::widget_list::AddScreen::open(env, params))
+        FixedScreen::new(screens::PLACEHOLDER, "core.screen.placeholder", |_, _| {
+            Box::new(PlaceholderScreen)
         }),
-    ))?;
+        FixedScreen::new(
+            screens::FINISHING_UPDATE,
+            "core.finishing-update.title",
+            |_, params| Box::new(finishing::Finishing::new(params)),
+        ),
+        FixedScreen::new(
+            screens::FOLDER_EDITOR,
+            "core.setting.library-folder",
+            |_, params| {
+                Box::new(FolderEditor {
+                    params: params.clone(),
+                })
+            },
+        ),
+    ];
+    r.add_screens(&SCREENS)?;
     r.bind_slot(slots::EDIT_WIDGETS, screens::WIDGET_LIST, Priority::DEFAULT)?;
-    // The choice every plugin asks (`ask::choice`), unless another
-    // screen fills the slot.
-    r.add_screen(ScreenSpec::new(
-        screens::CHOICE,
-        "core.choice",
-        Box::new(|env, params| Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))),
-    ))?;
     r.bind_slot(slots::CHOICE, screens::CHOICE, Priority::FALLBACK)?;
-    // The yes or no question every plugin asks (`ask::confirm`), unless
-    // another screen fills the slot.
-    r.add_screen(ScreenSpec::new(
-        screens::CONFIRM,
-        "core.confirm.screen",
-        Box::new(|env, params| Box::new(paperpaw_sdk::ui::confirm::Confirm::new(env, params))),
-    ))?;
     r.bind_slot(slots::CONFIRM, screens::CONFIRM, Priority::FALLBACK)?;
-    r.add_screen(ScreenSpec::new(
-        screens::PLACEHOLDER,
-        "core.screen.placeholder",
-        Box::new(|_, _| Box::new(PlaceholderScreen)),
-    ))?;
-    r.add_screen(ScreenSpec::new(
-        screens::FINISHING_UPDATE,
-        "core.finishing-update.title",
-        Box::new(|_, params| Box::new(finishing::Finishing::new(params))),
-    ))?;
-    // A folder for a setting: the folder chooser's, whichever plugin
-    // fills its slot.
-    r.add_screen(ScreenSpec::new(
-        screens::FOLDER_EDITOR,
-        "core.setting.library-folder",
-        Box::new(|_, params| {
-            Box::new(FolderEditor {
-                params: params.clone(),
-            })
-        }),
-    ))?;
     Ok(())
 }
 
@@ -947,64 +840,74 @@ impl Screen for FolderEditor {
 fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     // Every reader's submenu "More" (`menus::READER_MORE`): a submenu is
     // an action named like its menu, which the menu shows as a submenu
-    // and which opens the menu when bound to a key.
-    r.add_action(
-        ActionSpec::new(menus::READER_MORE, "core.action.reader-more").handler(Box::new(
-            |_: &Env<'_>, _: &Params, out: &mut Commands| {
-                out.push(Command::OpenSlot(
-                    slots::MENU,
-                    Params::new().with(params::MENU, menus::READER_MORE.as_str()),
-                ));
-            },
-        )),
-    )?;
-    r.add_icon(menus::READER_MORE, Cow::Borrowed("dots"))?;
-    // A short main menu; the tools plugins bring are one entry, so it
-    // stays the same however many there are.
-    r.add_menu_entry(MenuEntry::new(menus::TOOLS, actions::SCREENSHOT).order(95))?;
-    r.add_icon(actions::SCREENSHOT, Cow::Borrowed("camera"))?;
-    // What there is to open, a submenu of the tools (an action named like
-    // its menu) where plugins put something there: reached with the
-    // buttons too, however full the home screen is.
-    r.add_action(ActionSpec::new(menus::APPS, "core.action.apps").handler(
-        |_: &Env<'_>, _, out: &mut Commands| {
+    // and which opens the menu when bound to a key. The same for what
+    // there is to open, a submenu of the tools (`menus::APPS`) where
+    // plugins put something there: reached with the buttons too, however
+    // full the home screen is.
+    static SUBMENUS: [FixedAction; 2] = [
+        FixedAction::new(menus::READER_MORE, "core.action.reader-more").handler(|_, _, out| {
+            out.push(Command::OpenSlot(
+                slots::MENU,
+                Params::new().with(params::MENU, menus::READER_MORE.as_str()),
+            ));
+        }),
+        FixedAction::new(menus::APPS, "core.action.apps").handler(|_, _, out| {
             out.push(Command::OpenSlot(
                 slots::MENU,
                 Params::new().with(params::MENU, menus::APPS.as_str()),
             ));
-        },
-    ))?;
-    r.add_menu_entry(MenuEntry::new(menus::TOOLS, menus::APPS).order(90))?;
-    r.add_icon(menus::APPS, Cow::Borrowed("apps"))?;
+        }),
+    ];
+    r.add_actions(&SUBMENUS)?;
     r.set_item_state(menus::APPS, |env| {
         paperpaw_sdk::ItemState::new().shown(!env.menus().items(menus::APPS.as_str()).is_empty())
     })?;
-    for (action, order, icon) in [
-        // The quick panel at the top: found without its gesture or key.
-        (actions::QUICK_PANEL, 5, "adjustments-horizontal"),
-        (actions::HOME, 10, "home"),
-        (actions::LIBRARY, 20, "books"),
-        (actions::TOOLS, 30, "apps"),
-        (settings::NIGHT_MODE.into(), 85, "moon"),
-        (actions::SETTINGS, 90, "settings"),
-    ] {
-        r.add_menu_entry(MenuEntry::new(menus::MAIN, action.clone()).order(order))?;
-        r.add_icon(action, Cow::Borrowed(icon))?;
-    }
-
-    // The quick panel: what is changed often, whatever is open; plugins
-    // add their own (the light, …).
-    for (item, order) in [
-        (settings::NIGHT_MODE.into(), 10),
-        (settings::ROTATION.into(), 40),
-        (actions::REFRESH_SCREEN, 50),
-        (actions::SCREENSHOT, 60),
-        (actions::SLEEP, 70),
-        (actions::SETTINGS, 90),
-    ] {
-        r.add_menu_entry(MenuEntry::new(menus::QUICK, item).order(order))?;
-    }
-    r.add_icon(actions::REFRESH_SCREEN, Cow::Borrowed("sparkles"))?;
+    // A short main menu; the tools plugins bring are one entry, so it
+    // stays the same however many there are. The quick panel holds what
+    // is changed often, whatever is open (the quick panel at the top of
+    // the main menu: found without its gesture or key); plugins add
+    // their own (the light, ...).
+    static ENTRIES: [MenuEntry; 14] = [
+        MenuEntry::new(menus::TOOLS, actions::SCREENSHOT).order(95),
+        MenuEntry::new(menus::TOOLS, menus::APPS).order(90),
+        MenuEntry::new(menus::MAIN, actions::QUICK_PANEL).order(5),
+        MenuEntry::new(menus::MAIN, actions::HOME).order(10),
+        MenuEntry::new(menus::MAIN, actions::LIBRARY).order(20),
+        MenuEntry::new(menus::MAIN, actions::TOOLS).order(30),
+        MenuEntry::new(menus::MAIN, NIGHT_MODE).order(85),
+        MenuEntry::new(menus::MAIN, actions::SETTINGS).order(90),
+        MenuEntry::new(menus::QUICK, NIGHT_MODE).order(10),
+        MenuEntry::new(menus::QUICK, ROTATION).order(40),
+        MenuEntry::new(menus::QUICK, actions::REFRESH_SCREEN).order(50),
+        MenuEntry::new(menus::QUICK, actions::SCREENSHOT).order(60),
+        MenuEntry::new(menus::QUICK, actions::SLEEP).order(70),
+        MenuEntry::new(menus::QUICK, actions::SETTINGS).order(90),
+    ];
+    r.add_menu_entries(&ENTRIES)?;
+    static ICONS: [(Id, &str); 21] = [
+        (menus::READER_MORE, "dots"),
+        (actions::SCREENSHOT, "camera"),
+        (menus::APPS, "apps"),
+        (actions::QUICK_PANEL, "adjustments-horizontal"),
+        (actions::HOME, "home"),
+        (actions::LIBRARY, "books"),
+        (actions::TOOLS, "apps"),
+        (NIGHT_MODE, "moon"),
+        (actions::SETTINGS, "settings"),
+        (actions::REFRESH_SCREEN, "sparkles"),
+        (groups::READING, "book"),
+        (groups::LIBRARY, "books"),
+        (groups::DISPLAY, "contrast"),
+        (groups::CONTROLS, "adjustments"),
+        (groups::SYSTEM, "device-tablet"),
+        (groups::LOOK, "palette"),
+        (groups::OTHER, "dots"),
+        (groups::DEVELOPER, "bug"),
+        (groups::TIME, "clock"),
+        (groups::PLUGINS, "puzzle"),
+        (groups::WORDS, "language"),
+    ];
+    r.add_icons(&ICONS)?;
 
     // The settings' main page: reading, the device, customising.
     for (id, title, order) in [
@@ -1020,25 +923,21 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
             paperpaw_sdk::MenuSection::new(id, title, menus::SETTINGS).order(order),
         )?;
     }
-    for (id, title, order, icon) in [
-        (groups::READING, "core.group.reading", 10, "book"),
-        (groups::LIBRARY, "core.group.library", 20, "books"),
-        (
-            groups::STATUS_LINES,
-            "core.group.status",
-            15,
-            "layout-bottombar",
-        ),
-        (groups::MARKS, "core.group.marks", 17, "highlight"),
-        (groups::DISPLAY, "core.group.display", 60, "contrast"),
-        (groups::CONTROLS, "core.group.controls", 70, "adjustments"),
-        (groups::SYSTEM, "core.group.system", 90, "device-tablet"),
-        (groups::LOOK, "core.group.look", 210, "palette"),
-        (groups::OTHER, "core.group.other", 100, "dots"),
-        (groups::DEVELOPER, "core.group.developer", 95, "bug"),
-    ] {
-        r.add_setting_group(SettingGroupSpec::new(id.clone(), title).order(order))?;
-        r.add_icon(id, Cow::Borrowed(icon))?;
+    static GROUPS: [SettingGroupSpec; 11] = [
+        SettingGroupSpec::new(groups::READING, "core.group.reading").order(10),
+        SettingGroupSpec::new(groups::LIBRARY, "core.group.library").order(20),
+        SettingGroupSpec::new(groups::DISPLAY, "core.group.display").order(60),
+        SettingGroupSpec::new(groups::CONTROLS, "core.group.controls").order(70),
+        SettingGroupSpec::new(groups::SYSTEM, "core.group.system").order(90),
+        SettingGroupSpec::new(groups::LOOK, "core.group.look").order(210),
+        SettingGroupSpec::new(groups::OTHER, "core.group.other").order(100),
+        SettingGroupSpec::new(groups::DEVELOPER, "core.group.developer").order(95),
+        SettingGroupSpec::new(groups::TIME, "core.group.time").order(89),
+        SettingGroupSpec::new(groups::PLUGINS, "core.group.plugins").order(230),
+        SettingGroupSpec::new(groups::WORDS, "core.group.words").order(12),
+    ];
+    for group in &GROUPS {
+        r.add_setting_group(group)?;
     }
     Ok(())
 }
@@ -1068,9 +967,6 @@ static FONT_PT: SettingExtra = SettingExtra::new()
     .section(group_sections::FONT)
     .unit("core.unit.pt")
     .slider();
-static LINES_KEPT: SettingExtra = SettingExtra::new()
-    .unit("core.unit.lines")
-    .section(group_sections::PAGE);
 static WEIGHT: SettingExtra = SettingExtra::new()
     .unit("core.unit.weight")
     .section(group_sections::FONT);
@@ -1100,7 +996,6 @@ static IN_PAGE: SettingExtra = SettingExtra::new().section(group_sections::PAGE)
 static IN_APPS: SettingExtra = SettingExtra::new()
     .section("core.section.reading-apps")
     .keeps_unknown();
-static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(group_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
 static GENERAL: [SettingSpec; 9] = [
@@ -1124,14 +1019,14 @@ static GENERAL: [SettingSpec; 9] = [
         settings::NIGHT_MODE.static_str(),
         "core.setting.night-mode",
         false,
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .description("core.setting.night-mode.help"),
     SettingSpec::switch(
         settings::NIGHT_PICTURES.static_str(),
         "core.setting.night-pictures",
         false,
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .description("core.setting.night-pictures.help"),
     SettingSpec::choice(
@@ -1139,7 +1034,7 @@ static GENERAL: [SettingSpec; 9] = [
         "core.setting.mono-text",
         settings::MONO_TEXT_LEVELS,
         settings::MONO_TEXT_LEVELS[1],
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .description("core.setting.mono-text.help"),
     SettingSpec::switch(
@@ -1154,7 +1049,7 @@ static GENERAL: [SettingSpec; 9] = [
         "core.setting.voice",
         &[settings::VOICE_SYSTEM],
         settings::VOICE_SYSTEM,
-        groups::SYSTEM,
+        groups::READING_ALOUD,
     )
     .description("core.setting.voice.help"),
     SettingSpec::number(
@@ -1244,7 +1139,7 @@ static LOOK: [SettingSpec; 14] = [
         "core.setting.widget-frame",
         paperpaw_sdk::widgets::ALL_FRAMES,
         paperpaw_sdk::widgets::OWN_FRAME,
-        groups::LOOK,
+        Id::new_static("home.group"),
     )
     .advanced()
     .description("core.setting.widget-frame.help"),
@@ -1342,7 +1237,7 @@ static LOOK: [SettingSpec; 14] = [
         paperpaw_sdk::logo::LOGO.static_str(),
         "core.setting.logo",
         "",
-        groups::LOOK,
+        Id::new_static("sleep.group"),
     )
     .advanced()
     .description("core.setting.logo.help"),
@@ -1379,7 +1274,7 @@ static DEVICE: [SettingSpec; 15] = [
         0,
         1000,
         6,
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .with_extra(&PAGES)
     .scoped()
@@ -1396,7 +1291,7 @@ static DEVICE: [SettingSpec; 15] = [
         settings::PICTURES_IN_GRAYS.static_str(),
         "core.setting.pictures-in-grays",
         true,
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .description("core.setting.pictures-in-grays.help"),
     SettingSpec::number(
@@ -1405,7 +1300,7 @@ static DEVICE: [SettingSpec; 15] = [
         0,
         120,
         10,
-        groups::SYSTEM,
+        Id::new_static("power.group"),
     )
     .with_extra(&MINUTES_5)
     .description("core.setting.sleep-after.help"),
@@ -1438,7 +1333,7 @@ static DEVICE: [SettingSpec; 15] = [
         1,
         60,
         4,
-        groups::DISPLAY,
+        groups::LOOK,
     )
     .advanced()
     .with_extra(&SECONDS)
@@ -1540,7 +1435,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         "core.setting.text-color",
         settings::TEXT_COLORS,
         settings::TEXT_COLORS[0],
-        groups::LOOK,
+        groups::READING_TEXT,
     )
     .with_extra(&COLORS)
     .description("core.setting.colors.help"),
@@ -1548,7 +1443,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         settings::TEXT_COLOR_OWN.static_str(),
         "core.setting.text-color-own",
         "#5b4636",
-        groups::LOOK,
+        groups::READING_TEXT,
     )
     .with_extra(&COLORS)
     .description("core.setting.color-own.help"),
@@ -1557,7 +1452,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         "core.setting.paper-color",
         settings::PAPER_COLORS,
         settings::PAPER_COLORS[0],
-        groups::LOOK,
+        groups::READING_TEXT,
     )
     .with_extra(&COLORS)
     .description("core.setting.colors.help"),
@@ -1565,7 +1460,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         settings::PAPER_COLOR_OWN.static_str(),
         "core.setting.paper-color-own",
         "#f4ecd8",
-        groups::LOOK,
+        groups::READING_TEXT,
     )
     .with_extra(&COLORS)
     .description("core.setting.color-own.help"),
@@ -1584,222 +1479,11 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-/// The reading font, and whether a book's settings are its own. The
-/// status lines' font: the menus', the book's or one of its own (the
-/// families are offered once all fonts are known).
-static READING: [SettingSpec; 19] = [
-    SettingSpec::choice(
-        settings::STATUS_FONT.static_str(),
-        "core.setting.status-font",
-        &[settings::STATUS_FONT_UI, settings::STATUS_FONT_BOOK],
-        settings::STATUS_FONT_UI,
-        groups::STATUS_LINES,
-    )
-    .description("core.setting.status-font.help"),
-    SettingSpec::choice(
-        settings::READING_FONT.static_str(),
-        "core.setting.reading-font",
-        &[settings::DEFAULT_FONT],
-        settings::DEFAULT_FONT,
-        groups::READING,
-    )
-    .with_extra(&FONT)
-    .scoped()
-    .description("core.setting.reading-font.help"),
-    SettingSpec::number(
-        settings::FONT_SIZE.static_str(),
-        "core.setting.font-size",
-        crate::plugins::FONT_SIZES.0,
-        crate::plugins::FONT_SIZES.1,
-        11,
-        groups::READING,
-    )
-    .with_extra(&FONT_PT)
-    .scoped()
-    .description("core.setting.font-size.help"),
-    SettingSpec::number(
-        settings::LINE_SPACING.static_str(),
-        "core.setting.line-spacing",
-        80,
-        250,
-        135,
-        groups::READING,
-    )
-    .with_extra(&LINES)
-    .scoped()
-    .description("core.setting.line-spacing.help"),
-    SettingSpec::number(
-        settings::FONT_WEIGHT.static_str(),
-        "core.setting.font-weight",
-        0,
-        4,
-        0,
-        groups::READING,
-    )
-    .with_extra(&WEIGHT)
-    .scoped()
-    .description("core.setting.font-weight.help"),
-    SettingSpec::number(
-        settings::WORD_SPACING.static_str(),
-        "core.setting.word-spacing",
-        50,
-        200,
-        100,
-        groups::READING,
-    )
-    .with_extra(&WORDS)
-    .scoped()
-    .description("core.setting.word-spacing.help"),
-    SettingSpec::number(
-        settings::MARGIN.static_str(),
-        "core.setting.margin",
-        0,
-        30,
-        4,
-        groups::READING,
-    )
-    .with_extra(&MARGINS)
-    .scoped()
-    .description("core.setting.margin.help"),
-    SettingSpec::number(
-        settings::MARGIN_ENDS.static_str(),
-        "core.setting.margin-ends",
-        0,
-        30,
-        4,
-        groups::READING,
-    )
-    .with_extra(&MARGINS_ENDS)
-    .advanced()
-    .scoped()
-    .description("core.setting.margin-ends.help"),
-    SettingSpec::switch(
-        settings::JUSTIFY.static_str(),
-        "core.setting.justify",
-        true,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&IN_PAGE)
-    .description("core.setting.justify.help"),
-    SettingSpec::switch(
-        settings::HYPHENATE.static_str(),
-        "core.setting.hyphenate",
-        true,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&IN_PAGE)
-    .description("core.setting.hyphenate.help"),
-    SettingSpec::switch(
-        settings::PUBLISHER_STYLES.static_str(),
-        "core.setting.publisher-styles",
-        true,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&IN_PAGE)
-    .description("core.setting.publisher-styles.help"),
-    SettingSpec::switch(
-        settings::INDENT.static_str(),
-        "core.setting.indent",
-        true,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&IN_PAGE)
-    .description("core.setting.indent.help"),
-    SettingSpec::switch(
-        settings::PARAGRAPH_SPACING.static_str(),
-        "core.setting.paragraph-spacing",
-        false,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&IN_PAGE)
-    .description("core.setting.paragraph-spacing.help"),
-    SettingSpec::number(
-        settings::WIDOWS.static_str(),
-        "core.setting.widows",
-        1,
-        4,
-        1,
-        groups::READING,
-    )
-    .advanced()
-    .scoped()
-    .with_extra(&LINES_KEPT)
-    .description("core.setting.widows.help"),
-    SettingSpec::number(
-        settings::ORPHANS.static_str(),
-        "core.setting.orphans",
-        1,
-        4,
-        1,
-        groups::READING,
-    )
-    .advanced()
-    .scoped()
-    .with_extra(&LINES_KEPT)
-    .description("core.setting.orphans.help"),
-    SettingSpec::choice(
-        settings::READING_APP.static_str(),
-        "core.setting.reading-app",
-        &[settings::READING_APP_DEFAULT],
-        settings::READING_APP_DEFAULT,
-        groups::READING,
-    )
-    .with_extra(&IN_APPS)
-    .description("core.setting.reading-app.help"),
-    SettingSpec::choice(
-        settings::FOOTNOTES.static_str(),
-        "core.setting.footnotes",
-        &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
-        settings::FOOTNOTES_POPUP,
-        groups::READING,
-    )
-    .advanced()
-    .with_extra(&IN_BEHAVIOUR)
-    .description("core.setting.footnotes.help"),
-    SettingSpec::choice(
-        settings::PAGE_FRAME.static_str(),
-        "core.setting.page-frame",
-        &[settings::PAGE_FRAME_SINGLE],
-        settings::PAGE_FRAME_SINGLE,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&IN_PAGE)
-    .description("core.setting.page-frame.help"),
-    SettingSpec::switch(
-        settings::SCOPE_ONLY.static_str(),
-        "core.setting.scope-only",
-        false,
-        groups::READING,
-    )
-    .scoped()
-    .description("core.setting.scope-only.help"),
-];
-
-fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_settings(&READING)
-}
-
 /// The roles of the marks every reader draws: highlights, links, a
 /// search hit, the sentence read aloud (see `paperpaw_sdk::decorations`).
 mod marks;
-
-fn register_marks(r: &mut Registrar) -> Result<(), RegisterError> {
-    for role in [
-        &marks::HIGHLIGHT,
-        &marks::LINK,
-        &marks::SEARCH_HIT,
-        &marks::ALOUD,
-    ] {
-        r.add_settings(role)?;
-    }
-    Ok(())
-}
+/// Smooth text and its contrast, beside the font's weight.
+pub(crate) mod text_look;
 
 /// The time zones to choose from: the system's, then each known one.
 const ZONES: [&str; TIME_ZONES.len() + 1] = {
@@ -1819,7 +1503,7 @@ static TIME: [SettingSpec; 4] = [
         "core.setting.clock-format",
         &[CLOCK_24H, CLOCK_12H],
         CLOCK_24H,
-        groups::SYSTEM,
+        groups::TIME,
     )
     .description("core.setting.clock-format.help"),
     SettingSpec::choice(
@@ -1827,7 +1511,7 @@ static TIME: [SettingSpec; 4] = [
         "core.setting.week-start",
         time::WEEK_STARTS,
         time::WEEK_STARTS[0],
-        groups::SYSTEM,
+        groups::TIME,
     )
     .description("core.setting.week-start.help"),
     SettingSpec::choice(
@@ -1835,18 +1519,29 @@ static TIME: [SettingSpec; 4] = [
         "core.setting.time-zone",
         &ZONES,
         AUTO,
-        groups::SYSTEM,
+        groups::TIME,
     )
     .description("core.setting.time-zone.help"),
     SettingSpec::text(
         settings::TIME_ZONE_RULE.static_str(),
         "core.setting.time-zone-rule",
         "",
-        groups::SYSTEM,
+        groups::TIME,
     )
     .advanced()
     .description("core.setting.time-zone-rule.help"),
 ];
+
+/// Whether plugins may keep the device awake (ADR 0030): with the power
+/// settings, where the power plugin keeps them (`power.group`).
+static AWAKE_HOLDS: [SettingSpec; 1] = [SettingSpec::switch(
+    settings::AWAKE_HOLDS.static_str(),
+    "core.setting.awake-holds",
+    true,
+    Id::new_static("power.group"),
+)
+.advanced()
+.description("core.setting.awake-holds.help")];
 
 /// Below which charge the battery shows when it shows only when low.
 static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::number(
@@ -1855,7 +1550,7 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::number(
     5,
     50,
     20,
-    groups::SYSTEM,
+    groups::STATUS_LINES,
 )
 .with_extra(&PERCENT_5)
 .advanced()
@@ -1952,6 +1647,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         }),
     ))?;
     r.add_settings(&BATTERY_LOW)?;
+    r.add_settings(&AWAKE_HOLDS)?;
     Ok(())
 }
 
@@ -2119,7 +1815,7 @@ fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
 }
 
 /// A hint that is a word of its own (a translation key).
-fn label(key: &'static str) -> ActionHint {
+const fn label(key: &'static str) -> ActionHint {
     ActionHint::Label(Cow::Borrowed(key))
 }
 

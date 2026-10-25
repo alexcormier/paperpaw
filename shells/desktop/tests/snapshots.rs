@@ -211,11 +211,9 @@ const CASES: &[Case] = &[
         name: "boox-developer-settings",
         profile: "boox-go-7",
         book: None,
-        // Developer options on: their group of settings, opened as the
-        // root's entry opens it (on the root's second page since the
-        // groups moved).
+        // Developer options on: their group of settings.
         sets: &["settings.advanced=true", "core.developer=true"],
-        script: "open:settings.group:id=core.group.developer,wait:300",
+        script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:500,swipe:600:1400:600:700,wait:300,tap-on:Developer,wait:300",
         colour: 0,
         fixtures: false,
     },
@@ -226,7 +224,7 @@ const CASES: &[Case] = &[
         profile: "xteink-x4-pro",
         book: None,
         sets: &[],
-        script: "swipe:240:700:240:300,wait:300,tap-on:Settings,wait:500,page-forward,wait:300,                 tap-on:Wi-Fi,wait:500,tap:240:140,wait:2500",
+        script: "swipe:240:700:240:300,wait:300,tap-on:Settings,wait:500,swipe:240:700:240:350,wait:300,tap-on:Wi-Fi,wait:500,tap:240:140,wait:2500",
         colour: 0,
         fixtures: false,
     },
@@ -298,10 +296,9 @@ const CASES: &[Case] = &[
         name: "boox-lock-pin",
         profile: "boox-go-7",
         book: None,
-        // Setting up a screen lock: the keypad for a new PIN (its group
-        // on the root, then its first row; the heading says the same).
+        // Setting up a screen lock: the keypad for a new PIN.
         sets: &[],
-        script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:300,                 tap-on:Screen lock,wait:300,tap:632:200,wait:300,tap-on:PIN,wait:300",
+        script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:300,tap-on:Screen lock,wait:300,tap:600:200,wait:300,tap-on:PIN,wait:300",
         colour: 0,
         fixtures: false,
     },
@@ -381,7 +378,7 @@ const CASES: &[Case] = &[
         profile: "xteink-x4",
         book: None,
         sets: &[],
-        script: "run:core.settings,wait:300,open:settings.group:id=core.group.display,wait:300",
+        script: "run:core.settings,wait:300,open:settings.group:id=core.group.reading-display,wait:300",
         colour: 0,
         fixtures: false,
     },
@@ -882,7 +879,10 @@ fn screens_say_what_they_show() {
         .args(["--set", "reader.open-last=false"])
         .args(["--set", "help.show=false"])
         .args(["--set", case.sets[0]])
-        .args(["--script", "tap-on:Display,wait:300,describe"])
+        .args([
+            "--script",
+            "tap-on:Reading,wait:300,tap-on:Display,wait:300,describe",
+        ])
         .output()
         .unwrap();
     let _ = fs::remove_dir_all(&library);
@@ -892,7 +892,7 @@ fn screens_say_what_they_show() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    // The page tapped by its name, its rows with their text and state.
+    // The pages tapped by their names, the rows with their text and state.
     assert!(text.contains("Heading \"Display\""), "{text}");
     assert!(
         text.contains("Row \"Night mode, White text on black.\" (off)"),

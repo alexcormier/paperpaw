@@ -140,10 +140,12 @@ impl Device {
     }
 
     fn open(&mut self, screen: Id) {
+        self.open_with(screen, Params::new());
+    }
+
+    fn open_with(&mut self, screen: Id, params: Params) {
         self.now += 100;
-        let effects = self
-            .kernel
-            .open_screen(Instant(self.now), screen, Params::new());
+        let effects = self.kernel.open_screen(Instant(self.now), screen, params);
         self.settle(effects);
     }
 
@@ -292,7 +294,8 @@ fn a_screen_opened_over_the_hints_closes_them_for_next_time() {
     let mut device = Device::new(TOUCH, "");
     device.open(OTHER);
     assert_eq!(device.on_top(), "help.overlay");
-    device.open(HOME);
+    // Another of it (the one below is gone back to, not opened).
+    device.open_with(HOME, Params::new().with("n", "2"));
     assert_eq!(device.on_top(), "probe.home", "the one opened stays");
     let open: Vec<String> = device.kernel.screens().map(|id| id.to_string()).collect();
     assert!(!open.iter().any(|s| s == "help.overlay"), "{open:?}");

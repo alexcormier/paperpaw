@@ -64,6 +64,45 @@ pub fn wrap_lines_hyphenated(
     advance: impl Fn(usize, char) -> f32,
     hyphenate: Option<Hyphenate<'_>>,
 ) -> Vec<Line> {
+    wrap_lines_kerned(text, width, advance, |_, _, _| 0.0, hyphenate)
+}
+
+/// The adjustment `kern` makes between `c`, set at byte `i` of `text`,
+/// and the character before it; none where either is a space or the
+/// line breaks between them (`i` at `line_start` or before).
+fn pair(
+    text: &str,
+    kern: &dyn Fn(usize, char, char) -> f32,
+    line_start: usize,
+    i: usize,
+    c: char,
+) -> f32 {
+    if i <= line_start || c == ' ' {
+        return 0.0;
+    }
+    match text[..i].chars().next_back() {
+        Some(left) if left != ' ' && left != '\n' => kern(i, left, c),
+        _ => 0.0,
+    }
+}
+
+/// Like [`wrap_lines_hyphenated`], with pairs of characters kerned:
+/// `kern(index, left, right)` is how much `right`, set at byte `index`
+/// after `left`, moves (negative: closer); for the hyphen at the end of
+/// a hyphenated line, `index` is where the line ends. Pairs are kerned
+/// within a line only, never across a space or a break, so a line's
+/// width is that of its text drawn alone with the same pairs.
+pub fn wrap_lines_kerned(
+    text: &str,
+    width: impl Fn(usize) -> f32,
+    advance: impl Fn(usize, char) -> f32,
+    kern: impl Fn(usize, char, char) -> f32,
+    hyphenate: Option<Hyphenate<'_>>,
+) -> Vec<Line> {
+    let measures = Measures {
+        advance: &advance,
+        kern: &kern,
+    };
     let mut lines = Vec::new();
     let mut line_start = 0;
     let mut line_width = 0.0f32;
@@ -93,46 +132,25 @@ pub fn wrap_lines_hyphenated(
             word_start = line_start;
             continue;
         }
-        let w = advance(i, c);
+        let w = measures.add(text, line_start, i, c);
         let available = width(lines.len());
         if c != ' ' && line_width + w > available && i > line_start {
             let measure = |range: Range<usize>| -> f32 {
                 let start = range.start;
-                text[range]
-                    .char_indices()
-                    .map(|(k, c)| advance(start + k, c))
-                    .sum()
+                let add = |(k, c)| measures.add(text, line_start, start + k, c);
+                text[range].char_indices().map(add).sum()
             };
+            let hyphen = |cut: usize| measures.hyphen(text, line_start, cut);
             let before = line_width - measure(word_start..i);
             let hyphenated = hyphenate.and_then(|hyphenate| {
                 hyphen_break(
-                    text, word_start, line_start, i, before, available, &measure, &advance,
+                    text, word_start, line_start, i, before, available, &measure, &hyphen,
                     hyphenate,
                 )
             });
-            let next = if let Some((cut, cut_width)) = hyphenated {
-                lines.push(Line {
-                    range: line_start..cut,
-                    width: cut_width,
-                    spaces,
-                    last: false,
-                    hyphen: true,
-                });
-                cut
-            } else {
-                // Break at the last opportunity, or inside the word if none.
-                let (end, next, end_width, end_spaces) =
-                    last_break.unwrap_or((i, i, line_width, spaces));
-                push(
-                    &mut lines,
-                    text,
-                    line_start..end,
-                    end_width,
-                    end_spaces,
-                    false,
-                );
-                next
-            };
+            // Break at the last opportunity, or inside the word if none.
+            let fallback = last_break.unwrap_or((i, i, line_width, spaces));
+            let next = end_line(&mut lines, text, (line_start, spaces), hyphenated, fallback);
             // Read again from the start of the new line, so that what
             // moved there is broken against its width like any other text
             // and the line comes out as it would laid out from its start.
@@ -176,6 +194,325 @@ pub fn wrap_lines_hyphenated(
     lines
 }
 
+/// The most places to break a paragraph (between newlines) that
+/// [`wrap_lines_balanced`] weighs; one with more is broken greedily, so
+/// the memory it takes stays bounded (some 20 KB).
+pub const MAX_BREAKS: usize = 1024;
+
+/// Words shorter than this are not hyphenated by [`wrap_lines_balanced`]:
+/// looking up the patterns of every word costs, and short words gain
+/// little.
+const BALANCED_HYPHEN_MIN: usize = 7;
+
+/// A place where a line may end, for [`wrap_lines_balanced`].
+#[derive(Debug, Clone, Copy)]
+struct Break {
+    /// Where the line before it ends and the next starts.
+    end: u16,
+    next: u16,
+    /// The width of the text from the paragraph's start to `end` and to
+    /// `next`; with a hyphen, its width in `hyphen`.
+    to_end: f32,
+    to_next: f32,
+    hyphen: f32,
+    /// The least cost of lines up to here, and the break before.
+    cost: f32,
+    prev: u16,
+}
+
+/// Line breaking over whole paragraphs: of the ways to break each, the
+/// one whose lines (all but the last) leave the least room unfilled, as
+/// the sum of the squares of what each leaves, a hyphen counting as a
+/// tenth of a line left (minimum raggedness, with a bounded look back:
+/// a line is never longer than its width). Lines then end more evenly
+/// than greedily, and justified text has fewer wide gaps.
+///
+/// `width(n)` must be the same for every line after the first. A
+/// paragraph with a word longer than a line, or with more than
+/// [`MAX_BREAKS`] places to break, is broken greedily, as
+/// [`wrap_lines_hyphenated`] does; so are paragraphs of 64 KB and more.
+///
+/// The lines of a paragraph depend on all of it: laid out from a line's
+/// start, they come out other than in the whole paragraph. Callers lay
+/// out a paragraph from its start and take the lines they need.
+pub fn wrap_lines_balanced(
+    text: &str,
+    width: impl Fn(usize) -> f32,
+    advance: impl Fn(usize, char) -> f32,
+    hyphenate: Option<Hyphenate<'_>>,
+) -> Vec<Line> {
+    wrap_lines_balanced_kerned(text, width, advance, |_, _, _| 0.0, hyphenate)
+}
+
+/// Like [`wrap_lines_balanced`], with pairs of characters kerned as
+/// [`wrap_lines_kerned`] kerns them.
+pub fn wrap_lines_balanced_kerned(
+    text: &str,
+    width: impl Fn(usize) -> f32,
+    advance: impl Fn(usize, char) -> f32,
+    kern: impl Fn(usize, char, char) -> f32,
+    hyphenate: Option<Hyphenate<'_>>,
+) -> Vec<Line> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    loop {
+        let end = text[start..].find('\n').map_or(text.len(), |k| start + k);
+        let widths = (width(lines.len()), width(lines.len() + 1));
+        let measures = Measures {
+            advance: &advance,
+            kern: &kern,
+        };
+        let balanced = balanced_paragraph(text, start..end, widths, &measures, hyphenate);
+        match balanced {
+            Some(mut paragraph) => lines.append(&mut paragraph),
+            None => {
+                let offset = lines.len();
+                let greedy = wrap_lines_kerned(
+                    &text[start..end],
+                    |n| width(offset + n),
+                    |i, c| advance(start + i, c),
+                    |i, left, c| kern(start + i, left, c),
+                    hyphenate,
+                );
+                lines.extend(greedy.into_iter().map(|line| Line {
+                    range: start + line.range.start..start + line.range.end,
+                    ..line
+                }));
+            }
+        }
+        if end == text.len() {
+            break;
+        }
+        start = end + 1;
+    }
+    lines
+}
+
+/// How characters are measured for [`balanced_paragraph`]: their
+/// advances and their pairs (see [`wrap_lines_kerned`]).
+struct Measures<'a> {
+    advance: &'a dyn Fn(usize, char) -> f32,
+    kern: &'a dyn Fn(usize, char, char) -> f32,
+}
+
+impl Measures<'_> {
+    /// The width `c` at byte `i` of `text` adds to a line that starts
+    /// at `line_start`: its advance and its pair with the one before.
+    fn add(&self, text: &str, line_start: usize, i: usize, c: char) -> f32 {
+        (self.advance)(i, c) + pair(text, self.kern, line_start, i, c)
+    }
+
+    /// The width of the hyphen that ends a line at `cut`, set like the
+    /// character before it, with their pair.
+    fn hyphen(&self, text: &str, line_start: usize, cut: usize) -> f32 {
+        (self.advance)(cut - 1, '-') + pair(text, self.kern, line_start, cut, '-')
+    }
+
+    /// What a line from `i` on does not count of what the text up to
+    /// it does: the pair of the character at `i` with the one before.
+    fn cut(&self, text: &str, i: usize) -> f32 {
+        let c = text[i..].chars().next().unwrap_or(' ');
+        pair(text, self.kern, 0, i, c)
+    }
+}
+
+/// The lines of the paragraph `range` of `text`, broken over all of it
+/// (see [`wrap_lines_balanced`]); `widths` of its first line and of the
+/// others. `None` where it is broken greedily.
+fn balanced_paragraph(
+    text: &str,
+    range: Range<usize>,
+    (first, rest): (f32, f32),
+    measures: &Measures<'_>,
+    hyphenate: Option<Hyphenate<'_>>,
+) -> Option<Vec<Line>> {
+    if text.len() >= usize::from(u16::MAX) {
+        return None;
+    }
+    // Spaces at the start are dropped, as a line's are.
+    let paragraph = &text[range.clone()];
+    let start = range.start + (paragraph.len() - paragraph.trim_start_matches(' ').len());
+    let mut breaks: Vec<Break> = Vec::new();
+    let at = |end: usize, next: usize, to_end: f32, to_next: f32, hyphen: f32| Break {
+        end: end as u16,
+        next: next as u16,
+        to_end,
+        to_next,
+        hyphen,
+        cost: f32::INFINITY,
+        prev: 0,
+    };
+    breaks.push(Break {
+        cost: 0.0,
+        ..at(start, start, 0.0, 0.0, 0.0)
+    });
+    // The places a word may be hyphenated, `x` the width before it.
+    let points = |breaks: &mut Vec<Break>, word: Range<usize>, x: f32| {
+        if let Some(hyphenate) = hyphenate {
+            hyphen_points(text, word, start, x, measures, hyphenate, breaks, &at);
+        }
+    };
+    // The places to break, with the width of the text up to them.
+    let mut x = 0.0f32;
+    let mut word = start;
+    let mut i = start;
+    let mut x_word = 0.0f32;
+    while i < range.end {
+        let c = text[i..].chars().next()?;
+        let len = c.len_utf8();
+        if c == ' ' {
+            if i > word {
+                points(&mut breaks, word..i, x_word);
+            }
+            let end = i;
+            let to_end = x;
+            while text[i..].starts_with(' ') && i < range.end {
+                x += (measures.advance)(i, ' ');
+                i += 1;
+            }
+            if i < range.end {
+                breaks.push(at(end, i, to_end, x, 0.0));
+            }
+            word = i;
+            x_word = x;
+        } else {
+            x += measures.add(text, start, i, c);
+            i += len;
+            let dash = matches!(c, '-' | '\u{2010}' | '\u{2013}' | '\u{2014}');
+            if dash && i < range.end && !text[i..].starts_with(' ') {
+                // The next line starts with the character after it,
+                // without its pair with the dash.
+                breaks.push(at(i, i, x, x + measures.cut(text, i), 0.0));
+            }
+        }
+        if breaks.len() > MAX_BREAKS {
+            return None;
+        }
+    }
+    if range.end > word {
+        points(&mut breaks, word..range.end, x_word);
+    }
+    // Hyphenation points came after the word's start; keep the order.
+    breaks.sort_by_key(|b| (b.end, b.next));
+    let last = breaks.len();
+    breaks.push(at(range.end, range.end, x, x, 0.0));
+    if breaks.len() > MAX_BREAKS {
+        return None;
+    }
+    cheapest(&mut breaks, (first, rest));
+    if breaks[last].cost.is_infinite() {
+        return None;
+    }
+    // The lines, from the last break back.
+    let mut ends = Vec::new();
+    let mut j = last;
+    while j > 0 {
+        ends.push(j);
+        j = usize::from(breaks[j].prev);
+    }
+    let mut lines = Vec::with_capacity(ends.len());
+    let mut from = 0;
+    for &j in ends.iter().rev() {
+        let (b, e) = (breaks[from], breaks[j]);
+        let line_range = usize::from(b.next)..usize::from(e.end);
+        lines.push(Line {
+            spaces: text[line_range.clone()].matches(' ').count(),
+            range: line_range,
+            width: e.to_end - b.to_next + e.hyphen,
+            last: j == last,
+            hyphen: e.hyphen > 0.0,
+        });
+        from = j;
+    }
+    Some(lines)
+}
+
+/// The least cost of lines up to each of `breaks` (the last ends the
+/// paragraph, free of cost), and the break before it on that way,
+/// looking back no further than a line goes; `widths` of the first line
+/// and of the others.
+fn cheapest(breaks: &mut [Break], (first, rest): (f32, f32)) {
+    let last = breaks.len() - 1;
+    let hyphen_cost = (rest * 0.1) * (rest * 0.1);
+    for j in 1..breaks.len() {
+        let mut best = (f32::INFINITY, 0usize);
+        for i in (0..j).rev() {
+            let (b, e) = (breaks[i], breaks[j]);
+            if usize::from(e.end) < usize::from(b.next) {
+                continue;
+            }
+            let line = e.to_end - b.to_next + e.hyphen;
+            let available = if i == 0 { first } else { rest };
+            if line > available {
+                // Further back, lines only get longer.
+                if e.to_end - b.to_next > available {
+                    break;
+                }
+                continue;
+            }
+            if b.cost.is_infinite() {
+                continue;
+            }
+            let left = available - line;
+            let cost = b.cost
+                + match j == last {
+                    true => 0.0,
+                    false => left * left + if e.hyphen > 0.0 { hyphen_cost } else { 0.0 },
+                };
+            if cost < best.0 {
+                best = (cost, i);
+            }
+        }
+        breaks[j].cost = best.0;
+        breaks[j].prev = best.1 as u16;
+    }
+}
+
+/// Adds the places the word `word` of `text` may be hyphenated, as
+/// [`hyphen_break`] takes them, `x` the width before it, in a paragraph
+/// from `start`.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
+fn hyphen_points(
+    text: &str,
+    word: Range<usize>,
+    start: usize,
+    x: f32,
+    measures: &Measures<'_>,
+    hyphenate: Hyphenate<'_>,
+    breaks: &mut Vec<Break>,
+    at: &dyn Fn(usize, usize, f32, f32, f32) -> Break,
+) {
+    let w = &text[word.clone()];
+    let Some(first) = w.find(char::is_alphabetic) else {
+        return;
+    };
+    let letters = w[first..]
+        .find(|c: char| !c.is_alphabetic())
+        .map_or(w.len(), |k| first + k);
+    let core = &w[first..letters];
+    if core.chars().count() < BALANCED_HYPHEN_MIN || !core.chars().any(char::is_lowercase) {
+        return;
+    }
+    hyphenate(core, &mut |cut| {
+        if !core.is_char_boundary(cut) || cut == 0 || cut >= core.len() {
+            return;
+        }
+        let end = word.start + first + cut;
+        let before: f32 = text[word.start..end]
+            .char_indices()
+            .map(|(k, c)| measures.add(text, start, word.start + k, c))
+            .sum();
+        let to = x + before;
+        // The hyphen with its pair, and the next line without the pair
+        // it breaks.
+        let hyphen = measures.hyphen(text, start, end);
+        breaks.push(at(end, end, to, to + measures.cut(text, end), hyphen));
+    });
+}
+
 /// The last hyphenation point of the word at `word_start` that fits on the
 /// line before `overflow`, the character that does not: `(byte offset,
 /// line width with the hyphen)`. The letters the word starts with are
@@ -194,7 +531,7 @@ fn hyphen_break(
     before: f32,
     available: f32,
     measure: &dyn Fn(Range<usize>) -> f32,
-    advance: &dyn Fn(usize, char) -> f32,
+    hyphen: &dyn Fn(usize) -> f32,
     hyphenate: Hyphenate<'_>,
 ) -> Option<(usize, f32)> {
     let end = text[word_start..]
@@ -224,12 +561,38 @@ fn hyphen_break(
             return;
         }
         // The hyphen is set like the letter before it.
-        let width = before + measure(word_start..cut) + advance(cut - 1, '-');
+        let width = before + measure(word_start..cut) + hyphen(cut);
         if width <= available {
             best = Some((cut, width));
         }
     });
     best
+}
+
+/// Ends the line from `line_start` with `spaces` that overflows: at the
+/// hyphenation point found (and its width), else at `fallback` (end of
+/// the line's text, start of the next, width, spaces). Where the next
+/// line starts.
+fn end_line(
+    lines: &mut Vec<Line>,
+    text: &str,
+    (line_start, spaces): (usize, usize),
+    hyphenated: Option<(usize, f32)>,
+    fallback: (usize, usize, f32, usize),
+) -> usize {
+    if let Some((cut, width)) = hyphenated {
+        lines.push(Line {
+            range: line_start..cut,
+            width,
+            spaces,
+            last: false,
+            hyphen: true,
+        });
+        return cut;
+    }
+    let (end, next, width, spaces) = fallback;
+    push(lines, text, line_start..end, width, spaces, false);
+    next
 }
 
 fn push(
@@ -395,6 +758,84 @@ mod tests {
                 text[line.range.clone()]
             );
         }
+    }
+
+    /// The lines of `text` broken over whole paragraphs, one unit a
+    /// character.
+    fn balanced(text: &str, width: f32) -> Vec<&str> {
+        wrap_lines_balanced(text, |_| width, |_, _| 1.0, None)
+            .into_iter()
+            .map(|l| &text[l.range])
+            .collect()
+    }
+
+    #[test]
+    fn balanced_lines_end_more_evenly_than_greedy_ones() {
+        let text = "aaa bb cc ddddd eee ff ggggg";
+        // Greedy fills the first line and leaves the second short.
+        assert_eq!(
+            lines(text, 10.0),
+            vec!["aaa bb cc", "ddddd eee", "ff ggggg"]
+        );
+        let even = balanced(text, 10.0);
+        assert_eq!(even.concat().replace(' ', ""), text.replace(' ', ""));
+        let slack = |lines: &[&str]| -> f32 {
+            lines[..lines.len() - 1]
+                .iter()
+                .map(|l| (10.0 - l.len() as f32).powi(2))
+                .sum()
+        };
+        assert!(slack(&even) <= slack(&lines(text, 10.0)), "{even:?}");
+        assert!(even.iter().all(|l| l.len() <= 10), "{even:?}");
+    }
+
+    #[test]
+    fn balanced_breaking_keeps_what_greedy_keeps() {
+        // Newlines break, the last line of each paragraph says so,
+        // spaces are counted, widths and the first line's own width.
+        let text = "aa bb cc dd
+ee ff";
+        let result =
+            wrap_lines_balanced(text, |n| if n == 0 { 6.0 } else { 8.0 }, |_, _| 1.0, None);
+        let got: Vec<(&str, f32, usize, bool)> = result
+            .iter()
+            .map(|l| (&text[l.range.clone()], l.width, l.spaces, l.last))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("aa bb", 5.0, 1, false),
+                ("cc dd", 5.0, 1, true),
+                ("ee ff", 5.0, 1, true)
+            ]
+        );
+        // A word longer than a line: broken as greedy breaks it.
+        assert_eq!(
+            balanced("ab abcdefgh cd", 4.0),
+            lines("ab abcdefgh cd", 4.0)
+        );
+        assert_eq!(balanced("", 5.0), vec![""]);
+        assert_eq!(
+            balanced("well-known fact", 6.0),
+            vec!["well-", "known", "fact"]
+        );
+    }
+
+    #[test]
+    fn balanced_breaking_hyphenates_long_words() {
+        let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| {
+            for at in (2..word.len().saturating_sub(1)).step_by(2) {
+                out(at);
+            }
+        };
+        let text = "ab cdefghijkl mn opqrstuvwx yz";
+        let result = wrap_lines_balanced(text, |_| 9.0, |_, _| 1.0, Some(&hyphenate));
+        for line in &result {
+            assert!(line.width <= 9.0, "{line:?}");
+            let shown = text[line.range.clone()].len() + usize::from(line.hyphen);
+            assert_eq!(shown as f32, line.width, "{line:?}");
+        }
+        assert!(result.iter().any(|l| l.hyphen), "{result:?}");
     }
 
     #[test]

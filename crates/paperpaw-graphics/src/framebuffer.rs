@@ -158,6 +158,30 @@ impl Framebuffer {
         self.rows
     }
 
+    /// Holds `rows` rows at a time from now on, e.g. fewer to give memory
+    /// back (more bands a frame, drawn more slowly), from the top band.
+    /// Only where it holds bands already, not all of the screen: what it
+    /// holds is drawn anew each band.
+    pub fn set_rows(&mut self, rows: u16) -> Result<(), GraphicsError> {
+        let rows = rows.clamp(1, self.height.max(1));
+        if self.blind || self.rows >= self.height || rows == self.rows {
+            return Ok(());
+        }
+        let bytes = self.stride * rows as usize;
+        if bytes > self.data.len() {
+            self.data
+                .try_reserve_exact(bytes - self.data.len())
+                .map_err(|_| GraphicsError::OutOfMemory { bytes })?;
+        }
+        self.data.resize(bytes, 0xff);
+        self.data.shrink_to_fit();
+        self.rows = rows;
+        self.top = 0;
+        self.dirty = None;
+        self.diffusions.clear();
+        Ok(())
+    }
+
     /// The part of the screen currently held.
     pub fn band(&self) -> Rect {
         Rect::new(
@@ -611,7 +635,7 @@ impl Framebuffer {
 
     /// The ordered dither's offset at `(x, y)`: none where the format has
     /// many grays (or colours).
-    fn offset(&self, x: u16, y: u16) -> i32 {
+    pub(crate) fn offset(&self, x: u16, y: u16) -> i32 {
         /// 4×4 Bayer matrix.
         const BAYER: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
         match self.format.gray_levels() {
@@ -673,6 +697,13 @@ impl Framebuffer {
         }
     }
 
+    /// The rows held, the bytes of a row and the screen row of the
+    /// first, for drawing that writes whole bytes (see
+    /// [`Canvas::blit`](crate::Canvas::blit)).
+    pub(crate) fn rows_mut(&mut self) -> (&mut [u8], usize, u16) {
+        (&mut self.data, self.stride, self.top)
+    }
+
     /// The stored value of a pixel of a format of 8 bits or fewer.
     fn load(&self, x: u16, y: u16) -> u32 {
         let row = usize::from(y - self.top) * self.stride;
@@ -707,7 +738,7 @@ impl Framebuffer {
     }
 
     /// Converts a colour to the stored pixel value (nearest level).
-    fn encode(&self, color: Color) -> u32 {
+    pub(crate) fn encode(&self, color: Color) -> u32 {
         let color = if self.inverted {
             color.inverted()
         } else {
@@ -796,6 +827,20 @@ mod tests {
                 PixelFormat::Gray8,
             ]
         }
+    }
+
+    #[test]
+    fn bands_change_their_rows() {
+        let mut band = Framebuffer::banded(8, 10, 4, PixelFormat::Gray2).unwrap();
+        let four = band.byte_len();
+        band.set_rows(2).unwrap();
+        assert_eq!((band.rows(), band.byte_len()), (2, four / 2));
+        band.set_rows(4).unwrap();
+        assert_eq!((band.rows(), band.byte_len()), (4, four));
+        // All of the screen held: as it is.
+        let mut full = Framebuffer::new(8, 10, PixelFormat::Gray2).unwrap();
+        full.set_rows(2).unwrap();
+        assert_eq!(full.rows(), 10);
     }
 
     #[test]

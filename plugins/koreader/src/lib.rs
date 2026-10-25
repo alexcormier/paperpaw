@@ -1016,10 +1016,14 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for KoReader {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "KOReader", paperpaw_sdk::package_version!())
-            .description("Shares bookmarks and highlights with KOReader for books read in both.")
-            .how(&HOW)
-            .uses(paperpaw_sdk::Uses::NOTHING)
+        Manifest::new(
+            PLUGIN,
+            "KOReader highlights",
+            paperpaw_sdk::package_version!(),
+        )
+        .description("Shares bookmarks and highlights with KOReader for books read in both.")
+        .how(&HOW)
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

@@ -260,7 +260,9 @@ fn numbers_change_with_the_buttons_kept_when_chosen() {
     app.run(actions::SETTINGS);
     app.run(actions::DOWN);
     app.run(actions::CONFIRM);
-    // The reading settings: past the font, the font size.
+    // The reading settings, their page of the text: past the font, the
+    // font size.
+    app.run(actions::CONFIRM);
     app.run(actions::DOWN);
     let size = "core.font-size";
     let before = app.kernel.settings().int(size);
@@ -297,6 +299,7 @@ fn sliders_follow_the_finger_kept_where_it_is_lifted() {
     let mut app = App::on(TOUCH);
     app.run(actions::SETTINGS);
     app.tap_on("Reading");
+    app.tap_on("Text");
     app.kernel.render(&mut |_, _| {});
     let track = app
         .kernel
@@ -347,4 +350,28 @@ fn home_shows_the_book_read_last() {
     assert!(shown.starts_with("screen home.dashboard"), "{shown}");
     assert!(shown.contains("Continue reading"), "{shown}");
     assert!(shown.contains("Alice"), "{shown}");
+}
+
+/// A group's advanced settings, a page one level down, stay that page
+/// when one of them changes.
+#[test]
+fn a_groups_advanced_page_stays_when_a_setting_changes() {
+    let mut app = App::new();
+    app.now += 100;
+    let params = Params::new()
+        .with(params::ID, "core.group.reading-layout")
+        .with("more", "1");
+    let effects =
+        app.kernel
+            .open_screen(Instant(app.now), Id::new_static("settings.group"), params);
+    app.settle(effects);
+    assert!(app.described().contains("Heading \"Layout · More\""));
+    // A margin changed with the buttons and kept: the page is made anew,
+    // as the advanced page still.
+    app.run(actions::CONFIRM);
+    app.run(actions::UP);
+    app.run(actions::CONFIRM);
+    let shown = app.described();
+    assert!(shown.contains("Heading \"Layout · More\""), "{shown}");
+    assert!(shown.contains("Top and bottom margins, 5 mm"), "{shown}");
 }

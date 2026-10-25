@@ -29,6 +29,11 @@ const FONTS: &[(&str, &str, f32)] = &[
     ("paperpaw-sans", "fonts/SourceSans3.ttf", 430.0),
 ];
 
+/// The largest size of the reading faces in a lean build: larger ones
+/// come from a plugin that extends them (the font library's), drawn by
+/// it where text is asked larger.
+const LEAN_READING_MAX: f32 = 32.0;
+
 /// The pack of the UI font, which gets [`DISPLAY_SIZES`].
 const UI: &str = "paperpaw-sans";
 
@@ -36,6 +41,15 @@ fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=fonts");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_SIZES");
+    println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_LEAN");
+    println!("cargo::rustc-check-cfg=cfg(paperpaw_lean_fonts)");
+    // Lean (the firmware): no Literata Bold Italic, which few books use
+    // (bold stands in for it), and the reading faces without their
+    // largest sizes; the font library has both.
+    let lean = std::env::var_os("PAPERPAW_FONT_LEAN").is_some_and(|v| v == "1");
+    if lean {
+        println!("cargo::rustc-cfg=paperpaw_lean_fonts");
+    }
     if std::env::var_os("CARGO_FEATURE_OUTLINE").is_some()
         && std::env::var_os("CARGO_FEATURE_PACKS").is_none()
     {
@@ -56,14 +70,25 @@ fn main() {
         std::env::var_os("OUT_DIR").unwrap_or_else(|| panic!("OUT_DIR is set by cargo")),
     );
     for &(name, path, weight) in FONTS {
+        if lean && name == "literata-bold-italic" {
+            continue;
+        }
         let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
         let font = paperpaw_text::OutlineFont::new(data, &[("wght", weight)])
             .unwrap_or_else(|e| panic!("{path}: {e}"));
-        let chars = paperpaw_text::charset::chars(paperpaw_text::charset::LATIN);
+        // Latin, and the ligatures where the font has them.
+        let charset = paperpaw_text::charset::chars;
+        let ligatures = charset(paperpaw_text::charset::LIGATURES).filter(|ch| font.has_char(*ch));
+        let chars = charset(paperpaw_text::charset::LATIN).chain(ligatures);
+        let reading: Vec<f32> = sizes
+            .iter()
+            .copied()
+            .filter(|size| !lean || *size <= LEAN_READING_MAX)
+            .collect();
         let pack = if name == UI {
             with_display(&font, &sizes, chars)
         } else {
-            paperpaw_text::build_pack(&font, &sizes, chars)
+            paperpaw_text::build_pack(&font, &reading, chars)
         };
         write(&out.join(format!("{name}.ppfp")), &pack);
     }
@@ -77,13 +102,14 @@ fn main() {
 }
 
 /// The pack of the UI font: `chars` at `sizes`, and [`DISPLAY_CHARS`] at
-/// [`DISPLAY_SIZES`] too.
+/// [`DISPLAY_SIZES`] too, with the font's kerning of `chars`.
 fn with_display(
     font: &paperpaw_text::OutlineFont,
     sizes: &[f32],
     chars: impl Iterator<Item = char> + Clone,
 ) -> Vec<u8> {
     let mut builder = paperpaw_text::PackBuilder::new();
+    builder.kerning(&font.kerning_pairs(&chars.clone().collect::<Vec<char>>()));
     let strikes = sizes
         .iter()
         .map(|&size| (size, chars.clone().collect::<Vec<char>>()))

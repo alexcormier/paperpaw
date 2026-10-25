@@ -336,12 +336,14 @@ fn hostile_stylesheets_keep_their_sane_rules_within_bounds() {
     assert_eq!(block("Inside").align, Align::Auto);
     assert!(block("Braces").style_at(0).bold());
     for (_, b) in &read {
-        assert!(b.indent.is_none_or(|i| (0..=500).contains(&i)), "{b:?}");
+        assert!(b.indent.is_none_or(|i| (-500..=500).contains(&i)), "{b:?}");
+        assert!(b.margins.0 <= 1000 && b.margins.1 <= 1000, "{b:?}");
         assert!(b.space.is_none_or(|s| s <= 1600), "{b:?}");
         assert!(b.size.is_none_or(|s| (50..=300).contains(&s)), "{b:?}");
     }
     assert_eq!(block("Huge").indent, Some(500));
-    assert_eq!(block("Tiny").indent, Some(0));
+    // Hanging as far as it may.
+    assert_eq!(block("Tiny").indent, Some(-500));
     assert_eq!(block("Plain").align, Align::Auto);
 }
 
@@ -415,4 +417,47 @@ fn small_capitals_of_the_books_stylesheet_apply() {
     let read = blocks(&doc, &storage);
     assert!(read[1].1.style_at(0).small_caps());
     assert!(read[0].1.style_at(0).small_caps());
+}
+
+/// Block quotes, poems and hanging indents keep their room at the sides,
+/// lists their numbers and nesting, footnote marks and struck words their
+/// marks, and a book's line height comes along.
+#[test]
+fn sides_lists_marks_and_line_heights_of_the_book_come_along() {
+    let body = "<blockquote><p>Quoted</p></blockquote>\
+                <p class=\"hang\">Hanging</p>\
+                <ol start=\"3\"><li>Third</li><li>Fourth<ul><li>Inner</li></ul></li></ol>\
+                <p>Note<sup>1</sup> H<sub>2</sub>O <u>under</u> <del>gone</del></p>\
+                <p class=\"airy\">Airy</p>";
+    let epub = book_with(
+        &[body.into()],
+        ".hang { margin-left: 2em; text-indent: -2em } .airy { line-height: 1.8 }",
+        &[],
+        false,
+    );
+    let (storage, doc) = open(epub);
+    let read = blocks(&doc, &storage);
+    let block = |text: &str| {
+        &read
+            .iter()
+            .find(|(_, b)| b.text.starts_with(text))
+            .unwrap_or_else(|| panic!("{text}: {read:?}"))
+            .1
+    };
+    assert_eq!(block("Quoted").margins, (150, 150));
+    assert_eq!(block("Hanging").margins, (200, 0));
+    assert_eq!(block("Hanging").indent, Some(-200));
+    assert_eq!(block("3. Third").margins, (150, 0));
+    assert!(block("4. Fourth").text.starts_with("4. "));
+    // A list in a list: set in twice, with bullets.
+    assert_eq!(block("• Inner").margins, (300, 0));
+    let note = block("Note");
+    let at = |word: &str| note.style_at(note.text.find(word).unwrap());
+    assert!(at("1").superscript());
+    assert!(at("2").subscript());
+    assert!(at("under").underline());
+    assert!(at("gone").strike());
+    assert!(!at("Note").superscript());
+    assert_eq!(block("Airy").line_height, Some(180));
+    assert_eq!(block("Quoted").line_height, None);
 }

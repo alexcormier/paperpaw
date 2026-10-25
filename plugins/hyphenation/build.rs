@@ -3,16 +3,13 @@
 use std::path::PathBuf;
 
 /// (output name, patterns, exceptions, characters before / after a hyphen)
-const LANGUAGES: &[(&str, &str, Option<&str>, u8, u8)] = &[
-    ("de", "patterns/hyph-de-1996.pat.txt", None, 2, 2),
-    (
-        "en",
-        "patterns/hyph-en-us.pat.txt",
-        Some("patterns/hyph-en-us.hyp.txt"),
-        2,
-        3,
-    ),
-];
+const LANGUAGES: &[(&str, &str, Option<&str>, u8, u8)] = &[(
+    "en",
+    "patterns/hyph-en-us.pat.txt",
+    Some("patterns/hyph-en-us.hyp.txt"),
+    2,
+    3,
+)];
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");

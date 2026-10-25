@@ -71,8 +71,9 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
-    Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
+    Canvas, Color, Command, Cx, Env, FixedScreen, Gesture, GestureKind, Handled, Id, Manifest,
+    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("keyboard");
@@ -215,6 +216,12 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    CHOOSE_SCREEN,
+    "keyboard.setting.layouts",
+    |env, _| Box::new(choose::ChooseScreen::new(env)),
+)];
+
 impl Plugin for Keyboard {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Keyboard", paperpaw_sdk::package_version!())
@@ -226,13 +233,16 @@ impl Plugin for Keyboard {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // The layout in use; the next keyboard opens with it.
         let current = Rc::new(Cell::new(0usize));
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "keyboard.title",
-            Box::new(move |env, params| {
-                Box::new(KeyboardScreen::new(env, params, current.clone()))
-            }),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "keyboard.title",
+                Box::new(move |env, params| {
+                    Box::new(KeyboardScreen::new(env, params, current.clone()))
+                }),
+            )
+            .instances(paperpaw_sdk::Instances::MANY),
+        )?;
         r.bind_slot(slots::KEYBOARD, SCREEN, Priority::DEFAULT)?;
         // Its settings on a page of their own (Settings, Device).
         r.add_setting_group({
@@ -253,11 +263,7 @@ impl Plugin for Keyboard {
         r.add_settings(&SETTINGS)?;
         // Keys chosen with buttons take no shape.
         r.set_menu_need(KEY_SHAPE.id().clone(), paperpaw_sdk::MenuNeed::Touch)?;
-        r.add_screen(ScreenSpec::new(
-            CHOOSE_SCREEN,
-            "keyboard.setting.layouts",
-            Box::new(|env, _| Box::new(choose::ChooseScreen::new(env))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         // The first-run setup: the layouts to type with.
         r.add_setup_step(
             paperpaw_sdk::setup::SetupStepSpec::new(
@@ -590,6 +596,17 @@ impl KeyboardScreen {
         Rect::new(left as u16, y, (right - left) as u16, self.key_height)
     }
 
+    /// What a focus on `(row, index)` draws over: its key, or for a
+    /// button of the field the field's box, as the button's focus frame
+    /// goes past its edge.
+    fn focus_area(&self, row: usize, index: usize) -> Rect {
+        if row == PASTE_ROW {
+            self.text_box()
+        } else {
+            self.key_area(row, index)
+        }
+    }
+
     fn key_at(&self, point: paperpaw_sdk::Point) -> Option<(usize, usize)> {
         if let Some(index) = self.buttons.iter().position(|b| b.1.contains(point)) {
             return Some((PASTE_ROW, index));
@@ -887,8 +904,12 @@ impl KeyboardScreen {
         } else {
             return false;
         };
-        self.redraw(cx, self.key_area(row, index));
-        self.redraw(cx, self.key_area(to.0, to.1));
+        if to == (row, index) {
+            // Round a row of one: nothing moved.
+            return true;
+        }
+        self.redraw(cx, self.focus_area(row, index));
+        self.redraw(cx, self.focus_area(to.0, to.1));
         self.focus = Some(to);
         // The field's hint of letters held, where it changes.
         if self.held_hint(cx.env()).is_some() || (row != PASTE_ROW && self.has_held(row, index)) {
@@ -1137,7 +1158,7 @@ impl Screen for KeyboardScreen {
         }
         let key = self.key_at(gesture.start);
         if let Some((r, i)) = self.focus.take() {
-            self.redraw(cx, self.key_area(r, i));
+            self.redraw(cx, self.focus_area(r, i));
             // Its hint of letters held goes with it.
             if r != PASTE_ROW && self.has_held(r, i) {
                 self.redraw(cx, self.field);

@@ -73,10 +73,11 @@ fn markdown_lists_quotes_rules_and_code() {
             "• b",
             "• c",
             "• nested",
-            "• deep",
-            "• one",
+            // Numbered, in the one list Markdown here makes of them.
+            "1. deep",
+            "2. one",
             // A line after an item goes on with it.
-            "• two goes on",
+            "3. two goes on",
             "1234567890. not a number",
             "quote one quote two",
             "* * *",
@@ -237,7 +238,7 @@ fn html_forgives_as_browsers_do() {
     let words: Vec<&str> = words
         .iter()
         .map(String::as_str)
-        .filter(|w| *w != "•")
+        .filter(|w| !matches!(*w, "•" | "·"))
         .collect();
     assert_eq!(
         words,

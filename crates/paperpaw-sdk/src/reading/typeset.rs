@@ -10,9 +10,12 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use paperpaw_hyphen::Patterns;
+
 use crate::builtin::{fonts, settings};
 use crate::document::{Document, DocumentError, Locator};
-use crate::layout::{Face, Page, PageImage, PageLine, Style, Typesetter};
+use crate::layout::{BookStyles, Face, Page, PageImage, PageLine, Style, Typesetter};
+use crate::text::ToneCurve;
 use crate::{Canvas, Color, Env, FontHandle, FontSet, Id, Point, Rect};
 
 /// Relative sizes of headings 1 to 6.
@@ -26,6 +29,12 @@ const EMBEDDED_LIMIT: usize = 8 * 1024 * 1024;
 
 /// Small capitals are this much of the text size.
 const SMALL_CAPS: f32 = 0.78;
+
+/// Superscript and subscript are this much of the text size, raised or
+/// lowered by this much of it.
+const SCRIPT: f32 = 0.7;
+const RAISED: f32 = 0.33;
+const LOWERED: f32 = 0.15;
 
 /// Whether a book's own fonts are used: the font chosen is the book's
 /// (the default choice), and they render on this device (not on small
@@ -140,6 +149,13 @@ pub struct PageType {
     pub weight: u8,
     /// Spaces relative to the font's.
     pub word_spacing: f32,
+    /// Space added after every letter, in pixels.
+    pub letter_spacing: f32,
+    /// Pairs of letters kerned ([`settings::KERNING`]).
+    pub kerning: bool,
+    /// Ligatures drawn ([`settings::LIGATURES`]); never with letter
+    /// spacing, which would pull them apart.
+    pub ligatures: bool,
     /// Body text lines: baseline from the top of a line, line height.
     pub ascent: f32,
     pub line_height: f32,
@@ -159,6 +175,9 @@ pub struct PageType {
     pub columns: Vec<Rect>,
     /// The language whose hyphenation patterns are used, if hyphenating.
     pub hyphenation: Option<String>,
+    /// The fewest letters before and after a hyphen the reader asks for
+    /// (0: the language's own), see [`PageType::patterns`].
+    pub hyphen_minimums: (u8, u8),
     /// What the plugins' text filters did when it was made
     /// ([`TextFilters::signature`](crate::filters::TextFilters)).
     pub filters: u64,
@@ -195,18 +214,42 @@ impl PageType {
         let spacing = s.read(&settings::LINE_SPACING).clamp(80, 250) as f32 / 100.0;
         let line_height = (size * spacing).max(natural * spacing.min(1.0));
         let indent = s.read(&settings::INDENT);
+        let indent_size = s.read(&settings::INDENT_SIZE).clamp(50, 400) as f32 / 100.0;
         let spaced = s.read(&settings::PARAGRAPH_SPACING);
+        let paragraph_space = s.read(&settings::PARAGRAPH_SPACE).clamp(20, 150) as f32 / 100.0;
+        let balanced = s.read(&settings::LINE_BREAKING) != settings::LINE_BREAKING_FAST;
+        let letter_spacing = s.read(&settings::LETTER_SPACING).clamp(-5, 20) as f32 / 100.0 * size;
+        let kerning = s.read(&settings::KERNING);
+        let ligatures = s.read(&settings::LIGATURES) && letter_spacing == 0.0;
+        let book = [
+            (&settings::BOOK_ALIGN, BookStyles::ALIGN),
+            (&settings::BOOK_INDENT, BookStyles::INDENT),
+            (&settings::BOOK_SIZES, BookStyles::SIZE),
+            (&settings::BOOK_SPACING, BookStyles::SPACING),
+            (&settings::BOOK_FONTS, BookStyles::FONTS),
+            (&settings::BOOK_MARGINS, BookStyles::MARGINS),
+            (&settings::BOOK_LINE_HEIGHT, BookStyles::LINE_HEIGHT),
+        ]
+        .iter()
+        .filter(|(setting, _)| s.read(setting))
+        .fold(BookStyles::NONE, |all, (_, style)| all.with(*style));
         let justify = s.read(&settings::JUSTIFY);
         let ascent = metrics.ascent + (line_height - natural) / 2.0;
         let widows = s.read(&settings::WIDOWS).clamp(1, 4) as u8;
         let orphans = s.read(&settings::ORPHANS).clamp(1, 4) as u8;
         let style = Style::new(
-            if spaced { line_height * 0.6 } else { 0.0 },
-            if indent { size * 1.5 } else { 0.0 },
+            if spaced {
+                line_height * paragraph_space
+            } else {
+                0.0
+            },
+            if indent { size * indent_size } else { 0.0 },
             size,
             justify,
         )
-        .lines_kept(widows, orphans);
+        .lines_kept(widows, orphans)
+        .book(book)
+        .balanced(balanced);
 
         let display = env.device().display;
         let millimetres = |setting: &crate::setting::Setting<i64>| match whole_pages {
@@ -270,6 +313,17 @@ impl PageType {
         let hyphenation = (s.read(&settings::HYPHENATE)
             && env.hyphenation().get(language).is_some())
         .then(|| language.to_string());
+        let hyphen_minimums = (
+            s.read(&settings::HYPHEN_MIN_LEFT).clamp(0, 5) as u8,
+            s.read(&settings::HYPHEN_MIN_RIGHT).clamp(0, 5) as u8,
+        );
+        // The language and, where the reader changed them, the minimums:
+        // pages laid out with the language's own keep their key.
+        let hyphenation_key = match (&hyphenation, hyphen_minimums) {
+            (None, _) => String::from("-"),
+            (Some(language), (0, 0)) => language.clone(),
+            (Some(language), (left, right)) => format!("{language}:{left}:{right}"),
+        };
         // The plugins' stylesheets change what the book's text looks like.
         let stylesheets = env.stylesheets().iter().fold(0u64, |hash, sheet| {
             hash.rotate_left(5) ^ paperpaw_digest::fnv1a64(sheet.as_bytes())
@@ -277,7 +331,7 @@ impl PageType {
         let key = format!(
             "{:016x}",
             paperpaw_digest::fnv1a64(format!(
-                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}|{widows}:{orphans}",
+                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}|{widows}:{orphans}|{:x}|{letter_spacing}|{balanced}|{kerning}|{ligatures}",
                 crate::layout::VERSION,
                 font.id(),
                 face_id(env, &fonts::READING_BOLD),
@@ -285,10 +339,11 @@ impl PageType {
                 face_id(env, &fonts::READING_BOLD_ITALIC),
                 style.indent,
                 style.paragraph_spacing,
-                hyphenation.as_deref().unwrap_or("-"),
+                hyphenation_key,
                 s.read(&settings::PUBLISHER_STYLES),
                 uses_book_fonts(env),
                 env.text_filters().signature(env),
+                book.bits(),
             ))
         );
         // Pages without layers' rooms or a frame keep their key (and their
@@ -301,6 +356,9 @@ impl PageType {
             size,
             weight,
             word_spacing,
+            letter_spacing,
+            kerning,
+            ligatures,
             ascent,
             line_height,
             style,
@@ -313,9 +371,21 @@ impl PageType {
             rooms,
             columns,
             hyphenation,
+            hyphen_minimums,
             filters: env.text_filters().signature(env),
             key,
         }
+    }
+
+    /// The patterns words are hyphenated with: those of the page's
+    /// language, with the minimums the reader set where they are not 0;
+    /// `None` where the page is not hyphenated.
+    pub fn patterns(&self, env: &Env<'_>) -> Option<Patterns<'static>> {
+        let language = self.hyphenation.as_deref()?;
+        let (left, right) = self.hyphen_minimums;
+        env.hyphenation()
+            .get(language)
+            .map(|patterns| patterns.with_minimums(left.into(), right.into()))
     }
 
     /// The type of a sample of text `height` pixels high in `language`
@@ -423,13 +493,22 @@ fn face_id(env: &Env<'_>, role: &Id) -> String {
 /// The reading fonts by face, for layout and drawing: the faces bound to
 /// the reading roles (a font the user chose for book text is not mixed
 /// with the default bold or italic), the book's own where it uses them,
-/// headings larger, small capitals.
+/// headings larger, small capitals, the letters as smooth and as dark as
+/// the settings say.
 #[derive(Clone, Copy)]
 pub struct ReadingFaces<'a> {
     /// Regular, bold, italic and bold italic.
     fonts: [FontHandle<'a>; 4],
     weight: u8,
+    /// The contrast curve of the letters' edges.
+    tone: ToneCurve,
+    /// Letters black and white, without grays.
+    sharp: bool,
     word_spacing: f32,
+    letter_spacing: f32,
+    /// Pairs kerned and ligatures drawn, as the page's type says.
+    kerning: bool,
+    ligatures: bool,
     embedded: Option<&'a EmbeddedFonts>,
     size: f32,
     ascent: f32,
@@ -464,10 +543,16 @@ impl<'a> ReadingFaces<'a> {
         let bold = face(&fonts::READING_BOLD).unwrap_or(regular);
         let italic = face(&fonts::READING_ITALIC).unwrap_or(regular);
         let bold_italic = face(&fonts::READING_BOLD_ITALIC).unwrap_or(bold);
+        let (tone, sharp) = ink(env);
         Some(Self {
             fonts: [regular, bold, italic, bold_italic],
             weight: page.weight,
+            tone,
+            sharp,
             word_spacing: page.word_spacing,
+            letter_spacing: page.letter_spacing,
+            kerning: page.kerning,
+            ligatures: page.ligatures && page.letter_spacing == 0.0,
             embedded,
             size: page.size,
             ascent: page.ascent,
@@ -476,21 +561,27 @@ impl<'a> ReadingFaces<'a> {
     }
 
     /// The book's font for text in an embedded family, else the reading
-    /// face.
+    /// face; kerned and with ligatures as the settings say.
     pub fn font(&self, face: Face) -> FontHandle<'a> {
         let style = face.style;
-        if style.family() != 0
-            && let Some(font) = self
+        let font = match style.family() {
+            0 => None,
+            family => self
                 .embedded
-                .and_then(|e| e.face(style.family(), style.bold(), style.italic()))
-        {
-            return font;
+                .and_then(|e| e.face(family, style.bold(), style.italic())),
+        };
+        let font = font.unwrap_or(self.fonts[usize::from(style.bits() & 3)]);
+        let font = if self.kerning { font } else { font.unkerned() };
+        if self.ligatures {
+            font.ligatures()
+        } else {
+            font
         }
-        self.fonts[usize::from(style.bits() & 3)]
     }
 
-    /// The size of text in `face`, in pixels.
-    pub fn size(&self, face: Face) -> f32 {
+    /// The size of the line's text in `face`, in pixels: what
+    /// superscript and subscript are set smaller than.
+    fn line_size(&self, face: Face) -> f32 {
         match (face.size, face.heading) {
             // The book's size wins.
             (percent, _) if percent > 0 => self.size * f32::from(percent) / 100.0,
@@ -499,18 +590,78 @@ impl<'a> ReadingFaces<'a> {
         }
     }
 
+    /// The size of text in `face`, in pixels.
+    pub fn size(&self, face: Face) -> f32 {
+        let size = self.line_size(face);
+        match face.style.superscript() || face.style.subscript() {
+            true => size * SCRIPT,
+            false => size,
+        }
+    }
+
+    /// How far text in `face` sits below the line's baseline, in pixels:
+    /// raised above it (negative) for superscript, lowered for subscript.
+    pub fn shift(&self, face: Face) -> i32 {
+        let size = self.line_size(face);
+        if face.style.superscript() {
+            -(size * RAISED + 0.5) as i32
+        } else if face.style.subscript() {
+            (size * LOWERED + 0.5) as i32
+        } else {
+            0
+        }
+    }
+
+    /// The letter spacing of `text`: after each of its characters.
+    fn letters(&self, text: &str) -> f32 {
+        match self.letter_spacing {
+            0.0 => 0.0,
+            spacing => spacing * text.chars().count() as f32,
+        }
+    }
+
     /// The width of `text` in `face`, small capitals included.
     pub fn measure(&self, face: Face, text: &str) -> f32 {
         let (font, size) = (self.font(face), self.size(face));
+        let letters = self.letters(text);
         if !face.style.small_caps() {
-            return font.measure(size, text);
+            return font.measure(size, text) + letters;
         }
         small_caps_parts(text)
             .map(|(part, lower)| match lower {
                 true => font.measure(size * SMALL_CAPS, &part.to_uppercase()),
                 false => font.measure(size, part),
             })
-            .sum()
+            .sum::<f32>()
+            + letters
+    }
+
+    /// The lines under and through text in `face` from `x`, `width` wide,
+    /// on the line's `baseline`, in `ink`.
+    pub fn decorate(
+        &self,
+        canvas: &mut Canvas<'_>,
+        face: Face,
+        (x, width): (f32, f32),
+        baseline: i32,
+        ink: Color,
+    ) {
+        let (under, through) = (face.style.underline(), face.style.strike());
+        if !(under || through) || width <= 0.0 {
+            return;
+        }
+        let size = self.line_size(face);
+        let thick = ((size / 16.0) as u32).max(1);
+        let (left, right) = ((x + 0.5) as i32, (x + width + 0.5) as i32);
+        let length = (right - left).max(0) as u32;
+        if under {
+            let y = baseline + ((size / 10.0) as i32).max(1);
+            canvas.fill_rect(left, y, length, thick, ink);
+        }
+        if through {
+            let y = baseline - (size * 0.28) as i32;
+            canvas.fill_rect(left, y, length, thick, ink);
+        }
     }
 
     /// A space between words in `face`.
@@ -549,19 +700,43 @@ impl<'a> ReadingFaces<'a> {
             w => (f32::from(w) * size / 48.0 + 0.5).max(1.0) as u16,
         };
         let font = self.font(face);
+        let baseline = baseline + self.shift(face);
+        // Without grays from the coverage a frame of black and white draws
+        // from: the letters it would draw.
+        let tone = match self.sharp {
+            true => self.tone.sharp(canvas.mono_coverage()),
+            false => self.tone,
+        };
+        // Letter by letter where letters are spaced, each pair kerned as
+        // measuring kerns it; at once otherwise.
+        let draw = |canvas: &mut Canvas<'_>, size: f32, x: f32, text: &str| -> f32 {
+            if self.letter_spacing == 0.0 {
+                return font.draw_toned(canvas, size, x, baseline, text, ink, extra, tone);
+            }
+            let mut width = 0.0;
+            let mut buf = [0u8; 4];
+            let mut before = None;
+            for c in text.chars() {
+                if let Some(left) = before {
+                    width += font.kern(size, left, c);
+                }
+                before = Some(c);
+                let letter = c.encode_utf8(&mut buf);
+                width +=
+                    font.draw_toned(canvas, size, x + width, baseline, letter, ink, extra, tone);
+                width += self.letter_spacing;
+            }
+            width
+        };
         if !face.style.small_caps() {
-            return font.draw_bolder(canvas, size, x, baseline, text, ink, extra);
+            return draw(canvas, size, x, text);
         }
         // Lower case letters as smaller capitals.
         let mut width = 0.0;
         for (part, lower) in small_caps_parts(text) {
             width += match lower {
-                true => {
-                    let upper = part.to_uppercase();
-                    let small = size * SMALL_CAPS;
-                    font.draw_bolder(canvas, small, x + width, baseline, &upper, ink, extra)
-                }
-                false => font.draw_bolder(canvas, size, x + width, baseline, part, ink, extra),
+                true => draw(canvas, size * SMALL_CAPS, x + width, &part.to_uppercase()),
+                false => draw(canvas, size, x + width, part),
             };
         }
         width
@@ -576,9 +751,41 @@ impl Typesetter for ReadingFaces<'_> {
         if face.style.small_caps() && c.is_lowercase() {
             let small = self.size(face) * SMALL_CAPS;
             let font = self.font(face);
-            return c.to_uppercase().map(|u| font.advance(small, u)).sum();
+            // Its capitals (one or more: `ß` is `SS`), kerned among them.
+            let mut upper = 0.0;
+            let mut before = None;
+            for u in c.to_uppercase() {
+                if let Some(left) = before {
+                    upper += font.kern(small, left, u);
+                }
+                upper += font.advance(small, u);
+                before = Some(u);
+            }
+            return upper + self.letter_spacing;
         }
-        self.font(face).advance(self.size(face), c)
+        self.font(face).advance(self.size(face), c) + self.letter_spacing
+    }
+
+    /// The pair as drawing sets it ([`FontHandle::kern`]): in small
+    /// capitals, lower case letters as smaller capitals and no pair
+    /// between those and the rest, which are drawn apart.
+    fn kern(&self, face: Face, left: char, right: char) -> f32 {
+        if left == ' ' || right == ' ' {
+            return 0.0;
+        }
+        let font = self.font(face);
+        if face.style.small_caps() && (left.is_lowercase() || right.is_lowercase()) {
+            if left.is_lowercase() != right.is_lowercase() {
+                return 0.0;
+            }
+            let (Some(last), Some(first)) =
+                (left.to_uppercase().last(), right.to_uppercase().next())
+            else {
+                return 0.0;
+            };
+            return font.kern(self.size(face) * SMALL_CAPS, last, first);
+        }
+        font.kern(self.size(face), left, right)
     }
 
     fn line(&self, face: Face) -> (f32, f32) {
@@ -692,6 +899,23 @@ pub fn word_boxes(faces: &ReadingFaces<'_>, page_type: &PageType, page: &Page) -
     words
 }
 
+/// The contrast curve of book text ([`settings::TEXT_CONTRAST`]), and
+/// whether it is drawn without grays ([`settings::SMOOTH_TEXT`] off).
+/// Not where the panel shows black and white alone: its frame draws the
+/// same letters already, and a page shown in grays there for its
+/// pictures keeps its letters smooth, as before.
+fn ink(env: &Env<'_>) -> (ToneCurve, bool) {
+    let s = env.settings();
+    let level = s.read(&settings::TEXT_CONTRAST);
+    let step = settings::TEXT_CONTRAST_LEVELS
+        .iter()
+        .position(|l| *l == level)
+        .map_or(0, |at| at as i8 + ToneCurve::LIGHTEST);
+    let mono = env.device().display.format.gray_levels() == Some(2);
+    let sharp = !mono && !s.read(&settings::SMOOTH_TEXT);
+    (ToneCurve::contrast(step), sharp)
+}
+
 /// Draws `lines` laid out with `faces` in `page_type`, their content box
 /// at `origin`, each word in its ink (`inks`, by the words' order as
 /// [`word_boxes`] has them; black where none). Lines outside the part
@@ -720,6 +944,13 @@ pub fn draw_lines(
             let space = faces.space(run.face) + line.word_spacing;
             for (i, word) in text.split(' ').enumerate() {
                 if i > 0 {
+                    // Lines under and through words go on under the space
+                    // between them, in the first word's ink.
+                    if shown && !word.is_empty() {
+                        let ink = inks.get(ordinal.saturating_sub(1)).copied().flatten();
+                        let ink = ink.unwrap_or(Color::BLACK);
+                        faces.decorate(canvas, run.face, (x, space), baseline, ink);
+                    }
                     x += space;
                     joined = false;
                 }
@@ -734,10 +965,14 @@ pub fn draw_lines(
                     x += faces.measure(run.face, word);
                     continue;
                 }
-                match inks.get(ordinal - 1).copied().flatten() {
-                    Some(ink) => x += faces.draw_in(canvas, run.face, x, baseline, word, ink),
-                    None => x += faces.draw(canvas, run.face, x, baseline, word),
-                }
+                let ink = inks.get(ordinal - 1).copied().flatten();
+                let width = match ink {
+                    Some(ink) => faces.draw_in(canvas, run.face, x, baseline, word, ink),
+                    None => faces.draw(canvas, run.face, x, baseline, word),
+                };
+                let ink = ink.unwrap_or(Color::BLACK);
+                faces.decorate(canvas, run.face, (x, width), baseline, ink);
+                x += width;
             }
         }
     }

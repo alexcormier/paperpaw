@@ -243,7 +243,11 @@ def notice_text(packages):
 
 def app_text(product, packages):
     """The licences as the app shows them for `product`, a chapter each."""
-    patterns = re.findall(r"```text\n(.*?)\n```", read("plugins/hyphenation/patterns/README.md"), re.S)
+    def notices(path):
+        return re.findall(r"```text\n(.*?)\n```", read(path), re.S)
+
+    german = notices("plugins/hyphenation-de/patterns/README.md")
+    english = notices("plugins/hyphenation/patterns/README.md")
     parts = [
         ("Notice", read("tools/licences/NOTICE.in")),
         ("PaperPaw: Apache License 2.0", read("LICENSE")),
@@ -251,8 +255,8 @@ def app_text(product, packages):
         ("Source Sans 3 and PaperPaw Sans: SIL Open Font License 1.1",
          read("plugins/fonts-default/fonts/SourceSans3-OFL.txt")),
         ("Tabler Icons: MIT License", read("plugins/fonts-default/fonts/TablerIcons-MIT.txt")),
-        ("German hyphenation patterns", patterns[0]),
-        ("American English hyphenation patterns", patterns[1]),
+        ("German hyphenation patterns", german[0]),
+        ("American English hyphenation patterns", english[0]),
     ]
     text = "\n\n".join(f"## {title}\n\n{paragraphs(body)}" for title, body in parts)
     where = {"firmware": "the firmware of the Xteink readers",

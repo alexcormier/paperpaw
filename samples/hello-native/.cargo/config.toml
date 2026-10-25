@@ -20,6 +20,9 @@ x4pro = "build --release --target xtensa-esp32s3-none-elf"
 rustflags = [
     "-C", "link-arg=-Tpaperpaw-plugin.x",
     "-C", "link-arg=--emit-relocs",
+    # Calls stay `auipc` and `jalr`, which the packer can patch where
+    # they reach across the edge of hot code (`hot!`).
+    "-C", "link-arg=--no-relax",
     "-C", "code-model=medium",
     "-C", "relocation-model=static",
     "-C", "force-frame-pointers",

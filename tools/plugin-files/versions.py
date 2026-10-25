@@ -26,6 +26,11 @@ Where the plugin interface was raised since the release
 (`native::INTERFACE`), every plugin needs a newer version, changed or
 not: its code built before does not run on the new firmware, and devices
 fetch the new build only as an update.
+
+The data plugins of data.toml are held to the same: one whose builder or
+inputs changed since the release needs a newer version in data.toml (or
+the trailer in each commit no reader sees). They have no code, so a
+raised interface leaves them as they are.
 """
 
 import pathlib
@@ -155,6 +160,37 @@ def same_files(tag, paths):
     return done.returncode == 0
 
 
+def data_versions(text):
+    """Id to version of the data plugins of data.toml's `text`."""
+    return {plugin: fields["version"] for plugin, fields in tomllib.loads(text).items()}
+
+
+def data_problems(since):
+    """The data plugins of data.toml whose builder or inputs changed since
+    `since` without a newer version: (id, what is wrong)."""
+    path = "tools/plugin-files/data.toml"
+    if not (ROOT / path).exists():
+        return []
+    now = tomllib.loads((ROOT / path).read_text(encoding="utf-8"))
+    try:
+        before = data_versions(git("show", f"{since}:{path}"))
+    except subprocess.CalledProcessError:
+        before = {}
+    out = []
+    for plugin, fields in now.items():
+        if plugin not in before:
+            continue  # new since the release
+        paths = [fields["build"], *fields.get("inputs", [])]
+        log = git("log", "--no-merges", "--format=%B%x00", f"{since}..HEAD", "--", *paths)
+        changes = [m.strip() for m in log.split("\0") if m.strip()]
+        found = problem(plugin, before[plugin], fields["version"], changes)
+        if found:
+            out.append((plugin, found.replace(
+                f"plugins/{plugin}/Cargo.toml (and the Cargo.lock files that list it)",
+                "tools/plugin-files/data.toml")))
+    return out
+
+
 def main():
     since = sys.argv[1] if len(sys.argv) > 1 else git(
         "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD").strip()
@@ -187,6 +223,9 @@ def main():
         if found:
             print(f"::error file={manifest}::{plugin}: {found}")
             failed = True
+    for plugin, found in data_problems(since):
+        print(f"::error file=tools/plugin-files/data.toml::{plugin}: {found}")
+        failed = True
     if failed:
         sys.exit(1)
     print(f"every plugin that changed since {since} or its own release has a newer version")

@@ -3,6 +3,7 @@ pub mod paperpaw_text::charset
 pub const paperpaw_text::charset::CYRILLIC: &[core::ops::range::RangeInclusive<char>]
 pub const paperpaw_text::charset::GREEK: &[core::ops::range::RangeInclusive<char>]
 pub const paperpaw_text::charset::LATIN: &[core::ops::range::RangeInclusive<char>]
+pub const paperpaw_text::charset::LIGATURES: &[core::ops::range::RangeInclusive<char>]
 pub fn paperpaw_text::charset::chars(&[core::ops::range::RangeInclusive<char>]) -> impl core::iter::traits::iterator::Iterator<Item = char> + core::clone::Clone + '_
 pub fn paperpaw_text::charset::code_points(&str) -> core::option::Option<core::ops::range::RangeInclusive<char>>
 pub fn paperpaw_text::charset::named(&str) -> core::option::Option<&'static [core::ops::range::RangeInclusive<char>]>
@@ -22,6 +23,7 @@ impl paperpaw_text::Font
 pub fn paperpaw_text::Font::advance(&self, char, f32) -> f32
 pub fn paperpaw_text::Font::from_data(impl core::convert::Into<alloc::borrow::Cow<'static, [u8]>>, &[(&str, f32)]) -> core::result::Result<paperpaw_text::Font, paperpaw_text::FontError>
 pub fn paperpaw_text::Font::has_char(&self, char) -> bool
+pub fn paperpaw_text::Font::kern(&self, char, char, f32) -> f32
 pub fn paperpaw_text::Font::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::Font::line_metrics(&self, f32) -> paperpaw_text::LineMetrics
 pub fn paperpaw_text::Font::shown(&self, char) -> char
@@ -40,6 +42,7 @@ pub fn paperpaw_text::BitmapFont::advance(&self, char, f32) -> f32
 pub fn paperpaw_text::BitmapFont::glyph(&self, char, f32) -> paperpaw_text::GlyphRef<'_>
 pub fn paperpaw_text::BitmapFont::has_char(&self, char) -> bool
 pub fn paperpaw_text::BitmapFont::is_pack(&[u8]) -> bool
+pub fn paperpaw_text::BitmapFont::kern(&self, char, char, f32) -> f32
 pub fn paperpaw_text::BitmapFont::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::BitmapFont::line_metrics(&self, f32) -> paperpaw_text::LineMetrics
 pub fn paperpaw_text::BitmapFont::new(impl core::convert::Into<alloc::borrow::Cow<'static, [u8]>>) -> core::result::Result<paperpaw_text::BitmapFont, paperpaw_text::FontError>
@@ -88,6 +91,7 @@ pub struct paperpaw_text::PackBuilder
 impl paperpaw_text::PackBuilder
 pub fn paperpaw_text::PackBuilder::add_strike(&mut self, f32, paperpaw_text::LineMetrics, alloc::vec::Vec<(char, paperpaw_text::Glyph)>)
 pub fn paperpaw_text::PackBuilder::build(&self) -> alloc::vec::Vec<u8>
+pub fn paperpaw_text::PackBuilder::kerning(&mut self, &[(char, char, f32)])
 pub fn paperpaw_text::PackBuilder::new() -> Self
 pub struct paperpaw_text::StoredPack
 impl paperpaw_text::StoredPack
@@ -103,15 +107,29 @@ pub struct paperpaw_text::TextStyle<'a>
 pub paperpaw_text::TextStyle::based: bool
 pub paperpaw_text::TextStyle::bolder: u16
 pub paperpaw_text::TextStyle::color: paperpaw_platform::pixel::Color
+pub paperpaw_text::TextStyle::curve: paperpaw_text::ToneCurve
 pub paperpaw_text::TextStyle::font: &'a paperpaw_text::Font
 pub paperpaw_text::TextStyle::font_index: u16
 pub paperpaw_text::TextStyle::size: f32
 impl<'a> paperpaw_text::TextStyle<'a>
 pub fn paperpaw_text::TextStyle<'a>::based(self, bool) -> Self
 pub fn paperpaw_text::TextStyle<'a>::bolder(self, u16) -> Self
+pub fn paperpaw_text::TextStyle<'a>::curve(self, paperpaw_text::ToneCurve) -> Self
 pub fn paperpaw_text::TextStyle<'a>::new(&'a paperpaw_text::Font, u16, f32, paperpaw_platform::pixel::Color) -> Self
 impl core::fmt::Debug for paperpaw_text::TextStyle<'_>
 pub fn paperpaw_text::TextStyle<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_text::ToneCurve
+impl paperpaw_text::ToneCurve
+pub const paperpaw_text::ToneCurve::DARKEST: i8
+pub const paperpaw_text::ToneCurve::LIGHTEST: i8
+pub const paperpaw_text::ToneCurve::SMOOTH: paperpaw_text::ToneCurve
+pub fn paperpaw_text::ToneCurve::alpha(&self, u8) -> u8
+pub fn paperpaw_text::ToneCurve::contrast(i8) -> paperpaw_text::ToneCurve
+pub fn paperpaw_text::ToneCurve::is_sharp(&self) -> bool
+pub fn paperpaw_text::ToneCurve::sharp(self, u8) -> paperpaw_text::ToneCurve
+impl core::default::Default for paperpaw_text::ToneCurve
+pub fn paperpaw_text::ToneCurve::default() -> Self
+pub const paperpaw_text::MAX_BREAKS: usize
 pub const paperpaw_text::OUTLINES: bool
 pub trait paperpaw_text::PackSource
 pub fn paperpaw_text::PackSource::read_at(&self, u64, &mut [u8]) -> bool
@@ -121,5 +139,8 @@ pub fn paperpaw_text::is_mark(char) -> bool
 pub fn paperpaw_text::measure(&paperpaw_text::Font, f32, &str) -> f32
 pub fn paperpaw_text::wrap(&str, f32, impl core::ops::function::Fn(&str) -> f32) -> alloc::vec::Vec<core::ops::range::Range<usize>>
 pub fn paperpaw_text::wrap_lines(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(char) -> f32) -> alloc::vec::Vec<paperpaw_text::Line>
+pub fn paperpaw_text::wrap_lines_balanced(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
+pub fn paperpaw_text::wrap_lines_balanced_kerned(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, impl core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
 pub fn paperpaw_text::wrap_lines_hyphenated(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
+pub fn paperpaw_text::wrap_lines_kerned(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, impl core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
 pub type paperpaw_text::Hyphenate<'a> = &'a dyn core::ops::function::Fn(&str, &mut dyn core::ops::function::FnMut(usize))

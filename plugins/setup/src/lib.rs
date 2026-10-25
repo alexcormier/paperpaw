@@ -28,8 +28,8 @@ use alloc::format;
 
 use paperpaw_sdk::builtin::{events, menus, slots};
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority,
-    RegisterError, Registrar, ScreenSpec, library,
+    Command, Env, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params, Plugin, Priority,
+    RegisterError, Registrar, library,
 };
 
 pub const PLUGIN: Id = Id::new_static("setup");
@@ -59,6 +59,17 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "setup.open")
+    .handler(|_, _, out| out.push(Command::OpenSlot(slots::SETUP, Params::new())))];
+// In the device's part of the settings, before *About*.
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, OPEN).order(97)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "wand")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "setup.title", |env, _| {
+    Box::new(guide::Guide::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for Setup {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Setup", paperpaw_sdk::package_version!())
@@ -68,20 +79,11 @@ impl Plugin for Setup {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "setup.title",
-            Box::new(|env, _| Box::new(guide::Guide::new(env))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
-        r.add_action(ActionSpec::new(OPEN, "setup.open").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenSlot(slots::SETUP, Params::new()));
-            },
-        ))?;
-        // In the device's part of the settings, before *About*.
-        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(97))?;
-        r.add_icon(OPEN, Cow::Borrowed("wand"))?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         // The first start: the guide, once.
         r.on(events::STARTED, |env, _, out| {
             if env.storage().exists(&done_file()) {

@@ -92,6 +92,10 @@ fn header<'a>(call: &'a HttpCall, name: &str) -> Option<&'a str> {
 impl App {
     /// *Sync now*, by buttons: the request it makes.
     fn sync_now(&mut self) -> Vec<HttpCall> {
+        // From the start of the page: one open is gone back to as it was.
+        if self.screen() == "stats.sync" {
+            self.press("back");
+        }
         self.open("stats.sync", Params::new());
         for _ in 0..3 {
             self.press("down");

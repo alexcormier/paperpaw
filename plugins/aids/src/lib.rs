@@ -28,7 +28,6 @@ pub const PLUGIN: Id = Id::new_static("aids");
 pub const BOLD_BEGINNINGS: Setting<bool> = Setting::new("aids.bold-beginnings");
 /// Setting: words to replace, `from = to; …`.
 pub const REPLACE: Setting<Text> = Setting::new("aids.replace");
-const SECTION: &str = "aids.section";
 
 /// The pairs of a replacement list: `from = to` separated by `;`.
 fn pairs(list: &str) -> Vec<(String, String)> {
@@ -117,27 +116,22 @@ fn bold_beginnings(block: &mut Block) {
 #[derive(Debug, Default)]
 pub struct Aids;
 
-/// The aids' part of the reading settings.
-static IN_AIDS: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().section(SECTION);
-
 /// Bold word beginnings, and words replaced.
 static SETTINGS: [SettingSpec; 2] = [
     SettingSpec::switch(
         BOLD_BEGINNINGS.static_str(),
         "aids.setting.bold-beginnings",
         false,
-        groups::READING,
+        groups::READING_AIDS,
     )
-    .with_extra(&IN_AIDS)
     .description("aids.setting.bold-beginnings.help"),
     SettingSpec::text(
         REPLACE.static_str(),
         "aids.setting.replace",
         "",
-        groups::READING,
+        groups::READING_AIDS,
     )
     .advanced()
-    .with_extra(&IN_AIDS)
     .kept_on_reset()
     .description("aids.setting.replace.help"),
 ];

@@ -110,7 +110,10 @@ class Repository(unittest.TestCase):
     def check(self):
         """Whether the check passes in the repository."""
         here = self.root / "tools" / "plugin-files"
+        # As CI runs it: the release before from the tags, not unittest's
+        # own arguments.
         with unittest.mock.patch.multiple(versions, ROOT=self.root, HERE=here), \
+                unittest.mock.patch.object(sys, "argv", ["versions.py"]), \
                 contextlib.redirect_stdout(io.StringIO()):
             try:
                 versions.main()
@@ -150,6 +153,25 @@ class Repository(unittest.TestCase):
         # The fix released alone, not merged back yet.
         self.git("reset", "-q", "--hard", "HEAD^1")
         self.assertFalse(self.check())
+
+    def data(self, version):
+        self.write("tools/plugin-files/data.toml",
+                   f'[fonts-extra]\nversion = "{version}"\nbuild = "tools/extra.py"\n'
+                   'inputs = ["fonts/extra.ttf"]\n')
+
+    def test_a_data_plugin_whose_inputs_changed_needs_a_newer_version(self):
+        self.data("1.0.0")
+        self.write("tools/extra.py", "# one\n")
+        self.write("fonts/extra.ttf", "one")
+        self.commit("data plugin")
+        self.git("tag", "v0.5.0-beta.3")
+        self.assertTrue(self.check())
+        self.write("fonts/extra.ttf", "two")
+        self.commit("a better font")
+        self.assertFalse(self.check())
+        self.data("1.0.1")
+        self.commit("fonts-extra 1.0.1")
+        self.assertTrue(self.check())
 
 
 if __name__ == "__main__":

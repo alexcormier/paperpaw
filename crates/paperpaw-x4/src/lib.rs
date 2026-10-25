@@ -37,6 +37,7 @@ pub mod ds3231;
 pub mod gt911;
 pub mod nvs;
 pub mod ota;
+pub mod paced;
 pub mod panel;
 pub mod partitions;
 pub mod probe;

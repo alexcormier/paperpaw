@@ -40,7 +40,7 @@ pub const DEVICE: DeviceInfo = DeviceInfo {
 };
 
 /// The list for the X4.
-pub const LIST: &str = "https://paperpaw.org/api/v1/plugins.json?device=x4&lang=en";
+pub const LIST: &str = "https://paperpaw.org/api/v1/plugins.json?device=x4&lang=en&order=fair";
 
 /// A storage the test looks into while the kernel has it (in memory, or
 /// on the disk), with as much free space as the test says (none said: not

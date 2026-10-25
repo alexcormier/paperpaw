@@ -31,9 +31,9 @@ use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, host};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
-    HttpRequest, Id, Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode,
-    RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, Storage, StorageError,
+    Arg, Canvas, Command, Commands, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind,
+    Handled, HttpRequest, Id, Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode,
+    RegisterError, Registrar, Screen, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("news");
@@ -457,6 +457,29 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(OPEN, "news.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new()))),
+    FixedAction::new(FETCH, "news.fetch").handler(|env, _, out| {
+        if env.reader() {
+            fetch(env, 0, true, out);
+        } else {
+            let due = FETCH_DUE.id().clone();
+            out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
+                due,
+                core::time::Duration::from_secs(3600),
+            )));
+        }
+    }),
+];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(44)];
+static ICONS: [(Id, &str); 2] = [(OPEN, "rss"), (FETCH, "refresh")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "news.title", |env, _| {
+    Box::new(FeedsScreen::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for News {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "News", paperpaw_sdk::package_version!())
@@ -467,34 +490,12 @@ impl Plugin for News {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "news.title",
-            Box::new(|env, _| Box::new(FeedsScreen::new(env))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "news.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_action(ActionSpec::new(FETCH, "news.fetch").handler(
-            |env: &Env<'_>, _, out: &mut Commands| {
-                if env.reader() {
-                    fetch(env, 0, true, out);
-                } else {
-                    let due = FETCH_DUE.id().clone();
-                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
-                        due,
-                        core::time::Duration::from_secs(3600),
-                    )));
-                }
-            },
-        ))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
         r.on(FETCH_DUE, |env, (), out| fetch(env, 0, true, out))?;
         r.on(FETCHED, fetched)?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(44))?;
-        r.add_icon(OPEN, Cow::Borrowed("rss"))?;
-        r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         widget::register(r)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

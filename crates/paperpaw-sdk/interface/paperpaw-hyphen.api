@@ -7,7 +7,9 @@ impl<'a> paperpaw_hyphen::Patterns<'a>
 pub fn paperpaw_hyphen::Patterns<'a>::hyphenate(&self, &str, &mut dyn core::ops::function::FnMut(usize))
 pub fn paperpaw_hyphen::Patterns<'a>::minimums(&self) -> (usize, usize)
 pub fn paperpaw_hyphen::Patterns<'a>::new(&'a [u8]) -> core::result::Result<Self, paperpaw_hyphen::InvalidPatterns>
+pub fn paperpaw_hyphen::Patterns<'a>::with_minimums(self, usize, usize) -> Self
 impl core::fmt::Debug for paperpaw_hyphen::Patterns<'_>
 pub fn paperpaw_hyphen::Patterns<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const paperpaw_hyphen::BLOCK: usize
+pub const paperpaw_hyphen::MAX_MINIMUM: usize
 pub fn paperpaw_hyphen::compile(&str, &str, u8, u8) -> alloc::vec::Vec<u8>

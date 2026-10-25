@@ -26,8 +26,12 @@ extern crate alloc;
 mod bitmap;
 mod cache;
 pub mod charset;
+mod curve;
 mod font;
 mod glyph;
+mod kern_table;
+#[cfg(feature = "outline")]
+mod kerning;
 mod layout;
 #[cfg(feature = "outline")]
 mod outline;
@@ -44,26 +48,39 @@ mod stored;
 
 pub use bitmap::{BitmapFont, PackBuilder};
 pub use cache::GlyphCache;
+pub use curve::ToneCurve;
 pub use font::{Font, FontError, LineMetrics};
 pub use stored::{PackSource, StoredPack};
 
 /// Whether this build renders scalable (OpenType/TrueType) fonts.
 pub const OUTLINES: bool = cfg!(feature = "outline");
 pub use glyph::{Glyph, GlyphRef};
-pub use layout::{Hyphenate, Line, wrap, wrap_lines, wrap_lines_hyphenated};
+pub use layout::{
+    Hyphenate, Line, MAX_BREAKS, wrap, wrap_lines, wrap_lines_balanced, wrap_lines_balanced_kerned,
+    wrap_lines_hyphenated, wrap_lines_kerned,
+};
 #[cfg(feature = "outline")]
 pub use outline::OutlineFont;
 
 use paperpaw_graphics::Canvas;
 use paperpaw_platform::Color;
 
-/// Width of `text` in pixels.
+/// Width of `text` in pixels, its pairs kerned ([`Font::kern`]).
 pub fn measure(font: &Font, size: f32, text: &str) -> f32 {
-    text.chars().map(|ch| font.advance(ch, size)).sum()
+    let mut width = 0.0;
+    let mut before = None;
+    for ch in text.chars() {
+        if let Some(left) = before {
+            width += font.kern(left, ch, size);
+        }
+        width += font.advance(ch, size);
+        before = Some(ch);
+    }
+    width
 }
 
 /// How a line of text is drawn: its font (and the font's number in the
-/// glyph cache), size and colour, and how much bolder.
+/// glyph cache), size and colour, how much bolder, and on what curve.
 #[derive(Clone, Copy)]
 pub struct TextStyle<'a> {
     pub font: &'a Font,
@@ -75,6 +92,9 @@ pub struct TextStyle<'a> {
     /// bolder text with any font, also bitmap packs. Advances stay as
     /// they are.
     pub bolder: u16,
+    /// How the glyphs' coverage is drawn: smooth, on a contrast curve,
+    /// or without grays ([`ToneCurve`]).
+    pub curve: ToneCurve,
     /// The text goes on from one with a character before it, which
     /// combining marks at its start sit on (see [`glyph_x`]).
     pub based: bool,
@@ -90,6 +110,7 @@ impl<'a> TextStyle<'a> {
             size,
             color,
             bolder: 0,
+            curve: ToneCurve::SMOOTH,
             based: false,
         }
     }
@@ -97,6 +118,12 @@ impl<'a> TextStyle<'a> {
     /// Glyphs widened by `extra` pixels (see [`TextStyle::bolder`]).
     pub fn bolder(mut self, extra: u16) -> Self {
         self.bolder = extra;
+        self
+    }
+
+    /// Glyphs drawn on `curve` (see [`TextStyle::curve`]).
+    pub fn curve(mut self, curve: ToneCurve) -> Self {
+        self.curve = curve;
         self
     }
 
@@ -138,13 +165,14 @@ impl core::fmt::Debug for TextStyle<'_> {
             .field("size", &self.size)
             .field("color", &self.color)
             .field("bolder", &self.bolder)
+            .field("curve", &self.curve)
             .finish_non_exhaustive()
     }
 }
 
 /// Draws one line of `text` in `style` with its baseline at `baseline` and
-/// returns the advance in pixels. Newlines are not interpreted; use
-/// [`wrap`] first.
+/// returns the advance in pixels, its pairs kerned as [`measure`] kerns
+/// them. Newlines are not interpreted; use [`wrap`] first.
 pub fn draw_text(
     canvas: &mut Canvas<'_>,
     cache: &mut GlyphCache,
@@ -159,10 +187,16 @@ pub fn draw_text(
         size,
         color,
         bolder: extra,
+        curve: tone,
         mut based,
     } = *style;
     let mut pen = x;
+    let mut before = None;
     for ch in text.chars() {
+        if let Some(left) = before {
+            pen += font.kern(left, ch, size);
+        }
+        before = Some(ch);
         let glyph = cache.glyph(font_index, font, ch, size);
         let mark = is_mark(ch);
         // Saturating: a pen far out (absurd advances) draws nothing.
@@ -170,14 +204,14 @@ pub fn draw_text(
         based |= !mark;
         let gy = baseline.saturating_add(i32::from(glyph.top));
         if !glyph.is_empty() && extra == 0 {
-            // The usual weight: each pixel's own coverage.
+            // The usual weight: each pixel's own coverage, on its curve.
             canvas.draw_mask(
                 gx,
                 gy,
                 u32::from(glyph.width),
                 u32::from(glyph.height),
                 color,
-                |px, py| glyph.coverage(px as u16, py as u16),
+                |px, py| tone.alpha(glyph.level(px as u16, py as u16)),
             );
         } else if !glyph.is_empty() {
             let width = u32::from(glyph.width);
@@ -189,12 +223,14 @@ pub fn draw_text(
                 color,
                 |px, py| {
                     // The strongest coverage of the pixels up to `extra`
-                    // to the left.
-                    (0..=u32::from(extra))
+                    // to the left, on its curve (curves rise, so the
+                    // strongest stays the strongest).
+                    let level = (0..=u32::from(extra))
                         .filter(|k| *k <= px && px - k < width)
-                        .map(|k| glyph.coverage((px - k) as u16, py as u16))
+                        .map(|k| glyph.level((px - k) as u16, py as u16))
                         .max()
-                        .unwrap_or(0)
+                        .unwrap_or(0);
+                    tone.alpha(level)
                 },
             );
         }
@@ -203,8 +239,9 @@ pub fn draw_text(
     pen - x
 }
 
-/// Renders `chars` of `font` at each of `sizes` into a bitmap font pack.
-/// Characters the font lacks are skipped.
+/// Renders `chars` of `font` at each of `sizes` into a bitmap font pack,
+/// with the font's kerning of them. Characters the font lacks are
+/// skipped.
 #[cfg(feature = "outline")]
 pub fn build_pack(
     font: &OutlineFont,
@@ -212,6 +249,8 @@ pub fn build_pack(
     chars: impl IntoIterator<Item = char> + Clone,
 ) -> alloc::vec::Vec<u8> {
     let mut builder = PackBuilder::new();
+    let kerned: alloc::vec::Vec<char> = chars.clone().into_iter().collect();
+    builder.kerning(&font.kerning_pairs(&kerned));
     for &size in sizes {
         let glyphs = chars
             .clone()

@@ -142,7 +142,11 @@ impl Kernel {
             .find(|&i| self.overlay(i).is_none())
             .unwrap_or(0);
         let guarded = self.guard().is_some_and(|guard| index >= guard);
-        let entry = self.shared.stack.get(base).filter(|_| !guarded);
+        let entry = self
+            .shared
+            .stack
+            .get(base)
+            .filter(|_| !guarded && !self.full_screen(base));
         let hinted = self.stack.get(index).is_some_and(|active| active.hinted);
         self.layout(hinted, entry, None)
     }
@@ -169,7 +173,7 @@ impl Kernel {
             .len()
             .checked_sub(1)
             .map(|top| self.shown_base().min(top));
-        let entry = if screen.guards() || self.guard().is_some() {
+        let entry = if screen.guards() || self.guard().is_some() || screen.mode().is_full_screen() {
             None
         } else if overlay && let Some(base) = below {
             self.shared.stack.get(base)
@@ -197,6 +201,7 @@ impl Kernel {
         // part is (see `area_of`).
         let hinted = self.stack.last().is_some_and(|top| top.hinted);
         if self.guard().is_none()
+            && !self.full_screen(base)
             && let Some(entry) = self.shared.stack.get(base)
         {
             self.layout(hinted, Some(entry), Some(&mut strips));

@@ -23,8 +23,8 @@ use alloc::boxed::Box;
 use paperpaw_sdk::builtin::{events, groups, settings};
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingSpec,
+    Command, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Registrar, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("fonts-browser");
@@ -55,6 +55,25 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "fonts-browser.more")
+    .handler(|_, _, out| out.push(Command::OpenScreen(LIST_SCREEN, Params::new())))];
+/// After the fonts to choose from, where they are chosen.
+static ENTRIES: [MenuEntry; 2] = [
+    MenuEntry::new(Id::new_static(settings::READING_FONT.static_str()), OPEN),
+    MenuEntry::new(Id::new_static(settings::STATUS_FONT.static_str()), OPEN),
+];
+static ICONS: [(Id, &str); 1] = [(OPEN, "typography")];
+
+static SCREENS: [FixedScreen; 2] = [
+    FixedScreen::new(FONT_SCREEN, "fonts-browser.title", |env, params| {
+        Box::new(font::FontScreen::new(env, params))
+    }),
+    FixedScreen::new(LIST_SCREEN, "fonts-browser.title", |env, _| {
+        Box::new(list::ListScreen::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+];
+
 impl Plugin for FontsBrowser {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "More fonts", paperpaw_sdk::package_version!()).description(
@@ -64,26 +83,10 @@ impl Plugin for FontsBrowser {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "fonts-browser.title",
-            Box::new(|env, _| Box::new(list::ListScreen::new(env))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            FONT_SCREEN,
-            "fonts-browser.title",
-            Box::new(|env, params| Box::new(font::FontScreen::new(env, params))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "fonts-browser.more").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
-            },
-        ))?;
-        // After the fonts to choose from, where they are chosen.
-        for setting in [settings::READING_FONT, settings::STATUS_FONT] {
-            r.add_menu_entry(MenuEntry::new(setting.id().clone(), OPEN))?;
-        }
-        r.add_icon(OPEN, Cow::Borrowed("typography"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         // Downloads go on while no screen of the plugin is open; one cut
         // off by a restart is begun anew from the font's page.
         r.on(install::DOWNLOADED, install::received)?;

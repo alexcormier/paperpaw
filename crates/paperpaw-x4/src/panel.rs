@@ -183,6 +183,12 @@ where
         each!(self, d => d.wait())
     }
 
+    /// Whether a refresh started still goes on, without waiting;
+    /// [`Panel::wait`] ends it once it is over.
+    pub fn refreshing(&mut self) -> Result<bool, Error> {
+        each!(self, d => d.refreshing())
+    }
+
     pub fn sleep(&mut self) -> Result<(), Error> {
         each!(self, d => d.sleep())
     }

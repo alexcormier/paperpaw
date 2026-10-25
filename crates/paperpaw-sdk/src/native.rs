@@ -26,6 +26,10 @@
 //! made the plugin. `docs/plugins.md` says how a plugin is built, packed
 //! (`paperpaw-sign pack`), signed and published.
 //!
+//! Functions a plugin spends its time in may be marked [`hot!`](crate::hot):
+//! a device with faster memory than its plugins' code runs them from
+//! there.
+//!
 //! A code plugin is a folder like a data plugin's (`plugin.ini`,
 //! translations, settings) with its code as [`Native::file`]; the kernel
 //! loads the code of those switched on at the start, and switching one
@@ -51,7 +55,7 @@ pub use paperpaw_native::{Chip, HEADER_LEN, Header, Problem, Signature};
 /// against (see the [module documentation](self)). Raised by hand, and
 /// only when what plugins see changes; `crates/paperpaw-sdk/interface.txt`
 /// keeps what it was, and CI fails while they differ (ADR 0026).
-pub const INTERFACE: u16 = 3;
+pub const INTERFACE: u16 = 4;
 
 /// The crates whose types cross between a plugin and PaperPaw, by the
 /// names their paths begin with: the SDK and every crate of PaperPaw it
@@ -820,6 +824,8 @@ macro_rules! plugin {
     };
 }
 
+mod hot;
+
 /// The layouts [`LAYOUT`] digests, and the hash the fingerprint is made
 /// with.
 mod layout {
@@ -1207,6 +1213,9 @@ mod tests {
             relocs: 0,
             align,
             compiler: 1,
+            hot_at: 0,
+            hot_len: 0,
+            patches: 0,
             sha256: [0; 32],
         };
         header.to_bytes().to_vec()
@@ -1256,7 +1265,7 @@ mod tests {
         // images up to 40 KB after it.
         let x4 = CodeRoom::in_flash(0x66_0000, 0x76_0000, 0x66_1000 + 40_960, 2);
         assert_eq!((x4.total, x4.used, x4.granule), (1_044_480, 40_960, 4096));
-        assert_eq!((x4.placed, x4.max_plugins, x4.shared), (2, Some(83), false));
+        assert_eq!((x4.placed, x4.max_plugins, x4.shared), (2, Some(77), false));
         // Nothing placed yet: none of it used; a region too small: none.
         assert_eq!(CodeRoom::in_flash(0, 0x10_0000, 0, 0).used, 0);
         assert_eq!(CodeRoom::in_flash(0x1000, 0x1000, 0, 0).total, 0);
@@ -1347,6 +1356,9 @@ mod tests {
             relocs: 0,
             align: 16,
             compiler: 1,
+            hot_at: 0,
+            hot_len: 0,
+            patches: 0,
             sha256: [0; 32],
         };
         let image = [9u8; 64];

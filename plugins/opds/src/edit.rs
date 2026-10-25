@@ -9,7 +9,7 @@ use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{FolderChosen, Typed};
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
 };
@@ -185,13 +185,7 @@ impl EditScreen {
     }
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
-        match self.list.move_focus(delta, FIELDS.len()) {
-            ListChange::None => {}
-            _ => {
-                cx.request_redraw();
-                cx.request_refresh(RefreshMode::Fast);
-            }
-        }
+        self.list.move_focus(delta, FIELDS.len()).request(cx);
     }
 }
 

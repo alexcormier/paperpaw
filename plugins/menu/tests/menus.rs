@@ -324,7 +324,7 @@ fn a_long_menu_is_paged_and_every_entry_is_reached() {
         .kernel
         .actions()
         .iter()
-        .map(|a| a.id.as_str().to_string())
+        .map(|a| a.id().as_str().to_string())
         .filter(|id| !id.starts_with("core.") && !id.contains("menu"))
         .collect();
     let config = format!("[menus]\ncore.main = {}\n", ids.join(", "));

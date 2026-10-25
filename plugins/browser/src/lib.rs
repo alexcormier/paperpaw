@@ -37,9 +37,9 @@ use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
-    HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode,
-    RegisterError, Registrar, Screen, ScreenSpec,
+    Arg, Canvas, Command, Cx, Env, FixedAction, Gesture, GestureKind, Handled, HttpRequest, Id,
+    Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
+    Screen, ScreenSpec,
 };
 
 use crate::store::Entry;
@@ -76,6 +76,11 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "browser.title")
+    .handler(|_, _, out| out.push(Command::OpenSlot(slots::BROWSER, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(43)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "world")];
+
 impl Plugin for Browser {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Browser", paperpaw_sdk::package_version!())
@@ -92,13 +97,9 @@ impl Plugin for Browser {
             Box::new(move |env, params| Box::new(BrowserScreen::new(env, params, session.clone()))),
         ))?;
         r.bind_slot(slots::BROWSER, SCREEN, Priority::DEFAULT)?;
-        r.add_action(ActionSpec::new(OPEN, "browser.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenSlot(slots::BROWSER, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(43))?;
-        r.add_icon(OPEN, Cow::Borrowed("world"))?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

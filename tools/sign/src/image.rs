@@ -8,7 +8,9 @@
 //!   one data segment (DROM): the bootloader maps only the last of
 //!   several, which hides from the firmware the slot it runs in;
 //! - the app fits either slot, and CrossPoint's (PaperPaw runs in
-//!   CrossPoint's partitions when installed from its menu).
+//!   CrossPoint's partitions when installed from its menu), with at least
+//!   [`FAIL_BELOW`] to spare for the updates to come; it warns below
+//!   [`WARN_BELOW`], and prints the margin either way.
 
 use paperpaw_x4::partitions::{Slots, TABLE_AT, TABLE_LEN};
 
@@ -20,6 +22,11 @@ const HEADER: usize = 24;
 const DROM: core::ops::Range<u32> = 0x3C00_0000..0x3E00_0000;
 /// The room of an app slot in CrossPoint's partition table.
 const CROSSPOINT_SLOT: u32 = 0x64_0000;
+/// The least room an app leaves in the smallest slot: the next updates
+/// grow, and one that no longer fits cannot be installed over the air.
+pub const FAIL_BELOW: u32 = 256 * 1024;
+/// Below this margin the release warns: time to make room.
+pub const WARN_BELOW: u32 = 512 * 1024;
 
 /// What an app image is made of.
 #[derive(Debug, PartialEq, Eq)]
@@ -68,6 +75,12 @@ pub fn app(bytes: &[u8]) -> Result<App, String> {
     })
 }
 
+/// The room of the smallest slot the app has to fit: either of its own,
+/// or CrossPoint's.
+fn room(slots: &Slots) -> u32 {
+    slots.apps[0].1.min(slots.apps[1].1).min(CROSSPOINT_SLOT)
+}
+
 /// What keeps the flash image `bytes` from taking updates; its slots and
 /// app where nothing does.
 pub fn check(bytes: &[u8]) -> Result<(Slots, App), String> {
@@ -86,14 +99,28 @@ pub fn check(bytes: &[u8]) -> Result<(Slots, App), String> {
             app.drom
         ));
     }
-    let room = slots.apps[0].1.min(slots.apps[1].1).min(CROSSPOINT_SLOT);
+    let room = room(&slots);
     if app.len > room {
         return Err(format!(
-            "the app ({} bytes) does not fit a slot of {room} bytes (its own or CrossPoint's)",
-            app.len
+            "the app ({} bytes) does not fit a slot of {room} bytes (its own or CrossPoint's),              {} KB over",
+            app.len,
+            (app.len - room).div_ceil(1024)
+        ));
+    }
+    if room - app.len < FAIL_BELOW {
+        return Err(format!(
+            "the app ({} bytes) leaves {} KB of a slot of {room} bytes (its own or              CrossPoint's); the next updates need at least {} KB",
+            app.len,
+            (room - app.len) / 1024,
+            FAIL_BELOW / 1024
         ));
     }
     Ok((slots, app))
+}
+
+/// The room the app leaves in the smallest slot, in bytes.
+pub fn margin(slots: &Slots, app: &App) -> u32 {
+    room(slots) - app.len
 }
 
 /// `check-image <flash.bin>`.
@@ -106,6 +133,25 @@ pub fn check_file(path: &str) -> Result<(), String> {
          OTA data at {:#x}; the app takes {} bytes, one data segment",
         slots.data, app.len
     );
+    let margin = margin(&slots, &app);
+    println!(
+        "{path}: margin {} KB in the smallest slot ({} bytes)",
+        margin / 1024,
+        room(&slots)
+    );
+    if margin < WARN_BELOW {
+        // An annotation on the release's run where it runs in GitHub Actions.
+        let prefix = match std::env::var("GITHUB_ACTIONS").as_deref() {
+            Ok("true") => "::warning::",
+            _ => "warning: ",
+        };
+        println!(
+            "{prefix}{path}: only {} KB margin left, less than {} KB: make room before the \
+             next releases",
+            margin / 1024,
+            WARN_BELOW / 1024
+        );
+    }
     Ok(())
 }
 
@@ -180,5 +226,15 @@ mod tests {
         let app = image(&[(0x3C00_0020, CROSSPOINT_SLOT as usize)]);
         let why = check(&flash(&app, true)).unwrap_err();
         assert!(why.contains("does not fit"), "{why}");
+    }
+
+    #[test]
+    fn an_app_that_leaves_too_little_margin_fails() {
+        // The header, segment head, checksum and hash: 80 bytes besides.
+        let fits = (CROSSPOINT_SLOT - FAIL_BELOW) as usize - 80;
+        let (slots, app) = check(&flash(&image(&[(0x3C00_0020, fits)]), true)).unwrap();
+        assert_eq!(margin(&slots, &app), FAIL_BELOW);
+        let why = check(&flash(&image(&[(0x3C00_0020, fits + 16)]), true)).unwrap_err();
+        assert!(why.contains("need at least 256 KB"), "{why}");
     }
 }

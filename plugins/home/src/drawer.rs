@@ -6,7 +6,7 @@
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::widgets::grid;
 use paperpaw_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen};
 
@@ -124,7 +124,15 @@ impl Screen for DrawerScreen {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, len).request(cx);
+        match self.list.move_focus(delta, len) {
+            ListChange::Focus { left, reached, .. } => {
+                // The focus goes round a tool's icon and name, a little
+                // past its place.
+                let past = self.style.gap() / 2 + self.style.line() * 3 + 1;
+                ListChange::focus(left.grow(past), reached.grow(past)).request(cx);
+            }
+            change => change.request(cx),
+        }
         Handled::Yes
     }
 

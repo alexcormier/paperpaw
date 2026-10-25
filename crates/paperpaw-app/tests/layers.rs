@@ -358,7 +358,13 @@ fn choosing_a_frame_lays_the_page_out_anew_where_it_was() {
     app.image();
     let seen = app.seen.borrow();
     assert_eq!(seen.columns.len(), 2);
-    assert_eq!(seen.lines[0].1, first, "from the same line");
+    // From the line that holds where the page was, in the narrower column.
+    let (start, next) = (seen.lines[0].1, seen.lines.get(1).map(|line| line.1));
+    assert!(start <= first, "{start:?} after {first:?}");
+    assert!(
+        next.is_none_or(|next| next > first),
+        "{first:?} not on the first line"
+    );
 }
 
 /// Whether the rows of `area` have ink in its columns.

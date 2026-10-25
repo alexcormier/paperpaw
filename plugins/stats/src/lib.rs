@@ -51,8 +51,8 @@ use paperpaw_sdk::builtin::{events, menus, params};
 use paperpaw_sdk::digest::md5;
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, Instant, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingSpec, StorageError, time,
+    ActionSpec, Command, Commands, Env, FixedScreen, Id, Instant, Manifest, MenuEntry, Params,
+    Plugin, RegisterError, Registrar, SettingSpec, StorageError, time,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -489,6 +489,27 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ENTRIES: [MenuEntry; 2] = [
+    MenuEntry::new(menus::TOOLS, OPEN).order(35),
+    MenuEntry::new(menus::READER_MORE, OPEN).order(30),
+];
+static ICONS: [(Id, &str); 2] = [(GROUP, "chart-bar"), (OPEN, "chart-bar")];
+
+static SCREENS: [FixedScreen; 4] = [
+    FixedScreen::new(OVERVIEW, "stats.title", |env, params| {
+        Box::new(overview::Overview::new(env, params))
+    }),
+    FixedScreen::new(CALENDAR, "stats.calendar", |env, _| {
+        Box::new(calendar::Calendar::new(env))
+    }),
+    FixedScreen::new(BOOKS, "stats.books", |env, _| {
+        Box::new(books::BookList::new(env))
+    }),
+    FixedScreen::new(BOOK, "stats.title", |env, params| {
+        Box::new(book::BookView::new(env, params))
+    }),
+];
+
 impl Plugin for Stats {
     fn manifest(&self) -> Manifest {
         Manifest::new(
@@ -516,7 +537,7 @@ impl Plugin for Stats {
                 paperpaw_sdk::SettingGroupSpec::new(GROUP, "stats.group").order(25);
             &SPEC
         })?;
-        r.add_icon(GROUP, Cow::Borrowed("chart-bar"))?;
+        r.add_icons(&ICONS)?;
         r.add_settings(&SETTINGS)?;
 
         // Recording.
@@ -599,26 +620,7 @@ impl Plugin for Stats {
         sync::register(r, Rc::new(RefCell::new(sync::Sync::default())))?;
 
         // The views.
-        r.add_screen(ScreenSpec::new(
-            OVERVIEW,
-            "stats.title",
-            Box::new(|env, params| Box::new(overview::Overview::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CALENDAR,
-            "stats.calendar",
-            Box::new(|env, _| Box::new(calendar::Calendar::new(env))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            BOOKS,
-            "stats.books",
-            Box::new(|env, _| Box::new(books::BookList::new(env))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            BOOK,
-            "stats.title",
-            Box::new(|env, params| Box::new(book::BookView::new(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         let s = state;
         r.add_action(ActionSpec::new(OPEN, "stats.title").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
@@ -639,10 +641,7 @@ impl Plugin for Stats {
                 out.push(Command::OpenScreen(OVERVIEW, params));
             },
         ))?;
-        for (menu, order) in [(menus::TOOLS, 35), (menus::READER_MORE, 30)] {
-            r.add_menu_entry(MenuEntry::new(menu, OPEN).order(order))?;
-        }
-        r.add_icon(OPEN, Cow::Borrowed("chart-bar"))?;
+        r.add_menu_entries(&ENTRIES)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

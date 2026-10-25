@@ -196,7 +196,9 @@ pub fn paperpaw_platform::storage::Mounted<B, M>::rename(&self, &str, &str) -> c
 pub fn paperpaw_platform::storage::Mounted<B, M>::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub struct paperpaw_platform::storage::NoStorage
 impl paperpaw_platform::storage::Storage for paperpaw_platform::storage::NoStorage
 pub fn paperpaw_platform::storage::NoStorage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -214,7 +216,9 @@ pub fn paperpaw_platform::storage::NoStorage::rename(&self, &str, &str) -> core:
 pub fn paperpaw_platform::storage::NoStorage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub trait paperpaw_platform::storage::Storage
 pub fn paperpaw_platform::storage::Storage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Storage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -231,7 +235,9 @@ pub fn paperpaw_platform::storage::Storage::rename(&self, &str, &str) -> core::r
 pub fn paperpaw_platform::storage::Storage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Storage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Storage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Storage::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Storage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 impl paperpaw_platform::storage::Storage for paperpaw_platform::storage::NoStorage
 pub fn paperpaw_platform::storage::NoStorage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -248,7 +254,9 @@ pub fn paperpaw_platform::storage::NoStorage::rename(&self, &str, &str) -> core:
 pub fn paperpaw_platform::storage::NoStorage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Storage for paperpaw_platform::storage::Mounted<B, M>
 pub fn paperpaw_platform::storage::Mounted<B, M>::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -265,7 +273,9 @@ pub fn paperpaw_platform::storage::Mounted<B, M>::rename(&self, &str, &str) -> c
 pub fn paperpaw_platform::storage::Mounted<B, M>::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::is_reserved_name(&str) -> bool
 pub fn paperpaw_platform::storage::is_valid_path(&str) -> bool
 pub enum paperpaw_platform::ButtonState
@@ -404,7 +414,9 @@ pub fn paperpaw_platform::storage::Mounted<B, M>::rename(&self, &str, &str) -> c
 pub fn paperpaw_platform::storage::Mounted<B, M>::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub struct paperpaw_platform::NoStorage
 impl paperpaw_platform::storage::Storage for paperpaw_platform::storage::NoStorage
 pub fn paperpaw_platform::storage::NoStorage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -422,7 +434,9 @@ pub fn paperpaw_platform::storage::NoStorage::rename(&self, &str, &str) -> core:
 pub fn paperpaw_platform::storage::NoStorage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub struct paperpaw_platform::Point
 pub paperpaw_platform::Point::x: i32
 pub paperpaw_platform::Point::y: i32
@@ -479,7 +493,9 @@ pub fn paperpaw_platform::Storage::rename(&self, &str, &str) -> core::result::Re
 pub fn paperpaw_platform::Storage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::Storage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::Storage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::Storage::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::Storage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 impl paperpaw_platform::storage::Storage for paperpaw_platform::storage::NoStorage
 pub fn paperpaw_platform::storage::NoStorage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -496,7 +512,9 @@ pub fn paperpaw_platform::storage::NoStorage::rename(&self, &str, &str) -> core:
 pub fn paperpaw_platform::storage::NoStorage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::NoStorage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Storage for paperpaw_platform::storage::Mounted<B, M>
 pub fn paperpaw_platform::storage::Mounted<B, M>::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -513,4 +531,6 @@ pub fn paperpaw_platform::storage::Mounted<B, M>::rename(&self, &str, &str) -> c
 pub fn paperpaw_platform::storage::Mounted<B, M>::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::truncate(&self, &str, u64) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_platform::storage::Mounted<B, M>::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::write_at(&self, &str, u64, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>

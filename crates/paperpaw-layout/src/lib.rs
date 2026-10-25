@@ -8,8 +8,10 @@
 //!
 //! The engine knows nothing about fonts or drawing: a [`Typesetter`]
 //! measures characters in each [`Face`] (character style, body text or
-//! heading level), and the engine returns positioned lines with their runs
-//! of faces.
+//! heading level) and kerns pairs of them, and the engine returns
+//! positioned lines with their runs of faces. Pairs are kerned within a
+//! word and a face only: a line's width is that of its words drawn one by
+//! one, each run of a face at once.
 
 #![no_std]
 
@@ -23,7 +25,7 @@ pub use paperpaw_document::ImageRef;
 pub use paperpaw_document::TextStyle;
 use paperpaw_document::{Align, Block, BlockKind, Document, DocumentError, Locator, Storage};
 pub use paperpaw_text::Hyphenate;
-use paperpaw_text::wrap_lines_hyphenated;
+use paperpaw_text::{Line, wrap_lines_balanced_kerned, wrap_lines_kerned};
 
 /// Largest extra space per word gap for justification, relative to the
 /// line height.
@@ -48,7 +50,7 @@ pub struct Face {
 
 /// Changes whenever the same input is laid out differently, so readers
 /// rebuild page indexes they cached.
-pub const VERSION: u32 = 6;
+pub const VERSION: u32 = 7;
 
 /// Measures text for the layout engine; readers implement it with their
 /// fonts.
@@ -56,9 +58,66 @@ pub trait Typesetter {
     /// Advance width of `c` in `face`.
     fn advance(&self, face: Face, c: char) -> f32;
 
+    /// How much `right` moves when it follows `left` in `face`, in
+    /// pixels (negative: closer): the font's kerning, as drawing text of
+    /// that face applies it. Asked only for two characters of one word
+    /// and one face (also for a hyphen after a letter); 0 by default.
+    fn kern(&self, face: Face, left: char, right: char) -> f32 {
+        let _ = (face, left, right);
+        0.0
+    }
+
     /// Lines in `face`: `(ascent, line height)`, i.e. the distance from
     /// the top of a line box to its baseline and between baselines.
     fn line(&self, face: Face) -> (f32, f32);
+}
+
+/// Which of a book's own styles are followed (see [`Style::book`]): each
+/// can be left to the reader alone, e.g. a book's alignment but not its
+/// margins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BookStyles(u16);
+
+impl BookStyles {
+    /// None: the reader's settings alone.
+    pub const NONE: BookStyles = BookStyles(0);
+    /// A block's alignment ([`Block::align`]).
+    pub const ALIGN: BookStyles = BookStyles(1);
+    /// A first line's indent ([`Block::indent`]).
+    pub const INDENT: BookStyles = BookStyles(1 << 1);
+    /// Text sizes ([`Block::size`]).
+    pub const SIZE: BookStyles = BookStyles(1 << 2);
+    /// The space above blocks ([`Block::space`]).
+    pub const SPACING: BookStyles = BookStyles(1 << 3);
+    /// Font families the book embeds ([`TextStyle::family`]).
+    pub const FONTS: BookStyles = BookStyles(1 << 4);
+    /// Margins at the sides of blocks ([`Block::margins`]).
+    pub const MARGINS: BookStyles = BookStyles(1 << 5);
+    /// The distance between lines ([`Block::line_height`]).
+    pub const LINE_HEIGHT: BookStyles = BookStyles(1 << 6);
+    /// All of them.
+    pub const ALL: BookStyles = BookStyles(0x7F);
+
+    pub const fn has(self, other: BookStyles) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// These and `other`'s.
+    #[must_use]
+    pub const fn with(self, other: BookStyles) -> BookStyles {
+        BookStyles(self.0 | other.0)
+    }
+
+    /// These without `other`'s.
+    #[must_use]
+    pub const fn without(self, other: BookStyles) -> BookStyles {
+        BookStyles(self.0 & !other.0)
+    }
+
+    /// For a layout's key.
+    pub const fn bits(self) -> u16 {
+        self.0
+    }
 }
 
 /// Typographic settings for a page, in pixels.
@@ -84,6 +143,12 @@ pub struct Style {
     /// page whole, with a heading just before it. 1 lets lines fall where
     /// they fall.
     pub orphans: u8,
+    /// Which of the book's own styles are followed; all by default.
+    pub book: BookStyles,
+    /// Paragraphs broken over all their lines, for lines that end more
+    /// evenly ([`paperpaw_text::wrap_lines_balanced`]), not line by line;
+    /// off by default.
+    pub balanced: bool,
 }
 
 impl Style {
@@ -96,7 +161,21 @@ impl Style {
             justify,
             widows: 1,
             orphans: 1,
+            book: BookStyles::ALL,
+            balanced: false,
         }
+    }
+
+    /// The same, breaking paragraphs over all their lines, or line by line.
+    pub const fn balanced(mut self, balanced: bool) -> Self {
+        self.balanced = balanced;
+        self
+    }
+
+    /// The same, following only `book` of the book's own styles.
+    pub const fn book(mut self, book: BookStyles) -> Self {
+        self.book = book;
+        self
     }
 
     /// The same, keeping at least `widows` lines of a paragraph at the top
@@ -195,10 +274,16 @@ fn word_sources(block: &Block, range: core::ops::Range<usize>) -> Vec<(u32, u32)
     words
 }
 
-/// The face of a block's text at byte `index`.
-fn face_at(block: &Block, base: Face, index: usize) -> Face {
+/// The face of a block's text at byte `index`; the book's own fonts only
+/// where `book` follows them.
+fn face_at(block: &Block, base: Face, index: usize, book: BookStyles) -> Face {
+    let style = base.style.union(block.style_at(index));
     Face {
-        style: base.style.union(block.style_at(index)),
+        style: if book.has(BookStyles::FONTS) {
+            style
+        } else {
+            style.with_family(0)
+        },
         heading: base.heading,
         size: base.size,
     }
@@ -211,10 +296,11 @@ fn line_runs(
     base: Face,
     range: core::ops::Range<usize>,
     extra: usize,
+    book: BookStyles,
 ) -> Vec<LineRun> {
     let mut runs: Vec<LineRun> = Vec::new();
     for (i, _) in block.text[range.clone()].char_indices() {
-        let face = face_at(block, base, range.start + i);
+        let face = face_at(block, base, range.start + i, book);
         match runs.last_mut() {
             Some(run) if run.face == face => run.end = i,
             _ => runs.push(LineRun {
@@ -239,8 +325,9 @@ fn line_runs(
     runs
 }
 
-/// The heading level of a block (0: none) and the face of its text.
-fn block_face(block: &Block) -> (u8, Face) {
+/// The heading level of a block (0: none) and the face of its text; the
+/// book's size only where `style` follows it.
+fn block_face(block: &Block, style: &Style) -> (u8, Face) {
     let heading = match block.kind {
         BlockKind::Heading(level) => level.clamp(1, 6),
         _ => 0,
@@ -252,14 +339,134 @@ fn block_face(block: &Block) -> (u8, Face) {
             TextStyle::REGULAR
         },
         heading,
-        size: block.size.unwrap_or(0),
+        size: book_size(block, style).unwrap_or(0),
     };
     (heading, face)
 }
 
+/// The book's text size of a block, where `style` follows it.
+fn book_size(block: &Block, style: &Style) -> Option<u16> {
+    block.size.filter(|_| style.book.has(BookStyles::SIZE))
+}
+
+/// The ems of a block's text, in pixels: the book's are those of the
+/// block's own text.
+fn block_em(block: &Block, style: &Style) -> f32 {
+    style.em * f32::from(book_size(block, style).unwrap_or(100)) / 100.0
+}
+
+/// Where a block's lines start and how wide they are: the first line
+/// (indented where the block starts, by half a line at most, perhaps
+/// hanging out into the book's margin) and the others, within the book's
+/// margins, each kept to a quarter of the width.
+#[derive(Debug, Clone, Copy)]
+struct Measure {
+    first: (f32, f32),
+    rest: (f32, f32),
+}
+
+impl Measure {
+    fn of(block: &Block, style: &Style, width: f32, indent: f32) -> Measure {
+        let (start, end) = match style.book.has(BookStyles::MARGINS) {
+            true => {
+                let em = block_em(block, style);
+                let side = |m: u16| (f32::from(m) / 100.0 * em).clamp(0.0, width / 4.0);
+                (side(block.margins.0), side(block.margins.1))
+            }
+            false => (0.0, 0.0),
+        };
+        let rest = (start, (width - start - end).max(1.0));
+        // Indented by half a line at most, so a narrow page keeps room.
+        let first_x = (start + indent).clamp(0.0, start + rest.1 / 2.0);
+        Measure {
+            first: (first_x, (width - end - first_x).max(1.0)),
+            rest,
+        }
+    }
+
+    /// Where line `n` starts and how wide it is.
+    fn line(&self, n: usize) -> (f32, f32) {
+        if n == 0 { self.first } else { self.rest }
+    }
+}
+
+/// The lines of `block` from byte `from` of its text on (a line's start),
+/// their ranges in its text, and where they are set: broken line by line
+/// from there, or (balanced) over the whole block, from where it starts
+/// (`indent` is its first line's), and those from `from` on taken.
+fn block_lines(
+    block: &Block,
+    from: usize,
+    base: Face,
+    cx: &LayoutContext<'_>,
+    heading: u8,
+    indent: f32,
+) -> Vec<(Line, (f32, f32))> {
+    let (style, width) = (cx.style, cx.width);
+    let advance = |i: usize, c: char| {
+        cx.typesetter
+            .advance(face_at(block, base, i, style.book), c)
+    };
+    // A pair in one face: the character before `i` and `right`, the text's
+    // own there or a hyphen set like the character before it.
+    let kern = |i: usize, left: char, right: char| {
+        let face = face_at(block, base, i - left.len_utf8(), style.book);
+        let own = block.text[i..].starts_with(right);
+        if own && face_at(block, base, i, style.book) != face {
+            return 0.0;
+        }
+        cx.typesetter.kern(face, left, right)
+    };
+    let hyphenate = cx.hyphenate.filter(|_| heading == 0);
+    if style.balanced {
+        let measure = Measure::of(block, style, width, indent);
+        let lines = wrap_lines_balanced_kerned(
+            &block.text,
+            |n| measure.line(n).1,
+            advance,
+            kern,
+            hyphenate,
+        );
+        return lines
+            .into_iter()
+            .enumerate()
+            .filter(|(_, line)| line.range.start >= from)
+            .map(|(n, line)| (line, measure.line(n)))
+            .collect();
+    }
+    // A page that goes on with a block sets its lines as wide as those
+    // after a first line.
+    let measure = match from == 0 && !block.continues {
+        true => Measure::of(block, style, width, indent),
+        false => {
+            let rest = Measure::of(block, style, width, 0.0).rest;
+            Measure { first: rest, rest }
+        }
+    };
+    let lines = wrap_lines_kerned(
+        &block.text[from..],
+        |n| measure.line(n).1,
+        |i, c| advance(from + i, c),
+        |i, left, right| kern(from + i, left, right),
+        hyphenate,
+    );
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(n, mut line)| {
+            line.range = from + line.range.start..from + line.range.end;
+            (line, measure.line(n))
+        })
+        .collect()
+}
+
 /// How a block's lines are aligned.
 fn block_align(block: &Block, style: &Style, heading: u8) -> Align {
-    match block.align {
+    let align = match style.book.has(BookStyles::ALIGN) {
+        true => block.align,
+        false => Align::Auto,
+    };
+    match align {
         Align::Auto if heading > 0 => Align::Start,
         Align::Auto | Align::Justify if style.justify => Align::Justify,
         Align::Auto | Align::Justify => Align::Start,
@@ -270,15 +477,15 @@ fn block_align(block: &Block, style: &Style, heading: u8) -> Align {
 /// The indent of a block's first line, where it starts (not where a page
 /// continues it).
 fn first_indent(block: &Block, style: &Style, align: Align) -> f32 {
-    // The book's ems are those of the block's text.
-    let em = style.em * f32::from(block.size.unwrap_or(100)) / 100.0;
-    if !block.continues
-        && block.kind == BlockKind::Paragraph
-        && matches!(align, Align::Start | Align::Justify)
-    {
-        block
-            .indent
-            .map_or(style.indent, |i| f32::from(i) / 100.0 * em)
+    let em = block_em(block, style);
+    let book = block.indent.filter(|_| style.book.has(BookStyles::INDENT));
+    if block.continues || block.kind != BlockKind::Paragraph {
+        0.0
+    } else if let Some(hanging) = book.filter(|&i| i < 0) {
+        // A hanging indent, whatever the alignment.
+        f32::from(hanging) / 100.0 * em
+    } else if matches!(align, Align::Start | Align::Justify) {
+        book.map_or(style.indent, |i| f32::from(i) / 100.0 * em)
     } else {
         0.0
     }
@@ -344,10 +551,8 @@ pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, Docume
     let LayoutContext {
         document,
         storage,
-        width,
         style,
-        typesetter,
-        hyphenate,
+        ..
     } = *cx;
     let Some(block) = document.block_at(storage, at)? else {
         return Ok(at);
@@ -359,18 +564,13 @@ pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, Docume
     if from == 0 {
         return Ok(at);
     }
-    let (heading, base) = block_face(&block);
+    let (heading, base) = block_face(&block, style);
     let indent = first_indent(&block, style, block_align(&block, style, heading));
-    let lines = wrap_lines_hyphenated(
-        &block.text,
-        |n| if n == 0 { width - indent } else { width },
-        |i, c| typesetter.advance(face_at(&block, base, i), c),
-        hyphenate.filter(|_| heading == 0),
-    );
+    let lines = block_lines(&block, 0, base, cx, heading, indent);
     let start = lines
         .iter()
         .rev()
-        .map(|line| line.range.start)
+        .map(|(line, _)| line.range.start)
         .find(|start| *start <= from)
         .unwrap_or(0);
     Ok(Locator::new(at.section, block.source_offset(start)))
@@ -396,7 +596,7 @@ pub fn layout_page(
         width,
         style,
         typesetter,
-        hyphenate,
+        ..
     } = *cx;
     let mut page = Page {
         start,
@@ -476,17 +676,18 @@ pub fn layout_page(
             at = Locator::new(at.section, block.end);
             continue;
         }
-        let (heading, base) = block_face(&block);
-        let (ascent, line_height) = typesetter.line(base);
-        let line_height = line_height.max(MIN_LINE_HEIGHT);
-        // The book's ems are those of the block's text.
-        let em = style.em * f32::from(block.size.unwrap_or(100)) / 100.0;
+        let (heading, base) = block_face(&block, style);
+        let em = block_em(&block, style);
+        let (ascent, line_height) = block_line(&block, style, typesetter.line(base), em);
         let lines_before = page.lines.len();
         let had_content = !page.is_past_end();
         let at_block_start = from == 0 && !block.continues;
         // The book's space where it sets one; at the top of a page only
         // where a chapter starts (e.g. a title set lower).
-        let book_space = block.space.map(|s| f32::from(s) / 100.0 * em);
+        let book_space = block
+            .space
+            .filter(|_| style.book.has(BookStyles::SPACING))
+            .map(|s| f32::from(s) / 100.0 * em);
         if page.is_past_end() && at_block_start && book_space.is_some() {
             let first = document.block_at(storage, Locator::new(at.section, 0))?;
             if first.is_some_and(|f| f.start == block.start) {
@@ -505,15 +706,16 @@ pub fn layout_page(
         } else {
             0.0
         };
-        let text = &block.text[from..];
-        let lines = wrap_lines_hyphenated(
-            text,
-            |n| if n == 0 { width - indent } else { width },
-            |i, c| typesetter.advance(face_at(&block, base, from + i), c),
-            hyphenate.filter(|_| heading == 0),
-        );
+        // Balanced, the whole block is broken from its start, its first
+        // line indented as there.
+        let block_indent = match style.balanced {
+            true => first_indent(&block, style, align),
+            false => indent,
+        };
+        let lines = block_lines(&block, from, base, cx, heading, block_indent);
 
-        for (n, line) in lines.iter().enumerate() {
+        for (n, (line, (first_x, available))) in lines.iter().enumerate() {
+            let (first_x, available) = (*first_x, *available);
             let fits = y + line_height <= height;
             if !fits && !page.is_past_end() {
                 // Widows and orphans: as many lines go on as the next page
@@ -525,7 +727,7 @@ pub fn layout_page(
                 let orphans = usize::from(style.orphans.max(1));
                 let alone = stay < orphans;
                 let line_start = |i: usize| {
-                    Locator::new(at.section, block.source_offset(from + lines[i].range.start))
+                    Locator::new(at.section, block.source_offset(lines[i].0.range.start))
                 };
                 if alone && had_content {
                     match after_heading {
@@ -551,8 +753,6 @@ pub fn layout_page(
                 // falls rather than leaving an orphan here.
                 return ended(page, line_start(n));
             }
-            let first_x = if n == 0 { indent } else { 0.0 };
-            let available = if n == 0 { width - indent } else { width };
             let free = (available - line.width).max(0.0);
             let (x, word_spacing) = match align {
                 Align::Center => (first_x + free / 2.0, 0.0),
@@ -570,18 +770,18 @@ pub fn layout_page(
                 }
                 _ => (first_x, 0.0),
             };
-            let mut line_text = String::from(&text[line.range.clone()]);
+            let mut line_text = String::from(&block.text[line.range.clone()]);
             if line.hyphen {
                 line_text.push('-');
             }
-            let range = from + line.range.start..from + line.range.end;
+            let range = line.range.clone();
             let words = word_sources(&block, range.clone());
             page.lines.push(PageLine {
                 x,
                 baseline: y + ascent,
                 text: line_text,
                 word_spacing,
-                runs: line_runs(&block, base, range, usize::from(line.hyphen)),
+                runs: line_runs(&block, base, range, usize::from(line.hyphen), style.book),
                 section: at.section,
                 words,
             });
@@ -600,6 +800,24 @@ pub fn layout_page(
     }
     page.end = at;
     Ok(page)
+}
+
+/// A block's lines: `(ascent, line height)`, the reader's (`reader`, as
+/// the typesetter says) or, where `style` follows it, the book's
+/// distance between lines in percent of the block's text size (`em`),
+/// kept between its size and three times it, the text centred in it.
+fn block_line(block: &Block, style: &Style, reader: (f32, f32), em: f32) -> (f32, f32) {
+    let (ascent, line_height) = (reader.0, reader.1.max(MIN_LINE_HEIGHT));
+    match block
+        .line_height
+        .filter(|_| style.book.has(BookStyles::LINE_HEIGHT))
+    {
+        Some(percent) => {
+            let book = (em * f32::from(percent.clamp(100, 300)) / 100.0).max(MIN_LINE_HEIGHT);
+            (ascent + (book - line_height) / 2.0, book)
+        }
+        None => (ascent, line_height),
+    }
 }
 
 /// `page`, ending at `end`. A page that ends where it starts, or before,
@@ -725,6 +943,8 @@ mod tests {
         justify: false,
         widows: 1,
         orphans: 1,
+        book: BookStyles::ALL,
+        balanced: false,
     };
 
     #[test]
@@ -1118,5 +1338,89 @@ aa bb cc dd
         assert_eq!(page.end, Locator::new(0, 3));
         let next = layout(&doc, page.end.offset, 35.0, &STYLE);
         assert_eq!(texts(&next), vec!["#h", "bb"]);
+    }
+
+    /// One paragraph of 4-letter words, laid out 40 wide in `style`.
+    fn styled_page(block: Block, style: &Style) -> (Page, Locator) {
+        let doc = Blocks::new(move |at: Locator| (at.offset < 79).then(|| block.clone()));
+        let storage = paperpaw_document::NoStorage;
+        let cx = LayoutContext::new(&doc, &storage, 40.0, style, &Units);
+        let page = layout_page(&cx, Locator::new(0, 0), 100.0).unwrap();
+        // Where the second line starts, as found from inside it.
+        let second = Locator::new(0, page.lines[1].words[0].0);
+        let inside = Locator::new(0, second.offset + 2);
+        assert_eq!(
+            line_start(&cx, inside).unwrap(),
+            second,
+            "line starts agree"
+        );
+        (page, second)
+    }
+
+    fn words() -> Block {
+        let text =
+            "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll mmmm nnnn oooo pppp";
+        block(text, 0, 79)
+    }
+
+    #[test]
+    fn book_margins_narrow_the_lines_within_a_quarter() {
+        // 2 and 9 ems at 10 px: 20 px kept to a quarter of 40, 10 px.
+        let book = words().margins(200, 900);
+        let (page, _) = styled_page(book.clone(), &STYLE);
+        for line in &page.lines {
+            assert_eq!(line.x, 10.0);
+            assert!(line.text.len() <= 20, "{:?}", line.text);
+        }
+        // Left to the reader: the whole width.
+        let reader = STYLE.book(BookStyles::ALL.without(BookStyles::MARGINS));
+        let (page, _) = styled_page(book, &reader);
+        assert!(page.lines.iter().all(|l| l.x == 0.0));
+        assert_eq!(
+            page.lines[0].text,
+            "aaaa bbbb cccc dddd eeee ffff gggg hhhh"
+        );
+    }
+
+    #[test]
+    fn a_negative_indent_hangs_into_the_margin() {
+        let hanging = words().margins(100, 0).indent(-100);
+        let (page, _) = styled_page(hanging.clone(), &STYLE);
+        assert_eq!(page.lines[0].x, 0.0);
+        assert!(page.lines[1..].iter().all(|l| l.x == 10.0));
+        // Without a margin it cannot hang out of the page.
+        let (page, _) = styled_page(words().indent(-100), &STYLE);
+        assert!(page.lines.iter().all(|l| l.x == 0.0));
+        // The book's indent left to the reader: the margin stays.
+        let reader = STYLE.book(BookStyles::ALL.without(BookStyles::INDENT));
+        let (page, _) = styled_page(hanging, &reader);
+        assert!(page.lines.iter().all(|l| l.x == 10.0));
+    }
+
+    #[test]
+    fn the_books_line_height_only_where_followed() {
+        let tall = words().line_height(200);
+        let (page, _) = styled_page(tall.clone(), &STYLE);
+        assert_eq!(page.lines[1].baseline - page.lines[0].baseline, 20.0);
+        let reader = STYLE.book(BookStyles::ALL.without(BookStyles::LINE_HEIGHT));
+        let (page, _) = styled_page(tall, &reader);
+        assert_eq!(page.lines[1].baseline - page.lines[0].baseline, 10.0);
+    }
+
+    #[test]
+    fn the_books_alignment_size_and_fonts_can_be_left_to_the_reader() {
+        let centred = words().align(Align::Center).size(200).runs(vec![Run {
+            start: 0,
+            end: 4,
+            style: TextStyle::REGULAR.with_family(3),
+        }]);
+        let (page, _) = styled_page(centred.clone(), &STYLE);
+        assert!(page.lines[0].x > 0.0);
+        assert_eq!(page.lines[0].runs[0].face.size, 200);
+        assert_eq!(page.lines[0].runs[0].face.style.family(), 3);
+        let (page, _) = styled_page(centred, &STYLE.book(BookStyles::NONE));
+        assert_eq!(page.lines[0].x, 0.0);
+        assert_eq!(page.lines[0].runs[0].face.size, 0);
+        assert_eq!(page.lines[0].runs[0].face.style.family(), 0);
     }
 }

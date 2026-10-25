@@ -24,7 +24,7 @@ use crate::event::Event;
 use crate::status::item_ids;
 use crate::ui::choice;
 use crate::ui::reorder::{Reorder, ReorderStep};
-use crate::ui::{self, ListChange, ListView, UiStyle};
+use crate::ui::{self, ListView, UiStyle};
 use crate::widgets;
 use crate::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, PointerEvent, Rect,
@@ -282,9 +282,7 @@ impl Screen for ListScreen {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, len) != ListChange::None {
-            self.redraw(cx);
-        }
+        self.list.move_focus(delta, len).request(cx);
         Handled::Yes
     }
 

@@ -32,8 +32,8 @@ use paperpaw_sdk::filters::{InputFilterSpec, InputVerdict};
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::status::{StatusItemSpec, StatusValue};
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, InputEvent, Instant, MenuEntry, MenuNeed, Point,
-    PointerPhase, RegisterError, Registrar, SettingSpec,
+    Command, Env, FixedAction, Id, InputEvent, Instant, MenuEntry, MenuNeed, Point, PointerPhase,
+    RegisterError, Registrar, SettingSpec,
 };
 
 use crate::Shared;
@@ -211,22 +211,30 @@ fn how_to_unlock(env: &Env<'_>) -> &'static str {
     }
 }
 
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(TOGGLE, "lock.touch-toggle").handler(|env, _, out| {
+        // Said as the setting changes (below), as for any switch.
+        out.push(Command::set(&LOCKED, !env.settings().read(&LOCKED)));
+    }),
+    FixedAction::new(HINT, "lock.touch-hint")
+        .handler(|env, _, out| out.push(Command::Notify(env.i18n().tr(how_to_unlock(env)).into()))),
+];
+/// Beside night mode in the quick panel.
+static ENTRIES: [MenuEntry; 2] = [
+    MenuEntry::new(menus::QUICK, Id::new_static(LOCKED.static_str())).order(11),
+    MenuEntry::new(menus::READER, Id::new_static(LOCKED.static_str())).order(60),
+];
+static ICONS: [(Id, &str); 2] = [
+    (TOGGLE, "lock"),
+    (Id::new_static(LOCKED.static_str()), "lock"),
+];
+
 /// Adds the touch lock; `state` is the screen lock's, whose code entry
 /// it leaves alone.
 pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
-    r.add_action(ActionSpec::new(TOGGLE, "lock.touch-toggle").handler(
-        |env: &Env<'_>, _, out: &mut Commands| {
-            // Said as the setting changes (below), as for any switch.
-            out.push(Command::set(&LOCKED, !env.settings().read(&LOCKED)));
-        },
-    ))?;
-    r.add_icon(TOGGLE, Cow::Borrowed("lock"))?;
-    r.add_action(ActionSpec::new(HINT, "lock.touch-hint").handler(
-        |env: &Env<'_>, _, out: &mut Commands| {
-            out.push(Command::Notify(env.i18n().tr(how_to_unlock(env)).into()));
-        },
-    ))?;
+    r.add_actions(&ACTIONS)?;
+    r.add_icons(&ICONS)?;
     // However it was switched: the quick panel, the reader's menu,
     // Settings, the toggle, a rule.
     r.on(events::SETTING_CHANGED, |env, changed, out| {
@@ -264,11 +272,7 @@ pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterE
                 .then_some(StatusValue::Icon(Cow::Borrowed("lock")))
         }),
     ))?;
-    // Beside night mode in the quick panel.
-    for (menu, order) in [(menus::QUICK, 11), (menus::READER, 60)] {
-        r.add_menu_entry(MenuEntry::new(menu, LOCKED.id().clone()).order(order))?;
-    }
-    r.add_icon(LOCKED.id().clone(), Cow::Borrowed("lock"))?;
+    r.add_menu_entries(&ENTRIES)?;
     // Only where there is touch to lock.
     r.set_menu_need(LOCKED.id().clone(), MenuNeed::Touch)?;
     r.set_menu_need(TOGGLE, MenuNeed::Touch)?;

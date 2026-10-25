@@ -26,7 +26,11 @@ use crate::widgets::WidgetSpec;
 #[non_exhaustive]
 pub enum Contribution {
     Action(Box<ActionSpec>),
+    /// Actions kept in the program (a `static` list).
+    FixedActions(&'static [crate::action::FixedAction]),
     Screen(ScreenSpec),
+    /// Screens kept in the program (a `static` list).
+    FixedScreens(&'static [crate::screen::FixedScreen]),
     Slot(SlotSpec),
     /// A screen proposed for a slot (see [`Registrar::bind_slot`](crate::Registrar::bind_slot)).
     #[non_exhaustive]
@@ -96,7 +100,11 @@ pub enum Contribution {
     Format(Box<FormatSpec>),
     Hyphenation(HyphenationSpec),
     MenuEntry(MenuEntry),
+    /// Menu entries kept in the program (a `static` list).
+    FixedMenuEntries(&'static [MenuEntry]),
     MenuSection(MenuSection),
+    /// Icons kept in the program (a `static` list of items and icons).
+    FixedIcons(&'static [(Id, &'static str)]),
     #[non_exhaustive]
     Icon {
         item: Id,
@@ -196,14 +204,21 @@ pub enum Contribution {
         painters: &'static crate::ui::look::Painters,
         priority: Priority,
     },
+    /// A contribution of a kind that comes after this release, by its key
+    /// (see [`Registrar::add_extended`](crate::Registrar::add_extended)).
+    #[non_exhaustive]
+    Extended {
+        key: Id,
+        params: crate::Params,
+    },
 }
 
 impl Contribution {
     /// What kind it is, e.g. `action` or `setting`.
     pub fn kind(&self) -> &'static str {
         match self {
-            Contribution::Action(_) => "action",
-            Contribution::Screen(_) => "screen",
+            Contribution::Action(_) | Contribution::FixedActions(_) => "action",
+            Contribution::Screen(_) | Contribution::FixedScreens(_) => "screen",
             Contribution::Slot(_) => "slot",
             Contribution::SlotBinding { .. } => "slot-binding",
             Contribution::Setting(_) | Contribution::FixedSettings(_) => "setting",
@@ -224,9 +239,9 @@ impl Contribution {
             Contribution::FontBinding { .. } => "font-binding",
             Contribution::Format(_) => "format",
             Contribution::Hyphenation(_) => "hyphenation",
-            Contribution::MenuEntry(_) => "menu-entry",
+            Contribution::MenuEntry(_) | Contribution::FixedMenuEntries(_) => "menu-entry",
             Contribution::MenuSection(_) => "menu-section",
-            Contribution::Icon { .. } => "icon",
+            Contribution::Icon { .. } | Contribution::FixedIcons(_) => "icon",
             Contribution::MenuNeed { .. } => "menu-need",
             Contribution::HideMenuEntry { .. } => "hidden-menu-entry",
             Contribution::ItemState { .. } => "item-state",
@@ -264,6 +279,7 @@ impl Contribution {
             Contribution::EventDeclared(_) => "event",
             Contribution::Translations(_) => "translations",
             Contribution::UiLook { .. } => "ui-look",
+            Contribution::Extended { .. } => "extended",
         }
     }
 

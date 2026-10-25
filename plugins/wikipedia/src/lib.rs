@@ -31,9 +31,9 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::web::encode;
 use paperpaw_sdk::{
-    Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    Manifest, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec,
+    Canvas, Color, Command, Commands, Cx, Env, FixedScreen, Gesture, GestureKind, Handled,
+    HttpRequest, Id, Manifest, Params, Plugin, Priority, Rect, RefreshMode, RegisterError,
+    Registrar, Screen,
 };
 
 pub const PLUGIN: Id = Id::new_static("wikipedia");
@@ -165,20 +165,22 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    SCREEN,
+    "wikipedia.title",
+    |env, params| Box::new(Summary::new(env, params)),
+)];
+
 impl Plugin for Wikipedia {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Wikipedia", paperpaw_sdk::package_version!())
+        Manifest::new(PLUGIN, "Wikipedia lookup", paperpaw_sdk::package_version!())
             .description("Looks words up online, beside the dictionaries.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "wikipedia.title",
-            Box::new(|env, params| Box::new(Summary::new(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.bind_slot(slots::LOOKUP_ONLINE, SCREEN, Priority::DEFAULT)?;
         r.add_lookup_provider(
             LookupProviderSpec::new(PROVIDER, "wikipedia.title", provide).online(),

@@ -606,12 +606,12 @@ fn ask(device: &mut Device, request: Request) -> Result<Option<String>, String> 
             let mut actions: Vec<_> = kernel
                 .actions()
                 .iter()
-                .filter(|a| a.id.as_str().starts_with(prefix.as_str()))
+                .filter(|a| a.id().as_str().starts_with(prefix.as_str()))
                 .map(|a| {
                     format!(
                         "{{\"id\": {}, \"title\": {}}}",
-                        string(a.id.as_str()),
-                        string(kernel.translator().tr(&a.title))
+                        string(a.id().as_str()),
+                        string(kernel.translator().tr(a.title()))
                     )
                 })
                 .collect();

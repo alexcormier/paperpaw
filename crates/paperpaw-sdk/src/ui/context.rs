@@ -111,6 +111,35 @@ impl<'c> Ui<'c> {
         );
     }
 
+    /// A button filled as an `on` one is, without being on: e.g. a key
+    /// whose fill is the focus of the buttons.
+    pub fn filled_button(&mut self, rect: Rect, label: &str, focused: bool) {
+        super::button::draw_button_said(
+            &mut self.canvas,
+            self.env,
+            self.style,
+            rect,
+            label,
+            true,
+            false,
+            focused,
+        );
+    }
+
+    /// An icon button filled without being on (see
+    /// [`Ui::filled_button`]); the ink of its icon.
+    pub fn filled_icon_button(&mut self, rect: Rect, name: &str, focused: bool) -> Color {
+        super::button::draw_icon_button_said(
+            &mut self.canvas,
+            self.style,
+            rect,
+            name,
+            true,
+            false,
+            focused,
+        )
+    }
+
     /// A button that does nothing now.
     pub fn faint_button(&mut self, rect: Rect, label: &str, focused: bool) {
         super::draw_faint_button(&mut self.canvas, self.env, self.style, rect, label, focused);

@@ -39,8 +39,8 @@ use paperpaw_sdk::lookup::{LookupAnswer, LookupEntry, LookupProviderSpec, Lookup
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params,
-    Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
+    Arg, Canvas, Color, Command, Cx, Env, FixedScreen, Gesture, GestureKind, Handled, Id, Manifest,
+    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, SettingSpec,
     Storage, StorageError,
 };
 use paperpaw_stardict::{Builder, Dictionary};
@@ -87,6 +87,12 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    POPUP,
+    "dictionary.title",
+    |env, params| Box::new(Popup::new(env, params)),
+)];
+
 impl Plugin for DictionaryPlugin {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Dictionary", paperpaw_sdk::package_version!())
@@ -96,11 +102,7 @@ impl Plugin for DictionaryPlugin {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            POPUP,
-            "dictionary.title",
-            Box::new(|env, params| Box::new(Popup::new(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.bind_slot(slots::LOOKUP, POPUP, Priority::DEFAULT)?;
         r.add_lookup_provider(LookupProviderSpec::new(
             PROVIDER,

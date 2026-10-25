@@ -37,6 +37,7 @@
 
 extern crate alloc;
 
+mod awake;
 mod bluetooth;
 mod builder;
 mod chrome;
@@ -55,9 +56,11 @@ mod keymap;
 mod meter;
 mod network;
 mod plugins;
+mod realtime;
 mod recall;
 mod refresh;
 mod registry;
+mod room;
 mod screens;
 #[cfg(test)]
 mod tests;
@@ -318,6 +321,12 @@ pub struct Kernel {
     /// A screen was opened or closed since the last call ended; then the
     /// frame drawn for it is not shown yet (see [`Kernel::shown`]).
     screens_changed: bool,
+    /// Raw keys taken, the way out, frames asked (see [`realtime`]).
+    raw: realtime::RawKeys,
+    /// Room made for the screen that needs memory (see [`room`]).
+    lease: Option<room::Lease>,
+    /// Plugins' holds on the device's sleep (see [`awake`]).
+    holds: awake::Holds,
     /// Setting defaults from plugins, applied once all are registered:
     /// `(plugin, setting, value)`.
     plugin_defaults: Vec<(Id, Id, Cow<'static, str>)>,
@@ -465,6 +474,11 @@ impl Kernel {
             return self.finish();
         }
         let event = self.page_buttons_swapped(event);
+        match event {
+            InputEvent::Button { name, state } => self.note_held(name, state),
+            InputEvent::Pointer(pointer) => self.note_corner(&pointer, now),
+            _ => {}
+        }
         // Plugins' input filters come first; while a screen guards the
         // device, or a PIN or a password is entered, only those of its
         // plugin.
@@ -510,6 +524,7 @@ impl Kernel {
             _ => self.shared.last_input,
         };
         match event {
+            InputEvent::Button { name, state } if self.raw_key(name, state, now) => {}
             InputEvent::Button { name, state } => {
                 if state == ButtonState::Pressed {
                     self.input.pressed_on = self.stack.last().map(|top| top.serial);
@@ -796,8 +811,15 @@ impl Kernel {
             .shared
             .settings
             .int(core_settings::SLEEP_AFTER.as_str());
-        (self.shared.caps.sleep && minutes > 0)
-            .then(|| self.last_activity.add_millis(minutes as u64 * 60_000))
+        let set = (minutes as u64).saturating_mul(60_000);
+        // Longer while a screen played by watching asks for it.
+        let asked = self.top_mode().awake().map_or(0, |idle| {
+            u64::try_from(idle.as_millis()).unwrap_or(u64::MAX)
+        });
+        let due = self.last_activity.add_millis(set.max(asked));
+        // Not before plugins' holds end (ADR 0030).
+        let due = self.held_until().map_or(due, |held| held.max(due));
+        (self.shared.caps.sleep && minutes > 0).then_some(due)
     }
 
     /// Advances time, e.g. when a requested [`Effect::WakeAt`] is due.
@@ -805,6 +827,8 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.hide_hints();
+        self.escape(now);
+        self.count_awake();
         if self.sleep_due().is_some_and(|at| at <= now) {
             self.last_activity = now;
             // Busy: reading aloud, downloading, serving. Else asleep.
@@ -978,8 +1002,12 @@ impl Kernel {
 
     /// The menus every plugin added to, with their icons (e.g. for a tool
     /// that checks a plugin's).
-    pub fn menus(&self) -> &Menus {
-        &self.shared.menus
+    pub fn menus(&self) -> paperpaw_sdk::MenuView<'_> {
+        paperpaw_sdk::MenuView::new(
+            &self.shared.menus,
+            &self.shared.actions,
+            &self.shared.settings,
+        )
     }
 
     /// Every plugin with its state, `core` first.
@@ -999,12 +1027,7 @@ impl Kernel {
 
     /// The ids of every screen plugins added, whether open or not.
     pub fn known_screens(&self) -> impl Iterator<Item = &Id> {
-        self.shared
-            .registry
-            .screens
-            .titles()
-            .iter()
-            .map(|(id, _)| id)
+        self.shared.registry.screens.list().iter().map(|(id, _)| id)
     }
 
     /// What the device did since start (see [`paperpaw_sdk::usage`]).
@@ -1299,6 +1322,13 @@ struct Shared {
     memory: paperpaw_sdk::memory::Memory,
     /// How PaperPaw started (see [`KernelBuilder::started`]).
     started: paperpaw_sdk::power::Start,
+    /// What the panel can do and how the last frame went (see
+    /// [`KernelBuilder::panel`]).
+    panel: paperpaw_sdk::realtime::PanelInfo,
+    /// The buttons held down now, in the order they went down.
+    keys_held: Vec<&'static str>,
+    /// The room the screen on top asked for and got.
+    room: paperpaw_sdk::realtime::Room,
     /// Shared with font packs read where they are (see `Fonts::load`).
     storage: alloc::rc::Rc<dyn Storage>,
     /// What the storage read during the call going on (see `recall`).
@@ -1359,7 +1389,7 @@ impl Shared {
             content: self.content,
             stack: &self.stack,
             slots: &self.slots,
-            screens: self.registry.screens.titles(),
+            screens: self.registry.screens.list(),
             font_dirs: &self.font_dirs,
             catalog_device: self.catalog_device,
             secrets: &self.secrets,
@@ -1368,6 +1398,9 @@ impl Shared {
             memory: self.memory,
             clock: self.meter.clock(),
             started: self.started,
+            panel: self.panel,
+            keys_held: &self.keys_held,
+            room: self.room,
             storage: self.storage.as_ref(),
             keys: &self.keymap,
             look: self.look.0,

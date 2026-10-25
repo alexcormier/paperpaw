@@ -496,6 +496,10 @@ pub mod settings {
     /// The charge in percent at and below which the battery counts as low
     /// (the status item [`BATTERY_LOW`](super::status_items::BATTERY_LOW)).
     pub const BATTERY_LOW: Setting<i64> = Setting::new("core.battery-low");
+    /// Whether plugins may keep the device from going to sleep by itself
+    /// ([`WakeHold`](crate::power::WakeHold)): on by default; off, the
+    /// device sleeps after [`SLEEP_AFTER`] whatever plugins ask.
+    pub const AWAKE_HOLDS: Setting<bool> = Setting::new("core.awake-holds");
     /// How the screen is turned: one of [`ROTATIONS`], where the shell
     /// can turn it (see [`MenuNeed::Rotation`](crate::MenuNeed)); each
     /// book may have its own ([`SCOPE_ONLY`]).
@@ -685,6 +689,27 @@ pub mod settings {
     /// registers them, each book may have its own ([`SCOPE_ONLY`]), every
     /// reader reads them.
     pub const FONT_WEIGHT: Setting<i64> = Setting::new("core.font-weight");
+    /// Book text with smooth letters, their edges in grays; off, each
+    /// pixel black or white, from as much coverage as [`MONO_TEXT`] says.
+    /// Where the panel shows black and white but grays with a refresh of
+    /// its own (the X4), it is off at first: on, every page is shown in
+    /// grays, slower and costing more battery; off, only pages with
+    /// pictures are, and their letters stay smooth. Each book may have
+    /// its own ([`SCOPE_ONLY`]); the interface's text is as it is.
+    pub const SMOOTH_TEXT: Setting<bool> = Setting::new("core.smooth-text");
+    /// How dark book text is drawn: its letters' edges on a contrast
+    /// curve, finer than [`FONT_WEIGHT`] and with it, one of
+    /// [`TEXT_CONTRAST_LEVELS`] (lighter, normal, darker, darkest; see
+    /// [`ToneCurve::contrast`](crate::text::ToneCurve::contrast), whose steps go
+    /// from -1 for the first). Each book may have its own
+    /// ([`SCOPE_ONLY`]).
+    pub const TEXT_CONTRAST: Setting<Text> = Setting::new("core.text-contrast");
+    pub const TEXT_CONTRAST_LEVELS: &[&str] = &[
+        "core.text-contrast.lighter",
+        "core.text-contrast.normal",
+        "core.text-contrast.darker",
+        "core.text-contrast.darkest",
+    ];
     /// Space between words in percent of the font's (50 to 200).
     pub const WORD_SPACING: Setting<i64> = Setting::new("core.word-spacing");
     /// Distance between baselines in percent of the font size, at least
@@ -700,6 +725,11 @@ pub mod settings {
     pub const JUSTIFY: Setting<bool> = Setting::new("core.justify");
     /// Words broken at line ends, in the book's language.
     pub const HYPHENATE: Setting<bool> = Setting::new("core.hyphenate");
+    /// The fewest letters left before a hyphen (1 to 5; 0: the language's
+    /// own, that of its patterns), see `hyphen::Patterns::with_minimums`.
+    pub const HYPHEN_MIN_LEFT: Setting<i64> = Setting::new("core.hyphen-min-left");
+    /// The fewest letters carried after a hyphen (as [`HYPHEN_MIN_LEFT`]).
+    pub const HYPHEN_MIN_RIGHT: Setting<i64> = Setting::new("core.hyphen-min-right");
     /// The first lines of paragraphs indented.
     pub const INDENT: Setting<bool> = Setting::new("core.indent");
     /// Space between paragraphs.
@@ -713,6 +743,36 @@ pub mod settings {
     /// The book's own styles (an EPUB's CSS), see
     /// [`OpenOptions::publisher_styles`](crate::OpenOptions).
     pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("core.publisher-styles");
+    /// With [`PUBLISHER_STYLES`] on, which of the book's own styles are
+    /// followed, each on its own (see `layout::BookStyles`): its
+    /// alignment, indents, text sizes, space between paragraphs, fonts,
+    /// margins at the sides and distance between lines.
+    pub const BOOK_ALIGN: Setting<bool> = Setting::new("core.book-align");
+    pub const BOOK_INDENT: Setting<bool> = Setting::new("core.book-indent");
+    pub const BOOK_SIZES: Setting<bool> = Setting::new("core.book-sizes");
+    pub const BOOK_SPACING: Setting<bool> = Setting::new("core.book-spacing");
+    pub const BOOK_FONTS: Setting<bool> = Setting::new("core.book-fonts");
+    pub const BOOK_MARGINS: Setting<bool> = Setting::new("core.book-margins");
+    pub const BOOK_LINE_HEIGHT: Setting<bool> = Setting::new("core.book-line-height");
+    /// Space between letters, in percent of the text size (-5 to 20).
+    pub const LETTER_SPACING: Setting<i64> = Setting::new("core.letter-spacing");
+    /// Pairs of letters set as the font kerns them (e.g. `AV` closer).
+    pub const KERNING: Setting<bool> = Setting::new("core.kerning");
+    /// `fi`, `fl` and the like drawn as ligatures where the font has them
+    /// (not with letter spacing).
+    pub const LIGATURES: Setting<bool> = Setting::new("core.ligatures");
+    /// How far [`INDENT`] indents first lines, in percent of the text size
+    /// (50 to 400).
+    pub const INDENT_SIZE: Setting<i64> = Setting::new("core.indent-size");
+    /// How paragraphs are broken into lines: over all their lines, for
+    /// lines that end evenly ([`LINE_BREAKING_BALANCED`]), or line by line
+    /// ([`LINE_BREAKING_FAST`]).
+    pub const LINE_BREAKING: Setting<Text> = Setting::new("core.line-breaking");
+    pub const LINE_BREAKING_BALANCED: &str = "core.line-breaking.balanced";
+    pub const LINE_BREAKING_FAST: &str = "core.line-breaking.fast";
+    /// How much space [`PARAGRAPH_SPACING`] leaves, in percent of a line
+    /// (20 to 150).
+    pub const PARAGRAPH_SPACE: Setting<i64> = Setting::new("core.paragraph-space");
     /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or gone to
     /// ([`FOOTNOTES_JUMP`]) when their mark is followed.
     pub const FOOTNOTES: Setting<Text> = Setting::new("core.footnotes");
@@ -779,9 +839,25 @@ pub const PLUGIN_DIR: &str = "plugins";
 pub mod groups {
     use crate::Id;
 
-    /// Book text: font size, spacing, hyphenation, …
+    /// Reading books: a page of its parts below.
     pub const READING: Id = Id::new_static("core.group.reading");
-    /// Screen: night mode, menu size, refresh.
+    /// Parts of [`READING`], each a page of its own: the text (font, size,
+    /// weight, spacing, colours), the layout of pages (margins, line
+    /// spacing, justification and line breaking, lines kept together),
+    /// hyphenation, which of a book's own styles are followed, how text
+    /// and pictures are shown (smooth, contrast, night mode, refresh),
+    /// reading aloud, aids to reading, and what happens while reading
+    /// (books opened again, footnotes, the reading app); with
+    /// [`STATUS_LINES`] and [`MARKS`].
+    pub const READING_TEXT: Id = Id::new_static("core.group.reading-text");
+    pub const READING_LAYOUT: Id = Id::new_static("core.group.reading-layout");
+    pub const READING_HYPHENATION: Id = Id::new_static("core.group.reading-hyphenation");
+    pub const READING_BOOK_STYLES: Id = Id::new_static("core.group.reading-book-styles");
+    pub const READING_DISPLAY: Id = Id::new_static("core.group.reading-display");
+    pub const READING_ALOUD: Id = Id::new_static("core.group.reading-aloud");
+    pub const READING_AIDS: Id = Id::new_static("core.group.reading-aids");
+    pub const READING_BEHAVIOUR: Id = Id::new_static("core.group.reading-behaviour");
+    /// Screen: front light, rotation.
     pub const DISPLAY: Id = Id::new_static("core.group.display");
     /// Buttons and gestures.
     pub const CONTROLS: Id = Id::new_static("core.group.controls");
@@ -789,14 +865,23 @@ pub mod groups {
     pub const LIBRARY: Id = Id::new_static("core.group.library");
     /// Language and everything about the device.
     pub const SYSTEM: Id = Id::new_static("core.group.system");
+    /// Date and time: the clock's format, the first day of the week, the
+    /// time zone.
+    pub const TIME: Id = Id::new_static("core.group.time");
+    /// Plugins: the store, each plugin's network.
+    pub const PLUGINS: Id = Id::new_static("core.group.plugins");
+    /// Words: dictionaries, translation, vocabulary.
+    pub const WORDS: Id = Id::new_static("core.group.words");
     /// How menus and lists look: text size, margins, rows, lines, headers.
     /// Themes (data plugins) set its defaults.
     pub const LOOK: Id = Id::new_static("core.group.look");
     /// Marks in the text: the looks of the roles of decorations (see
-    /// [`decorations`](crate::decorations)), a section per role.
+    /// [`decorations`](crate::decorations)), a section per role; a part
+    /// of [`READING`].
     pub const MARKS: Id = Id::new_static("core.group.marks");
     /// The status lines above and below a book's text (what they show,
-    /// their size); the reader puts its settings for them here.
+    /// their size); the reader puts its settings for them here. A part of
+    /// [`READING`].
     pub const STATUS_LINES: Id = Id::new_static("core.group.status");
     /// Settings whose plugin names no registered group.
     pub const OTHER: Id = Id::new_static("core.group.other");
@@ -831,10 +916,11 @@ pub mod group_sections {
     pub const FONT: &str = "core.setting-section.font";
     /// How a page is set: spacing, margins, justification, hyphenation.
     pub const PAGE: &str = "core.setting-section.page";
-    /// What happens when reading: books opened again, bookmarks.
+    /// What happens when reading: books opened again, bookmarks (now
+    /// mostly [`groups::READING_BEHAVIOUR`](super::groups::READING_BEHAVIOUR)).
     pub const BEHAVIOUR: &str = "core.setting-section.behaviour";
-    /// Reading aloud: its speed, what is marked, turning the pages
-    /// (shells add the voice).
+    /// Reading aloud: its speed, what is marked, turning the pages (now
+    /// mostly [`groups::READING_ALOUD`](super::groups::READING_ALOUD)).
     pub const ALOUD: &str = "core.setting-section.aloud";
 
     /// The standard parts in their order.

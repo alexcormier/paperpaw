@@ -1,7 +1,10 @@
 screen settings.group
 Heading "Reading"
 Heading "Preview"
-Heading "Text"
-Row "Font, Book's font, “Book's font” is Literata, or the book's own where the device draws them." (focused)
-Row "Font size, 11 pt, Size of the book text."
-Row "Font weight, +0, Darker, bolder text with any font; helps on light screens."
+Row "Text" (focused)
+Row "Layout"
+Row "Hyphenation"
+Row "Publisher's formatting"
+Row "Display"
+Row "Status lines"
+Row "Marks"

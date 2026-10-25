@@ -38,8 +38,8 @@ use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingSpec,
+    ActionSpec, Command, Commands, Env, FixedAction, FixedScreen, HttpRequest, Id, Manifest,
+    MenuEntry, Params, Plugin, RegisterError, Registrar, ScreenSpec, SettingSpec,
 };
 
 use crate::catalogs::Catalog;
@@ -218,6 +218,17 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "opds.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(LIST_SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(45)];
+static ICONS: [(Id, &str); 2] = [(OPEN, "book-download"), (SYNC, "refresh")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    EDIT_SCREEN,
+    "opds.title",
+    |env, params| Box::new(edit::EditScreen::new(env, params)),
+)];
+
 impl Plugin for Opds {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "OPDS catalogs", paperpaw_sdk::package_version!())
@@ -232,11 +243,14 @@ impl Plugin for Opds {
         let temp = TempFiles::default();
         let state = Rc::new(RefCell::new(Sync::new(temp.clone())));
         let shared = state.clone();
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "opds.title",
-            Box::new(move |env, _| Box::new(list::ListScreen::new(env, shared.clone()))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                LIST_SCREEN,
+                "opds.title",
+                Box::new(move |env, _| Box::new(list::ListScreen::new(env, shared.clone()))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_screen(ScreenSpec::new(
             BROWSE_SCREEN,
             "opds.title",
@@ -244,16 +258,8 @@ impl Plugin for Opds {
                 Box::new(browse::BrowseScreen::new(env, params, temp.clone()))
             }),
         ))?;
-        r.add_screen(ScreenSpec::new(
-            EDIT_SCREEN,
-            "opds.title",
-            Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "opds.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
-            },
-        ))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
         let shared = state.clone();
         r.add_action(ActionSpec::new(SYNC, "opds.sync-all").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
@@ -272,9 +278,8 @@ impl Plugin for Opds {
         r.on(SYNC_DUE, move |env, (), out| {
             shared.borrow_mut().start(env, marked(env), out);
         })?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(45))?;
-        r.add_icon(OPEN, Cow::Borrowed("book-download"))?;
-        r.add_icon(SYNC, Cow::Borrowed("refresh"))?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.on(events::STARTED, |env, _, out| {
             temp::clean(env.storage());
             catalogs::move_passwords(env, out);

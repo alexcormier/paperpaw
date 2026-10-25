@@ -18,10 +18,15 @@ pub struct Params {
     carried: Option<Rc<dyn Any>>,
 }
 
-/// As the named strings are: what is carried is not compared.
+/// As the named strings are, in any order: what is carried is not
+/// compared.
 impl PartialEq for Params {
     fn eq(&self, other: &Self) -> bool {
-        self.values == other.values
+        self.values.len() == other.values.len()
+            && self
+                .values
+                .iter()
+                .all(|(key, value)| other.get(key) == Some(value))
     }
 }
 

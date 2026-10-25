@@ -38,9 +38,9 @@ use paperpaw_sdk::replies::{SocketNotice, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    Arg, Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled,
     Hint, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, SettingSpec, SocketRead, Storage,
+    SDK_VERSION, Screen, SettingSpec, SocketRead, Storage,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -122,27 +122,33 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "calibre.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(47)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "device-desktop")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "calibre.title", |env, _| {
+    Box::new(CalibreScreen::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for Calibre {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Calibre", paperpaw_sdk::package_version!())
-            .description("Receive books from Calibre over the network, as its wireless device.")
-            .how(&HOW)
-            .uses(paperpaw_sdk::Uses::NETWORK)
+        Manifest::new(
+            PLUGIN,
+            "Calibre connection",
+            paperpaw_sdk::package_version!(),
+        )
+        .description("Receive books from Calibre over the network, as its wireless device.")
+        .how(&HOW)
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "calibre.title",
-            Box::new(|env, _| Box::new(CalibreScreen::new(env))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "calibre.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(47))?;
-        r.add_icon(OPEN, Cow::Borrowed("device-desktop"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

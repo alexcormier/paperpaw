@@ -12,6 +12,77 @@ change the plugin SDK.
   when it is in reach, instead of the strongest: after a restart the
   reader stays in the network one chose. *Join first* (Last picked,
   Strongest) sets it.
+- **Code plugins must be built again for beta.8.** The plugin interface
+  is now 4: what crosses changed for a book's formatting and kerning
+  (`Block`, `TextStyle`, `Typesetter`, `layout::Style`, `FontHandle`),
+  the settings' pages (`SettingGroupSpec`), screens that run in real
+  time, screens opened once, static registration (`Actions::get`,
+  `Env::menus`, `Env::screens`) and lists that draw only what a step
+  changes (`ListChange`), with room for what comes later (the developer
+  link, `Command::Extended`). PaperPaw's own store plugins come as
+  updates.
+- Moving through the settings with the buttons is quicker: a step draws
+  only the row left and the row reached, no longer the whole screen (on
+  the X4 a sixth to a third of it), in every list of the settings.
+- The firmware is leaner, so updates keep room: German hyphenation is a
+  plugin of the store (`hyphenation-de`), as the other languages are,
+  and the built-in one keeps English; Literata Bold Italic is no longer
+  built into the firmware (bold stands in for it; the emulator and the
+  app keep it), and its faces go up to 32 px there (about 10 pt). A data
+  plugin may bring faces of a family without its regular one, and a pack
+  that extends a face with larger sizes draws text that large (the font
+  size goes as far), so the font library brings both back
+  (`tools/literata-packs.py`). At the largest size, its help says where
+  larger ones are found.
+- The release keeps room for the updates to come: `paperpaw-sign
+  check-image` prints the margin an image leaves in the smallest app
+  slot (its own or CrossPoint's), warns below 512 KB and fails below
+  256 KB.
+- A step with the buttons draws only what it changes, on every screen
+  with a list, a grid or buttons to move between: the item the focus
+  left and the one it came to, no longer the whole screen (on the X4 a
+  sixth to a third of a frame). `ListChange::Focus` carries the two
+  items, so `ListChange::request` asks for them alone; `ListView`,
+  `Rows` and `Sections` give `focus_change` for a focus that only came
+  to show, `ListChange::focus` serves focuses of a screen's own and
+  `ui::button_reach` says where a focused button draws. Their `request`
+  methods are gone: `change.request(cx)` does it. A screen whose focus
+  changes more than its items asks for that part too.
+- The store finds its way in a library of thousands: its start shows
+  what the library picks (Recommended, New, Popular now, Recently
+  updated, Discover) between the search and the groups, and a group
+  lists its plugins in the library's fair mix of the day, so that every
+  plugin gets seen. A to Z stays a choice, sorted on the device a run at
+  a time, and long groups go to a letter (*Go to letter*, a grid of A to
+  Z for buttons and fingers). The list still streams to the card. A
+  library without picks shows the start and the order as before.
+- Plugins that work with another product say what they do with it:
+  KOReader highlights, Calibre connection, Readwise export, Wallabag
+  articles, Wikipedia lookup and Joplin notes (their ids stay, and so do their
+  settings and data).
+- Literata's sizes above 32 px and its Bold Italic, which the X4's
+  firmware leaves out, are plugins of the store: the release builds
+  PaperPaw's own data plugins (`tools/plugin-files/data.toml`) and
+  publishes them with the others, versions checked as theirs.
+- With buttons alone (the X4) the keyboard keeps a computer keyboard's
+  rows at every size (qwertyuiop above asdfghjkl); the size makes keys
+  higher and their letters larger, and a row is split only where its
+  letters would not fit. Up and down keep to the column one came along.
+  Typing takes about as many presses as before (627 against 633 for the
+  sample texts in `plugins/keyboard/tests/presses.rs`), capitals fewer.
+- Its keys are wider with buttons alone: the focus fills a key instead
+  of framing it, so two pixels between keys do (on the X4 a letter's key
+  is 39 pixels wide, was 25). On touch screens the room between keys
+  follows the screen's size (0.6 mm). The plain X4s start with the
+  keyboard at Small, the X4 Pro at Large; a size chosen stays. "Hold: ö"
+  in place of "Hold for ö" leaves the field's title whole.
+- Settings where readers look for them: *Date and time* (the clock, the
+  first day of the week, the time zone), *Plugins* (each plugin's
+  network) and *Words* are groups of their own; the auto sleep is under
+  *Power*, the device's name under *Wi-Fi*, the sleep screen's logo with
+  the sleep screen, the widgets' frame with the home screen. Reading's
+  settings have shorter names (*Invert pictures*, *Paragraph spacing*,
+  *Top and bottom margins* …).
 
 ### Added
 
@@ -27,21 +98,141 @@ change the plugin SDK.
   address (modes `url` and `email`), typed as it is. The browser,
   catalogs, news, KOReader sync, Joplin, Wallabag and the statistics'
   sync ask for their addresses so.
-
-### Changed
-
-- With buttons alone (the X4) the keyboard keeps a computer keyboard's
-  rows at every size (qwertyuiop above asdfghjkl); the size makes keys
-  higher and their letters larger, and a row is split only where its
-  letters would not fit. Up and down keep to the column one came along.
-  Typing takes about as many presses as before (627 against 633 for the
-  sample texts in `plugins/keyboard/tests/presses.rs`), capitals fewer.
-- Its keys are wider with buttons alone: the focus fills a key instead
-  of framing it, so two pixels between keys do (on the X4 a letter's key
-  is 39 pixels wide, was 25). On touch screens the room between keys
-  follows the screen's size (0.6 mm). The plain X4s start with the
-  keyboard at Small, the X4 Pro at Large; a size chosen stays. "Hold: ö"
-  in place of "Hold for ö" leaves the field's title whole.
+- Plugins can run in real time: games, emulators, animations
+  ([ADR 0030](docs/adr/0030-real-time-screens.md)). A screen says how
+  it runs in one place (`Screen::mode`, `realtime::ScreenMode`): full
+  screen, buttons pressed and released (`Screen::on_key`,
+  `Env::keys_held`; holding *Back*, or a finger in the top left corner,
+  two seconds always leaves), its own refreshes, the fastest refresh,
+  the grays enough, a pace, staying awake longer, and the memory it
+  needs. The device says what it can do and how the last frame went
+  (`Env::panel`, `PanelInfo`, `FrameReport`), so faster panels make
+  plugins faster without a new build. `Canvas::blit` draws packed
+  bitmaps at a whole scale, `memory::vec_in` keeps data in internal RAM
+  or PSRAM, and code plugins get `Api::alloc_in`. On the X4 the main
+  loop goes on while the panel refreshes for such a screen, and every
+  frame's times are measured. `samples/frame-test` shows it all. The
+  first time such a screen opens, a notice says how to leave it.
+- Room for a screen that needs memory: the kernel lets caches go, holds
+  background work back, switches Wi-Fi and Bluetooth off where the
+  screen does not need them, asks the screens below to let go of what
+  they make again (the reader its book, keeping its place;
+  `Screen::on_squeeze`, `RoomSteps::SQUEEZED`) and closes them where
+  that is not enough, until there is enough; everything comes back once
+  it closes (`ScreenMode::memory`, `Env::room`).
+- A screen opened again while it is open is gone back to, not stacked
+  (several *Transfer over Wi-Fi* screens one over another took as many
+  presses of *Back*): the screens above it close and it hears the
+  params (`Screen::on_reopen`). Each screen says how many of it may be
+  open (`ScreenSpec::instances`, `Instances`): one for each set of
+  params (the default), one at most (the transfer, Wi-Fi, Bluetooth,
+  store and diagnostics screens and other roots) or many (the
+  keyboard). Params are alike in any order.
+- Plugins see what the buttons are good for: `Capability::PAGE_KEYS`
+  and `Capability::BUTTONS` (enough for every screen without touch),
+  from the buttons the shell lists.
+- Less memory at rest: actions, screens, menu entries and icons can be
+  `static` lists that stay in flash (`FixedAction` and
+  `Registrar::add_actions`, `FixedScreen` and `add_screens`,
+  `add_menu_entries`, `add_icons`; `MenuEntry::new` is `const`), as the
+  kernel's and the plugins' are now. `Actions::get` gives an `Action`
+  of either kind; `Env::screens` gives a `ScreenList`. Menus no longer copy the labels of the actions and
+  settings they list (`Env::menus` gives a `MenuView`). Translations
+  keep only the languages in use as catalogs; English catalogs a
+  language covers drop their index; the indexes of the catalogs built
+  in are made when PaperPaw is built (`FixedIndexes`,
+  `KernelBuilder::catalog_indexes`). The X4 emulator's home at start
+  takes some 30 KiB less.
+- Room for a screen that needs memory may also draw frames in more,
+  smaller bands (`RoomSteps::BANDS`), as they were once it closes.
+- Plugins can keep the device awake for a while (`power::WakeHold`,
+  `Command::KeepAwake`, `Cx::keep_awake`): bounded, renewed by id, a
+  screen's ended with it, never with a battery nearly empty. *Let
+  plugins keep the device awake* (on) turns it off for all; the usage
+  says each plugin's awake time.
+- Hot code in code plugins (`paperpaw_sdk::hot!`): the X4 runs it from
+  internal RAM, a bounded arena whose rest goes to the heap. Plugin
+  files are of format 3 (the hot range and its patches); RISC-V plugins
+  link with `--no-relax`.
+- Room in the plugin interface for what comes later without a new one:
+  `Command::Extended`, `Screen::on_extended`, `Contribution::Extended`,
+  `Capabilities::has` with `Capability` constants, wider `Moments` and
+  `BookStyles`, `Storage::write_at` and `truncate`.
+- The reading settings in pages of their own: *Text*, *Layout*,
+  *Hyphenation*, *Publisher's formatting*, *Display*, *Status lines*,
+  *Marks in the text*, *Reading aloud*, *Reading aids* and *Behaviour*,
+  each short, its rarely needed settings one level down under *More*
+  (or with the others, with *Show advanced settings*). Settings about
+  reading came along: the colours of text and paper (from *Look*),
+  night mode, text darkness, pictures in grays and full refresh (from
+  *Display*), the voice (from *System*) and *Battery low at* (now with
+  the status lines). SDK: groups within groups
+  (`SettingGroupSpec::within`, `Settings::parent_of` and `within`),
+  `groups::READING_TEXT` and the other parts of `READING`;
+  `STATUS_LINES` and `MARKS` are parts of it.
+- Balanced line breaking: paragraphs are broken over all their lines,
+  so lines end more evenly and justified text has fewer wide gaps;
+  *Line breaking* can be set back to *Fast*, line by line
+  (`core.line-breaking`). SDK: `text::wrap_lines_balanced`,
+  `layout::Style::balanced`.
+- A book's own styles one by one: with *Publisher's formatting* on, its
+  alignment, indents, text sizes, spacing, fonts, margins and line
+  spacing can each be left to the reader (its line spacing is by
+  default). SDK: `layout::BookStyles`, `Style::book`, settings
+  `core.book-*`.
+- More of a book's formatting comes along: margins at the sides (block
+  quotes, poems, lists set in), hanging indents, line heights,
+  superscript and subscript, underline and strike, numbered and nested
+  lists, and a table's rows each on a line of their own. SDK:
+  `Block::margins`, `Block::line_height`, `TextStyle::SUPERSCRIPT`,
+  `SUBSCRIPT`, `UNDERLINE` and `STRIKE` (a `TextStyle` has 16 bits now).
+- Letter spacing, and the size of indents and of the space between
+  paragraphs, as settings (`core.letter-spacing`, `core.indent-size`,
+  `core.paragraph-space`); their defaults keep pages as they were.
+- Kerning and ligatures: pairs such as *AV* and *To* are set as the
+  font kerns them (its GPOS `kern` feature, else its legacy `kern`
+  table), in books and menus, and *fi* and *fl* (*ff*, *ffi* and *ffl*
+  where they take the room of their letters) are drawn as ligatures in
+  books where the font has them. Settings *Kerning* and *Ligatures*
+  (advanced, per book, on: `core.kerning`, `core.ligatures`); books are
+  laid out again once. Font packs keep a kerning table of classes, read
+  in place (still version 1: older firmware ignores it, older packs read
+  without kerning); the default packs grow by about 134 KB of flash, no
+  memory. SDK: `Font::kern`, `BitmapFont::kern`, `OutlineFont::kern` and
+  `kerning_pairs`, `PackBuilder::kerning`, `charset::LIGATURES`,
+  `FontHandle::kern`, `unkerned` and `ligatures`,
+  `layout::Typesetter::kern`, `text::wrap_lines_kerned` and
+  `wrap_lines_balanced_kerned`, `PageType::kerning` and `ligatures`,
+  `settings::KERNING` and `LIGATURES`; `text::measure`, `draw_text` and
+  `FontHandle::measure` and its drawing kern the text they get.
+- Hyphenation for more languages, as store plugins of their own: French,
+  Spanish, Italian, Dutch, Portuguese, Swedish, Danish, Norwegian
+  (Bokmål), Polish, Russian and Ukrainian. The firmware keeps
+  German and English; each language takes flash, almost no memory.
+- Settings *Letters before hyphen* and *Letters after hyphen*
+  (advanced, 0 to 5; 0: the language's own): how short a piece of a word
+  may be. Books are laid out again when they change. SDK:
+  `settings::HYPHEN_MIN_LEFT`, `HYPHEN_MIN_RIGHT`,
+  `PageType::hyphen_minimums` and `patterns`,
+  `hyphen::Patterns::with_minimums`.
+- *Text contrast* (Settings, Reading): book text lighter, normal, darker
+  or darkest, its letters' edges on a contrast curve, finer than *Font
+  weight* and together with it. Normal draws as before; each book may
+  have its own.
+- *Smooth text* works on every screen now: off draws book text in black
+  and white, without gray edges, also where the screen has grays (the
+  Boox), on at first there. On the X4s it stays off at first, and off,
+  pages of text turn without the slower refresh in grays. It is a
+  setting of the kernel now (`core.smooth-text`, was
+  `reader.smooth-text`, taken over), each book may have its own. SDK:
+  `settings::SMOOTH_TEXT`, `settings::TEXT_CONTRAST`, `text::ToneCurve`,
+  `FontHandle::draw_toned`, `Canvas::mono_coverage`.
+- Room for USB developer tools as a plugin ([ADR 0031](docs/adr/0031-developer-link.md)):
+  `Uses::DEVELOPER`, `Capability::USB_LINK`, `Command::Developer` with
+  `developer::open`, `write`, `screen` and `close`, heard as `DevEvent`.
+  Reserved: this release answers that the link is not available.
+- SDK: `Ui::filled_button` and `filled_icon_button`, filled as an `on`
+  button without saying it is on (a key whose fill is the focus).
 
 ## [0.5.0-beta.7] - 2026-10-25
 

@@ -57,8 +57,8 @@ use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::work::{Moments, Work};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Commands, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params,
-    Plugin, RegisterError, Registrar, ScreenSpec, SettingSpec,
+    ActionSpec, Arg, Command, Commands, Env, FixedScreen, HttpRequest, Id, Instant, Manifest,
+    MenuEntry, Params, Plugin, RegisterError, Registrar, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("kosync");
@@ -775,6 +775,19 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ENTRIES: [MenuEntry; 1] =
+    [MenuEntry::new(paperpaw_sdk::builtin::menus::READER_MORE, SYNC_NOW).order(25)];
+static ICONS: [(Id, &str); 2] = [(GROUP, "devices"), (SYNC_NOW, "refresh")];
+
+static SCREENS: [FixedScreen; 2] = [
+    FixedScreen::new(ACCOUNT_SCREEN, "kosync.group", |env, _| {
+        Box::new(account::AccountScreen::new(env))
+    }),
+    FixedScreen::new(CONFIRM_SCREEN, "kosync.group", |env, params| {
+        Box::new(confirm::ConfirmScreen::new(env, params))
+    }),
+];
+
 impl Plugin for Kosync {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Progress sync", paperpaw_sdk::package_version!())
@@ -796,18 +809,9 @@ impl Plugin for Kosync {
                 paperpaw_sdk::SettingGroupSpec::new(GROUP, "kosync.group").order(28);
             &SPEC
         })?;
-        r.add_icon(GROUP, Cow::Borrowed("devices"))?;
+        r.add_icons(&ICONS)?;
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            ACCOUNT_SCREEN,
-            "kosync.group",
-            Box::new(|env, _| Box::new(account::AccountScreen::new(env))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CONFIRM_SCREEN,
-            "kosync.group",
-            Box::new(|env, params| Box::new(confirm::ConfirmScreen::new(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
 
         let s = state.clone();
         r.on(events::STARTED, move |env, _, out| {
@@ -956,10 +960,7 @@ impl Plugin for Kosync {
                 state.pull(env, out, &path, true);
             },
         ))?;
-        r.add_menu_entry(
-            MenuEntry::new(paperpaw_sdk::builtin::menus::READER_MORE, SYNC_NOW).order(25),
-        )?;
-        r.add_icon(SYNC_NOW, Cow::Borrowed("refresh"))?;
+        r.add_menu_entries(&ENTRIES)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

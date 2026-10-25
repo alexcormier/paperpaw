@@ -1,7 +1,6 @@
-//! The bundled tables hyphenate known words as dictionaries do, keep
-//! their minimums (German 2 and 2, English 2 and 3), ignore case, and
-//! never break a word anywhere but inside it, whatever it holds; the
-//! plugin registers both languages.
+//! The bundled table hyphenates known words as dictionaries do, keeps its
+//! minimums (2 and 3), ignores case, and never breaks a word anywhere but
+//! inside it, whatever it holds; the plugin registers its language.
 
 extern crate std;
 
@@ -34,28 +33,6 @@ fn hyphenated(table: &[u8], word: &str) -> String {
 }
 
 #[test]
-fn german_words_as_the_dictionary_has_them() {
-    for expected in [
-        "Schiff-fahrt",
-        "Zu-cker",
-        "Was-ser",
-        "Fens-ter",
-        "Kar-tof-fel",
-        "El-tern",
-        "Stra-ße",
-        "Uni-ver-si-tät",
-        "Bä-cke-rei",
-        "Mäd-chen",
-        "Freund-schaft",
-        "Ofen",
-        "Abend",
-    ] {
-        let word: String = expected.chars().filter(|&c| c != '-').collect();
-        assert_eq!(hyphenated(DE, &word), expected);
-    }
-}
-
-#[test]
 fn english_words_as_the_dictionary_has_them() {
     for expected in [
         // Not "com-put-er": three letters at least after a hyphen.
@@ -78,14 +55,9 @@ fn english_words_as_the_dictionary_has_them() {
 
 #[test]
 fn the_minimums_are_kept() {
-    let de = Patterns::new(DE).unwrap();
     let en = Patterns::new(EN).unwrap();
-    assert_eq!(de.minimums(), (2, 2));
     assert_eq!(en.minimums(), (2, 3));
     // Words too short to break at all.
-    for word in ["", "a", "ab", "abc"] {
-        assert!(breaks(DE, word).is_empty(), "{word}");
-    }
     for word in ["", "a", "ab", "abc", "abcd"] {
         assert!(breaks(EN, word).is_empty(), "{word}");
     }
@@ -93,7 +65,7 @@ fn the_minimums_are_kept() {
 
 #[test]
 fn case_does_not_matter() {
-    for (table, word) in [(DE, "Wasser"), (DE, "kartoffel"), (EN, "Computer")] {
+    for (table, word) in [(EN, "Computer"), (EN, "information")] {
         let lower = breaks(table, &word.to_lowercase());
         assert!(!lower.is_empty(), "{word}");
         assert_eq!(breaks(table, &word.to_uppercase()), lower, "{word}");
@@ -102,7 +74,7 @@ fn case_does_not_matter() {
 }
 
 #[test]
-fn the_plugin_registers_both_languages() {
+fn the_plugin_registers_its_language() {
     let mut registrar = Registrar::new(PLUGIN);
     Hyphenation.register(&mut registrar).unwrap();
     let mut languages: Vec<(&str, &str)> = registrar
@@ -117,10 +89,7 @@ fn the_plugin_registers_both_languages() {
         })
         .collect();
     languages.sort();
-    assert_eq!(
-        languages,
-        [("hyphenation.de", "de"), ("hyphenation.en", "en")]
-    );
+    assert_eq!(languages, [("hyphenation.en", "en")]);
 }
 
 proptest! {
@@ -136,10 +105,9 @@ proptest! {
     #[test]
     fn breaks_are_always_inside_the_word(
         word in "[a-zäöüßA-ZÄÖÜ0-9'’çéñøИя-]{0,60}",
-        german in any::<bool>(),
     ) {
-        let (table, left, right) = if german { (DE, 2, 2) } else { (EN, 2, 3) };
-        let found = breaks(table, &word);
+        let (left, right) = (2, 3);
+        let found = breaks(EN, &word);
         for (k, &at) in found.iter().enumerate() {
             prop_assert!(k == 0 || found[k - 1] < at);
             prop_assert!(0 < at && at < word.len() && word.is_char_boundary(at));

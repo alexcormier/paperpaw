@@ -1,6 +1,6 @@
 Mehr Plugins ist der Plugin-Store: Er findet Plugins für dieses Gerät im Internet und installiert, aktualisiert und entfernt sie. Du öffnest ihn unter Werkzeuge; er braucht WLAN.
 
-Die Plugins stehen nach Gruppen geordnet; du kannst suchen und sortieren. Öffne eines für seine Seite mit Größe und Speicherbedarf, dann Installieren, Aktualisieren oder Entfernen. Alle aktualisieren erneuert alle installierten.
+Der Anfang zeigt, was die Bibliothek empfiehlt, was neu oder gerade beliebt ist, dann die Gruppen. Eine Gruppe zeigt ihre Plugins gemischt, jeden Tag anders, damit jedes gesehen wird; sortiere sie von A bis Z, nach neu oder zuletzt aktualisiert, und springe in langen Listen zu einem Buchstaben. Öffne eines für seine Seite mit Größe und Speicherbedarf, dann Installieren, Aktualisieren oder Entfernen. Alle aktualisieren erneuert alle installierten.
 
 Code-Plugins laufen mit vollem Zugriff auf das Gerät: Der Store sagt das, fragt vorher, und sie starten nach einem Neustart. Geht eines schief, startet PaperPaw ohne Code-Plugins und nennt es. Woher die Liste kommt, legt Plugin-Bibliothek fest.
 

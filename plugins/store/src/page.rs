@@ -747,7 +747,7 @@ impl Screen for PageScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.rows(cx.env()).len();
         if let Some(change) = self.list.navigate(action, len) {
-            self.list.request(change, cx);
+            change.request(cx);
         } else if *action == actions::CONFIRM {
             self.activate(self.list.focus(), cx);
         } else if *action == actions::BACK && self.notice {

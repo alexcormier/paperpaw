@@ -152,6 +152,8 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ICONS: [(Id, &str); 1] = [(NOW, "lock")];
+
 impl Plugin for Lock {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Screen lock", paperpaw_sdk::package_version!())
@@ -190,7 +192,7 @@ impl Plugin for Lock {
                 })
                 .sealed(),
         )?;
-        r.add_icon(NOW, Cow::Borrowed("lock"))?;
+        r.add_icons(&ICONS)?;
         let start = state.clone();
         r.on(events::STARTED, move |env, _, out| {
             // A wait due when PaperPaw stopped is waited anew.

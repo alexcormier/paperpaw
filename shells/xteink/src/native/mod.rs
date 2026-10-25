@@ -9,15 +9,19 @@
 //! - **X4**: the image is written once into the free end of the app
 //!   partition the firmware runs from and mapped through free MMU entries,
 //!   so its code runs from flash and only its data takes RAM (`flash`).
+//!   Its hot code runs from an arena of internal RAM, as far as it holds
+//!   it (`hot`).
 //!
 //! Plugins are never unloaded: switching one takes a restart. Where each
 //! lies is kept ([`attribute`]), so a panic's calls inside a plugin are
 //! written with its name and the offset into its file.
 
-mod api;
+pub(crate) mod api;
 pub mod bundle;
 #[cfg(feature = "esp32c3")]
 mod flash;
+#[cfg(feature = "esp32c3")]
+mod hot;
 mod partition;
 #[cfg(feature = "esp32s3")]
 mod psram;
@@ -54,6 +58,20 @@ pub fn this_firmware() -> paperpaw_sdk::native::Native {
     native
 }
 
+/// The internal RAM kept for plugins' hot code (the X4's arena), which
+/// the heap gets once plugins are loaded, as far as they did not take it.
+#[cfg(feature = "esp32c3")]
+pub const HOT_ARENA_LEN: usize = hot::LEN;
+#[cfg(feature = "esp32s3")]
+pub const HOT_ARENA_LEN: usize = 0;
+
+/// Gives the arena for hot code to the heap: no code plugins are loaded
+/// at this start.
+pub fn no_hot_code() {
+    #[cfg(feature = "esp32c3")]
+    hot::release(0);
+}
+
 /// The chip plugin files must be made for.
 #[cfg(feature = "esp32c3")]
 const CHIP: Chip = Chip::Esp32C3;
@@ -67,6 +85,11 @@ struct Image {
     /// The instruction address of the image's first byte.
     code_base: u32,
     len: u32,
+    /// Where its hot code runs, if not in place (0), where it lies in the
+    /// image and its length.
+    hot: u32,
+    hot_at: u32,
+    hot_len: u32,
     /// What loading it took: microseconds to place it and to make its
     /// plugin, bytes of the heap and of its internal RAM.
     took: Option<Took>,
@@ -78,6 +101,9 @@ struct Took {
     make_us: u64,
     heap: isize,
     internal: isize,
+    /// Bytes of hot code run from internal RAM, which the heap does not
+    /// get.
+    hot: u32,
 }
 
 /// Every image loaded, for naming the plugin a panic's call was in.
@@ -133,11 +159,12 @@ pub fn describe(line: &mut dyn FnMut(&str)) {
         for image in IMAGES.borrow_ref(cs).iter() {
             let took = image.took.map_or_else(String::new, |t| {
                 alloc::format!(
-                    ", placed in {} us, made in {} us, heap {:+} B, internal RAM {:+} B",
+                    ", placed in {} us, made in {} us, heap {:+} B, internal RAM {:+} B, hot code {} B",
                     t.place_us,
                     t.make_us,
                     t.heap,
-                    t.internal
+                    t.internal,
+                    t.hot
                 )
             });
             line(&alloc::format!(
@@ -153,12 +180,18 @@ pub fn describe(line: &mut dyn FnMut(&str)) {
 /// The plugin whose code the instruction address `pc` lies in, and the
 /// offset into its file (the image begins after the header): with the
 /// plugin's ELF, its function is at `0x3C000000 + 0x06000000 + offset -
-/// 80`. Called from the panic handler: allocates nothing.
+/// HEADER_LEN`. Code in the arena of hot code is its plugin's, at its
+/// place in the image. Called from the panic handler: allocates nothing.
 pub fn attribute(pc: u32, found: &mut dyn FnMut(&str, u32)) {
     critical_section::with(|cs| {
         if let Ok(images) = IMAGES.borrow(cs).try_borrow() {
             for image in images.iter() {
-                let offset = pc.wrapping_sub(image.code_base);
+                let hot = pc.wrapping_sub(image.hot);
+                let offset = if image.hot != 0 && hot < image.hot_len {
+                    image.hot_at + hot
+                } else {
+                    pc.wrapping_sub(image.code_base)
+                };
                 if offset < image.len {
                     found(&image.id, offset + HEADER_LEN as u32);
                     return;
@@ -224,7 +257,7 @@ impl Loader {
         let size = storage.size(path).map_err(|_| PluginProblem::Damaged)?;
         header.signed(size).map_err(problem)?;
         let words = read_words(storage, path, &header)?;
-        let base = self.place.put(storage, path, &header, &words)?;
+        let (base, hot) = self.place.put(storage, path, &header, &words)?;
         drop(words);
         let placed = crate::micros();
         // SAFETY: the entry lies in the image just placed and relocated,
@@ -238,6 +271,9 @@ impl Loader {
                 id: String::from(code.id.as_str()),
                 code_base: base + CODE_OFFSET,
                 len: header.image_len,
+                hot,
+                hot_at: header.hot_at,
+                hot_len: header.hot_len,
                 took: None,
             })
         });
@@ -251,10 +287,18 @@ impl Loader {
             make_us: crate::micros() - placed,
             heap: esp_alloc::HEAP.used() as isize - heap as isize,
             internal: internal as isize - internal_free() as isize,
+            hot: if hot == 0 { 0 } else { header.hot_len },
         };
         info!(
-            "native: {path}: {} B at {base:#x}, {} words moved; placed in {} us, made in {} us; heap {:+} B, internal RAM {:+} B",
-            header.image_len, header.relocs, took.place_us, took.make_us, took.heap, took.internal
+            "native: {path}: {} B at {base:#x}, {} words moved, {} patched; placed in {} us, made in {} us; heap {:+} B, internal RAM {:+} B, hot code {} B at {hot:#x}",
+            header.image_len,
+            header.relocs,
+            header.patches,
+            took.place_us,
+            took.make_us,
+            took.heap,
+            took.internal,
+            took.hot
         );
         critical_section::with(|cs| {
             if let Some(image) = IMAGES.borrow_ref_mut(cs).last_mut() {
@@ -308,13 +352,14 @@ fn problem(problem: Problem) -> PluginProblem {
     }
 }
 
-/// The words to relocate, read from the end of the file.
+/// The words after the image (those to relocate, then the patches),
+/// read from the end of the file.
 fn read_words(
     storage: &dyn Storage,
     path: &str,
     header: &Header,
 ) -> Result<Vec<u32>, PluginProblem> {
-    let count = header.relocs as usize;
+    let count = header.tail_words();
     let mut words = Vec::new();
     words
         .try_reserve_exact(count)
@@ -333,7 +378,7 @@ fn read_words(
         );
         at += want as u64;
     }
-    paperpaw_native::check_relocations(header, words.iter().copied()).map_err(problem)?;
+    paperpaw_native::check_relocations(header, &words).map_err(problem)?;
     Ok(words)
 }
 
@@ -357,7 +402,7 @@ fn read_exact(
 }
 
 /// The bytes after the header the digest covers once the image is read:
-/// the words to relocate as the file has them.
+/// the words after the image as the file has them.
 fn digest_words(sha: &mut paperpaw_digest::sha256::Sha256, words: &[u32]) {
     for word in words {
         sha.update(&word.to_le_bytes());

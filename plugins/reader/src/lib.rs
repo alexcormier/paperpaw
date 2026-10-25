@@ -49,8 +49,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::help::{self, Zone};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
-    Command, Commands, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar,
-    ScreenSpec, SettingSpec,
+    Command, Commands, Env, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params, Plugin,
+    Priority, RegisterError, Registrar, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("reader");
@@ -99,16 +99,13 @@ pub mod settings {
     use paperpaw_sdk::setting::{Setting, Text};
 
     /// The standard type of book pages, registered by the kernel (each
-    /// book may have its own).
+    /// book may have its own). Smooth text was the reader's own before
+    /// beta.8 (`reader.smooth-text`).
     pub use paperpaw_sdk::builtin::settings::{
         FONT_SIZE, FONT_WEIGHT, FOOTNOTES, FOOTNOTES_JUMP, FOOTNOTES_POPUP, HYPHENATE, INDENT,
         JUSTIFY, LINE_SPACING, MARGIN, MARGIN_ENDS, PARAGRAPH_SPACING, PUBLISHER_STYLES,
-        WORD_SPACING,
+        SMOOTH_TEXT, TEXT_CONTRAST, WORD_SPACING,
     };
-    /// Book pages with smooth letters, their edges in grays, where the
-    /// panel shows black and white but can show grays with a refresh of
-    /// its own (the X4): slower and costing more battery.
-    pub const SMOOTH_TEXT: Setting<bool> = Setting::new("reader.smooth-text");
     /// Reopen the last book at start-up.
     pub const OPEN_LAST: Setting<bool> = Setting::new("reader.open-last");
     /// A tap on the top right corner sets or removes a bookmark.
@@ -205,45 +202,29 @@ pub mod actions {
 #[derive(Debug, Default)]
 pub struct Reader;
 
-/// The parts of the reading settings, with units and steps; those set by
-/// eye with sliders.
+/// Units and steps of the reader's settings; those set by eye with
+/// sliders.
 mod extras {
     use paperpaw_sdk::SettingExtra;
-    use paperpaw_sdk::builtin::group_sections::{ALOUD, BEHAVIOUR, FONT};
 
-    pub(crate) static IN_FONT: SettingExtra = SettingExtra::new().section(FONT);
-    pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
-    pub(crate) static AUTO_TURN: SettingExtra = SettingExtra::new()
-        .unit("core.unit.seconds")
-        .step(5)
-        .section(BEHAVIOUR);
+    pub(crate) static AUTO_TURN: SettingExtra =
+        SettingExtra::new().unit("core.unit.seconds").step(5);
     pub(crate) static ALOUD_SPEED: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(10)
-        .section(ALOUD)
         .slider();
-    pub(crate) static IN_ALOUD: SettingExtra = SettingExtra::new().section(ALOUD);
 }
 
-/// The reader's own settings: smooth letters, what it does, and reading
-/// aloud (the type of pages is the kernel's, see `settings`).
-static SETTINGS: [SettingSpec; 9] = [
-    SettingSpec::switch(
-        settings::SMOOTH_TEXT.static_str(),
-        "reader.setting.smooth-text",
-        false,
-        groups::READING,
-    )
-    .with_extra(&extras::IN_FONT)
-    .description("reader.setting.smooth-text.help"),
+/// The reader's own settings: what it does, and reading aloud (the type
+/// of pages is the kernel's, see `settings`).
+static SETTINGS: [SettingSpec; 8] = [
     SettingSpec::switch(
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
         true,
-        groups::READING,
+        groups::READING_BEHAVIOUR,
     )
     .advanced()
-    .with_extra(&extras::IN_BEHAVIOUR)
     .description("reader.setting.open-last.help"),
     SettingSpec::switch(
         settings::CORNER_BOOKMARK.static_str(),
@@ -267,7 +248,7 @@ static SETTINGS: [SettingSpec; 9] = [
         5,
         600,
         30,
-        groups::READING,
+        groups::READING_BEHAVIOUR,
     )
     .advanced()
     .with_extra(&extras::AUTO_TURN)
@@ -278,7 +259,7 @@ static SETTINGS: [SettingSpec; 9] = [
         50,
         300,
         100,
-        groups::READING,
+        groups::READING_ALOUD,
     )
     .with_extra(&extras::ALOUD_SPEED)
     .description("reader.setting.aloud-speed.help"),
@@ -286,26 +267,23 @@ static SETTINGS: [SettingSpec; 9] = [
         settings::ALOUD_HIGHLIGHT.static_str(),
         "reader.setting.aloud-highlight",
         true,
-        groups::READING,
+        groups::READING_ALOUD,
     )
-    .with_extra(&extras::IN_ALOUD)
     .description("reader.setting.aloud-highlight.help"),
     SettingSpec::switch(
         settings::ALOUD_TURN.static_str(),
         "reader.setting.aloud-turn-pages",
         true,
-        groups::READING,
+        groups::READING_ALOUD,
     )
-    .with_extra(&extras::IN_ALOUD)
     .description("reader.setting.aloud-turn-pages.help"),
     SettingSpec::choice(
         settings::ALOUD_TIMER.static_str(),
         "reader.setting.aloud-timer",
         &aloud::TIMER_CHOICES,
         aloud::TIMER_CHOICES[0],
-        groups::READING,
+        groups::READING_ALOUD,
     )
-    .with_extra(&extras::IN_ALOUD)
     .description("reader.setting.aloud-timer.help"),
 ];
 
@@ -313,6 +291,155 @@ static SETTINGS: [SettingSpec; 9] = [
 static HOW: [(&str, &str); 2] = [
     ("en", include_str!("../how/en.txt")),
     ("de", include_str!("../how/de.txt")),
+];
+
+static ACTIONS: [FixedAction; 29] = [
+    FixedAction::new(actions::TOC, "reader.toc"),
+    FixedAction::new(actions::SEARCH, "reader.search"),
+    FixedAction::new(actions::GO_TO_PAGE, "reader.go-to-page"),
+    FixedAction::new(actions::GO_TO_PERCENT, "reader.go-to-percent"),
+    FixedAction::new(actions::READ_ALOUD, "reader.read-aloud"),
+    FixedAction::new(actions::SELECT, "reader.select"),
+    FixedAction::new(actions::LINKS, "reader.links"),
+    FixedAction::new(actions::NEXT_STATUS_LINE, "reader.next-status-line"),
+    FixedAction::new(actions::NEXT_TOP_STATUS_LINE, "reader.next-top-status-line"),
+    FixedAction::new(actions::TOGGLE_BOOKMARK, "reader.toggle-bookmark"),
+    FixedAction::new(actions::ANNOTATIONS, "reader.annotations"),
+    FixedAction::new(actions::LOOK_UP, "reader.select.look-up"),
+    FixedAction::new(actions::HIGHLIGHT, "reader.select.highlight"),
+    FixedAction::new(actions::COPY, "reader.select.copy"),
+    FixedAction::new(actions::TRANSLATE, "reader.select.translate"),
+    FixedAction::new(actions::READ_FROM, "reader.select.read-aloud"),
+    FixedAction::new(actions::NOTE, "reader.select.note"),
+    FixedAction::new(actions::BOOK_INFO, "reader.book-info"),
+    FixedAction::new(actions::AUTO_TURN, "reader.auto-turn"),
+    FixedAction::new(actions::SKIM_BOOK, "reader.skim"),
+    FixedAction::new(actions::NEXT_CHAPTER, "reader.next-chapter"),
+    FixedAction::new(actions::PREV_CHAPTER, "reader.prev-chapter"),
+    FixedAction::new(actions::EXTEND, "reader.select.extend"),
+    FixedAction::new(actions::CANCEL, "reader.select.cancel"),
+    FixedAction::new(actions::MORE, "reader.select.more"),
+    FixedAction::new(actions::FONT_LARGER, "reader.action.font-larger")
+        .handler(|env, _, out| font_step(env, out, 1)),
+    FixedAction::new(actions::FONT_SMALLER, "reader.action.font-smaller")
+        .handler(|env, _, out| font_step(env, out, -1)),
+    FixedAction::new(actions::TOGGLE_JUSTIFY, "reader.action.toggle-justify").handler(
+        |env, _, out| {
+            let justify = env.settings().read(&settings::JUSTIFY);
+            out.push(Command::set(&settings::JUSTIFY, !justify));
+        },
+    ),
+    // Font and layout as a panel of controls: changes show at once.
+    FixedAction::new(actions::QUICK_SETTINGS, "reader.layout").handler(|_, _, out| {
+        out.push(Command::OpenSlot(
+            slots::PANEL,
+            Params::new().with(params::MENU, String::from(LAYOUT_MENU.as_str())),
+        ));
+    }),
+];
+
+/// Within the sizes the reading font has (see the setting), to the next
+/// that looks different.
+fn font_step(env: &Env<'_>, out: &mut Commands, step: i64) {
+    let Some(spec) = env.settings().spec(settings::FONT_SIZE.as_str()) else {
+        return;
+    };
+    let size = env.settings().read(&settings::FONT_SIZE);
+    let next = match spec.kind {
+        paperpaw_sdk::SettingKind::Int { min, max } => (size + step).clamp(min, max.max(min)),
+        _ => size + step,
+    };
+    let next = paperpaw_sdk::ui::shown_step(env, spec, size, next);
+    out.push(Command::set(&settings::FONT_SIZE, next));
+}
+
+/// A setting's id, kept in the program.
+macro_rules! setting_id {
+    ($setting:expr) => {
+        Id::new_static($setting.static_str())
+    };
+}
+
+static ENTRIES: [MenuEntry; 34] = [
+    // The bar for selected text; plugins add to it.
+    MenuEntry::new(SELECTION_MENU, actions::LOOK_UP).order(10),
+    MenuEntry::new(SELECTION_MENU, actions::HIGHLIGHT).order(20),
+    MenuEntry::new(SELECTION_MENU, actions::NOTE).order(22),
+    MenuEntry::new(SELECTION_MENU, actions::READ_FROM).order(25),
+    MenuEntry::new(SELECTION_MENU, actions::COPY).order(30),
+    MenuEntry::new(SELECTION_MENU, actions::TRANSLATE).order(35),
+    MenuEntry::new(SELECTION_MENU, actions::EXTEND).order(80),
+    MenuEntry::new(SELECTION_MENU, actions::CANCEL).order(90),
+    // A short menu; settings in it show their state and change in
+    // place. First, focused as the menu opens: with buttons, the font and
+    // layout are two presses away.
+    MenuEntry::new(MENU, actions::QUICK_SETTINGS).order(5),
+    MenuEntry::new(MENU, actions::TOC).order(10),
+    MenuEntry::new(MENU, actions::SEARCH).order(20),
+    MenuEntry::new(MENU, actions::READ_ALOUD).order(30),
+    MenuEntry::new(MENU, actions::ANNOTATIONS).order(40),
+    MenuEntry::new(MENU, setting_id!(core_settings::NIGHT_MODE)).order(60),
+    // Beside the night mode, to be found; held Select and the
+    // corner are quicker.
+    MenuEntry::new(MENU, actions::TOGGLE_BOOKMARK).order(65),
+    MenuEntry::new(MENU, MORE_MENU).order(70),
+    // Last, so that one press back from the first entry reaches
+    // it: home from a book without a further list.
+    MenuEntry::new(MENU, core_actions::HOME).order(80),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(core_settings::SCOPE_ONLY)).order(1),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(core_settings::READING_FONT)).order(5),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(settings::FONT_SIZE)).order(10),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(settings::FONT_WEIGHT)).order(15),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(settings::LINE_SPACING)).order(20),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(settings::MARGIN)).order(30),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(settings::JUSTIFY)).order(40),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(settings::HYPHENATE)).order(50),
+    MenuEntry::new(LAYOUT_MENU, setting_id!(settings::PUBLISHER_STYLES)).order(60),
+    MenuEntry::new(MORE_MENU, actions::SKIM_BOOK).order(15),
+    MenuEntry::new(MORE_MENU, actions::GO_TO_PAGE).order(16),
+    MenuEntry::new(MORE_MENU, actions::GO_TO_PERCENT).order(17),
+    MenuEntry::new(MORE_MENU, actions::AUTO_TURN).order(17),
+    MenuEntry::new(MORE_MENU, actions::SELECT).order(20),
+    MenuEntry::new(MORE_MENU, actions::LINKS).order(25),
+    MenuEntry::new(MORE_MENU, actions::NEXT_STATUS_LINE).order(30),
+    MenuEntry::new(MORE_MENU, core_actions::SETTINGS).order(50),
+];
+
+static ICONS: [(Id, &str); 13] = [
+    (actions::TOC, "list"),
+    (actions::LINKS, "link"),
+    (actions::SEARCH, "search"),
+    (actions::GO_TO_PAGE, "hash"),
+    (actions::GO_TO_PERCENT, "arrow-bar-to-right"),
+    (actions::ANNOTATIONS, "bookmarks"),
+    (actions::QUICK_SETTINGS, "typography"),
+    (actions::TOGGLE_BOOKMARK, "bookmark"),
+    (actions::SELECT, "cursor-text"),
+    (actions::READ_ALOUD, "volume"),
+    (actions::AUTO_TURN, "clock-play"),
+    (actions::SKIM_BOOK, "arrows-horizontal"),
+    (actions::NEXT_STATUS_LINE, "layout-bottombar"),
+];
+
+static SCREENS: [FixedScreen; 6] = [
+    FixedScreen::new(SCREEN, "reader.title", |env, params| {
+        Box::new(screen::ReaderScreen::open(env, params))
+    }),
+    FixedScreen::new(TOC_SCREEN, "reader.toc", |env, params| {
+        Box::new(toc::TocScreen::open(env, params))
+    }),
+    FixedScreen::new(ANNOTATIONS_SCREEN, "reader.annotations", |env, params| {
+        Box::new(annotations::AnnotationsScreen::open(env, params))
+    }),
+    FixedScreen::new(SKIM_SCREEN, "reader.skim", |env, params| {
+        Box::new(skim::SkimScreen::new(env, params))
+    }),
+    FixedScreen::new(FOOTNOTE_SCREEN, "reader.title", |env, params| {
+        Box::new(footnote::FootnoteScreen::new(env, params))
+    }),
+    FixedScreen::new(SEARCH_SCREEN, "reader.search", |env, params| {
+        Box::new(search::SearchScreen::open(env, params))
+    }),
 ];
 
 impl Plugin for Reader {
@@ -323,10 +450,6 @@ impl Plugin for Reader {
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "longer than the limit from before it was set; split it when it is next changed"
-    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // Each book's position, page index and own settings, moved and
         // removed with it.
@@ -336,11 +459,7 @@ impl Plugin for Reader {
         )?;
         // The page takes all of the screen; the buttons' row comes on a press.
         r.set_screen_hints(SCREEN, paperpaw_sdk::HintVisibility::OnPress)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "reader.title",
-            Box::new(|env, params| Box::new(screen::ReaderScreen::open(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.bind_slot(slots::READER, SCREEN, Priority::DEFAULT)?;
         // The first time: the tap zones (as the standard key map has them),
         // or the buttons; once the book shows (see `Screen::on_show`).
@@ -361,80 +480,16 @@ impl Plugin for Reader {
             ],
         )?;
         r.add_reader(paperpaw_sdk::readers::ReaderSpec::new(APP, SCREEN))?;
-        r.add_screen(ScreenSpec::new(
-            TOC_SCREEN,
-            "reader.toc",
-            Box::new(|env, params| Box::new(toc::TocScreen::open(env, params))),
-        ))?;
         // Its other screens fill the standard slots, which others may.
         r.bind_slot(slots::TOC, TOC_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::ANNOTATIONS, ANNOTATIONS_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::FOOTNOTE, FOOTNOTE_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::SEARCH, SEARCH_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::SKIM, SKIM_SCREEN, Priority::DEFAULT)?;
-        r.add_action(paperpaw_sdk::ActionSpec::new(actions::TOC, "reader.toc"))?;
-        r.add_screen(ScreenSpec::new(
-            ANNOTATIONS_SCREEN,
-            "reader.annotations",
-            Box::new(|env, params| Box::new(annotations::AnnotationsScreen::open(env, params))),
-        ))?;
         status::register(r)?;
-        r.add_screen(ScreenSpec::new(
-            SKIM_SCREEN,
-            "reader.skim",
-            Box::new(|env, params| Box::new(skim::SkimScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            FOOTNOTE_SCREEN,
-            "reader.title",
-            Box::new(|env, params| Box::new(footnote::FootnoteScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            SEARCH_SCREEN,
-            "reader.search",
-            Box::new(|env, params| Box::new(search::SearchScreen::open(env, params))),
-        ))?;
-        for (id, title) in [
-            (actions::SEARCH, "reader.search"),
-            (actions::GO_TO_PAGE, "reader.go-to-page"),
-            (actions::GO_TO_PERCENT, "reader.go-to-percent"),
-            (actions::READ_ALOUD, "reader.read-aloud"),
-            (actions::SELECT, "reader.select"),
-            (actions::LINKS, "reader.links"),
-            (actions::NEXT_STATUS_LINE, "reader.next-status-line"),
-            (actions::NEXT_TOP_STATUS_LINE, "reader.next-top-status-line"),
-            (actions::TOGGLE_BOOKMARK, "reader.toggle-bookmark"),
-            (actions::ANNOTATIONS, "reader.annotations"),
-            (actions::LOOK_UP, "reader.select.look-up"),
-            (actions::HIGHLIGHT, "reader.select.highlight"),
-            (actions::COPY, "reader.select.copy"),
-            (actions::TRANSLATE, "reader.select.translate"),
-            (actions::READ_FROM, "reader.select.read-aloud"),
-            (actions::NOTE, "reader.select.note"),
-            (actions::BOOK_INFO, "reader.book-info"),
-            (actions::AUTO_TURN, "reader.auto-turn"),
-            (actions::SKIM_BOOK, "reader.skim"),
-            (actions::NEXT_CHAPTER, "reader.next-chapter"),
-            (actions::PREV_CHAPTER, "reader.prev-chapter"),
-            (actions::EXTEND, "reader.select.extend"),
-            (actions::CANCEL, "reader.select.cancel"),
-            (actions::MORE, "reader.select.more"),
-        ] {
-            r.add_action(paperpaw_sdk::ActionSpec::new(id, title))?;
-        }
-        // The bar for selected text; plugins add to it.
-        for (item, order) in [
-            (actions::LOOK_UP, 10),
-            (actions::HIGHLIGHT, 20),
-            (actions::NOTE, 22),
-            (actions::READ_FROM, 25),
-            (actions::COPY, 30),
-            (actions::TRANSLATE, 35),
-            (actions::EXTEND, 80),
-            (actions::CANCEL, 90),
-        ] {
-            r.add_menu_entry(paperpaw_sdk::MenuEntry::new(SELECTION_MENU, item).order(order))?;
-        }
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
 
         r.add_settings(&SETTINGS)?;
         // A sample of text above the reading settings, set as they say.
@@ -445,62 +500,6 @@ impl Plugin for Reader {
             .previews(groups::READING),
         )?;
 
-        let font_step = |step: i64| -> paperpaw_sdk::ActionHandler {
-            Box::new(
-                move |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
-                    // Within the sizes the reading font has (see the
-                    // setting), to the next that looks different.
-                    let Some(spec) = env.settings().spec(settings::FONT_SIZE.as_str()) else {
-                        return;
-                    };
-                    let size = env.settings().read(&settings::FONT_SIZE);
-                    let next = match spec.kind {
-                        paperpaw_sdk::SettingKind::Int { min, max } => {
-                            (size + step).clamp(min, max.max(min))
-                        }
-                        _ => size + step,
-                    };
-                    let next = paperpaw_sdk::ui::shown_step(env, spec, size, next);
-                    out.push(Command::set(&settings::FONT_SIZE, next));
-                },
-            )
-        };
-        let handlers: [(Id, &'static str, paperpaw_sdk::ActionHandler); 3] = [
-            (
-                actions::FONT_LARGER,
-                "reader.action.font-larger",
-                font_step(1),
-            ),
-            (
-                actions::FONT_SMALLER,
-                "reader.action.font-smaller",
-                font_step(-1),
-            ),
-            (
-                actions::TOGGLE_JUSTIFY,
-                "reader.action.toggle-justify",
-                Box::new(
-                    |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
-                        let justify = env.settings().read(&settings::JUSTIFY);
-                        out.push(Command::set(&settings::JUSTIFY, !justify));
-                    },
-                ),
-            ),
-        ];
-        for (id, title, handler) in handlers {
-            r.add_action(paperpaw_sdk::ActionSpec::new(id, title).handler(handler))?;
-        }
-        // Font and layout as a panel of controls: changes show at once.
-        r.add_action(
-            paperpaw_sdk::ActionSpec::new(actions::QUICK_SETTINGS, "reader.layout").handler(
-                |_: &Env<'_>, _, out: &mut Commands| {
-                    out.push(Command::OpenSlot(
-                        slots::PANEL,
-                        Params::new().with(params::MENU, String::from(LAYOUT_MENU.as_str())),
-                    ));
-                },
-            ),
-        )?;
         // A tap at the bottom of a page opens it. Swipes in from the sides
         // turn pages, as swipes do, rather than going back; two fingers
         // apart or together make the text larger or smaller. Holding
@@ -522,45 +521,6 @@ impl Plugin for Reader {
                  long.page-back = reader.prev-chapter\n",
             ),
         )?;
-        // A short menu; settings in it show their state and change in
-        // place.
-        let entries = [
-            // First, focused as the menu opens: with buttons, the font and
-            // layout are two presses away.
-            (MENU, actions::QUICK_SETTINGS, 5),
-            (MENU, actions::TOC, 10),
-            (MENU, actions::SEARCH, 20),
-            (MENU, actions::READ_ALOUD, 30),
-            (MENU, actions::ANNOTATIONS, 40),
-            (MENU, core_settings::NIGHT_MODE.into(), 60),
-            // Beside the night mode, to be found; held Select and the
-            // corner are quicker.
-            (MENU, actions::TOGGLE_BOOKMARK, 65),
-            (MENU, MORE_MENU, 70),
-            // Last, so that one press back from the first entry reaches
-            // it: home from a book without a further list.
-            (MENU, core_actions::HOME, 80),
-            (LAYOUT_MENU, core_settings::SCOPE_ONLY.into(), 1),
-            (LAYOUT_MENU, core_settings::READING_FONT.into(), 5),
-            (LAYOUT_MENU, settings::FONT_SIZE.into(), 10),
-            (LAYOUT_MENU, settings::FONT_WEIGHT.into(), 15),
-            (LAYOUT_MENU, settings::LINE_SPACING.into(), 20),
-            (LAYOUT_MENU, settings::MARGIN.into(), 30),
-            (LAYOUT_MENU, settings::JUSTIFY.into(), 40),
-            (LAYOUT_MENU, settings::HYPHENATE.into(), 50),
-            (LAYOUT_MENU, settings::PUBLISHER_STYLES.into(), 60),
-            (MORE_MENU, actions::SKIM_BOOK, 15),
-            (MORE_MENU, actions::GO_TO_PAGE, 16),
-            (MORE_MENU, actions::GO_TO_PERCENT, 17),
-            (MORE_MENU, actions::AUTO_TURN, 17),
-            (MORE_MENU, actions::SELECT, 20),
-            (MORE_MENU, actions::LINKS, 25),
-            (MORE_MENU, actions::NEXT_STATUS_LINE, 30),
-            (MORE_MENU, core_actions::SETTINGS, 50),
-        ];
-        for (menu, item, order) in entries {
-            r.add_menu_entry(paperpaw_sdk::MenuEntry::new(menu, item).order(order))?;
-        }
         // Short menus: reading aloud where the device speaks; choosing
         // text and links and switching status lines (a tap on one by
         // touch) with the buttons where there is no touch screen.
@@ -577,26 +537,7 @@ impl Plugin for Reader {
         for item in [actions::SELECT, actions::LINKS, actions::NEXT_STATUS_LINE] {
             r.set_menu_need(item, paperpaw_sdk::MenuNeed::NoTouch)?;
         }
-        r.set_menu_need(settings::SMOOTH_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
         r.set_menu_need(settings::CORNER_BOOKMARK, paperpaw_sdk::MenuNeed::Touch)?;
-        for (item, icon) in [
-            (actions::TOC, "list"),
-            (actions::LINKS, "link"),
-            (actions::SEARCH, "search"),
-            (actions::GO_TO_PAGE, "hash"),
-            (actions::GO_TO_PERCENT, "arrow-bar-to-right"),
-            (actions::ANNOTATIONS, "bookmarks"),
-            (actions::QUICK_SETTINGS, "typography"),
-            (actions::TOGGLE_BOOKMARK, "bookmark"),
-            (actions::SELECT, "cursor-text"),
-            (actions::READ_ALOUD, "volume"),
-            (actions::AUTO_TURN, "clock-play"),
-            (actions::SKIM_BOOK, "arrows-horizontal"),
-            (actions::NEXT_STATUS_LINE, "layout-bottombar"),
-        ] {
-            r.add_icon(item, Cow::Borrowed(icon))?;
-        }
-
         r.on(events::STARTED, |env, (), out| reopen_last_book(env, out))?;
         r.on(events::BOOK_MOVED, |env, moved, _| book_moved(env, moved))?;
         // The first-run setup: how large the text is.

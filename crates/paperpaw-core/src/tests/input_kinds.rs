@@ -271,7 +271,11 @@ fn inputs_raised_and_layers_put_in_front() {
     kernel.finish();
     assert_eq!(kernel.stack[0].key_layer, None);
     // By a screen for the one below it: not laid.
-    kernel.open_screen(Instant(30), Id::new_static("lay.screen"), Params::new());
+    kernel.open_screen(
+        Instant(30),
+        Id::new_static("lay.screen"),
+        Params::new().with("n", "2"),
+    );
     kernel.run_action(Instant(40), Id::new_static("lay.other"));
     assert_eq!(kernel.stack[0].key_layer, None);
     kernel.apply(Command::Input(String::from("no.such-input")));

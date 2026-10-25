@@ -135,6 +135,11 @@ const OTHERS: usize = 4;
 /// Largest font file loaded.
 const MAX_FONT_FILE: u64 = 48 * 1024 * 1024;
 
+/// The usual step between a pack's sizes, in pixels: a size asked more
+/// than half of it past a pack's largest is drawn by a pack with larger
+/// ones, where one extends it.
+const LARGER_STEP: f32 = 4.0;
+
 /// The lines of a heading or title, as many times its size apart
 /// ([`FontHandle::heading_line_height`]).
 const HEADING_LEADING: f32 = 1.2;
@@ -197,6 +202,13 @@ impl Fonts {
             cache: RefCell::new(GlyphCache::new(cache_bytes)),
             describing: core::cell::Cell::new(false),
         }
+    }
+
+    /// Lets the glyphs drawn at runtime go, to make room; they are drawn
+    /// again as they are needed.
+    #[cfg(feature = "kernel")]
+    pub fn clear_cache(&self) {
+        self.cache.borrow_mut().clear();
     }
 
     fn check_new(&self, id: &Id) -> Result<(), RegisterError> {
@@ -575,6 +587,15 @@ impl Fonts {
         for i in self.extensions_of(index) {
             add(i);
         }
+        // The extension with the largest sizes beyond this pack's own, if
+        // one has any.
+        let largest = |f: &Font| f.largest_size().unwrap_or(0.0);
+        let own = entry.font.as_ref().map_or(0.0, largest);
+        let larger = self
+            .extensions_of(index)
+            .filter_map(|i| self.entries[i].font.as_ref().map(|f| (f, i as u16)))
+            .filter(|(f, _)| own > 0.0 && largest(f) > own)
+            .max_by(|a, b| largest(a.0).total_cmp(&largest(b.0)));
         if let Some(fallback) = self.fallback_index() {
             add(fallback);
             for i in self.extensions_of(fallback) {
@@ -589,7 +610,10 @@ impl Fonts {
             describing: &self.describing,
             index: index as u16,
             others,
+            larger,
             display: false,
+            kerning: true,
+            ligatures: false,
         }
     }
 
@@ -721,7 +745,10 @@ impl FontSet {
             describing: &self.describing,
             index: index as u16,
             others: [None; OTHERS],
+            larger: None,
             display: false,
+            kerning: true,
+            ligatures: false,
         })
     }
 }
@@ -740,10 +767,33 @@ pub struct FontHandle<'a> {
     /// Fonts for the characters this one lacks, asked in turn, and their
     /// numbers in the same cache.
     others: [Option<(&'a Font, u16)>; OTHERS],
+    /// A pack that extends this one with larger sizes (a plugin's, for
+    /// sizes the firmware leaves out), and its number: it draws text
+    /// asked larger than this font's largest size.
+    larger: Option<(&'a Font, u16)>,
     /// Draws at a pack's large sizes made for a few characters too (see
     /// [`FontHandle::display`]).
     display: bool,
+    /// Pairs of characters kerned (see [`FontHandle::unkerned`]).
+    kerning: bool,
+    /// Ligatures drawn (see [`FontHandle::ligatures`]).
+    ligatures: bool,
 }
+
+/// The ligature of two characters, if there is one: drawn in their place
+/// where the font has it, the pair set as wide as the ligature is (see
+/// [`FontHandle::ligatures`]).
+fn ligature(left: char, right: char) -> Option<char> {
+    match (left, right) {
+        ('f', 'i') => Some('\u{fb01}'),
+        ('f', 'l') => Some('\u{fb02}'),
+        _ => None,
+    }
+}
+
+/// Ligatures of three characters and of `ff`: drawn only where they take
+/// the room their characters take apart, within this many pixels.
+const LIGATURE_FIT: f32 = 0.5;
 
 impl fmt::Debug for FontHandle<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -761,16 +811,38 @@ impl<'a> FontHandle<'a> {
     }
 
     /// The largest size text can be set in, in pixels: a font pack has
-    /// the sizes it was made in; `None` for a scalable font, which has
-    /// every size.
+    /// the sizes it was made in, and those of a pack that extends it with
+    /// larger ones; `None` for a scalable font, which has every size.
     pub fn largest_size(&self) -> Option<f32> {
-        self.font().largest_size()
+        let own = self.font().largest_size();
+        match self.larger.and_then(|(font, _)| font.largest_size()) {
+            Some(larger) => Some(own.map_or(larger, |own| own.max(larger))),
+            None => own,
+        }
+    }
+
+    /// The handle of the pack that extends this one with larger sizes, for
+    /// text asked at `size`, where it is past this font's largest size by
+    /// more than half of the usual step between sizes; `None` where this
+    /// font draws it.
+    fn larger_for(&self, size: f32) -> Option<Self> {
+        let (font, index) = self.larger?;
+        let own = self.font.largest_size()?;
+        (size >= own + LARGER_STEP / 2.0).then_some(Self {
+            font,
+            index,
+            larger: None,
+            ..*self
+        })
     }
 
     /// Ascent, descent and line height at `size` pixels: of the size text
     /// is drawn at (see [`FontHandle::size_for`]; for a display, the size
     /// asked).
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.line_metrics(size);
+        }
         self.font()
             .line_metrics(self.font().size_for(size, "", self.display))
     }
@@ -782,6 +854,9 @@ impl<'a> FontHandle<'a> {
     /// line (capitals with accents) still stay clear of the lowest of the
     /// line above (descenders). Text keeps its line height.
     pub fn heading_line_height(&self, size: f32) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.heading_line_height(size);
+        }
         let drawn = self.font().size_for(size, "", self.display);
         // In whole pixels, rounded up (no float rounding in `no_std`).
         let apart = (drawn * HEADING_LEADING + 0.999) as u32 as f32;
@@ -816,9 +891,84 @@ impl<'a> FontHandle<'a> {
     /// Horizontal advance of one character in pixels, at the size it is
     /// drawn at alone (see [`FontHandle::size_for`]).
     pub fn advance(&self, size: f32, ch: char) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.advance(size, ch);
+        }
         let mut buffer = [0u8; 4];
         let size = self.size_for(size, ch.encode_utf8(&mut buffer));
         self.pick(ch).0.advance(ch, size)
+    }
+
+    /// This font without kerning: each character set after the one
+    /// before by its advance alone, as fonts were set before kerning (e.g.
+    /// a reader's setting for book text). Measuring and drawing agree
+    /// either way.
+    pub fn unkerned(self) -> Self {
+        Self {
+            kerning: false,
+            ..self
+        }
+    }
+
+    /// This font with ligatures: `fi` and `fl` drawn as one glyph where
+    /// the font has it, the pair set as wide as that glyph (so measuring,
+    /// as [`FontHandle::kern`] does, agrees); `ff`, `ffi` and `ffl` drawn
+    /// as one only where that takes the room of their characters apart.
+    /// The text stays as it is: positions, hyphenation and search are
+    /// those of its characters. For book text, not for the menus.
+    pub fn ligatures(self) -> Self {
+        Self {
+            ligatures: true,
+            ..self
+        }
+    }
+
+    /// How much `right` moves when it follows `left` at `size`, in pixels
+    /// (negative: closer), as [`FontHandle::measure`] and the drawing
+    /// methods set the pair: the font's kerning (none where the two are
+    /// drawn by different fonts, or [`FontHandle::unkerned`]), or with
+    /// [`FontHandle::ligatures`] the room a ligature saves. What a layout
+    /// adds between the characters of a word it measures one by one.
+    pub fn kern(&self, size: f32, left: char, right: char) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.kern(size, left, right);
+        }
+        let font = match self.others[0] {
+            None => self.font,
+            Some(_) => {
+                let (font, index) = self.pick(left);
+                if self.pick(right).1 != index {
+                    return 0.0;
+                }
+                font
+            }
+        };
+        let size = match self.display {
+            true => {
+                let mut pair = [0u8; 8];
+                let len = left.encode_utf8(&mut pair).len();
+                let len = len + right.encode_utf8(&mut pair[len..]).len();
+                self.size_for(size, core::str::from_utf8(&pair[..len]).unwrap_or(""))
+            }
+            false => size,
+        };
+        self.pair_in(font, size, left, right)
+    }
+
+    /// The adjustment of a pair both drawn by `font` at `size` (see
+    /// [`FontHandle::kern`]).
+    fn pair_in(&self, font: &Font, size: f32, left: char, right: char) -> f32 {
+        if self.ligatures
+            && let Some(joined) = ligature(left, right)
+            && font.has_char(joined)
+        {
+            let apart = font.advance(left, size) + font.advance(right, size);
+            return font.advance(joined, size) - apart;
+        }
+        match self.kerning {
+            true => font.kern(left, right, size),
+            false => 0.0,
+        }
     }
 
     /// This font for a text of a few characters drawn large alone, a
@@ -838,17 +988,39 @@ impl<'a> FontHandle<'a> {
     /// [`FontHandle::display`]), one for the whole text; `size` where the
     /// font is scalable. Measuring, inking and drawing use it.
     pub fn size_for(&self, size: f32, text: &str) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.size_for(size, text);
+        }
         self.font.size_for(size, text, self.display)
     }
 
-    /// Width of a single line of text in pixels.
+    /// Width of a single line of text in pixels, its pairs kerned (see
+    /// [`FontHandle::kern`]).
     pub fn measure(&self, size: f32, text: &str) -> f32 {
-        let size = self.size_for(size, text);
-        if self.others[0].is_none() {
-            paperpaw_text::measure(self.font(), size, text)
-        } else {
-            text.chars().map(|ch| self.advance(size, ch)).sum()
+        if let Some(larger) = self.larger_for(size) {
+            return larger.measure(size, text);
         }
+        let size = self.size_for(size, text);
+        let single = self.others[0].is_none();
+        let mut width = 0.0;
+        let mut before: Option<(char, u16)> = None;
+        for ch in text.chars() {
+            let (font, index) = match single {
+                true => (self.font, self.index),
+                false => self.pick(ch),
+            };
+            if let Some((left, at)) = before
+                && at == index
+            {
+                width += self.pair_in(font, size, left, ch);
+            }
+            width += match single {
+                true => font.advance(ch, size),
+                false => self.advance(size, ch),
+            };
+            before = Some((ch, index));
+        }
+        width
     }
 
     /// How far the ink of one line of `text` reaches above and below its
@@ -859,6 +1031,9 @@ impl<'a> FontHandle<'a> {
     ///
     /// [`Ui::header`]: crate::ui::Ui::header
     pub fn ink(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.ink(size, text);
+        }
         // Only described: as a line would be, no glyph made.
         if self.describing.get() {
             let metrics = self.line_metrics(size);
@@ -890,6 +1065,9 @@ impl<'a> FontHandle<'a> {
     /// its advance (e.g. an icon in its column). `None` for text without
     /// ink.
     pub fn ink_across(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.ink_across(size, text);
+        }
         // Only described: as far as its advances go, no glyph made.
         if self.describing.get() {
             return Some((0, self.measure(size, text) as i32));
@@ -899,8 +1077,15 @@ impl<'a> FontHandle<'a> {
         let mut ink: Option<(i32, i32)> = None;
         let mut pen = 0.0f32;
         let mut based = false;
+        let mut before: Option<(char, u16)> = None;
         for ch in text.chars() {
             let (font, index) = self.pick(ch);
+            if let Some((left, at)) = before
+                && at == index
+            {
+                pen += self.pair_in(font, size, left, ch);
+            }
+            before = Some((ch, index));
             let glyph = cache.glyph(index, font, ch, size);
             let mark = paperpaw_text::is_mark(ch);
             // Where it is drawn ([`FontHandle::draw`]).
@@ -919,9 +1104,18 @@ impl<'a> FontHandle<'a> {
         ink
     }
 
-    /// Breaks `text` into lines that fit `max_width`.
+    /// Breaks `text` into lines that fit `max_width`, its pairs kerned
+    /// within each line as drawn.
     pub fn wrap(&self, size: f32, text: &str, max_width: f32) -> Vec<Range<usize>> {
-        paperpaw_text::wrap(text, max_width, |s| self.measure(size, s))
+        let advance = |_: usize, ch: char| {
+            let mut buffer = [0u8; 4];
+            self.measure(size, ch.encode_utf8(&mut buffer))
+        };
+        let kern = |_: usize, left: char, right: char| self.kern(size, left, right);
+        paperpaw_text::wrap_lines_kerned(text, |_| max_width, advance, kern, None)
+            .into_iter()
+            .map(|line| line.range)
+            .collect()
     }
 
     /// Draws one line with its baseline at `baseline`; returns its width.
@@ -957,6 +1151,31 @@ impl<'a> FontHandle<'a> {
         color: Color,
         extra: u16,
     ) -> f32 {
+        let tone = paperpaw_text::ToneCurve::SMOOTH;
+        self.draw_toned(canvas, size, x, baseline, text, color, extra, tone)
+    }
+
+    /// Like [`FontHandle::draw_bolder`], the glyphs' coverage drawn in
+    /// `tone`: on a contrast curve, or without grays (e.g. a reader's
+    /// settings for book text).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
+    pub fn draw_toned(
+        &self,
+        canvas: &mut Canvas<'_>,
+        size: f32,
+        x: f32,
+        baseline: i32,
+        text: &str,
+        color: Color,
+        extra: u16,
+        tone: paperpaw_text::ToneCurve,
+    ) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.draw_toned(canvas, size, x, baseline, text, color, extra, tone);
+        }
         // Only described, as a screen reader asks: no glyph made.
         if canvas.is_blind() || self.describing.get() {
             return self.measure(size, text);
@@ -976,155 +1195,101 @@ impl<'a> FontHandle<'a> {
                 .map_or(rest.len(), |(at, _)| at);
             let style = paperpaw_text::TextStyle::new(font, index, size, color)
                 .bolder(extra)
+                .curve(tone)
                 .based(based);
             let run = &rest[..end];
-            pen += paperpaw_text::draw_text(canvas, &mut cache, &style, pen, baseline, run);
+            pen += self.draw_run(canvas, &mut cache, &style, pen, baseline, run);
             based |= run.chars().any(|ch| !paperpaw_text::is_mark(ch));
             rest = &rest[end..];
         }
         pen - x
     }
+
+    /// Draws `run`, all in `style`'s font, from `x`; its width. At once
+    /// where the font kerns it as this handle does; else character by
+    /// character, each where measuring puts it, ligatures in place of
+    /// their characters.
+    fn draw_run(
+        &self,
+        canvas: &mut Canvas<'_>,
+        cache: &mut GlyphCache,
+        style: &paperpaw_text::TextStyle<'_>,
+        x: f32,
+        baseline: i32,
+        run: &str,
+    ) -> f32 {
+        if self.kerning && !(self.ligatures && run.contains('f')) {
+            return paperpaw_text::draw_text(canvas, cache, style, x, baseline, run);
+        }
+        let (font, size) = (style.font, style.size);
+        let mut style = *style;
+        let mut pen = x;
+        let mut before: Option<char> = None;
+        let mut at = 0;
+        let mut buffer = [0u8; 4];
+        while let Some(ch) = run[at..].chars().next() {
+            if let Some(left) = before {
+                pen += self.pair_in(font, size, left, ch);
+            }
+            let joined = match self.ligatures && ch == 'f' {
+                true => self.ligature_at(font, size, &run[at..]),
+                false => None,
+            };
+            let (drawn, len, width) = joined.unwrap_or((ch, ch.len_utf8(), font.advance(ch, size)));
+            paperpaw_text::draw_text(
+                canvas,
+                cache,
+                &style,
+                pen,
+                baseline,
+                drawn.encode_utf8(&mut buffer),
+            );
+            if !paperpaw_text::is_mark(ch) {
+                style = style.based(true);
+            }
+            pen += width;
+            before = run[..at + len].chars().next_back();
+            at += len;
+        }
+        pen - x
+    }
+
+    /// The ligature drawn for the start of `text` (an `f`): its
+    /// character, the bytes of `text` it stands for and the width those
+    /// take as measured, with the pairs between them. `None` where the
+    /// `f` is drawn alone: the font lacks the ligature, or one of three
+    /// characters or `ff` would not take their room, or the next `f`
+    /// makes a ligature with the character after it.
+    fn ligature_at(&self, font: &Font, size: f32, text: &str) -> Option<(char, usize, f32)> {
+        let mut chars = text.chars();
+        let (Some('f'), Some(second)) = (chars.next(), chars.next()) else {
+            return None;
+        };
+        let advance = |ch: char| font.advance(ch, size);
+        if let Some(joined) = ligature('f', second) {
+            let width = advance('f') + self.pair_in(font, size, 'f', second) + advance(second);
+            return font.has_char(joined).then_some((joined, 2, width));
+        }
+        if second != 'f' {
+            return None;
+        }
+        let two = advance('f') + self.pair_in(font, size, 'f', 'f') + advance('f');
+        let fits = |joined: char, width: f32| {
+            font.has_char(joined) && (advance(joined) - width).abs() <= LIGATURE_FIT
+        };
+        if let Some(third @ ('i' | 'l')) = chars.next() {
+            let three = two + self.pair_in(font, size, 'f', third) + advance(third);
+            let joined = if third == 'i' { '\u{fb03}' } else { '\u{fb04}' };
+            if fits(joined, three) {
+                return Some((joined, 3, three));
+            }
+            if ligature('f', third).is_some_and(|l| font.has_char(l)) {
+                return None;
+            }
+        }
+        fits('\u{fb00}', two).then_some(('\u{fb00}', 2, two))
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::MemoryStorage;
-    use paperpaw_text::{Glyph, PackBuilder};
-
-    /// A pack holding `chars`, with empty glyphs.
-    fn pack(chars: &str) -> alloc::vec::Vec<u8> {
-        let metrics = LineMetrics {
-            ascent: 8.0,
-            descent: 2.0,
-            line_height: 12.0,
-        };
-        let mut builder = PackBuilder::new();
-        let glyphs = chars.chars().map(|c| (c, Glyph::empty(5.0))).collect();
-        builder.add_strike(10.0, metrics, glyphs);
-        builder.build()
-    }
-
-    /// Any Tabler icon has a name; one the icon font lacks is drawn from
-    /// an icon pack that extends it, others stay without a drawing.
-    #[test]
-    fn icon_packs_add_icons_the_font_lacks() {
-        let zoom = crate::icons::char("zoom-in").expect("every Tabler name is known");
-        let star = crate::icons::char("star").unwrap();
-        let other = crate::icons::char("zoom-out").unwrap();
-        let mut packed = String::new();
-        packed.push(zoom);
-        let storage: Rc<dyn Storage> = Rc::new(
-            MemoryStorage::new().with("plugins/icons-zoom/fonts/icons.ppfp", pack(&packed)),
-        );
-        let mut fonts = Fonts::new(4096);
-        let mut shipped = String::new();
-        shipped.push(star);
-        let icons = Font::from_data(pack(&shipped), &[]).unwrap();
-        fonts
-            .add(FontSpec::new(Id::new_static("a.icons"), icons))
-            .unwrap();
-        fonts.propose(roles::ICONS, Id::new_static("a.icons"), Priority::DEFAULT);
-        fonts
-            .add_extension(
-                Id::new_static("icons-zoom.icons"),
-                String::from("plugins/icons-zoom/fonts/icons.ppfp"),
-                Id::new_static("a.icons"),
-            )
-            .unwrap();
-        assert!(fonts.load(&storage).is_empty());
-        let bound = fonts.bound(roles::ICONS.as_str()).unwrap();
-        assert!(bound.has_char(star) && bound.has_char(zoom));
-        assert!(!bound.has_char(other));
-    }
-
-    #[test]
-    fn extensions_add_characters_read_from_storage() {
-        let storage: Rc<dyn Storage> =
-            Rc::new(MemoryStorage::new().with("plugins/cyr/fonts/latin-cyr.ppfp", pack("жщ")));
-        let mut fonts = Fonts::new(4096);
-        let latin = Font::from_data(pack("ab"), &[]).unwrap();
-        fonts
-            .add(FontSpec::new(Id::new_static("a.latin"), latin))
-            .unwrap();
-        let ui = Font::from_data(pack("ab"), &[]).unwrap();
-        fonts
-            .add(FontSpec::new(Id::new_static("a.ui"), ui))
-            .unwrap();
-        fonts.propose(roles::READING, Id::new_static("a.latin"), Priority::DEFAULT);
-        fonts
-            .add_extension(
-                Id::new_static("cyr.latin-cyr"),
-                String::from("plugins/cyr/fonts/latin-cyr.ppfp"),
-                Id::new_static("a.latin"),
-            )
-            .unwrap();
-        assert!(
-            !fonts.get("a.latin").unwrap().has_char('ж'),
-            "not before it is loaded"
-        );
-        assert!(fonts.load(&storage).is_empty());
-        // The font it extends, and others by way of their fallback.
-        assert!(fonts.get("a.latin").unwrap().has_char('ж'));
-        assert!(fonts.get("a.ui").unwrap().has_char('щ'));
-        assert_eq!(fonts.get("a.ui").unwrap().measure(10.0, "aж"), 10.0);
-        assert!(!fonts.get("a.ui").unwrap().has_char('ю'));
-    }
-
-    /// A family of packs on the storage: its faces read a glyph at a time
-    /// while it is chosen, freed when another is, forgotten with their
-    /// plugin.
-    #[test]
-    fn families_of_packs_are_chosen_and_removed() {
-        let storage: Rc<dyn Storage> = Rc::new(
-            MemoryStorage::new()
-                .with("plugins/round/fonts/round.ppfp", pack("ab"))
-                .with("plugins/round/fonts/round-bold.ppfp", pack("abc")),
-        );
-        let mut fonts = Fonts::new(4096);
-        let builtin = Font::from_data(pack("a"), &[]).unwrap();
-        fonts
-            .add(FontSpec::new(Id::new_static("a.serif"), builtin).family("Serif", false, false))
-            .unwrap();
-        fonts.propose(roles::READING, Id::new_static("a.serif"), Priority::DEFAULT);
-        for (name, bold) in [("round", false), ("round-bold", true)] {
-            let face = FontFace::new(
-                Id::parse(&alloc::format!("round.{name}")).unwrap(),
-                alloc::format!("plugins/round/fonts/{name}.ppfp"),
-                "Round",
-                bold,
-                false,
-            );
-            assert!(face.is_pack());
-            fonts.add_face(face).unwrap();
-        }
-        assert_eq!(fonts.families(), ["Serif", "Round"]);
-        assert!(
-            fonts.get("round.round").is_none(),
-            "not before it is chosen"
-        );
-
-        fonts.set_family(Some("Round"));
-        assert!(fonts.load(&storage).is_empty());
-        let reading = fonts.role(roles::READING.as_str()).unwrap();
-        assert_eq!(reading.id().as_str(), "round.round");
-        assert!(reading.has_char('b') && !reading.has_char('c'));
-        let bold = fonts.bound(roles::READING_BOLD.as_str()).unwrap();
-        assert!(bold.has_char('c'));
-        // No italic: the regular face stands in, not another family's.
-        assert!(fonts.bound(roles::READING_ITALIC.as_str()).is_none());
-
-        fonts.set_family(None);
-        assert!(fonts.load(&storage).is_empty());
-        assert!(fonts.get("round.round").is_none(), "freed");
-
-        fonts.set_family(Some("Round"));
-        assert!(fonts.load(&storage).is_empty());
-        assert_eq!(fonts.remove_plugin("round"), 2);
-        assert_eq!(fonts.families(), ["Serif"]);
-        assert_eq!(
-            fonts.role(roles::READING.as_str()).unwrap().id().as_str(),
-            "a.serif"
-        );
-    }
-}
+mod tests;

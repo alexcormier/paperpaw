@@ -129,9 +129,142 @@ impl fmt::Debug for Memory {
     }
 }
 
+/// Where data is kept, for what reads it all the time and what is large
+/// ([`vec_in`]). Devices with one kind of memory keep both alike. Places
+/// are constants of one type, so more can come without a new plugin
+/// interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Placement(u32);
+
+impl Placement {
+    /// Read and written all the time, by a loop that runs every frame:
+    /// internal RAM where the device has more than one kind (the X4 Pro).
+    pub const FAST: Self = Self(1);
+    /// Much data, read now and then (a whole file kept): PSRAM where the
+    /// device has it, so internal RAM stays for the rest.
+    pub const LARGE: Self = Self(2);
+
+    /// Its number in the firmware's table (`Api::alloc_in`).
+    pub(crate) const fn code(self) -> u32 {
+        self.0
+    }
+
+    /// The placement of number `code`, `None` for 0 (anywhere).
+    pub(crate) const fn of(code: u32) -> Option<Self> {
+        match code {
+            0 => None,
+            code => Some(Self(code)),
+        }
+    }
+}
+
+/// Why memory could not be had.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MemoryError {
+    /// No room for `bytes` where asked.
+    Full { bytes: usize },
+    /// More than an address can count.
+    TooLarge,
+}
+
+impl fmt::Display for MemoryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MemoryError::Full { bytes } => write!(f, "no room for {bytes} bytes"),
+            MemoryError::TooLarge => write!(f, "more memory than can be counted"),
+        }
+    }
+}
+
+impl core::error::Error for MemoryError {}
+
+/// Allocates by placement, as the firmware's table's `alloc_in`: size,
+/// alignment, the [`Placement`]'s number; null when there is no room.
+pub type Placer = unsafe extern "C" fn(size: usize, align: usize, placement: u32) -> *mut u8;
+
+/// The firmware's allocation by placement, where it gave one. Not in a
+/// code plugin file, which has no writable data: it reads the
+/// firmware's table instead ([`placer`]).
+#[cfg(not(all(paperpaw_plugin, target_os = "none")))]
+static PLACER: core::sync::atomic::AtomicPtr<()> =
+    core::sync::atomic::AtomicPtr::new(core::ptr::null_mut());
+
+/// Gives the SDK the firmware's allocation by placement, at start.
+#[cfg(feature = "kernel")]
+pub fn set_placer(placer: Placer) {
+    PLACER.store(placer as *mut (), core::sync::atomic::Ordering::Release);
+}
+
+/// The firmware's allocation by placement, where there is one.
+#[cfg(not(all(paperpaw_plugin, target_os = "none")))]
+fn placer() -> Option<Placer> {
+    let placer = PLACER.load(core::sync::atomic::Ordering::Acquire);
+    // SAFETY: only `set_placer` stores here, a `Placer`.
+    (!placer.is_null()).then(|| unsafe { core::mem::transmute::<*mut (), Placer>(placer) })
+}
+
+/// The firmware's allocation by placement, from its table, where the
+/// firmware that loaded this plugin file has it.
+#[cfg(all(paperpaw_plugin, target_os = "none"))]
+fn placer() -> Option<Placer> {
+    unsafe extern "C" {
+        /// The firmware's table: `paperpaw-plugin.x` makes the word, the
+        /// loader writes its address before the plugin's code runs.
+        static PAPERPAW_API: *const paperpaw_native::Api;
+    }
+    // SAFETY: a table that lives as long as the firmware runs, written
+    // before any code of the plugin ran.
+    let api = unsafe { &*PAPERPAW_API };
+    let has = core::mem::offset_of!(paperpaw_native::Api, alloc_in) + core::mem::size_of::<usize>()
+        <= api.size as usize;
+    has.then_some(api.alloc_in)
+}
+
+/// An empty vector with room for `capacity` values, kept where
+/// `placement` says (where the device has more than one kind of memory;
+/// elsewhere as `Vec::with_capacity`). It grows and is dropped as any
+/// vector, wherever it went: keep it from growing (room for all of it at
+/// once) to keep it where it is.
+pub fn vec_in<T>(placement: Placement, capacity: usize) -> Result<alloc::vec::Vec<T>, MemoryError> {
+    let layout = core::alloc::Layout::array::<T>(capacity).map_err(|_| MemoryError::TooLarge)?;
+    let placer = placer().filter(|_| layout.size() > 0);
+    let Some(placer) = placer else {
+        let mut vec = alloc::vec::Vec::new();
+        vec.try_reserve_exact(capacity)
+            .map_err(|_| MemoryError::Full {
+                bytes: layout.size(),
+            })?;
+        return Ok(vec);
+    };
+    // SAFETY: a layout of non-zero size, as the firmware's heap takes it.
+    let ptr = unsafe { placer(layout.size(), layout.align(), placement.code()) };
+    if ptr.is_null() {
+        return Err(MemoryError::Full {
+            bytes: layout.size(),
+        });
+    }
+    // SAFETY: allocated by the global allocator's heap (the firmware's,
+    // which frees blocks of any of its regions) for `capacity` values of
+    // `T`, none of them set yet.
+    Ok(unsafe { alloc::vec::Vec::from_raw_parts(ptr.cast::<T>(), 0, capacity) })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vectors_go_anywhere_without_a_placer() {
+        let mut vec = vec_in::<u32>(Placement::LARGE, 100).unwrap();
+        assert!(vec.capacity() >= 100 && vec.is_empty());
+        vec.push(7);
+        assert_eq!(vec_in::<u8>(Placement::FAST, 0).unwrap().capacity(), 0);
+        assert_eq!(
+            vec_in::<u64>(Placement::FAST, usize::MAX),
+            Err(MemoryError::TooLarge)
+        );
+    }
 
     #[test]
     fn a_probe_is_read_when_asked() {

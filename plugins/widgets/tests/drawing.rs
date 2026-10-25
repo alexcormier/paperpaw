@@ -322,6 +322,9 @@ impl Harness {
             memory: paperpaw_sdk::memory::Memory::NONE,
             clock: paperpaw_sdk::time::Clock::NONE,
             started: paperpaw_sdk::power::Start::Unknown,
+            panel: paperpaw_sdk::realtime::PanelInfo::default(),
+            keys_held: &[],
+            room: paperpaw_sdk::realtime::Room::default(),
             metrics: Metrics {
                 dpi: self.device.display.dpi,
             },
@@ -365,7 +368,7 @@ impl Harness {
             content: paperpaw_platform::Rect::default(),
             stack: &[],
             slots: &[],
-            screens: &[],
+            screens: paperpaw_sdk::ScreenList::default(),
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,

@@ -15,8 +15,9 @@ USAGE:
 OPTIONS:
     --sizes <px,...>      Pixel sizes to render (default: 20,24,28,32,36,40,48)
     --axis <tag=value>    Set a variation axis, e.g. --axis wght=700 (repeatable)
-    --chars <set,...>     Character sets: latin (default), cyrillic, greek,
-                          or code points: U+EA01, U+EA01-EA0F (e.g. icons)
+    --chars <set,...>     Character sets: latin and ligatures (default),
+                          cyrillic, greek, or code points: U+EA01,
+                          U+EA01-EA0F (e.g. icons)
     -h, --help            Show this help
 ";
 
@@ -34,7 +35,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let mut positional = Vec::new();
     let mut sizes = vec![20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0];
     let mut axes: Vec<(String, f32)> = Vec::new();
-    let mut sets = vec![String::from("latin")];
+    let mut sets = vec![String::from("latin"), String::from("ligatures")];
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {

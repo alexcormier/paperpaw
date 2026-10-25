@@ -42,6 +42,40 @@ pub struct Catalog {
     /// [`Index`]); kept here, beside the other small fields, rather than
     /// in the index, where it would take a word.
     wide: bool,
+    /// When it was added to a translator, of those added: later ones win.
+    pub(crate) added: u32,
+}
+
+/// A catalog of a language not in use, kept small: its source and where
+/// its language and name are in it, nothing more (see
+/// [`Translator`](crate::Translator)). Made a catalog again when its
+/// language comes into use.
+#[derive(Debug, Clone)]
+pub(crate) struct Parked {
+    source: Cow<'static, str>,
+    language: Span,
+    name: Span,
+    pub(crate) added: u32,
+}
+
+impl Parked {
+    pub(crate) fn language(&self) -> &str {
+        self.source.get(self.language.range()).unwrap_or_default()
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        self.source.get(self.name.range()).unwrap_or_default()
+    }
+
+    /// The catalog again, unloaded (its index made when it loads).
+    pub(crate) fn unpark(self) -> Catalog {
+        let added = self.added;
+        // Read once already: it parses.
+        let mut catalog = Catalog::parse(self.source).unwrap_or_else(|_| Catalog::empty());
+        catalog.unload();
+        catalog.added = added;
+        catalog
+    }
 }
 
 /// A byte range in the source, or in `escaped` if the top bit is set.
@@ -51,6 +85,16 @@ struct Span {
     len: u32,
 }
 
+impl Span {
+    /// Its bytes in the source (none for one in `escaped`).
+    fn range(self) -> core::ops::Range<usize> {
+        match self.start & ESCAPED {
+            0 => self.start as usize..(self.start + self.len) as usize,
+            _ => 0..0,
+        }
+    }
+}
+
 const ESCAPED: u32 = 1 << 31;
 /// In the index: a message of `others`.
 const OTHER: u32 = 1 << 31;
@@ -58,8 +102,24 @@ const OTHER: u32 = 1 << 31;
 /// The index of a catalog: its entries (see [`OTHER`]) in two bytes each
 /// where they fit, as in most catalogs (of a source under 32 KiB); else
 /// (a wide index, see `Catalog::wide`) each in four, the low half first.
+/// Made at run time, or kept in the program for catalogs built in
+/// ([`FixedIndexes`]).
 #[derive(Debug, Clone, Default)]
-struct Index(Box<[u16]>);
+struct Index(Cow<'static, [u16]>);
+
+/// The indexes of catalogs built into the program, made when it was built
+/// (`paperpaw-app`'s build script): each with the [`fingerprint`] of its
+/// source. A catalog whose source has one uses it rather than an index
+/// on the heap ([`Translator::fixed_indexes`](crate::Translator::fixed_indexes)).
+pub type FixedIndexes = &'static [(u64, &'static [u16])];
+
+/// What a catalog's source is known by in [`FixedIndexes`]: FNV-1a of its
+/// bytes.
+pub fn fingerprint(source: &str) -> u64 {
+    source.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
 
 /// In a narrow index: a message of `others`.
 const NARROW_OTHER: u16 = 1 << 15;
@@ -84,13 +144,19 @@ impl Index {
             .map(|at| narrow(*at))
             .collect::<Option<Vec<u16>>>()
         {
-            Some(narrow) => (Index(narrow.into_boxed_slice()), false),
+            Some(narrow) => (
+                Index(Cow::Owned(narrow.into_boxed_slice().into_vec())),
+                false,
+            ),
             None => {
                 let halves = entries
                     .iter()
                     .flat_map(|at| [*at as u16, (at >> 16) as u16])
                     .collect::<Vec<u16>>();
-                (Index(halves.into_boxed_slice()), true)
+                (
+                    Index(Cow::Owned(halves.into_boxed_slice().into_vec())),
+                    true,
+                )
             }
         }
     }
@@ -195,9 +261,29 @@ impl Catalog {
             others: Box::default(),
             loaded: false,
             wide: false,
+            added: 0,
         };
         catalog.scan(true)?;
         Ok(catalog)
+    }
+
+    /// A catalog of no messages, of the fallback language.
+    fn empty() -> Catalog {
+        Catalog::parse("[meta]\nlanguage = en\n").unwrap_or_else(|_| unreachable!())
+    }
+
+    /// Kept small while its language is not in use ([`Parked`]); itself
+    /// where its language or name is escaped (they would be lost).
+    pub(crate) fn park(self) -> Result<Parked, Catalog> {
+        if self.meta_len > 0 {
+            return Err(self);
+        }
+        Ok(Parked {
+            source: self.source,
+            language: self.language,
+            name: self.name,
+            added: self.added,
+        })
     }
 
     /// Reads the source. With `meta`, also reads and validates `[meta]`
@@ -372,6 +458,37 @@ impl Catalog {
 
     pub fn is_empty(&self) -> bool {
         self.index.0.is_empty()
+    }
+
+    /// Its index, two bytes an entry, for a build script that keeps it in
+    /// the program ([`FixedIndexes`]); `None` while unloaded or where the
+    /// index is wide.
+    pub fn narrow_index(&self) -> Option<&[u16]> {
+        (self.loaded && !self.wide).then_some(&*self.index.0)
+    }
+
+    /// The bytes its index takes on the heap: none where it is kept in
+    /// the program ([`FixedIndexes`]) or unloaded.
+    pub fn index_on_heap(&self) -> usize {
+        match &self.index.0 {
+            Cow::Owned(index) => index.len() * 2,
+            Cow::Borrowed(_) => 0,
+        }
+    }
+
+    /// Takes its index from `fixed` where that has the same one for its
+    /// source: the one on the heap goes.
+    pub fn use_fixed(&mut self, fixed: FixedIndexes) {
+        if fixed.is_empty() || !matches!(self.index.0, Cow::Owned(_)) {
+            return;
+        }
+        let Some(own) = self.narrow_index() else {
+            return;
+        };
+        let print = fingerprint(&self.source);
+        if let Some(&(_, index)) = fixed.iter().find(|(p, index)| *p == print && *index == own) {
+            self.index = Index(Cow::Borrowed(index));
+        }
     }
 }
 

@@ -149,7 +149,7 @@ impl Kit {
             content: paperpaw_platform::Rect::default(),
             stack: &[],
             slots: &[],
-            screens: &[],
+            screens: crate::ScreenList::default(),
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,
@@ -158,6 +158,9 @@ impl Kit {
             memory: crate::memory::Memory::NONE,
             clock: crate::time::Clock::NONE,
             started: crate::power::Start::Unknown,
+            panel: crate::realtime::PanelInfo::default(),
+            keys_held: &[],
+            room: crate::realtime::Room::default(),
             storage: &self.storage,
         })
     }
