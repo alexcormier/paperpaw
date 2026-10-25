@@ -203,11 +203,40 @@ fn medium_is_the_keyboard_as_before() {
     }
 }
 
+/// Keys chosen with buttons: the size sets how many a row holds. Large
+/// splits the rows into short ones (few presses along each, the X4's
+/// keyboard as before), Medium splits the longest row only, Small keeps
+/// them whole, as where keys are tapped: a lower keyboard. Their height
+/// stays a row's.
 #[test]
-fn the_size_leaves_keys_chosen_with_buttons_alone() {
-    let before = keyboard(X4, "");
-    for size in SIZES {
-        assert_eq!(sized(X4, size), before, "{size}");
+fn the_size_sets_how_many_keys_a_row_has_with_buttons() {
+    // The letters' rows, by the top of their keys.
+    let rows = |parts: &[Part]| {
+        let mut tops: Vec<u16> = parts
+            .iter()
+            .filter(|p| p.label.chars().count() == 1 && p.label.chars().all(char::is_alphabetic))
+            .map(|p| p.area.y)
+            .collect();
+        tops.dedup();
+        tops.len()
+    };
+    let (small, medium, large) = (
+        sized(X4, "keyboard.size.small"),
+        sized(X4, "keyboard.size.medium"),
+        sized(X4, "keyboard.size.large"),
+    );
+    assert_eq!(rows(&small), 3, "qwertyuiop, asdfghjkl, zxcvbnm whole");
+    assert!(rows(&small) < rows(&medium) && rows(&medium) < rows(&large));
+    // Small is as low as the keyboard on touch screens of that width
+    // would let it be; Large is the highest, its keys the widest.
+    assert!(height(X4, &small) < height(X4, &medium) && height(X4, &medium) < height(X4, &large));
+    assert!(key(&small, "q").area.width < key(&large, "q").area.width);
+    for parts in [&small, &medium, &large] {
+        assert_eq!(
+            key(parts, "q").area.height,
+            key(&large, "q").area.height,
+            "a row high"
+        );
     }
 }
 

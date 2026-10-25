@@ -243,57 +243,32 @@ const BOOX_GO_7_BODY: Body = Body {
 };
 
 /// The firmware's setting defaults (the X4, X4 Pro and X4 Classic).
-const X4_SETTINGS: [(&str, &str); 10] = [
+const X4_SETTINGS: [(&str, &str); 11] = [
     // A 4.3" screen: smaller text, so menus and pages hold enough.
     ("core.ui-size", "9"),
     ("core.font-size", "9"),
-    // A full refresh takes 3.5 s on its panel: screens change fast.
-    ("core.flash-screens", "false"),
-    // On USB the radio stays on in a network joined before.
-    ("wifi.while-charging", "true"),
-    // A small screen: calm status lines, the time and the battery at the
-    // edges; while reading the time at the left, the page at the right
-    // (and the mark of reading aloud beside the time while it reads).
-    (
-        "reader.status.bottom-left",
-        "core.status.clock, reader.status.aloud, lock.touch-status",
-    ),
-    ("reader.status.bottom-center", ""),
-    ("reader.status.bottom-right", "reader.status.page"),
-    ("home.status.left", "core.status.clock"),
-    ("home.status.center", ""),
-    (
-        "home.status.right",
-        "lock.touch-status, core.status.battery",
-    ),
-];
-
-/// The X4 Pro's: the X4s', and a large keyboard on its touch screen
-/// (its keys tapped with a finger on a 4.3" screen).
-const X4_PRO_SETTINGS: [(&str, &str); 11] = [
-    // A 4.3" screen: smaller text, so menus and pages hold enough.
-    ("core.ui-size", "9"),
-    ("core.font-size", "9"),
-    // A full refresh takes 3.5 s on its panel: screens change fast.
-    ("core.flash-screens", "false"),
-    // On USB the radio stays on in a network joined before.
-    ("wifi.while-charging", "true"),
-    // A small screen: calm status lines, the time and the battery at the
-    // edges; while reading the time at the left, the page at the right
-    // (and the mark of reading aloud beside the time while it reads).
-    (
-        "reader.status.bottom-left",
-        "core.status.clock, reader.status.aloud, lock.touch-status",
-    ),
-    ("reader.status.bottom-center", ""),
-    ("reader.status.bottom-right", "reader.status.page"),
-    ("home.status.left", "core.status.clock"),
-    ("home.status.center", ""),
-    (
-        "home.status.right",
-        "lock.touch-status, core.status.battery",
-    ),
+    // Large keys: tapped with a finger on the X4 Pro, and chosen with the
+    // buttons in short rows, few presses along each, on the others.
     ("keyboard.size", "keyboard.size.large"),
+    // A full refresh takes 3.5 s on its panel: screens change fast.
+    ("core.flash-screens", "false"),
+    // On USB the radio stays on in a network joined before.
+    ("wifi.while-charging", "true"),
+    // A small screen: calm status lines, the time and the battery at the
+    // edges; while reading the time at the left, the page at the right
+    // (and the mark of reading aloud beside the time while it reads).
+    (
+        "reader.status.bottom-left",
+        "core.status.clock, reader.status.aloud, lock.touch-status",
+    ),
+    ("reader.status.bottom-center", ""),
+    ("reader.status.bottom-right", "reader.status.page"),
+    ("home.status.left", "core.status.clock"),
+    ("home.status.center", ""),
+    (
+        "home.status.right",
+        "lock.touch-status, core.status.battery",
+    ),
 ];
 
 /// The firmware's memory for glyphs of font packs on the card.
@@ -443,7 +418,7 @@ pub const PROFILES: &[Profile] = &[
         // The controller takes 8 rows (turned) in a byte.
         frame_rows: Some(192),
         row_align: 8,
-        settings: &X4_PRO_SETTINGS,
+        settings: &X4_SETTINGS,
         speech: false,
         wifi: true,
         bluetooth: 2,

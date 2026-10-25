@@ -247,11 +247,19 @@ enum Key {
 /// A key and its width in units (a letter is 2).
 type Slot = (Key, u8);
 
-/// The least width of a letter's key, in millimetres, where keys are
-/// chosen with buttons: room for the letter and the focus frame round it.
-/// On a narrower screen (the X4) the rows are split rather than their keys
-/// made narrower.
-const LEAST_KEY_MM: u32 = 6;
+/// The least width of a letter's key where keys are chosen with buttons,
+/// in tenths of a millimetre, by the keyboard's size ([`KEY_SIZE`]): at
+/// Large room for the letter and the focus frame round it, so that on a
+/// narrow screen (the X4) the rows are split into short ones, few presses
+/// along each; at Medium the longest row is split; at Small the rows are
+/// whole, as where keys are tapped: a lower keyboard, more presses.
+fn least_key_tenths(size: &str) -> u32 {
+    match size {
+        SIZE_SMALL => LEAST_TAP_MM * 10,
+        SIZE_LARGE => 60,
+        _ => 50,
+    }
+}
 
 /// The least width of a letter's key where keys are tapped, in
 /// millimetres: as much as a finger hits reliably.
@@ -473,9 +481,14 @@ impl KeyboardScreen {
         let display = env.device().display;
         let touch = env.device().input.touch;
         // As many units in a row as leave a letter (2 units) its least
-        // width.
-        let least = if touch { LEAST_TAP_MM } else { LEAST_KEY_MM };
-        let unit = (env.metrics().mm(least) / 2).max(1);
+        // width: where keys are tapped the size sets their height, chosen
+        // with buttons their width.
+        let least = if touch {
+            LEAST_TAP_MM * 10
+        } else {
+            least_key_tenths(env.settings().read(&KEY_SIZE))
+        };
+        let unit = (env.metrics().tenth_mm(least) / 2).max(1);
         let most = (u32::from(display.width) - 2 * u32::from(style.margin())) / unit;
         let letters = &layouts[current.get()].1;
         // As high as the layer with the most rows needs, so that turning

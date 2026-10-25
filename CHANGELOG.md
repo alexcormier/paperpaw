@@ -46,6 +46,10 @@ change the plugin SDK.
 
 ### Changed
 
+- Keyboard size works on readers with buttons alone too: Large splits
+  the rows into short ones (few presses along each, as before and the
+  X4s' default), Medium splits the longest, Small keeps them whole as on
+  touch screens (a lower keyboard, more presses).
 - The on-screen keyboard: on readers with buttons alone (the X4s, the X3)
   the focus starts on *Phone*, where the text can be typed on a phone
   instead of a letter at a time; on the X4 Pro the keys are large by
