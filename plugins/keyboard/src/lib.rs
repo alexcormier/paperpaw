@@ -677,6 +677,17 @@ impl KeyboardScreen {
         Rect::new(left as u16, y, (right - left) as u16, self.key_height)
     }
 
+    /// What a focus on `(row, index)` draws over: its key, or for a
+    /// button of the field the field's box, as the button's focus frame
+    /// goes past its edge.
+    fn focus_area(&self, row: usize, index: usize) -> Rect {
+        if row == PASTE_ROW {
+            self.text_box()
+        } else {
+            self.key_area(row, index)
+        }
+    }
+
     fn key_at(&self, point: paperpaw_sdk::Point) -> Option<(usize, usize)> {
         if let Some(index) = self.buttons.iter().position(|b| b.1.contains(point)) {
             return Some((PASTE_ROW, index));
@@ -944,8 +955,12 @@ impl KeyboardScreen {
         } else {
             return false;
         };
-        self.redraw(cx, self.key_area(row, index));
-        self.redraw(cx, self.key_area(to.0, to.1));
+        if to == (row, index) {
+            // Round a row of one: nothing moved.
+            return true;
+        }
+        self.redraw(cx, self.focus_area(row, index));
+        self.redraw(cx, self.focus_area(to.0, to.1));
         self.focus = Some(to);
         // The field's hint of letters held, where it changes.
         if self.held_hint(cx.env()).is_some() || (row != PASTE_ROW && self.has_held(row, index)) {
@@ -1374,7 +1389,7 @@ impl Screen for KeyboardScreen {
         }
         let key = self.key_at(gesture.start);
         if let Some((r, i)) = self.focus.take() {
-            self.redraw(cx, self.key_area(r, i));
+            self.redraw(cx, self.focus_area(r, i));
             // Its hint of letters held goes with it.
             if r != PASTE_ROW && self.has_held(r, i) {
                 self.redraw(cx, self.field);

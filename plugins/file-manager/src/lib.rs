@@ -512,9 +512,18 @@ impl Browser {
         cx.request_refresh(RefreshMode::Partial);
     }
 
+    /// What the focus draws over: its row, or the bar below the list.
+    fn focus_rect(&self) -> Rect {
+        match self.focus {
+            Focus::List => self.list.row_rect(self.list.focus() % self.list.rows().max(1)),
+            Focus::Bar(_) => self.bar,
+        }
+    }
+
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.len;
         let bar = self.buttons().len();
+        let (left, first) = (self.focus_rect(), self.first);
         // The list and the bar below it, one round: past the last button
         // to the first entry, and back.
         self.focus = match self.focus {
@@ -540,7 +549,15 @@ impl Browser {
         };
         let env = *cx.env();
         self.show_focus(&env);
-        self.redraw(cx);
+        if self.first == first {
+            // The same page: the row or bar the focus left and the one
+            // it came to.
+            cx.request_redraw_area(left);
+            cx.request_redraw_area(self.focus_rect());
+            cx.request_refresh(RefreshMode::Fast);
+        } else {
+            self.redraw(cx);
+        }
     }
 }
 

@@ -238,7 +238,7 @@ impl TocScreen {
             let env = *cx.env();
             self.load_page(&env);
         }
-        change.request(cx);
+        self.list.request(change, cx);
     }
 }
 
