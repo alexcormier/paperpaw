@@ -260,7 +260,9 @@ fn numbers_change_with_the_buttons_kept_when_chosen() {
     app.run(actions::SETTINGS);
     app.run(actions::DOWN);
     app.run(actions::CONFIRM);
-    // The reading settings: past the font, the font size.
+    // The reading settings, their page of the text: past the font, the
+    // font size.
+    app.run(actions::CONFIRM);
     app.run(actions::DOWN);
     let size = "core.font-size";
     let before = app.kernel.settings().int(size);
@@ -297,6 +299,7 @@ fn sliders_follow_the_finger_kept_where_it_is_lifted() {
     let mut app = App::on(TOUCH);
     app.run(actions::SETTINGS);
     app.tap_on("Reading");
+    app.tap_on("Text");
     app.kernel.render(&mut |_, _| {});
     let track = app
         .kernel
