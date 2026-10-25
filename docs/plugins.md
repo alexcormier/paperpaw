@@ -1493,6 +1493,19 @@ the few functions that run every frame with `paperpaw_sdk::hot! { … }`:
 the X4 runs them from internal RAM instead of flash, a bounded part of
 its heap; what does not fit runs from flash as before.
 
+A screen that needs much memory says so (`.memory(bytes)`, and
+`.needs_network()` or `.needs_bluetooth()` where it does): as it shows,
+the kernel lets caches go, holds background work back, switches off
+the radios it does not need and closes the screens below, until there
+is enough, and gives everything back once it closes. Read what you got
+with `env.room()` in `on_show`, and make the large buffer there.
+
+To keep the device from going to sleep by itself for a while (a clock,
+a slideshow, a long download), hold it: `cx.keep_awake(WakeHold::new(id,
+reason).lasting(...))` on a screen (it ends when the screen closes), or
+`Command::KeepAwake` from work and services; renew it before it ends,
+let go with `Command::LetSleep`. The reader can switch holds off.
+
 `samples/frame-test` does all of this and shows what it measures (frames
 a second, the work as hot and as ordinary code, the drawing, the heap):
 `cargo run -p paperpaw-emulator --features frame-test`, then *Frame

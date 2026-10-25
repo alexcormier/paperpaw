@@ -12,15 +12,34 @@ change the plugin SDK.
   ([ADR 0030](docs/adr/0030-real-time-screens.md)). A screen says how
   it runs in one place (`Screen::mode`, `realtime::ScreenMode`): full
   screen, buttons pressed and released (`Screen::on_key`,
-  `Env::keys_held`; holding *Back* two seconds always leaves), its own
-  refreshes, the fastest refresh, the grays enough, a pace, staying
-  awake longer. The device says what it can do and how the last frame
-  went (`Env::panel`, `PanelInfo`, `FrameReport`), so faster panels make
+  `Env::keys_held`; holding *Back*, or a finger in the top left corner,
+  two seconds always leaves), its own refreshes, the fastest refresh,
+  the grays enough, a pace, staying awake longer, and the memory it
+  needs. The device says what it can do and how the last frame went
+  (`Env::panel`, `PanelInfo`, `FrameReport`), so faster panels make
   plugins faster without a new build. `Canvas::blit` draws packed
   bitmaps at a whole scale, `memory::vec_in` keeps data in internal RAM
   or PSRAM, and code plugins get `Api::alloc_in`. On the X4 the main
   loop goes on while the panel refreshes for such a screen, and every
   frame's times are measured. `samples/frame-test` shows it all.
+- Room for a screen that needs memory: the kernel lets caches go, holds
+  background work back, switches Wi-Fi and Bluetooth off where the
+  screen does not need them and closes the screens below (a book keeps
+  its place), until there is enough; everything comes back once it
+  closes (`ScreenMode::memory`, `Env::room`).
+- Plugins can keep the device awake for a while (`power::WakeHold`,
+  `Command::KeepAwake`, `Cx::keep_awake`): bounded, renewed by id, a
+  screen's ended with it, never with a battery nearly empty. *Let
+  plugins keep the device awake* (on) turns it off for all; the usage
+  says each plugin's awake time.
+- Hot code in code plugins (`paperpaw_sdk::hot!`): the X4 runs it from
+  internal RAM, a bounded arena whose rest goes to the heap. Plugin
+  files are of format 3 (the hot range and its patches); RISC-V plugins
+  link with `--no-relax`.
+- Room in the plugin interface for what comes later without a new one:
+  `Command::Extended`, `Screen::on_extended`, `Contribution::Extended`,
+  `Capabilities::has` with `Capability` constants, wider `Moments` and
+  `BookStyles`, `Storage::write_at` and `truncate`.
 - The reading settings in pages of their own: *Text*, *Layout*,
   *Hyphenation*, *Publisher's formatting*, *Display*, *Status lines*,
   *Marks in the text*, *Reading aloud*, *Reading aids* and *Behaviour*,

@@ -32,8 +32,9 @@ without being rebuilt, and the SDK must not be redone for it.
 ## Decision
 
 - **A screen says how it runs, in one place.** `Screen::mode` returns a
-  `ScreenMode`, read when the screen shows and when it says it changed
-  (`Cx::mode_changed`). It asks for intent, not for a device's modes:
+  `ScreenMode`, read whenever it counts (each input, each frame; whether
+  it is full screen when the screen is made). It asks for intent, not
+  for a device's modes:
   - `full_screen`: no row of hints, no bars; the screen has the panel.
   - `raw_keys`: buttons come pressed and released (`Screen::on_key`),
     with the time; `Env::keys_held` says which are down now.
@@ -48,6 +49,9 @@ without being rebuilt, and the SDK must not be redone for it.
     as soon as the panel can take them.
   - `awake_for(Duration)`: the device sleeps by itself no sooner while
     the screen shows, as long as the user's setting is shorter.
+  - `memory(bytes)` (or `memory_in(placement, bytes)`), `needs_network`,
+    `needs_bluetooth`: the room it needs free, and the radios it needs
+    (see the lease below).
 - **The device says what it can do, and what it did.** `Env::panel`
   returns a `PanelInfo`: the fastest time of each refresh mode as
   measured (`refresh_time`), its grays, whether the next frame can be
@@ -57,9 +61,10 @@ without being rebuilt, and the SDK must not be redone for it.
   A plugin paces itself by that, not by numbers of its own.
 - **Raw keys keep a way out.** The power button is never raw: sleep
   stays. Holding *Back* for two seconds (`ESCAPE_HOLD`) leaves the
-  screen whatever it does with *Back* otherwise. Touch screens keep
-  their gestures from the edges unless the screen holds them
-  (`Screen::holds_edges`). A press the screen does not take
+  screen whatever it does with *Back* otherwise. On touch screens a
+  finger held as long in the top left corner does the same for a screen
+  that is full screen or takes raw keys, and the gestures from the
+  edges stay unless the screen holds them (`Screen::holds_edges`). A press the screen does not take
   (`Handled::No` when pressed) goes to the key map with its release, as
   before; one it takes, it gets let go too.
 - **A blit draws packed pictures fast.** `Canvas::blit` draws a
@@ -94,11 +99,40 @@ without being rebuilt, and the SDK must not be redone for it.
   anywhere where a device has one kind of memory. The firmware gives
   code plugins the call through its table (`Api::alloc_in`), which grows
   at its end.
+- **Room is lent to a screen that needs memory.** As such a screen
+  shows, the kernel makes room step by step until there is enough,
+  measuring after each: caches let go (glyphs drawn, files read), the
+  background work held back, Wi-Fi and Bluetooth off where the screen
+  does not need them (never while a download goes on, a phone is
+  served, or a Bluetooth link is up), the screens below closed but the
+  lowest (each keeps what it has as it closes, a book its place). Where
+  there are internal RAM and PSRAM, the room is measured where the
+  screen asked (`Placement::FAST`, `LARGE`). The screen reads what it got
+  (`Env::room`: granted, partly or refused, with the memory free and the
+  steps taken, `RoomSteps`) and makes its buffers in `on_show`. Once it
+  closes everything comes back: the screens opened again, Wi-Fi as it
+  was (the network wanted again if it was in one), Bluetooth let go,
+  the work going on. Nothing is said to the reader. Steps are the
+  kernel's: new kinds of room are new `RoomSteps` constants.
+- **Plugins may hold the device awake, within bounds.** A screen
+  (`Cx::keep_awake`), work, a service or a widget (`Command::KeepAwake`
+  with a `power::WakeHold`) keeps the device from going to sleep by
+  itself: each hold has an id (the same id renews it), a reason, and an
+  end at most `MAX_HOLD` away; a screen's counts while it is on top and
+  ends when it closes. Holds put off only the sleep after
+  `core.sleep-after`: the processor still naps, the power button still
+  works, and below 10 % of charge (not charging) no hold counts. The
+  reader can let no plugin hold it (`core.awake-holds`, on by default);
+  `PluginUsage` counts each plugin's awake time and its last reason.
+  `ScreenMode::awake_for` is one use of it.
 - **The X4's main loop goes on while the panel refreshes**, while a
   screen runs at a pace: it starts the refresh and returns; screens get
   their timers and the buttons are read; a frame drawn meanwhile waits
   until the panel is free and then shows what is current. Other screens
-  keep the loop as it was.
+  keep the loop as it was. What goes when is decided by a small state
+  machine (`paperpaw_x4::paced::Frames`), tested to never send to the
+  panel while it refreshes and to lose no frame, also when the device
+  is about to sleep.
 - **Growing without a new interface.** `ScreenMode` and `PanelInfo` are
   values of fixed layout with private fields: a word of flags and slots
   of numbers, more than are used. A later option takes a free bit or
@@ -110,7 +144,13 @@ without being rebuilt, and the SDK must not be redone for it.
   memory are constants of one type each (`BitmapFormat::GRAY2`,
   `Dither::ORDERED`, `Placement::FAST`), not enums: a new one is a new
   constant, which the interface gate counts as free. A new button is a
-  new name; touch and pen are `Screen::on_pointer` already. What needs a new
+  new name; touch and pen are `Screen::on_pointer` already. For what
+  cannot be foreseen, interface 4 has keyed escape hatches:
+  `Command::Extended`, `Screen::on_extended` and `Contribution::Extended`
+  (a kernel leaves keys it does not know), and `Capabilities::has` with
+  `Capability` constants. `Moments` and `BookStyles` were widened, and
+  `Storage` got `write_at` and `truncate`, so that these need no raise
+  either. What needs a new
   interface: a new item of `Screen` or of another trait, a field of a
   type whose layout crosses, a new relocation kind for hot code (the
   file's format names it), and anything gone.
