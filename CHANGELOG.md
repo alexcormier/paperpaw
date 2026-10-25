@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- The emulator starts online with `--wifi online` (over `--stdio`,
+  `"wifi": "online"` in `start`): the X4s on USB, their radio on and in
+  a network `Workshop Wi-Fi` joined before, so plugins' requests go out
+  at once; Wi-Fi switches off and on in the settings as on a device.
+  Without it, nothing changes.
 - Plugins can be published from GitHub: tag a release in the plugin's
   own repository (topic `paperpaw-plugin`) and paperpaw.org lists it as
   "Community, unreviewed". `tools/dev/templates` has the release

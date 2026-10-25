@@ -15,7 +15,7 @@
 //!
 //! | `op` | Fields | Does |
 //! |------|--------|------|
-//! | `start` | `profile`, `library` (a folder), `settings` (INI text, optional), `trust_code` (optional) | starts a device of that profile on the folder (setup done), with `trust_code` the code plugins built for this computer there installed (`native::trust`); `started` follows, then a `frame` |
+//! | `start` | `profile`, `library` (a folder), `settings` (INI text, optional), `trust_code` (optional), `wifi` (`online` or `off`, optional) | starts a device of that profile on the folder (setup done), with `trust_code` the code plugins built for this computer there installed (`native::trust`), with `wifi: online` online from the start as `--wifi online`; `started` follows, then a `frame` |
 //! | `button` | `name` (`confirm`, `page-forward`, …), `pressed` | a button pressed or let go |
 //! | `pointer` | `phase` (`down`, `move`, `up`, `cancel`), `x`, `y` | a finger on a touch screen, at the panel's pixels |
 //! | `reload` | | starts the device again on its folder: plugins changed there are read anew |
@@ -195,6 +195,7 @@ impl Session {
                 library,
                 settings,
                 trust_code,
+                wifi_online,
             } => {
                 self.stop();
                 let start = Started {
@@ -202,6 +203,7 @@ impl Session {
                     library,
                     settings,
                     trust_code,
+                    wifi_online,
                 };
                 let device = start.device()?;
                 events.push(started(&device));
@@ -398,6 +400,7 @@ struct Started {
     library: PathBuf,
     settings: Option<String>,
     trust_code: bool,
+    wifi_online: bool,
 }
 
 impl Started {
@@ -411,7 +414,12 @@ impl Started {
             crate::native::trust(&self.library)
                 .map_err(|e| format!("{}: {e}", self.library.display()))?;
         }
-        start(&self.profile, &self.library, self.settings.as_deref())
+        start(
+            &self.profile,
+            &self.library,
+            self.settings.as_deref(),
+            self.wifi_online,
+        )
     }
 }
 
@@ -427,7 +435,12 @@ impl Drop for Session {
 
 /// A device of `profile` on the folder `library`, its setup done (it
 /// opens on the home screen, not the first-start questions), started.
-fn start(profile: &str, library: &Path, settings: Option<&str>) -> Result<Device, String> {
+fn start(
+    profile: &str,
+    library: &Path,
+    settings: Option<&str>,
+    wifi_online: bool,
+) -> Result<Device, String> {
     let profile = profiles::find(profile).ok_or_else(|| format!("no profile `{profile}`"))?;
     let at = |e: std::io::Error| format!("{}: {e}", library.display());
     let setup = library.join(".paperpaw/plugins/setup");
@@ -443,6 +456,7 @@ fn start(profile: &str, library: &Path, settings: Option<&str>) -> Result<Device
     // Frames as they end up, not the panel's flashing on the way.
     device.panel.animate = false;
     device.requests = Some(Vec::new());
+    device.set_wifi_online(wifi_online);
     device.start();
     device.tick_if_due();
     Ok(device)

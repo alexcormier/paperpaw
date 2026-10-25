@@ -5,7 +5,8 @@
 //! computer's own network is used.
 //!
 //! The networks: `PaperPaw Test` (any password but `wrong`), `Cafe`
-//! (open) and `Far Away` (out of reach once joined).
+//! (open) and `Far Away` (out of reach once joined); with `--wifi online`
+//! also `Workshop Wi-Fi`, joined from the start ([`Wifi::online`]).
 
 use std::collections::VecDeque;
 
@@ -27,24 +28,50 @@ const HOST_ADDRESS: &str = "192.168.4.1";
 /// The pretend radio's strongest network, joined with any password but
 /// `wrong`.
 pub const TEST_NETWORK: &str = "PaperPaw Test";
-
-fn networks() -> Vec<WifiNetwork> {
-    let net = |ssid: &str, signal, secured| WifiNetwork::new(String::from(ssid), signal, secured);
-    vec![
-        net(TEST_NETWORK, -48, true),
-        net("Cafe", -70, false),
-        net("Far Away", -88, true),
-    ]
-}
+/// The network an emulator started with `--wifi online` is in, known as
+/// joined before (with [`WORKSHOP_PASSWORD`]).
+pub const WORKSHOP_NETWORK: &str = "Workshop Wi-Fi";
+pub const WORKSHOP_PASSWORD: &str = "workshop";
 
 #[derive(Debug, Default)]
 pub struct Wifi {
     state: WifiState,
     /// What is reported when, in the order of time.
     due: VecDeque<(Instant, WifiEvent)>,
+    /// The workshop's network is in reach ([`Wifi::online`]).
+    workshop: bool,
 }
 
 impl Wifi {
+    fn networks(&self) -> Vec<WifiNetwork> {
+        let net =
+            |ssid: &str, signal, secured| WifiNetwork::new(String::from(ssid), signal, secured);
+        let mut networks = vec![
+            net(TEST_NETWORK, -48, true),
+            net("Cafe", -70, false),
+            net("Far Away", -88, true),
+        ];
+        if self.workshop {
+            networks.insert(0, net(WORKSHOP_NETWORK, -40, true));
+        }
+        networks
+    }
+
+    /// The radio on and in the workshop's network now, as a device that
+    /// started on USB in a network joined before: what `--wifi online`
+    /// starts with. It stays in reach when the radio goes off and on.
+    pub fn online(&mut self, now: Instant) {
+        self.workshop = true;
+        self.due.clear();
+        self.set(
+            now,
+            WifiState::Online {
+                ssid: String::from(WORKSHOP_NETWORK),
+                address: String::from(ADDRESS),
+            },
+        );
+    }
+
     /// Does what the kernel asked.
     pub fn apply(&mut self, call: WifiCommand, now: Instant) {
         let after = |ms| now.add_millis(ms);
@@ -59,13 +86,13 @@ impl Wifi {
                 self.set(now, WifiState::Off);
             }
             WifiCommand::Scan if self.state.is_on() => {
-                self.report(after(SCAN_MS), WifiEvent::Scanned(networks()));
+                self.report(after(SCAN_MS), WifiEvent::Scanned(self.networks()));
             }
             WifiCommand::Scan => {}
             WifiCommand::Join { ssid, password } if self.state.is_on() => {
                 self.due.retain(|(_, e)| !matches!(e, WifiEvent::State(_)));
                 self.set(now, WifiState::Joining { ssid: ssid.clone() });
-                let network = networks().into_iter().find(|n| n.ssid == ssid);
+                let network = self.networks().into_iter().find(|n| n.ssid == ssid);
                 let failure = match &network {
                     None => Some(JoinFailure::NotFound),
                     Some(n) if n.signal < -85 => Some(JoinFailure::Timeout),
@@ -237,6 +264,44 @@ mod tests {
         ));
         wifi.apply(WifiCommand::Off, Instant(5000));
         assert_eq!(run(&mut wifi, 5000), [WifiEvent::State(WifiState::Off)]);
+    }
+
+    /// Online from the start, the workshop's network stays in reach: off
+    /// and on, it is found and joined again.
+    #[test]
+    fn online_at_once_and_again_after_off_and_on() {
+        let mut wifi = Wifi::default();
+        wifi.online(Instant(0));
+        assert!(matches!(
+            run(&mut wifi, 0).as_slice(),
+            [WifiEvent::State(WifiState::Online { ssid, .. })] if ssid == WORKSHOP_NETWORK
+        ));
+        wifi.apply(WifiCommand::Off, Instant(10));
+        wifi.apply(WifiCommand::On, Instant(20));
+        wifi.apply(WifiCommand::Scan, Instant(1000));
+        let scanned = run(&mut wifi, 3000);
+        assert!(scanned.iter().any(|e| matches!(
+            e,
+            WifiEvent::Scanned(networks) if networks[0].ssid == WORKSHOP_NETWORK
+        )));
+        wifi.apply(
+            WifiCommand::Join {
+                ssid: String::from(WORKSHOP_NETWORK),
+                password: String::from(WORKSHOP_PASSWORD),
+            },
+            Instant(3000),
+        );
+        assert!(matches!(
+            run(&mut wifi, 5000).last(),
+            Some(WifiEvent::State(WifiState::Online { .. }))
+        ));
+        // Without it, the workshop's network is not there.
+        assert!(
+            Wifi::default()
+                .networks()
+                .iter()
+                .all(|n| n.ssid != WORKSHOP_NETWORK)
+        );
     }
 
     #[test]
