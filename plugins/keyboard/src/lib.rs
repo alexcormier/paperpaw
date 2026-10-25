@@ -62,7 +62,7 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{actions, events, groups, params, slots};
+use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
@@ -89,6 +89,8 @@ pub const SHAPE_WIDE: &str = "keyboard.key-shape.wide";
 /// How big the keys that are tapped are: smaller, as their shape says
 /// (the default), or larger.
 pub const KEY_SIZE: Setting<Text> = Setting::new("keyboard.size");
+/// Its settings' group (Settings, Device, Keyboard).
+pub const GROUP: Id = Id::new_static("keyboard.group");
 pub const SIZE_SMALL: &str = "keyboard.size.small";
 pub const SIZE_MEDIUM: &str = "keyboard.size.medium";
 pub const SIZE_LARGE: &str = "keyboard.size.large";
@@ -164,7 +166,7 @@ static SETTINGS: [SettingSpec; 5] = [
         "keyboard.setting.layouts",
         paperpaw_sdk::SettingKind::List,
         paperpaw_sdk::SettingValue::Text(Cow::Borrowed(layouts::AUTO)),
-        groups::SYSTEM,
+        GROUP,
     )
     .with_extra(&CHOSEN)
     .description("keyboard.setting.layouts.help"),
@@ -172,7 +174,7 @@ static SETTINGS: [SettingSpec; 5] = [
         UMLAUT_KEYS.static_str(),
         "keyboard.setting.umlaut-keys",
         false,
-        groups::SYSTEM,
+        GROUP,
     )
     .description("keyboard.setting.umlaut-keys.help"),
     SettingSpec::choice(
@@ -180,7 +182,7 @@ static SETTINGS: [SettingSpec; 5] = [
         "keyboard.setting.key-shape",
         &[SHAPE_ROUND, SHAPE_TALL, SHAPE_WIDE],
         SHAPE_ROUND,
-        groups::SYSTEM,
+        GROUP,
     )
     .description("keyboard.setting.key-shape.help"),
     SettingSpec::choice(
@@ -188,14 +190,14 @@ static SETTINGS: [SettingSpec; 5] = [
         "keyboard.setting.size",
         &[SIZE_SMALL, SIZE_MEDIUM, SIZE_LARGE],
         SIZE_MEDIUM,
-        groups::SYSTEM,
+        GROUP,
     )
     .description("keyboard.setting.size.help"),
     SettingSpec::switch(
         AUTO_CAPITALS.static_str(),
         "keyboard.setting.auto-capitals",
         false,
-        groups::SYSTEM,
+        GROUP,
     )
     .description("keyboard.setting.auto-capitals.help"),
 ];
@@ -225,7 +227,16 @@ impl Plugin for Keyboard {
             }),
         ))?;
         r.bind_slot(slots::KEYBOARD, SCREEN, Priority::DEFAULT)?;
+        // Its settings on a page of their own (Settings, Device).
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "keyboard.title").order(72);
+            &SPEC
+        })?;
+        r.add_icon(GROUP, Cow::Borrowed("keyboard"))?;
         r.add_settings(&SETTINGS)?;
+        // Keys chosen with buttons take no shape.
+        r.set_menu_need(KEY_SHAPE.id().clone(), paperpaw_sdk::MenuNeed::Touch)?;
         r.add_screen(ScreenSpec::new(
             CHOOSE_SCREEN,
             "keyboard.setting.layouts",

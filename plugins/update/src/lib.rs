@@ -46,6 +46,8 @@ use paperpaw_sdk::{
 pub use look::LOOK;
 
 pub const PLUGIN: Id = Id::new_static("update");
+/// Its settings' group (Settings, Device, Updates).
+pub const GROUP: Id = Id::new_static("update.group");
 /// Opens the page.
 pub const OPEN: Id = Id::new_static("update.open");
 /// Asks the update server for an update and offers one it names (e.g.
@@ -72,18 +74,13 @@ static SETTINGS: [SettingSpec; 3] = [
         groups::DEVELOPER,
     )
     .description("update.setting.server.help"),
-    SettingSpec::switch(
-        look::LOOK.static_str(),
-        "update.setting.look",
-        false,
-        groups::SYSTEM,
-    )
-    .description("update.setting.look.help"),
+    SettingSpec::switch(look::LOOK.static_str(), "update.setting.look", false, GROUP)
+        .description("update.setting.look.help"),
     SettingSpec::switch(
         online::BETAS.static_str(),
         "update.setting.betas",
         false,
-        groups::SYSTEM,
+        GROUP,
     )
     .description("update.setting.betas.help"),
 ];
@@ -189,6 +186,14 @@ impl Plugin for Update {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // Its settings on a page of their own (Settings, Device).
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "update.group").order(94);
+            &SPEC
+        })?;
+        r.add_icon(GROUP, Cow::Borrowed("cloud-download"))?;
+        r.set_menu_need(GROUP, MenuNeed::Firmware)?;
         r.add_settings(&SETTINGS)?;
         // Only where PaperPaw updates the firmware.
         r.set_menu_need(online::SERVER.id().clone(), MenuNeed::Firmware)?;

@@ -2,4 +2,4 @@ Battery use notes the charge about once a minute while the device is awake, toge
 
 Open Battery from the Tools menu. It shows the charge now, this time awake, the use on battery so far and your recent times awake. It pages with the page buttons, or by tapping the arrows at the top.
 
-It needs a while of reading on battery before the figures mean anything. Recording is on by default and can be switched off in Settings, under System, as Record battery use.
+It needs a while of reading on battery before the figures mean anything. Recording is on by default and can be switched off in Settings, under Device, Power, as Record battery use.

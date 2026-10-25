@@ -85,7 +85,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::switch(
     HIDDEN.static_str(),
     "file-manager.setting.hidden",
     false,
-    groups::SYSTEM,
+    groups::LIBRARY,
 )
 .advanced()
 .description("file-manager.setting.hidden.help")];

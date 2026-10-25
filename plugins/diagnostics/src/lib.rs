@@ -61,9 +61,8 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::number(
     1,
     10_000,
     20,
-    groups::SYSTEM,
+    groups::DEVELOPER,
 )
-.advanced()
 .description("diagnostics.setting.pages.help")];
 
 /// How it works, by language (see `Manifest::how`).

@@ -956,7 +956,7 @@ its documentation (for example one line per entry); others add to it
 with `r.contribute(point, text)`, and the plugin reads
 `env.services().contributions(point)`, each with the plugin it came from.
 
-### Marks in the text
+### Marks (decorations)
 
 A plugin marks words on book pages with a decorator (ADR 0021): it gets
 the words of a page with their places in the book and gives back ranges,
@@ -968,7 +968,7 @@ use paperpaw_sdk::decorations::{self, Decorated, Decoration, DecoratorSpec, Line
 
 const LEARNING: Id = Id::new_static("vocabulary.learning");
 
-// The role: its look is settings (Settings, Marks in the text), the
+// The role: its look is settings (Settings, Marks), the
 // plugin gives the default; themes and users change it.
 decorations::add_role(r, &LEARNING, "vocabulary.role.learning",
     Decoration::NONE.line(LineKind::Dotted))?;

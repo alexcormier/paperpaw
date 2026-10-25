@@ -11,7 +11,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{groups, settings};
+use paperpaw_sdk::builtin::settings;
 use paperpaw_sdk::ui;
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
@@ -26,7 +26,6 @@ use paperpaw_sdk::widgets::grid::{self, Item, What};
 
 /// Pages at most.
 pub(crate) const MAX_PAGES: usize = 8;
-const SECTION: &str = "home.section";
 
 /// Columns of the grid.
 pub(crate) const COLUMNS: Setting<i64> = Setting::new("home.columns");
@@ -84,18 +83,17 @@ pub(crate) fn setting(index: usize) -> Id {
     Id::parse(&format!("home.page-{}", index + 1)).unwrap_or(Id::new_static("home.page-1"))
 }
 
-/// The home screen's part of the Appearance settings.
-static IN_HOME: SettingExtra = SettingExtra::new().section(SECTION);
+/// The home screen's settings, on its page (Settings, Customise, Home screen).
+static IN_HOME: SettingExtra = SettingExtra::new();
 /// A page's items, edited on the home screen itself.
-static PAGE: SettingExtra = SettingExtra::new().section(SECTION).editor(SCREEN);
+static PAGE: SettingExtra = SettingExtra::new().editor(SCREEN);
 /// The status items below the page, chosen on their picker.
-static ITEMS: SettingExtra = SettingExtra::new()
-    .section(SECTION)
-    .editor(paperpaw_sdk::builtin::screens::STATUS_ITEMS);
+static ITEMS: SettingExtra =
+    SettingExtra::new().editor(paperpaw_sdk::builtin::screens::STATUS_ITEMS);
 
 /// The setting of page `n` (1 the first).
 const fn page(id: &'static str, title: &'static str, default: &'static str) -> SettingSpec {
-    SettingSpec::text(id, title, default, groups::LOOK)
+    SettingSpec::text(id, title, default, GROUP)
         .with_extra(&PAGE)
         .description("home.setting.page.help")
         .advanced()
@@ -117,7 +115,7 @@ static SETTINGS: [SettingSpec; 16] = [
         2,
         grid::MAX_COLUMNS as i64,
         3,
-        groups::LOOK,
+        GROUP,
     )
     .with_extra(&IN_HOME)
     .description("home.setting.columns.help"),
@@ -127,7 +125,7 @@ static SETTINGS: [SettingSpec; 16] = [
         0,
         grid::MAX_ROWS as i64,
         0,
-        groups::LOOK,
+        GROUP,
     )
     .with_extra(&IN_HOME)
     .description("home.setting.rows.help"),
@@ -135,7 +133,7 @@ static SETTINGS: [SettingSpec; 16] = [
         crate::blocks::TOOL_LABELS.static_str(),
         "home.setting.tool-labels",
         true,
-        groups::LOOK,
+        GROUP,
     )
     .with_extra(&IN_HOME)
     .description("home.setting.tool-labels.help"),
@@ -143,7 +141,7 @@ static SETTINGS: [SettingSpec; 16] = [
         crate::blocks::FOCUS_AT_ONCE.static_str(),
         "home.setting.focus-at-once",
         false,
-        groups::LOOK,
+        GROUP,
     )
     .with_extra(&IN_HOME)
     .description("home.setting.focus-at-once.help"),
@@ -151,7 +149,7 @@ static SETTINGS: [SettingSpec; 16] = [
         STATUS_BAR.static_str(),
         "home.setting.status-bar",
         true,
-        groups::LOOK,
+        GROUP,
     )
     .with_extra(&IN_HOME)
     .description("home.setting.status-bar.help"),
@@ -159,7 +157,7 @@ static SETTINGS: [SettingSpec; 16] = [
         FOOTER_PENCIL.static_str(),
         "home.setting.footer-pencil",
         true,
-        groups::LOOK,
+        GROUP,
     )
     .with_extra(&IN_HOME)
     .description("home.setting.footer-pencil.help"),
@@ -167,7 +165,7 @@ static SETTINGS: [SettingSpec; 16] = [
         FOOTER_DOTS.static_str(),
         "home.setting.footer-dots",
         true,
-        groups::LOOK,
+        GROUP,
     )
     .with_extra(&IN_HOME)
     .description("home.setting.footer-dots.help"),
@@ -176,7 +174,7 @@ static SETTINGS: [SettingSpec; 16] = [
         "home.setting.footer-items",
         SettingKind::List,
         SettingValue::Text(Cow::Borrowed("")),
-        groups::LOOK,
+        GROUP,
     )
     .with_extra(&ITEMS)
     .description("home.setting.footer-items.help"),
@@ -200,7 +198,17 @@ const PAGE_SETTINGS: &[Id] = &[
     Id::new_static("home.page-8"),
 ];
 
+/// The home screen's settings' group (Settings, Customise, Home screen).
+pub const GROUP: paperpaw_sdk::Id = paperpaw_sdk::Id::new_static("home.group");
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    // Its settings on a page of their own (Settings, Customise).
+    r.add_setting_group({
+        static SPEC: paperpaw_sdk::SettingGroupSpec =
+            paperpaw_sdk::SettingGroupSpec::new(GROUP, "home.section").order(220);
+        &SPEC
+    })?;
+    r.add_icon(GROUP, Cow::Borrowed("home"))?;
     r.add_settings(&SETTINGS)?;
     r.add_widget_place(PLACE)?;
     r.set_menu_need(

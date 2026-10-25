@@ -29,6 +29,9 @@ use paperpaw_sdk::{
 
 pub const PLUGIN: Id = Id::new_static("power");
 const GROUP: Id = Id::new_static("power.group");
+/// A charge, in percent.
+static PERCENT: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().unit("core.unit.percent");
 /// Opens the power settings: what a tap on the mode's status item runs.
 pub const OPEN: Id = Id::new_static("power.open");
 /// Which mode: one of `MODES`.
@@ -70,6 +73,7 @@ static SETTINGS: [SettingSpec; 4] = [
         20,
         GROUP,
     )
+    .with_extra(&PERCENT)
     .description("power.setting.saving-below.help"),
     SettingSpec::number(
         OFFLINE_BELOW.static_str(),
@@ -79,6 +83,7 @@ static SETTINGS: [SettingSpec; 4] = [
         10,
         GROUP,
     )
+    .with_extra(&PERCENT)
     .description("power.setting.offline-below.help"),
     SettingSpec::switch(
         NORMAL_WHILE_CHARGING.static_str(),

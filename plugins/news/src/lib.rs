@@ -434,8 +434,11 @@ fn headlines(env: &Env<'_>, max: usize) -> Vec<(String, String)> {
 #[derive(Debug, Default)]
 pub struct News;
 
-/// How many articles a feed keeps, in steps of five.
-static STEP_5: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().step(5);
+/// How many articles a feed keeps, in steps of five, in the library's
+/// settings in a part named after the plugin.
+static STEP_5: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
+    .step(5)
+    .section("news.plugin.name");
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::number(
     ARTICLES.static_str(),
     "news.setting.articles",

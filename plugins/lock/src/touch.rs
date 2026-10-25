@@ -27,7 +27,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use paperpaw_sdk::builtin::{events, groups, menus};
+use paperpaw_sdk::builtin::{events, menus};
 use paperpaw_sdk::filters::{InputFilterSpec, InputVerdict};
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::status::{StatusItemSpec, StatusValue};
@@ -161,7 +161,7 @@ impl Escape {
 /// The switch, with the controls.
 pub(crate) static SETTINGS: [SettingSpec; 1] =
     [
-        SettingSpec::switch(LOCKED.static_str(), "lock.touch", false, groups::CONTROLS)
+        SettingSpec::switch(LOCKED.static_str(), "lock.touch", false, crate::GROUP)
             .description("lock.touch.help"),
     ];
 
