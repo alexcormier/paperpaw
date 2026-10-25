@@ -254,17 +254,21 @@ jobs:
           cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-sdk --target-dir target/statics
           cargo run --release -p paperpaw-sign -- statics \
             target/statics/riscv32imc-unknown-none-elf/release/deps/*.rlib
-      - name: The sample and its CI template name the firmware's compilers
+      - name: The sample and the CI templates name the firmware's compilers
         run: |
           x4="$(sed -n 's/^channel = "\(.*\)"/\1/p' shells/xteink/rust-toolchain.toml)"
           . shells/xteink/versions.env
           template=samples/hello-native/.github/workflows/build.yml
+          release=tools/dev/templates/.github/workflows/paperpaw-release.yml
           status=0
           for found in \
             "samples/hello-native/rust-toolchain.toml:channel = \"$x4\"" \
             "$template:RUST_X4: \"$x4\"" \
             "$template:RUST_X4_PRO: \"$ESP_RUST_VERSION\"" \
-            "$template:ESP_GCC: \"$ESP_GCC_VERSION\""; do
+            "$template:ESP_GCC: \"$ESP_GCC_VERSION\"" \
+            "$release:RUST_X4: \"$x4\"" \
+            "$release:RUST_X4_PRO: \"$ESP_RUST_VERSION\"" \
+            "$release:ESP_GCC: \"$ESP_GCC_VERSION\""; do
             if ! grep -qF -- "${found#*:}" "${found%%:*}"; then
               echo "::error file=${found%%:*}::should say ${found#*:}, as shells/xteink does"
               status=1

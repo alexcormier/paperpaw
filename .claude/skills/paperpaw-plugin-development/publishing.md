@@ -73,12 +73,21 @@ version published or taken down.
 
 ## 2. The way in
 
-**The upload form** at `https://paperpaw.org/submit` is the only way:
-the author signs in by a link sent by e-mail, uploads, reads the
-checks, completes the entry, looks at the preview and sends it to the
-moderators. They decide; the author gets a mail either way. The
-`catalogue/` folder of the paperpaw.org repository holds PaperPaw's own
-plugins only; it is not a way for others to publish.
+There are two ways. Ask the user which they want.
+
+1. **The upload form** at `https://paperpaw.org/submit` (section 6): the
+   author signs in by a link sent by e-mail, uploads, reads the checks,
+   completes the entry, looks at the preview and sends it to the
+   moderators. They decide; the author gets a mail either way. The
+   plugin is listed as reviewed.
+2. **A tag on GitHub** (section 6b): the plugin's own public repository
+   has the topic `paperpaw-plugin`, and a GitHub release holds its
+   files. The site finds it, checks it like an upload and lists it as
+   "Community, unreviewed": no moderator has read it. No sign-in, no
+   form.
+
+The `catalogue/` folder of the paperpaw.org repository holds PaperPaw's
+own plugins only; it is not a way for others to publish.
 
 ## 3. Gather what the listing needs
 
@@ -580,6 +589,86 @@ Limits: ZIP 20 MB (40 MB unpacked), each build 4 MB, source 50 MB (the
 same for each part in a store file), one upload 100 MB, 10 submissions a
 day (the site's setting).
 
+## 6b. Publish from GitHub
+
+The second way in (section 2). Everything is a file in the repository
+and a tag; the site does the rest. It suits an author who already keeps
+the plugin on GitHub. Sections 3 to 5b (the id, `plugin.ini`,
+`store/store.ini`, the key, the builds) hold as they are.
+
+1. **The repository**: public on `github.com`, not archived, not a
+   fork, with the topic `paperpaw-plugin` (*About*, the gear, *Topics*,
+   or with the user's yes `gh repo edit --add-topic paperpaw-plugin`).
+   The site searches for that topic every hour (at most 1000
+   repositories).
+2. **The workflow**: copy
+   `tools/dev/templates/.github/workflows/paperpaw-release.yml` of the
+   PaperPaw repository to `.github/workflows/` and set its switches at
+   the top: `CODE` (`"false"` for a data plugin, `"true"` for a plugin
+   with code), `X4` and `X4_PRO` (the readers to build for), `PLUGIN_DIR`
+   (the folder with `plugin.ini`), `BIN` (the binary crate) and, for
+   code, `PAPERPAW`, `RUST_X4`, `RUST_X4_PRO` and `ESP_GCC` as in
+   section 5b. It builds as `build.sh` does, and publishes the X4 Pro's
+   file for the X4 Classic too (`X4_CLASSIC`: same chip, same
+   fingerprint). Keep one workflow that makes the release: the sample's
+   `build.yml` makes one too (the site then takes its
+   `<id>-<version>-upload.zip`, the folder with `store/`).
+3. **The key** (code plugins): section 5b. The file's contents are the
+   repository's secret `PAPERPAW_PLUGIN_KEY`; the job writes it to a
+   temporary file and never prints it. All builds of a version, and all
+   versions, are signed by this one key: the first version the site
+   takes fixes the plugin's key, and a later version signed by another
+   key fails the check `key` and is not offered. Data plugins need no
+   key.
+4. **The tag**: `plugin.ini`'s `version` is the number, the tag is `v` +
+   it (the site takes `v1.0.0` and `1.0.0`; the template wants the
+   first). With the user's yes:
+
+   ```sh
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+   The job stops at once when the tag is not `v` + `plugin.ini`'s
+   version, and when a code plugin has no secret.
+5. **The release** the job makes must be published, not a draft and not
+   a pre-release. Its assets, by name:
+
+   | Asset | What |
+   |---|---|
+   | `<id>-<version>.zip` | the plugin's folder as the form's `package` takes it: `plugin.ini` at the top or in one folder, `store/store.ini` and the screenshots under `store/` |
+   | `<id>-<version>-<device>.ppn` | code plugins: one signed build per reader, `<device>` one of `x4`, `x4-pro`, `x4-classic` (the X3 runs the X4's); a fingerprint may follow the device in the name, and the file's header decides which reader it is for; two builds for one reader fail |
+
+   Or one asset, `<id>-<version>-store.zip`, a store file (section 6):
+   then nothing else is read. Other assets are ignored; at most 10 are
+   read, with the form's limits (ZIP 20 MB, a build 4 MB, source 50 MB).
+6. **The source** of a code plugin: `[source]` in `store/store.ini`, as
+   for the form; when it names none, the site takes the repository at
+   the release's tag and keeps it. Commit `Cargo.lock`.
+7. **What the site does** within the hour: it takes the repository's
+   newest release (and keeps the versions it took before), runs the
+   form's checks on it (section 8 has them; warnings are shown, a
+   failure means the version is not offered), keeps the files, and lists
+   the plugin as "Community, unreviewed" with the GitHub owner as author,
+   a link to the repository, the key's fingerprint and a report button.
+   Readers download from the site, never from GitHub. The admins can
+   block a repository, an owner or a key, which takes it down at once.
+8. **Ids**: an id belongs to whoever it first appeared with, reviewed or
+   from GitHub (by key; a data plugin by account or GitHub owner). A
+   release with another's id or key is not offered, and the ids and
+   names of PaperPaw's own plugins are reserved. Look at
+   `https://paperpaw.org/api/v1/plugins.json?community=1` first (section
+   3).
+9. **Reviewed later**: the author names the repository in the form at
+   `https://paperpaw.org/submit` (*From GitHub*, signed in); the site
+   fills in everything from the newest release, and the author sends it
+   to the moderators. A plugin with code is theirs by its key. Once
+   approved, each new release waits for the moderators as an update.
+
+Do not say the plugin is published until the user has seen it listed on
+the site; report what the site says, word for word. An update is a new
+tag in the same way (section 7).
+
 ## 7. Updates
 
 1. Raise the version in `plugin.ini` and in the code's manifest (and
@@ -594,6 +683,9 @@ day (the site's setting).
 4. An update goes live at once only when the store's admins allow it,
    it is signed by the same key and every check passed without a
    warning; otherwise it waits for the moderators.
+5. From GitHub (section 6b): a new tag and release with the same key;
+   the site takes the newest release within the hour. There is no
+   moderator step; the checks decide.
 
 ## 8. Checks, messages and how to fix them
 
@@ -661,11 +753,13 @@ check it with two folders (section 5b), and publish a new version.
 
 ## 9. A lost or leaked key
 
-The form takes no other key than the earlier versions' (check `key`).
+The store takes no other key than the earlier versions' without a
+moderator's transfer of the id (check `key`, `claim`).
 
 - **Lost**: write to the site's contact address (`/contact`). A
-  moderator can change the key in the open, recorded in the version log;
-  readers who have the plugin are warned at the update.
+  moderator can transfer the id to the new key in the open, logged;
+  readers who ever had the plugin refuse every version signed by the new
+  key and keep the one they have. For them a lost key means a new id.
 - **Leaked** (shown in a chat, committed, in a log): the same, at once;
   remove the old secret from the CI (`PAPERPAW_PLUGIN_KEY`) and from the
   repository's history, and tell the user plainly.
@@ -675,8 +769,8 @@ The form takes no other key than the earlier versions' (check `key`).
 The plugin's page on the site and in each reader's store: whether it
 has code (and, before a reader installs the first code plugin, what
 that means), who made it, its licence and source, its badge, and for
-code the PaperPaw it is built for. A reader whose update is signed by
-another key is warned and decides. `/log` and
+code the PaperPaw it is built for. A reader refuses an update or a new
+install signed by another key than the one it first installed. `/log` and
 `/api/v1/log.json?after=<n>` list every version with the SHA-256 of its
 package and builds, its key and its source's revision.
 
@@ -704,6 +798,12 @@ package and builds, its key and its source's revision.
       committed; the repository public on `github.com`, `codeberg.org`
       or `gitlab.com`; `[source]` names it and the tag, with `path` and
       `bin` when needed.
+- [ ] From GitHub: the repository is public, not a fork, with the topic
+      `paperpaw-plugin`; the release is published (no draft, no
+      pre-release) and holds `<id>-<version>.zip` with `store/`, and for
+      code one signed `.ppn` per reader named `<id>-<version>-<device>`;
+      the tag is `v` + `plugin.ini`'s version; the secret
+      `PAPERPAW_PLUGIN_KEY` is the key of the earlier versions.
 - [ ] No secret anywhere: no `*.key` in a repository or its history, the
       key in no chat, file or log; `PAPERPAW_PLUGIN_KEY` only as a CI
       secret.

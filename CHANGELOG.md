@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- Plugins can be published from GitHub: tag a release in the plugin's
+  own repository (topic `paperpaw-plugin`) and paperpaw.org lists it as
+  "Community, unreviewed". `tools/dev/templates` has the release
+  workflow that zips the folder, builds and signs a code plugin and
+  makes the release; the handbook and the plugin skill explain it.
+
 ## [0.5.0-beta.6] - 2026-10-25
 
 ### Added
