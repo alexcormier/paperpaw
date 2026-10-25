@@ -98,6 +98,14 @@ change the plugin SDK.
   so. PaperPaw's own store plugins come as updates. `Work`'s `network`
   and `charging` became `needs` (`Needs::NETWORK | Needs::CHARGING`).
 
+### Fixed
+
+- Customise menus names the menus of the font choosers (their way to
+  more fonts) as the settings are named, e.g. *Status lines › Font*,
+  instead of showing `core.status-font` and `core.reading-font`. A test
+  walks the menu editor, every settings page and chooser and every
+  menu in each language shipped and fails on an id shown as a name.
+
 ## [0.5.0-beta.6] - 2026-10-25
 
 ### Added
