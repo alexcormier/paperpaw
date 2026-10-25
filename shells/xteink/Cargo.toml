@@ -183,3 +183,11 @@ debug = 2
 # entry is written before the old one goes (rename, `Dir::replace`).
 [patch."https://github.com/rafalh/rust-fatfs"]
 fatfs = { path = "../../patches/fatfs" }
+
+# trouble-host (feature `bluetooth`) stopped its whole host where the
+# controller refused to switch address resolution on again after a sync
+# of its list, because a scan or connection had begun meanwhile; this copy
+# tries the sync again later (patches/trouble-host, "Modified for
+# PaperPaw").
+[patch.crates-io]
+trouble-host = { path = "../../patches/trouble-host" }
