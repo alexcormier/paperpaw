@@ -389,9 +389,12 @@ jobs:
           mv dist/*.ppn dist/plugins/
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases" > "$RUNNER_TEMP/releases.json"
           python3 tools/plugin-files/published.py files dist/plugins "$RUNNER_TEMP/releases.json"
+          # PaperPaw's own data plugins (data.toml): built here, their
+          # folders and entries beside the plugins with code.
+          python3 tools/plugin-files/data.py "$RUNNER_TEMP/data"
           python3 tools/plugin-files/catalogue.py dist/plugins "$VERSION" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
-            --date "$(date -u +%F)"
+            --date "$(date -u +%F)" --data "$RUNNER_TEMP/data"
           python3 tools/plugin-files/published.py folders dist/plugins "$RUNNER_TEMP/releases.json"
           (cd dist/plugins && zip -q -X -r "../paperpaw-$VERSION-catalogue.zip" catalogue)
           mv dist/plugins/SHA256SUMS "dist/paperpaw-$VERSION-plugins.sha256"

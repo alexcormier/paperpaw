@@ -56,6 +56,10 @@ change the plugin SDK.
   KOReader highlights, Calibre connection, Readwise export, Wallabag
   articles, Wikipedia lookup and Joplin notes (their ids stay, and so do their
   settings and data).
+- Literata's sizes above 32 px and its Bold Italic, which the X4's
+  firmware leaves out, are plugins of the store: the release builds
+  PaperPaw's own data plugins (`tools/plugin-files/data.toml`) and
+  publishes them with the others, versions checked as theirs.
 
 ### Added
 

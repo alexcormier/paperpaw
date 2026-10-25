@@ -76,6 +76,60 @@ class HowItWorks(unittest.TestCase):
 
 
 
+class DataPlugins(unittest.TestCase):
+    def folders(self, root):
+        """The data plugins' folders as data.py builds them, made up."""
+        for plugin, fields in catalogue.data.plugins().items():
+            folder = root / plugin
+            (folder / "fonts").mkdir(parents=True)
+            folder.joinpath("plugin.ini").write_text(
+                catalogue.data.plugin_ini(plugin, fields) + "formats = 3\n", encoding="utf-8")
+            folder.joinpath("fonts", f"{plugin}.ppfp").write_bytes(b"PPFP" + bytes(range(200)))
+            for path, text in catalogue.data.catalogs(plugin, fields):
+                (folder / path).parent.mkdir(parents=True, exist_ok=True)
+                (folder / path).write_text(text, encoding="utf-8")
+
+    def test_a_release_s_data_plugins_come_with_their_folder_alone(self):
+        with tempfile.TemporaryDirectory() as dist, tempfile.TemporaryDirectory() as made:
+            dist, made = pathlib.Path(dist), pathlib.Path(made)
+            built(dist)
+            self.folders(made)
+            argv = ["catalogue.py", str(dist), "0.5.0-beta.8", "https://example.invalid/r",
+                    "--date", "2026-10-25", "--data", str(made)]
+            with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                catalogue.main()
+            entry = dist.joinpath("catalogue", "literata-large.toml").read_text(encoding="utf-8")
+            self.assertIn('kind = "data"', entry)
+            self.assertIn("off_by_default = true", entry)
+            self.assertIn('name = "Literata, größere Schriftgrade"', entry)
+            self.assertIn('url = "https://example.invalid/r/literata-large-1.0.0.zip"', entry)
+            for word in ["crate", "author_key", "builds"]:
+                self.assertNotIn(word, entry)
+            with zipfile.ZipFile(dist / "literata-large-1.0.0.zip") as z:
+                self.assertEqual(z.namelist(), [
+                    "plugin.ini", "fonts/literata-large.ppfp", "i18n/de.ini", "i18n/en.ini"])
+                self.assertTrue(z.read("fonts/literata-large.ppfp").startswith(b"PPFP"))
+            first = dist.joinpath("literata-large-1.0.0.zip").read_bytes()
+            sums = dist.joinpath("SHA256SUMS").read_text(encoding="utf-8")
+            self.assertIn("literata-bold-italic-1.0.0.zip", sums)
+            # The same bytes again.
+            with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                catalogue.main()
+            self.assertEqual(dist.joinpath("literata-large-1.0.0.zip").read_bytes(), first)
+
+    def test_a_folder_not_at_its_version_is_refused(self):
+        with tempfile.TemporaryDirectory() as dist, tempfile.TemporaryDirectory() as made:
+            dist, made = pathlib.Path(dist), pathlib.Path(made)
+            built(dist)
+            self.folders(made)
+            ini = made / "literata-large" / "plugin.ini"
+            ini.write_text(ini.read_text(encoding="utf-8").replace("version = 1.0.0", "version = 0.9.0"))
+            argv = ["catalogue.py", str(dist), "0.5.0-beta.8", "https://example.invalid/r", "--data", str(made)]
+            with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                catalogue.main()
+
+
 class Versions(unittest.TestCase):
     def test_a_release_s_plugins_carry_their_own_versions(self):
         with tempfile.TemporaryDirectory() as dist:

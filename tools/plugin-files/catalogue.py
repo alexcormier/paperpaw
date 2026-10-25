@@ -3,7 +3,7 @@
 (plugins.txt), from the files build.sh made for every reader of a release:
 
     python3 tools/plugin-files/catalogue.py <dist> <release> <base-url> [--date YYYY-MM-DD]
-        [--only <id>] [--tag <tag>]
+        [--only <id>] [--tag <tag>] [--data <dir>]
 
 <release> is the PaperPaw release whose firmware the files are built for
 (their SDK is its), <tag> the tag they are published at (`v<release>`
@@ -23,6 +23,12 @@ where not given; a plugin's update between releases has its own,
   and its SHA-256;
 - SHA256SUMS of the ZIPs and the plugin files.
 
+With `--data <dir>` the data plugins of data.toml come too, their folders
+in <dir> as data.py built them (`<dir>/<id>`): each its folder's ZIP,
+<id>-<version>.zip, every file of the folder in it, and an entry of kind
+`data` with that ZIP alone (no crate, no builds, nothing signed), its
+names and summaries from data.toml.
+
 Name and summary come from each plugin's translations
 (`<id>.plugin.name`, `<id>.plugin.description`, English and German), the
 author's key from the files' signatures (all must have the same), the
@@ -41,6 +47,8 @@ import struct
 import sys
 import tomllib
 import zipfile
+
+import data
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -116,13 +124,73 @@ def how_files(plugin, plugins=ROOT / "plugins"):
 
 
 def folder_zip(path, plugin_ini, files=()):
-    """The folder's ZIP: `plugin.ini` and `files` (name, text), the same
-    bytes for the same contents."""
+    """The folder's ZIP: `plugin.ini` and `files` (name, text or bytes),
+    the same bytes for the same contents."""
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for name, text in [("plugin.ini", plugin_ini), *sorted(files)]:
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             info.external_attr = 0o644 << 16
             z.writestr(info, text)
+
+
+def data_entries(source, dist, release, base, date, only=None):
+    """The data plugins of data.toml from their folders in `source`: their
+    ZIPs into `dist` and their entries into `dist/catalogue`; the ZIPs'
+    (sha256, name) for SHA256SUMS."""
+    sums = []
+    sdk = ".".join(release.split("-")[0].split("+")[0].split(".")[:2])
+    for plugin, fields in data.plugins().items():
+        if only not in (None, plugin):
+            continue
+        folder = source / plugin
+        ini_path = folder / "plugin.ini"
+        if not ini_path.exists():
+            fail(f"{plugin}: no folder in {source} (tools/plugin-files/data.py builds it)")
+        version = fields["version"]
+        ini = ini_path.read_text(encoding="utf-8")
+        if f"version = {version}\n" not in ini:
+            fail(f"{plugin}: its plugin.ini is not at data.toml's version {version}")
+        summary = fields["description"]
+        if len(summary) > 160 or len(fields["de"]["description"]) > 160:
+            fail(f"{plugin}: its description is longer than a summary may be (160)")
+        files = [
+            (path.relative_to(folder).as_posix(), path.read_bytes())
+            for path in sorted(folder.rglob("*"))
+            if path.is_file() and path.name != "plugin.ini"
+        ]
+        zipped = dist / f"{plugin}-{version}.zip"
+        folder_zip(zipped, ini, files)
+        digest = sha256(zipped)
+        sums.append((digest, zipped.name))
+        lines = [
+            f"# PaperPaw's own data plugin, built for PaperPaw {release} (tools/plugin-files/data.toml).",
+            f"id = {toml(plugin)}",
+            f"name = {toml(fields['name'])}",
+            f"summary = {toml(summary)}",
+            'kind = "data"',
+            'author = "PaperPaw"',
+            f"licence = {toml(fields['licence'])}",
+            f"source = {toml(REPOSITORY + '/blob/main/' + fields['build'])}",
+            f"group = {toml(fields['group'])}",
+            "devices = [" + ", ".join(toml(d) for d in fields["devices"]) + "]",
+        ]
+        if fields.get("off_by_default"):
+            lines.append("off_by_default = true")
+        lines += [
+            "",
+            "[i18n.de]",
+            f"name = {toml(fields['de']['name'])}",
+            f"summary = {toml(fields['de']['description'])}",
+            "",
+            "[[versions]]",
+            f"version = {toml(version)}",
+            f"sdk = {toml(sdk)}",
+            f"date = {toml(date)}",
+            f"url = {toml(base + '/' + zipped.name)}",
+            f"sha256 = {toml(digest)}",
+        ]
+        (dist / "catalogue" / f"{plugin}.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return sums
 
 
 def main():
@@ -134,6 +202,8 @@ def main():
     # One plugin alone: an update of it between releases (store-plugin.yml).
     parser.add_argument("--only")
     parser.add_argument("--tag")
+    # The data plugins' folders (data.py), for their entries too.
+    parser.add_argument("--data", type=pathlib.Path)
     args = parser.parse_args()
     dist, release, base = args.dist, args.release, args.base_url.rstrip("/")
     tag = args.tag or f"v{release}"
@@ -142,8 +212,9 @@ def main():
     keys = set()
     sums = []
     chosen = [(p, g) for p, g in plugins() if args.only in (None, p)]
-    if not chosen:
-        fail(f"{args.only} is not in plugins.txt")
+    only_data = args.only is not None and args.only in data.plugins()
+    if not chosen and not only_data:
+        fail(f"{args.only} is not in plugins.txt or data.toml")
     for plugin, group in chosen:
         name = message(plugin, "en", f"{plugin}.plugin.name")
         summary = message(plugin, "en", f"{plugin}.plugin.description")
@@ -222,11 +293,13 @@ def main():
                 f"sha256 = {toml(digest)}",
             ]
         (dist / "catalogue" / f"{plugin}.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    if len(keys) != 1:
+    if chosen and len(keys) != 1:
         fail(f"the files are signed by {len(keys)} keys, not one")
-    key = keys.pop()
+    key = keys.pop() if chosen else None
     for entry in (dist / "catalogue").glob("*.toml"):
-        entry.write_text(entry.read_text(encoding="utf-8").replace("AUTHOR_KEY", toml(key)), encoding="utf-8")
+        entry.write_text(entry.read_text(encoding="utf-8").replace("AUTHOR_KEY", toml(key or "")), encoding="utf-8")
+    if args.data is not None:
+        sums += data_entries(args.data, dist, release, base, args.date, args.only)
     (dist / "SHA256SUMS").write_text("".join(f"{d}  {n}\n" for d, n in sorted(sums, key=lambda s: s[1])), encoding="utf-8")
     print(f"{len(chosen)} plugins, signed by {key}")
 
