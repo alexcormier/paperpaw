@@ -117,6 +117,10 @@ no upload form. paperpaw.org lists public repositories with the topic
 GitHub release, checks it as it checks an upload, keeps the files and
 lists the plugin as "Community, unreviewed".
 
+The easiest start is `paperpaw-dev new --github <id>` (with `--code`
+for a plugin with code): it writes the whole repository, the workflow
+with its switches set included. Otherwise:
+
 1. Give the repository the topic `paperpaw-plugin`.
 2. Copy `paperpaw-release.yml` to `.github/workflows/` and set its
    switches at the top: `CODE` (`"true"` for a plugin with code, `"false"`
@@ -129,14 +133,17 @@ lists the plugin as "Community, unreviewed".
    repository, and paste its contents as the repository's secret
    `PAPERPAW_PLUGIN_KEY` (*Settings*, *Secrets and variables*,
    *Actions*). Data plugins need no key.
-4. Raise `version` in `plugin.ini` (and in the code), commit, then:
+4. Raise `version` in `plugin.ini` (and in the code), run
+   `paperpaw-dev check-publish` (or `paperpaw-sign check-publish .`) and
+   fix what it says, commit, then:
 
 ```sh
 git tag v1.0.0 && git push --tags
 ```
 
 The tag must be `v` and `plugin.ini`'s version, or the job stops. It
-makes a published release (not a draft, not a pre-release) with exactly
+runs `check-publish` before it builds and on the files it made, and
+releases nothing where it fails. It makes a published release (not a draft, not a pre-release) with exactly
 `<id>-<version>.zip`, the plugin's folder with its `store/`, and for code
 one signed `<id>-<version>-<device>.ppn` per reader. The site picks it
 up within the hour. What fails its checks is not offered; the warnings

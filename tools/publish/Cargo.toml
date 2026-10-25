@@ -1,0 +1,24 @@
+[package]
+name = "paperpaw-publish"
+description = "Checks a plugin's repository and its release files by the rules of paperpaw.org's plugin store, before anything is published: for paperpaw-dev and paperpaw-sign"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+paperpaw-digest.workspace = true
+paperpaw-fs.workspace = true
+paperpaw-json.workspace = true
+paperpaw-native.workspace = true
+paperpaw-zip.workspace = true
+
+[dev-dependencies]
+paperpaw-zip = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

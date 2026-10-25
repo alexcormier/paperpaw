@@ -71,6 +71,16 @@ USAGE:
     paperpaw-sign check-plugin <plugin.ppn>
         Shows the author of a plugin file and whether the signature holds;
         fails if it is not signed.
+    paperpaw-sign check-publish [repo] [--release-dir <dir>] [--tag <tag>] [--rules <file>]
+        Checks a plugin's repository by the rules of the plugin store at
+        paperpaw.org, and with --release-dir the files of its release (their
+        names, each build's chip, interface and signature); fails where the
+        site would refuse it, and says what to change. --rules takes the
+        site's newest rules (https://paperpaw.org/api/v1/store-rules.json).
+        paperpaw-dev check-publish is the same check.
+    paperpaw-sign store-rules [file]
+        Prints the store's rules this tool checks by; with a file (the
+        site's), fails where they differ.
     paperpaw-sign statics <crate.rlib>...
         Lists the symbols in writable memory (mutable statics) of the
         objects in rlibs (built without LTO); fails if there is one. A
@@ -112,11 +122,46 @@ fn run(args: Vec<String>) -> Result<(), String> {
         ["sign-plugin", file, "--key", key] => plugin::sign(file, Some(key)),
         ["check-plugin", file] => plugin::check(file),
         ["statics", archives @ ..] if !archives.is_empty() => plugin::statics(archives),
+        ["check-publish", rest @ ..] => check_publish(rest),
+        ["store-rules"] => {
+            print!("{}", paperpaw_publish::rules::BUILT_IN);
+            Ok(())
+        }
+        ["store-rules", file] => store_rules(file),
         ["-h" | "--help"] => {
             print!("{USAGE}");
             Ok(())
         }
         _ => Err(format!("unexpected arguments\n\n{USAGE}")),
+    }
+}
+
+/// `check-publish`: the problems, one a line; fails on an error.
+fn check_publish(args: &[&str]) -> Result<(), String> {
+    let args: Vec<String> = args.iter().map(ToString::to_string).collect();
+    let problems = paperpaw_publish::run(&args, None)?;
+    for problem in &problems {
+        println!("{problem}");
+    }
+    if paperpaw_publish::passes(&problems) {
+        println!("check-publish: the plugin store takes it");
+        Ok(())
+    } else {
+        Err("the plugin store would refuse it: change what the errors say".into())
+    }
+}
+
+/// `store-rules <file>`: whether the rules in `file` are this tool's.
+fn store_rules(file: &str) -> Result<(), String> {
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let theirs = paperpaw_publish::Rules::parse(&text).map_err(|e| format!("{file}: {e}"))?;
+    if theirs == paperpaw_publish::Rules::built_in() {
+        println!("the same rules");
+        Ok(())
+    } else {
+        Err(format!(
+            "{file} has other rules than tools/publish/store-rules.json: bring them in step"
+        ))
     }
 }
 

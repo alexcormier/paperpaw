@@ -38,6 +38,14 @@ COMMANDS:
     package     A data plugin as the installer and the website take it, a .ppn
                 file's header, fingerprint, signature and sizes, compatibility
     snapshots   Compares screens with the pictures in --snapshots (--bless writes them)
+    check-publish [repo] [--release-dir <dir>] [--tag <tag>] [--rules <file>]
+                A plugin's own repository (and its release's files) checked by the
+                plugin store's rules at paperpaw.org, saying what to change: run it
+                before tagging; the release workflow runs it too
+    new --github <id> [--code] [--dir <path>]
+                A plugin's own repository for GitHub that check-publish passes: the
+                plugin's folder, store/store.ini, the release workflow, README,
+                .gitignore; with --code the crate too
     ui-kit      Every building block of the SDK's `ui` module, as the gallery shows
                 screens (every device, look, light and dark), checked as `visual`
                 checks; a label shortened to fit is an error
@@ -234,7 +242,14 @@ pub fn main(args: impl Iterator<Item = String>, add: Option<AddPlugins>) -> Exit
 
 /// Runs the command line; whether the checks passed.
 pub fn run(args: impl Iterator<Item = String>, add: Option<AddPlugins>) -> Result<bool, String> {
-    let Some((command, mut context)) = parse(args)? else {
+    // Publishing from GitHub: arguments of their own.
+    let args: Vec<String> = args.collect();
+    match args.first().map(String::as_str) {
+        Some("check-publish") => return crate::publish::check(&args[1..]),
+        Some("new") => return crate::publish::new(&args[1..]),
+        _ => {}
+    }
+    let Some((command, mut context)) = parse(args.into_iter())? else {
         return Ok(true);
     };
     context.target.add = add;

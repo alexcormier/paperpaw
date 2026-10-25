@@ -23,6 +23,13 @@ change the plugin SDK.
   "Community, unreviewed". `tools/dev/templates` has the release
   workflow that zips the folder, builds and signs a code plugin and
   makes the release; the handbook and the plugin skill explain it.
+- `paperpaw-dev check-publish` (and `paperpaw-sign check-publish`)
+  checks a plugin's repository and its release files by the plugin
+  store's rules, the site's own (`tools/publish/store-rules.json`, served
+  by paperpaw.org too), and says what to change; the release workflow
+  runs it before it builds and on the files it made, and releases
+  nothing where it fails. `paperpaw-dev new --github <id>` makes a
+  repository that passes it, the workflow included.
 - Community plugins: the store's new setting *Community plugins*
   (Settings, System, off at first) also lists plugins that their authors
   published on GitHub, which nobody reviewed. They are marked
