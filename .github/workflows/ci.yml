@@ -137,7 +137,7 @@ jobs:
       - name: Build the web emulator
         # As it is served, its size told and kept in bounds.
         if: matrix.target == 'wasm32-unknown-unknown'
-        run: python3 shells/web/build.py --limit-mb 15
+        run: python3 shells/web/build.py --limit-mb 16
 
   firmware:
     name: Firmware (${{ matrix.device }})

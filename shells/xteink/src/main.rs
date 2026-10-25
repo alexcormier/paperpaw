@@ -27,6 +27,8 @@ extern crate alloc;
 #[cfg(all(feature = "bluetooth", not(feature = "x4-pro")))]
 compile_error!("Bluetooth is built for the X4 Pro alone (ADR 0027)");
 
+#[cfg(feature = "remote")]
+mod bench;
 #[cfg(feature = "bluetooth")]
 mod bluetooth;
 #[cfg(feature = "x4")]
@@ -45,8 +47,6 @@ mod card;
 #[cfg(feature = "esp32s3")]
 #[path = "card_pro.rs"]
 mod card;
-#[cfg(feature = "remote")]
-mod bench;
 mod clock;
 mod crash;
 mod device;

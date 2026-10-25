@@ -213,8 +213,8 @@ impl Remote {
             }
             Command::Actions(prefix) => {
                 for action in kernel.actions().iter() {
-                    if action.id.as_str().starts_with(prefix.as_str()) {
-                        println!("PP:ACTION {}", action.id);
+                    if action.id().as_str().starts_with(prefix.as_str()) {
+                        println!("PP:ACTION {}", action.id());
                     }
                 }
                 println!("PP:END");

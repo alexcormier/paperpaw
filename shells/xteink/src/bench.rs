@@ -94,5 +94,7 @@ pub fn run() {
         ram[i] = us;
         check ^= r;
     }
-    info!("bench: {STEPS} interpreter steps: flash {flash:?} us, internal RAM {ram:?} us ({check})");
+    info!(
+        "bench: {STEPS} interpreter steps: flash {flash:?} us, internal RAM {ram:?} us ({check})"
+    );
 }
