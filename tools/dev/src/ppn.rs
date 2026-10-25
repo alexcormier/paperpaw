@@ -140,12 +140,14 @@ fn sizes(header: &Header, signed: bool) -> String {
     let data = header.code_at;
     let code = header.image_len - header.code_at;
     let relocations = u64::from(header.relocs) * 4;
+    let patches = u64::from(header.patches) * 8;
     let trailer = if signed { SIGNATURE_LEN as u64 } else { 0 };
     let total = header.file_len() + trailer;
     format!(
-        "{total} bytes: header {HEADER_LEN}, read-only data {data}, code {code}, \
-         relocations {relocations} ({} words), signature {trailer}",
-        header.relocs
+        "{total} bytes: header {HEADER_LEN}, read-only data {data}, code {code} \
+         ({} hot), relocations {relocations} ({} words), patches {patches}, \
+         signature {trailer}",
+        header.hot_len, header.relocs
     )
 }
 
@@ -169,6 +171,9 @@ mod tests {
             relocs: 0,
             align: 16,
             compiler: 1,
+            hot_at: 0,
+            hot_len: 0,
+            patches: 0,
             sha256: [0; 32],
         };
         let image = [9u8; 64];
@@ -210,7 +215,7 @@ mod tests {
             .find(|f| f.check == "package.ppn-size")
             .unwrap();
         assert!(
-            size.message.starts_with("256 bytes: header 80"),
+            size.message.starts_with("268 bytes: header 92"),
             "{}",
             size.message
         );

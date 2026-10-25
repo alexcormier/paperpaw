@@ -5111,6 +5111,7 @@ pub use paperpaw_sdk::xml::escape
 pub use paperpaw_sdk::xml::local_name
 pub macro paperpaw_sdk::data_path!
 pub macro paperpaw_sdk::event_data!
+pub macro paperpaw_sdk::hot!
 pub macro paperpaw_sdk::package_version!
 pub macro paperpaw_sdk::plugin!
 pub macro paperpaw_sdk::role_settings!

@@ -36,14 +36,16 @@ pub struct Psram {
 impl Psram {
     /// Reads the image of the plugin file at `path` into PSRAM, checked
     /// by its digest and relocated, and makes it runnable; its data
-    /// address.
+    /// address, and 0: its hot code runs in place (its calls could not
+    /// reach internal RAM from PSRAM, which is fast through its cache
+    /// already). `words` follow the image in the file.
     pub fn put(
         &mut self,
         storage: &dyn Storage,
         path: &str,
         header: &Header,
         words: &[u32],
-    ) -> Result<u32, PluginProblem> {
+    ) -> Result<(u32, u32), PluginProblem> {
         #[cfg(feature = "remote")]
         super::set_room(super::Room::Psram);
         let len = header.image_len as usize;
@@ -76,7 +78,7 @@ impl Psram {
             Cache_Resume_DCache_Autoload(autoload);
             Cache_Invalidate_Addr(base + CODE_OFFSET, len as u32);
         }
-        Ok(base)
+        Ok((base, 0))
     }
 
     /// Nothing to do once all are placed.

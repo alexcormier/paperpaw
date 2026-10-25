@@ -31,7 +31,21 @@ SECTIONS
     . = . + 0x06000000;
     .text : ALIGN(16)
     {
-        *(.literal .text .literal.* .text.*)
+        /* All code but the hot code: a section goes to the first pattern
+           that names it, so `.text.*` would take the hot code too. */
+        *(.literal .text .literal.*
+          .text.[!p]* .text.p[!a]* .text.pa[!p]* .text.pap[!e]* .text.pape[!r]*
+          .text.paper[!p]* .text.paperp[!a]* .text.paperpa[!w]* .text.paperpaw[!_]*
+          .text.paperpaw_[!h]* .text.paperpaw_h[!o]* .text.paperpaw_ho[!t]*
+          .text.paperpaw_hot[!.]*)
+        /* The hot code (the SDK's `hot!`) at the end, in whole words: a
+           device may run it from faster memory (paperpaw-sign pack
+           records where it lies). */
+        . = ALIGN(4);
+        PAPERPAW_HOT = .;
+        *(.text.paperpaw_hot .text.paperpaw_hot.*)
+        . = ALIGN(4);
+        PAPERPAW_HOT_END = .;
     }
 
     /* Writable data has no place in a plugin (its state lives on the

@@ -10,12 +10,13 @@ use crate::signature::Signature;
 
 /// A plugin file's first bytes.
 pub const MAGIC: [u8; 4] = *b"PPNP";
-/// The format this crate reads and writes: 2 names the compiler.
-pub const FORMAT: u16 = 2;
+/// The format this crate reads and writes: 2 named the compiler, 3 adds
+/// hot code and the patches that move it.
+pub const FORMAT: u16 = 3;
 /// The header's length.
-pub const HEADER_LEN: usize = 80;
+pub const HEADER_LEN: usize = 92;
 /// The bytes of the header its digest covers (all before the digest).
-const DIGESTED_LEN: usize = 48;
+const DIGESTED_LEN: usize = 60;
 /// The largest image taken: more than either device has room for.
 pub const MAX_IMAGE_LEN: u32 = 4 << 20;
 /// Where `paperpaw-plugin.x` links a plugin's read-only data.
@@ -76,8 +77,7 @@ pub enum Problem {
     NotAPlugin,
     /// It is a plugin file of a newer format than this one reads.
     NewerFormat,
-    /// It is a plugin file of an older format, which does not say its
-    /// compiler: it needs a new build.
+    /// It is a plugin file of an older format: it needs a new build.
     OlderFormat,
     /// It is made for a chip this crate does not know.
     UnknownChip,
@@ -87,7 +87,7 @@ pub enum Problem {
     Length,
     /// It was changed or damaged: its digest does not hold.
     Damaged,
-    /// A word it lists to relocate is not one.
+    /// A word it lists to relocate is not one, or a patch is not right.
     Relocation,
     /// It ends with an author's signature that does not hold.
     Signature,
@@ -103,7 +103,7 @@ impl fmt::Display for Problem {
             Problem::Malformed => "its header does not hold together",
             Problem::Length => "not as long as it says",
             Problem::Damaged => "changed or damaged",
-            Problem::Relocation => "a word to relocate is not one",
+            Problem::Relocation => "a word to relocate or a patch is not right",
             Problem::Signature => "its author's signature does not hold",
         })
     }
@@ -135,7 +135,15 @@ pub struct Header {
     /// The compiler it was built with ([`compiler::id`](crate::compiler::id)
     /// of its release).
     pub compiler: u32,
-    /// SHA-256 of the header's first 48 bytes and of all after the header
+    /// Where the hot code begins in the image: code a device may run from
+    /// faster memory than the rest (0 when there is none).
+    pub hot_at: u32,
+    /// The hot code's bytes (0: none).
+    pub hot_len: u32,
+    /// How many patches follow the words to relocate: the instructions
+    /// that reach across the hot code's edge (see [`Relocator`](crate::Relocator)).
+    pub patches: u32,
+    /// SHA-256 of the header's first 60 bytes and of all after the header
     /// (see [`Header::digest`]).
     pub sha256: [u8; 32],
 }
@@ -161,7 +169,7 @@ impl Header {
         }
         let chip = Chip::from_id(le16(bytes, 6)).ok_or(Problem::UnknownChip)?;
         let mut sha256 = [0; 32];
-        sha256.copy_from_slice(&bytes[48..80]);
+        sha256.copy_from_slice(&bytes[DIGESTED_LEN..HEADER_LEN]);
         let header = Header {
             chip,
             fingerprint: u64::from(le32(bytes, 8)) | (u64::from(le32(bytes, 12)) << 32),
@@ -173,6 +181,9 @@ impl Header {
             relocs: le32(bytes, 36),
             align: le32(bytes, 40),
             compiler: le32(bytes, 44),
+            hot_at: le32(bytes, 48),
+            hot_len: le32(bytes, 52),
+            patches: le32(bytes, 56),
             sha256,
         };
         if header.compiler == 0 || !header.holds_together() {
@@ -182,8 +193,8 @@ impl Header {
     }
 
     /// Whether the parts lie where they can: the entry and the table's
-    /// word in the read-only data, the code after it, the image in the
-    /// address space at its alignment.
+    /// word in the read-only data, the code after it, the hot code in the
+    /// code, the image in the address space at its alignment.
     fn holds_together(&self) -> bool {
         let entry_len = ENTRY_LEN as u32;
         self.image_len > 0
@@ -202,6 +213,7 @@ impl Header {
                 .is_some_and(|end| end <= self.code_at)
             && (self.api + 4 <= self.entry || self.entry + entry_len <= self.api)
             && self.relocs <= self.image_len / 4
+            && self.hot_holds_together()
             && self.align.is_power_of_two()
             && (4..=4096).contains(&self.align)
             && self.base.is_multiple_of(self.align)
@@ -212,11 +224,30 @@ impl Header {
                 .is_some()
     }
 
+    /// Whether the hot code lies in the code, in whole words, and the
+    /// patches are not more than the code's instructions. Only RISC-V
+    /// moves hot code: an Xtensa file has none.
+    fn hot_holds_together(&self) -> bool {
+        let placed = if self.hot_len == 0 {
+            self.hot_at == 0
+        } else {
+            self.hot_at >= self.code_at
+                && self.hot_at.is_multiple_of(4)
+                && self.hot_len.is_multiple_of(4)
+                && self
+                    .hot_at
+                    .checked_add(self.hot_len)
+                    .is_some_and(|end| end <= self.image_len)
+        };
+        let riscv = self.chip == Chip::Esp32C3 || (self.hot_len == 0 && self.patches == 0);
+        placed && riscv && self.patches <= self.image_len.saturating_sub(self.code_at) / 2
+    }
+
     /// The header's bytes.
     pub fn to_bytes(&self) -> [u8; HEADER_LEN] {
         let mut bytes = [0; HEADER_LEN];
         bytes[..DIGESTED_LEN].copy_from_slice(&self.digested());
-        bytes[48..80].copy_from_slice(&self.sha256);
+        bytes[DIGESTED_LEN..].copy_from_slice(&self.sha256);
         bytes
     }
 
@@ -236,6 +267,9 @@ impl Header {
             self.relocs,
             self.align,
             self.compiler,
+            self.hot_at,
+            self.hot_len,
+            self.patches,
         ]
         .into_iter()
         .enumerate()
@@ -260,14 +294,26 @@ impl Header {
         sha.finish() == self.sha256
     }
 
-    /// Where the words to relocate begin in the file.
+    /// Where the words to relocate begin in the file, the patches after
+    /// them.
     pub fn relocs_at(&self) -> u64 {
         HEADER_LEN as u64 + u64::from(self.image_len)
     }
 
+    /// How many words follow the image: those to relocate, then two for
+    /// each patch.
+    pub fn tail_words(&self) -> usize {
+        self.relocs as usize + 2 * self.patches as usize
+    }
+
     /// The file's length without its author's signature.
     pub fn file_len(&self) -> u64 {
-        self.relocs_at() + 4 * u64::from(self.relocs)
+        self.relocs_at() + 4 * self.tail_words() as u64
+    }
+
+    /// Whether the image offset `at` lies in the hot code.
+    pub fn in_hot(&self, at: u32) -> bool {
+        at.wrapping_sub(self.hot_at) < self.hot_len
     }
 
     /// Whether a file of `len` bytes with this header ends with an
@@ -293,7 +339,8 @@ impl Header {
         if !header.holds(sha) {
             return Err(Problem::Damaged);
         }
-        crate::check_relocations(&header, header.words(&file[..end]))?;
+        let words: alloc::vec::Vec<u32> = header.words(&file[..end]).collect();
+        crate::check_relocations(&header, &words)?;
         if !signed {
             return Ok((header, None));
         }
@@ -304,7 +351,7 @@ impl Header {
         Ok((header, Some(signature)))
     }
 
-    /// The words to relocate in a whole file whose length was checked.
+    /// The words after the image in a whole file whose length was checked.
     fn words<'a>(&self, file: &'a [u8]) -> impl Iterator<Item = u32> + 'a {
         let at = self.relocs_at() as usize;
         file[at..]
@@ -356,6 +403,9 @@ pub(crate) mod tests {
             relocs,
             align: 16,
             compiler: crate::compiler::id("1.99.0 (b940084d7 2026-09-28)"),
+            hot_at: 0,
+            hot_len: 0,
+            patches: 0,
             sha256: [0; 32],
         }
     }
@@ -393,10 +443,10 @@ pub(crate) mod tests {
         assert_eq!(Header::read(b"PPNP\x01\x00"), Err(Problem::Length));
         assert_eq!(Header::read(b""), Err(Problem::Length));
         let mut newer = file();
-        newer[4] = 3;
+        newer[4] = 4;
         assert_eq!(Header::read(&newer), Err(Problem::NewerFormat));
         let mut older = file();
-        older[4] = 1;
+        older[4] = 2;
         assert_eq!(Header::read(&older), Err(Problem::OlderFormat));
         let mut chip = file();
         chip[6] = 7;
@@ -443,6 +493,43 @@ pub(crate) mod tests {
                 base: u32::MAX - 64,
                 ..good
             },
+            // Hot code outside the code, not in whole words, or on Xtensa.
+            Header {
+                chip: Chip::Esp32C3,
+                hot_at: 60,
+                hot_len: 8,
+                ..good
+            },
+            Header {
+                chip: Chip::Esp32C3,
+                hot_at: 66,
+                hot_len: 8,
+                ..good
+            },
+            Header {
+                chip: Chip::Esp32C3,
+                hot_at: 64,
+                hot_len: 6,
+                ..good
+            },
+            Header {
+                chip: Chip::Esp32C3,
+                hot_at: 88,
+                hot_len: 12,
+                ..good
+            },
+            Header { hot_at: 64, ..good },
+            Header {
+                hot_at: 64,
+                hot_len: 8,
+                ..good
+            },
+            Header { patches: 1, ..good },
+            Header {
+                chip: Chip::Esp32C3,
+                patches: 17,
+                ..good
+            },
         ];
         for header in bad {
             assert_eq!(
@@ -457,6 +544,16 @@ pub(crate) mod tests {
             ..good
         };
         assert_eq!(Header::read(&unnamed.to_bytes()), Err(Problem::Malformed));
+        // Hot code at the code's end, on RISC-V.
+        let hot = Header {
+            chip: Chip::Esp32C3,
+            hot_at: 88,
+            hot_len: 8,
+            patches: 16,
+            ..good
+        };
+        assert_eq!(Header::read(&hot.to_bytes()), Ok(hot));
+        assert!(hot.in_hot(88) && hot.in_hot(95) && !hot.in_hot(96) && !hot.in_hot(87));
     }
 
     #[test]

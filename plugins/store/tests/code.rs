@@ -56,6 +56,9 @@ fn ppn(build: Fingerprint, seed: Option<&[u8; 32]>) -> Vec<u8> {
         relocs: 0,
         align: 16,
         compiler: 1,
+        hot_at: 0,
+        hot_len: 0,
+        patches: 0,
         sha256: [0; 32],
     };
     let mut sha = header.digest();
@@ -169,7 +172,7 @@ fn a_code_plugin_is_installed_and_starts_after_a_restart() {
     // *Back*: the plugin again, nothing installed.
     shopping.run(actions::BACK);
     let shown = shopping.shown();
-    assert!(shown.contains("Install, 337 B"), "{shown}");
+    assert!(shown.contains("Install, 349 B"), "{shown}");
     shopping.run(actions::BACK);
     shopping.run(actions::BACK);
     shopping.run(OPEN);
@@ -259,7 +262,7 @@ fn a_new_install_after_a_removal_keeps_the_first_key() {
 
 /// The SHA-256 a plugin file's header carries.
 fn digest(file: &[u8]) -> [u8; 32] {
-    file[48..80].try_into().unwrap()
+    Header::read(file).unwrap().sha256
 }
 
 /// The clock's first install with `code`: not installed, the reader told

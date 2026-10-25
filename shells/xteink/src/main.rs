@@ -134,8 +134,10 @@ esp_bootloader_esp_idf::esp_app_desc!(
 );
 
 /// Heap for PaperPaw: what the emulator's X4 profile allows, less what
-/// Bluetooth takes of the same memory for good.
-const HEAP_SIZE: usize = (192 - BLUETOOTH_KB) * 1024;
+/// Bluetooth takes of the same memory for good, and less the X4's arena
+/// for plugins' hot code, which the heap gets once plugins are loaded as
+/// far as they did not take it (`native::HOT_ARENA_LEN`).
+const HEAP_SIZE: usize = (192 - BLUETOOTH_KB) * 1024 - native::HOT_ARENA_LEN;
 /// Bluetooth's fixed share of the internal RAM, in KB, as measured: its
 /// controller's code in IRAM (20.6 KB) and statics (4.4 KB). The stack,
 /// after them, would lose it: the heap gives it back (`build.rs` checks
@@ -576,6 +578,7 @@ impl paperpaw_core::CodeLoader for NoCode {
 fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
     if ota.is_some_and(ota::Ota::on_trial) {
         info!("native: an update on trial starts without code plugins");
+        native::no_hot_code();
         return CodePlugins::None;
     }
     if let Some(safe_mode) = safe_mode::check(input::held(safe_mode::KEY)) {
@@ -583,6 +586,7 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
             "native: safe mode ({:?}), without code plugins",
             safe_mode.reason
         );
+        native::no_hot_code();
         return CodePlugins::SafeMode(safe_mode);
     }
     #[cfg(feature = "esp32s3")]

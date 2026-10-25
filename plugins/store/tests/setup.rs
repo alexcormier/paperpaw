@@ -47,6 +47,9 @@ fn ppn() -> Vec<u8> {
         relocs: 0,
         align: 16,
         compiler: 1,
+        hot_at: 0,
+        hot_len: 0,
+        patches: 0,
         sha256: [0; 32],
     };
     let mut sha = header.digest();
