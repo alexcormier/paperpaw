@@ -99,7 +99,7 @@ fn shown_in(
 fn a_plugin_by_another_author_is_named() {
     let shown = shown(&[("clock", NotInstalledReason::OtherAuthor)], false);
     assert!(
-        shown.contains("clock was not installed: signed by another author"),
+        shown.contains("clock was not installed: signed by another key than before"),
         "{shown}"
     );
 }
