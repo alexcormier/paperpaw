@@ -477,3 +477,51 @@ fn online_from_the_start_with_wifi_online() {
     assert!(off.ok, "{}", off.stderr);
     assert!(off.stdout.contains("Row \"Wi-Fi, Off\""), "{}", off.stdout);
 }
+
+/// `--wifi online` before `--stdio`, as the workshop passes it: the
+/// devices it starts are online; the help names it so the workshop can
+/// tell.
+#[test]
+fn wifi_online_holds_for_the_devices_stdio_starts() {
+    use std::io::Write;
+    let help = emulator(&["--help"]);
+    assert!(
+        help.stdout
+            .lines()
+            .any(|l| l.trim_start().starts_with("--wifi <state>")),
+        "{}",
+        help.stdout
+    );
+    let library = library("wifi-stdio");
+    let path = paperpaw_core::sdk::json::string(&library.display().to_string());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
+        .args(["--wifi", "online", "--stdio"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let lines = format!(
+        "{{\"op\": \"start\", \"profile\": \"xteink-x4\", \"library\": {path}}}\n\
+         {{\"op\": \"open\", \"screen\": \"wifi.page\"}}\n\
+         {{\"op\": \"describe\"}}\n\
+         {{\"op\": \"quit\"}}\n"
+    );
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(lines.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let _ = fs::remove_dir_all(&library);
+    assert!(
+        stdout.contains("Connected to Workshop Wi-Fi"),
+        "{}",
+        stdout
+            .lines()
+            .filter(|l| !l.contains("\"frame\""))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}

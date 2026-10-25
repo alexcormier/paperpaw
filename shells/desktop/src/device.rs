@@ -35,6 +35,15 @@ pub fn set_free_space(bytes: u64) {
 /// them installed (a library copied from elsewhere would run its code).
 static CODE_PLUGINS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+static WIFI_ONLINE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Devices start online (`--wifi online`, before `--stdio` too), or with
+/// the radio off as on a device (by default); see
+/// [`Device::set_wifi_online`].
+pub fn set_wifi_online(on: bool) {
+    WIFI_ONLINE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Loads code plugins built for this computer, or none (by default).
 pub fn set_code_plugins(on: bool) {
     CODE_PLUGINS.store(on, std::sync::atomic::Ordering::Relaxed);
@@ -295,7 +304,7 @@ impl Device {
             speech: std::collections::VecDeque::new(),
             warnings: Vec::new(),
             fixtures: false,
-            wifi_online: false,
+            wifi_online: WIFI_ONLINE.load(std::sync::atomic::Ordering::Relaxed),
             asleep: false,
             rotation,
             wall: None,

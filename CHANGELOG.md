@@ -20,6 +20,9 @@ change the plugin SDK.
   summary, with their licences.
 - The emulator starts online with `--wifi online` (over `--stdio`,
   `"wifi": "online"` in `start`): the X4s on USB, their radio on and in
+- The emulator starts online with `--wifi online` (also given before
+  `--stdio`, for the devices it starts; or `"wifi": "online"` in
+  `start`): the X4s on USB, their radio on and in
   a network `Workshop Wi-Fi` joined before, so plugins' requests go out
   at once; Wi-Fi switches off and on in the settings as on a device.
   Without it, nothing changes.

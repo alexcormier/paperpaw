@@ -16,8 +16,9 @@ pub enum Request {
         library: PathBuf,
         settings: Option<String>,
         trust_code: bool,
-        /// Online from the start (`"wifi": "online"`).
-        wifi_online: bool,
+        /// Online from the start (`"wifi": "online"`), or with the radio
+        /// off (`"off"`); `None` as `--wifi` said.
+        wifi_online: Option<bool>,
     },
     Button {
         name: String,
@@ -165,8 +166,9 @@ pub fn parse(line: &str) -> Result<Request, String> {
             settings: text("settings"),
             trust_code: json::raw_member(line, "trust_code").map(str::trim) == Some("true"),
             wifi_online: match text("wifi").as_deref() {
-                None | Some("off") => false,
-                Some("online") => true,
+                None => None,
+                Some("off") => Some(false),
+                Some("online") => Some(true),
                 Some(other) => return Err(format!("no wifi `{other}`: online or off")),
             },
         },
