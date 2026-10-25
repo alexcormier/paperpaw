@@ -13,6 +13,7 @@
     reason = "tests panic on purpose when something is wrong"
 )]
 
+use std::cell::Cell;
 use std::rc::Rc;
 
 use paperpaw_core::{Effects, Io, Kernel, ServerCall, ServerEvent};
@@ -43,9 +44,19 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Small,
 };
 
-/// A storage the test looks into while the kernel has it.
+/// A storage the test looks into while the kernel has it, on a card that
+/// can be made to fail.
 #[derive(Clone, Default)]
-struct Shared(Rc<MemoryStorage>);
+struct Shared(Rc<MemoryStorage>, Rc<Card>);
+
+/// What the card does: how much it takes before it fails (none: never),
+/// and the most it was given to append at once.
+#[derive(Default)]
+struct Card {
+    fails_after: Cell<Option<u64>>,
+    appended: Cell<u64>,
+    largest_append: Cell<usize>,
+}
 
 impl Storage for Shared {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
@@ -58,6 +69,14 @@ impl Storage for Shared {
         self.0.write(path, data)
     }
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        let card = &self.1;
+        card.largest_append
+            .set(card.largest_append.get().max(data.len()));
+        let appended = card.appended.get() + data.len() as u64;
+        if card.fails_after.get().is_some_and(|most| appended > most) {
+            return Err(StorageError::Io);
+        }
+        card.appended.set(appended);
         self.0.append(path, data)
     }
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
@@ -250,6 +269,43 @@ impl Device {
                 _ => None,
             })
             .unwrap_or_else(|| panic!("no answer to request {request}"))
+    }
+
+    /// Sends an upload of `parts` with `pause` milliseconds between them,
+    /// the kernel's timers running meanwhile, as a slow network brings
+    /// them; the calls the shell got before the last part, and after.
+    fn upload_slowly(
+        &mut self,
+        path: &str,
+        parts: &[Vec<u8>],
+        pause: u64,
+    ) -> (Vec<ServerCall>, Vec<ServerCall>) {
+        let request = self.next_request;
+        self.next_request += 1;
+        let target = format!("/api/file?k={}&path={path}", self.key);
+        self.event(ServerEvent::Request {
+            server: self.server,
+            request,
+            method: "PUT".into(),
+            target,
+            body: true,
+        });
+        let mut before = Vec::new();
+        for (i, part) in parts.iter().enumerate() {
+            self.now += pause;
+            let effects = self.kernel.tick(Instant(self.now));
+            self.settle(effects);
+            let last = i + 1 == parts.len();
+            if last {
+                before = self.calls();
+            }
+            self.event(ServerEvent::Body {
+                request,
+                data: part.clone(),
+                last,
+            });
+        }
+        (before, self.calls())
     }
 
     fn upload(&mut self, path: &str, parts: &[&[u8]]) -> Answer {
@@ -673,4 +729,50 @@ fn offline_mode_offers_to_go_online_first() {
             );
         }
     }
+}
+
+/// A large upload over a slow network lands whole: the kernel writes each
+/// part as it comes, never more than a part at a time, however long the
+/// parts take.
+#[test]
+fn a_large_slow_upload_lands_whole_a_part_at_a_time() {
+    let mut device = Device::serving();
+    const PART: usize = 16 * 1024;
+    let mut data = vec![0u8; 6 * 1024 * 1024 + 123];
+    fill(&mut data);
+    let parts: Vec<Vec<u8>> = data.chunks(PART).map(<[u8]>::to_vec).collect();
+    let (_, calls) = device.upload_slowly("Books/large.epub", &parts, 1_500);
+    let answered = calls.iter().find_map(|call| match call {
+        ServerCall::Respond { status, .. } => Some(*status),
+        _ => None,
+    });
+    assert_eq!(answered, Some(200), "{calls:?}");
+    assert_eq!(device.read("Books/large.epub").as_deref(), Some(&data[..]));
+    assert!(
+        device.storage.1.largest_append.get() <= PART,
+        "a part at a time"
+    );
+    assert_eq!(device.waiting_bodies(), 0, "nothing left behind");
+}
+
+/// A card that fails in the middle of an upload: the client is answered at
+/// once, while it is still sending, and nothing is left behind.
+#[test]
+fn a_card_failing_mid_upload_is_answered_at_once() {
+    let mut device = Device::serving();
+    device.storage.1.fails_after.set(Some(100 * 1024));
+    let parts: Vec<Vec<u8>> = (0..40).map(|_| vec![7u8; 16 * 1024]).collect();
+    let (before, _) = device.upload_slowly("Books/large.epub", &parts, 200);
+    let refused = before.iter().find_map(|call| match call {
+        ServerCall::Respond { status, body, .. } => {
+            Some((*status, String::from_utf8_lossy(body).into_owned()))
+        }
+        _ => None,
+    });
+    let (status, said) =
+        refused.unwrap_or_else(|| panic!("no answer before the body ended: {before:?}"));
+    assert_eq!(status, 500, "{said}");
+    assert!(said.contains("card"), "{said}");
+    assert_eq!(device.read("Books/large.epub"), None);
+    assert_eq!(device.waiting_bodies(), 0, "nothing left behind");
 }
