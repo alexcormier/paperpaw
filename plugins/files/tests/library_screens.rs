@@ -162,6 +162,25 @@ fn an_empty_library_says_where_books_come_from() {
 
 /// Used to panic: `Listing::page` underflowed for an empty folder (as the
 /// library showed again).
+/// A card the device cannot use (exFAT on an X4): no catalog ever comes,
+/// so the library does not say it is collecting books for ever.
+#[test]
+fn a_card_that_cannot_be_read_shows_an_empty_library() {
+    let _turn = turn();
+    for device in DEVICES {
+        let storage = Shared(std::rc::Rc::new(paperpaw_platform::NoStorage));
+        let mut app = App::new(device, storage);
+        // The hints first.
+        if app.screen() == "help.overlay" {
+            app.run(actions::CONFIRM);
+        }
+        app.run(actions::LIBRARY);
+        app.wait(3000);
+        assert!(!app.shows("Collecting"), "{}", app.described());
+        assert!(app.shows("No books here yet"), "{}", app.described());
+    }
+}
+
 #[test]
 fn an_empty_library_shows_again_after_its_menu_closes() {
     let _turn = turn();

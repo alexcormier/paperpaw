@@ -113,8 +113,12 @@ struct Device {
 
 impl Device {
     fn new(device: DeviceInfo, config: &str) -> Self {
+        Self::on(device, config, MemoryStorage::new())
+    }
+
+    fn on(device: DeviceInfo, config: &str, storage: impl paperpaw_sdk::Storage + 'static) -> Self {
         let mut kernel = Kernel::builder(device)
-            .storage(MemoryStorage::new())
+            .storage(storage)
             .user_config(format!("[core]\nlanguage = en\n{config}"))
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(Probe)
@@ -269,6 +273,21 @@ fn with_buttons_alone_their_hints_and_their_choice() {
 
     // Switched off at first: none.
     let mut device = Device::new(BUTTONS, "[help]\nshow = false\n");
+    device.open(OTHER);
+    assert_eq!(device.on_top(), "probe.other");
+}
+
+/// A card that cannot be written keeps no hints as seen: closed, they
+/// stay closed (they opened again over the screen each time, and nothing
+/// got past them).
+#[test]
+fn hints_closed_on_a_card_that_cannot_be_written_stay_closed() {
+    let mut device = Device::on(BUTTONS, "", paperpaw_platform::NoStorage);
+    device.open(OTHER);
+    assert_eq!(device.on_top(), "help.overlay");
+    device.run(actions::CONFIRM);
+    assert_eq!(device.on_top(), "probe.other");
+    device.run(actions::BACK);
     device.open(OTHER);
     assert_eq!(device.on_top(), "probe.other");
 }

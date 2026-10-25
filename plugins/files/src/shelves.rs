@@ -186,7 +186,7 @@ impl Screen for ShelfScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let state = library::service(&env).catalog_state(&env);
-        self.collecting = matches!(state, State::Missing | State::Building);
+        self.collecting = crate::list::collecting(&env);
         if state == State::Missing {
             // No catalog yet: the kernel makes it, then it shows.
             cx.command(library::request_catalog());

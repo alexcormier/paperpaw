@@ -118,12 +118,14 @@ fn make_index(env: &Env<'_>) -> Index {
     library::service(env).index(env, cap(env.device().memory), &archive(env))
 }
 
-/// Whether the catalog is still to be made (none yet).
-fn collecting(env: &Env<'_>) -> bool {
+/// Whether the catalog is still to be made (none yet). Not where the
+/// storage cannot be read (a card the device cannot use): none would
+/// ever come, and the empty library says where books go.
+pub(crate) fn collecting(env: &Env<'_>) -> bool {
     matches!(
         library::service(env).catalog_state(env),
         State::Missing | State::Building
-    )
+    ) && env.storage().list("", &mut |_| {}).is_ok()
 }
 
 /// The archive folder, as the setting names it: its books are on the

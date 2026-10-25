@@ -34,6 +34,10 @@ pub(crate) struct Overlay {
     /// The box: the hints without a zone, *Got it*, *No more hints*.
     dialog: ui::Dialog,
     focus: usize,
+    /// That they were shown is kept: where it is not (a card that cannot
+    /// be written), they would open again each time the screen shows,
+    /// and closing them would never get past them.
+    kept: bool,
 }
 
 impl Overlay {
@@ -59,6 +63,7 @@ impl Overlay {
             zones,
             dialog,
             focus: GOT_IT,
+            kept: true,
         };
         overlay.lay_out(env);
         overlay
@@ -129,9 +134,10 @@ impl Overlay {
         self.dialog.place(y);
     }
 
-    /// Closes, the screen's hints seen; `more` false switches all off.
+    /// Closes, the screen's hints seen; `more` false switches all off, as
+    /// does a storage that cannot keep that they were seen.
     fn close(&mut self, more: bool, cx: &mut Cx<'_, '_>) {
-        if !more {
+        if !more || !self.kept {
             cx.command(Command::set(&SHOW, false));
         }
         cx.command(Command::Back);
@@ -167,7 +173,7 @@ impl Screen for Overlay {
 
     /// Seen as it shows: never again, unless asked for.
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        crate::mark_seen(cx.env().storage(), &self.screen);
+        self.kept = crate::mark_seen(cx.env().storage(), &self.screen);
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {

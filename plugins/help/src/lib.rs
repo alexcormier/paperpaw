@@ -61,11 +61,12 @@ pub(crate) fn seen(storage: &dyn Storage, screen: &str) -> bool {
         })
 }
 
-/// The hints of `screen` were shown.
-pub(crate) fn mark_seen(storage: &dyn Storage, screen: &str) {
-    if !seen(storage, screen) {
-        let _ = storage.append(&seen_file(), format!("{screen}\n").as_bytes());
-    }
+/// The hints of `screen` were shown; whether that is kept.
+pub(crate) fn mark_seen(storage: &dyn Storage, screen: &str) -> bool {
+    seen(storage, screen)
+        || storage
+            .append(&seen_file(), format!("{screen}\n").as_bytes())
+            .is_ok()
 }
 
 /// The hints of `screen` count as not shown: they were covered before
