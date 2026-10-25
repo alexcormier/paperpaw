@@ -1837,6 +1837,7 @@ pub paperpaw_sdk::firmware::FirmwareState::Installing::done: u64
 pub paperpaw_sdk::firmware::FirmwareState::Installing::total: u64
 #[non_exhaustive] pub enum paperpaw_sdk::firmware::InstallFailure
 pub paperpaw_sdk::firmware::InstallFailure::Damaged
+pub paperpaw_sdk::firmware::InstallFailure::LowBattery
 pub paperpaw_sdk::firmware::InstallFailure::NewerFormat
 pub paperpaw_sdk::firmware::InstallFailure::NotAnUpdate
 pub paperpaw_sdk::firmware::InstallFailure::NotNewer
@@ -1866,7 +1867,9 @@ pub fn paperpaw_sdk::firmware::Firmware::plugins(self, paperpaw_update::plugins:
 pub fn paperpaw_sdk::firmware::Firmware::room(self, u64) -> Self
 pub fn paperpaw_sdk::firmware::Firmware::state(self, paperpaw_sdk::firmware::FirmwareState) -> Self
 pub fn paperpaw_sdk::firmware::Firmware::undone(self, bool) -> Self
+pub const paperpaw_sdk::firmware::INSTALL_BATTERY: u8
 pub const paperpaw_sdk::firmware::UPDATE_DIR: &str
+pub fn paperpaw_sdk::firmware::battery_allows_install(&paperpaw_platform::status::SystemStatus) -> bool
 pub fn paperpaw_sdk::firmware::beta(&str) -> core::option::Option<(&str, &str)>
 pub fn paperpaw_sdk::firmware::compare_versions(&str, &str) -> core::cmp::Ordering
 pub mod paperpaw_sdk::help

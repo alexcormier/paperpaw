@@ -26,7 +26,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
-use paperpaw_platform::Storage;
+use paperpaw_platform::{Storage, SystemStatus};
 pub use paperpaw_update::{
     APP_HEAD_LEN, AppInfo, CHIP_ESP32_C3, CHIP_ESP32_S3, Check, PLUGINS_AT, PLUGINS_HEAD_LEN,
     PluginCrate, Plugins, Problem, TRAILER_LEN, Trailer, fingerprint, key_hex, parse_key,
@@ -40,6 +40,21 @@ pub use foreign::{ForeignCheck, ForeignImage};
 
 /// The folder on the card where update files are looked for.
 pub const UPDATE_DIR: &str = "updates";
+
+/// The battery's charge in percent below which firmware is not installed
+/// unless the device is charging: a battery run flat half way would leave
+/// it to the firmware before (it comes back), but the reader without one.
+pub const INSTALL_BATTERY: u8 = 20;
+
+/// Whether the battery lets firmware be installed now: charged to
+/// [`INSTALL_BATTERY`] or more, charging (on USB), or not measured (no
+/// battery reading: the emulator, Android). The kernel refuses an install
+/// otherwise ([`InstallFailure::LowBattery`]).
+pub fn battery_allows_install(status: &SystemStatus) -> bool {
+    status
+        .battery
+        .is_none_or(|b| b.charging || b.percent >= INSTALL_BATTERY)
+}
 
 /// What the shell is told to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,6 +151,9 @@ pub enum InstallFailure {
     Damaged,
     /// Writing it failed.
     Write,
+    /// The battery is below [`INSTALL_BATTERY`] percent and the device is
+    /// not charging: charged, or plugged in, it may be installed.
+    LowBattery,
 }
 
 impl From<Problem> for InstallFailure {

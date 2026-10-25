@@ -413,6 +413,54 @@ fn a_failed_install_says_why_and_closes() {
     assert_ne!(d.screen(), Some(PAGE));
 }
 
+/// The battery's charge, as the shell tells it.
+fn battery(d: &mut Device, percent: u8, charging: bool) {
+    let now = d.later(10);
+    let status = paperpaw_sdk::SystemStatus {
+        battery: Some(paperpaw_sdk::Battery {
+            percent,
+            charging,
+            millivolts: None,
+        }),
+        ..paperpaw_sdk::SystemStatus::default()
+    };
+    let effects = d.kernel.set_status(now, status);
+    d.settle(effects);
+}
+
+#[test]
+fn below_20_percent_and_not_charging_nothing_is_installed() {
+    let mut d = Device::with_card(&update_file(PROJECT, "0.5.0", &SEED), false);
+    battery(&mut d, 19, false);
+    d.run(OPEN);
+    d.run(actions::CONFIRM);
+    assert!(d.firmware_commands().is_empty(), "the kernel refused it");
+    let shown = d.shown();
+    assert!(
+        shown.contains("Charge to 20 % or plug in to install"),
+        "{shown}"
+    );
+    assert!(shown.contains("PaperPaw 0.4.0 stays"), "{shown}");
+    // Plugged in: it installs.
+    d.run(actions::CONFIRM);
+    battery(&mut d, 19, true);
+    d.run(OPEN);
+    d.run(actions::CONFIRM);
+    assert_eq!(
+        d.firmware_commands(),
+        [FirmwareCommand::install(CARD.to_string(), None, false)]
+    );
+}
+
+#[test]
+fn from_20_percent_it_installs_on_battery() {
+    let mut d = Device::with_card(&update_file(PROJECT, "0.5.0", &SEED), false);
+    battery(&mut d, 20, false);
+    d.run(OPEN);
+    d.run(actions::CONFIRM);
+    assert_eq!(d.firmware_commands().len(), 1);
+}
+
 #[test]
 fn an_own_build_installs_only_with_its_key_accepted() {
     let mut d = Device::with_card(&update_file(PROJECT, "0.5.0", &OWN), false);

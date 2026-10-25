@@ -8,6 +8,12 @@ change the plugin SDK.
 
 ### Added
 
+- Firmware is installed only with the battery at 20 % or more, or on
+  USB: below it the kernel refuses any install (the update, another
+  firmware), checked as the writing would begin, and *Update* says
+  "Charge to 20 % or plug in to install." Downloading goes on. SDK:
+  `InstallFailure::LowBattery`, `firmware::INSTALL_BATTERY`,
+  `firmware::battery_allows_install`.
 - Back to CrossPoint without a computer: *Update* installs another
   firmware's image from the card (not signed, only as chosen, with a
   warning), checked whole for this device first. SDK:

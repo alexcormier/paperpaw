@@ -142,6 +142,7 @@ fn reason(failure: InstallFailure) -> &'static str {
         InstallFailure::NotNewer => "update.reason.not-newer",
         InstallFailure::Damaged => "update.reason.damaged",
         InstallFailure::Write => "update.reason.write",
+        InstallFailure::LowBattery => "update.reason.low-battery",
         _ => "update.reason.other",
     }
 }

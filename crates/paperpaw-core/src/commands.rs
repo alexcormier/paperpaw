@@ -748,7 +748,19 @@ impl Kernel {
         let out = &mut self.output.commands;
         match command {
             Command::Firmware(command) => {
-                if self.shared.firmware.is_some() {
+                let install = matches!(
+                    command,
+                    FirmwareCommand::Install { .. } | FirmwareCommand::InstallForeign { .. }
+                );
+                // No plugin installs firmware on a battery near empty, the
+                // device not charging: checked as the writing would begin.
+                if let Some(firmware) = &mut self.shared.firmware
+                    && install
+                    && !paperpaw_sdk::firmware::battery_allows_install(&self.shared.status)
+                {
+                    firmware.state = FirmwareState::Failed(InstallFailure::LowBattery);
+                    out.push(events::FIRMWARE_CHANGED.emit(()));
+                } else if self.shared.firmware.is_some() {
                     self.io.firmware_calls.push(command);
                 } else {
                     self.warn_runtime(String::from("PaperPaw is not this device's firmware"));
