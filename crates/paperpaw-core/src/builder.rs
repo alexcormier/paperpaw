@@ -939,7 +939,7 @@ impl Kernel {
                 "",
                 paperpaw_sdk::SettingKind::Choice(choices.into()),
                 paperpaw_sdk::SettingValue::Text(Cow::Borrowed(core_settings::READING_APP_DEFAULT)),
-                paperpaw_sdk::builtin::groups::READING,
+                paperpaw_sdk::builtin::groups::READING_BEHAVIOUR,
             )
             .description("core.setting.reading-app.format.help")
             .with_extra(&READING_APPS);

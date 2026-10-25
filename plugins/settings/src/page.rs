@@ -185,16 +185,17 @@ fn specs(env: &Env<'_>, group: &Id, own: Option<&Id>, more: bool) -> Vec<Setting
 /// settings by section, its advanced ones a page down, what plugins do
 /// with them and resetting them.
 fn entries(env: &Env<'_>, of: &Id, placed: bool, more: bool, specs: &[SettingSpec]) -> Vec<Row> {
-    // Advanced settings one level down, unless they are shown with the
-    // others (the advanced switch).
+    // Advanced settings one level down, unless they are shown here (the
+    // advanced switch, or a page of nothing else).
     let has_more = !more
-        && !env.settings().read(&ADVANCED)
+        && !specs.iter().any(|spec| spec.level == Level::Advanced)
         && env.settings().specs().any(|spec| {
             env.settings().group_of(spec) == *of
                 && spec.level == Level::Advanced
                 && offered(env, spec)
         });
-    // Its parts, each a page of its own, where they hold something.
+    // Its parts, each a page of its own, where they hold something (if
+    // only advanced settings, shown there at once).
     let mut entries: Vec<Row> = match more || placed {
         true => Vec::new(),
         false => env
@@ -204,7 +205,7 @@ fn entries(env: &Env<'_>, of: &Id, placed: bool, more: bool, specs: &[SettingSpe
             .filter(|g| {
                 env.settings().specs().any(|spec| {
                     env.settings().within(&env.settings().group_of(spec), &g.id)
-                        && visible(env, spec)
+                        && offered(env, spec)
                 })
             })
             .map(|g| Row::Part(g.id.clone(), env.i18n().tr(&g.title).to_string()))
@@ -289,7 +290,13 @@ impl GroupPage {
             true => alloc::format!("{title} · {}", env.i18n().tr("settings.more")),
             false => title,
         };
-        let specs = specs(env, &group, own.as_ref(), more);
+        // A page of advanced settings alone shows them, not a page of them
+        // one level down.
+        let basic = specs(env, &group, own.as_ref(), more);
+        let specs = match basic.is_empty() && !more {
+            true => specs(env, &group, own.as_ref(), true),
+            false => basic,
+        };
         let entries = entries(env, of, own.is_some(), more, &specs);
         let noted = specs.iter().any(|spec| spec.description.is_some());
         let (style, header, mut area) = page(env);

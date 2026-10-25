@@ -202,23 +202,17 @@ pub mod actions {
 #[derive(Debug, Default)]
 pub struct Reader;
 
-/// The parts of the reading settings, with units and steps; those set by
-/// eye with sliders.
+/// Units and steps of the reader's settings; those set by eye with
+/// sliders.
 mod extras {
     use paperpaw_sdk::SettingExtra;
-    use paperpaw_sdk::builtin::group_sections::{ALOUD, BEHAVIOUR};
 
-    pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
-    pub(crate) static AUTO_TURN: SettingExtra = SettingExtra::new()
-        .unit("core.unit.seconds")
-        .step(5)
-        .section(BEHAVIOUR);
+    pub(crate) static AUTO_TURN: SettingExtra =
+        SettingExtra::new().unit("core.unit.seconds").step(5);
     pub(crate) static ALOUD_SPEED: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(10)
-        .section(ALOUD)
         .slider();
-    pub(crate) static IN_ALOUD: SettingExtra = SettingExtra::new().section(ALOUD);
 }
 
 /// The reader's own settings: what it does, and reading aloud (the type
@@ -228,10 +222,9 @@ static SETTINGS: [SettingSpec; 8] = [
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
         true,
-        groups::READING,
+        groups::READING_BEHAVIOUR,
     )
     .advanced()
-    .with_extra(&extras::IN_BEHAVIOUR)
     .description("reader.setting.open-last.help"),
     SettingSpec::switch(
         settings::CORNER_BOOKMARK.static_str(),
@@ -255,7 +248,7 @@ static SETTINGS: [SettingSpec; 8] = [
         5,
         600,
         30,
-        groups::READING,
+        groups::READING_BEHAVIOUR,
     )
     .advanced()
     .with_extra(&extras::AUTO_TURN)
@@ -266,7 +259,7 @@ static SETTINGS: [SettingSpec; 8] = [
         50,
         300,
         100,
-        groups::READING,
+        groups::READING_ALOUD,
     )
     .with_extra(&extras::ALOUD_SPEED)
     .description("reader.setting.aloud-speed.help"),
@@ -274,26 +267,23 @@ static SETTINGS: [SettingSpec; 8] = [
         settings::ALOUD_HIGHLIGHT.static_str(),
         "reader.setting.aloud-highlight",
         true,
-        groups::READING,
+        groups::READING_ALOUD,
     )
-    .with_extra(&extras::IN_ALOUD)
     .description("reader.setting.aloud-highlight.help"),
     SettingSpec::switch(
         settings::ALOUD_TURN.static_str(),
         "reader.setting.aloud-turn-pages",
         true,
-        groups::READING,
+        groups::READING_ALOUD,
     )
-    .with_extra(&extras::IN_ALOUD)
     .description("reader.setting.aloud-turn-pages.help"),
     SettingSpec::choice(
         settings::ALOUD_TIMER.static_str(),
         "reader.setting.aloud-timer",
         &aloud::TIMER_CHOICES,
         aloud::TIMER_CHOICES[0],
-        groups::READING,
+        groups::READING_ALOUD,
     )
-    .with_extra(&extras::IN_ALOUD)
     .description("reader.setting.aloud-timer.help"),
 ];
 

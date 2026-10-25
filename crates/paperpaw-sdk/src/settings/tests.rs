@@ -371,7 +371,8 @@ fn groups_within_groups_know_their_parents() {
         Id::new_static("core.group.reading-text"),
         Id::new_static("core.group.other"),
     );
-    s.add_group(SettingGroupSpec::new(reading.clone(), "")).unwrap();
+    s.add_group(SettingGroupSpec::new(reading.clone(), ""))
+        .unwrap();
     s.add_group(SettingGroupSpec::new(text.clone(), "").within(reading.clone()))
         .unwrap();
     assert_eq!(s.parent_of(&text), Some(&reading));

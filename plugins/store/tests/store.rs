@@ -307,7 +307,7 @@ fn fonts_open_the_fonts_browser() {
     shopping.request("https://paperpaw.org/api/v1/fonts.json");
 }
 
-/// The reading settings say where fonts with larger sizes are found: the
+/// The page of the text says where fonts with larger sizes are found: the
 /// font size goes as far as the packs built in (48 pixels at 220 dpi: 16
 /// points), and *Discover fonts* opens the fonts browser, or its page
 /// where it is not installed.
@@ -323,8 +323,8 @@ fn larger_sizes_are_discovered_from_the_reading_settings() {
         size,
         Some(paperpaw_sdk::SettingKind::Int { min: 6, max: 16 })
     );
-    let reading = kernel.menus().ids("core.group.reading");
-    assert!(reading.contains(&&DISCOVER_FONTS), "{reading:?}");
+    let text = kernel.menus().ids("core.group.reading-text");
+    assert!(text.contains(&&DISCOVER_FONTS), "{text:?}");
     shopping.run(DISCOVER_FONTS);
     shopping.request("https://paperpaw.org/api/v1/fonts.json");
 

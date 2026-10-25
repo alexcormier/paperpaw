@@ -324,11 +324,13 @@ fn first_run_to_reading_and_home_keeps_the_book_opened() {
 fn settings_changed_in_the_ui_are_saved_and_read_back_after_a_restart() {
     let card = Card::new(true);
 
-    // On a touch screen: night mode switched on, on the display page.
+    // On a touch screen: night mode switched on, on the page of the
+    // display, a part of the reading settings.
     let mut touch = App::start(TOUCH, &card);
     let night = core_settings::NIGHT_MODE.static_str();
     assert!(!touch.kernel.settings().bool(night));
     touch.run(actions::SETTINGS);
+    touch.tap_on("Reading");
     touch.tap_on("Display");
     assert_eq!(touch.screen(), "settings.group");
     touch.tap_on("Night mode");

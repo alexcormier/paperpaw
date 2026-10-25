@@ -166,9 +166,9 @@ impl Plugin for Store {
                 },
             ),
         )?;
-        // On the reading settings, below the font size, whose largest
+        // On the page of the text, below the font size, whose largest
         // sizes are the font's.
-        r.add_menu_entry(MenuEntry::new(groups::READING, DISCOVER_FONTS))?;
+        r.add_menu_entry(MenuEntry::new(groups::READING_TEXT, DISCOVER_FONTS))?;
         r.add_icon(DISCOVER_FONTS, Cow::Borrowed("typography"))?;
         // Downloads go on while no screen of the store is open; one cut
         // off by a restart is begun anew from the plugin's page.

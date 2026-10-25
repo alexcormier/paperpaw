@@ -1024,13 +1024,6 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     for (id, title, order, icon) in [
         (groups::READING, "core.group.reading", 10, "book"),
         (groups::LIBRARY, "core.group.library", 20, "books"),
-        (
-            groups::STATUS_LINES,
-            "core.group.status",
-            15,
-            "layout-bottombar",
-        ),
-        (groups::MARKS, "core.group.marks", 17, "highlight"),
         (groups::DISPLAY, "core.group.display", 60, "contrast"),
         (groups::CONTROLS, "core.group.controls", 70, "hand-finger"),
         (groups::SYSTEM, "core.group.system", 90, "device-tablet"),
@@ -1098,7 +1091,6 @@ static IN_PAGE: SettingExtra = SettingExtra::new().section(group_sections::PAGE)
 static IN_APPS: SettingExtra = SettingExtra::new()
     .section("core.section.reading-apps")
     .keeps_unknown();
-static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(group_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
 static GENERAL: [SettingSpec; 9] = [
@@ -1122,14 +1114,14 @@ static GENERAL: [SettingSpec; 9] = [
         settings::NIGHT_MODE.static_str(),
         "core.setting.night-mode",
         false,
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .description("core.setting.night-mode.help"),
     SettingSpec::switch(
         settings::NIGHT_PICTURES.static_str(),
         "core.setting.night-pictures",
         false,
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .description("core.setting.night-pictures.help"),
     SettingSpec::choice(
@@ -1137,7 +1129,7 @@ static GENERAL: [SettingSpec; 9] = [
         "core.setting.mono-text",
         settings::MONO_TEXT_LEVELS,
         settings::MONO_TEXT_LEVELS[1],
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .description("core.setting.mono-text.help"),
     SettingSpec::switch(
@@ -1152,7 +1144,7 @@ static GENERAL: [SettingSpec; 9] = [
         "core.setting.voice",
         &[settings::VOICE_SYSTEM],
         settings::VOICE_SYSTEM,
-        groups::SYSTEM,
+        groups::READING_ALOUD,
     )
     .description("core.setting.voice.help"),
     SettingSpec::number(
@@ -1377,7 +1369,7 @@ static DEVICE: [SettingSpec; 15] = [
         0,
         1000,
         6,
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .with_extra(&PAGES)
     .scoped()
@@ -1394,7 +1386,7 @@ static DEVICE: [SettingSpec; 15] = [
         settings::PICTURES_IN_GRAYS.static_str(),
         "core.setting.pictures-in-grays",
         true,
-        groups::DISPLAY,
+        groups::READING_DISPLAY,
     )
     .description("core.setting.pictures-in-grays.help"),
     SettingSpec::number(
@@ -1538,7 +1530,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         "core.setting.text-color",
         settings::TEXT_COLORS,
         settings::TEXT_COLORS[0],
-        groups::LOOK,
+        groups::READING_TEXT,
     )
     .with_extra(&COLORS)
     .description("core.setting.colors.help"),
@@ -1546,7 +1538,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         settings::TEXT_COLOR_OWN.static_str(),
         "core.setting.text-color-own",
         "#5b4636",
-        groups::LOOK,
+        groups::READING_TEXT,
     )
     .with_extra(&COLORS)
     .description("core.setting.color-own.help"),
@@ -1555,7 +1547,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         "core.setting.paper-color",
         settings::PAPER_COLORS,
         settings::PAPER_COLORS[0],
-        groups::LOOK,
+        groups::READING_TEXT,
     )
     .with_extra(&COLORS)
     .description("core.setting.colors.help"),
@@ -1563,7 +1555,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
         settings::PAPER_COLOR_OWN.static_str(),
         "core.setting.paper-color-own",
         "#f4ecd8",
-        groups::LOOK,
+        groups::READING_TEXT,
     )
     .with_extra(&COLORS)
     .description("core.setting.color-own.help"),
@@ -1642,7 +1634,7 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::number(
     5,
     50,
     20,
-    groups::SYSTEM,
+    groups::STATUS_LINES,
 )
 .with_extra(&PERCENT_5)
 .advanced()

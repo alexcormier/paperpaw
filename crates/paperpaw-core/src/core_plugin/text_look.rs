@@ -13,7 +13,6 @@ pub(super) static SETTINGS: [SettingSpec; 2] = [
         true,
         groups::READING_DISPLAY,
     )
-    .with_extra(&super::FONT)
     .scoped()
     .description("core.setting.smooth-text.help"),
     SettingSpec::choice(
@@ -23,7 +22,6 @@ pub(super) static SETTINGS: [SettingSpec; 2] = [
         settings::TEXT_CONTRAST_LEVELS[1],
         groups::READING_DISPLAY,
     )
-    .with_extra(&super::FONT)
     .scoped()
     .description("core.setting.text-contrast.help"),
 ];

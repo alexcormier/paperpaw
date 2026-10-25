@@ -9,11 +9,17 @@ change the plugin SDK.
 ### Added
 
 - The reading settings in pages of their own: *Text*, *Layout*,
-  *Hyphenation*, *Publisher's formatting* and *Display*, each short, its
-  rarely needed settings one level down under *More* (or with the
-  others, with *Show advanced settings*). SDK: groups within groups
+  *Hyphenation*, *Publisher's formatting*, *Display*, *Status lines*,
+  *Marks in the text*, *Reading aloud*, *Reading aids* and *Behaviour*,
+  each short, its rarely needed settings one level down under *More*
+  (or with the others, with *Show advanced settings*). Settings about
+  reading came along: the colours of text and paper (from *Look*),
+  night mode, text darkness, pictures in grays and full refresh (from
+  *Display*), the voice (from *System*) and *Battery low at* (now with
+  the status lines). SDK: groups within groups
   (`SettingGroupSpec::within`, `Settings::parent_of` and `within`),
-  `groups::READING_TEXT` and the other parts of `READING`.
+  `groups::READING_TEXT` and the other parts of `READING`;
+  `STATUS_LINES` and `MARKS` are parts of it.
 - Balanced line breaking: paragraphs are broken over all their lines,
   so lines end more evenly and justified text has fewer wide gaps;
   *Line breaking* can be set back to *Fast*, line by line

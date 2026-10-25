@@ -460,7 +460,7 @@ fn by_touch_a_reading_app_is_tapped_in_the_list_and_in_the_settings() {
     app.now += 100;
     let params = paperpaw_sdk::Params::new().with(
         paperpaw_sdk::builtin::params::ID,
-        paperpaw_sdk::builtin::groups::READING.as_str(),
+        paperpaw_sdk::builtin::groups::READING_BEHAVIOUR.as_str(),
     );
     let effects = app.kernel.open_slot(
         Instant(app.now),
@@ -574,7 +574,7 @@ fn shots() {
         app.now += 100;
         let params = paperpaw_sdk::Params::new().with(
             paperpaw_sdk::builtin::params::ID,
-            paperpaw_sdk::builtin::groups::READING.as_str(),
+            paperpaw_sdk::builtin::groups::READING_BEHAVIOUR.as_str(),
         );
         let effects = app.kernel.open_slot(
             Instant(app.now),
@@ -608,7 +608,7 @@ fn shots() {
         app.now += 100;
         let params = paperpaw_sdk::Params::new().with(
             paperpaw_sdk::builtin::params::ID,
-            paperpaw_sdk::builtin::groups::READING.as_str(),
+            paperpaw_sdk::builtin::groups::READING_BEHAVIOUR.as_str(),
         );
         let effects = app.kernel.open_slot(
             Instant(app.now),

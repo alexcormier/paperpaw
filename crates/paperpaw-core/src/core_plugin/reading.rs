@@ -5,9 +5,7 @@
 use paperpaw_sdk::builtin::{group_sections, groups, settings};
 use paperpaw_sdk::{Id, RegisterError, Registrar, SettingExtra, SettingSpec};
 
-use super::{
-    FONT, FONT_PT, IN_APPS, IN_BEHAVIOUR, IN_PAGE, LINES, MARGINS, MARGINS_ENDS, WEIGHT, WORDS,
-};
+use super::{FONT, FONT_PT, IN_APPS, IN_PAGE, LINES, MARGINS, MARGINS_ENDS, WEIGHT, WORDS};
 
 static LINES_KEPT: SettingExtra = SettingExtra::new()
     .unit("core.unit.lines")
@@ -203,7 +201,7 @@ static READING: [SettingSpec; 21] = [
         "core.setting.reading-app",
         &[settings::READING_APP_DEFAULT],
         settings::READING_APP_DEFAULT,
-        groups::READING,
+        groups::READING_BEHAVIOUR,
     )
     .with_extra(&IN_APPS)
     .description("core.setting.reading-app.help"),
@@ -212,17 +210,16 @@ static READING: [SettingSpec; 21] = [
         "core.setting.footnotes",
         &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
         settings::FOOTNOTES_POPUP,
-        groups::READING,
+        groups::READING_BEHAVIOUR,
     )
     .advanced()
-    .with_extra(&IN_BEHAVIOUR)
     .description("core.setting.footnotes.help"),
     SettingSpec::choice(
         settings::PAGE_FRAME.static_str(),
         "core.setting.page-frame",
         &[settings::PAGE_FRAME_SINGLE],
         settings::PAGE_FRAME_SINGLE,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .scoped()
     .with_extra(&IN_PAGE)
@@ -404,6 +401,15 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             4,
         ),
         (groups::READING_DISPLAY, "core.group.reading-display", 5),
+        (groups::STATUS_LINES, "core.group.status", 6),
+        (groups::MARKS, "core.group.marks", 7),
+        (groups::READING_ALOUD, "core.group.reading-aloud", 8),
+        (groups::READING_AIDS, "core.group.reading-aids", 9),
+        (
+            groups::READING_BEHAVIOUR,
+            "core.group.reading-behaviour",
+            10,
+        ),
     ] {
         r.add_setting_group(
             paperpaw_sdk::SettingGroupSpec::new(id, title)

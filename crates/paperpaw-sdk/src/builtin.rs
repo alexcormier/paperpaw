@@ -834,19 +834,25 @@ pub const PLUGIN_DIR: &str = "plugins";
 pub mod groups {
     use crate::Id;
 
-    /// Book text: font size, spacing, hyphenation, …
+    /// Reading books: a page of its parts below.
     pub const READING: Id = Id::new_static("core.group.reading");
     /// Parts of [`READING`], each a page of its own: the text (font, size,
-    /// weight, spacing), the layout of pages (margins, line spacing,
-    /// justification and line breaking, lines kept together),
-    /// hyphenation, which of a book's own styles are followed, and how
-    /// text is shown (smooth, its contrast).
+    /// weight, spacing, colours), the layout of pages (margins, line
+    /// spacing, justification and line breaking, lines kept together),
+    /// hyphenation, which of a book's own styles are followed, how text
+    /// and pictures are shown (smooth, contrast, night mode, refresh),
+    /// reading aloud, aids to reading, and what happens while reading
+    /// (books opened again, footnotes, the reading app); with
+    /// [`STATUS_LINES`] and [`MARKS`].
     pub const READING_TEXT: Id = Id::new_static("core.group.reading-text");
     pub const READING_LAYOUT: Id = Id::new_static("core.group.reading-layout");
     pub const READING_HYPHENATION: Id = Id::new_static("core.group.reading-hyphenation");
     pub const READING_BOOK_STYLES: Id = Id::new_static("core.group.reading-book-styles");
     pub const READING_DISPLAY: Id = Id::new_static("core.group.reading-display");
-    /// Screen: night mode, menu size, refresh.
+    pub const READING_ALOUD: Id = Id::new_static("core.group.reading-aloud");
+    pub const READING_AIDS: Id = Id::new_static("core.group.reading-aids");
+    pub const READING_BEHAVIOUR: Id = Id::new_static("core.group.reading-behaviour");
+    /// Screen: front light, rotation.
     pub const DISPLAY: Id = Id::new_static("core.group.display");
     /// Buttons and gestures.
     pub const CONTROLS: Id = Id::new_static("core.group.controls");
@@ -858,10 +864,12 @@ pub mod groups {
     /// Themes (data plugins) set its defaults.
     pub const LOOK: Id = Id::new_static("core.group.look");
     /// Marks in the text: the looks of the roles of decorations (see
-    /// [`decorations`](crate::decorations)), a section per role.
+    /// [`decorations`](crate::decorations)), a section per role; a part
+    /// of [`READING`].
     pub const MARKS: Id = Id::new_static("core.group.marks");
     /// The status lines above and below a book's text (what they show,
-    /// their size); the reader puts its settings for them here.
+    /// their size); the reader puts its settings for them here. A part of
+    /// [`READING`].
     pub const STATUS_LINES: Id = Id::new_static("core.group.status");
     /// Settings whose plugin names no registered group.
     pub const OTHER: Id = Id::new_static("core.group.other");
@@ -896,10 +904,11 @@ pub mod group_sections {
     pub const FONT: &str = "core.setting-section.font";
     /// How a page is set: spacing, margins, justification, hyphenation.
     pub const PAGE: &str = "core.setting-section.page";
-    /// What happens when reading: books opened again, bookmarks.
+    /// What happens when reading: books opened again, bookmarks (now
+    /// mostly [`groups::READING_BEHAVIOUR`](super::groups::READING_BEHAVIOUR)).
     pub const BEHAVIOUR: &str = "core.setting-section.behaviour";
-    /// Reading aloud: its speed, what is marked, turning the pages
-    /// (shells add the voice).
+    /// Reading aloud: its speed, what is marked, turning the pages (now
+    /// mostly [`groups::READING_ALOUD`](super::groups::READING_ALOUD)).
     pub const ALOUD: &str = "core.setting-section.aloud";
 
     /// The standard parts in their order.
