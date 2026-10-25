@@ -21,7 +21,7 @@ from:
 | `examples/crash.rs` | a plugin that panics at every start, to try safe mode |
 
 Here it uses the SDK from this repository; a plugin's own repository
-names the release it is built for (`paperpaw-sdk = "0.5.0-beta.5"`).
+names the release it is built for (`paperpaw-sdk = "0.5.0-beta.6"`).
 
 ## Building, packing, trying
 

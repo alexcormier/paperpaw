@@ -6,6 +6,18 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.6] - 2026-10-25
+
+### Added
+
+- The web flasher can put every store plugin on a reader at once: it
+  writes the plugins chosen into the reader's empty second app
+  partition, where all of them fit (about 4.8 MB on the X4), instead of
+  the room behind the firmware (about 1.9 MB). PaperPaw installs them
+  onto the card at its first start and only then frees the partition
+  for updates; a power cut in between installs them at the next start.
+  The room behind the firmware is still read, for older flashers.
+
 ## [0.5.0-beta.5] - 2026-10-25
 
 ### Fixed

@@ -616,10 +616,10 @@ plugin and the app share one:
 
 ```toml
 [dev-dependencies]
-paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.5" }
+paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.6" }
 
 [patch.crates-io]
-paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.5" }
+paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.6" }
 ```
 
 `examples/paperpaw-dev.rs` adds the plugin to the app:
@@ -1484,11 +1484,11 @@ below) takes it. One manifest gives each its own, by target:
 
 ```toml
 [dependencies]
-paperpaw-sdk = "0.5.0-beta.5"
+paperpaw-sdk = "0.5.0-beta.6"
 
 # Outline fonts for the emulator's build only: the X4s draw font packs.
 [target.'cfg(not(target_os = "none"))'.dependencies]
-paperpaw-sdk = { version = "0.5.0-beta.5", features = ["outline"] }
+paperpaw-sdk = { version = "0.5.0-beta.6", features = ["outline"] }
 ```
 
 A build for a device that asks for `outline` stops and says so.
@@ -1933,7 +1933,7 @@ installs as authors do (see [The crate](#the-crate)). So:
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
   `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`), its SDK
-  (`paperpaw-sdk = "0.5.0-beta.5"`) and, for the X4 Pro, its core libraries
+  (`paperpaw-sdk = "0.5.0-beta.6"`) and, for the X4 Pro, its core libraries
   installed, and build again for every release until 1.0 (see
   [Which build fits](#which-build-fits));
 - never set `RUSTFLAGS`, which would replace the flags that link the
