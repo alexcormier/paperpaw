@@ -45,6 +45,8 @@ mod card;
 #[cfg(feature = "esp32s3")]
 #[path = "card_pro.rs"]
 mod card;
+#[cfg(feature = "remote")]
+mod bench;
 mod clock;
 mod crash;
 mod device;
@@ -412,6 +414,9 @@ fn prepare() -> Ready {
     // Plugins choose internal RAM or PSRAM for their data (ADR 0030).
     paperpaw_sdk::memory::set_placer(native::api::alloc_in);
     esp_println::logger::init_logger_from_env();
+    // What hot code in internal RAM gains on this chip (test builds).
+    #[cfg(feature = "remote")]
+    bench::run();
     power::note_start();
     let (place, naps, reason) = power::last_run();
     info!("PaperPaw starting (reset: {reason:?}, last at {place}, naps {naps})");
