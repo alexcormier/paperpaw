@@ -74,5 +74,28 @@ fn its_bar_fills_in_steps_until_the_trial_ends() {
     assert!(effects.refresh().is_some(), "the bar is drawn anew");
     assert_eq!(effects.wake_at(), Some(Instant(7000)));
     let effects = kernel.tick(Instant(31_000));
-    assert_eq!(effects.wake_at(), None, "full at the end: no more wakes");
+    // Full at the end; then one wake more, when it lets go.
+    assert_eq!(effects.wake_at(), Some(Instant(91_000)));
+}
+
+/// A restart that does not come keeps nobody on it: a minute after the
+/// trial it lets go, and *Back* closes it. Opened without a trial (by
+/// mistake), it holds nothing at all.
+#[test]
+fn it_lets_go_after_the_trial_and_never_holds_without_one() {
+    let harness = Harness::new();
+    let mut kernel = finishing(&harness);
+    kernel.tick(Instant(31_000));
+    kernel.run_action(Instant(40_000), actions::BACK);
+    assert_eq!(kernel.active_screen(), Some(&screens::FINISHING_UPDATE));
+    kernel.tick(Instant(91_000));
+    kernel.run_action(Instant(91_100), actions::BACK);
+    render(&mut kernel);
+    assert_ne!(kernel.active_screen(), Some(&screens::FINISHING_UPDATE));
+
+    let mut kernel = harness.kernel();
+    kernel.open_screen(Instant(10), screens::FINISHING_UPDATE, Params::new());
+    kernel.run_action(Instant(20), actions::BACK);
+    render(&mut kernel);
+    assert_ne!(kernel.active_screen(), Some(&screens::FINISHING_UPDATE));
 }

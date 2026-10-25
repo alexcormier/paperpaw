@@ -21,19 +21,28 @@ pub(crate) const FROM: &str = "from";
 pub(crate) const UNTIL: &str = "until";
 /// The bar fills in this many steps: few refreshes of the panel.
 const STEPS: u64 = 10;
+/// How long after the trial it still holds on, waiting for the restart;
+/// then it lets go, so a device whose restart does not come is not kept
+/// on it.
+const GRACE_MS: u64 = 60_000;
 
 pub(crate) struct Finishing {
     from: u64,
     until: u64,
+    /// It guards the device and takes no input: while there is a trial
+    /// to show and a little after; never opened without one.
+    holding: bool,
 }
 
 impl Finishing {
     pub(crate) fn new(params: &Params) -> Self {
         let read = |key| params.get(key).and_then(|v| v.parse().ok()).unwrap_or(0);
         let from = read(FROM);
+        let until = read(UNTIL).max(from);
         Self {
             from,
-            until: read(UNTIL).max(from),
+            until,
+            holding: until > 0,
         }
     }
 
@@ -50,9 +59,15 @@ impl Finishing {
         (step < STEPS).then(|| Instant(self.from + (self.until - self.from) * (step + 1) / STEPS))
     }
 
-    fn wake(&self, cx: &mut Cx<'_, '_>) {
-        if let Some(at) = self.next(cx.env().now()) {
-            cx.wake_at(at);
+    fn wake(&mut self, cx: &mut Cx<'_, '_>) {
+        let now = cx.env().now();
+        if now.0 >= self.until.saturating_add(GRACE_MS) {
+            self.holding = false;
+        }
+        match self.next(now) {
+            Some(at) => cx.wake_at(at),
+            None if self.holding => cx.wake_at(Instant(self.until.saturating_add(GRACE_MS))),
+            None => {}
         }
     }
 }
@@ -94,37 +109,41 @@ impl Screen for Finishing {
             .draw(&mut ui, below);
     }
 
-    // Nothing shows above it, nothing closes it, and it takes no input.
+    // While it holds on, nothing shows above it, nothing closes it, and
+    // it takes no input.
     fn guards(&self) -> bool {
-        true
+        self.holding
     }
 
     fn holds_edges(&self) -> bool {
-        true
+        self.holding
     }
 
     fn hints(&self) -> Option<HintVisibility> {
-        Some(HintVisibility::Hidden)
+        self.holding.then_some(HintVisibility::Hidden)
     }
 
-    fn hint(&self, _: &Id, _: &Env<'_>) -> Hint {
-        Hint::Hidden
+    fn hint(&self, action: &Id, _: &Env<'_>) -> Hint {
+        match self.holding {
+            true => Hint::Hidden,
+            false => Hint::only_back(action),
+        }
     }
 
     fn on_close_request(&mut self, _: CloseCause, _: &mut Cx<'_, '_>) -> Handled {
-        Handled::Yes
+        self.taken()
     }
 
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
-        Handled::Yes
+        self.taken()
     }
 
     fn on_gesture(&mut self, _: Gesture, _: &mut Cx<'_, '_>) -> Handled {
-        Handled::Yes
+        self.taken()
     }
 
     fn on_pointer(&mut self, _: &PointerEvent, _: &mut Cx<'_, '_>) -> Handled {
-        Handled::Yes
+        self.taken()
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -135,6 +154,16 @@ impl Screen for Finishing {
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
         self.wake(cx);
+    }
+}
+
+impl Finishing {
+    /// Input and closing taken (and so passed over) while it holds on.
+    fn taken(&self) -> Handled {
+        match self.holding {
+            true => Handled::Yes,
+            false => Handled::No,
+        }
     }
 }
 
@@ -166,5 +195,8 @@ mod tests {
         let f = Finishing::new(&Params::new());
         assert_eq!(f.step(Instant(5)), STEPS);
         assert_eq!(f.next(Instant(5)), None);
+        // Opened without a trial, it holds nothing.
+        assert!(!f.holding);
+        assert!(finishing(1_000, 31_000).holding);
     }
 }
