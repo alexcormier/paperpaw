@@ -422,8 +422,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          prerelease=()
-          [[ "$VERSION" == 0.* || "$VERSION" == *-* ]] && prerelease=(--prerelease)
+          # PaperPaw's own releases, betas too, are GitHub's "latest": what
+          # firmware directories (readme.club) read; a beta says so in its
+          # version. A store plugin released alone (store-plugin.yml) is a
+          # pre-release that never becomes the latest.
           assets=("dist/paperpaw-$VERSION.apk" "dist/paperpaw-$VERSION.apk.sha256")
           # The devices of the firmware job; the X4 Classic's and the
           # X3's are experimental (not yet tried on one).
@@ -453,5 +455,5 @@ jobs:
           for part in "" .sha256 .sig; do
             assets+=("dist/paperpaw-xtensa-std-$VERSION.tar.gz$part")
           done
-          gh release create "$GITHUB_REF_NAME" "${prerelease[@]}" \
+          gh release create "$GITHUB_REF_NAME" --latest \
             --title "PaperPaw $VERSION" --notes-file dist/notes.md "${assets[@]}"
