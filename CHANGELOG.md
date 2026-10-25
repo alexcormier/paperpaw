@@ -46,6 +46,10 @@ change the plugin SDK.
 
 ### Changed
 
+- The on-screen keyboard: on readers with buttons alone (the X4s, the X3)
+  the focus starts on *Phone*, where the text can be typed on a phone
+  instead of a letter at a time; on the X4 Pro the keys are large by
+  default (a size chosen before stays).
 - On the Xteink readers the interface font, drawn from bitmap packs made
   from Source Sans 3, is PaperPaw Sans: its licence reserves the name
   for the unchanged font. A reading or status font chosen as Source Sans
