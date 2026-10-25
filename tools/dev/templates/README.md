@@ -18,6 +18,7 @@ These files start it in a plugin's repository. Copy them, then replace
 | `tests/snapshots/cases.ini` | The cases: screens and widgets, the device, settings, script steps. |
 | `tests/flows/open-and-close.flow` | A flow: steps and what should be true after them. Write one for every action of the plugin. |
 | `.github/workflows/paperpaw-dev.yml` | CI: the tests, then `check --plugin my-plugin --quick` and the flows varied at the edges, the reports kept as the run's artifact. |
+| `.github/workflows/paperpaw-release.yml` | CI: on a tag `v1.0.0`, zips the plugin's folder, builds and signs a code plugin for each reader, and makes the GitHub release that paperpaw.org takes the plugin from. |
 
 ## The dependency
 
@@ -107,3 +108,50 @@ Or take `paperpaw-dev` ready built from a release. It is in
 it, and installs it on emulated devices as the store does: what either
 would refuse is an error. In CI, the job above with these two steps in
 place of the tests and the example.
+
+## Publish by tagging
+
+`paperpaw-release.yml` publishes a plugin from its own repository, with
+no upload form. paperpaw.org lists public repositories with the topic
+`paperpaw-plugin` (not archived, not forks), takes each one's newest
+GitHub release, checks it as it checks an upload, keeps the files and
+lists the plugin as "Community, unreviewed".
+
+1. Give the repository the topic `paperpaw-plugin`.
+2. Copy `paperpaw-release.yml` to `.github/workflows/` and set its
+   switches at the top: `CODE` (`"true"` for a plugin with code, `"false"`
+   for a folder of data), the readers to build for (`X4`, `X4_PRO`), the
+   plugin's folder `PLUGIN_DIR` and, for code, the binary `BIN` and the
+   PaperPaw release's pins, as in `samples/hello-native`. The X4 Classic
+   is not built yet.
+3. For a plugin with code, make a key once with
+   `paperpaw-sign key author.key`, keep the file safe and out of every
+   repository, and paste its contents as the repository's secret
+   `PAPERPAW_PLUGIN_KEY` (*Settings*, *Secrets and variables*,
+   *Actions*). Data plugins need no key.
+4. Raise `version` in `plugin.ini` (and in the code), commit, then:
+
+```sh
+git tag v1.0.0 && git push --tags
+```
+
+The tag must be `v` and `plugin.ini`'s version, or the job stops. It
+makes a published release (not a draft, not a pre-release) with exactly
+`<id>-<version>.zip`, the plugin's folder with its `store/`, and for code
+one signed `<id>-<version>-<device>.ppn` per reader. The site picks it
+up within the hour. What fails its checks is not offered; the warnings
+are shown.
+
+Some things to know:
+
+- The files are kept on the site; readers never download from GitHub.
+- A plugin with code needs its source: `store/store.ini` names it
+  (`[source]`), or the site takes the repository at the release's tag.
+  Commit `Cargo.lock`.
+- The first version the site takes fixes the plugin's key. A later
+  version signed by another key is not offered, and readers refuse it.
+- An id of a reviewed plugin (PaperPaw's own, or one from the upload form)
+  is never listed from GitHub. Between two repositories with one id, the
+  one the site took first keeps it.
+- Whoever installs it sees the author (the GitHub owner), the link to the
+  repository and the key's fingerprint, and can report it.

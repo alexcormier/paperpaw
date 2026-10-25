@@ -1,6 +1,6 @@
 ---
 name: paperpaw-plugin-development
-description: "Helps write a plugin for PaperPaw as it is, without changing PaperPaw (a community plugin, usually in its own repository): code plugins in Rust against the released paperpaw-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices; publishing it in the plugin store on paperpaw.org (the upload form, signing code plugins, reproducible builds, updates). Use when someone writes, ports, debugs, tests, profiles or publishes such a plugin. Not for work on PaperPaw itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md."
+description: "Helps write a plugin for PaperPaw as it is, without changing PaperPaw (a community plugin, usually in its own repository): code plugins in Rust against the released paperpaw-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices; publishing it in the plugin store on paperpaw.org (the upload form or a tagged GitHub release, signing code plugins, reproducible builds, updates). Use when someone writes, ports, debugs, tests, profiles or publishes such a plugin. Not for work on PaperPaw itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md."
 ---
 
 # Developing PaperPaw plugins
@@ -352,7 +352,8 @@ reference for the site's names: what to upload (the folder with
 `store/store.ini`, a code plugin's signed builds and source, or all of
 it in one store file, as the PaperPaw Workshop makes it), the
 author's signing key, builds the site can rebuild to compare, the
-upload form, updates, every check code with
+upload form, or instead a tagged release on GitHub that the site takes
+(unreviewed, section 6b), updates, every check code with
 its fix, and a final checklist. Its rules for the
 assistant come first: the secret key is never shown, copied or
 committed, nothing is uploaded, pushed or submitted without the user's
