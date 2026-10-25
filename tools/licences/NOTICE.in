@@ -1,0 +1,63 @@
+PaperPaw
+Copyright 2026 Hannes Thoene and the PaperPaw contributors
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for details.
+
+Bundled fonts (plugins/fonts-default/fonts) are licensed under the SIL Open
+Font License, Version 1.1:
+
+- Literata, Copyright 2017 The Literata Project Authors
+  (https://github.com/googlefonts/literata)
+- Source Sans 3, Copyright 2010-2023 Adobe (http://www.adobe.com/), with
+  Reserved Font Name 'Source' (https://github.com/adobe-fonts/source-sans),
+  bundled unmodified as SourceSans3.ttf. The Xteink readers draw the
+  interface from bitmap packs made from it (one weight, Latin letters
+  only, rasterised): a Modified Version under the licence, so they are
+  named PaperPaw Sans, not with the Reserved Font Name, and are licensed
+  under the SIL Open Font License, Version 1.1, as the font they are
+  derived from.
+
+The icon font (plugins/fonts-default/fonts/PaperPawIcons.ttf) is a subset of
+Tabler Icons, Copyright 2020-2025 Paweł Kuna (https://tabler.io/icons),
+licensed under the MIT License (fonts/TablerIcons-MIT.txt).
+
+Bundled hyphenation patterns (plugins/hyphenation/patterns) come from the
+hyph-utf8 project (https://github.com/hyphenation/tex-hyphen):
+
+- German, reformed spelling, Copyright (c) 2013-2024 Stephan Hennig,
+  Werner Lemberg, Günter Milde, Sander van Geloven, Georg Pfeiffer,
+  Gisbert W. Selke, Tobias Wendorf, Keno Wehr, licensed under the MIT
+  License.
+- American English, Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken,
+  under an all-permissive license.
+
+Their notices are in plugins/hyphenation/patterns/README.md.
+
+The firmware of the Xteink readers also contains:
+
+- Display initialisation sequences and waveform tables derived from the
+  FreeInk SDK, Copyright (c) 2026 FreeInk, and the OpenX4 E-Paper
+  Community SDK, Copyright (c) 2025 Open X4 E-Paper Contributors, both
+  licensed under the MIT License (its text is below, with the crates').
+- Battery gauge and board facts after Papyrix, Copyright (c) 2026 Pavel
+  Liashkov, licensed under the MIT License.
+- Mbed TLS (https://github.com/Mbed-TLS/mbedtls), Copyright The Mbed TLS
+  Contributors, used under the Apache License, Version 2.0 (one of its
+  two licences).
+- The Wi-Fi, Bluetooth LE and radio libraries of ESP-IDF
+  (https://github.com/espressif/esp-idf), Copyright Espressif Systems
+  (Shanghai) Co., Ltd., provided as binaries for Espressif's chips and
+  licensed as ESP-IDF states (Apache License, Version 2.0), and ESP-IDF's
+  second-stage bootloader, licensed under the Apache License, Version 2.0.
+- Mozilla's list of certificate authorities (webpki-roots), under the
+  Community Data License Agreement Permissive 2.0, whose text is below.
+
+Patched copies of fatfs, trouble-host and jni-macros (patches/) keep their
+licences; their changes are marked "Modified for PaperPaw".
+
+The cats (the sleeping cat in plugins/sleep/pictures, the reading cats in
+plugins/reading-goal/pictures, the README's pictures in docs/images/readme
+and their dark versions) are PaperPaw artwork, generated with an AI
+image model (Google Nano Banana) for the project, and licensed under the
+Apache License, Version 2.0, as the rest of PaperPaw.

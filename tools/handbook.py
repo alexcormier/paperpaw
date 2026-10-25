@@ -165,6 +165,9 @@ Tests, pictures, fonts and the sample books are not in it.
 """
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(f"{top}/README.md", readme)
+        # PaperPaw's licence and the notices of what it holds.
+        for name in ("LICENSE", "NOTICE"):
+            z.write(ROOT / name, f"{top}/{name}")
         z.write(registry, f"{top}/registry.json")
         z.writestr(f"{top}/checks.json", json.dumps({"format": FORMAT, "checks": codes}, indent=1) + "\n")
         for folder in ("docs", "samples"):

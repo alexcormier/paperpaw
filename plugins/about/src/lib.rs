@@ -46,8 +46,11 @@ pub const SCREEN: Id = Id::new_static("about.screen");
 pub const LINES: &str = "about.lines";
 /// Bytes of lines a plugin adds, at most.
 pub const MOST_LINES: usize = 512;
-/// The licences, from `tools/licences/build.py`.
-const LICENCES: &str = include_str!("../licences.md");
+/// The licences of the build's product (the firmware's or the apps'),
+/// from `tools/licences/build.py`, deflated in parts by `build.rs`: each
+/// its deflated length and its length (both `u32`, little-endian), then
+/// its bytes.
+const LICENCES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/licences.bin"));
 /// PaperPaw's logo, as the page shows it.
 const LOGO: &[u8] = include_bytes!("../logo.png");
 /// PaperPaw's version: its kernel's (this plugin has a version of its
@@ -83,8 +86,38 @@ pub(crate) fn read(env: &Env<'_>, path: String, text: &str) -> Option<Command> {
         .map(|()| paperpaw_sdk::readers::open(path))
 }
 
-/// The licences' text, the logo first: the picture set, or PaperPaw's
-/// own written beside it; a chapter each.
+/// The licences' parts, inflated one at a time; none where one cannot be.
+fn licence_parts() -> impl Iterator<Item = Vec<u8>> {
+    let mut rest = LICENCES;
+    core::iter::from_fn(move || {
+        let word = |at: usize| -> Option<usize> {
+            let bytes: [u8; 4] = rest.get(at..at + 4)?.try_into().ok()?;
+            usize::try_from(u32::from_le_bytes(bytes)).ok()
+        };
+        let (packed, len) = (word(0)?, word(4)?);
+        let data = rest.get(8..8 + packed)?;
+        rest = &rest[8 + packed..];
+        miniz_oxide::inflate::decompress_to_vec_with_limit(data, len).ok()
+    })
+}
+
+/// Writes the licences to [`licences_path`] for the reader and opens
+/// them there: the page's start ([`licences`]), then the licences' parts
+/// appended one by one, so they are never all in memory; nothing where
+/// they cannot be written.
+pub(crate) fn read_licences(env: &Env<'_>) -> Option<Command> {
+    let path = licences_path();
+    let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+    env.storage().write(&path, licences(env).as_bytes()).ok()?;
+    for part in licence_parts() {
+        env.storage().append(&path, &part).ok()?;
+    }
+    Some(paperpaw_sdk::readers::open(path))
+}
+
+/// The start of the licences' page, the logo first: the picture set, or
+/// PaperPaw's own written beside it; the licences follow it, a chapter
+/// each ([`read_licences`]).
 pub(crate) fn licences(env: &Env<'_>) -> String {
     let intro = env.i18n().tr("about.intro");
     let set = env.settings().read(&logo::LOGO).trim().trim_matches('/');
@@ -99,7 +132,7 @@ pub(crate) fn licences(env: &Env<'_>) -> String {
     };
     let version = shown_version(env.i18n(), &version(env));
     format!(
-        "![PaperPaw]({picture})\n\n# PaperPaw {version}\n\n{intro}\n\n{SOURCE}\n\n{}{LICENCES}",
+        "![PaperPaw]({picture})\n\n# PaperPaw {version}\n\n{intro}\n\n{SOURCE}\n\n{}",
         lines(env),
     )
 }
@@ -240,7 +273,13 @@ mod tests {
 
     use paperpaw_i18n::{Catalog, check};
 
-    use super::{LICENCES, shown_version};
+    use super::{licence_parts, shown_version};
+
+    /// The licences as the page writes them.
+    fn licences() -> std::string::String {
+        let parts: std::vec::Vec<u8> = licence_parts().flatten().collect();
+        std::string::String::from_utf8(parts).unwrap()
+    }
 
     #[test]
     fn a_beta_shows_as_one() {
@@ -271,8 +310,9 @@ mod tests {
         // As they are in the repository: run tools/licences/build.py
         // after one changed.
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../");
+        let all = words(&licences());
         for file in [
-            "NOTICE",
+            "tools/licences/NOTICE.in",
             "LICENSE",
             "plugins/fonts-default/fonts/Literata-OFL.txt",
             "plugins/fonts-default/fonts/SourceSans3-OFL.txt",
@@ -282,11 +322,16 @@ mod tests {
                 continue;
             };
             assert!(
-                words(LICENCES).contains(&words(&text)),
+                all.contains(&words(&text)),
                 "{file} changed: run tools/licences/build.py"
             );
         }
-        assert!(LICENCES.contains("Gerard D.C. Kuiken"));
-        assert!(LICENCES.contains("Stephan Hennig"));
+        assert!(all.contains("Gerard D.C. Kuiken"));
+        assert!(all.contains("Stephan Hennig"));
+        // The crates' notices of this build's product (the apps' here),
+        // whole from their parts.
+        assert!(all.contains("Third-party crates: MIT License"));
+        let file = concat!(env!("CARGO_MANIFEST_DIR"), "/licences-app.md");
+        assert_eq!(licences(), std::fs::read_to_string(file).unwrap());
     }
 }

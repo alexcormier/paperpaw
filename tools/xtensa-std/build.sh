@@ -51,6 +51,9 @@ for crate in core alloc compiler_builtins; do
 done
 # The compiler they were built by: install.sh refuses another.
 rustc +esp -V > "$work/stage/lib/rustlib/$target/paperpaw-rustc.txt"
+# The Rust project's licence for the libraries, PaperPaw's and its notices.
+cp "$here/NOTICE-rust.txt" "$work/stage/lib/rustlib/$target/"
+cp "$here/../../LICENSE" "$here/../../NOTICE" "$work/stage/lib/rustlib/$target/"
 
 file="$out/paperpaw-xtensa-std-$version.tar.gz"
 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --format=gnu \

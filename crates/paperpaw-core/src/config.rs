@@ -45,6 +45,36 @@ fn moved(id: &str, value: &str, entries: &[String]) -> Option<(&'static str, Str
     Some((now, value))
 }
 
+/// Values that were renamed, by setting: the UI font's family where it is
+/// drawn from bitmap packs, which may not keep its font's Reserved Font
+/// Name (Source Sans 3 is PaperPaw Sans there, `fonts-default`, October
+/// 2026), so a reading or status font chosen by the old name is kept.
+const RENAMED: [(&str, &str, &str); 2] = [
+    ("core.reading-font", "Source Sans 3", "PaperPaw Sans"),
+    ("core.status-font", "Source Sans 3", "PaperPaw Sans"),
+];
+
+/// `value` of setting `id` as kept in a file, under its new name where it
+/// was renamed and only the new one is a value it takes now.
+fn renamed(settings: &paperpaw_sdk::Settings, id: &str, value: String) -> String {
+    let Some((_, _, now)) = RENAMED
+        .iter()
+        .find(|(setting, old, _)| *setting == id && *old == value)
+    else {
+        return value;
+    };
+    let takes = |v: &str| {
+        settings
+            .spec(id)
+            .is_some_and(|spec| spec.parse(v).is_some())
+    };
+    if !takes(&value) && takes(now) {
+        String::from(*now)
+    } else {
+        value
+    }
+}
+
 /// The ids of the settings `source` (a settings file) sets.
 fn entries(source: &str) -> Vec<String> {
     paperpaw_config::parse(source)
@@ -199,6 +229,7 @@ impl Kernel {
                 if let Some((now, was)) = moved(&id, &value, &ids) {
                     (id, value) = (now.to_string(), was);
                 }
+                let value = renamed(&self.shared.settings, &id, value);
                 let parsed = self
                     .shared
                     .settings
@@ -524,6 +555,8 @@ impl Kernel {
                         None if MOVED.iter().any(|(old, _)| *old == id) => continue,
                         None => (id, value),
                     };
+                    let value =
+                        Cow::<str>::Owned(renamed(&self.shared.settings, &id, value.into_owned()));
                     let secret = self
                         .shared
                         .settings

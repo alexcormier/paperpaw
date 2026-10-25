@@ -8,6 +8,16 @@ change the plugin SDK.
 
 ### Added
 
+- The notices of everything PaperPaw ships: the crates of the firmware
+  and of the apps, each under its licence with its copyright lines and
+  each licence's text once, and Mbed TLS, ESP-IDF's radio libraries and
+  bootloader, the FreeInk and OpenX4 display code and Papyrix. Made from
+  the lockfiles by `tools/licences/build.py` into NOTICE and About
+  PaperPaw, Licences (packed, written out to read part by part); CI
+  fails where a crate that ships is missing. The web, emulator,
+  handbook and core library archives carry LICENSE and NOTICE.
+- Weather names Open-Meteo, Wikipedia names each article below its
+  summary, with their licences.
 - Plugins can be published from GitHub: tag a release in the plugin's
   own repository (topic `paperpaw-plugin`) and paperpaw.org lists it as
   "Community, unreviewed". `tools/dev/templates` has the release
@@ -21,6 +31,11 @@ change the plugin SDK.
 
 ### Changed
 
+- On the Xteink readers the interface font, drawn from bitmap packs made
+  from Source Sans 3, is PaperPaw Sans: its licence reserves the name
+  for the unchanged font. A reading or status font chosen as Source Sans
+  3 is kept. The unchanged font keeps its name where it is drawn as it
+  is.
 - A code plugin's key is trusted from its first install: an update or a
   new install after a removal signed by another key is refused with a
   short warning, from any library; there is no *Install anyway* any

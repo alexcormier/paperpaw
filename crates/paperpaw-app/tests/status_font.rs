@@ -83,11 +83,37 @@ fn the_status_lines_follow_their_setting() {
     assert!(families.iter().all(|f| choices.contains(f)), "{families:?}");
     let ui_family = families
         .iter()
-        .find(|f| f.contains("Source Sans"))
+        .find(|f| f.contains("Source Sans") || f.contains("PaperPaw Sans"))
         .unwrap()
         .to_string();
     let _ = kernel
         .set_setting(Instant(20), settings::STATUS_FONT.as_str(), &ui_family)
         .unwrap();
     assert_eq!(status(&kernel), role(&kernel, &fonts::UI));
+}
+
+#[test]
+fn a_font_chosen_as_source_sans_3_is_kept_where_the_packs_are_paperpaw_sans() {
+    // Chosen by the family's name before the packs were renamed.
+    let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
+    let builder = Kernel::builder(DEVICE).storage(storage).user_config(
+        "[help]\nshow = false\n\n[core]\nreading-font = Source Sans 3\nstatus-font = Source Sans 3\n",
+    );
+    let packs = matches!(fonts(), paperpaw_app::Fonts::Packs);
+    let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
+    let _ = kernel.start(Instant(0));
+    let _ = kernel.tick(Instant(10));
+    let family = if packs {
+        "PaperPaw Sans"
+    } else {
+        "Source Sans 3"
+    };
+    for setting in [settings::READING_FONT, settings::STATUS_FONT] {
+        assert_eq!(
+            kernel.settings().text(setting.as_str()),
+            family,
+            "{setting:?}"
+        );
+    }
+    assert!(kernel.fonts().families().contains(&family));
 }

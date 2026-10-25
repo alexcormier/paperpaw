@@ -8,7 +8,7 @@ Bundled fonts (plugins/fonts-default/fonts) are licensed under the SIL Open Font
 
 - Literata, Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)
 
-- Source Sans 3, Copyright 2010-2020 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source' (https://github.com/adobe-fonts/source-sans), bundled unmodified
+- Source Sans 3, Copyright 2010-2023 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source' (https://github.com/adobe-fonts/source-sans), bundled unmodified as SourceSans3.ttf. The Xteink readers draw the interface from bitmap packs made from it (one weight, Latin letters only, rasterised): a Modified Version under the licence, so they are named PaperPaw Sans, not with the Reserved Font Name, and are licensed under the SIL Open Font License, Version 1.1, as the font they are derived from.
 
 The icon font (plugins/fonts-default/fonts/PaperPawIcons.ttf) is a subset of Tabler Icons, Copyright 2020-2025 Paweł Kuna (https://tabler.io/icons), licensed under the MIT License (fonts/TablerIcons-MIT.txt).
 
@@ -19,6 +19,20 @@ Bundled hyphenation patterns (plugins/hyphenation/patterns) come from the hyph-u
 - American English, Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken, under an all-permissive license.
 
 Their notices are in plugins/hyphenation/patterns/README.md.
+
+The firmware of the Xteink readers also contains:
+
+- Display initialisation sequences and waveform tables derived from the FreeInk SDK, Copyright (c) 2026 FreeInk, and the OpenX4 E-Paper Community SDK, Copyright (c) 2025 Open X4 E-Paper Contributors, both licensed under the MIT License (its text is below, with the crates').
+
+- Battery gauge and board facts after Papyrix, Copyright (c) 2026 Pavel Liashkov, licensed under the MIT License.
+
+- Mbed TLS (https://github.com/Mbed-TLS/mbedtls), Copyright The Mbed TLS Contributors, used under the Apache License, Version 2.0 (one of its two licences).
+
+- The Wi-Fi, Bluetooth LE and radio libraries of ESP-IDF (https://github.com/espressif/esp-idf), Copyright Espressif Systems (Shanghai) Co., Ltd., provided as binaries for Espressif's chips and licensed as ESP-IDF states (Apache License, Version 2.0), and ESP-IDF's second-stage bootloader, licensed under the Apache License, Version 2.0.
+
+- Mozilla's list of certificate authorities (webpki-roots), under the Community Data License Agreement Permissive 2.0, whose text is below.
+
+Patched copies of fatfs, trouble-host and jni-macros (patches/) keep their licences; their changes are marked "Modified for PaperPaw".
 
 The cats (the sleeping cat in plugins/sleep/pictures, the reading cats in plugins/reading-goal/pictures, the README's pictures in docs/images/readme and their dark versions) are PaperPaw artwork, generated with an AI image model (Google Nano Banana) for the project, and licensed under the Apache License, Version 2.0, as the rest of PaperPaw.
 
@@ -128,9 +142,9 @@ TERMINATION This license becomes null and void if any of the above conditions ar
 
 DISCLAIMER THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
 
-## Source Sans 3: SIL Open Font License 1.1
+## Source Sans 3 and PaperPaw Sans: SIL Open Font License 1.1
 
-Copyright 2010-2020 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+Copyright 2010-2023 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 
@@ -195,3 +209,249 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
 Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken
 
 Copying and distribution of this file, with or without modification, are permitted in any medium without royalty provided the copyright notice and this notice are preserved.
+
+## Third-party crates: MIT License
+
+Crates in the apps (Android, the desktop and web emulators) used under the MIT License:
+
+- adler2 2.0.1: Copyright (C) Jonas Schievink <jonasschievink@gmail.com>
+- ahash 0.8.12: Copyright (c) 2018 Tom Kaitchuck
+- android-activity 0.6.1: Copyright the android-activity contributors (https://github.com/rust-mobile/android-activity)
+- android-properties 0.2.2: Copyright (c) 2020 Mikhail Lappo
+- android_log-sys 0.3.2: Copyright 2016 The android_log_sys Developers; Copyright (c) 2016 The android_log_sys Developers
+- android_logger 0.15.1: Copyright 2016 The android_logger Developers; Copyright (c) 2016 The android_logger Developers
+- android_system_properties 0.1.6: Copyright 2016 Nicolas Silva; Copyright (c) 2013 Nicolas Silva; COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+- as-raw-xcb-connection 1.0.1: Copyright 2019 as-raw-xcb-connection Contributers
+- bitflags 1.3.2: Copyright (c) 2014 The Rust Project Developers
+- bitflags 2.13.2: Copyright (c) 2014 The Rust Project Developers
+- block2 0.5.1: Copyright Steven Sheldon, Mads Marquart (https://github.com/madsmtm/objc2)
+- bumpalo 3.20.3: Copyright (c) 2019 Nick Fitzgerald
+- bytemuck 1.25.2: Copyright (c) 2019 Daniel "Lokathor" Gee.
+- bytemuck_derive 1.12.1: Copyright (c) 2019 Daniel "Lokathor" Gee.
+- bytes 1.12.1: Copyright (c) 2018 Carl Lerche
+- calloop 0.13.0: Copyright (c) 2018 Victor Berger
+- calloop-wayland-source 0.3.0: Copyright (c) 2023 Kirill Chibisov
+- cesu8 1.1.0: Copyright (C) 2000-2010 Julian Seward.  All rights; Copyright (c) 2003-2013 University of Illinois at; Copyright (c) 2009-2014 by the contributors listed in; Copyright (C) 2008-2010 Tachyon Technologies.; Copyright (c) 2008, Natacha Porté; Copyright (c) 2011, Vicent Martí; Copyright (c) 2013, Devin Torres and the Hoedown authors; Copyright (C) 2012-2014 Free Software Foundation, Inc.; Copyright (C) 2002-2014 Jason Evans; Copyright (C) 2007-2012 Mozilla Foundation.; Copyright (C) 2009-2014 Facebook, Inc.
+- cfg-if 1.0.5: Copyright (c) 2014 Alex Crichton
+- chrono 0.4.45: Copyright (c) 2014, Kang Seonghoon.
+- combine 4.6.8: Copyright (c) 2015 Markus Westerlind
+- core-foundation 0.9.4: Copyright (c) 2012-2013 Mozilla Foundation
+- core-foundation-sys 0.8.7: Copyright (c) 2012-2013 Mozilla Foundation
+- core-graphics 0.23.2: Copyright (c) 2012-2013 Mozilla Foundation
+- core-graphics-types 0.1.3: Copyright (c) 2012-2013 Mozilla Foundation
+- core_maths 0.1.1: Copyright (c) 2024 Robert Bastian
+- crc32fast 1.5.2: Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
+- ctor 0.10.1: Copyright Matt Mastracci (https://github.com/mmastrac/rust-ctor)
+- cursor-icon 1.2.0: Copyright 2023 Kirill Chibisov; Copyright (c) 2023 Kirill Chibisov
+- dispatch 0.2.0: Copyright Steven Sheldon (http://github.com/SSheldon/rust-dispatch)
+- dispatch2 0.3.1: Copyright Mads Marquart, Mary (https://github.com/madsmtm/objc2)
+- dlib 0.5.3: Copyright (c) 2015 Victor Berger
+- downcast-rs 1.2.1: Copyright (c) 2020 Ashish Myles and contributors
+- dpi 0.1.2: Copyright (c) 2018 Jorge Aparicio; Copyright © 2005-2020 Rich Felker, et al.; Copyright © 1993,2004 Sun Microsystems or; Copyright © 2003-2011 David Schultz or; Copyright © 2003-2009 Steven G. Kargl or; Copyright © 2003-2009 Bruce D. Evans or; Copyright © 2008 Stephen L. Moshier or; Copyright © 2017-2018 Arm Limited
+- drm 0.14.1: Copyright Tyler Slabinski, Victoria Brekenfeld (https://github.com/Smithay/drm-rs)
+- drm-ffi 0.9.1: Copyright Tyler Slabinski (https://github.com/Smithay/drm-rs)
+- drm-fourcc 2.2.0: Copyright Daniel Franklin (https://github.com/danielzfranklin/drm-fourcc-rs)
+- drm-sys 0.8.1: Copyright Tyler Slabinski (https://github.com/Smithay/drm-rs)
+- dtor 0.8.1: Copyright Matt Mastracci (https://github.com/mmastrac/rust-ctor)
+- ed25519-compact 2.6.0: Copyright (c) 2020-2026 Frank Denis
+- embedded-hal 1.0.0: Copyright (c) 2017-2018 Jorge Aparicio
+- env_filter 0.1.4: Copyright (c) Individual contributors
+- equivalent 1.0.3: Copyright (c) 2016--2023
+- errno 0.3.14: Copyright (c) 2014 Chris Wong
+- fastrand 2.5.0: Copyright Stjepan Glavina (https://github.com/smol-rs/fastrand)
+- fdeflate 0.3.7: Copyright The image-rs Developers (https://github.com/image-rs/fdeflate)
+- flate2 1.1.10: Copyright (c) 2014-2026 Alex Crichton
+- font-types 0.12.7: Copyright 2019 Fontations Developers; Copyright (c) 2019 Fontations Developers
+- foreign-types 0.5.0: Copyright (c) 2017 The foreign-types Developers
+- foreign-types-macros 0.2.4: Copyright (c) 2017 The foreign-types Developers
+- foreign-types-shared 0.3.1: Copyright (c) 2017 The foreign-types Developers
+- futures-core 0.3.34: Copyright (c) 2016 Alex Crichton; Copyright (c) 2017 The Tokio Authors
+- futures-task 0.3.34: Copyright (c) 2016 Alex Crichton; Copyright (c) 2017 The Tokio Authors
+- futures-util 0.3.34: Copyright (c) 2016 Alex Crichton; Copyright (c) 2017 The Tokio Authors
+- getrandom 0.3.4: Copyright (c) 2018-2025 The rust-random Project Developers; Copyright (c) 2014 The Rust Project Developers
+- getrandom 0.4.3: Copyright (c) 2018-2026 The rust-random Project Developers; Copyright (c) 2014 The Rust Project Developers
+- hashbrown 0.17.1: Copyright (c) 2016 Amanieu d'Antras
+- iana-time-zone 0.1.65: Copyright 2020 Andrew Straw; Copyright (c) 2020 Andrew D. Straw
+- indexmap 2.14.2: Copyright (c) 2016--2017
+- jni 0.21.1: Copyright (c) 2016 Prevoty, Inc. and jni-rs contributors
+- jni 0.22.4: Copyright jni team (https://github.com/jni-rs/jni-rs)
+- jni-macros 0.22.4: Copyright (c) 2016 Prevoty, Inc. and jni-rs contributors
+- jni-sys 0.3.1: Copyright (c) 2015 The rust-jni-sys Developers
+- jni-sys 0.4.1: Copyright (c) 2015 The rust-jni-sys Developers
+- jni-sys-macros 0.4.1: Copyright Robert Bragg (https://github.com/jni-rs/jni-sys)
+- js-sys 0.3.106: Copyright (c) 2014 Alex Crichton
+- libc 0.2.191: Copyright (c) The Rust Project Developers
+- libm 0.2.16: Copyright (c) 2018 Jorge Aparicio; Copyright © 2005-2020 Rich Felker, et al.; Copyright © 1993,2004 Sun Microsystems or; Copyright © 2003-2011 David Schultz or; Copyright © 2003-2009 Steven G. Kargl or; Copyright © 2003-2009 Bruce D. Evans or; Copyright © 2008 Stephen L. Moshier or; Copyright © 2017-2018 Arm Limited
+- linux-raw-sys 0.12.1: Copyright Dan Gohman (https://github.com/sunfishcode/linux-raw-sys)
+- linux-raw-sys 0.4.15: Copyright Dan Gohman (https://github.com/sunfishcode/linux-raw-sys)
+- linux-raw-sys 0.9.4: Copyright Dan Gohman (https://github.com/sunfishcode/linux-raw-sys)
+- log 0.4.34: Copyright (c) 2014 The Rust Project Developers
+- memchr 2.8.3: Copyright (c) 2015 Andrew Gallant
+- memmap2 0.9.11: Copyright (c) 2020 Yevhenii Reizner; Copyright (c) 2015 Dan Burkert
+- miniz_oxide 0.8.9: Copyright 2013-2014 RAD Game Tools and Valve Software; Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC; Copyright (c) 2017 Frommi; Copyright (c) 2017-2024 oyvindln; Copyright (c) 2020 Frommi
+- miniz_oxide 0.9.1: Copyright 2013-2014 RAD Game Tools and Valve Software; Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC; Copyright (c) 2017 Frommi; Copyright (c) 2017-2024 oyvindln; Copyright (c) 2020 Frommi
+- ndk 0.9.0: Copyright The Rust Mobile contributors (https://github.com/rust-mobile/ndk)
+- ndk-context 0.1.1: Copyright The Rust Windowing contributors (https://github.com/rust-windowing/android-ndk-rs)
+- ndk-sys 0.6.0+11769913: Copyright The Rust Windowing contributors (https://github.com/rust-mobile/ndk)
+- num-traits 0.2.19: Copyright (c) 2014 The Rust Project Developers
+- num_enum 0.7.6: Copyright (c) 2018, Daniel Wagner-Hall
+- num_enum_derive 0.7.6: Copyright (c) 2018, Daniel Wagner-Hall
+- objc-sys 0.3.5: Copyright Mads Marquart (https://github.com/madsmtm/objc2)
+- objc2 0.5.3: Copyright Steven Sheldon, Mads Marquart (https://github.com/madsmtm/objc2)
+- objc2 0.6.5: Copyright Mads Marquart (https://github.com/madsmtm/objc2)
+- objc2-app-kit 0.2.2: Copyright the objc2-app-kit contributors (https://github.com/madsmtm/objc2)
+- objc2-core-data 0.2.2: Copyright the objc2-core-data contributors (https://github.com/madsmtm/objc2)
+- objc2-core-foundation 0.3.2: Copyright the objc2-core-foundation contributors (https://github.com/madsmtm/objc2)
+- objc2-core-graphics 0.3.2: Copyright the objc2-core-graphics contributors (https://github.com/madsmtm/objc2)
+- objc2-core-image 0.2.2: Copyright the objc2-core-image contributors (https://github.com/madsmtm/objc2)
+- objc2-encode 4.1.0: Copyright Mads Marquart (https://github.com/madsmtm/objc2)
+- objc2-foundation 0.2.2: Copyright the objc2-foundation contributors (https://github.com/madsmtm/objc2)
+- objc2-foundation 0.3.2: Copyright the objc2-foundation contributors (https://github.com/madsmtm/objc2)
+- objc2-io-surface 0.3.2: Copyright the objc2-io-surface contributors (https://github.com/madsmtm/objc2)
+- objc2-metal 0.2.2: Copyright the objc2-metal contributors (https://github.com/madsmtm/objc2)
+- objc2-quartz-core 0.2.2: Copyright the objc2-quartz-core contributors (https://github.com/madsmtm/objc2)
+- objc2-quartz-core 0.3.2: Copyright the objc2-quartz-core contributors (https://github.com/madsmtm/objc2)
+- once_cell 1.21.4: Copyright Aleksey Kladov (https://github.com/matklad/once_cell)
+- percent-encoding 2.3.2: Copyright (c) 2013-2025 The rust-url developers
+- pin-project 1.1.13: Copyright the pin-project contributors (https://github.com/taiki-e/pin-project)
+- pin-project-internal 1.1.13: Copyright the pin-project-internal contributors (https://github.com/taiki-e/pin-project)
+- pin-project-lite 0.2.17: Copyright the pin-project-lite contributors (https://github.com/taiki-e/pin-project-lite)
+- png 0.18.1: Copyright (c) 2015 nwin
+- polling 3.11.0: Copyright Stjepan Glavina, John Nunley (https://github.com/smol-rs/polling)
+- proc-macro-crate 3.5.0: Copyright Bastian Köcher (https://github.com/bkchr/proc-macro-crate)
+- proc-macro2 1.0.107: Copyright David Tolnay, Alex Crichton (https://github.com/dtolnay/proc-macro2)
+- quick-xml 0.41.0: Copyright (c) 2016 Johann Tuffe
+- quote 1.0.47: Copyright David Tolnay (https://github.com/dtolnay/quote)
+- rand_core 0.10.1: Copyright (c) 2018-2026 The Rand Project Developers
+- raw-window-handle 0.6.2: Copyright (c) 2019 Osspial; Copyright (c) 2020 Osspial
+- read-fonts 0.45.1: Copyright 2019 Fontations Developers; Copyright (c) 2019 Fontations Developers
+- rustix 0.38.44: Copyright Dan Gohman, Jakub Konka (https://github.com/bytecodealliance/rustix)
+- rustix 1.1.5: Copyright Dan Gohman, Jakub Konka (https://github.com/bytecodealliance/rustix)
+- rustversion 1.0.23: Copyright David Tolnay (https://github.com/dtolnay/rustversion)
+- scoped-tls 1.0.1: Copyright (c) 2014 Alex Crichton
+- serde 1.0.229: Copyright Erick Tryzelaar, David Tolnay (https://github.com/serde-rs/serde)
+- serde_core 1.0.229: Copyright Erick Tryzelaar, David Tolnay (https://github.com/serde-rs/serde)
+- simd-adler32 0.3.10: Copyright Marvin Countryman (https://github.com/mcountryman/simd-adler32)
+- simd_cesu8 1.2.0: Copyright Sean C. Roach (https://github.com/seancroach/simd_cesu8)
+- simdutf8 0.1.5: Copyright Hans Kratz (https://github.com/rusticstuff/simdutf8)
+- skrifa 0.48.0: Copyright 2019 Fontations Developers; Copyright (c) 2019 Fontations Developers
+- slab 0.4.12: Copyright (c) 2019 Carl Lerche
+- smallvec 1.16.3: Copyright (c) 2018 The Servo Project Developers
+- smithay-client-toolkit 0.19.2: Copyright (c) 2018 Victor Berger
+- smol_str 0.2.2: Copyright Aleksey Kladov (https://github.com/rust-analyzer/smol_str)
+- softbuffer 0.4.8: Copyright 2022 Kirill Chibisov
+- stable_deref_trait 1.2.1: Copyright (c) 2017 Robert Grosse
+- syn 2.0.119: Copyright David Tolnay (https://github.com/dtolnay/syn)
+- syn 3.0.9: Copyright David Tolnay (https://github.com/dtolnay/syn)
+- synstructure 0.14.0: Copyright 2016 Nika Layzell
+- thiserror 1.0.69: Copyright David Tolnay (https://github.com/dtolnay/thiserror)
+- thiserror 2.0.21: Copyright David Tolnay (https://github.com/dtolnay/thiserror)
+- thiserror-impl 1.0.69: Copyright David Tolnay (https://github.com/dtolnay/thiserror)
+- thiserror-impl 2.0.21: Copyright David Tolnay (https://github.com/dtolnay/thiserror)
+- tiny-xlib 0.2.5: Copyright (c) 2023 John Nunley
+- toml_datetime 1.1.2+spec-1.1.0: Copyright Individual contributors; Copyright (c) Individual contributors
+- toml_edit 0.25.17+spec-1.1.0: Copyright Individual contributors; Copyright (c) Individual contributors
+- toml_parser 1.1.5+spec-1.1.0: Copyright Individual contributors; Copyright (c) Individual contributors
+- tracing 0.1.44: Copyright (c) 2019 Tokio Contributors
+- tracing-core 0.1.36: Copyright (c) 2019 Tokio Contributors
+- unicode-ident 1.0.27: COPYRIGHT AND PERMISSION NOTICE; Copyright © 1991-2023 Unicode, Inc.
+- unicode-segmentation 1.13.3: Copyright (c) 2015 The Rust Project Developers
+- wasm-bindgen 0.2.129: Copyright (c) 2014 Alex Crichton
+- wasm-bindgen-futures 0.4.79: Copyright (c) 2014 Alex Crichton
+- wasm-bindgen-macro 0.2.129: Copyright (c) 2014 Alex Crichton
+- wasm-bindgen-macro-support 0.2.129: Copyright (c) 2014 Alex Crichton
+- wasm-bindgen-shared 0.2.129: Copyright (c) 2014 Alex Crichton
+- wayland-backend 0.3.17: Copyright (c) 2015 Elinor Berger
+- wayland-client 0.31.15: Copyright (c) 2015 Elinor Berger
+- wayland-csd-frame 0.3.0: Copyright (c) 2023 Kirill Chibisov
+- wayland-cursor 0.31.14: Copyright (c) 2015 Elinor Berger
+- wayland-protocols 0.32.12: Copyright (c) 2015 Elinor Berger
+- wayland-protocols-plasma 0.3.12: Copyright (c) 2015 Elinor Berger
+- wayland-protocols-wlr 0.3.12: Copyright (c) 2015 Elinor Berger
+- wayland-scanner 0.31.11: Copyright (c) 2015 Elinor Berger
+- wayland-sys 0.31.11: Copyright (c) 2015 Elinor Berger
+- web-sys 0.3.106: Copyright (c) 2014 Alex Crichton
+- web-time 1.1.0: Copyright 2023 dAxpeDDa; Copyright (c) 2023 dAxpeDDa
+- windows-link 0.2.1: Copyright (c) Microsoft Corporation.
+- windows-sys 0.52.0: Copyright (c) Microsoft Corporation.
+- windows-sys 0.61.2: Copyright (c) Microsoft Corporation.
+- windows-targets 0.52.6: Copyright (c) Microsoft Corporation.
+- windows_x86_64_msvc 0.52.6: Copyright (c) Microsoft Corporation.
+- winnow 1.0.4: Copyright the winnow contributors (https://github.com/winnow-rs/winnow)
+- x11-dl 2.21.0: Copyright daggerbot, Erle Pereira, AltF02 (https://github.com/AltF02/x11-rs.git)
+- x11rb 0.13.2: Copyright 2019 x11rb Contributers
+- x11rb-protocol 0.13.2: Copyright 2019 x11rb Contributers
+- xcursor 0.3.11: Copyright (c) 2020 Samuele Esposito
+- xkbcommon-dl 0.4.2: Copyright (c) 2023 Kirill Chibisov
+- xkeysym 0.2.1: Copyright 2022-2023 John Nunley; Copyright (c) 2022-2023 John Nunley
+- zerocopy 0.8.63: Copyright 2023 The Fuchsia Authors; Copyright 2019 The Fuchsia Authors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Third-party crates: Apache License 2.0
+
+Crates in the apps (Android, the desktop and web emulators) used under the Apache License 2.0:
+
+- dpi 0.1.2: Copyright (c) 2018 Jorge Aparicio; Copyright © 2005-2020 Rich Felker, et al.; Copyright © 1993,2004 Sun Microsystems or; Copyright © 2003-2011 David Schultz or; Copyright © 2003-2009 Steven G. Kargl or; Copyright © 2003-2009 Bruce D. Evans or; Copyright © 2008 Stephen L. Moshier or; Copyright © 2017-2018 Arm Limited
+- gethostname 1.1.0: Copyright Sebastian Wiesner (https://codeberg.org/swsnr/gethostname.rs.git)
+- winit 0.30.13: Copyright The winit contributors, Pierre Krieger (https://github.com/rust-windowing/winit)
+
+Its text is in the chapter on PaperPaw's own licence above.
+
+## Third-party crates: ISC License
+
+Crates in the apps (Android, the desktop and web emulators) used under the ISC License:
+
+- libloading 0.8.9: Copyright © 2015, Simonas Kazlauskas
+- libloading 0.9.0: Copyright © 2015, Simonas Kazlauskas
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+## Third-party crates: zlib License
+
+Crates in the apps (Android, the desktop and web emulators) used under the zlib License:
+
+- foldhash 0.2.0: Copyright (c) 2024 Orson Peters
+- zlib-rs 0.6.8: (C) 2024 Trifecta Tech Foundation
+
+This software is provided 'as-is', without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose, including commercial applications, and to alter it and redistribute it freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not claim that you wrote the original software. If you use this software in a product, an acknowledgment in the product documentation would be appreciated but is not required.
+
+2. Altered source versions must be plainly marked as such, and must not be misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
+
+## Third-party crates: Unicode License v3
+
+Crates in the apps (Android, the desktop and web emulators) used under the Unicode License v3:
+
+- unicode-ident 1.0.27: COPYRIGHT AND PERMISSION NOTICE; Copyright © 1991-2023 Unicode, Inc.
+- yoke 0.8.3: COPYRIGHT AND PERMISSION NOTICE; Copyright © 2020-2024 Unicode, Inc.
+- yoke-derive 0.8.4: COPYRIGHT AND PERMISSION NOTICE; Copyright © 2020-2024 Unicode, Inc.
+- zerofrom 0.1.8: COPYRIGHT AND PERMISSION NOTICE; Copyright © 2020-2024 Unicode, Inc.
+- zerofrom-derive 0.1.8: COPYRIGHT AND PERMISSION NOTICE; Copyright © 2020-2024 Unicode, Inc.
+
+UNICODE LICENSE V3
+
+COPYRIGHT AND PERMISSION NOTICE
+
+Copyright © 1991-2023 Unicode, Inc.
+
+NOTICE TO USER: Carefully read the following legal agreement. BY DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING DATA FILES, AND/OR SOFTWARE, YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE TERMS AND CONDITIONS OF THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE THE DATA FILES OR SOFTWARE.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of data files and any associated documentation (the "Data Files") or software and any associated documentation (the "Software") to deal in the Data Files or Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, and/or sell copies of the Data Files or Software, and to permit persons to whom the Data Files or Software are furnished to do so, provided that either (a) this copyright and permission notice appear with all copies of the Data Files or Software, or (b) this copyright and permission notice appear in associated Documentation.
+
+THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF THIRD PARTY RIGHTS.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA FILES OR SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall not be used in advertising or otherwise to promote the sale, use or other dealings in these Data Files or Software without prior written authorization of the copyright holder.

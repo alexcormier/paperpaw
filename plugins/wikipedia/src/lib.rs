@@ -81,6 +81,13 @@ fn summary_url(language: &str, word: &str) -> String {
     )
 }
 
+/// The address of the article `title`, as its source is named (without
+/// `https://`, short enough to read).
+fn article_url(language: &str, title: &str) -> String {
+    let title = encode(title.trim()).replace('+', "_");
+    format!("{}.wikipedia.org/wiki/{title}", wiki(language))
+}
+
 /// The request for the summary of `word`'s article, answered with
 /// `reply`.
 fn summary_request(language: &str, word: &str, reply: Id) -> HttpRequest {
@@ -177,6 +184,12 @@ impl Plugin for Wikipedia {
             LookupProviderSpec::new(PROVIDER, "wikipedia.title", provide).online(),
         )?;
         r.on(PROVIDED, provided)?;
+        // The articles' licence asks for their source and licence to be
+        // named: below each, and here.
+        r.contribute(
+            Id::new_static("about.lines"),
+            "Article summaries from Wikipedia (https://www.wikipedia.org), under CC BY-SA 4.0.",
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -286,14 +299,20 @@ impl Summary {
         true
     }
 
-    /// The summary arrived: its title and text, or why not.
+    /// The summary arrived: its title and text, with its source and
+    /// licence below it (CC BY-SA asks for both), or why not.
     fn answered(&mut self, env: &Env<'_>, reply: &HttpReply) {
         let text = match summary(env, reply) {
             Ok((title, text)) => {
                 if let Some(title) = title {
                     self.word = title;
                 }
-                text
+                let source = article_url(&self.language, &self.word);
+                let from = env.i18n().format(
+                    "wikipedia.source",
+                    &[("address", paperpaw_sdk::Arg::Str(&source))],
+                );
+                format!("{text}\n\n{from}")
             }
             Err(why) => why,
         };

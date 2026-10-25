@@ -7,7 +7,12 @@
 //!   than a technical face. Its font file is shipped unchanged (its
 //!   licence reserves the name "Source" for the original) and used at
 //!   weight 430 ([`UI_WEIGHT`]); the bitmap packs are drawn from it at
-//!   build time, at that weight and for Latin text only.
+//!   build time, at that weight and for Latin text only. Changed so, they
+//!   are a Modified Version under the licence and may not carry the name:
+//!   their family is **PaperPaw Sans** ([`UI_FAMILY`]). A reading or
+//!   status font chosen as "Source Sans 3" on a device of packs is read
+//!   as PaperPaw Sans (the kernel's `config::RENAMED`), so the reader keeps
+//!   their font.
 //! - **PaperPaw Icons** (`fonts-default.icons`): the icons of the menus,
 //!   taken from Tabler Icons (MIT licence; see `tools/icons/subset.py`).
 //!
@@ -44,6 +49,14 @@ pub const ICONS: Id = Id::new_static("fonts-default.icons");
 /// hold on e-ink panels with one bit a pixel. Also in `build.rs`.
 pub const UI_WEIGHT: f32 = 430.0;
 
+/// The UI font's family as the font file names it, unchanged.
+pub const SOURCE_SANS_FAMILY: &str = "Source Sans 3";
+/// The UI font's family where it is drawn from bitmap packs: not the
+/// Reserved Font Name.
+pub const PAPERPAW_SANS_FAMILY: &str = "PaperPaw Sans";
+/// The UI font's family in this build.
+pub const UI_FAMILY: &str = preferred::UI_FAMILY;
+
 /// The faces: id, role, font data and weight (for variable fonts).
 type Faces = [(Id, Id, &'static [u8], f32); 5];
 
@@ -53,6 +66,7 @@ mod outlines {
     const LITERATA_ITALIC: &[u8] = include_bytes!("../fonts/Literata-Italic.ttf");
     const SOURCE_SANS: &[u8] = include_bytes!("../fonts/SourceSans3.ttf");
     pub const ICONS: &[u8] = include_bytes!("../fonts/PaperPawIcons.ttf");
+    pub const UI_FAMILY: &str = super::SOURCE_SANS_FAMILY;
 
     /// Bold faces are instances of the variable fonts.
     pub fn faces() -> super::Faces {
@@ -86,6 +100,7 @@ mod packs {
     }
 
     pub const ICONS: &[u8] = pack!("icons");
+    pub const UI_FAMILY: &str = super::PAPERPAW_SANS_FAMILY;
 
     pub fn faces() -> super::Faces {
         use super::*;
@@ -109,7 +124,7 @@ mod packs {
                 pack!("literata-bold-italic"),
                 700.0,
             ),
-            (SOURCE_SANS, fonts::UI, pack!("source-sans"), UI_WEIGHT),
+            (SOURCE_SANS, fonts::UI, pack!("paperpaw-sans"), UI_WEIGHT),
         ]
     }
 }
@@ -141,7 +156,12 @@ fn manifest() -> Manifest {
         .uses(paperpaw_sdk::Uses::NOTHING)
 }
 
-fn register(r: &mut Registrar, faces: Faces, icons: &'static [u8]) -> Result<(), RegisterError> {
+fn register(
+    r: &mut Registrar,
+    faces: Faces,
+    icons: &'static [u8],
+    ui_family: &'static str,
+) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
     for (id, role, data, weight) in faces {
@@ -150,7 +170,7 @@ fn register(r: &mut Registrar, faces: Faces, icons: &'static [u8]) -> Result<(),
                 message: Cow::Owned(alloc::format!("{id}: {e}")),
             })?;
         let family = if role == fonts::UI {
-            "Source Sans 3"
+            ui_family
         } else {
             "Literata"
         };
@@ -173,7 +193,12 @@ impl Plugin for DefaultFonts {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        register(r, preferred::faces(), preferred::ICONS)
+        register(
+            r,
+            preferred::faces(),
+            preferred::ICONS,
+            preferred::UI_FAMILY,
+        )
     }
 }
 
@@ -184,7 +209,7 @@ impl Plugin for DefaultFontPacks {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        register(r, packs::faces(), packs::ICONS)
+        register(r, packs::faces(), packs::ICONS, packs::UI_FAMILY)
     }
 }
 

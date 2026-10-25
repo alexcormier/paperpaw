@@ -254,6 +254,11 @@ jobs:
           cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-sdk --target-dir target/statics
           cargo run --release -p paperpaw-sign -- statics \
             target/statics/riscv32imc-unknown-none-elf/release/deps/*.rlib
+      - name: The notices name every crate that ships
+        # NOTICE and the app's licences (plugins/about), from the lockfiles
+        # by tools/licences/build.py: a crate added, removed or updated
+        # without them fails here.
+        run: python3 tools/licences/build.py --check
       - name: The sample and the CI templates name the firmware's compilers
         run: |
           x4="$(sed -n 's/^channel = "\(.*\)"/\1/p' shells/xteink/rust-toolchain.toml)"
