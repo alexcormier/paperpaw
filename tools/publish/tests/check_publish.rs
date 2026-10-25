@@ -118,7 +118,7 @@ fn code_repo(name: &str) -> PathBuf {
     write(
         &dir,
         "Cargo.toml",
-        "[package]\nname = \"clock\"\n\n[dependencies]\npaperpaw-sdk = \"0.5.0-beta.7\"\n",
+        "[package]\nname = \"clock\"\n\n[dependencies]\npaperpaw-sdk = \"0.5.0-beta.8\"\n",
     );
     write(&dir, "Cargo.lock", "version = 4\n");
     write(&dir, ".gitignore", "/target/\n*.key\n");

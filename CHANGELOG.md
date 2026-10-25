@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.8] - 2026-10-25
+
 ### Changed
 
 - Wi-Fi joins the saved network picked last on the Wi-Fi page first,
