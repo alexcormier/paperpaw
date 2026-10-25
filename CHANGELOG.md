@@ -179,6 +179,10 @@ change the plugin SDK.
   is built again with this release's SDK, and the plugin manager says
   so. PaperPaw's own store plugins come as updates. `Work`'s `network`
   and `charging` became `needs` (`Needs::NETWORK | Needs::CHARGING`).
+- The release keeps room for the updates to come: `paperpaw-sign
+  check-image` prints the margin an image leaves in the smallest app
+  slot (its own or CrossPoint's), warns below 512 KB and fails below
+  256 KB.
 
 ### Fixed
 
