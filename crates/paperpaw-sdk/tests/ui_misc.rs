@@ -611,3 +611,49 @@ fn a_text_setting_opens_the_keyboard_on_every_screen() {
         None
     );
 }
+
+/// A letter that reaches far past its box (the fraction slash, U+2044,
+/// meant to overhang its neighbours) still keeps to the widget's area,
+/// first and last in a caption or a line, wherever they are placed.
+#[test]
+fn an_overhanging_letter_keeps_to_the_area() {
+    let frames = [
+        "core.frame.none",
+        "core.frame.line",
+        "core.frame.card",
+        "core.frame.dark",
+    ];
+    let aligns = ["core.align.left", "core.align.center", "core.align.right"];
+    for text in ["⁄", "⁄1⁄2⁄"] {
+        for frame_value in frames {
+            for align in aligns {
+                let h = look_harness(frame_value, align);
+                let env = h.env();
+                let area = Rect::new(10, 10, 150, 120);
+                let look =
+                    widgets::draw_frame(&mut frame(480, 800).canvas(), &env, "t.clock", area);
+                let inner = look.area;
+                let bound = Rect::new(inner.x - 2, inner.y, inner.width + 4, inner.height);
+                let mut drawn = frame(480, 800);
+                let below =
+                    widgets::draw_caption(&mut drawn.canvas(), &env, "t.clock", &look, text);
+                let style = UiStyle::new(&env);
+                let wrapped_text = format!("{text} words {text}");
+                widgets::draw_wrapped(
+                    &mut drawn.canvas(),
+                    &env,
+                    below,
+                    widgets::align(&env, "t.clock"),
+                    style.text(),
+                    &wrapped_text,
+                    look.ink,
+                );
+                assert_eq!(
+                    drawn_outside(&mut drawn, bound),
+                    None,
+                    "{text:?} {frame_value} {align}"
+                );
+            }
+        }
+    }
+}

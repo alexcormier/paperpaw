@@ -483,6 +483,24 @@ pub fn caption_height(env: &Env<'_>) -> u16 {
     line_height(env, style.small) + style.gap as u16 / 2
 }
 
+/// How far letters may reach past the box their advance gives them, left
+/// and right (a slant, a slash's tail); text in a widget's area is cut
+/// there, so that a letter that reaches further (the fraction slash,
+/// U+2044, overhangs its neighbours by design) stays inside.
+const OVERHANG: u16 = 2;
+
+/// Where text placed in `area` may draw: `area`, [`OVERHANG`] wider on
+/// each side.
+fn ink_room(area: Rect) -> Rect {
+    let left = area.x.saturating_sub(OVERHANG);
+    Rect::new(
+        left,
+        area.y,
+        area.width + (area.x - left) + OVERHANG,
+        area.height,
+    )
+}
+
 /// Draws `text` small at the top of `look`'s area, placed as `widget`'s
 /// alignment says ([`align`](super::align)), e.g. "Today" over the
 /// numbers; returns the area left below it.
@@ -500,7 +518,8 @@ pub fn draw_caption(
         let text = ui::fit(&font, style.small, text, f32::from(area.width));
         let x = super::align(env, widget).x(area, font.measure(style.small, &text));
         let row = Rect::new(area.x, area.y, area.width, line_height(env, style.small));
-        ui::draw_label(canvas, &font, style.small, x, row, &text, look.faint);
+        let mut canvas = canvas.clipped(ink_room(area));
+        ui::draw_label(&mut canvas, &font, style.small, x, row, &text, look.faint);
     }
     Rect::new(area.x, area.y + height, area.width, area.height - height)
 }
@@ -807,11 +826,19 @@ impl Wrapped {
         let at = Rect::new(area.x, top, area.width, total);
         canvas.describe(paperpaw_graphics::Role::Text, &self.text, at);
         let metrics = font.line_metrics(size);
+        // Cut at the sides only: an area lower than a line still shows it.
+        let tall = Rect::new(
+            area.x,
+            area.y,
+            area.width,
+            area.height.max(top - area.y + total),
+        );
+        let mut canvas = canvas.clipped(ink_room(tall));
         for (n, shown) in self.lines.iter().enumerate() {
             let y = f32::from(top) + apart * n as f32;
             let baseline = y + (line + metrics.ascent - metrics.descent) / 2.0;
             let x = align.x(area, font.measure(size, shown));
-            font.draw(canvas, size, x, baseline as i32, shown, color);
+            font.draw(&mut canvas, size, x, baseline as i32, shown, color);
         }
         total
     }
