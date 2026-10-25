@@ -5,12 +5,13 @@ use paperpaw_sdk::SettingSpec;
 use paperpaw_sdk::builtin::{groups, settings};
 
 pub(super) static SETTINGS: [SettingSpec; 2] = [
-    // On at first; off where it costs a refresh in grays (see
-    // `smooth_text_default`).
+    // Off unless the panel shows grays itself (see
+    // `smooth_text_default`): on a panel of black and white every page
+    // with it is a refresh of the whole screen in grays.
     SettingSpec::switch(
         settings::SMOOTH_TEXT.static_str(),
         "core.setting.smooth-text",
-        true,
+        false,
         groups::READING_DISPLAY,
     )
     .scoped()
@@ -27,11 +28,13 @@ pub(super) static SETTINGS: [SettingSpec; 2] = [
 ];
 
 /// The default of [`settings::SMOOTH_TEXT`] on a panel of `gray_levels`
-/// grays (`None`: many, or colour), where it is not the declared one:
-/// off where the panel shows black and white alone, which shows smooth
-/// letters only with a slower refresh in grays of its own.
+/// grays (`None`: many, or colour), where it is not the declared one
+/// (off): on where the panel shows grays itself. A panel of black and
+/// white shows smooth letters only with a refresh of the whole screen in
+/// grays at every page, so there it stays off unless the reader chooses
+/// it, and a device whose default was not set stays as quick.
 pub(crate) fn smooth_text_default(gray_levels: Option<u16>) -> Option<&'static str> {
-    (gray_levels == Some(2)).then_some("false")
+    (gray_levels != Some(2)).then_some("true")
 }
 
 #[cfg(test)]
@@ -40,9 +43,9 @@ mod tests {
 
     #[test]
     fn smooth_text_is_off_at_first_only_in_black_and_white() {
-        assert_eq!(smooth_text_default(Some(2)), Some("false"));
-        assert_eq!(smooth_text_default(Some(4)), None);
-        assert_eq!(smooth_text_default(Some(16)), None);
-        assert_eq!(smooth_text_default(None), None);
+        assert_eq!(smooth_text_default(Some(2)), None);
+        assert_eq!(smooth_text_default(Some(4)), Some("true"));
+        assert_eq!(smooth_text_default(Some(16)), Some("true"));
+        assert_eq!(smooth_text_default(None), Some("true"));
     }
 }
