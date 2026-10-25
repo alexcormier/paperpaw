@@ -40,6 +40,9 @@ const OLD_MAGIC: &[u8; 5] = b"QIHP\x01"; // before PPHP
 const HEADER: usize = 24;
 /// Longest word that is hyphenated, in characters.
 const MAX_WORD: usize = 48;
+/// The most characters [`Patterns::with_minimums`] keeps before or after a
+/// hyphen.
+pub const MAX_MINIMUM: usize = 16;
 
 /// Why a pattern table cannot be used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,9 +106,25 @@ impl<'a> Patterns<'a> {
         })
     }
 
-    /// Minimum characters before and after a hyphen.
+    /// Minimum characters before and after a hyphen: those of the table,
+    /// or those given to [`with_minimums`](Self::with_minimums).
     pub fn minimums(&self) -> (usize, usize) {
         (self.left_min, self.right_min)
+    }
+
+    /// These patterns with other minimums, e.g. a reader's: the fewest
+    /// characters to keep before (`left`) and after (`right`) a hyphen.
+    /// 0 keeps the table's own. A value is at most [`MAX_MINIMUM`]; a word
+    /// that cannot keep both is left whole.
+    #[must_use]
+    pub fn with_minimums(mut self, left: usize, right: usize) -> Self {
+        if left > 0 {
+            self.left_min = left.min(MAX_MINIMUM);
+        }
+        if right > 0 {
+            self.right_min = right.min(MAX_MINIMUM);
+        }
+        self
     }
 
     fn entries(&self) -> usize {
@@ -327,6 +346,34 @@ mod tests {
         let table = compile("1ü ä1", "", 1, 1);
         let patterns = Patterns::new(&table).unwrap();
         assert_eq!(hyphenated(&patterns, "Mädchenbüro"), "Mä-dchenb-üro");
+    }
+
+    #[test]
+    fn minimums_can_be_given_and_0_keeps_the_tables() {
+        let table = compile("1b", "", 2, 2);
+        let table = Patterns::new(&table).unwrap();
+        assert_eq!(table.minimums(), (2, 2));
+        // The table's own: no break fits.
+        assert_eq!(hyphenated(&table, "abab"), "abab");
+        assert_eq!(hyphenated(&table.with_minimums(0, 0), "abab"), "abab");
+        // Both given.
+        let both = table.with_minimums(1, 1);
+        assert_eq!(both.minimums(), (1, 1));
+        assert_eq!(hyphenated(&both, "abab"), "a-ba-b");
+        // One given, the other the table's.
+        assert_eq!(hyphenated(&table.with_minimums(1, 0), "abab"), "a-bab");
+        assert_eq!(hyphenated(&table.with_minimums(0, 1), "abab"), "aba-b");
+        // More than a word can keep: it stays whole, whatever the number.
+        for huge in [3, 16, 1000, usize::MAX] {
+            let wide = table.with_minimums(huge, huge);
+            assert!(wide.minimums().0 <= MAX_MINIMUM);
+            assert_eq!(hyphenated(&wide, "abab"), "abab");
+        }
+        // Exceptions keep the given minimums too.
+        let table = compile("", "ab-ab", 1, 1);
+        let table = Patterns::new(&table).unwrap();
+        assert_eq!(hyphenated(&table, "abab"), "ab-ab");
+        assert_eq!(hyphenated(&table.with_minimums(3, 0), "abab"), "abab");
     }
 
     #[test]
