@@ -233,6 +233,105 @@ fn items_and_lines_are_found_by_their_ids() {
     assert_eq!(drawn_outside(&mut frame, status.area), None);
 }
 
+/// Twice the vertical middle of what is drawn in `area` (twice, so that a
+/// middle between two pixels is said exactly), counting the pixels
+/// nearer the ink (black) than the paper ([`PAPER`]), as a panel of black
+/// and white shows them.
+fn twice_ink_middle(frame: &paperpaw_graphics::Framebuffer, area: Rect) -> Option<i32> {
+    let view = frame.view();
+    let ink = PAPER.r / 2;
+    let inked = |y: u16| (area.x..area.x + area.width).any(|x| view.pixel(x, y).r < ink);
+    let rows: Vec<u16> = (area.y..area.y + area.height)
+        .filter(|y| inked(*y))
+        .collect();
+    Some(i32::from(*rows.first()?) + i32::from(*rows.last()?) + 1)
+}
+
+/// Every item of a status line stands on one line: the middle of its ink
+/// (the time's and the page's figures, the battery, its percentage, an
+/// icon, a bar) is the middle of the figures, which is the middle of the
+/// band, top and bottom alike, at every status size; to the pixel, or
+/// half a pixel off where an odd height leaves no other way.
+#[test]
+fn every_item_stands_on_the_line_s_middle() {
+    let mut h = harness();
+    h.status_items.add(StatusItemSpec::new(
+        Id::new_static("t.progress"),
+        "t.progress.title",
+        Box::new(|_, _| Some(StatusValue::Bar { permille: 400 })),
+    ));
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    // Figures alone (a slash or a percent sign reaches past them).
+    let context = Params::new()
+        .with("page", "0123456789")
+        .with("level", "80")
+        .with("chapter", "10:40");
+    // The status sizes of 5 to 16 pt on the X4s (220 dpi) and the Boox
+    // (300 dpi), in bands as high as the reader gives them.
+    let sizes = [13.0f32, 15.3, 18.3, 21.4, 25.0, 29.2, 33.3, 44.0];
+    for size in sizes {
+        let height = (size * 2.1 + 0.5) as u16;
+        let area = Rect::new(10, 20, 460, height);
+        let mut middles = Vec::new();
+        for item in [PAGE, CHAPTER, LEVEL, ICON, "t.progress"] {
+            let line = StatusLine::new(area, [item, "", ""], size, Color::BLACK);
+            let mut frame = frame(480, 200);
+            line.draw(&mut frame.canvas(), &env, &font, &context);
+            let middle = |part: Rect| {
+                twice_ink_middle(&frame, part)
+                    .unwrap_or_else(|| panic!("{item} drew nothing at {size}"))
+            };
+            if item == LEVEL {
+                // The battery (its width, from the left) and its percentage
+                // beside it, apart.
+                let battery = (size * 1.3) as u16;
+                middles.push((
+                    "the battery",
+                    middle(Rect::new(area.x, area.y, battery, area.height)),
+                ));
+                let rest = Rect::new(
+                    area.x + battery + 1,
+                    area.y,
+                    area.width - battery - 1,
+                    area.height,
+                );
+                middles.push(("its percentage", middle(rest)));
+            } else {
+                middles.push((item, middle(area)));
+            }
+        }
+        // The figures' middle: in the band's, or half a pixel above it
+        // where an odd pixel is left.
+        let band = 2 * i32::from(area.y) + i32::from(area.height);
+        let (top, bottom) = font.ink(size, "0123456789").unwrap();
+        let room = i32::from(area.height) - (bottom - top);
+        let figures = 2 * (i32::from(area.y) + room.div_euclid(2) - top) + top + bottom;
+        assert!(
+            (0..=1).contains(&(band - figures)),
+            "at {size} px the figures stand at {} px, the band's middle is {} px",
+            figures as f32 / 2.0,
+            band as f32 / 2.0
+        );
+        for (item, middle) in &middles {
+            // To the pixel, or half a pixel where heights differ odd and
+            // even; a pixel for texts of other glyphs (a colon, the percent
+            // sign, which is taller than the figures).
+            let most = if [CHAPTER, "its percentage"].contains(item) {
+                2
+            } else {
+                1
+            };
+            assert!(
+                (middle - figures).abs() <= most,
+                "at {size} px {item} stands at {} px, the figures at {} px: {middles:?}",
+                *middle as f32 / 2.0,
+                figures as f32 / 2.0
+            );
+        }
+    }
+}
+
 /// In a line too narrow for its items (a widget of one cell), what does
 /// not fit whole is left out rather than drawn past the area: the battery
 /// keeps its gauge without the percentage where only that fits.

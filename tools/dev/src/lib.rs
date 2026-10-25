@@ -40,6 +40,7 @@ pub mod package;
 pub mod perf;
 pub mod ppn;
 pub mod probe;
+pub mod publish;
 pub mod reach;
 pub mod report;
 pub mod session;

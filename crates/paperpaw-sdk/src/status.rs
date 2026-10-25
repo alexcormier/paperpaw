@@ -654,14 +654,11 @@ impl<'a> StatusLine<'a> {
         font: &FontHandle<'_>,
         context: &Params,
     ) {
-        let (area, size) = (self.area, self.size);
-        let metrics = font.line_metrics(size);
-        let baseline = i32::from(area.y)
-            + ((f32::from(area.height) + metrics.ascent - metrics.descent) / 2.0) as i32;
+        let middle = Middle::of(font, self.area, self.size);
         // Nothing past the line's area, whatever its items.
-        let mut canvas = canvas.clipped(area);
+        let mut canvas = canvas.clipped(self.area);
         for laid in self.layout(env, font, context) {
-            draw_value(&mut canvas, env, font, self, &laid, baseline);
+            draw_value(&mut canvas, env, font, self, &laid, middle);
         }
     }
 
@@ -919,28 +916,73 @@ fn place<'a>(
     }
 }
 
-/// Draws an item where the line placed it.
+/// The one line a status line's items are centred on: the middle of its
+/// figures' ink (the digits of the time, the page, the percentage), in
+/// the middle of the line's band, top and bottom alike. Text stands on
+/// `baseline`; shapes and icons are centred on `twice` / 2 (twice the y,
+/// so that a centre between two pixels is said exactly).
+#[derive(Debug, Clone, Copy)]
+struct Middle {
+    baseline: i32,
+    twice: i32,
+    /// The figures' height, in pixels.
+    figures: i32,
+}
+
+/// What a status line's figures are measured by.
+const FIGURES: &str = "0123456789";
+
+impl Middle {
+    fn of(font: &FontHandle<'_>, area: Rect, size: f32) -> Self {
+        let (top, bottom) = font.ink(size, FIGURES).unwrap_or_else(|| {
+            let metrics = font.line_metrics(size);
+            (-(metrics.ascent as i32), -(metrics.descent as i32))
+        });
+        let room = i32::from(area.height) - (bottom - top);
+        // An odd pixel goes below, where the eye expects it.
+        let baseline = i32::from(area.y) + room.div_euclid(2) - top;
+        Middle {
+            baseline,
+            twice: 2 * baseline + top + bottom,
+            figures: bottom - top,
+        }
+    }
+
+    /// `height` made as long as it can be centred on the line to the
+    /// pixel: as odd or as even as the figures' height (a pixel less
+    /// where it is not), and the top of a shape that tall on it.
+    fn fit(&self, height: i32) -> (i32, i32) {
+        let height = if (height - self.figures) % 2 == 0 {
+            height
+        } else {
+            height - 1
+        }
+        .max(1);
+        (height, (self.twice - height).div_euclid(2))
+    }
+}
+
+/// Draws an item where the line placed it, on the line's middle.
 fn draw_value(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
     line: &StatusLine<'_>,
     laid: &Laid<'_>,
-    baseline: i32,
+    middle: Middle,
 ) {
-    let (area, size, color) = (line.area, line.size, line.color);
+    let (size, color) = (line.size, line.color);
     let metrics = font.line_metrics(size);
-    let x = laid.x;
+    let (x, baseline) = (laid.x, middle.baseline);
     match &laid.value {
         StatusValue::Text(text) => {
             font.draw(canvas, size, x, baseline, text, color);
         }
         StatusValue::Icon(name) => {
-            crate::ui::draw_icon(canvas, env, name, size, x, area, color);
+            crate::ui::draw_icon_centred(canvas, env, name, size, x, middle.twice, color);
         }
         StatusValue::Level { percent, charging } => {
-            let height = (metrics.ascent * 0.75) as i32;
-            let top = baseline - height;
+            let (height, top) = middle.fit((metrics.ascent * 0.75) as i32);
             let battery = Rect::new(
                 x as u16,
                 top.max(0) as u16,
@@ -954,19 +996,18 @@ fn draw_value(
             }
         }
         StatusValue::Bar { permille } => {
-            // As thick as the line of the book's progress bar, on the
-            // middle of the text's capitals.
-            let thickness = (size * 0.3).max(3.0) as u32;
+            // As thick as the line of the book's progress bar.
+            let (thickness, top) = middle.fit((size * 0.3).max(3.0) as i32);
+            let thickness = thickness as u32;
             let stroke = (size / 12.0).max(1.0) as u32;
-            let middle = baseline - (metrics.ascent * 0.35) as i32;
-            let top = middle - thickness as i32 / 2;
             let width = bar_width(size);
             canvas.stroke_rect(x as i32, top, width as u32, thickness, stroke, color);
             let filled = width * f32::from((*permille).min(1000)) / 1000.0;
             canvas.fill_rect(x as i32, top, filled as u32, thickness, color);
         }
         StatusValue::Labelled { icon, text } => {
-            let icon_width = crate::ui::draw_icon(canvas, env, icon, size, x, area, color);
+            let icon_width =
+                crate::ui::draw_icon_centred(canvas, env, icon, size, x, middle.twice, color);
             let at = x + icon_width + label_gap(size);
             font.draw(canvas, size, at, baseline, text, color);
         }
@@ -988,7 +1029,12 @@ fn shrink(widths: &[f32], texts: &[bool], gap: f32, room: f32) -> Option<(usize,
     Some((longest, (widths[longest] - (total - room)).max(0.0)))
 }
 
-/// A battery outline filled to `percent`; a plus when charging.
+/// A battery filled to `percent`, in the style of the UI's shapes: a rounded
+/// body, a small rounded nub, the level as a rounded bar inside with a
+/// gap as wide as the line all round, and a bolt when charging, in ink
+/// with a rim of paper, so that it reads on the level, beside it
+/// and across its edge alike. Crisp at every size: whole pixels only,
+/// nothing blended.
 fn draw_battery(
     canvas: &mut Canvas<'_>,
     area: Rect,
@@ -997,39 +1043,90 @@ fn draw_battery(
     charging: bool,
     color: Color,
 ) {
-    let (x, y, height) = (i32::from(area.x), i32::from(area.y), i32::from(area.height));
+    let (x, y, height) = (i32::from(area.x), i32::from(area.y), u32::from(area.height));
     let line = ((size / 10.0) as u32).max(1);
-    let nub = ((size / 8.0) as i32).max(2);
-    let width = i32::from(area.width) - nub;
-    canvas.stroke_rect(x, y, width as u32, height as u32, line, color);
-    canvas.fill_rect(
-        x + width,
-        y + height / 4,
-        nub as u32,
-        (height / 2) as u32,
-        color,
-    );
-    let inner = width - 2 * (line as i32 + 1);
-    let fill = inner * i32::from(percent.min(100)) / 100;
-    let inset = line as i32 + 1;
-    canvas.fill_rect(
-        x + inset,
-        y + inset,
-        fill.max(0) as u32,
-        (height - 2 * inset).max(0) as u32,
-        color,
-    );
-    if charging {
-        // A plus in the middle of the battery, white on its fill when it
-        // is more than half full.
-        let s = (height / 2).max(3);
-        let cx = x + width / 2;
-        let cy = y + height / 2;
-        let bar = (line as i32).max(1);
-        let ink = if percent > 50 { Color::WHITE } else { color };
-        canvas.fill_rect(cx - s / 2, cy - bar / 2, s as u32, bar as u32, ink);
-        canvas.fill_rect(cx - bar / 2, cy - s / 2, bar as u32, s as u32, ink);
+    let nub = ((size / 8.0) as u32).max(2);
+    let width = u32::from(area.width).saturating_sub(nub);
+    let radius = (height / 4).max(1);
+    canvas.stroke_round_rect(x, y, width, height, line, radius, color);
+    // The nub, half as tall as the body and centred on it to the pixel,
+    // rounded on its outer side (its inner side lies on the body's line).
+    let mut nub_height = height / 2;
+    if (height - nub_height) % 2 == 1 {
+        nub_height += 1;
     }
+    let nub_radius = line.min(nub_height / 2).max(1);
+    canvas.fill_round_rect(
+        x + width as i32 - nub_radius as i32,
+        y + ((height - nub_height) / 2) as i32,
+        nub + nub_radius,
+        nub_height,
+        nub_radius,
+        color,
+    );
+    // The level: a bar inside, as far from the line as the line is wide.
+    let inset = 2 * line;
+    let bar_height = height.saturating_sub(2 * inset);
+    let full = width.saturating_sub(2 * inset);
+    let fill = full * u32::from(percent.min(100)) / 100;
+    let bar_radius = radius.saturating_sub(inset).max(1).min(bar_height / 2);
+    let (bar_x, bar_y) = (x + inset as i32, y + inset as i32);
+    if fill > 0 && bar_height > 0 {
+        canvas.fill_round_rect(bar_x, bar_y, fill, bar_height, bar_radius, color);
+    }
+    if !charging {
+        return;
+    }
+    // The bolt in the middle of the inside: in ink, with a rim of paper
+    // a pixel wide inside the body.
+    let mark_height = height.saturating_sub(2 * line + 2).max(3);
+    let mark_width = (mark_height * 2 / 3).max(4);
+    let left = x + (width as i32 - mark_width as i32) / 2;
+    let top = y + (height as i32 - mark_height as i32) / 2;
+    let in_mark = |column: i32, row: i32| {
+        if column < 0 || row < 0 || column >= mark_width as i32 || row >= mark_height as i32 {
+            return false;
+        }
+        in_bolt(column as u32, row as u32, mark_width, mark_height, line + 1)
+    };
+    let (inside_left, inside_right) = (x + line as i32, x + (width - line) as i32);
+    let (inside_top, inside_bottom) = (y + line as i32, y + (height - line) as i32);
+    for row in -1..=mark_height as i32 {
+        for column in -1..=mark_width as i32 {
+            let (px, py) = (left + column, top + row);
+            let ink = if in_mark(column, row) {
+                color
+            } else if (-1..=1).any(|dy| (-1..=1).any(|dx| in_mark(column + dx, row + dy))) {
+                Color::WHITE
+            } else {
+                continue;
+            };
+            if px >= inside_left && px < inside_right && py >= inside_top && py < inside_bottom {
+                canvas.fill_rect(px, py, 1, 1, ink);
+            }
+        }
+    }
+}
+
+/// Whether the pixel at `column` and `row` of a box `width` by `height`
+/// is a lightning bolt's, drawn as pixels are at small sizes: a stroke
+/// `thickness` wide from the top right down to the middle's left, a bar
+/// across the middle, and a stroke from the middle's right down to the
+/// bottom left.
+fn in_bolt(column: u32, row: u32, width: u32, height: u32, thickness: u32) -> bool {
+    let thickness = thickness.min(width / 2).max(1);
+    let middle = height / 2;
+    let run = width - thickness;
+    let left = if row < middle {
+        // Rounded to the nearest pixel, as the steps fall.
+        (run * (middle - row) + middle / 2) / middle.max(1)
+    } else if row == middle {
+        return column < width;
+    } else {
+        let rest = height - 1 - middle;
+        (run * (height - 1 - row) + rest / 2) / rest.max(1)
+    };
+    column >= left && column < left + thickness
 }
 
 #[cfg(test)]

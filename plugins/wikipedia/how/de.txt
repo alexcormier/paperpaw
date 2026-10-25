@@ -3,3 +3,5 @@ Wikipedia schlägt Wörter online nach, neben den Wörterbüchern. Schlägst du 
 Öffne den Eintrag, um ihn auf einem eigenen Bildschirm zu lesen. Die Seitentasten oder Tippen scrollen ihn, die Auswahltaste oder ein Tippen am Ende schließt ihn.
 
 Dafür braucht es ein Netz. Gibt es keinen Artikel, sagt es das.
+
+Die Zusammenfassungen kommen aus Wikipedia unter der Lizenz Creative Commons Namensnennung, Weitergabe unter gleichen Bedingungen 4.0 (CC BY-SA 4.0); jede nennt ihren Artikel darunter.

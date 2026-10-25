@@ -59,6 +59,16 @@ change the plugin SDK.
   `settings::HYPHEN_MIN_LEFT`, `HYPHEN_MIN_RIGHT`,
   `PageType::hyphen_minimums` and `patterns`,
   `hyphen::Patterns::with_minimums`.
+- The notices of everything PaperPaw ships: the crates of the firmware
+  and of the apps, each under its licence with its copyright lines and
+  each licence's text once, and Mbed TLS, ESP-IDF's radio libraries and
+  bootloader, the FreeInk and OpenX4 display code and Papyrix. Made from
+  the lockfiles by `tools/licences/build.py` into NOTICE and About
+  PaperPaw, Licences (packed, written out to read part by part); CI
+  fails where a crate that ships is missing. The web, emulator,
+  handbook and core library archives carry LICENSE and NOTICE.
+- Weather names Open-Meteo, Wikipedia names each article below its
+  summary, with their licences.
 - The emulator starts online with `--wifi online` (also given before
   `--stdio`, for the devices it starts; or `"wifi": "online"` in
   `start`): the X4s on USB, their radio on and in
@@ -70,6 +80,13 @@ change the plugin SDK.
   "Community, unreviewed". `tools/dev/templates` has the release
   workflow that zips the folder, builds and signs a code plugin and
   makes the release; the handbook and the plugin skill explain it.
+- `paperpaw-dev check-publish` (and `paperpaw-sign check-publish`)
+  checks a plugin's repository and its release files by the plugin
+  store's rules, the site's own (`tools/publish/store-rules.json`, served
+  by paperpaw.org too), and says what to change; the release workflow
+  runs it before it builds and on the files it made, and releases
+  nothing where it fails. `paperpaw-dev new --github <id>` makes a
+  repository that passes it, the workflow included.
 - Community plugins: the store's new setting *Community plugins*
   (Settings, System, off at first) also lists plugins that their authors
   published on GitHub, which nobody reviewed. They are marked
@@ -90,6 +107,19 @@ change the plugin SDK.
 
 ### Changed
 
+- Keyboard size works on readers with buttons alone too: Large splits
+  the rows into short ones (few presses along each, as before and the
+  X4s' default), Medium splits the longest, Small keeps them whole as on
+  touch screens (a lower keyboard, more presses).
+- The on-screen keyboard: on readers with buttons alone (the X4s, the X3)
+  the focus starts on *Phone*, where the text can be typed on a phone
+  instead of a letter at a time; on the X4 Pro the keys are large by
+  default (a size chosen before stays).
+- On the Xteink readers the interface font, drawn from bitmap packs made
+  from Source Sans 3, is PaperPaw Sans: its licence reserves the name
+  for the unchanged font. A reading or status font chosen as Source Sans
+  3 is kept. The unchanged font keeps its name where it is drawn as it
+  is.
 - A code plugin's key is trusted from its first install: an update or a
   new install after a removal signed by another key is refused with a
   short warning, from any library; there is no *Install anyway* any
@@ -147,6 +177,15 @@ change the plugin SDK.
 
 ### Fixed
 
+- Status lines stand every item on one line: the battery, icons and bars
+  centred on the figures of the time, the page and the percentage, and
+  those in the middle of the line, to the pixel. The battery stood a
+  pixel higher than its percentage.
+- Customise menus names the menus of the font choosers (their way to
+  more fonts) as the settings are named, e.g. *Status lines › Font*,
+  instead of showing `core.status-font` and `core.reading-font`. A test
+  walks the menu editor, every settings page and chooser and every
+  menu in each language shipped and fails on an id shown as a name.
 - Test builds for the X4 Pro and the X4 Classic (with remote control
   over USB) took no updates over the air ("OTA: no partitions for
   updates"): their image's two data segments hid which half of the

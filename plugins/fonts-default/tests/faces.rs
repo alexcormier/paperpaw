@@ -15,7 +15,7 @@ use std::path::Path;
 
 use paperpaw_plugin_fonts_default::{
     DefaultFonts, ICONS, LITERATA, LITERATA_BOLD, LITERATA_BOLD_ITALIC, LITERATA_ITALIC, PLUGIN,
-    SOURCE_SANS,
+    SOURCE_SANS, UI_FAMILY,
 };
 #[cfg(any(feature = "outline", feature = "packs"))]
 use paperpaw_sdk::Font;
@@ -73,7 +73,7 @@ fn every_role_is_bound_to_a_face_of_the_right_style() {
         (&LITERATA_BOLD, Some("Literata"), true, false),
         (&LITERATA_ITALIC, Some("Literata"), false, true),
         (&LITERATA_BOLD_ITALIC, Some("Literata"), true, true),
-        (&SOURCE_SANS, Some("Source Sans 3"), false, false),
+        (&SOURCE_SANS, Some(UI_FAMILY), false, false),
         // Never offered for text.
         (&ICONS, None, false, false),
     ] {

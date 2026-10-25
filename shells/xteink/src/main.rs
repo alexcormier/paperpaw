@@ -656,7 +656,11 @@ fn kernel(
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default(&settings::FLASH_SCREENS, false)
         .setting_default(&settings::UI_SIZE, 9)
-        .setting_default(&settings::FONT_SIZE, 9);
+        .setting_default(&settings::FONT_SIZE, 9)
+        // Large keys, unless the reader chose another size: tapped with a
+        // finger on the X4 Pro's 4.3" screen, chosen with the buttons in
+        // short rows, few presses along each, on the others.
+        .setting_default_text("keyboard.size", "keyboard.size.large");
     // A small screen: calm status lines, the time and the page while
     // reading (and the mark of reading aloud while it reads), the time
     // and the battery elsewhere. Every item stays to be chosen.

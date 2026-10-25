@@ -2099,11 +2099,28 @@ The release's tag is `v` and the version of `plugin.ini`. Its assets are
 pre-release. The source of a code plugin is `[source]` in
 `store/store.ini`, or else the repository at the release's tag.
 
+Start such a repository with `paperpaw-dev new --github <id>` (`--code`
+for a plugin with code): it lays out the plugin's folder, `store.ini`
+with a valid group, the release workflow and a README. Before every tag,
+`paperpaw-dev check-publish` (or the smaller `paperpaw-sign
+check-publish .`) checks the repository by the rules the site checks by,
+`tools/publish/store-rules.json`, the same file the site serves at
+`/api/v1/store-rules.json`, and says what to change.
+
 [`paperpaw-release.yml`](../tools/dev/templates/README.md#publish-by-tagging)
 in `tools/dev/templates/.github/workflows` does it all on pushing the
-tag: it checks the tag against `plugin.ini`, zips the folder, builds and
-signs a code plugin with the key in the repository's secret
-`PAPERPAW_PLUGIN_KEY`, and creates the release.
+tag: it checks the tag against `plugin.ini`, runs `check-publish`, zips
+the folder, builds and signs a code plugin with the key in the
+repository's secret `PAPERPAW_PLUGIN_KEY`, checks the files it made, and
+creates the release only where every check passed.
+
+The site refuses most often: a group that is none of the twelve, more
+than five tags, a screenshot without its line in `[screenshots]`, a
+summary longer than one sentence, files in the plugin's folder that are
+no plugin's (a README or LICENSE where `PLUGIN_DIR` is the repository's
+top), a tag that is not `v` + the version, a build not signed or signed
+by another key, and for code a missing `Cargo.lock` or the SDK named by
+path. `check-publish` names each with its fix.
 
 Unreviewed means the moderators did not read it; the checks are the same.
 An id belongs to whoever it first appeared with, reviewed or from

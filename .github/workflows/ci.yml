@@ -254,6 +254,21 @@ jobs:
           cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-sdk --target-dir target/statics
           cargo run --release -p paperpaw-sign -- statics \
             target/statics/riscv32imc-unknown-none-elf/release/deps/*.rlib
+      - name: The notices name every crate that ships
+        # NOTICE and the app's licences (plugins/about), from the lockfiles
+        # by tools/licences/build.py: a crate added, removed or updated
+        # without them fails here.
+        run: python3 tools/licences/build.py --check
+      - name: The plugin store's rules are the site's
+        # tools/publish/store-rules.json, which paperpaw-dev and
+        # paperpaw-sign check by, against paperpaw.org's own (where it
+        # serves them).
+        run: |
+          if curl -sSf --max-time 20 https://paperpaw.org/api/v1/store-rules.json -o "$RUNNER_TEMP/store-rules.json"; then
+            cargo run --release -p paperpaw-sign -- store-rules "$RUNNER_TEMP/store-rules.json"
+          else
+            echo "::notice::paperpaw.org serves no store rules (yet): not compared"
+          fi
       - name: The sample and the CI templates name the firmware's compilers
         run: |
           x4="$(sed -n 's/^channel = "\(.*\)"/\1/p' shells/xteink/rust-toolchain.toml)"

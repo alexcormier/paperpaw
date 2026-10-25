@@ -23,11 +23,14 @@ const FONTS: &[(&str, &str, f32)] = &[
     ("literata-italic", "fonts/Literata-Italic.ttf", 400.0),
     ("literata-bold-italic", "fonts/Literata-Italic.ttf", 700.0),
     // The UI font's weight is `UI_WEIGHT` in the plugin.
-    ("source-sans", "fonts/SourceSans3.ttf", 430.0),
+    // Source Sans 3 changed (one weight, Latin only, rasterised): a
+    // Modified Version under its licence, which reserves the name
+    // "Source", so the pack is PaperPaw Sans.
+    ("paperpaw-sans", "fonts/SourceSans3.ttf", 430.0),
 ];
 
 /// The pack of the UI font, which gets [`DISPLAY_SIZES`].
-const UI: &str = "source-sans";
+const UI: &str = "paperpaw-sans";
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");

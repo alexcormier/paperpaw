@@ -68,7 +68,7 @@ impl AboutScreen {
     /// Opens what row `index` opens: its text in the reader.
     fn activate(&self, env: &Env<'_>, index: usize, cx: &mut Cx<'_, '_>) {
         let command = match self.rows.get(index) {
-            Some(Row::Licences) => crate::read(env, crate::licences_path(), &crate::licences(env)),
+            Some(Row::Licences) => crate::read_licences(env),
             Some(Row::BuiltIn) => crate::read(env, crate::plugins_path(), &crate::built_in(env)),
             _ => None,
         };

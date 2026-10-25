@@ -5,7 +5,7 @@ extern crate std;
 
 use proptest::prelude::*;
 
-use super::{summary_url, wiki};
+use super::{article_url, summary_url, wiki};
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
@@ -23,4 +23,13 @@ proptest! {
         prop_assert!(!title.contains(['/', '?', '#', ' ', '\n', '\t']), "{}", title);
         prop_assert!(title.is_ascii(), "{}", title);
     }
+}
+
+#[test]
+fn an_article_is_named_by_its_address_below_it() {
+    assert_eq!(article_url("de-DE", "Hund"), "de.wikipedia.org/wiki/Hund");
+    assert_eq!(
+        article_url("en", "White Rabbit"),
+        "en.wikipedia.org/wiki/White_Rabbit"
+    );
 }

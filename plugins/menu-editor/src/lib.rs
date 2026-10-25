@@ -103,18 +103,16 @@ fn is_menu(env: &Env<'_>, id: &str) -> bool {
 
 /// The display name of an entry: an action, a setting or a submenu.
 fn name(env: &Env<'_>, id: &str) -> String {
-    let key = env
-        .actions()
-        .get(id)
-        .map(|a| a.title.as_ref())
-        .or_else(|| {
-            env.settings()
-                .specs()
-                .find(|s| s.id.as_str() == id)
-                .map(|s| s.title.as_ref())
-        })
-        .unwrap_or(id);
-    env.i18n().tr(key).to_string()
+    let key = env.actions().get(id).map(|a| a.title.as_ref()).or_else(|| {
+        env.settings()
+            .specs()
+            .find(|s| s.id.as_str() == id)
+            .map(|s| s.title.as_ref())
+    });
+    match key {
+        Some(key) => env.i18n().tr(key).to_string(),
+        None => name_of_menu(env, id),
+    }
 }
 
 /// The entries of `menu` as shown now.
@@ -319,7 +317,7 @@ impl MenusScreen {
         let mut roots: Vec<(Id, String)> = all
             .iter()
             .filter(|m| !is_sub(m))
-            .map(|m| ((*m).clone(), env.i18n().tr(m.as_str()).to_string()))
+            .map(|m| ((*m).clone(), name_of_menu(env, m.as_str())))
             .collect();
         roots.sort_by_key(|(_, name)| name.to_lowercase());
         let mut menus = Vec::new();
@@ -328,7 +326,7 @@ impl MenusScreen {
         }
         // Menus in a circle are no one's root: listed after the others.
         for menu in all {
-            let name = env.i18n().tr(menu.as_str()).to_string();
+            let name = name_of_menu(env, menu.as_str());
             add_with_submenus(env, menu.clone(), name, &mut menus);
         }
         let mut screen = Self {
@@ -402,13 +400,29 @@ fn add_with_submenus(env: &Env<'_>, menu: Id, name: String, out: &mut Vec<(Id, S
         .collect();
     out.push((menu, name.clone()));
     for sub in subs {
-        let sub_name = alloc::format!("{name} › {}", name_of_menu(env, &sub));
+        let sub_name = alloc::format!("{name} › {}", name_of_menu(env, sub.as_str()));
         add_with_submenus(env, sub, sub_name, out);
     }
 }
 
-fn name_of_menu(env: &Env<'_>, menu: &Id) -> String {
-    env.i18n().tr(menu.as_str()).to_string()
+/// The display name of `menu`: its translation, or, for the menu of a
+/// setting's chooser (its more ways to choose, e.g. fonts to get), the
+/// setting's name after its group's, as it is found in the settings.
+fn name_of_menu(env: &Env<'_>, menu: &str) -> String {
+    if let Some(name) = env.i18n().get(menu) {
+        return name.to_string();
+    }
+    let settings = env.settings();
+    let Some(spec) = settings.spec(menu) else {
+        let key = env.actions().get(menu).map_or(menu, |a| a.title.as_ref());
+        return env.i18n().tr(key).to_string();
+    };
+    let group = settings.group_of(spec);
+    let title = env.i18n().tr(&spec.title);
+    match settings.groups().find(|g| g.id == group) {
+        Some(group) => alloc::format!("{} › {title}", env.i18n().tr(&group.title)),
+        None => title.to_string(),
+    }
 }
 
 impl Screen for MenusScreen {
@@ -517,11 +531,11 @@ impl EntriesScreen {
 
 impl Screen for EntriesScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let title = env.i18n().tr(&self.menu);
+        let title = name_of_menu(env, &self.menu);
         let rows = &self.rows;
         let row = |i: usize| (rows[i].0.as_str(), rows[i].1.as_str());
         self.frame
-            .draw(canvas, env, title, rows.len(), row, self.count);
+            .draw(canvas, env, &title, rows.len(), row, self.count);
     }
 
     /// Entries are moved by dragging their grip.

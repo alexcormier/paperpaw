@@ -243,10 +243,13 @@ const BOOX_GO_7_BODY: Body = Body {
 };
 
 /// The firmware's setting defaults (the X4, X4 Pro and X4 Classic).
-const X4_SETTINGS: [(&str, &str); 10] = [
+const X4_SETTINGS: [(&str, &str); 11] = [
     // A 4.3" screen: smaller text, so menus and pages hold enough.
     ("core.ui-size", "9"),
     ("core.font-size", "9"),
+    // Large keys: tapped with a finger on the X4 Pro, and chosen with the
+    // buttons in short rows, few presses along each, on the others.
+    ("keyboard.size", "keyboard.size.large"),
     // A full refresh takes 3.5 s on its panel: screens change fast.
     ("core.flash-screens", "false"),
     // On USB the radio stays on in a network joined before.

@@ -14,6 +14,12 @@ ignore = [
     # To go when esp-hal moves on.
     { id = "RUSTSEC-2024-0436", reason = "build time only, from esp-hal" },
     { id = "RUSTSEC-2024-0449", reason = "build time only, from esp-config" },
+    # crypto-bigint 0.5 (timing variability), below p256 0.13 that
+    # trouble-host uses for Bluetooth LE Secure Connections pairing: one
+    # ECDH with a fresh key per pairing, which leaves no way to time the
+    # same secret again and again. To go when trouble-host moves to a p256
+    # on crypto-bigint 0.7.
+    { id = "RUSTSEC-2026-0387", reason = "BLE pairing ECDH with fresh keys, via trouble-host's p256 0.13" },
 ]
 
 [licenses]

@@ -25,15 +25,14 @@ use crate::target::DataPlugin;
 pub const MAX_DATA_FILE: u64 = 64 * 1024;
 /// Largest `plugin.ini` the kernel reads.
 pub const MAX_MANIFEST: u64 = 4 * 1024;
-/// The kinds of files the plugin library takes in a package; font packs
-/// (`ppfp`) only in `fonts/`, as the kernel reads them.
-pub const WEBSITE_KINDS: [&str; 9] = [
-    "ini", "css", "ttf", "otf", "ttc", "ppfp", "txt", "md", "png",
-];
-/// The most a package may hold unpacked, at the plugin library.
-pub const WEBSITE_MAX_CONTENT: u64 = 40 * 1024 * 1024;
-/// The longest id the plugin library takes.
-const WEBSITE_MAX_ID: usize = 48;
+/// The plugin library's rules (`tools/publish/store-rules.json`, the
+/// site's own): the kinds of files it takes in a package (font packs,
+/// `ppfp`, only in `fonts/`, as the kernel reads them), the most a package
+/// holds unpacked, the longest id, the groups.
+fn rules() -> &'static paperpaw_publish::Rules {
+    static RULES: std::sync::OnceLock<paperpaw_publish::Rules> = std::sync::OnceLock::new();
+    RULES.get_or_init(paperpaw_publish::Rules::built_in)
+}
 
 /// The keys of `[plugin]` the kernel reads.
 const PLUGIN_KEYS: [&str; 5] = ["id", "name", "description", "version", "formats"];
@@ -167,13 +166,6 @@ pub fn check(plugin: &DataPlugin, report: &mut Report) -> Option<Folder> {
     Some(folder)
 }
 
-/// The store's groups, as the plugin library and the device's store
-/// (`plugins/store/src/catalog.rs`) have them: keep them in step.
-pub const STORE_GROUPS: [&str; 12] = [
-    "reading", "formats", "library", "sync", "home", "look", "notes", "learning", "news", "tools",
-    "games", "system",
-];
-
 /// `store/store.ini`, what only the store reads: its `group` one of the
 /// store's, as the plugin library refuses others.
 fn store_entry(folder: &Folder, add: &mut dyn FnMut(Finding)) {
@@ -183,7 +175,7 @@ fn store_entry(folder: &Folder, add: &mut dyn FnMut(Finding)) {
     for line in lines(folder, "store/store.ini", add) {
         if line.section == "store"
             && line.key == "group"
-            && !STORE_GROUPS.contains(&line.value.trim())
+            && !rules().groups.iter().any(|g| g == line.value.trim())
         {
             add(Finding::error(
                 "package.store-group",
@@ -191,7 +183,7 @@ fn store_entry(folder: &Folder, add: &mut dyn FnMut(Finding)) {
                 format!(
                     "`{}` is no group of the store; the plugin library refuses it. One of: {}.",
                     line.value.trim(),
-                    STORE_GROUPS.join(", ")
+                    rules().groups.join(", ")
                 ),
             ));
         }
@@ -569,12 +561,13 @@ fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Findin
                         "`{id}` is no plugin id: lower-case letters, digits and `-`, at most 40, not starting with `-`."
                     ),
                 ));
-            } else if id.ends_with('-') || id.len() > WEBSITE_MAX_ID {
+            } else if id.ends_with('-') || id.len() > rules().max_id {
                 add(Finding::error(
                     "package.id",
                     place,
                     format!(
-                        "The plugin library takes no id like `{id}`: at most {WEBSITE_MAX_ID} characters, not ending with `-`."
+                        "The plugin library takes no id like `{id}`: at most {} characters, not ending with `-`.",
+                        rules().max_id
                     ),
                 ));
             }
@@ -836,13 +829,13 @@ fn files_and_kinds(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Fin
             ));
         }
         let ext = extension(path);
-        if !WEBSITE_KINDS.contains(&ext.as_str()) {
+        if !rules().package_kinds.contains(&ext) {
             add(Finding::error(
                 "package.website",
                 path,
                 format!(
                     "The plugin library at paperpaw.org takes only {} files in a data plugin.",
-                    WEBSITE_KINDS.join(", ")
+                    rules().package_kinds.join(", ")
                 ),
             ));
         } else if ext == "ppfp" && !path.starts_with("fonts/") {
@@ -890,14 +883,14 @@ fn files_and_kinds(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Fin
         ));
     }
     let total: u64 = folder.files.iter().map(|f| f.size).sum();
-    if total > WEBSITE_MAX_CONTENT {
+    if total > rules().max_content {
         add(Finding::error(
             "package.website",
             "",
             format!(
                 "{} MB unpacked, but the plugin library takes at most {} MB.",
                 total / (1024 * 1024),
-                WEBSITE_MAX_CONTENT / (1024 * 1024)
+                rules().max_content / (1024 * 1024)
             ),
         ));
     }

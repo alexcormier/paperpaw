@@ -80,6 +80,27 @@ jobs:
           echo "ID=$id" >> "$GITHUB_ENV"
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
+      # paperpaw-sign of the release checks the repository by the plugin
+      # store's rules (the site's newest, where it answers) before anything
+      # is built: a release the site would refuse is never made.
+      - name: paperpaw-sign, of the release
+        run: |
+          set -euo pipefail
+          if [ "$CODE" = true ]; then toolchain="+$RUST_X4"; rustup toolchain install "$RUST_X4" --profile minimal; else toolchain=""; fi
+          cargo $toolchain install --locked --git https://github.com/hthoene/paperpaw --tag "v$PAPERPAW" paperpaw-sign
+
+      - name: Check it as the plugin store will
+        run: |
+          set -euo pipefail
+          rules=()
+          if curl -sSf --max-time 20 https://paperpaw.org/api/v1/store-rules.json -o "$RUNNER_TEMP/store-rules.json"; then
+            rules=(--rules "$RUNNER_TEMP/store-rules.json")
+          else
+            echo "the site's rules could not be fetched: checked by paperpaw-sign's own"
+          fi
+          echo "RULES=${rules[*]}" >> "$GITHUB_ENV"
+          paperpaw-sign check-publish . --tag "$GITHUB_REF_NAME" "${rules[@]}"
+
       - name: Zip the plugin's folder
         run: |
           set -euo pipefail
@@ -101,10 +122,6 @@ jobs:
             "$RUNNER_TEMP/espup" install --targets esp32s3 --toolchain-version "$RUST_X4_PRO" \
               --crosstool-toolchain-version "$ESP_GCC"
           fi
-
-      - name: paperpaw-sign, of the release
-        if: env.CODE == 'true'
-        run: cargo "+$RUST_X4" install --locked --git https://github.com/hthoene/paperpaw --tag "v$PAPERPAW" paperpaw-sign
 
       # The X4 Pro's core libraries, built once by the release and signed
       # with PaperPaw's release key, into the esp toolchain (as rustup has
@@ -170,6 +187,14 @@ jobs:
               cp "release/$ID-$VERSION-x4-pro.ppn" "release/$ID-$VERSION-x4-classic.ppn"
             fi
           fi
+
+      # The files as the site will read them: names, chips, interface,
+      # signatures, one key. Nothing is released where this fails.
+      - name: Check the release's files
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086
+          paperpaw-sign check-publish . --release-dir release --tag "$GITHUB_REF_NAME" $RULES
 
       - name: Release
         env:

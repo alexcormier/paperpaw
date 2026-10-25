@@ -9,10 +9,16 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 categories = ["no-std"]
-include = ["src", "how", "i18n", "licences.md", "logo.png"]
+include = ["src", "how", "i18n", "build.rs", "licences-firmware.md", "licences-app.md", "logo.png"]
 
 [dependencies]
 paperpaw-sdk.workspace = true
+# The licences, deflated in parts (build.rs), read one part at a time.
+# The version paperpaw-zip uses, so the firmware has one copy.
+miniz_oxide = { version = "=0.9.1", default-features = false, features = ["with-alloc"] }
+
+[build-dependencies]
+miniz_oxide = { version = "=0.9.1", default-features = false, features = ["with-alloc"] }
 
 [dev-dependencies]
 paperpaw-core.workspace = true

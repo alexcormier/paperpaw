@@ -20,6 +20,8 @@ paperpaw-digest.workspace = true
 paperpaw-fs.workspace = true
 paperpaw-i18n.workspace = true
 paperpaw-native.workspace = true
+# The store's groups, kept in step with the site's rules (a test).
+paperpaw-publish.workspace = true
 paperpaw-platform.workspace = true
 paperpaw-plugin-fonts-browser.workspace = true
 paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }

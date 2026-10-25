@@ -478,6 +478,11 @@ impl Plugin for Weather {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
+        // The data's licence asks for its source to be named.
+        r.contribute(
+            Id::new_static("about.lines"),
+            "Weather data by Open-Meteo.com (https://open-meteo.com), under CC BY 4.0.",
+        )?;
         r.add_setting_group({
             static SPEC: paperpaw_sdk::SettingGroupSpec =
                 paperpaw_sdk::SettingGroupSpec::new(GROUP, "weather.title").order(88);
