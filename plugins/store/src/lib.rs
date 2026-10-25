@@ -242,8 +242,6 @@ fn finish(env: &Env<'_>, done: &Progress, out: &mut Commands) -> bool {
             };
             (key, true)
         }
-        // It waits on its page for the reader's word.
-        Verdict::OtherAuthor { .. } => ("store.other-author.notice", false),
         Verdict::Refused(refusal) => {
             INSTALLER.cancel(env.storage());
             (refusal.key(), false)

@@ -61,8 +61,6 @@ enum Row {
     Understood,
     /// Not now, after the notice or the warning.
     Cancel,
-    /// The update signed by another author: install it anyway.
-    Anyway,
     /// Installed some other way: this store's version in its place.
     UseStore,
     /// Not installed: there is no room for it.
@@ -82,8 +80,6 @@ enum Shown {
     Plugin,
     /// The notice before the first code plugin.
     Notice,
-    /// The warning about an update signed by another author.
-    OtherAuthor,
 }
 
 /// The plugin's files, from its page at the library.
@@ -171,10 +167,6 @@ impl PageScreen {
     fn shown(&self) -> Shown {
         if self.notice {
             Shown::Notice
-        } else if self.own_job().is_some_and(|job| job.done >= job.total) {
-            // All here and checked, and not installed: it waits for the
-            // reader's word on another author.
-            Shown::OtherAuthor
         } else {
             Shown::Plugin
         }
@@ -205,7 +197,6 @@ impl PageScreen {
         };
         match self.shown() {
             Shown::Notice => return alloc::vec![Row::Understood, Row::Cancel],
-            Shown::OtherAuthor => return alloc::vec![Row::Cancel, Row::Anyway],
             Shown::Plugin => {}
         }
         if self.own_job().is_some() {
@@ -329,7 +320,7 @@ impl PageScreen {
         match &self.details {
             Details::Here(plugin) => {
                 let mut out = paperpaw_sdk::Commands::new();
-                trust::expect(env.storage(), &plugin.entry, plugin.author_key.as_ref());
+                trust::expect(env.storage(), &plugin.entry.id, plugin.author_key.as_ref());
                 if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
                 }
@@ -369,32 +360,7 @@ impl PageScreen {
                 self.install(cx);
             }
             Some(Row::Cancel) => {
-                if self.shown() == Shown::OtherAuthor {
-                    INSTALLER.cancel(env.storage());
-                    self.job = None;
-                    // The next update waiting has its turn.
-                    let mut out = paperpaw_sdk::Commands::new();
-                    queue::next(&env, &mut out);
-                    for command in out {
-                        cx.command(command);
-                    }
-                    self.job = INSTALLER.progress(env.storage());
-                }
                 self.notice = false;
-                self.list.set_focus(0);
-                self.redraw(cx);
-            }
-            Some(Row::Anyway) => {
-                let mut out = paperpaw_sdk::Commands::new();
-                if trust::install_anyway(&env, &mut out).is_none() {
-                    INSTALLER.cancel(env.storage());
-                    out.push(failed(&env, &plugin.name));
-                }
-                queue::next(&env, &mut out);
-                for command in out {
-                    cx.command(command);
-                }
-                self.job = INSTALLER.progress(env.storage());
                 self.list.set_focus(0);
                 self.redraw(cx);
             }
@@ -474,7 +440,6 @@ impl PageScreen {
             Row::Restart => (tr("store.restart"), String::new()),
             Row::Understood => (tr("store.code.understood"), String::new()),
             Row::Cancel => (tr("store.not-now"), String::new()),
-            Row::Anyway => (tr("store.other-author.anyway"), String::new()),
             Row::NoRoom => (
                 tr("store.no-room"),
                 files::size(plugin.size, env.i18n().tr("store.decimal")),
@@ -492,15 +457,10 @@ impl PageScreen {
     }
 
     /// What the page says above its rows: what the plugin does and the
-    /// facts in small print, or the notice, or the warning.
+    /// facts in small print, or the notice.
     fn texts(&self, env: &Env<'_>, plugin: &Entry) -> (String, Vec<(&'static str, String)>) {
-        let name = [("name", Arg::Str(&plugin.name))];
         match self.shown() {
             Shown::Notice => (env.i18n().tr("store.code.notice").to_string(), Vec::new()),
-            Shown::OtherAuthor => (
-                env.i18n().format("store.other-author", &name),
-                alloc::vec![("", env.i18n().tr("store.other-author.help").to_string())],
-            ),
             Shown::Plugin => {
                 let more = match &self.details {
                     Details::Here(details) => Some(&details.more),

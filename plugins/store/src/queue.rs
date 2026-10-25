@@ -251,7 +251,7 @@ pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let _ = env.storage().remove(&fetched);
     match plugin {
         Some(plugin) => {
-            trust::expect(env.storage(), &plugin.entry, plugin.author_key.as_ref());
+            trust::expect(env.storage(), &plugin.entry.id, plugin.author_key.as_ref());
             if !INSTALLER.start(env, &plugin.package, out) {
                 if quiet(env) {
                     note(env, &plugin.entry.name, false);
