@@ -202,6 +202,15 @@ fn run() -> Result<(), String> {
     gui::run(device, dir, recorder, options.cable)
 }
 
+/// `--wifi`'s value: whether the device starts online.
+fn wifi_online(value: &str) -> Result<bool, String> {
+    match value {
+        "online" => Ok(true),
+        "off" => Ok(false),
+        other => Err(format!("--wifi expects online or off, got `{other}`")),
+    }
+}
+
 /// Reads `--config` and appends `--set` overrides as config sections.
 fn user_config(options: &Options) -> Result<Option<String>, String> {
     let mut config = match &options.config {
@@ -320,13 +329,7 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
                     }
                 };
             }
-            "--wifi" => {
-                options.wifi_online = match value("--wifi")?.as_str() {
-                    "online" => true,
-                    "off" => false,
-                    other => return Err(format!("--wifi expects online or off, got `{other}`")),
-                };
-            }
+            "--wifi" => options.wifi_online = wifi_online(&value("--wifi")?)?,
             "--free-space" => {
                 let bytes = value("--free-space")?;
                 device::set_free_space(
