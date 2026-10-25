@@ -756,6 +756,49 @@ fn wanted_the_radio_joins_the_saved_network_and_goes_off_after() {
     assert_eq!(device.told(), [WifiCommand::Off]);
 }
 
+/// The network picked last on the page is joined first after a restart,
+/// though another saved one is stronger (*Join first*: Last picked).
+#[test]
+fn the_network_picked_last_is_joined_first_after_a_restart() {
+    let storage = Shared::default();
+    let mut device = Device::on(TOUCH, storage.clone());
+    device.kernel.set_secret(paperpaw_sdk::wifi::keep("Strong", "pw1"));
+    device.kernel.set_secret(paperpaw_sdk::wifi::keep("Weak", "pw2"));
+    device.open();
+    device.radio_on_with(vec![network("Strong", -45, true), network("Weak", -70, true)]);
+    device.told();
+    device.tap("Weak");
+    assert_eq!(
+        device.told(),
+        [WifiCommand::Join {
+            ssid: "Weak".into(),
+            password: "pw2".into()
+        }]
+    );
+    device.radio(WifiEvent::State(WifiState::Online {
+        ssid: "Weak".into(),
+        address: "10.0.0.2".into(),
+    }));
+
+    // Another start: wanted, both in reach, the one picked joins.
+    let mut device = Device::on(BUTTONS, storage);
+    device.run(FETCH);
+    assert_eq!(device.told(), [WifiCommand::On]);
+    device.radio(WifiEvent::State(WifiState::On));
+    assert_eq!(device.told(), [WifiCommand::Scan]);
+    device.radio(WifiEvent::Scanned(vec![
+        network("Strong", -45, true),
+        network("Weak", -70, true),
+    ]));
+    assert_eq!(
+        device.told(),
+        [WifiCommand::Join {
+            ssid: "Weak".into(),
+            password: "pw2".into()
+        }]
+    );
+}
+
 #[test]
 fn a_saved_network_not_in_reach_is_said_when_wanted() {
     let mut device = Device::new(TOUCH);
