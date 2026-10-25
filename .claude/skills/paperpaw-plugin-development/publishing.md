@@ -753,11 +753,13 @@ check it with two folders (section 5b), and publish a new version.
 
 ## 9. A lost or leaked key
 
-The form takes no other key than the earlier versions' (check `key`).
+The store takes no other key than the earlier versions' without a
+moderator's transfer of the id (check `key`, `claim`).
 
 - **Lost**: write to the site's contact address (`/contact`). A
-  moderator can change the key in the open, recorded in the version log;
-  readers who have the plugin are warned at the update.
+  moderator can transfer the id to the new key in the open, logged;
+  readers who ever had the plugin refuse every version signed by the new
+  key and keep the one they have. For them a lost key means a new id.
 - **Leaked** (shown in a chat, committed, in a log): the same, at once;
   remove the old secret from the CI (`PAPERPAW_PLUGIN_KEY`) and from the
   repository's history, and tell the user plainly.
@@ -767,8 +769,8 @@ The form takes no other key than the earlier versions' (check `key`).
 The plugin's page on the site and in each reader's store: whether it
 has code (and, before a reader installs the first code plugin, what
 that means), who made it, its licence and source, its badge, and for
-code the PaperPaw it is built for. A reader whose update is signed by
-another key is warned and decides. `/log` and
+code the PaperPaw it is built for. A reader refuses an update or a new
+install signed by another key than the one it first installed. `/log` and
 `/api/v1/log.json?after=<n>` list every version with the SHA-256 of its
 package and builds, its key and its source's revision.
 
