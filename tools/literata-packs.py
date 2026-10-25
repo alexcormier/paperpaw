@@ -8,8 +8,10 @@ Usage:
     python tools/literata-packs.py OUT_DIR
 
 Writes OUT_DIR/literata-large and OUT_DIR/literata-bold-italic; copy a
-folder into the device's plugins folder (plugins/ on the X4's card), or
-offer it in the font library.
+folder into the device's plugins folder (plugins/ on the X4's card). The
+release builds them so (tools/plugin-files/data.py) and offers them in
+the store; their versions, names and descriptions are in
+tools/plugin-files/data.toml.
 """
 
 import shutil
@@ -18,6 +20,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools" / "plugin-files"))
+import data  # noqa: E402
 FONTGEN = ROOT / "target/release/paperpaw-fontgen"
 FONTS = ROOT / "plugins/fonts-default/fonts"
 
@@ -39,17 +43,18 @@ def pack(file, weight, sizes, out):
                     "--chars", "latin,ligatures", "--axis", f"wght={weight}"], check=True)
 
 
-def plugin(out, id, name, description, sections):
+def plugin(out, id, sections):
+    """Its plugin.ini with `sections`, its translations and the licence,
+    as data.toml names and describes it."""
+    fields = data.plugins()[id]
     (out / "plugin.ini").write_text(
-        "[plugin]\n"
-        f"id = {id}\n"
-        f"name = {name}\n"
-        f"description = {description}\n"
-        "version = 1.0.0\n"
-        "formats = 3\n"
-        f"\n{sections}",
+        data.plugin_ini(id, fields) + "formats = 3\n" + f"\n{sections}",
         encoding="utf-8",
+        newline="\n",
     )
+    for path, text in data.catalogs(id, fields):
+        (out / path).parent.mkdir(parents=True, exist_ok=True)
+        (out / path).write_text(text, encoding="utf-8", newline="\n")
     shutil.copy(FONTS / "Literata-OFL.txt", out / "fonts" / "Literata-OFL.txt")
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())
     print(f"{out}: {size / 1024:.0f} KiB")
@@ -68,16 +73,13 @@ def main():
     for name, file, weight, _ in FACES:
         pack(file, weight, LARGE, out / "fonts" / f"{name}-large.ppfp")
     extends = "\n".join(f"{name}-large.ppfp = {face}" for name, _, _, face in FACES)
-    plugin(out, "literata-large", "Literata, larger sizes",
-           "Book text in Literata larger than the firmware's sizes.",
-           f"[extends]\n{extends}\n")
+    plugin(out, "literata-large", f"[extends]\n{extends}\n")
 
     out = base / "literata-bold-italic"
     shutil.rmtree(out, ignore_errors=True)
     (out / "fonts").mkdir(parents=True)
     pack("Literata-Italic.ttf", 700, ALL, out / "fonts" / "literata-bold-italic.ppfp")
-    plugin(out, "literata-bold-italic", "Literata Bold Italic",
-           "Bold italic book text in Literata, where bold stands in for it.",
+    plugin(out, "literata-bold-italic",
            "[family]\nname = Literata\nbold-italic = literata-bold-italic.ppfp\n\n"
            "[fonts]\ncore.font-reading-bold-italic = literata-bold-italic.bold-italic\n")
 

@@ -159,6 +159,11 @@ change the plugin SDK.
 
 ### Changed
 
+- Literata's sizes above 32 px and its Bold Italic, which the X4's
+  firmware leaves out, are plugins of the store: the release builds
+  PaperPaw's own data plugins (`tools/plugin-files/data.toml`) and
+  publishes them with the others, versions checked as theirs.
+
 - **Code plugins must be built again for beta.8.** The plugin interface
   is now 4 (`Block`, `TextStyle`, `Typesetter`, `layout::Style`,
   `FontHandle` and `SettingGroupSpec` changed, for a book's formatting,
