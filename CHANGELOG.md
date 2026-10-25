@@ -76,6 +76,14 @@ change the plugin SDK.
   so. PaperPaw's own store plugins come as updates. `Work`'s `network`
   and `charging` became `needs` (`Needs::NETWORK | Needs::CHARGING`).
 
+### Fixed
+
+- Updates over the air on the X4 Pro and the X4 Classic: the firmware
+  could not tell which half of the flash it runs from and took no
+  updates at all ("OTA: no partitions for updates"). **X4 Pro and X4
+  Classic readers on 0.5.0-beta.6 or earlier need the web flasher once
+  to get 0.5.0-beta.7; later updates come over the air.**
+
 ## [0.5.0-beta.6] - 2026-10-25
 
 ### Added
