@@ -4,9 +4,9 @@
 # plugin from (a repository with the topic `paperpaw-plugin`; the site
 # lists it as "Community, unreviewed"). The release holds exactly:
 #
-#   my-plugin-0.5.0-beta.6.zip            the plugin's folder (always)
-#   my-plugin-0.5.0-beta.6-x4.ppn         a code plugin's signed builds,
-#   my-plugin-0.5.0-beta.6-x4-pro.ppn     one for each reader chosen below
+#   my-plugin-1.0.0.zip                   the plugin's folder (always)
+#   my-plugin-1.0.0-x4.ppn                a code plugin's signed builds,
+#   my-plugin-1.0.0-x4-pro.ppn            one for each reader chosen below
 #
 # A code plugin is signed with the author's key, kept as the repository's
 # secret PAPERPAW_PLUGIN_KEY (`paperpaw-sign key author.key` makes it
