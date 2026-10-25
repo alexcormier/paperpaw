@@ -153,3 +153,53 @@ fn hyphenating_keeps_the_text() {
         }
     }
 }
+
+/// The word around the byte offset `at`: its letters before and after.
+fn letters_around(text: &str, at: usize) -> (usize, usize) {
+    let start = text[..at]
+        .rfind(|c: char| !c.is_alphabetic())
+        .map_or(0, |i| i + 1);
+    let end = text[at..]
+        .find(|c: char| !c.is_alphabetic())
+        .map_or(text.len(), |i| at + i);
+    (
+        text[start..at].chars().count(),
+        text[at..end].chars().count(),
+    )
+}
+
+/// The minimums a reader sets reach the lines: a break leaves at least
+/// that many letters on the line and on the next, wherever lines are cut,
+/// and the same minimums always give the same lines.
+#[test]
+fn lines_keep_the_minimums_the_reader_set() {
+    let table = Patterns::new(german()).unwrap();
+    let text = "Die Donaudampfschifffahrtsgesellschaft und die Grundstücksverkehrsgenehmigung, \
+                Kraftfahrzeughaftpflichtversicherung, Silbentrennungsalgorithmus.";
+    let lay = |patterns: &Patterns<'_>, width: usize| {
+        let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| patterns.hyphenate(word, out);
+        wrap_lines_hyphenated(text, |_| width as f32, |_, _| 1.0, Some(&hyphenate))
+            .iter()
+            .map(|line| (line.range.clone(), line.hyphen))
+            .collect::<Vec<_>>()
+    };
+    let mut differ = false;
+    for (left, right) in [(1, 1), (0, 0), (3, 3), (5, 2), (2, 5), (4, 0)] {
+        let patterns = table.with_minimums(left, right);
+        let (left, right) = patterns.minimums();
+        for width in 6..40 {
+            let lines = lay(&patterns, width);
+            assert_eq!(lines, lay(&patterns, width), "the same lines every time");
+            for (range, _) in lines.iter().filter(|(_, hyphen)| *hyphen) {
+                let (before, after) = letters_around(text, range.end);
+                assert!(before >= left, "{width}: {before} before, {left} asked");
+                assert!(after >= right, "{width}: {after} after, {right} asked");
+            }
+            differ |= lay(&table.with_minimums(1, 1), width) != lines;
+        }
+    }
+    assert!(
+        differ,
+        "other minimums lay the text out otherwise somewhere"
+    );
+}

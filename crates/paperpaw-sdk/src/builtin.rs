@@ -720,6 +720,11 @@ pub mod settings {
     pub const JUSTIFY: Setting<bool> = Setting::new("core.justify");
     /// Words broken at line ends, in the book's language.
     pub const HYPHENATE: Setting<bool> = Setting::new("core.hyphenate");
+    /// The fewest letters left before a hyphen (1 to 5; 0: the language's
+    /// own, that of its patterns), see `hyphen::Patterns::with_minimums`.
+    pub const HYPHEN_MIN_LEFT: Setting<i64> = Setting::new("core.hyphen-min-left");
+    /// The fewest letters carried after a hyphen (as [`HYPHEN_MIN_LEFT`]).
+    pub const HYPHEN_MIN_RIGHT: Setting<i64> = Setting::new("core.hyphen-min-right");
     /// The first lines of paragraphs indented.
     pub const INDENT: Setting<bool> = Setting::new("core.indent");
     /// Space between paragraphs.

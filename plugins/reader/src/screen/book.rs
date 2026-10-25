@@ -483,10 +483,7 @@ impl Book {
     ) -> Option<R> {
         let t = &self.typography;
         let faces = Faces::new(env, t, self.embedded.as_ref())?;
-        let patterns = t
-            .hyphenation
-            .as_deref()
-            .and_then(|language| env.hyphenation().get(language));
+        let patterns = t.patterns(env);
         let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| {
             if let Some(patterns) = patterns {
                 patterns.hyphenate(word, out);

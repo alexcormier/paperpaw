@@ -1,6 +1,6 @@
-use paperpaw_sdk::SettingSpec;
 use paperpaw_sdk::decorations::{Decoration, LineKind, Tone};
 use paperpaw_sdk::role_settings;
+use paperpaw_sdk::{RegisterError, Registrar, SettingSpec};
 
 pub(super) static HIGHLIGHT: [SettingSpec; 7] = role_settings!(
     "core.highlight",
@@ -25,3 +25,11 @@ pub(super) static ALOUD: [SettingSpec; 7] = role_settings!(
     "core.role.aloud",
     Decoration::NONE.line(LineKind::Solid).thickness(5)
 );
+
+/// The marks' settings, each role's.
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    for role in [&HIGHLIGHT, &LINK, &SEARCH_HIT, &ALOUD] {
+        r.add_settings(role)?;
+    }
+    Ok(())
+}
