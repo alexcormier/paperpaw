@@ -13,7 +13,8 @@
 //! frame kept for the panel ([`sent`]), the clock set over the network
 //! ([`sntp`]), addresses in the device's own network ([`dhcp`]),
 //! updates over the air ([`ota`]), handles of the network stack made
-//! anew ([`generation`]) and Wi-Fi given with the firmware
+//! anew ([`generation`]), waits that never hang ([`bounded`]) and Wi-Fi
+//! given with the firmware
 //! ([`provision`]).
 //!
 //! PaperPaw draws the screen upright, 480 × 800, in bands of rows; the
@@ -27,6 +28,7 @@ extern crate alloc;
 mod bands;
 pub mod battery;
 pub mod bm8563;
+pub mod bounded;
 pub mod bq27220;
 pub mod buttons;
 pub mod card;

@@ -383,6 +383,7 @@ impl Firmware {
         self.settle_frame();
         self.pause_trial();
         let _ = self.kernel.stop(now());
+        self.network.leave();
         esp_hal::system::software_reset();
     }
 
@@ -645,6 +646,8 @@ impl Firmware {
         if self.usb_power.is_high() && self.sleep_on_usb() {
             return;
         }
+        // The power goes, the radio's with it: the network left first.
+        self.network.leave();
         let mut power = input::stop().expect("the power button");
         // The X4 Classic keeps its power on and holds its lines, as its
         // stock firmware sleeps (see its board).
@@ -1257,6 +1260,7 @@ impl Firmware {
                 self.pause_trial();
                 let at = self.kernel_now();
                 let _ = self.kernel.stop(at);
+                self.network.leave();
                 remote::ok();
                 esp_hal::system::software_reset();
             }

@@ -260,6 +260,10 @@ change the plugin SDK.
   network joined before is joined: the first scans after the radio came
   on often miss a weaker network, and one of its access points, weak or
   far, refuses a join now and then.
+- The X4s leave the Wi-Fi network before they start again (after an
+  update, a restart from the settings) and before they sleep. A router
+  that was not told (a FRITZ!Box) refused their joins for a while after,
+  so they joined another network or none.
 
 ## [0.5.0-beta.7] - 2026-10-25
 
