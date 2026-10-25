@@ -99,16 +99,13 @@ pub mod settings {
     use paperpaw_sdk::setting::{Setting, Text};
 
     /// The standard type of book pages, registered by the kernel (each
-    /// book may have its own).
+    /// book may have its own). Smooth text was the reader's own before
+    /// beta.8 (`reader.smooth-text`).
     pub use paperpaw_sdk::builtin::settings::{
         FONT_SIZE, FONT_WEIGHT, FOOTNOTES, FOOTNOTES_JUMP, FOOTNOTES_POPUP, HYPHENATE, INDENT,
         JUSTIFY, LINE_SPACING, MARGIN, MARGIN_ENDS, PARAGRAPH_SPACING, PUBLISHER_STYLES,
-        WORD_SPACING,
+        SMOOTH_TEXT, TEXT_CONTRAST, WORD_SPACING,
     };
-    /// Book pages with smooth letters, their edges in grays, where the
-    /// panel shows black and white but can show grays with a refresh of
-    /// its own (the X4): slower and costing more battery.
-    pub const SMOOTH_TEXT: Setting<bool> = Setting::new("reader.smooth-text");
     /// Reopen the last book at start-up.
     pub const OPEN_LAST: Setting<bool> = Setting::new("reader.open-last");
     /// A tap on the top right corner sets or removes a bookmark.
@@ -209,9 +206,8 @@ pub struct Reader;
 /// eye with sliders.
 mod extras {
     use paperpaw_sdk::SettingExtra;
-    use paperpaw_sdk::builtin::group_sections::{ALOUD, BEHAVIOUR, FONT};
+    use paperpaw_sdk::builtin::group_sections::{ALOUD, BEHAVIOUR};
 
-    pub(crate) static IN_FONT: SettingExtra = SettingExtra::new().section(FONT);
     pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
     pub(crate) static AUTO_TURN: SettingExtra = SettingExtra::new()
         .unit("core.unit.seconds")
@@ -225,17 +221,9 @@ mod extras {
     pub(crate) static IN_ALOUD: SettingExtra = SettingExtra::new().section(ALOUD);
 }
 
-/// The reader's own settings: smooth letters, what it does, and reading
-/// aloud (the type of pages is the kernel's, see `settings`).
-static SETTINGS: [SettingSpec; 9] = [
-    SettingSpec::switch(
-        settings::SMOOTH_TEXT.static_str(),
-        "reader.setting.smooth-text",
-        false,
-        groups::READING,
-    )
-    .with_extra(&extras::IN_FONT)
-    .description("reader.setting.smooth-text.help"),
+/// The reader's own settings: what it does, and reading aloud (the type
+/// of pages is the kernel's, see `settings`).
+static SETTINGS: [SettingSpec; 8] = [
     SettingSpec::switch(
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
@@ -577,7 +565,6 @@ impl Plugin for Reader {
         for item in [actions::SELECT, actions::LINKS, actions::NEXT_STATUS_LINE] {
             r.set_menu_need(item, paperpaw_sdk::MenuNeed::NoTouch)?;
         }
-        r.set_menu_need(settings::SMOOTH_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
         r.set_menu_need(settings::CORNER_BOOKMARK, paperpaw_sdk::MenuNeed::Touch)?;
         for (item, icon) in [
             (actions::TOC, "list"),

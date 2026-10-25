@@ -43,6 +43,18 @@ change the plugin SDK.
   published on GitHub, which nobody reviewed. They are marked
   *Unreviewed*, with the repository they come from; a code plugin's page
   shows the key it is signed with.
+- *Text contrast* (Settings, Reading): book text lighter, normal, darker
+  or darkest, its letters' edges on a contrast curve, finer than *Font
+  weight* and together with it. Normal draws as before; each book may
+  have its own.
+- *Smooth text* works on every screen now: off draws book text in black
+  and white, without gray edges, also where the screen has grays (the
+  Boox), on at first there. On the X4s it stays off at first, and off,
+  pages of text turn without the slower refresh in grays. It is a
+  setting of the kernel now (`core.smooth-text`, was
+  `reader.smooth-text`, taken over), each book may have its own. SDK:
+  `settings::SMOOTH_TEXT`, `settings::TEXT_CONTRAST`, `text::ToneCurve`,
+  `FontHandle::draw_toned`, `Canvas::mono_coverage`.
 
 ### Changed
 

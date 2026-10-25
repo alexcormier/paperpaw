@@ -1910,9 +1910,13 @@ static TYPE: [SettingSpec; 11] = [
     .description("core.setting.paragraph-space.help"),
 ];
 
+/// Smooth text and its contrast, beside the font's weight.
+pub(crate) mod text_look;
+
 fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&READING)?;
-    r.add_settings(&TYPE)
+    r.add_settings(&TYPE)?;
+    r.add_settings(&text_look::SETTINGS)
 }
 
 /// The roles of the marks every reader draws: highlights, links, a

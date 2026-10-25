@@ -952,6 +952,16 @@ impl Kernel {
     /// a theme installed for larger print enlarges it on a device whose
     /// own default is small too.
     pub(crate) fn apply_defaults(&mut self, device: &[(String, String)]) {
+        // The kernel's own for this panel first, the device's after.
+        let format = self.shared.device.display.format;
+        if let Some(value) =
+            crate::core_plugin::text_look::smooth_text_default(format.gray_levels())
+        {
+            let id = core_settings::SMOOTH_TEXT.static_str();
+            if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
+                self.warn_runtime(format!("default `{id}`: {error}"));
+            }
+        }
         for (id, value) in device {
             if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
                 self.warn_runtime(format!("device default `{id}`: {error}"));

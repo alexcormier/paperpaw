@@ -13,6 +13,7 @@ use alloc::vec::Vec;
 use crate::builtin::{fonts, settings};
 use crate::document::{Document, DocumentError, Locator};
 use crate::layout::{BookStyles, Face, Page, PageImage, PageLine, Style, Typesetter};
+use crate::text::ToneCurve;
 use crate::{Canvas, Color, Env, FontHandle, FontSet, Id, Point, Rect};
 
 /// Relative sizes of headings 1 to 6.
@@ -455,12 +456,17 @@ fn face_id(env: &Env<'_>, role: &Id) -> String {
 /// The reading fonts by face, for layout and drawing: the faces bound to
 /// the reading roles (a font the user chose for book text is not mixed
 /// with the default bold or italic), the book's own where it uses them,
-/// headings larger, small capitals.
+/// headings larger, small capitals, the letters as smooth and as dark as
+/// the settings say.
 #[derive(Clone, Copy)]
 pub struct ReadingFaces<'a> {
     /// Regular, bold, italic and bold italic.
     fonts: [FontHandle<'a>; 4],
     weight: u8,
+    /// The contrast curve of the letters' edges.
+    tone: ToneCurve,
+    /// Letters black and white, without grays.
+    sharp: bool,
     word_spacing: f32,
     letter_spacing: f32,
     embedded: Option<&'a EmbeddedFonts>,
@@ -497,9 +503,12 @@ impl<'a> ReadingFaces<'a> {
         let bold = face(&fonts::READING_BOLD).unwrap_or(regular);
         let italic = face(&fonts::READING_ITALIC).unwrap_or(regular);
         let bold_italic = face(&fonts::READING_BOLD_ITALIC).unwrap_or(bold);
+        let (tone, sharp) = ink(env);
         Some(Self {
             fonts: [regular, bold, italic, bold_italic],
             weight: page.weight,
+            tone,
+            sharp,
             word_spacing: page.word_spacing,
             letter_spacing: page.letter_spacing,
             embedded,
@@ -645,16 +654,23 @@ impl<'a> ReadingFaces<'a> {
         };
         let font = self.font(face);
         let baseline = baseline + self.shift(face);
+        // Without grays from the coverage a frame of black and white draws
+        // from: the letters it would draw.
+        let tone = match self.sharp {
+            true => self.tone.sharp(canvas.mono_coverage()),
+            false => self.tone,
+        };
         // Letter by letter where letters are spaced; at once otherwise.
         let draw = |canvas: &mut Canvas<'_>, size: f32, x: f32, text: &str| -> f32 {
             if self.letter_spacing == 0.0 {
-                return font.draw_bolder(canvas, size, x, baseline, text, ink, extra);
+                return font.draw_toned(canvas, size, x, baseline, text, ink, extra, tone);
             }
             let mut width = 0.0;
             let mut buf = [0u8; 4];
             for c in text.chars() {
                 let letter = c.encode_utf8(&mut buf);
-                width += font.draw_bolder(canvas, size, x + width, baseline, letter, ink, extra);
+                width +=
+                    font.draw_toned(canvas, size, x + width, baseline, letter, ink, extra, tone);
                 width += self.letter_spacing;
             }
             width
@@ -797,6 +813,23 @@ pub fn word_boxes(faces: &ReadingFaces<'_>, page_type: &PageType, page: &Page) -
         }
     }
     words
+}
+
+/// The contrast curve of book text ([`settings::TEXT_CONTRAST`]), and
+/// whether it is drawn without grays ([`settings::SMOOTH_TEXT`] off).
+/// Not where the panel shows black and white alone: its frame draws the
+/// same letters already, and a page shown in grays there for its
+/// pictures keeps its letters smooth, as before.
+fn ink(env: &Env<'_>) -> (ToneCurve, bool) {
+    let s = env.settings();
+    let level = s.read(&settings::TEXT_CONTRAST);
+    let step = settings::TEXT_CONTRAST_LEVELS
+        .iter()
+        .position(|l| *l == level)
+        .map_or(0, |at| at as i8 + ToneCurve::LIGHTEST);
+    let mono = env.device().display.format.gray_levels() == Some(2);
+    let sharp = !mono && !s.read(&settings::SMOOTH_TEXT);
+    (ToneCurve::contrast(step), sharp)
 }
 
 /// Draws `lines` laid out with `faces` in `page_type`, their content box

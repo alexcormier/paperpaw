@@ -336,7 +336,40 @@ fn balanced_paragraph(
     if breaks.len() > MAX_BREAKS {
         return None;
     }
-    // The least cost to each break, looking back as far as a line goes.
+    cheapest(&mut breaks, (first, rest));
+    if breaks[last].cost.is_infinite() {
+        return None;
+    }
+    // The lines, from the last break back.
+    let mut ends = Vec::new();
+    let mut j = last;
+    while j > 0 {
+        ends.push(j);
+        j = usize::from(breaks[j].prev);
+    }
+    let mut lines = Vec::with_capacity(ends.len());
+    let mut from = 0;
+    for &j in ends.iter().rev() {
+        let (b, e) = (breaks[from], breaks[j]);
+        let line_range = usize::from(b.next)..usize::from(e.end);
+        lines.push(Line {
+            spaces: text[line_range.clone()].matches(' ').count(),
+            range: line_range,
+            width: e.to_end - b.to_next + e.hyphen,
+            last: j == last,
+            hyphen: e.hyphen > 0.0,
+        });
+        from = j;
+    }
+    Some(lines)
+}
+
+/// The least cost of lines up to each of `breaks` (the last ends the
+/// paragraph, free of cost), and the break before it on that way,
+/// looking back no further than a line goes; `widths` of the first line
+/// and of the others.
+fn cheapest(breaks: &mut [Break], (first, rest): (f32, f32)) {
+    let last = breaks.len() - 1;
     let hyphen_cost = (rest * 0.1) * (rest * 0.1);
     for j in 1..breaks.len() {
         let mut best = (f32::INFINITY, 0usize);
@@ -370,31 +403,6 @@ fn balanced_paragraph(
         breaks[j].cost = best.0;
         breaks[j].prev = best.1 as u16;
     }
-    if breaks[last].cost.is_infinite() {
-        return None;
-    }
-    // The lines, from the last break back.
-    let mut ends = Vec::new();
-    let mut j = last;
-    while j > 0 {
-        ends.push(j);
-        j = usize::from(breaks[j].prev);
-    }
-    let mut lines = Vec::with_capacity(ends.len());
-    let mut from = 0;
-    for &j in ends.iter().rev() {
-        let (b, e) = (breaks[from], breaks[j]);
-        let line_range = usize::from(b.next)..usize::from(e.end);
-        lines.push(Line {
-            spaces: text[line_range.clone()].matches(' ').count(),
-            range: line_range,
-            width: e.to_end - b.to_next + e.hyphen,
-            last: j == last,
-            hyphen: e.hyphen > 0.0,
-        });
-        from = j;
-    }
-    Some(lines)
 }
 
 /// Adds the places the word `word` of `text` may be hyphenated, as

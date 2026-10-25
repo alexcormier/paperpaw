@@ -360,7 +360,8 @@ impl ReaderScreen {
 
 impl Screen for ReaderScreen {
     /// A page with pictures, or any page with smooth letters: in grays
-    /// where the panel can.
+    /// where the panel can. Without smooth letters a page of text alone
+    /// is black and white and turns without a refresh in grays.
     fn grays(&self) -> bool {
         self.book
             .as_ref()
@@ -1087,19 +1088,22 @@ impl ReaderScreen {
                 return;
             }
         }
+        // How the letters are inked: the same page drawn again, in grays
+        // or not from now on (the kernel's settings, so before those).
+        if id == crate::settings::SMOOTH_TEXT.as_str()
+            || id == crate::settings::TEXT_CONTRAST.as_str()
+        {
+            self.smooth = cx.env().settings().read(&crate::settings::SMOOTH_TEXT);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Full);
+            return;
+        }
         if *event == events::STATUS_CHANGED
             || changed.is_some() && !font_changed && id.starts_with("core.")
         {
             // The battery, the clock format, the time zone, …
             self.status_shown = None;
             self.update_status(cx);
-            return;
-        }
-        if id == crate::settings::SMOOTH_TEXT.as_str() {
-            // The same page, shown in grays or not from now on.
-            self.smooth = cx.env().settings().read(&crate::settings::SMOOTH_TEXT);
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Full);
             return;
         }
         let Ok(book) = &mut self.book else {
