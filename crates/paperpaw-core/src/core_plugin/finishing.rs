@@ -59,7 +59,9 @@ impl Finishing {
 
 impl Screen for Finishing {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let area = canvas.clip();
+        // All of its part of the screen: drawn in strips, each clipped.
+        let content = env.content();
+        let area = Rect::new(0, 0, content.width, content.height);
         canvas.fill(area, Color::WHITE);
         let style = UiStyle::new(env);
         let mut ui = ui::Ui::new(canvas, env, &style);
