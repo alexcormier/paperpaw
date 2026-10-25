@@ -584,6 +584,37 @@ impl Radio {
         }
     }
 
+    /// Leaves the network and switches the radio off at once, before the
+    /// device starts again or sleeps: switched off, the driver takes leave
+    /// of the router (`esp_wifi_stop`), which a reset or the power cut in
+    /// sleep do not; a FRITZ!Box then refused the X4's joins for a while
+    /// (seen after updates and flashing). A task going on is waited for
+    /// [`STOP_MS`] at the longest, and the radio left on if it goes on.
+    pub fn leave(&mut self) {
+        if self.on.is_none() {
+            return;
+        }
+        let until = esp_hal::time::Instant::now() + esp_hal::time::Duration::from_millis(STOP_MS);
+        paperpaw_x4::bounded::wait(
+            || {
+                let busy = matches!(self.on.as_ref().map(|on| &on.work), Some(Work::Busy(_)));
+                if busy {
+                    let _ = self.poll();
+                }
+                !busy
+            },
+            || esp_hal::time::Instant::now() > until,
+        );
+        if self
+            .on
+            .as_ref()
+            .is_some_and(|on| matches!(on.work, Work::Idle(_)))
+        {
+            log::info!("wifi: leaving the network");
+            self.stop();
+        }
+    }
+
     /// Switches the radio off: the driver dropped, the radio powered down.
     fn stop(&mut self) {
         let Some(on) = self.on.take() else {

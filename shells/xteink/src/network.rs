@@ -221,6 +221,12 @@ impl Network {
         remote::http_answer(answer, since.map_or(0, |at| now.0.saturating_sub(at)));
     }
 
+    /// Leaves the network before the device starts again or sleeps
+    /// ([`Radio::leave`]).
+    pub fn leave(&mut self) {
+        self.radio.leave();
+    }
+
     /// Whether data is moving for plugins' requests, servers or sockets:
     /// the main loop comes by again at once.
     pub fn moving(&self) -> bool {
