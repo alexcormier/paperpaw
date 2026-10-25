@@ -76,6 +76,18 @@ change the plugin SDK.
 
 ### Changed
 
+- Settings sorted where readers look for them (their ids kept, so what
+  was set stays): pages of their own for the Keyboard (layouts, umlaut
+  keys, size, shape of keys), the Screen lock (with Lock touch), Updates,
+  the Sleep screen (from Display) and the Home screen (from Appearance);
+  Record battery use with Power, Show hidden files with the Library,
+  Number of test pages with Developer, the reading cat's settings with
+  Reading statistics; Calibre and News in parts of their own in the
+  Library. Hidden where they do nothing: the shape of keys on readers
+  with buttons alone, the choice of gray covers on gray screens. Clearer
+  names: Lines at the top and at the bottom (the status lines), Covers in
+  the library and in catalogs, Selected row, Line thickness, List
+  sections, the vocabulary's two switches; percentages with their unit.
 - Keyboard size works on readers with buttons alone too: Large splits
   the rows into short ones (few presses along each, as before and the
   X4s' default), Medium splits the longest, Small keeps them whole as on

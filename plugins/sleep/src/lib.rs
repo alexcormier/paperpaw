@@ -42,7 +42,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events, groups, slots};
+use paperpaw_sdk::builtin::{actions, events, slots};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library;
 use paperpaw_sdk::logo::Logo;
@@ -56,6 +56,8 @@ use paperpaw_sdk::{
 };
 
 pub const PLUGIN: Id = Id::new_static("sleep");
+/// Its settings' group (Settings, Device, Sleep screen).
+pub const GROUP: Id = Id::new_static("sleep.group");
 /// What the sleep screen shows: one of [`CAT`], [`COVER`], [`PICTURE`],
 /// [`OVERLAY`], [`WIDGETS`], [`MESSAGE`], [`PAGE`], or a screen another
 /// plugin offers ([`paperpaw_sdk::Registrar::add_choice`]).
@@ -73,7 +75,6 @@ pub const WIDGET_LIST: Setting<Text> = Setting::new("sleep.widgets");
 /// The folder of the pictures.
 pub const FOLDER: Setting<Text> = Setting::new("sleep.folder");
 const SCREEN: Id = Id::new_static("sleep.screen");
-const SECTION: &str = "sleep.section";
 
 pub(crate) fn data(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
@@ -85,13 +86,11 @@ pub struct Sleep;
 
 /// The sleep screen's part of the display settings, its folder and its
 /// widgets each chosen on a screen of their own.
-static IN_SLEEP: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().section(SECTION);
-static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
-    .section(SECTION)
-    .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
-static WIDGETS_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
-    .section(SECTION)
-    .editor_slot(slots::EDIT_WIDGETS);
+static IN_SLEEP: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new();
+static FOLDER_EXTRA: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
+static WIDGETS_EXTRA: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor_slot(slots::EDIT_WIDGETS);
 /// Where its widgets show, for editors and widgets that ask.
 const PLACE: WidgetPlace = WidgetPlace::new(
     Id::new_static("sleep.widgets"),
@@ -110,11 +109,9 @@ const OVERLAY_PLACE: WidgetPlace = WidgetPlace::new(
 )
 .shown_if(Id::new_static(SHOW.static_str()), OVERLAY);
 const OVERLAY_SETTINGS: &[Id] = &[Id::new_static(overlay::WIDGET.static_str())];
-static PICKED_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
-    .section(SECTION)
-    .editor(overlay::PICK);
+static PICKED_EXTRA: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor(overlay::PICK);
 static PERCENT: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
-    .section(SECTION)
     .unit("core.unit.percent")
     .step(5)
     .slider();
@@ -127,18 +124,13 @@ static SETTINGS: [SettingSpec; 9] = [
         "sleep.setting.show",
         &[CAT, COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE],
         CAT,
-        groups::DISPLAY,
+        GROUP,
     )
     .with_extra(&IN_SLEEP)
     .description("sleep.setting.show.help"),
-    SettingSpec::text(
-        FOLDER.static_str(),
-        "sleep.setting.folder",
-        "sleep",
-        groups::DISPLAY,
-    )
-    .with_extra(&FOLDER_EXTRA)
-    .description("sleep.setting.folder.help"),
+    SettingSpec::text(FOLDER.static_str(), "sleep.setting.folder", "sleep", GROUP)
+        .with_extra(&FOLDER_EXTRA)
+        .description("sleep.setting.folder.help"),
     SettingSpec::new(
         paperpaw_sdk::Id::new_static(WIDGET_LIST.static_str()),
         "sleep.setting.widgets",
@@ -146,7 +138,7 @@ static SETTINGS: [SettingSpec; 9] = [
         paperpaw_sdk::SettingValue::Text(Cow::Borrowed(
             "home.date, home.continue, stats.widget.today, home.recent",
         )),
-        groups::DISPLAY,
+        GROUP,
     )
     .with_extra(&WIDGETS_EXTRA)
     .description("sleep.setting.widgets.help"),
@@ -154,7 +146,7 @@ static SETTINGS: [SettingSpec; 9] = [
         overlay::PICTURE.static_str(),
         "sleep.setting.overlay-picture",
         "",
-        groups::DISPLAY,
+        GROUP,
     )
     .with_extra(&PICKED_EXTRA)
     .description("sleep.setting.overlay-picture.help"),
@@ -162,7 +154,7 @@ static SETTINGS: [SettingSpec; 9] = [
         overlay::WIDGET.static_str(),
         "sleep.setting.overlay-widget",
         "",
-        groups::DISPLAY,
+        GROUP,
     )
     .with_extra(&PICKED_EXTRA)
     .description("sleep.setting.overlay-widget.help"),
@@ -171,7 +163,7 @@ static SETTINGS: [SettingSpec; 9] = [
         "sleep.setting.overlay-position",
         &overlay::POSITIONS,
         overlay::DEFAULT_POSITION,
-        groups::DISPLAY,
+        GROUP,
     )
     .with_extra(&IN_SLEEP)
     .description("sleep.setting.overlay-position.help"),
@@ -181,7 +173,7 @@ static SETTINGS: [SettingSpec; 9] = [
         10,
         100,
         overlay::DEFAULT_SIZE,
-        groups::DISPLAY,
+        GROUP,
     )
     .with_extra(&PERCENT)
     .description("sleep.setting.overlay-size.help"),
@@ -191,7 +183,7 @@ static SETTINGS: [SettingSpec; 9] = [
         0,
         90,
         0,
-        groups::DISPLAY,
+        GROUP,
     )
     .with_extra(&PERCENT)
     .description("sleep.setting.overlay-see-through.help"),
@@ -200,7 +192,7 @@ static SETTINGS: [SettingSpec; 9] = [
         "sleep.setting.overlay-when",
         &overlay::WHEN,
         overlay::WHEN[0],
-        groups::DISPLAY,
+        GROUP,
     )
     .with_extra(&IN_SLEEP)
     .description("sleep.setting.overlay-when.help"),
@@ -223,6 +215,14 @@ impl Plugin for Sleep {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // Its settings on a page of their own (Settings, Device).
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "sleep.title").order(62);
+            &SPEC
+        })?;
+        r.add_icon(GROUP, Cow::Borrowed("moon"))?;
+        r.set_menu_need(GROUP, MenuNeed::Sleep)?;
         r.add_settings(&SETTINGS)?;
         let items: [Id; 9] = [
             SHOW.into(),

@@ -101,6 +101,10 @@ fn provided(metadata: &str) -> paperpaw_sdk::library::Provided {
 #[derive(Debug, Default)]
 pub struct Calibre;
 
+/// In the library's settings, in a part named after it.
+static IN_CALIBRE: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().section("calibre.plugin.name");
+
 /// Calibre's address, where it is not found by itself.
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     ADDRESS.static_str(),
@@ -108,6 +112,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
     "",
     groups::LIBRARY,
 )
+.with_extra(&IN_CALIBRE)
 .description("calibre.setting.address.help")
 .advanced()];
 
