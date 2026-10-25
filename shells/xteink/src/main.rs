@@ -629,6 +629,9 @@ fn kernel(
         .random(random)
         .memory(memory)
         .started(started())
+        // Black and white, frames drawn and sent while none refreshes; the
+        // refreshes' times as they are measured (ADR 0030).
+        .panel(paperpaw_sdk::realtime::PanelInfo::new(2))
         // The panel refreshes on its own: a mark shows at once while slow
         // work goes on.
         .busy_mark(true)

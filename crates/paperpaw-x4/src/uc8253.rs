@@ -575,6 +575,18 @@ where
         Ok(())
     }
 
+    /// Whether a refresh started by [`Display::start_refresh`] still goes
+    /// on, without waiting (its busy pin low, or not seen busy yet):
+    /// [`Display::wait`] once it is over, which ends it.
+    pub fn refreshing(&mut self) -> Result<bool, Error> {
+        let Some(pending) = self.pending.as_mut() else {
+            return Ok(false);
+        };
+        let busy = self.busy.is_low().map_err(|_| Error::Pin)?;
+        pending.started |= busy;
+        Ok(busy || !pending.started)
+    }
+
     /// Waits for a refresh started by [`Display::start_refresh`] to end.
     pub fn wait(&mut self) -> Result<(), Error> {
         let Some(pending) = self.pending.take() else {

@@ -24,6 +24,8 @@ use crate::network::{Network, NetworkIo};
 use crate::ota::Ota;
 use crate::{clock, device, input, now, power, stack};
 
+mod paced;
+
 /// How long the main loop rests when there is nothing to do.
 const POLL_MS: u64 = 10;
 /// Lines of the cable transfer read in one turn of the main loop at most.
@@ -123,6 +125,25 @@ pub struct State {
     /// An update was kept after its trial, which started without code
     /// plugins, and there are some to load: a start at a calm moment.
     restart_for_code: bool,
+    /// The pace the screen on top runs at (`Effects::pace`): its frames
+    /// are shown without waiting for the panel ([`paced`]).
+    pace: Option<core::time::Duration>,
+    /// A paced frame on its way to the panel, and what changed since,
+    /// waiting for it.
+    in_flight: Option<paced::InFlight>,
+    waiting: Option<(Rect, RefreshMode)>,
+    /// The panel's memories may differ after a paced frame: the next one
+    /// drives every pixel.
+    frame_stale: bool,
+}
+
+/// The place of `refresh` in [`State::refresh_ms`].
+fn kind(refresh: Refresh) -> usize {
+    match refresh {
+        Refresh::Fast => 0,
+        Refresh::Half => 1,
+        Refresh::Full => 2,
+    }
 }
 
 impl Firmware {
@@ -223,8 +244,10 @@ impl Firmware {
         power::allow(battery);
         self.status();
         self.buttons();
+        self.poll_frame();
         self.usb();
         self.tick();
+        self.poll_frame();
         self.rest(battery, installing);
     }
 
@@ -357,6 +380,7 @@ impl Firmware {
 
     fn restart(&mut self) -> ! {
         info!("restarting");
+        self.settle_frame();
         self.pause_trial();
         let _ = self.kernel.stop(now());
         esp_hal::system::software_reset();
@@ -560,6 +584,9 @@ impl Firmware {
         if let Some(at) = self.state.panel_idle_at {
             until = until.min(at);
         }
+        if let Some(due) = self.frame_due() {
+            until = until.min(due);
+        }
         if !power::nap_until(until) {
             self.delay
                 .delay_millis(until.saturating_sub(now().0) as u32);
@@ -584,6 +611,7 @@ impl Firmware {
     )]
     #[inline(never)]
     fn sleep(&mut self) {
+        self.settle_frame();
         // A press over USB that put it to sleep is let go first.
         #[cfg(feature = "remote")]
         self.release_held();
@@ -708,7 +736,17 @@ impl Firmware {
         // The light as set (or shown while a slider moves) at once, not
         // after the frame that shows the setting.
         self.light();
+        self.state.pace = effects.pace();
         loop {
+            // Anything but a paced frame waits for the one on its way.
+            let paced = effects.refresh().is_some_and(|(_, mode)| self.paced(mode))
+                && !effects.restart()
+                && !effects.proceed()
+                && !effects.grays()
+                && self.kernel.rotation() == self.panel.rotation();
+            if !paced {
+                self.settle_frame();
+            }
             if effects.restart() {
                 self.restart();
             }
@@ -755,7 +793,11 @@ impl Firmware {
                 effects = self.kernel.draw_again(now());
                 continue;
             } else if let Some((area, mode)) = effects.refresh() {
-                self.show(area, mode);
+                if paced {
+                    self.queue_frame(area, mode);
+                } else {
+                    self.show(area, mode);
+                }
             }
             for warning in self.kernel.take_warnings() {
                 warn!("{warning}");
@@ -817,11 +859,7 @@ impl Firmware {
     /// the panel's busy line all along; then waits for the rest. The
     /// panel's power goes off a while after.
     fn refresh(&mut self, refresh: Refresh) -> Result<(), paperpaw_x4::display::Error> {
-        let kind = match refresh {
-            Refresh::Fast => 0,
-            Refresh::Half => 1,
-            Refresh::Full => 2,
-        };
+        let kind = kind(refresh);
         let started = now();
         self.panel.start_refresh(refresh, false)?;
         // A little early: the rest is watched. In naps no longer than the
@@ -919,6 +957,14 @@ impl Firmware {
         let shown = now();
         self.kernel.panel_busy(shown.since(written));
         self.kernel.shown(shown);
+        let ms = core::time::Duration::from_millis;
+        self.kernel.frame_shown(
+            area,
+            RefreshMode::Gray,
+            ms(written.since(started)),
+            ms(shown.since(written)),
+            shown,
+        );
         self.state.gray_shown = true;
         if let Some(e) = failed {
             warn!("display: {e:?}");
@@ -968,6 +1014,14 @@ impl Firmware {
         let shown = now();
         self.kernel.panel_busy(shown.since(drawn));
         self.kernel.shown(shown);
+        let ms = core::time::Duration::from_millis;
+        self.kernel.frame_shown(
+            area,
+            mode,
+            ms(drawn.since(started)),
+            ms(shown.since(drawn)),
+            shown,
+        );
         // After every refresh, both memories again hold the frame now
         // shown, as the stock firmware does: the refresh may leave the
         // memory of the new frame changed, and the next fast refresh
@@ -1022,6 +1076,7 @@ fn heap_free() -> usize {
 impl Firmware {
     #[inline(never)]
     fn remote(&mut self, line: Result<alloc::vec::Vec<u8>, crate::usb_lines::TooLong>) {
+        self.settle_frame();
         if let Some(command) = self.remote.command(line)
             && let Some(command) = self.remote.answer(&mut self.kernel, &mut self.usb, command)
         {

@@ -706,6 +706,35 @@ impl Device {
         self.asleep
     }
 
+    /// Draws what changed and shows it, in `region` with `mode`; the
+    /// frame's times go to the kernel.
+    fn show_frame(&mut self, region: paperpaw_platform::Rect, mode: RefreshMode) {
+        let started = crate::host::micros();
+        let (kernel, controller) = (&mut self.kernel, &mut self.controller);
+        let mut frame = crate::trace::Frame::start();
+        budget::track(|| {
+            kernel.render(&mut |top, rows| {
+                controller.write_rows(top, rows);
+                if let Some(frame) = &mut frame {
+                    frame.band();
+                }
+            });
+        });
+        if let Some(frame) = frame {
+            let screen = self.kernel.active_screen().map(ToString::to_string);
+            frame.done(screen.as_deref().unwrap_or_default());
+        }
+        let colors = self.profile.colors.then(|| self.kernel.colors());
+        self.panel
+            .refresh(self.controller.view(), region, mode, colors);
+        // Shown as soon as drawn: plugins that pace themselves by the
+        // panel go as fast as they can here.
+        let drawn = core::time::Duration::from_micros(crate::host::micros() - started);
+        let now = self.now();
+        self.kernel
+            .frame_shown(region, mode, drawn, core::time::Duration::ZERO, now);
+    }
+
     fn execute(&mut self, effects: Effects) {
         if effects.restart() {
             return self.restart();
@@ -727,23 +756,7 @@ impl Device {
             let again = budget::track(|| self.kernel.draw_again(now));
             return self.execute(effects.and(again));
         } else if let Some((region, mode)) = effects.refresh() {
-            let (kernel, controller) = (&mut self.kernel, &mut self.controller);
-            let mut frame = crate::trace::Frame::start();
-            budget::track(|| {
-                kernel.render(&mut |top, rows| {
-                    controller.write_rows(top, rows);
-                    if let Some(frame) = &mut frame {
-                        frame.band();
-                    }
-                });
-            });
-            if let Some(frame) = frame {
-                let screen = self.kernel.active_screen().map(ToString::to_string);
-                frame.done(screen.as_deref().unwrap_or_default());
-            }
-            let colors = self.profile.colors.then(|| self.kernel.colors());
-            self.panel
-                .refresh(self.controller.view(), region, mode, colors);
+            self.show_frame(region, mode);
         }
         // Slow work ahead: its mark shows first, as on the X4 (whose panel
         // refreshes it while the kernel works on), then what the work
@@ -945,6 +958,14 @@ fn build_kernel(
             .memory(budget::memory_use)
             .glyph_cache(profile.glyph_cache)
             .busy_mark(profile.busy_mark)
+            // Its grays; frames show at once here (see `execute`).
+            .panel(paperpaw_core::sdk::realtime::PanelInfo::new(
+                device
+                    .display
+                    .format
+                    .gray_levels()
+                    .map_or(255, |levels| levels.min(255) as u8),
+            ))
             .colors(profile.colors)
             .network(true)
             .wifi(profile.wifi)
@@ -964,6 +985,10 @@ fn build_kernel(
         #[cfg(feature = "hello")]
         {
             builder = builder.plugin(paperpaw_sample_hello::Hello);
+        }
+        #[cfg(feature = "frame-test")]
+        {
+            builder = builder.plugin(paperpaw_sample_frame_test::FrameTest);
         }
         if let Some(light) = profile.light {
             builder = builder.plugin(crate::light::Emulated(light));

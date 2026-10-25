@@ -657,6 +657,16 @@ where
         self.command(cmd::DEEP_SLEEP, &[0xA5])
     }
 
+    /// Whether a refresh started by [`Display::start_refresh`] still goes
+    /// on, without waiting (its busy pin low): [`Display::wait`] once it
+    /// is over, which ends it.
+    pub fn refreshing(&mut self) -> Result<bool, Error> {
+        if self.pending.is_none() {
+            return Ok(false);
+        }
+        self.busy.is_low().map_err(|_| Error::Pin)
+    }
+
     /// Waits for a refresh started by [`Display::start_refresh`] to end,
     /// then keeps the frame as the one shown (the controller copies it
     /// too, but the frame kept goes again, as the stock firmware sends

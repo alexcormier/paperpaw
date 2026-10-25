@@ -527,6 +527,13 @@ where
         Ok(())
     }
 
+    /// Whether a refresh started by [`Display::start_refresh`] still goes
+    /// on, without waiting (its busy pin high): [`Display::wait`] once it
+    /// is over.
+    pub fn refreshing(&mut self) -> Result<bool, Error> {
+        self.busy.is_high().map_err(|_| Error::Pin)
+    }
+
     /// Waits while the controller is busy (its busy pin high), e.g. with a
     /// refresh started by [`Display::start_refresh`].
     pub fn wait(&mut self) -> Result<(), Error> {

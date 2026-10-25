@@ -1436,6 +1436,7 @@ dependencies = [
  "paperpaw-graphics",
  "paperpaw-native",
  "paperpaw-platform",
+ "paperpaw-sample-frame-test",
  "paperpaw-sample-hello",
  "paperpaw-serve",
  "paperpaw-zip",
@@ -2258,6 +2259,16 @@ name = "paperpaw-qr"
 version = "0.5.0-beta.6"
 dependencies = [
  "proptest",
+]
+
+[[package]]
+name = "paperpaw-sample-frame-test"
+version = "0.5.0-beta.6"
+dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
+ "paperpaw-platform",
+ "paperpaw-sdk",
 ]
 
 [[package]]

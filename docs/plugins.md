@@ -1446,6 +1446,58 @@ script presses with `ble-key:right` (or `left`, `page-down`,
 heart-rate belt that answers the example above, notifying a rate each
 second.
 
+### Screens that run in real time
+
+Games, emulators and animations draw many frames a second and want
+every button as it goes down. Such a screen says so in one place,
+[`Screen::mode`], with a `realtime::ScreenMode`
+([ADR 0030](adr/0030-real-time-screens.md)):
+
+```rust
+fn mode(&self) -> ScreenMode {
+    ScreenMode::new()
+        .full_screen()     // no row of hints, no bars
+        .raw_keys()        // buttons pressed and released, in on_key
+        .cleans_itself()   // no full refresh every few pages
+        .fastest()         // the fastest refresh the panel has
+        .grays(2)          // black and white is enough
+        .frame_every(Duration::from_millis(100))
+        .awake_for(Duration::from_secs(600))
+}
+```
+
+Each option asks for an intent; every device meets it as well as it
+can. With `raw_keys`, `on_key` gets each button pressed and let go,
+with its time, and `env.keys_held()` says which are down. The power
+button stays the device's, and holding *Back* for two seconds always
+leaves the screen. With `frame_every`, the screen asks for its timer as
+usual (`cx.wake_at`); the X4 then goes on while the panel refreshes, and
+shows the next frame as soon as the panel is free.
+
+The device says what it can do and what it did: `env.panel()` has the
+fastest time of each refresh mode as measured, its grays, and the last
+frame shown (`last_frame()`: when, how long it took, how many frames
+were merged into it). Pace yourself by these numbers rather than by
+your own: faster panels then make your plugin faster without a new
+build.
+
+Draw pictures that change every frame with `canvas.blit`: a packed
+`Bitmap` of 1, 2, 4 or 8 bits a pixel with a palette of grays, at a
+whole scale, dithered or not. A 160×144 picture at three times its size
+costs a fraction of drawing it pixel by pixel.
+
+Keep what a loop reads all the time in internal RAM and large data in
+PSRAM (`memory::vec_in(Placement::Fast, n)` and `Placement::Large`);
+devices with one kind of memory keep both alike. In a code plugin, mark
+the few functions that run every frame with `paperpaw_sdk::hot! { … }`:
+the X4 runs them from internal RAM instead of flash, a bounded part of
+its heap; what does not fit runs from flash as before.
+
+`samples/frame-test` does all of this and shows what it measures (frames
+a second, the work as hot and as ordinary code, the drawing, the heap):
+`cargo run -p paperpaw-emulator --features frame-test`, then *Frame
+test* in the tools.
+
 ### Work in the background
 
 What a plugin does on its own, not because the reader just asked for

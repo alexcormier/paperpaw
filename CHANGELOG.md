@@ -8,6 +8,19 @@ change the plugin SDK.
 
 ### Added
 
+- Plugins can run in real time: games, emulators, animations
+  ([ADR 0030](docs/adr/0030-real-time-screens.md)). A screen says how
+  it runs in one place (`Screen::mode`, `realtime::ScreenMode`): full
+  screen, buttons pressed and released (`Screen::on_key`,
+  `Env::keys_held`; holding *Back* two seconds always leaves), its own
+  refreshes, the fastest refresh, the grays enough, a pace, staying
+  awake longer. The device says what it can do and how the last frame
+  went (`Env::panel`, `PanelInfo`, `FrameReport`), so faster panels make
+  plugins faster without a new build. `Canvas::blit` draws packed
+  bitmaps at a whole scale, `memory::vec_in` keeps data in internal RAM
+  or PSRAM, and code plugins get `Api::alloc_in`. On the X4 the main
+  loop goes on while the panel refreshes for such a screen, and every
+  frame's times are measured. `samples/frame-test` shows it all.
 - The reading settings in pages of their own: *Text*, *Layout*,
   *Hyphenation*, *Publisher's formatting*, *Display*, *Status lines*,
   *Marks in the text*, *Reading aloud*, *Reading aids* and *Behaviour*,
