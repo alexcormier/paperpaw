@@ -48,7 +48,11 @@
 extern crate alloc;
 
 mod choose;
+mod draw;
+mod keys;
 mod layouts;
+
+use keys::*;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -242,56 +246,6 @@ impl Plugin for Keyboard {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Layer {
-    Letters,
-    Symbols,
-    /// Only digits, for numbers (mode `number`).
-    Digits,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Key {
-    Char(char),
-    Shift,
-    Delete,
-    Space,
-    Layer(Layer),
-    /// Switches to the next chosen layout.
-    NextLayout,
-    Done,
-}
-
-/// A key and its width in units (a letter is 2).
-type Slot = (Key, u8);
-
-/// How high keys chosen with buttons are, and how large their letters, in
-/// hundredths of a row and of the text, by the keyboard's size
-/// ([`KEY_SIZE`]). Their rows stay a computer keyboard's whatever the size:
-/// the letters grow less, as ten keys a row leave them little room on a
-/// narrow screen (the X4).
-fn button_scale(size: &str) -> (u32, u32) {
-    match size {
-        SIZE_SMALL => (100, 100),
-        SIZE_LARGE => (150, 110),
-        _ => (125, 105),
-    }
-}
-
-/// The least width of a letter's key, in pixels: tapped, what a finger
-/// hits; chosen with buttons, room for its letter (`scale` hundredths of
-/// the text) inside the focus frame, so that a row is split only where its
-/// letters would not fit.
-fn least_letter(env: &Env<'_>, style: &UiStyle, touch: bool, scale: u32) -> u32 {
-    if touch {
-        return env.metrics().tenth_mm(LEAST_TAP_MM * 10);
-    }
-    let px = style.text() * scale as f32 / 100.0;
-    let widest = style.font(env).map_or(px, |font| font.measure(px, "M"));
-    // Inside the room the focus frame leaves (see `key_inset`).
-    widest as u32 + 2 * 3 * ui::button_border(style)
-}
-
 /// Two presses of *Shift* this close, in milliseconds, lock capitals.
 const DOUBLE_MS: u64 = 800;
 
@@ -313,156 +267,6 @@ fn sentence_starts(text: &str) -> bool {
         return true;
     }
     trimmed.len() < text.len() && trimmed.ends_with(['.', '!', '?'])
-}
-
-/// The least width of a letter's key where keys are tapped, in
-/// millimetres: as much as a finger hits reliably.
-const LEAST_TAP_MM: u32 = 4;
-
-/// How high a key that is tapped is, in hundredths of a letter key's
-/// width, by its shape ([`KEY_SHAPE`]): nearly round, round or a little
-/// wider, so the keyboard leaves much of the screen above it in view.
-fn height_of(shape: &str) -> u32 {
-    match shape {
-        SHAPE_ROUND => 100,
-        SHAPE_WIDE => 85,
-        _ => 110,
-    }
-}
-
-/// How high the keyboard is where keys are tapped, in hundredths of its
-/// height at Medium, by its size ([`KEY_SIZE`]): the keys take what
-/// changes. With round keys on the X4 Pro and the Boox, the keyboard
-/// then takes about 30 %, 40 % and 50 % of the screen.
-fn size_of(size: &str) -> u32 {
-    match size {
-        SIZE_SMALL => 75,
-        SIZE_LARGE => 125,
-        _ => 100,
-    }
-}
-
-/// How high the keys are where they are tapped, for keys `letter` wide,
-/// `count` rows of them and `around` pixels of the keyboard that are not
-/// keys. The shape gives the height at Medium, and the size scales the
-/// whole keyboard from there.
-fn tapped_height(env: &Env<'_>, style: &UiStyle, letter: u32, count: u16, around: u16) -> u16 {
-    let shape = env.settings().read(&KEY_SHAPE);
-    let border = 2 * ui::button_border(style) as u16;
-    let touch_row = style.touch_row(u32::from(style.row())) as u16;
-    let height = (letter * height_of(shape) / 100) as u16;
-    let shaped = match shape {
-        // As before: no higher than a touch row, as high as a line.
-        SHAPE_TALL => height
-            .min(touch_row)
-            .max(paperpaw_sdk::widgets::line_height(env, style.text()) + border),
-        // As high as wide; high enough for the letter itself.
-        SHAPE_ROUND => height.max(style.text() as u16 + border),
-        _ => height.min(touch_row).max(style.text() as u16 + border),
-    };
-    let count = count.max(1);
-    let medium = u32::from(around) + u32::from(count) * u32::from(shaped);
-    let target = medium * size_of(env.settings().read(&KEY_SIZE)) / 100;
-    let sized = (target.saturating_sub(u32::from(around)) / u32::from(count)) as u16;
-    // Larger keys stop where the keyboard would take more than half the
-    // screen.
-    let half = (env.device().display.height / 2).saturating_sub(around) / count;
-    let sized = if sized > shaped {
-        sized.min(half.max(shaped))
-    } else {
-        sized
-    };
-    // Never smaller than a finger hits, nor than the letter on the key.
-    let least = (env.metrics().mm(LEAST_TAP_MM) as u16).max(style.text() as u16 + border);
-    sized.max(least)
-}
-
-/// The units of a row of keys.
-fn units(row: &[Slot]) -> u32 {
-    row.iter().map(|(_, w)| u32::from(*w)).sum()
-}
-
-/// `row` in rows of at most `most` units, as even as can be and in their
-/// order ("qwert" above "yuiop"); as it is where it fits.
-fn split(row: Vec<Slot>, most: u32) -> Vec<Vec<Slot>> {
-    let total: u32 = row.iter().map(|(_, w)| u32::from(*w)).sum();
-    if most == 0 || total <= most {
-        return alloc::vec![row];
-    }
-    let parts = total.div_ceil(most);
-    let mut out: Vec<Vec<Slot>> = Vec::with_capacity(parts as usize);
-    let mut used = 0;
-    for slot in row {
-        // A new row once this one holds its share.
-        let part = (used * parts / total) as usize;
-        if out.len() <= part {
-            out.push(Vec::new());
-        }
-        used += u32::from(slot.1);
-        if let Some(last) = out.last_mut() {
-            last.push(slot);
-        }
-    }
-    out
-}
-
-/// The rows of a layer; `letters` are the rows of the layout, `switch`
-/// adds the key for the next layout; rows wider than `most` units are
-/// split (see [`split`]; 0 for none).
-fn rows(letters: &str, layer: Layer, switch: bool, most: u32) -> Vec<Vec<Slot>> {
-    let chars = |row: &str| -> Vec<Slot> { row.chars().map(|c| (Key::Char(c), 2)).collect() };
-    match layer {
-        Layer::Letters | Layer::Symbols => {
-            let mut rows: Vec<Vec<Slot>> = if layer == Layer::Letters {
-                letters.split_whitespace().map(chars).collect()
-            } else {
-                SYMBOLS.iter().map(|row| chars(row)).collect()
-            };
-            if let Some(last) = rows.last_mut() {
-                if layer == Layer::Letters {
-                    last.insert(0, (Key::Shift, 3));
-                }
-                last.push((Key::Delete, 3));
-            }
-            let mut rows: Vec<Vec<Slot>> =
-                rows.into_iter().flat_map(|row| split(row, most)).collect();
-            let other = if layer == Layer::Letters {
-                Layer::Symbols
-            } else {
-                Layer::Letters
-            };
-            let mut bottom = alloc::vec![(Key::Layer(other), 3)];
-            // The key to the next layout as wide as the one to symbols, so
-            // its code fits.
-            if switch && layer == Layer::Letters {
-                bottom.push((Key::NextLayout, 3));
-            }
-            // The space bar takes what leaves the row as wide as the
-            // widest, five letters at least; "," and "." are as wide as a
-            // letter.
-            let widest = rows.iter().map(|row| units(row)).max().unwrap_or(20);
-            let others = units(&bottom) + 2 + 2 + 3;
-            let least = if bottom.len() > 1 { 7 } else { 10 };
-            let space = widest.saturating_sub(others).max(least) as u8;
-            bottom.extend([
-                (Key::Char(','), 2),
-                (Key::Space, space),
-                (Key::Char('.'), 2),
-                (Key::Done, 3),
-            ]);
-            rows.push(bottom);
-            rows
-        }
-        Layer::Digits => {
-            let mut rows: Vec<Vec<Slot>> = ["123", "456", "789"].iter().map(|r| chars(r)).collect();
-            rows.push(alloc::vec![
-                (Key::Delete, 2),
-                (Key::Char('0'), 2),
-                (Key::Done, 2),
-            ]);
-            rows
-        }
-    }
 }
 
 /// The variants of a letter, shown above it.
@@ -1140,99 +944,6 @@ impl KeyboardScreen {
         Handled::Yes
     }
 
-    fn draw_field(&self, ui: &mut ui::Ui<'_>) {
-        // Only in the band it lies in: its text is measured to fit.
-        if self.field.intersection(&ui.canvas().clip()).is_none() {
-            return;
-        }
-        let (env, style) = (ui.env(), self.style);
-        let Some(font) = style.font(env) else {
-            return;
-        };
-        let margin = style.margin() as f32;
-        let f = self.field;
-        let title_height = (style.small() * 1.5) as u16;
-        let title_area = Rect::new(f.x, f.y, f.width, title_height);
-        // With buttons, on a letter that holds others: that it does, at
-        // the right end.
-        let held = self.held_hint(env);
-        let held_width = held
-            .as_ref()
-            .map_or(0.0, |h| font.measure(style.small(), h) + margin);
-        if let Some(held) = &held {
-            let x = f32::from(f.x + f.width) - margin - font.measure(style.small(), held);
-            ui::Label::new(held)
-                .px(style.small())
-                .color(Color::BLACK)
-                .draw_from(ui, x, title_area);
-        }
-        let title = ui::fit(
-            &font,
-            style.small(),
-            &self.title,
-            f32::from(f.width) - 2.0 * margin - held_width,
-        );
-        ui::Label::new(&title)
-            .px(style.small())
-            .color(style.faint(ui::Ink::Muted))
-            .draw_from(ui, margin, title_area);
-        let box_area = self.text_box();
-        ui::stroke_round(
-            ui.canvas(),
-            &style,
-            box_area,
-            u32::from(style.line()).max(2),
-            Color::BLACK,
-        );
-        // What is typed in it, for screen readers (dots of a password say
-        // nothing).
-        ui.canvas()
-            .describe(paperpaw_sdk::semantics::Role::Field, "", box_area);
-        // The end of the text, with a cursor after it; a password as dots.
-        let text = if self.password {
-            "•".repeat(self.text.chars().count())
-        } else {
-            self.text.clone()
-        };
-        let buttons_width = self.buttons.first().map_or(0.0, |(_, area)| {
-            f32::from(box_area.x + box_area.width - area.x) + margin
-        });
-        let room = f32::from(box_area.width) - margin * 1.5 - buttons_width;
-        // The longest end of it that fits, found by halving.
-        let starts: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
-        let fits = |n: usize| font.measure(style.text(), &text[starts[n]..]) <= room;
-        let (mut low, mut high) = (0, starts.len());
-        while low < high {
-            let mid = (low + high) / 2;
-            if fits(mid) {
-                high = mid;
-            } else {
-                low = mid + 1;
-            }
-        }
-        let start = starts.get(low).copied().unwrap_or(text.len());
-        let x = f32::from(box_area.x) + margin / 2.0;
-        let shown = &text[start..];
-        ui::Label::new(shown)
-            .px(style.text())
-            .color(Color::BLACK)
-            .draw_from(ui, x, box_area);
-        let end = x + font.measure(style.text(), shown);
-        let cursor = style.text() as u32;
-        ui.canvas().fill_rect(
-            end as i32 + 2,
-            i32::from(box_area.y) + (i32::from(box_area.height) - cursor as i32) / 2,
-            u32::from(style.line()).max(2),
-            cursor,
-            Color::BLACK,
-        );
-        for (index, &(kind, area)) in self.buttons.iter().enumerate() {
-            let focused = self.focus == Some((PASTE_ROW, index));
-            let label = env.i18n().tr(kind.label());
-            ui.button(area, label, false, focused);
-        }
-    }
-
     /// The letters the layout types by holding the focused letter (German
     /// ä on a), e.g. "Hold for ä", while keys are chosen with buttons.
     fn held_hint(&self, env: &Env<'_>) -> Option<String> {
@@ -1249,133 +960,6 @@ impl KeyboardScreen {
             "keyboard.hold-for",
             &[("letters", paperpaw_sdk::Arg::Str(&letters))],
         ))
-    }
-
-    /// The style keys `height` high are drawn in, by their shape: round
-    /// (a letter's a circle, wider ones a pill), or with soft corners.
-    fn key_style(&self, height: u16) -> UiStyle {
-        let mut style = self.style;
-        if !self.touch {
-            // Ten narrow keys a row: soft corners, not round ends, leave
-            // their letters the whole width, however high they are.
-            return style
-                .with_text(style.text() * self.letters as f32 / 100.0)
-                .with_pill(false)
-                .with_corner((style.text() / 4.0) as u16);
-        }
-        match self.shape.as_str() {
-            SHAPE_ROUND => {
-                style = style.with_pill(true).with_row(style.row().max(height));
-            }
-            SHAPE_WIDE => {
-                style = style
-                    .with_pill(false)
-                    .with_corner(height / 4)
-                    .with_row(style.row().max(height));
-            }
-            _ => {}
-        }
-        style
-    }
-
-    fn draw_key(&self, ui: &mut ui::Ui<'_>, row: usize, index: usize) {
-        let (env, style) = (ui.env(), self.style);
-        let key = self.rows[row][index].0;
-        let area = self.key_area(row, index);
-        let focused = self.focus == Some((row, index));
-        // Buttons as everywhere. Tapped, they fill their place but for a
-        // seam, the focused one (after a button was used) smaller by its
-        // focus frame, which stays in its place; chosen with buttons, they
-        // fill it but for the room the frame takes, higher by the size.
-        let frame = ui::button_border(&style) * 3;
-        let pad = if focused { frame } else { self.key_inset() } as u16;
-        let h = if self.touch {
-            area.height.saturating_sub(2 * pad)
-        } else {
-            area.height.saturating_sub(2 * frame as u16)
-        };
-        let r = Rect::new(
-            area.x + pad,
-            area.y + (area.height - h) / 2,
-            area.width.saturating_sub(2 * pad),
-            h,
-        );
-        // The key's own style: its shape.
-        let style = self.key_style(r.height);
-        let mut ui = ui::Ui::new(ui.canvas(), env, &style);
-        // Shift while capitals are locked (one capital, the letters show
-        // it), and *OK* always: the key that ends typing stands out.
-        let active = (key == Key::Shift && self.shift == Shift::Locked) || key == Key::Done;
-        let name = match key {
-            Key::Shift => "keyboard.shift",
-            Key::Delete => "keyboard.delete",
-            Key::Space => "keyboard.space",
-            _ => {
-                let label = self.label(env, key);
-                return ui.button(r, &label, active, focused);
-            }
-        };
-        // The key drawn: an arrow, a space.
-        let name = env.i18n().tr(name);
-        let ink = ui.icon_button(r, name, active, focused);
-        let size = (style.text() * 0.6) as i32;
-        let (cx, cy) = (
-            i32::from(r.x) + i32::from(r.width) / 2,
-            i32::from(r.y) + i32::from(r.height) / 2,
-        );
-        // The icon a theme gave the key, else drawn here.
-        let icon = match key {
-            Key::Shift => paperpaw_sdk::icons::SHIFT,
-            Key::Delete => paperpaw_sdk::icons::DELETE,
-            _ => paperpaw_sdk::icons::SPACE,
-        };
-        let canvas = ui.canvas();
-        if ui::draw_icon_at(canvas, env, icon, style.text(), (cx, cy), ink) {
-            return;
-        }
-        match key {
-            Key::Shift => arrow_up(canvas, cx, cy, size, ink),
-            Key::Delete => arrow_left(canvas, cx, cy, size, ink),
-            Key::Space => {
-                let w = i32::from(r.width) / 3;
-                let t = u32::from(style.line()).max(2) as i32;
-                canvas.fill_rect(cx - w / 2, cy + size / 3, w as u32, t as u32, ink);
-                canvas.fill_rect(cx - w / 2, cy, t as u32, (size / 3 + t) as u32, ink);
-                canvas.fill_rect(cx + w / 2 - t, cy, t as u32, (size / 3 + t) as u32, ink);
-            }
-            _ => {}
-        }
-    }
-
-    fn draw_variants(&self, ui: &mut ui::Ui<'_>) {
-        let Some(popup) = &self.popup else {
-            return;
-        };
-        let style = self.style;
-        let a = popup.area;
-        let border = (u32::from(style.line()) * 2).max(2);
-        let out = border as u16 * 2;
-        let frame = Rect::new(
-            a.x.saturating_sub(out),
-            a.y.saturating_sub(out),
-            a.width + 2 * out,
-            a.height + 2 * out,
-        );
-        ui.canvas().fill(frame, Color::WHITE);
-        ui.canvas().stroke(frame, border, Color::BLACK);
-        for (index, c) in popup.chars.iter().enumerate() {
-            let key = popup.key(index);
-            let h = ui::button_height(&style, key);
-            let pad = ui::button_border(&style) as u16 * 3;
-            let r = Rect::new(
-                key.x + pad,
-                key.y + (key.height - h) / 2,
-                key.width.saturating_sub(2 * pad),
-                h,
-            );
-            let focused = popup.focus == Some(index);
-            ui.button(r, &c.to_string(), false, focused);
-        }
     }
 }
 
@@ -1395,26 +979,6 @@ fn small(c: char) -> char {
         (Some(l), None) => l,
         _ => c,
     }
-}
-
-/// An arrow pointing up (*Shift*), centred at `(x, y)`.
-fn arrow_up(canvas: &mut Canvas<'_>, x: i32, y: i32, size: i32, color: Color) {
-    let half = size / 2;
-    for dy in 0..=half {
-        canvas.fill_rect(x - dy, y - half + dy, (dy * 2 + 1) as u32, 1, color);
-    }
-    let stem = (size / 4).max(2);
-    canvas.fill_rect(x - stem / 2, y, stem as u32, half as u32, color);
-}
-
-/// An arrow pointing left (*Delete*), centred at `(x, y)`.
-fn arrow_left(canvas: &mut Canvas<'_>, x: i32, y: i32, size: i32, color: Color) {
-    let half = size / 2;
-    for dx in 0..=half {
-        canvas.fill_rect(x - half + dx, y - dx, 1, (dx * 2 + 1) as u32, color);
-    }
-    let stem = (size / 4).max(2);
-    canvas.fill_rect(x, y - stem / 2, half as u32, stem as u32, color);
 }
 
 impl Screen for KeyboardScreen {
@@ -1604,42 +1168,5 @@ mod tests {
         assert_eq!(width(&one), 20);
         // Not on the symbols.
         assert!(!has(&rows(letters, Layer::Symbols, true, 0)));
-    }
-}
-
-#[cfg(test)]
-mod split_tests {
-    use super::*;
-
-    /// A row too wide for a narrow screen in two as even as can be, in
-    /// its order; one that fits as it is.
-    #[test]
-    fn rows_too_wide_are_split_evenly_in_order() {
-        let row = rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 16);
-        let names = |r: &[Slot]| {
-            r.iter()
-                .map(|(k, _)| match k {
-                    Key::Char(c) => *c,
-                    Key::Shift => '^',
-                    Key::Delete => '<',
-                    _ => '_',
-                })
-                .collect::<String>()
-        };
-        let shown: Vec<String> = row.iter().map(|r| names(r)).collect();
-        assert_eq!(
-            &shown[..6],
-            ["qwert", "yuiop", "asdfg", "hjkl", "^zxcv", "bnm<"]
-        );
-        assert!(
-            row[..6]
-                .iter()
-                .all(|r| r.iter().map(|(_, w)| u32::from(*w)).sum::<u32>() <= 16)
-        );
-        // Wide enough: the rows as they are.
-        assert_eq!(
-            rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 40).len(),
-            4
-        );
     }
 }
