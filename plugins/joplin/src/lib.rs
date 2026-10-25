@@ -126,7 +126,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Joplin {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Joplin", paperpaw_sdk::package_version!())
+        Manifest::new(PLUGIN, "Joplin notes", paperpaw_sdk::package_version!())
             .description("Keeps the highlights and notes of each book in Joplin.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)

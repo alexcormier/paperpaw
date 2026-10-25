@@ -241,7 +241,7 @@ change the plugin SDK.
   library without picks shows the start and the order as before.
 - Plugins that work with another product say what they do with it:
   KOReader highlights, Calibre connection, Readwise export, Wallabag
-  articles and Wikipedia lookup (their ids stay, and so do their
+  articles, Wikipedia lookup and Joplin notes (their ids stay, and so do their
   settings and data).
 
 ### Fixed
