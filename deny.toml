@@ -37,6 +37,9 @@ allow = [
     # Hyphenation patterns only (plugins/hyphenation): the FSF all-permissive
     # license of the American English patterns.
     "FSFAP",
+    # Hyphenation patterns only (plugins/hyphenation-sv, -ru): the LaTeX
+    # Project Public License, which lets unmodified files be distributed.
+    "LPPL-1.3c",
     # The X4's TCP/IP stack (smoltcp): zero-clause BSD, no conditions.
     "0BSD",
     # Data only (the X4's TLS): Mozilla's root certificates as webpki-roots

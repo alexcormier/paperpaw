@@ -55,3 +55,17 @@ notice and this notice are preserved.
 
 British English patterns are not included: their source notes that the
 underlying word list may not be redistributed.
+
+## Other languages
+
+The hyphenation plugins of the store keep their own pattern files, with
+source, authors, licence and hyphen minimums, in
+`plugins/hyphenation-<language>/patterns/README.md`: French, Spanish,
+Italian, Dutch, Portuguese, Swedish, Danish, Norwegian (Bokmål), Finnish,
+Polish, Russian and Ukrainian. They come from the same project.
+
+Left out because their licence does not allow redistribution in an
+Apache-2.0 project, or none is stated: Czech (GPL), Hungarian (MPL, GPL and
+LGPL), Latvian (LGPL and GPL), Romanian (no licence stated). Norwegian
+Nynorsk is not included yet: its patterns equal Bokmål's, but its
+exceptions differ.
