@@ -206,6 +206,7 @@ impl PageType {
         let indent_size = s.read(&settings::INDENT_SIZE).clamp(50, 400) as f32 / 100.0;
         let spaced = s.read(&settings::PARAGRAPH_SPACING);
         let paragraph_space = s.read(&settings::PARAGRAPH_SPACE).clamp(20, 150) as f32 / 100.0;
+        let balanced = s.read(&settings::LINE_BREAKING) != settings::LINE_BREAKING_FAST;
         let letter_spacing = s.read(&settings::LETTER_SPACING).clamp(-5, 20) as f32 / 100.0 * size;
         let book = [
             (&settings::BOOK_ALIGN, BookStyles::ALIGN),
@@ -234,7 +235,8 @@ impl PageType {
             justify,
         )
         .lines_kept(widows, orphans)
-        .book(book);
+        .book(book)
+        .balanced(balanced);
 
         let display = env.device().display;
         let millimetres = |setting: &crate::setting::Setting<i64>| match whole_pages {
@@ -305,7 +307,7 @@ impl PageType {
         let key = format!(
             "{:016x}",
             paperpaw_digest::fnv1a64(format!(
-                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}|{widows}:{orphans}|{:x}|{letter_spacing}",
+                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}|{widows}:{orphans}|{:x}|{letter_spacing}|{balanced}",
                 crate::layout::VERSION,
                 font.id(),
                 face_id(env, &fonts::READING_BOLD),

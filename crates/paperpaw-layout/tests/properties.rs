@@ -177,8 +177,11 @@ fn para() -> impl Strategy<Value = Para> {
         0u8..10,
         0u8..5,
         prop_oneof![4 => Just(None), 1 => (50u16..200).prop_map(Some)],
+        // Now and then the book's margins at the sides, and a hanging
+        // indent into them.
+        prop_oneof![3 => Just(((0u16, 0u16), None)), 1 => ((0u16..400, 0u16..400), -300i16..100).prop_map(|(m, i)| (m, Some(i)))],
     )
-        .prop_map(|(words, kind, align, size)| {
+        .prop_map(|(words, kind, align, size, (margins, indent))| {
             let mut text = String::new();
             let mut runs = Vec::new();
             for (i, (word, bold, gap)) in words.iter().enumerate() {
@@ -206,8 +209,8 @@ fn para() -> impl Strategy<Value = Para> {
                 runs,
                 align: Align::from_bits(align),
                 size,
-                indent: None,
-                margins: (0, 0),
+                indent,
+                margins,
             }
         })
 }
@@ -222,9 +225,11 @@ fn book() -> impl Strategy<Value = Book> {
 }
 
 fn style() -> impl Strategy<Value = Style> {
-    (0.0f32..6.0, 0.0f32..4.0, any::<bool>()).prop_map(|(paragraph_spacing, indent, justify)| {
-        Style::new(paragraph_spacing, indent, 10.0, justify)
-    })
+    (0.0f32..6.0, 0.0f32..4.0, any::<bool>(), any::<bool>()).prop_map(
+        |(paragraph_spacing, indent, justify, balanced)| {
+            Style::new(paragraph_spacing, indent, 10.0, justify).balanced(balanced)
+        },
+    )
 }
 
 fn context<'a>(

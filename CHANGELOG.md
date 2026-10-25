@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- Balanced line breaking: paragraphs are broken over all their lines,
+  so lines end more evenly and justified text has fewer wide gaps;
+  *Line breaking* can be set back to *Fast*, line by line
+  (`core.line-breaking`). SDK: `text::wrap_lines_balanced`,
+  `layout::Style::balanced`.
 - A book's own styles one by one: with *Publisher's formatting* on, its
   alignment, indents, text sizes, spacing, fonts, margins and line
   spacing can each be left to the reader (its line spacing is by

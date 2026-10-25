@@ -50,7 +50,9 @@ pub use stored::{PackSource, StoredPack};
 /// Whether this build renders scalable (OpenType/TrueType) fonts.
 pub const OUTLINES: bool = cfg!(feature = "outline");
 pub use glyph::{Glyph, GlyphRef};
-pub use layout::{Hyphenate, Line, wrap, wrap_lines, wrap_lines_hyphenated};
+pub use layout::{
+    Hyphenate, Line, MAX_BREAKS, wrap, wrap_lines, wrap_lines_balanced, wrap_lines_hyphenated,
+};
 #[cfg(feature = "outline")]
 pub use outline::OutlineFont;
 

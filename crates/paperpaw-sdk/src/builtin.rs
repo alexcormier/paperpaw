@@ -728,6 +728,12 @@ pub mod settings {
     /// How far [`INDENT`] indents first lines, in percent of the text size
     /// (50 to 400).
     pub const INDENT_SIZE: Setting<i64> = Setting::new("core.indent-size");
+    /// How paragraphs are broken into lines: over all their lines, for
+    /// lines that end evenly ([`LINE_BREAKING_BALANCED`]), or line by line
+    /// ([`LINE_BREAKING_FAST`]).
+    pub const LINE_BREAKING: Setting<Text> = Setting::new("core.line-breaking");
+    pub const LINE_BREAKING_BALANCED: &str = "core.line-breaking.balanced";
+    pub const LINE_BREAKING_FAST: &str = "core.line-breaking.fast";
     /// How much space [`PARAGRAPH_SPACING`] leaves, in percent of a line
     /// (20 to 150).
     pub const PARAGRAPH_SPACE: Setting<i64> = Setting::new("core.paragraph-space");

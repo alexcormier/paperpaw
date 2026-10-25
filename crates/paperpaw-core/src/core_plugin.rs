@@ -1815,7 +1815,21 @@ const fn book_style(id: &'static str, title: &'static str, on: bool) -> SettingS
 /// Which of the book's own styles are followed, and the finer measures
 /// of the type: letter spacing, the indent's and the paragraph space's
 /// size. Their defaults keep pages as they were.
-static TYPE: [SettingSpec; 10] = [
+static TYPE: [SettingSpec; 11] = [
+    SettingSpec::choice(
+        settings::LINE_BREAKING.static_str(),
+        "core.setting.line-breaking",
+        &[
+            settings::LINE_BREAKING_BALANCED,
+            settings::LINE_BREAKING_FAST,
+        ],
+        settings::LINE_BREAKING_BALANCED,
+        groups::READING,
+    )
+    .with_extra(&IN_PAGE)
+    .advanced()
+    .scoped()
+    .description("core.setting.line-breaking.help"),
     book_style(
         settings::BOOK_ALIGN.static_str(),
         "core.setting.book-align",

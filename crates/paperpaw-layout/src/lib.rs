@@ -23,7 +23,7 @@ pub use paperpaw_document::ImageRef;
 pub use paperpaw_document::TextStyle;
 use paperpaw_document::{Align, Block, BlockKind, Document, DocumentError, Locator, Storage};
 pub use paperpaw_text::Hyphenate;
-use paperpaw_text::wrap_lines_hyphenated;
+use paperpaw_text::{Line, wrap_lines_balanced, wrap_lines_hyphenated};
 
 /// Largest extra space per word gap for justification, relative to the
 /// line height.
@@ -134,6 +134,10 @@ pub struct Style {
     pub orphans: u8,
     /// Which of the book's own styles are followed; all by default.
     pub book: BookStyles,
+    /// Paragraphs broken over all their lines, for lines that end more
+    /// evenly ([`paperpaw_text::wrap_lines_balanced`]), not line by line;
+    /// off by default.
+    pub balanced: bool,
 }
 
 impl Style {
@@ -147,7 +151,14 @@ impl Style {
             widows: 1,
             orphans: 1,
             book: BookStyles::ALL,
+            balanced: false,
         }
+    }
+
+    /// The same, breaking paragraphs over all their lines, or line by line.
+    pub const fn balanced(mut self, balanced: bool) -> Self {
+        self.balanced = balanced;
+        self
     }
 
     /// The same, following only `book` of the book's own styles.
@@ -334,9 +345,9 @@ fn block_em(block: &Block, style: &Style) -> f32 {
 }
 
 /// Where a block's lines start and how wide they are: the first line
-/// (indented where the block starts, perhaps hanging out into the
-/// book's margin) and the others, within the book's margins, each kept
-/// to a quarter of the width.
+/// (indented where the block starts, by half a line at most, perhaps
+/// hanging out into the book's margin) and the others, within the book's
+/// margins, each kept to a quarter of the width.
 #[derive(Debug, Clone, Copy)]
 struct Measure {
     first: (f32, f32),
@@ -354,7 +365,8 @@ impl Measure {
             false => (0.0, 0.0),
         };
         let rest = (start, (width - start - end).max(1.0));
-        let first_x = (start + indent).max(0.0);
+        // Indented by half a line at most, so a narrow page keeps room.
+        let first_x = (start + indent).clamp(0.0, start + rest.1 / 2.0);
         Measure {
             first: (first_x, (width - end - first_x).max(1.0)),
             rest,
@@ -365,6 +377,59 @@ impl Measure {
     fn line(&self, n: usize) -> (f32, f32) {
         if n == 0 { self.first } else { self.rest }
     }
+}
+
+/// The lines of `block` from byte `from` of its text on (a line's start),
+/// their ranges in its text, and where they are set: broken line by line
+/// from there, or (balanced) over the whole block, from where it starts
+/// (`indent` is its first line's), and those from `from` on taken.
+fn block_lines(
+    block: &Block,
+    from: usize,
+    base: Face,
+    cx: &LayoutContext<'_>,
+    heading: u8,
+    indent: f32,
+) -> Vec<(Line, (f32, f32))> {
+    let (style, width) = (cx.style, cx.width);
+    let advance = |i: usize, c: char| {
+        cx.typesetter
+            .advance(face_at(block, base, i, style.book), c)
+    };
+    let hyphenate = cx.hyphenate.filter(|_| heading == 0);
+    if style.balanced {
+        let measure = Measure::of(block, style, width, indent);
+        let lines = wrap_lines_balanced(&block.text, |n| measure.line(n).1, advance, hyphenate);
+        return lines
+            .into_iter()
+            .enumerate()
+            .filter(|(_, line)| line.range.start >= from)
+            .map(|(n, line)| (line, measure.line(n)))
+            .collect();
+    }
+    // A page that goes on with a block sets its lines as wide as those
+    // after a first line.
+    let measure = match from == 0 && !block.continues {
+        true => Measure::of(block, style, width, indent),
+        false => {
+            let rest = Measure::of(block, style, width, 0.0).rest;
+            Measure { first: rest, rest }
+        }
+    };
+    let lines = wrap_lines_hyphenated(
+        &block.text[from..],
+        |n| measure.line(n).1,
+        |i, c| advance(from + i, c),
+        hyphenate,
+    );
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(n, mut line)| {
+            line.range = from + line.range.start..from + line.range.end;
+            (line, measure.line(n))
+        })
+        .collect()
 }
 
 /// How a block's lines are aligned.
@@ -458,10 +523,8 @@ pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, Docume
     let LayoutContext {
         document,
         storage,
-        width,
         style,
-        typesetter,
-        hyphenate,
+        ..
     } = *cx;
     let Some(block) = document.block_at(storage, at)? else {
         return Ok(at);
@@ -475,17 +538,11 @@ pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, Docume
     }
     let (heading, base) = block_face(&block, style);
     let indent = first_indent(&block, style, block_align(&block, style, heading));
-    let measure = Measure::of(&block, style, width, indent);
-    let lines = wrap_lines_hyphenated(
-        &block.text,
-        |n| measure.line(n).1,
-        |i, c| typesetter.advance(face_at(&block, base, i, style.book), c),
-        hyphenate.filter(|_| heading == 0),
-    );
+    let lines = block_lines(&block, 0, base, cx, heading, indent);
     let start = lines
         .iter()
         .rev()
-        .map(|line| line.range.start)
+        .map(|(line, _)| line.range.start)
         .find(|start| *start <= from)
         .unwrap_or(0);
     Ok(Locator::new(at.section, block.source_offset(start)))
@@ -511,7 +568,7 @@ pub fn layout_page(
         width,
         style,
         typesetter,
-        hyphenate,
+        ..
     } = *cx;
     let mut page = Page {
         start,
@@ -621,24 +678,16 @@ pub fn layout_page(
         } else {
             0.0
         };
-        // A page that goes on with a block sets its lines as wide as
-        // those after a first line.
-        let measure = match at_block_start {
-            true => Measure::of(&block, style, width, indent),
-            false => {
-                let rest = Measure::of(&block, style, width, 0.0).rest;
-                Measure { first: rest, rest }
-            }
+        // Balanced, the whole block is broken from its start, its first
+        // line indented as there.
+        let block_indent = match style.balanced {
+            true => first_indent(&block, style, align),
+            false => indent,
         };
-        let text = &block.text[from..];
-        let lines = wrap_lines_hyphenated(
-            text,
-            |n| measure.line(n).1,
-            |i, c| typesetter.advance(face_at(&block, base, from + i, style.book), c),
-            hyphenate.filter(|_| heading == 0),
-        );
+        let lines = block_lines(&block, from, base, cx, heading, block_indent);
 
-        for (n, line) in lines.iter().enumerate() {
+        for (n, (line, (first_x, available))) in lines.iter().enumerate() {
+            let (first_x, available) = (*first_x, *available);
             let fits = y + line_height <= height;
             if !fits && !page.is_past_end() {
                 // Widows and orphans: as many lines go on as the next page
@@ -650,7 +699,7 @@ pub fn layout_page(
                 let orphans = usize::from(style.orphans.max(1));
                 let alone = stay < orphans;
                 let line_start = |i: usize| {
-                    Locator::new(at.section, block.source_offset(from + lines[i].range.start))
+                    Locator::new(at.section, block.source_offset(lines[i].0.range.start))
                 };
                 if alone && had_content {
                     match after_heading {
@@ -676,7 +725,6 @@ pub fn layout_page(
                 // falls rather than leaving an orphan here.
                 return ended(page, line_start(n));
             }
-            let (first_x, available) = measure.line(n);
             let free = (available - line.width).max(0.0);
             let (x, word_spacing) = match align {
                 Align::Center => (first_x + free / 2.0, 0.0),
@@ -694,11 +742,11 @@ pub fn layout_page(
                 }
                 _ => (first_x, 0.0),
             };
-            let mut line_text = String::from(&text[line.range.clone()]);
+            let mut line_text = String::from(&block.text[line.range.clone()]);
             if line.hyphen {
                 line_text.push('-');
             }
-            let range = from + line.range.start..from + line.range.end;
+            let range = line.range.clone();
             let words = word_sources(&block, range.clone());
             page.lines.push(PageLine {
                 x,
@@ -868,6 +916,7 @@ mod tests {
         widows: 1,
         orphans: 1,
         book: BookStyles::ALL,
+        balanced: false,
     };
 
     #[test]
