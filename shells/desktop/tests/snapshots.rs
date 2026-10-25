@@ -211,9 +211,11 @@ const CASES: &[Case] = &[
         name: "boox-developer-settings",
         profile: "boox-go-7",
         book: None,
-        // Developer options on: their group of settings.
+        // Developer options on: their group of settings, opened as the
+        // root's entry opens it (on the root's second page since the
+        // groups moved).
         sets: &["settings.advanced=true", "core.developer=true"],
-        script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:500,tap-on:Developer,wait:300",
+        script: "open:settings.group:id=core.group.developer,wait:300",
         colour: 0,
         fixtures: false,
     },
@@ -296,9 +298,10 @@ const CASES: &[Case] = &[
         name: "boox-lock-pin",
         profile: "boox-go-7",
         book: None,
-        // Setting up a screen lock: the keypad for a new PIN.
+        // Setting up a screen lock: the keypad for a new PIN (its group
+        // on the root, then its first row; the heading says the same).
         sets: &[],
-        script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:300,                 tap-on:System,wait:300,tap-on:Screen lock,wait:300,tap-on:PIN,wait:300",
+        script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:300,                 tap-on:Screen lock,wait:300,tap:632:200,wait:300,tap-on:PIN,wait:300",
         colour: 0,
         fixtures: false,
     },
@@ -540,7 +543,7 @@ const CASES: &[Case] = &[
         profile: "boox-go-7",
         book: None,
         sets: &[],
-        script: "run:core.settings,wait:300,tap-on:Search the settings,wait:300",
+        script: "run:core.settings,wait:300,tap-on:Search,wait:300",
         colour: 0,
         fixtures: false,
     },
