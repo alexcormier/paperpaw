@@ -27,7 +27,9 @@ change the plugin SDK.
   with the reader, Add a device (a search, then pairing confirmed on the
   reader), forgetting one (the menu button or a long press), which
   plugins may use a sensor, and Remotes: when a remote's or a keyboard's
-  keys work (when switched on, while reading, or always).
+  keys work (when switched on, while reading, or always). A remote that
+  falls asleep connects again by itself when it wakes, as long as its
+  keys are wanted.
 - Plugin interface 3: code plugins are built again for it (`Command`,
   `Env`, `Capabilities`, `MenuNeed`, `Usage` and `Work` changed for
   Bluetooth). `Work`'s `network` and `charging` became `needs`
