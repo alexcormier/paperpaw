@@ -17,8 +17,9 @@ pub(super) fn groups(kernel: &Kernel, ours: &dyn Fn(&str) -> Option<String>) -> 
         let Some(plugin) = ours(id) else {
             continue;
         };
-        // A widget's own group is not on the main page.
-        if widgets.has(id) {
+        // A widget's own group is not on the main page, nor a part of
+        // another group (shown on that group's page).
+        if widgets.has(id) || group.parent.is_some() {
             continue;
         }
         if group.order == 0 {
