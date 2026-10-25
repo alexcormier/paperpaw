@@ -37,7 +37,7 @@ struct paperpaw_native::index::NoRoom
 struct paperpaw_native::index::Placed { sha256: [u8; 32], at: u32, len: u32, base: u32, api: u32 }
 struct paperpaw_native::index::Placement { at: u32, base: u32, present: bool, erase_index: bool }
 struct paperpaw_native::index::Region { start: u32, end: u32, base: u32 }
-struct paperpaw_native::interface::Api #{"repr": {"align": null, "int": null, "kind": "c", "packed": null}} { size: u32, alloc: unsafe extern "C" fn(usize, usize) -> *mut u8, dealloc: unsafe extern "C" fn(*mut u8, usize, usize), realloc: unsafe extern "C" fn(*mut u8, usize, usize, usize) -> *mut u8, panic: unsafe extern "C" fn(*const u8, usize) -> never, micros: extern "C" fn() -> u64, icon: unsafe extern "C" fn(*const u8, usize) -> u32 }
+struct paperpaw_native::interface::Api #{"repr": {"align": null, "int": null, "kind": "c", "packed": null}} { size: u32, alloc: unsafe extern "C" fn(usize, usize) -> *mut u8, dealloc: unsafe extern "C" fn(*mut u8, usize, usize), realloc: unsafe extern "C" fn(*mut u8, usize, usize, usize) -> *mut u8, panic: unsafe extern "C" fn(*const u8, usize) -> never, micros: extern "C" fn() -> u64, icon: unsafe extern "C" fn(*const u8, usize) -> u32, alloc_in: unsafe extern "C" fn(usize, usize, u32) -> *mut u8 }
 struct paperpaw_native::interface::Entry #{"repr": {"align": null, "int": null, "kind": "c", "packed": null}} { fingerprint: u64, make: unsafe extern "C" fn() -> *mut core::ffi::c_void }
 struct paperpaw_native::reloc::Relocator<'a> { header: &'a paperpaw_native::header::Header, words: &'a [u32], delta: u32, api: u32 }
 struct paperpaw_native::signature::BadSignature

@@ -208,6 +208,11 @@ pub struct Env<'a> {
     /// How PaperPaw started this time, where the shell can tell (see
     /// [`power::Start`](crate::power::Start)).
     pub(crate) started: crate::power::Start,
+    /// What the panel can do and how the last frame went (see
+    /// [`realtime`](crate::realtime)).
+    pub(crate) panel: crate::realtime::PanelInfo,
+    /// The buttons held down now, in the order they went down.
+    pub(crate) keys_held: &'a [&'static str],
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub(crate) storage: &'a dyn Storage,
@@ -511,6 +516,19 @@ impl<'a> Env<'a> {
         self.started
     }
 
+    /// What the panel can do, and how the last frame went (see
+    /// [`realtime`](crate::realtime)): for screens that pace themselves.
+    pub fn panel(&self) -> crate::realtime::PanelInfo {
+        self.panel
+    }
+
+    /// The buttons held down now: for screens that take raw keys
+    /// ([`ScreenMode::raw_keys`](crate::realtime::ScreenMode::raw_keys)),
+    /// also for the others.
+    pub fn keys_held(&self) -> crate::realtime::KeysHeld<'a> {
+        crate::realtime::KeysHeld::of(self.keys_held)
+    }
+
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub fn storage(&self) -> &'a dyn Storage {
@@ -668,6 +686,11 @@ pub struct EnvParts<'a> {
     /// How PaperPaw started this time, where the shell can tell (see
     /// [`power::Start`](crate::power::Start)).
     pub started: crate::power::Start,
+    /// What the panel can do and how the last frame went (see
+    /// [`realtime`](crate::realtime)).
+    pub panel: crate::realtime::PanelInfo,
+    /// The buttons held down now, in the order they went down.
+    pub keys_held: &'a [&'static str],
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -730,6 +753,8 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             memory: p.memory,
             clock: p.clock,
             started: p.started,
+            panel: p.panel,
+            keys_held: p.keys_held,
             storage: p.storage,
         }
     }

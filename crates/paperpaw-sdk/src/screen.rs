@@ -441,6 +441,28 @@ pub trait Screen {
         Handled::No
     }
 
+    /// How the screen runs while it is on top
+    /// ([`ScreenMode`](crate::realtime::ScreenMode)): full screen, raw
+    /// keys, its own refreshes, a pace. Read whenever it counts (each
+    /// input, each frame), so it may change as the screen goes on; whether
+    /// it is full screen counts when the screen is made. By default a
+    /// screen of pages.
+    fn mode(&self) -> crate::realtime::ScreenMode {
+        crate::realtime::ScreenMode::new()
+    }
+
+    /// A button pressed or let go, for a screen that takes raw keys
+    /// ([`ScreenMode::raw_keys`](crate::realtime::ScreenMode::raw_keys)),
+    /// before the key map. A press it takes ([`Handled::Yes`]) brings its
+    /// release here too; one it does not goes to the key map with its
+    /// release, as on other screens. The power button never comes, and
+    /// holding *Back* for [`ESCAPE_HOLD`](crate::realtime::ESCAPE_HOLD)
+    /// leaves the screen.
+    fn on_key(&mut self, key: &crate::realtime::KeyEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = (key, cx);
+        Handled::No
+    }
+
     /// How the row of hints below the screen labels the button that runs
     /// `action` here, on devices with buttons in a row under the screen
     /// ([`settings::BUTTON_HINTS`](crate::builtin::settings::BUTTON_HINTS)):

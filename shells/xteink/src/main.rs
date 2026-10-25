@@ -409,6 +409,8 @@ fn prepare() -> Ready {
     // The heap before the board: the board keeps its bus there.
     esp_alloc::heap_allocator!(size: HEAP_SIZE);
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: RECLAIMED_SIZE);
+    // Plugins choose internal RAM or PSRAM for their data (ADR 0030).
+    paperpaw_sdk::memory::set_placer(native::api::alloc_in);
     esp_println::logger::init_logger_from_env();
     power::note_start();
     let (place, naps, reason) = power::last_run();

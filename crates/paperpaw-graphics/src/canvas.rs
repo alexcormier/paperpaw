@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::{Color, Point, Rect};
 
+use crate::blit::{Bitmap, Blit};
 use crate::framebuffer::Framebuffer;
 use crate::round::{self, corner_inset};
 
@@ -804,6 +805,27 @@ impl<'a> Canvas<'a> {
             self.framebuffer
                 .put_rgb(px, rect.y, [rgb[at], rgb[at + 1], rgb[at + 2]]);
         }
+        self.framebuffer.mark_dirty(rect);
+    }
+
+    /// Draws `bitmap` as `blit` says, fast enough for every frame (e.g.
+    /// an emulated game's screen): a picture, as gray rows are, dithered
+    /// as they are unless `blit` says otherwise.
+    pub fn blit(&mut self, bitmap: &Bitmap<'_>, blit: Blit) {
+        if self.framebuffer.is_blind() {
+            return;
+        }
+        let scale = u64::from(blit.scale);
+        let (x, y) = (i64::from(blit.at.x), i64::from(blit.at.y));
+        let (width, height) = (
+            u64::from(bitmap.width()) * scale,
+            u64::from(bitmap.height()) * scale,
+        );
+        let Some(rect) = self.clip_wide(x, y, width, height) else {
+            return;
+        };
+        let origin = (x + i64::from(self.origin.0), y + i64::from(self.origin.1));
+        crate::blit::draw(self.framebuffer, rect, origin, bitmap, blit);
         self.framebuffer.mark_dirty(rect);
     }
 

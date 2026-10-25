@@ -37,6 +37,7 @@ pub struct Effects {
     pub(crate) restart: bool,
     pub(crate) sleep: bool,
     pub(crate) proceed: bool,
+    pub(crate) pace: Option<core::time::Duration>,
 }
 
 impl Effects {
@@ -63,6 +64,15 @@ impl Effects {
 
     pub fn wake_at(&self) -> Option<Instant> {
         self.wake_at
+    }
+
+    /// The pace the screen on top runs at, if it asks for one
+    /// ([`ScreenMode::frame_every`](paperpaw_sdk::realtime::ScreenMode::frame_every)):
+    /// the shell keeps ready for it (no light sleep longer than a frame)
+    /// and, where it can, goes on while the panel refreshes, showing the
+    /// next frame once the panel is free.
+    pub fn pace(&self) -> Option<core::time::Duration> {
+        self.pace
     }
 
     /// Whether the shell should build a new kernel (see [`Effect::Restart`]).
@@ -97,6 +107,7 @@ impl Effects {
             restart: self.restart || later.restart,
             sleep: self.sleep || later.sleep,
             proceed: self.proceed || later.proceed,
+            pace: later.pace,
         }
     }
 

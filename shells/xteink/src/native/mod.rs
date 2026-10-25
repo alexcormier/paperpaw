@@ -14,7 +14,7 @@
 //! lies is kept ([`attribute`]), so a panic's calls inside a plugin are
 //! written with its name and the offset into its file.
 
-mod api;
+pub(crate) mod api;
 pub mod bundle;
 #[cfg(feature = "esp32c3")]
 mod flash;

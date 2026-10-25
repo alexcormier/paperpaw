@@ -101,6 +101,7 @@ pub mod presets;
 pub mod random;
 pub mod readers;
 pub mod reading;
+pub mod realtime;
 pub mod replies;
 mod screen;
 pub mod secrets;
@@ -176,10 +177,10 @@ pub use settings::{
 };
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 
-pub use paperpaw_graphics::Canvas;
 /// Round shapes' geometry: angles as on a clock face, points around a
 /// centre (see [`Canvas::fill_ring`], [`Canvas::draw_hand`]).
 pub use paperpaw_graphics::round;
+pub use paperpaw_graphics::{Bitmap, BitmapError, BitmapFormat, Blit, Canvas, Dither};
 pub use paperpaw_i18n::{Arg, Translator};
 pub use paperpaw_platform::{Battery, SystemStatus, WallClock};
 pub use paperpaw_platform::{

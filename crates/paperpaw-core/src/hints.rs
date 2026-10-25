@@ -67,6 +67,9 @@ impl Kernel {
     /// When open screen `active` shows the row: as it says, else as its
     /// plugin said for it.
     pub(crate) fn hints_of(&self, active: &ActiveScreen) -> HintVisibility {
+        if active.screen.mode().is_full_screen() {
+            return HintVisibility::Hidden;
+        }
         active
             .screen
             .hints()

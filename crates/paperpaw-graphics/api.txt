@@ -12,6 +12,32 @@ pub const paperpaw_graphics::round::UNIT: i32
 pub fn paperpaw_graphics::round::corner_inset(u32, u32, u32) -> u32
 pub fn paperpaw_graphics::round::point_at(paperpaw_platform::geometry::Point, i32, i32) -> paperpaw_platform::geometry::Point
 pub fn paperpaw_graphics::round::sin_cos(i32) -> (i32, i32)
+#[non_exhaustive] pub enum paperpaw_graphics::BitmapError
+pub paperpaw_graphics::BitmapError::DataTooShort
+pub paperpaw_graphics::BitmapError::DataTooShort::len: usize
+pub paperpaw_graphics::BitmapError::DataTooShort::needed: usize
+pub paperpaw_graphics::BitmapError::PaletteTooShort
+pub paperpaw_graphics::BitmapError::PaletteTooShort::len: usize
+pub paperpaw_graphics::BitmapError::PaletteTooShort::needed: usize
+pub paperpaw_graphics::BitmapError::StrideTooSmall
+pub paperpaw_graphics::BitmapError::StrideTooSmall::needed: usize
+pub paperpaw_graphics::BitmapError::StrideTooSmall::stride: usize
+pub paperpaw_graphics::BitmapError::ZeroSize
+impl core::error::Error for paperpaw_graphics::BitmapError
+impl core::fmt::Display for paperpaw_graphics::BitmapError
+pub fn paperpaw_graphics::BitmapError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum paperpaw_graphics::BitmapFormat
+pub paperpaw_graphics::BitmapFormat::Gray1
+pub paperpaw_graphics::BitmapFormat::Gray2
+pub paperpaw_graphics::BitmapFormat::Gray4
+pub paperpaw_graphics::BitmapFormat::Gray8
+impl paperpaw_graphics::BitmapFormat
+pub const fn paperpaw_graphics::BitmapFormat::bits_per_pixel(self) -> u8
+pub const fn paperpaw_graphics::BitmapFormat::stride(self, u16) -> usize
+pub const fn paperpaw_graphics::BitmapFormat::values(self) -> u16
+#[non_exhaustive] pub enum paperpaw_graphics::Dither
+pub paperpaw_graphics::Dither::None
+pub paperpaw_graphics::Dither::Ordered
 #[non_exhaustive] pub enum paperpaw_graphics::GraphicsError
 pub paperpaw_graphics::GraphicsError::OutOfMemory
 pub paperpaw_graphics::GraphicsError::OutOfMemory::bytes: usize
@@ -33,8 +59,22 @@ pub paperpaw_graphics::Role::Row
 pub paperpaw_graphics::Role::Slider
 pub paperpaw_graphics::Role::Switch
 pub paperpaw_graphics::Role::Text
+pub struct paperpaw_graphics::Bitmap<'a>
+impl<'a> paperpaw_graphics::Bitmap<'a>
+pub fn paperpaw_graphics::Bitmap<'a>::format(&self) -> paperpaw_graphics::BitmapFormat
+pub fn paperpaw_graphics::Bitmap<'a>::height(&self) -> u16
+pub fn paperpaw_graphics::Bitmap<'a>::new(paperpaw_graphics::BitmapFormat, u16, u16, &'a [u8]) -> core::result::Result<Self, paperpaw_graphics::BitmapError>
+pub fn paperpaw_graphics::Bitmap<'a>::palette(self, &'a [u8]) -> core::result::Result<Self, paperpaw_graphics::BitmapError>
+pub fn paperpaw_graphics::Bitmap<'a>::stride(self, usize) -> core::result::Result<Self, paperpaw_graphics::BitmapError>
+pub fn paperpaw_graphics::Bitmap<'a>::width(&self) -> u16
+#[non_exhaustive] pub struct paperpaw_graphics::Blit
+impl paperpaw_graphics::Blit
+pub const fn paperpaw_graphics::Blit::at(paperpaw_platform::geometry::Point) -> Self
+pub const fn paperpaw_graphics::Blit::dither(self, paperpaw_graphics::Dither) -> Self
+pub const fn paperpaw_graphics::Blit::scale(self, u8) -> Self
 pub struct paperpaw_graphics::Canvas<'a>
 impl<'a> paperpaw_graphics::Canvas<'a>
+pub fn paperpaw_graphics::Canvas<'a>::blit(&mut self, &paperpaw_graphics::Bitmap<'_>, paperpaw_graphics::Blit)
 pub fn paperpaw_graphics::Canvas<'a>::clear(&mut self, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::clip(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_graphics::Canvas<'a>::clipped(&mut self, paperpaw_platform::geometry::Rect) -> paperpaw_graphics::Canvas<'_>

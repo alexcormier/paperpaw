@@ -31,7 +31,12 @@ impl Kernel {
         let mut screen = (spec.factory)(&self.shared.env(self.now), params);
         // It says otherwise of the row of hints: made again for the part
         // of the screen it then has.
-        if let Some(own) = screen.hints()
+        let own = match screen.mode().is_full_screen() {
+            // All of the panel its own: no row of hints.
+            true => Some(HintVisibility::Hidden),
+            false => screen.hints(),
+        };
+        if let Some(own) = own
             && (own == HintVisibility::Shown) != hinted
         {
             hinted = !hinted;

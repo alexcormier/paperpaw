@@ -129,9 +129,115 @@ impl fmt::Debug for Memory {
     }
 }
 
+/// Where data is kept, for what reads it all the time and what is large
+/// ([`vec_in`]). Devices with one kind of memory keep both alike.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Placement {
+    /// Read and written all the time, by a loop that runs every frame:
+    /// internal RAM where the device has more than one kind (the X4 Pro).
+    Fast,
+    /// Much data, read now and then (a whole file kept): PSRAM where the
+    /// device has it, so internal RAM stays for the rest.
+    Large,
+}
+
+impl Placement {
+    /// Its number in the firmware's table (`Api::alloc_in`).
+    const fn code(self) -> u32 {
+        match self {
+            Placement::Fast => 1,
+            Placement::Large => 2,
+        }
+    }
+}
+
+/// Why memory could not be had.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MemoryError {
+    /// No room for `bytes` where asked.
+    Full { bytes: usize },
+    /// More than an address can count.
+    TooLarge,
+}
+
+impl fmt::Display for MemoryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MemoryError::Full { bytes } => write!(f, "no room for {bytes} bytes"),
+            MemoryError::TooLarge => write!(f, "more memory than can be counted"),
+        }
+    }
+}
+
+impl core::error::Error for MemoryError {}
+
+/// Allocates by placement, as the firmware's table's `alloc_in`: size,
+/// alignment, the [`Placement`]'s number; null when there is no room.
+pub type Placer = unsafe extern "C" fn(size: usize, align: usize, placement: u32) -> *mut u8;
+
+/// The firmware's allocation by placement, where it gave one.
+static PLACER: core::sync::atomic::AtomicPtr<()> =
+    core::sync::atomic::AtomicPtr::new(core::ptr::null_mut());
+
+/// Gives the SDK the firmware's allocation by placement, at start (a code
+/// plugin's own copy of the SDK takes it from the firmware's table).
+#[cfg(feature = "kernel")]
+pub fn set_placer(placer: Placer) {
+    place_with(placer);
+}
+
+pub(crate) fn place_with(placer: Placer) {
+    PLACER.store(placer as *mut (), core::sync::atomic::Ordering::Release);
+}
+
+/// An empty vector with room for `capacity` values, kept where
+/// `placement` says (where the device has more than one kind of memory;
+/// elsewhere as `Vec::with_capacity`). It grows and is dropped as any
+/// vector, wherever it went: keep it from growing (room for all of it at
+/// once) to keep it where it is.
+pub fn vec_in<T>(placement: Placement, capacity: usize) -> Result<alloc::vec::Vec<T>, MemoryError> {
+    let layout = core::alloc::Layout::array::<T>(capacity).map_err(|_| MemoryError::TooLarge)?;
+    let placer = PLACER.load(core::sync::atomic::Ordering::Acquire);
+    if layout.size() == 0 || placer.is_null() {
+        let mut vec = alloc::vec::Vec::new();
+        vec.try_reserve_exact(capacity)
+            .map_err(|_| MemoryError::Full {
+                bytes: layout.size(),
+            })?;
+        return Ok(vec);
+    }
+    // SAFETY: only `set_placer` stores here, a `Placer`.
+    let placer: Placer = unsafe { core::mem::transmute::<*mut (), Placer>(placer) };
+    // SAFETY: a layout of non-zero size, as the firmware's heap takes it.
+    let ptr = unsafe { placer(layout.size(), layout.align(), placement.code()) };
+    if ptr.is_null() {
+        return Err(MemoryError::Full {
+            bytes: layout.size(),
+        });
+    }
+    // SAFETY: allocated by the global allocator's heap (the firmware's,
+    // which frees blocks of any of its regions) for `capacity` values of
+    // `T`, none of them set yet.
+    Ok(unsafe { alloc::vec::Vec::from_raw_parts(ptr.cast::<T>(), 0, capacity) })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vectors_go_anywhere_without_a_placer() {
+        let mut vec = vec_in::<u32>(Placement::Large, 100).unwrap();
+        assert!(vec.capacity() >= 100 && vec.is_empty());
+        vec.push(7);
+        assert_eq!(vec_in::<u8>(Placement::Fast, 0).unwrap().capacity(), 0);
+        assert_eq!(
+            vec_in::<u64>(Placement::Fast, usize::MAX),
+            Err(MemoryError::TooLarge)
+        );
+    }
 
     #[test]
     fn a_probe_is_read_when_asked() {

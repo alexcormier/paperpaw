@@ -611,7 +611,7 @@ impl Framebuffer {
 
     /// The ordered dither's offset at `(x, y)`: none where the format has
     /// many grays (or colours).
-    fn offset(&self, x: u16, y: u16) -> i32 {
+    pub(crate) fn offset(&self, x: u16, y: u16) -> i32 {
         /// 4×4 Bayer matrix.
         const BAYER: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
         match self.format.gray_levels() {
@@ -673,6 +673,13 @@ impl Framebuffer {
         }
     }
 
+    /// The rows held, the bytes of a row and the screen row of the
+    /// first, for drawing that writes whole bytes (see
+    /// [`Canvas::blit`](crate::Canvas::blit)).
+    pub(crate) fn rows_mut(&mut self) -> (&mut [u8], usize, u16) {
+        (&mut self.data, self.stride, self.top)
+    }
+
     /// The stored value of a pixel of a format of 8 bits or fewer.
     fn load(&self, x: u16, y: u16) -> u32 {
         let row = usize::from(y - self.top) * self.stride;
@@ -707,7 +714,7 @@ impl Framebuffer {
     }
 
     /// Converts a colour to the stored pixel value (nearest level).
-    fn encode(&self, color: Color) -> u32 {
+    pub(crate) fn encode(&self, color: Color) -> u32 {
         let color = if self.inverted {
             color.inverted()
         } else {

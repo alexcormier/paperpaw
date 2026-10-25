@@ -158,6 +158,8 @@ impl Kit {
             memory: crate::memory::Memory::NONE,
             clock: crate::time::Clock::NONE,
             started: crate::power::Start::Unknown,
+            panel: crate::realtime::PanelInfo::default(),
+            keys_held: &[],
             storage: &self.storage,
         })
     }

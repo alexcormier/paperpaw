@@ -44,6 +44,7 @@ struct BuilderParts {
     random: paperpaw_sdk::random::Random,
     memory: paperpaw_sdk::memory::Memory,
     started: paperpaw_sdk::power::Start,
+    panel: paperpaw_sdk::realtime::PanelInfo,
     /// Network settings kept in the program, by plugin.
     network_settings: &'static [crate::NetworkSettings],
     /// The most Bluetooth links the shell keeps; none without a radio.
@@ -191,6 +192,15 @@ impl KernelBuilder {
     /// watchdog. Without, it is not known.
     pub fn started(mut self, start: paperpaw_sdk::power::Start) -> Self {
         self.0.started = start;
+        self
+    }
+
+    /// What the panel can do ([`paperpaw_sdk::realtime::PanelInfo`]): its
+    /// grays, refresh times known beforehand, whether frames overlap.
+    /// Refreshes shown add their times ([`Kernel::panel_busy`]). Without,
+    /// a panel of the display's grays, its times not known.
+    pub fn panel(mut self, panel: paperpaw_sdk::realtime::PanelInfo) -> Self {
+        self.0.panel = panel;
         self
     }
 
@@ -522,6 +532,8 @@ impl BuilderParts {
                 random: self.random,
                 memory: self.memory,
                 started: self.started,
+                panel: self.panel,
+                keys_held: Vec::new(),
                 storage,
                 recall,
                 keymap: Keymap::default(),
@@ -610,6 +622,7 @@ impl BuilderParts {
             shown_since: Instant(0),
             scope: None,
             screens_changed: false,
+            raw: crate::realtime::RawKeys::default(),
             preview_owner: None,
             next_serial: 0,
             task: None,
@@ -1050,6 +1063,13 @@ impl Kernel {
             random: paperpaw_sdk::random::Random::NONE,
             memory: paperpaw_sdk::memory::Memory::NONE,
             started: paperpaw_sdk::power::Start::Unknown,
+            panel: paperpaw_sdk::realtime::PanelInfo::new(
+                device
+                    .display
+                    .format
+                    .gray_levels()
+                    .map_or(255, |l| l.min(255) as u8),
+            ),
             network_settings: &[],
             bluetooth_links: 0,
         }))

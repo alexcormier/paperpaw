@@ -55,6 +55,7 @@ mod keymap;
 mod meter;
 mod network;
 mod plugins;
+mod realtime;
 mod recall;
 mod refresh;
 mod registry;
@@ -318,6 +319,8 @@ pub struct Kernel {
     /// A screen was opened or closed since the last call ended; then the
     /// frame drawn for it is not shown yet (see [`Kernel::shown`]).
     screens_changed: bool,
+    /// Raw keys taken, the way out, frames asked (see [`realtime`]).
+    raw: realtime::RawKeys,
     /// Setting defaults from plugins, applied once all are registered:
     /// `(plugin, setting, value)`.
     plugin_defaults: Vec<(Id, Id, Cow<'static, str>)>,
@@ -465,6 +468,9 @@ impl Kernel {
             return self.finish();
         }
         let event = self.page_buttons_swapped(event);
+        if let InputEvent::Button { name, state } = event {
+            self.note_held(name, state);
+        }
         // Plugins' input filters come first; while a screen guards the
         // device, or a PIN or a password is entered, only those of its
         // plugin.
@@ -510,6 +516,7 @@ impl Kernel {
             _ => self.shared.last_input,
         };
         match event {
+            InputEvent::Button { name, state } if self.raw_key(name, state, now) => {}
             InputEvent::Button { name, state } => {
                 if state == ButtonState::Pressed {
                     self.input.pressed_on = self.stack.last().map(|top| top.serial);
@@ -796,8 +803,13 @@ impl Kernel {
             .shared
             .settings
             .int(core_settings::SLEEP_AFTER.as_str());
+        let set = (minutes as u64).saturating_mul(60_000);
+        // Longer while a screen played by watching asks for it.
+        let asked = self.top_mode().awake().map_or(0, |idle| {
+            u64::try_from(idle.as_millis()).unwrap_or(u64::MAX)
+        });
         (self.shared.caps.sleep && minutes > 0)
-            .then(|| self.last_activity.add_millis(minutes as u64 * 60_000))
+            .then(|| self.last_activity.add_millis(set.max(asked)))
     }
 
     /// Advances time, e.g. when a requested [`Effect::WakeAt`] is due.
@@ -805,6 +817,7 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.hide_hints();
+        self.escape(now);
         if self.sleep_due().is_some_and(|at| at <= now) {
             self.last_activity = now;
             // Busy: reading aloud, downloading, serving. Else asleep.
@@ -1299,6 +1312,11 @@ struct Shared {
     memory: paperpaw_sdk::memory::Memory,
     /// How PaperPaw started (see [`KernelBuilder::started`]).
     started: paperpaw_sdk::power::Start,
+    /// What the panel can do and how the last frame went (see
+    /// [`KernelBuilder::panel`]).
+    panel: paperpaw_sdk::realtime::PanelInfo,
+    /// The buttons held down now, in the order they went down.
+    keys_held: Vec<&'static str>,
     /// Shared with font packs read where they are (see `Fonts::load`).
     storage: alloc::rc::Rc<dyn Storage>,
     /// What the storage read during the call going on (see `recall`).
@@ -1368,6 +1386,8 @@ impl Shared {
             memory: self.memory,
             clock: self.meter.clock(),
             started: self.started,
+            panel: self.panel,
+            keys_held: &self.keys_held,
             storage: self.storage.as_ref(),
             keys: &self.keymap,
             look: self.look.0,

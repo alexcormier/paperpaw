@@ -125,6 +125,7 @@ impl core::fmt::Display for paperpaw_native::Problem
 pub fn paperpaw_native::Problem::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[repr(C)] pub struct paperpaw_native::Api
 pub paperpaw_native::Api::alloc: fn(usize, usize) -> *mut u8
+pub paperpaw_native::Api::alloc_in: fn(usize, usize, u32) -> *mut u8
 pub paperpaw_native::Api::dealloc: fn(*mut u8, usize, usize)
 pub paperpaw_native::Api::icon: fn(*const u8, usize) -> u32
 pub paperpaw_native::Api::micros: fn() -> u64

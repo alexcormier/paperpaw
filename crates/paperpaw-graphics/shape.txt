@@ -5,7 +5,12 @@
 const paperpaw_graphics::framebuffer::MONO_COVERAGE: u8 = 96u8
 const paperpaw_graphics::round::UNIT: i32 = 10_000i32
 enum paperpaw_graphics::GraphicsError { OutOfMemory { bytes: usize }, UnsupportedFormat(0: paperpaw_platform::pixel::PixelFormat) }
+enum paperpaw_graphics::blit::BitmapError { ZeroSize, StrideTooSmall { stride: usize, needed: usize }, DataTooShort { len: usize, needed: usize }, PaletteTooShort { len: usize, needed: usize } }
+enum paperpaw_graphics::blit::BitmapFormat { Gray1, Gray2, Gray4, Gray8 }
+enum paperpaw_graphics::blit::Dither { Ordered, None }
 enum paperpaw_graphics::canvas::Role { Heading, Row, Button, Switch, Slider, Text, Check, Radio, Field, Image, Link, Dialog, Progress }
+struct paperpaw_graphics::blit::Bitmap<'a> { format: paperpaw_graphics::blit::BitmapFormat, width: u16, height: u16, stride: usize, data: &'a [u8], palette: core::option::Option<&'a [u8]> }
+struct paperpaw_graphics::blit::Blit { at: paperpaw_platform::geometry::Point, scale: u8, dither: paperpaw_graphics::blit::Dither }
 struct paperpaw_graphics::canvas::Canvas<'a> { framebuffer: &'a mut paperpaw_graphics::framebuffer::Framebuffer, clip: paperpaw_platform::geometry::Rect, origin: (i32, i32), described: core::option::Option<&'a mut alloc::vec::Vec<paperpaw_graphics::canvas::Described>>, disabled: bool }
 struct paperpaw_graphics::canvas::Describe<'c> { sink: core::option::Option<&'c mut alloc::vec::Vec<paperpaw_graphics::canvas::Described>>, role: paperpaw_graphics::canvas::Role, label: &'c str, area: paperpaw_platform::geometry::Rect, clip: paperpaw_platform::geometry::Rect, focused: bool, on: core::option::Option<bool>, disabled: bool }
 struct paperpaw_graphics::canvas::Described { role: paperpaw_graphics::canvas::Role, label: alloc::string::String, area: paperpaw_platform::geometry::Rect, focused: bool, on: core::option::Option<bool>, disabled: bool, clip: paperpaw_platform::geometry::Rect }

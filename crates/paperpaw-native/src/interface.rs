@@ -55,6 +55,11 @@ pub struct Api {
     /// stay in the firmware (the SDK's `icons::char` in a plugin built
     /// with `--cfg paperpaw_plugin`).
     pub icon: unsafe extern "C" fn(name: *const u8, len: usize) -> u32,
+    /// Allocates as `alloc` does, where `placement` says: 1 for data read
+    /// all the time (internal RAM), 2 for much data (PSRAM), where the
+    /// device has both; else anywhere. Null when there is no room. Freed
+    /// with `dealloc`.
+    pub alloc_in: unsafe extern "C" fn(size: usize, align: usize, placement: u32) -> *mut u8,
 }
 
 impl Api {
