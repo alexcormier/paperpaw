@@ -30,11 +30,14 @@ impl Book {
                     .copied()
                     .unwrap_or(text);
                 let top = (t.y + line.baseline - t.ascent).max(0.0);
-                Some(LineBox::new(
-                    Rect::new(column.x, top as u16, column.width, t.line_height as u16),
-                    Locator::new(line.section, first),
-                    Locator::new(line.section, last),
-                ))
+                Some(
+                    LineBox::new(
+                        Rect::new(column.x, top as u16, column.width, t.line_height as u16),
+                        Locator::new(line.section, first),
+                        Locator::new(line.section, last),
+                    )
+                    .leading(line.leading as u16),
+                )
             })
             .collect()
     }

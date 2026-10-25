@@ -24,6 +24,14 @@
 //! the frame to the page's box; a reader of one's own does the same with
 //! [`PageLayers::rooms`] and [`PageLayers::columns`].
 //!
+//! A layer that needs the page's words where they are drawn (to write
+//! over or between them: a translation above each line, an interlinear
+//! reading) asks for them ([`PageLayerSpec::words`]) and finds them in
+//! [`PageView::words`]; readers measure them once a page, and only where
+//! a layer asks. Room between the lines for it comes from a text filter
+//! ([`Block::leading_above`](crate::document::Block::leading_above)),
+//! which each line's [`LineBox::leading`] tells.
+//!
 //! A layer whose drawing changes while the page stays (its data changed)
 //! asks for the screen to be drawn again
 //! ([`Command::Redraw`](crate::Command::Redraw)): readers keep nothing of
@@ -35,6 +43,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::document::Locator;
+use crate::reading::WordBox;
 use crate::setting::Setting;
 use crate::{Canvas, Env, Id, Rect};
 
@@ -71,11 +80,27 @@ pub struct LineBox {
     pub start: Locator,
     /// Just after its last character.
     pub end: Locator,
+    /// The room above `area` that the line's block asked for
+    /// ([`Block::leading_above`](crate::document::Block::leading_above)),
+    /// in pixels: between the line before and this one's letters. 0 for
+    /// none.
+    pub leading: u16,
 }
 
 impl LineBox {
     pub fn new(area: Rect, start: Locator, end: Locator) -> Self {
-        Self { area, start, end }
+        Self {
+            area,
+            start,
+            end,
+            leading: 0,
+        }
+    }
+
+    /// With `leading` pixels of room above it.
+    pub fn leading(mut self, leading: u16) -> Self {
+        self.leading = leading;
+        self
     }
 }
 
@@ -97,6 +122,11 @@ pub struct PageView<'a> {
     pub columns: &'a [Rect],
     /// The page's lines, in reading order.
     pub lines: &'a [LineBox],
+    /// The page's words with their boxes and places in the book, in
+    /// reading order, as [`reading::word_boxes`](crate::reading::word_boxes)
+    /// measures them, where a layer that is on asked for them
+    /// ([`PageLayerSpec::words`]); else empty (and not measured).
+    pub words: &'a [WordBox],
     /// The room this layer reserved, if it did.
     pub room: Option<Rect>,
     /// The status lines, where they are shown.
@@ -116,6 +146,7 @@ impl<'a> PageView<'a> {
             content,
             columns: &[],
             lines: &[],
+            words: &[],
             room: None,
             top_status: None,
             bottom_status: None,
@@ -134,6 +165,11 @@ impl<'a> PageView<'a> {
 
     pub fn lines(mut self, lines: &'a [LineBox]) -> Self {
         self.lines = lines;
+        self
+    }
+
+    pub fn words(mut self, words: &'a [WordBox]) -> Self {
+        self.words = words;
         self
     }
 
@@ -185,6 +221,8 @@ pub struct PageLayerSpec {
     /// It hears taps on its room
     /// ([`events::PAGE_LAYER_TAPPED`](crate::builtin::events::PAGE_LAYER_TAPPED)).
     pub taps: bool,
+    /// It draws by the page's words ([`PageView::words`]).
+    pub words: bool,
     pub reserve: Option<ReserveFn>,
     pub draw: DrawLayerFn,
 }
@@ -196,13 +234,14 @@ impl fmt::Debug for PageLayerSpec {
             .field("order", &self.order)
             .field("switch", &self.switch)
             .field("taps", &self.taps)
+            .field("words", &self.words)
             .finish_non_exhaustive()
     }
 }
 
 impl PageLayerSpec {
     /// Layer `id`, named `title`, drawing with `draw`; order 0, always
-    /// on, no room, no taps.
+    /// on, no room, no taps, no words.
     pub fn new(
         id: Id,
         title: impl Into<Cow<'static, str>>,
@@ -214,6 +253,7 @@ impl PageLayerSpec {
             order: 0,
             switch: None,
             taps: false,
+            words: false,
             reserve: None,
             draw: Box::new(draw),
         }
@@ -233,6 +273,14 @@ impl PageLayerSpec {
     /// Hears taps on its room.
     pub fn taps(mut self) -> Self {
         self.taps = true;
+        self
+    }
+
+    /// Draws by the page's words: the reader gives them in
+    /// [`PageView::words`] while it is on (measured once a page, where a
+    /// layer asks).
+    pub fn words(mut self) -> Self {
+        self.words = true;
         self
     }
 
@@ -376,6 +424,12 @@ impl PageLayers {
     /// The layers that are on, by order.
     pub fn on<'s>(&'s self, env: &'s Env<'_>) -> impl Iterator<Item = &'s PageLayerSpec> {
         self.layers.iter().filter(move |l| is_on(env, l))
+    }
+
+    /// Whether a layer that is on draws by the page's words
+    /// ([`PageLayerSpec::words`]): the reader then gives them.
+    pub fn want_words(&self, env: &Env<'_>) -> bool {
+        self.on(env).any(|l| l.words)
     }
 
     /// The frames' ids, in the order of the plugins.

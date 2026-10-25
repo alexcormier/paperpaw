@@ -23,7 +23,9 @@ use alloc::vec::Vec;
 
 pub use paperpaw_document::ImageRef;
 pub use paperpaw_document::TextStyle;
-use paperpaw_document::{Align, Block, BlockKind, Document, DocumentError, Locator, Storage};
+use paperpaw_document::{
+    Align, Block, BlockKind, Document, DocumentError, Locator, MAX_LEADING_ABOVE, Storage,
+};
 pub use paperpaw_text::Hyphenate;
 use paperpaw_text::{Line, wrap_lines_balanced_kerned, wrap_lines_kerned};
 
@@ -197,6 +199,7 @@ pub struct LineRun {
 
 /// A line of text at its position on the page.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct PageLine {
     /// Left edge relative to the content box.
     pub x: f32,
@@ -213,6 +216,11 @@ pub struct PageLine {
     /// the section's source, for positions that outlast the layout (e.g.
     /// highlights).
     pub words: Vec<(u32, u32)>,
+    /// The room above the line's letters its block asked for
+    /// ([`Block::leading_above`]), in pixels: part of the line's height,
+    /// between the line before and this one's ascent, where a page layer
+    /// draws (an interlinear reading). 0 for none.
+    pub leading: f32,
 }
 
 /// An image at its position and size on the page.
@@ -679,6 +687,11 @@ pub fn layout_page(
         let (heading, base) = block_face(&block, style);
         let em = block_em(&block, style);
         let (ascent, line_height) = block_line(&block, style, typesetter.line(base), em);
+        // Room a plugin asked for above every line: it is part of each
+        // line's height, so the page breaks with it.
+        let leading = block_leading(&block, em);
+        let letters = line_height;
+        let (ascent, line_height) = (ascent + leading, line_height + leading);
         let lines_before = page.lines.len();
         let had_content = !page.is_past_end();
         let at_block_start = from == 0 && !block.continues;
@@ -762,7 +775,7 @@ pub fn layout_page(
                     // Huge gaps look worse than a ragged line: set those
                     // lines flush left (e.g. a few words before a very long
                     // word).
-                    if extra > line_height * MAX_JUSTIFY_GAP {
+                    if extra > letters * MAX_JUSTIFY_GAP {
                         (first_x, 0.0)
                     } else {
                         (first_x, extra)
@@ -784,6 +797,7 @@ pub fn layout_page(
                 runs: line_runs(&block, base, range, usize::from(line.hyphen), style.book),
                 section: at.section,
                 words,
+                leading,
             });
             y += line_height;
         }
@@ -818,6 +832,13 @@ fn block_line(block: &Block, style: &Style, reader: (f32, f32), em: f32) -> (f32
         }
         None => (ascent, line_height),
     }
+}
+
+/// The room above each of `block`'s lines that a plugin asked for
+/// ([`Block::leading_above`]), in pixels for its text size `em`.
+fn block_leading(block: &Block, em: f32) -> f32 {
+    let hundredths = block.leading_above.unwrap_or(0).min(MAX_LEADING_ABOVE);
+    em * f32::from(hundredths) / 100.0
 }
 
 /// `page`, ending at `end`. A page that ends where it starts, or before,
@@ -1405,6 +1426,35 @@ aa bb cc dd
         let reader = STYLE.book(BookStyles::ALL.without(BookStyles::LINE_HEIGHT));
         let (page, _) = styled_page(tall, &reader);
         assert_eq!(page.lines[1].baseline - page.lines[0].baseline, 10.0);
+    }
+
+    #[test]
+    fn room_above_the_lines_moves_them_down_and_breaks_the_page_sooner() {
+        let (plain, _) = styled_page(words(), &STYLE);
+        // Half an em at 10 px: 5 px above every line, part of its height,
+        // whether the reader follows the book or not.
+        for style in [STYLE, STYLE.book(BookStyles::NONE)] {
+            let (spaced, _) = styled_page(words().leading_above(50), &style);
+            assert_eq!(spaced.lines[0].baseline - plain.lines[0].baseline, 5.0);
+            assert_eq!(spaced.lines[1].baseline - spaced.lines[0].baseline, 15.0);
+            assert!(spaced.lines.iter().all(|l| l.leading == 5.0));
+            assert_eq!(spaced.lines[0].text, plain.lines[0].text);
+        }
+        assert!(plain.lines.iter().all(|l| l.leading == 0.0));
+        // Four ems at most: on a page 60 px high, a line of 50 px leaves
+        // no room for the second, which comes on the next page.
+        let page = |block: Block| {
+            let doc = Blocks::new(move |at: Locator| (at.offset < 79).then(|| block.clone()));
+            let storage = paperpaw_document::NoStorage;
+            let cx = LayoutContext::new(&doc, &storage, 40.0, &STYLE, &Units);
+            layout_page(&cx, Locator::new(0, 0), 60.0).unwrap()
+        };
+        let (plain, most) = (page(words()), page(words().leading_above(5000)));
+        assert_eq!(plain.lines.len(), 2);
+        assert_eq!(most.lines.len(), 1);
+        assert_eq!(most.lines[0].leading, 40.0);
+        assert!(most.end < plain.end, "the page breaks sooner");
+        assert_eq!(most.end.offset, plain.lines[1].words[0].0);
     }
 
     #[test]

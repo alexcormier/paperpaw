@@ -875,7 +875,13 @@ impl ReaderScreen {
         // The plugins' layers behind the text and over it; their line
         // boxes only while there are layers.
         let lines = if layered { book.lines() } else { &[] };
-        let view = book.page_view(lines);
+        // The page's words for a layer that draws by them, measured once
+        // a page as for choosing them.
+        let laid = match layered && env.page_layers().want_words(env) {
+            true => book.words(env),
+            false => &[],
+        };
+        let view = book.page_view(lines).words(laid);
         let rooms = &book.typography.rooms;
         if layered {
             env.page_layers().draw(ui.canvas(), env, &view, rooms, true);

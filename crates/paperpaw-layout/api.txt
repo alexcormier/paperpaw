@@ -52,8 +52,9 @@ pub paperpaw_layout::PageImage::image: paperpaw_document::ImageRef
 pub paperpaw_layout::PageImage::width: f32
 pub paperpaw_layout::PageImage::x: f32
 pub paperpaw_layout::PageImage::y: f32
-pub struct paperpaw_layout::PageLine
+#[non_exhaustive] pub struct paperpaw_layout::PageLine
 pub paperpaw_layout::PageLine::baseline: f32
+pub paperpaw_layout::PageLine::leading: f32
 pub paperpaw_layout::PageLine::runs: alloc::vec::Vec<paperpaw_layout::LineRun>
 pub paperpaw_layout::PageLine::section: u32
 pub paperpaw_layout::PageLine::text: alloc::string::String

@@ -28,8 +28,10 @@ change the plugin SDK.
   time, screens opened once, static registration (`Actions::get`,
   `Env::menus`, `Env::screens`) and lists that draw only what a step
   changes (`ListChange`), with room for what comes later (the developer
-  link, `Command::Extended`). PaperPaw's own store plugins come as
-  updates.
+  link, `Command::Extended`), and room between the lines for page
+  layers (`Block::leading_above`, `PageLine::leading`,
+  `LineBox::leading`, `PageView::words`, `PageLayerSpec::words`).
+  PaperPaw's own store plugins come as updates.
 - Moving through the settings with the buttons is quicker: a step draws
   only the row left and the row reached, no longer the whole screen (on
   the X4 a sixth to a third of it), in every list of the settings.
@@ -95,6 +97,15 @@ change the plugin SDK.
 
 ### Added
 
+- Plugins write between a book's lines, an interlinear reading with a
+  translation above each line: a text filter asks for room above every
+  line of a block (`Block::leading_above`, hundredths of an em, at most
+  four), which the layout adds to the line's height so pages break with
+  it, and each line tells it (`PageLine::leading`, `LineBox::leading`);
+  a page layer that asks (`PageLayerSpec::words`) gets the page's words
+  with their boxes and places (`PageView::words`, `reading::WordBox`,
+  now without the feature `unstable`), measured once a page and only
+  where a layer asks.
 - With buttons alone, holding Back finishes typing and keeps the text,
   wherever the focus is (Back alone cancels); the field says so. Holding
   Select still finishes on any key that is no letter.

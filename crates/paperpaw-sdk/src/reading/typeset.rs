@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 
 use paperpaw_hyphen::Patterns;
 
+use super::WordBox;
 use crate::builtin::{fonts, settings};
 use crate::document::{Document, DocumentError, Locator};
 use crate::layout::{BookStyles, Face, Page, PageImage, PageLine, Style, Typesetter};
@@ -821,33 +822,6 @@ pub fn small_caps_parts(text: &str) -> impl Iterator<Item = (&str, bool)> {
         rest = tail;
         Some((part, lower))
     })
-}
-
-/// A word on the page, with its box on the screen and its place in the
-/// book.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct WordBox {
-    pub area: Rect,
-    pub text: String,
-    pub start: Locator,
-    pub end: Locator,
-}
-
-impl WordBox {
-    pub fn new(area: Rect, text: impl Into<String>, start: Locator, end: Locator) -> Self {
-        Self {
-            area,
-            text: text.into(),
-            start,
-            end,
-        }
-    }
-
-    /// The word without the punctuation around it, as it is looked up.
-    pub fn lookup_text(&self) -> &str {
-        self.text.trim_matches(|c: char| !c.is_alphanumeric())
-    }
 }
 
 /// The words of `page`, laid out with `faces` in `page_type`, with their

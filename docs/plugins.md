@@ -1091,6 +1091,44 @@ r.add_page_layer(
 - A layer whose drawing changes while the page stays asks for the
   screen to be drawn again (`Command::Redraw`).
 
+A layer that writes between the lines, an interlinear reading with a
+small translation above each line, takes two parts: a text filter asks
+for room above every line (`Block::leading_above`, in hundredths of an
+em), which the layout adds to each line's height, so pages break with
+it and words are hit where they are drawn; and a layer that asks for the
+page's words (`.words()`) finds them in `page.words` (`WordBox`: each
+word's box, text and place), measured once a page and only where a
+layer asks:
+
+```rust
+const ON: Setting<bool> = Setting::new("interlinear.on");
+
+r.add_text_filter(TextFilterSpec::new(
+    Id::new_static("interlinear.room"),
+    "interlinear.room",
+    // Seven tenths of an em above every line, while switched on.
+    Box::new(|env, block| {
+        if env.settings().read(&ON) {
+            block.leading_above = Some(70);
+        }
+    }),
+    // Changes with the setting: pages are laid out anew.
+    Box::new(|env| u64::from(env.settings().read(&ON))),
+))?;
+r.add_page_layer(
+    PageLayerSpec::new(Id::new_static("interlinear.words"), "interlinear.words", |canvas, env, page| {
+        for word in page.words {
+            // The room above the word's line: line.leading pixels high.
+            let Some(line) = page.lines.iter().find(|l| l.start <= word.start && word.start < l.end) else { continue };
+            let gloss = translation(env, page.language, word.lookup_text());
+            draw_small(canvas, env, word.area.x, line.area.y - line.leading, gloss);
+        }
+    })
+    .switch(&ON)
+    .words(),
+)?;
+```
+
 A frame (`layers::PageFrameSpec`) sets the text in columns: two
 columns, two pages side by side. The setting `core.page-frame` (each
 book may have its own) offers every frame by its id, named by the

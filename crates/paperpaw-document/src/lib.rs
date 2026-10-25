@@ -318,9 +318,20 @@ pub struct Block {
     /// The book's distance between lines, in percent of the text size;
     /// `None` leaves it to the reader.
     pub line_height: Option<u16>,
+    /// Room added above each of the block's lines, in hundredths of an em
+    /// of its text, at most [`MAX_LEADING_ABOVE`]: for what a plugin's
+    /// page layer draws over the lines (a translation between them, an
+    /// interlinear reading), which a text filter asks for. The layout adds
+    /// it to every line's height above its letters, so pages break and
+    /// words are hit where they are drawn; layers find it as each line's
+    /// `leading`. `None` (or 0) for none. Not the book's: formats leave it.
+    pub leading_above: Option<u16>,
     /// The image of an [`BlockKind::Image`] block.
     pub image: Option<ImageRef>,
 }
+
+/// The most room [`Block::leading_above`] adds above a line: four ems.
+pub const MAX_LEADING_ABOVE: u16 = 400;
 
 impl Block {
     /// Made of what it needs; the rest as set with its methods.
@@ -339,6 +350,7 @@ impl Block {
             size: None,
             margins: (0, 0),
             line_height: None,
+            leading_above: None,
             image: None,
         }
     }
@@ -385,6 +397,11 @@ impl Block {
 
     pub fn line_height(mut self, line_height: impl Into<Option<u16>>) -> Self {
         self.line_height = line_height.into();
+        self
+    }
+
+    pub fn leading_above(mut self, leading_above: impl Into<Option<u16>>) -> Self {
+        self.leading_above = leading_above.into();
         self
     }
 
@@ -771,6 +788,7 @@ mod tests {
             size: None,
             margins: (0, 0),
             line_height: None,
+            leading_above: None,
             image: None,
         };
         block.replace(0..3, "Mister");
@@ -815,6 +833,7 @@ mod tests {
             size: None,
             margins: (0, 0),
             line_height: None,
+            leading_above: None,
             image: None,
         }
     }

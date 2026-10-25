@@ -21,8 +21,8 @@ pub use filtered::{DroppedRuns, FilteredDocument};
 pub use index::PageIndex;
 #[cfg(feature = "unstable")]
 pub use typeset::{
-    EmbeddedFonts, PageType, ReadingFaces, StatusRoom, WordBox, draw_image, draw_lines,
-    small_caps_parts, uses_book_fonts, word_boxes,
+    EmbeddedFonts, PageType, ReadingFaces, StatusRoom, draw_image, draw_lines, small_caps_parts,
+    uses_book_fonts, word_boxes,
 };
 
 use alloc::format;
@@ -32,7 +32,34 @@ use alloc::vec::Vec;
 use crate::builtin::events;
 use crate::document::Locator;
 use crate::event::{Event, EventData};
-use crate::{Command, Params};
+use crate::{Command, Params, Rect};
+
+/// A word on the page, with its box on the screen and its place in the
+/// book (`word_boxes`, page layers' [`PageView::words`](crate::layers::PageView::words)).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct WordBox {
+    pub area: Rect,
+    pub text: String,
+    pub start: Locator,
+    pub end: Locator,
+}
+
+impl WordBox {
+    pub fn new(area: Rect, text: impl Into<String>, start: Locator, end: Locator) -> Self {
+        Self {
+            area,
+            text: text.into(),
+            start,
+            end,
+        }
+    }
+
+    /// The word without the punctuation around it, as it is looked up.
+    pub fn lookup_text(&self) -> &str {
+        self.text.trim_matches(|c: char| !c.is_alphanumeric())
+    }
+}
 
 /// A word of the page: its text and its place in the book. A word broken
 /// over two lines is two words, each with the whole word as its text and
