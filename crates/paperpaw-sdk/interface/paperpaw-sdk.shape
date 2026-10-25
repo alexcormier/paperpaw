@@ -458,7 +458,7 @@ const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "cod
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = &[ "paperpaw_sdk", "paperpaw_platform", "paperpaw_graphics", "paperpaw_i18n", "paperpaw_config", "paperpaw_text", "paperpaw_document", "paperpaw_layout", "paperpaw_xml", "paperpaw_zip", "paperpaw_hyphen", "paperpaw_image", "paperpaw_update", "paperpaw_digest", "paperpaw_json", "paperpaw_qr", "paperpaw_native", ]
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 4u16
-const paperpaw_sdk::native::LAYOUT: u64 = 18_099_666_983_827_056_243u64
+const paperpaw_sdk::native::LAYOUT: u64 = 12_617_970_397_501_798_835u64
 const paperpaw_sdk::native::TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") { "rustc 1.99.0, riscv32imc-unknown-none-elf" } else if cfg!(target_arch = "xtensa") { "esp 1.97.0.0, xtensa-esp32s3-none-elf" } else { "the compiler of PaperPaw's release, for this computer" }
 const paperpaw_sdk::numbers::DECIMAL_MARK: &str = "core.decimal"
 const paperpaw_sdk::pattern::MAX_PATTERN: usize = 256usize
@@ -776,7 +776,7 @@ struct paperpaw_sdk::builtin::events::Goto { path: alloc::string::String, sectio
 struct paperpaw_sdk::builtin::events::LookupAnswered { provider: paperpaw_sdk::id::Id, word: alloc::string::String, source: alloc::string::String, text: alloc::string::String, more: core::option::Option<paperpaw_sdk::id::Id> }
 struct paperpaw_sdk::builtin::events::MenuChanged { id: paperpaw_sdk::id::Id }
 struct paperpaw_sdk::builtin::events::NotesExported { path: alloc::string::String, title: alloc::string::String }
-struct paperpaw_sdk::builtin::events::PageLayerTapped { layer: paperpaw_sdk::id::Id, path: alloc::string::String, x: i32, y: i32, section: core::option::Option<u32>, offset: core::option::Option<u32> }
+struct paperpaw_sdk::builtin::events::PageLayerTapped { layer: paperpaw_sdk::id::Id, path: alloc::string::String, x: i32, y: i32, section: core::option::Option<u32>, offset: core::option::Option<u32>, item: core::option::Option<u32> }
 struct paperpaw_sdk::builtin::events::PageWordsWanted { reply: paperpaw_sdk::id::Id }
 struct paperpaw_sdk::builtin::events::ReadToday { day: i32, seconds: u32 }
 struct paperpaw_sdk::builtin::events::Reading { path: alloc::string::String, title: alloc::string::String, progress: f32, section: u32, offset: u32, chapter: alloc::string::String, page: core::option::Option<u32>, pages: core::option::Option<u32>, chapter_left: core::option::Option<u32>, xpointer: core::option::Option<alloc::string::String> }
@@ -861,9 +861,10 @@ struct paperpaw_sdk::install::marks::Marks { from: paperpaw_sdk::install::marks:
 struct paperpaw_sdk::install::origin::Origins { kept: alloc::vec::Vec<(alloc::string::String, paperpaw_sdk::version::Version, alloc::string::String)> }
 struct paperpaw_sdk::keys::GestureSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, factory: paperpaw_sdk::keys::RecognizerFactory }
 struct paperpaw_sdk::keys::InputSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, need: core::option::Option<paperpaw_sdk::menus::MenuNeed>, kind: paperpaw_sdk::keys::InputKind }
+struct paperpaw_sdk::layers::LayerItem { id: u32, area: paperpaw_platform::geometry::Rect, label: alloc::string::String }
 struct paperpaw_sdk::layers::LineBox { area: paperpaw_platform::geometry::Rect, start: paperpaw_document::Locator, end: paperpaw_document::Locator, leading: u16 }
 struct paperpaw_sdk::layers::PageFrameSpec { id: paperpaw_sdk::id::Id, columns: paperpaw_sdk::layers::ColumnsFn }
-struct paperpaw_sdk::layers::PageLayerSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, order: i16, switch: core::option::Option<paperpaw_sdk::id::Id>, taps: bool, words: bool, reserve: core::option::Option<paperpaw_sdk::layers::ReserveFn>, draw: paperpaw_sdk::layers::DrawLayerFn }
+struct paperpaw_sdk::layers::PageLayerSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, order: i16, switch: core::option::Option<paperpaw_sdk::id::Id>, taps: bool, words: bool, items: core::option::Option<paperpaw_sdk::layers::ItemsFn>, reserve: core::option::Option<paperpaw_sdk::layers::ReserveFn>, draw: paperpaw_sdk::layers::DrawLayerFn }
 struct paperpaw_sdk::layers::PageLayers { layers: alloc::vec::Vec<paperpaw_sdk::layers::PageLayerSpec>, frames: alloc::vec::Vec<paperpaw_sdk::layers::PageFrameSpec> }
 struct paperpaw_sdk::layers::PageView<'a> { path: &'a str, language: &'a str, start: paperpaw_document::Locator, end: paperpaw_document::Locator, content: paperpaw_platform::geometry::Rect, columns: &'a [paperpaw_platform::geometry::Rect], lines: &'a [paperpaw_sdk::layers::LineBox], words: &'a [paperpaw_sdk::reading::WordBox], room: core::option::Option<paperpaw_platform::geometry::Rect>, top_status: core::option::Option<paperpaw_platform::geometry::Rect>, bottom_status: core::option::Option<paperpaw_platform::geometry::Rect> }
 struct paperpaw_sdk::library::Book { size: u64, indexed: bool, title: core::option::Option<alloc::string::String>, author: core::option::Option<alloc::string::String>, series: core::option::Option<alloc::string::String>, series_index: core::option::Option<alloc::string::String>, tags: alloc::vec::Vec<alloc::string::String>, cover: core::option::Option<paperpaw_document::ImageRef>, progress: core::option::Option<u8>, added: core::option::Option<u32>, fields: alloc::vec::Vec<(alloc::string::String, alloc::string::String)> }

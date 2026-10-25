@@ -11,6 +11,10 @@ pub paperpaw_document::Align::Start
 impl paperpaw_document::Align
 pub const fn paperpaw_document::Align::bits(self) -> u8
 pub const fn paperpaw_document::Align::from_bits(u8) -> paperpaw_document::Align
+#[non_exhaustive] pub enum paperpaw_document::AnnotationKind
+pub paperpaw_document::AnnotationKind::Gloss
+pub paperpaw_document::AnnotationKind::Phonetic
+pub paperpaw_document::AnnotationKind::Ruby
 #[non_exhaustive] pub enum paperpaw_document::BlockKind
 pub paperpaw_document::BlockKind::Heading(u8)
 pub paperpaw_document::BlockKind::Image
@@ -30,12 +34,22 @@ pub fn paperpaw_document::DocumentError::fmt(&self, &mut core::fmt::Formatter<'_
 #[non_exhaustive] pub enum paperpaw_document::PageProgression
 pub paperpaw_document::PageProgression::LeftToRight
 pub paperpaw_document::PageProgression::RightToLeft
+#[non_exhaustive] pub struct paperpaw_document::Annotation
+pub paperpaw_document::Annotation::end: u32
+pub paperpaw_document::Annotation::kind: paperpaw_document::AnnotationKind
+pub paperpaw_document::Annotation::size: u16
+pub paperpaw_document::Annotation::start: u32
+pub paperpaw_document::Annotation::text: alloc::string::String
+impl paperpaw_document::Annotation
+pub fn paperpaw_document::Annotation::new(u32, u32, impl core::convert::Into<alloc::string::String>, paperpaw_document::AnnotationKind) -> Self
 #[non_exhaustive] pub struct paperpaw_document::Block
 pub paperpaw_document::Block::align: paperpaw_document::Align
+pub paperpaw_document::Block::annotations: alloc::vec::Vec<paperpaw_document::Annotation>
 pub paperpaw_document::Block::continues: bool
 pub paperpaw_document::Block::end: u32
 pub paperpaw_document::Block::image: core::option::Option<paperpaw_document::ImageRef>
 pub paperpaw_document::Block::indent: core::option::Option<i16>
+pub paperpaw_document::Block::inserted: alloc::vec::Vec<paperpaw_document::Block>
 pub paperpaw_document::Block::kind: paperpaw_document::BlockKind
 pub paperpaw_document::Block::leading_above: core::option::Option<u16>
 pub paperpaw_document::Block::line_height: core::option::Option<u16>
@@ -48,9 +62,11 @@ pub paperpaw_document::Block::start: u32
 pub paperpaw_document::Block::text: alloc::string::String
 impl paperpaw_document::Block
 pub fn paperpaw_document::Block::align(self, paperpaw_document::Align) -> Self
+pub fn paperpaw_document::Block::bound_inserted(&mut self)
 pub fn paperpaw_document::Block::continues(self, bool) -> Self
 pub fn paperpaw_document::Block::image(self, impl core::convert::Into<core::option::Option<paperpaw_document::ImageRef>>) -> Self
 pub fn paperpaw_document::Block::indent(self, impl core::convert::Into<core::option::Option<i16>>) -> Self
+pub fn paperpaw_document::Block::insert_after(&mut self, paperpaw_document::Block) -> bool
 pub fn paperpaw_document::Block::leading_above(self, impl core::convert::Into<core::option::Option<u16>>) -> Self
 pub fn paperpaw_document::Block::line_height(self, impl core::convert::Into<core::option::Option<u16>>) -> Self
 pub fn paperpaw_document::Block::map(self, paperpaw_document::OffsetMap) -> Self
@@ -137,6 +153,8 @@ pub paperpaw_document::TocEntry::at: paperpaw_document::Locator
 pub paperpaw_document::TocEntry::level: u8
 pub paperpaw_document::TocEntry::title: alloc::string::String
 pub const paperpaw_document::MAX_FAMILIES: u8
+pub const paperpaw_document::MAX_INSERTED: usize
+pub const paperpaw_document::MAX_INSERTED_TEXT: usize
 pub const paperpaw_document::MAX_LEADING_ABOVE: u16
 pub trait paperpaw_document::Document
 pub fn paperpaw_document::Document::block_at(&self, &dyn paperpaw_platform::storage::Storage, paperpaw_document::Locator) -> core::result::Result<core::option::Option<paperpaw_document::Block>, paperpaw_document::DocumentError>

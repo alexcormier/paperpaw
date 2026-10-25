@@ -4,6 +4,8 @@
 # too, every feature on (ADR 0026).
 const paperpaw_document::Locator::START: paperpaw_document::Locator = Locator { section: 0, offset: 0, }
 const paperpaw_document::MAX_FAMILIES: u8 = 31u8
+const paperpaw_document::MAX_INSERTED: usize = 4usize
+const paperpaw_document::MAX_INSERTED_TEXT: usize = 4_096usize
 const paperpaw_document::MAX_LEADING_ABOVE: u16 = 400u16
 const paperpaw_document::OffsetMap::IDENTITY: paperpaw_document::OffsetMap = OffsetMap { checkpoints: Vec::new(), }
 const paperpaw_document::TextStyle::BOLD: paperpaw_document::TextStyle = TextStyle(1)
@@ -16,10 +18,12 @@ const paperpaw_document::TextStyle::SUBSCRIPT: paperpaw_document::TextStyle = Te
 const paperpaw_document::TextStyle::SUPERSCRIPT: paperpaw_document::TextStyle = TextStyle(1 << 8)
 const paperpaw_document::TextStyle::UNDERLINE: paperpaw_document::TextStyle = TextStyle(1 << 10)
 enum paperpaw_document::Align { Auto, Start, Center, End, Justify }
+enum paperpaw_document::AnnotationKind { Ruby, Phonetic, Gloss }
 enum paperpaw_document::BlockKind { Paragraph, Heading(0: u8), Preformatted, Image }
 enum paperpaw_document::DocumentError { Storage(0: paperpaw_platform::storage::StorageError), Malformed(0: alloc::borrow::Cow<'static, str>), UnsupportedFormat, OutOfMemory, NotReady }
 enum paperpaw_document::PageProgression { LeftToRight, RightToLeft }
-struct paperpaw_document::Block { kind: paperpaw_document::BlockKind, continues: bool, start: u32, end: u32, text: alloc::string::String, map: paperpaw_document::OffsetMap, runs: alloc::vec::Vec<paperpaw_document::Run>, align: paperpaw_document::Align, indent: core::option::Option<i16>, space: core::option::Option<u16>, size: core::option::Option<u16>, margins: (u16, u16), line_height: core::option::Option<u16>, leading_above: core::option::Option<u16>, image: core::option::Option<paperpaw_document::ImageRef> }
+struct paperpaw_document::Annotation { start: u32, end: u32, text: alloc::string::String, kind: paperpaw_document::AnnotationKind, size: u16 }
+struct paperpaw_document::Block { kind: paperpaw_document::BlockKind, continues: bool, start: u32, end: u32, text: alloc::string::String, map: paperpaw_document::OffsetMap, runs: alloc::vec::Vec<paperpaw_document::Run>, align: paperpaw_document::Align, indent: core::option::Option<i16>, space: core::option::Option<u16>, size: core::option::Option<u16>, margins: (u16, u16), line_height: core::option::Option<u16>, leading_above: core::option::Option<u16>, image: core::option::Option<paperpaw_document::ImageRef>, inserted: alloc::vec::Vec<paperpaw_document::Block>, annotations: alloc::vec::Vec<paperpaw_document::Annotation> }
 struct paperpaw_document::EmbeddedFont { family: u8, bold: bool, italic: bool }
 struct paperpaw_document::ImageRef { path: alloc::string::String, width: u32, height: u32 }
 struct paperpaw_document::Link { start: u32, end: u32, href: alloc::string::String }

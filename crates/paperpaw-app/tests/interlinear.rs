@@ -4,6 +4,10 @@
 //! `leading` saying how much), and a layer that asks for the page's words
 //! gets them with their boxes, the words the reader has for the page,
 //! with the room free above them. Where no layer asks, none are measured.
+//! A filter inserts a block after each paragraph (a parallel text): it
+//! shows, and the book's words, pages and places stay the book's. A tap
+//! on an item the layer drew, or Select on it chosen with the buttons,
+//! comes to the layer's plugin; other taps stay the reader's.
 
 #![allow(
     clippy::unwrap_used,
@@ -16,23 +20,24 @@ use std::rc::Rc;
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{
-    DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
+    DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat,
+    PointerEvent, PointerPhase, PointerTool, Rotation,
 };
-use paperpaw_sdk::builtin::{params, slots};
-use paperpaw_sdk::document::Locator;
+use paperpaw_sdk::builtin::{events, params, slots};
+use paperpaw_sdk::document::{Block, BlockKind, Locator};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::filters::TextFilterSpec;
-use paperpaw_sdk::layers::PageLayerSpec;
+use paperpaw_sdk::layers::{LayerItem, PageLayerSpec};
 use paperpaw_sdk::reading::PageWords;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    ActionSpec, Commands, Env, Id, Manifest, MemoryStorage, Params, Plugin, Rect, RegisterError,
-    Registrar, SDK_VERSION, SettingSpec,
+    ActionSpec, Commands, Env, Id, Manifest, MemoryStorage, Params, Plugin, Point, Rect,
+    RegisterError, Registrar, SDK_VERSION, SettingSpec,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
-    id: "test-buttons",
-    name: "Test buttons",
+    id: "test-both",
+    name: "Test both",
     display: DisplayInfo {
         width: 480,
         height: 800,
@@ -43,7 +48,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
     },
     input: InputCaps {
         buttons: true,
-        touch: false,
+        touch: true,
         pen: false,
         keys: &["back", "confirm", "left", "right", "up", "down", "power"],
     },
@@ -53,12 +58,25 @@ const DEVICE: DeviceInfo = DeviceInfo {
 const BOOK: &str = "books/alice-in-wonderland.txt";
 /// Whether the room above the lines is asked for.
 const ON: Setting<bool> = Setting::new("interlinear.on");
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::switch(
-    ON.static_str(),
-    "interlinear.on",
-    false,
-    paperpaw_sdk::builtin::groups::READING,
-)];
+/// Whether a translation follows each paragraph.
+const PARALLEL: Setting<bool> = Setting::new("interlinear.parallel");
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::switch(
+        ON.static_str(),
+        "interlinear.on",
+        false,
+        paperpaw_sdk::builtin::groups::READING,
+    ),
+    SettingSpec::switch(
+        PARALLEL.static_str(),
+        "interlinear.parallel",
+        false,
+        paperpaw_sdk::builtin::groups::READING,
+    ),
+];
+/// What the inserted translations begin with, which no word of the book
+/// has.
+const SIGN: &str = "§";
 /// The room asked for: 70 hundredths of an em.
 const LEADING: u16 = 70;
 const ASK: Id = Id::new_static("interlinear.ask");
@@ -74,6 +92,8 @@ struct Seen {
     /// The words the layer got.
     words: Vec<(Rect, String, Locator, Locator)>,
     told: Option<PageWords>,
+    /// The items tapped or chosen, with the line beside each.
+    tapped: Vec<(u32, Option<Locator>)>,
 }
 
 /// Room above every line while switched on, and a layer that draws by
@@ -98,8 +118,16 @@ impl Plugin for Interlinear {
                 if env.settings().read(&ON) {
                     block.leading_above = Some(LEADING);
                 }
+                if env.settings().read(&PARALLEL) && block.kind == BlockKind::Paragraph {
+                    let reversed: String = block.text.chars().rev().collect();
+                    let text = format!("{SIGN} {reversed}");
+                    let len = text.len() as u32;
+                    block.insert_after(Block::new(BlockKind::Paragraph, 0, len, text));
+                }
             }),
-            Box::new(|env: &Env<'_>| u64::from(env.settings().read(&ON))),
+            Box::new(|env: &Env<'_>| {
+                u64::from(env.settings().read(&ON)) + 2 * u64::from(env.settings().read(&PARALLEL))
+            }),
         ))?;
         let seen = self.seen.clone();
         let layer = PageLayerSpec::new(
@@ -117,7 +145,27 @@ impl Plugin for Interlinear {
                     .collect();
             },
         );
+        // The room above each line an item: tapped, it would open the
+        // line's translation.
+        let layer = layer.items(|_, page| {
+            page.lines
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| l.leading > 0)
+                .map(|(i, l)| {
+                    let a = l.area;
+                    let room = Rect::new(a.x, a.y - l.leading, a.width, l.leading);
+                    LayerItem::new(i as u32, room).label("Translation")
+                })
+                .collect()
+        });
         r.add_page_layer(if self.asks { layer.words() } else { layer })?;
+        let seen = self.seen.clone();
+        r.on(events::PAGE_LAYER_TAPPED, move |_, tapped, _| {
+            if let Some(item) = tapped.item {
+                seen.borrow_mut().tapped.push((item, tapped.line()));
+            }
+        })?;
         r.add_action(
             ActionSpec::new(ASK, "ask").handler(|_: &Env<'_>, _, out: &mut Commands| {
                 out.push(paperpaw_sdk::reading::ask_page_words(&HEARD));
@@ -152,15 +200,22 @@ impl App {
 
     /// The same, the layer asking for the words if `asks`.
     fn with(on: bool, asks: bool) -> Self {
+        Self::configured(on, false, asks)
+    }
+
+    /// The same, translations following each paragraph if `parallel`.
+    fn configured(on: bool, parallel: bool, asks: bool) -> Self {
         let storage = MemoryStorage::new()
             .with(
                 BOOK,
                 include_str!("../../../samples/library/books/alice-in-wonderland.txt"),
             )
             .with(".paperpaw/plugins/setup/done", "");
+        let switch = |on: bool| if on { "on" } else { "off" };
         let config = format!(
-            "[help]\nshow = false\n[core]\nlanguage = en\n[interlinear]\non = {}\n",
-            if on { "on" } else { "off" }
+            "[help]\nshow = false\n[core]\nlanguage = en\n[interlinear]\non = {}\nparallel = {}\n",
+            switch(on),
+            switch(parallel)
         );
         let builder = Kernel::builder(DEVICE).storage(storage).user_config(config);
         let seen = Rc::new(RefCell::new(Seen::default()));
@@ -198,6 +253,42 @@ impl App {
             self.run(paperpaw_sdk::builtin::actions::NEXT_PAGE);
         }
         self.show();
+    }
+
+    fn tap(&mut self, point: Point) {
+        for phase in [PointerPhase::Down, PointerPhase::Up] {
+            self.now += 30;
+            let event = InputEvent::Pointer(PointerEvent {
+                id: 0,
+                phase,
+                point,
+                tool: PointerTool::Finger,
+                pressure: 1000,
+            });
+            let effects = self.kernel.handle(Instant(self.now), event);
+            if phase == PointerPhase::Up {
+                self.settle(effects);
+            }
+        }
+        self.show();
+    }
+
+    /// The starts of the words of `pages` pages from the first, as the
+    /// reader tells them.
+    fn word_starts(&mut self, pages: usize) -> Vec<Locator> {
+        let mut starts = Vec::new();
+        for page in 0..pages {
+            if page > 0 {
+                self.turn(1);
+            }
+            let told = self.seen.borrow().told.clone().unwrap();
+            assert!(
+                told.words.iter().all(|w| !w.text.contains(SIGN)),
+                "{told:?}"
+            );
+            starts.extend(told.words.iter().map(|w| w.start));
+        }
+        starts
     }
 
     fn run(&mut self, action: Id) {
@@ -308,4 +399,77 @@ fn switching_the_room_on_lays_the_page_out_anew() {
     let seen = app.seen.borrow();
     assert!(seen.lines.iter().all(|&(_, l)| l > 0), "{:?}", seen.lines);
     assert!(seen.end < before, "{:?} {before:?}", seen.end);
+}
+
+#[test]
+fn blocks_a_filter_inserts_show_and_the_books_places_stay_its_own() {
+    let pages = 6;
+    let plain = App::configured(false, false, true).word_starts(pages);
+    let mut parallel = App::configured(false, true, true);
+    let first_end = parallel.seen.borrow().end;
+    let starts = parallel.word_starts(pages);
+    // Every word once, in order, none of what was inserted: the book's
+    // words as without, fewer on as many pages (the translations take
+    // room).
+    assert!(
+        starts.windows(2).all(|w| w[0] < w[1]),
+        "in order, none twice"
+    );
+    assert!(
+        starts.len() < plain.len(),
+        "{} {}",
+        starts.len(),
+        plain.len()
+    );
+    assert_eq!(starts[..], plain[..starts.len()], "no word lost");
+    // The first page ends at a place of the book.
+    assert!(first_end.offset > 0);
+}
+
+#[test]
+fn a_tap_on_a_layers_item_is_its_plugins_and_other_taps_the_readers() {
+    let mut app = App::new(true);
+    app.turn(3);
+    let (start, line) = {
+        let seen = app.seen.borrow();
+        (seen.start, seen.lines[1])
+    };
+    // The room above the second line: the layer's item 1.
+    let (area, leading) = line;
+    let room = Point::new(
+        i32::from(area.x) + i32::from(area.width) / 2,
+        i32::from(area.y) - i32::from(leading) / 2,
+    );
+    app.tap(room);
+    {
+        let seen = app.seen.borrow();
+        assert_eq!(seen.tapped.len(), 1, "{:?}", seen.tapped);
+        assert_eq!(seen.tapped[0].0, 1);
+        assert!(seen.tapped[0].1.is_some(), "the line beside it");
+        assert_eq!(seen.start, start, "the page stays");
+    }
+    // At the right edge, past the text: the reader turns the page.
+    app.tap(Point::new(475, 400));
+    let seen = app.seen.borrow();
+    assert_eq!(seen.tapped.len(), 1, "not the layer's");
+    assert!(seen.start > start, "{:?} {start:?}", seen.start);
+}
+
+#[test]
+fn a_layers_item_is_chosen_with_the_buttons_as_links_are() {
+    let mut app = App::new(true);
+    app.turn(3);
+    let start = app.seen.borrow().start;
+    app.run(paperpaw_reader_links());
+    app.run(paperpaw_sdk::builtin::actions::DOWN);
+    app.run(paperpaw_sdk::builtin::actions::CONFIRM);
+    app.show();
+    let seen = app.seen.borrow();
+    assert_eq!(seen.tapped.iter().map(|t| t.0).collect::<Vec<_>>(), [1]);
+    assert_eq!(seen.start, start);
+}
+
+/// The reader's action that starts choosing links with the buttons.
+fn paperpaw_reader_links() -> Id {
+    Id::new_static("reader.links")
 }

@@ -26,6 +26,9 @@ paperpaw-sample-hello = { path = "../hello-plugin" }
 # The sample that runs in real time (ADR 0030), as a file to measure hot
 # code: `cargo x4 --example frame_test`.
 paperpaw-sample-frame-test = { path = "../frame-test" }
+# The interlinear sample (ADR 0032), as a file: `cargo x4 --example
+# interlinear`.
+paperpaw-sample-interlinear = { path = "../interlinear" }
 
 # As the firmware is built: small code, one unit, no unwinding.
 [profile.release]

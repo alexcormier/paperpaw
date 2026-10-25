@@ -4,7 +4,7 @@
 
 use super::*;
 
-use paperpaw_sdk::layers::{LineBox, PageView};
+use paperpaw_sdk::layers::{LayerItem, LineBox, PageView};
 
 impl Book {
     /// The lines of the page as layers see them, made once a page.
@@ -70,6 +70,50 @@ impl Book {
             .iter()
             .map(|(_, room)| room.right() as f32)
             .fold(t.x + t.width, f32::max)
+    }
+
+    /// The page as the layers that are on draw it, the words given where
+    /// one asks for them.
+    pub(super) fn layers_view<'a>(&'a self, env: &Env<'_>) -> PageView<'a> {
+        let words = match env.page_layers().want_words(env) {
+            true => self.words(env),
+            false => &[],
+        };
+        self.page_view(self.lines()).words(words)
+    }
+
+    /// The items the layers that are on drew on the page, those on top
+    /// first.
+    pub(super) fn layer_items(&self, env: &Env<'_>) -> Vec<(Id, LayerItem)> {
+        if env.page_layers().is_empty() {
+            return Vec::new();
+        }
+        env.page_layers().items(env, &self.layers_view(env))
+    }
+
+    /// Tells the plugin of layer `layer` its item `item` was tapped, at
+    /// `at` (its middle when chosen with the buttons).
+    pub(super) fn tap_item(
+        &self,
+        layer: &Id,
+        item: &LayerItem,
+        at: Option<Point>,
+        cx: &mut Cx<'_, '_>,
+    ) {
+        let area = item.area;
+        let at = at.unwrap_or_else(|| {
+            Point::new(
+                i32::from(area.x) + i32::from(area.width) / 2,
+                i32::from(area.y) + i32::from(area.height) / 2,
+            )
+        });
+        let line = self.page_view(self.lines()).line_at(at).map(|l| l.start);
+        let mut tapped = events::PageLayerTapped::new(layer.clone(), self.path.clone(), at.x, at.y)
+            .item(item.id);
+        if let Some(line) = line {
+            tapped = tapped.section(line.section).offset(line.offset);
+        }
+        cx.command(events::PAGE_LAYER_TAPPED.emit(tapped));
     }
 
     /// Tells the plugin of layer `layer` its room was tapped, at `at`

@@ -738,6 +738,18 @@ impl Screen for ReaderScreen {
                 }
                 return Handled::Yes;
             }
+            // An item a layer drew: its plugin answers, before anything
+            // else the reader would do with the tap there.
+            if !corner
+                && !back
+                && let Some((layer, item)) = book
+                    .layer_items(&env)
+                    .into_iter()
+                    .find(|(_, item)| item.area.contains(p))
+            {
+                book.tap_item(&layer, &item, Some(p), cx);
+                return Handled::Yes;
+            }
             // The room of a layer that hears taps: its plugin answers (not
             // where the bookmark corner or the way back are).
             if !corner
@@ -1219,7 +1231,11 @@ pub(super) fn page_text(lines: &[PageLine]) -> String {
     let mut out = String::new();
     let mut joined = false;
     for (i, line) in lines.iter().enumerate() {
-        if i > 0 && !joined {
+        // What a filter inserted is not the book's.
+        if line.inserted {
+            continue;
+        }
+        if i > 0 && !joined && !out.is_empty() {
             out.push(' ');
         }
         let last = line.words.last().copied();

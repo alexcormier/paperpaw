@@ -24,7 +24,8 @@ use alloc::vec::Vec;
 pub use paperpaw_document::ImageRef;
 pub use paperpaw_document::TextStyle;
 use paperpaw_document::{
-    Align, Block, BlockKind, Document, DocumentError, Locator, MAX_LEADING_ABOVE, Storage,
+    Align, AnnotationKind, Block, BlockKind, Document, DocumentError, Locator, MAX_LEADING_ABOVE,
+    Storage,
 };
 pub use paperpaw_text::Hyphenate;
 use paperpaw_text::{Line, wrap_lines_balanced_kerned, wrap_lines_kerned};
@@ -221,6 +222,29 @@ pub struct PageLine {
     /// between the line before and this one's ascent, where a page layer
     /// draws (an interlinear reading). 0 for none.
     pub leading: f32,
+    /// The line is of a block a text filter inserted
+    /// ([`Block::inserted`]): its words have no places (`words` is
+    /// empty), nothing on it is chosen, kept or read as the book's.
+    pub inserted: bool,
+    /// Annotations set above the line's words (ruby, glosses). Reserved:
+    /// empty until the layout sets them (ADR 0032).
+    pub annotations: Vec<LineAnnotation>,
+}
+
+/// An annotation set above a line ([`Block::annotations`]), where the
+/// layout put it. Reserved: none are set yet (ADR 0032).
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct LineAnnotation {
+    /// Left edge relative to the content box, and its width.
+    pub x: f32,
+    pub width: f32,
+    /// Its baseline relative to the content box's top.
+    pub baseline: f32,
+    pub text: String,
+    pub kind: AnnotationKind,
+    /// Its text size in pixels.
+    pub size: f32,
 }
 
 /// An image at its position and size on the page.
@@ -798,8 +822,38 @@ pub fn layout_page(
                 section: at.section,
                 words,
                 leading,
+                inserted: false,
+                annotations: Vec::new(),
             });
             y += line_height;
+        }
+        // What a filter inserted after the block, below its last line and
+        // never apart from it.
+        if !block.inserted.is_empty() {
+            let (placed, below, whole) = inserted_lines(&block, cx, at.section, y, height);
+            if !whole {
+                // Not all of it fits: the page ends before the block's last
+                // line, which goes on the next page with it, where all of
+                // it fits there. Where it would not fit on any page (or
+                // that line starts the page), what fits stays here and the
+                // rest goes: what is inserted has no place to go on from.
+                let last = page.lines.len().saturating_sub(1);
+                let (_, tall, _) = inserted_lines(&block, cx, at.section, 0.0, f32::INFINITY);
+                if page.lines.len() > lines_before
+                    && last > 0
+                    && line_height + tall <= height
+                    && let Some((line, _)) = lines.last()
+                {
+                    page.lines.truncate(last);
+                    let start = Locator::new(at.section, block.source_offset(line.range.start));
+                    return ended(page, start);
+                }
+                page.lines.extend(placed);
+                page.end = Locator::new(at.section, block.end);
+                return Ok(page);
+            }
+            page.lines.extend(placed);
+            y = below;
         }
         // A heading needs at least one line of what follows on its page.
         let heading_start = Locator::new(at.section, block.source_offset(from));
@@ -834,6 +888,70 @@ fn block_line(block: &Block, style: &Style, reader: (f32, f32), em: f32) -> (f32
     }
 }
 
+/// The lines of the blocks inserted after `block` ([`Block::inserted`]),
+/// set from `y` down on a page `height` high, as many as fit; where they
+/// end, and whether all fit. They take the paragraph spacing before
+/// each, their own face, size and alignment, and no places.
+fn inserted_lines(
+    block: &Block,
+    cx: &LayoutContext<'_>,
+    section: u32,
+    mut y: f32,
+    height: f32,
+) -> (Vec<PageLine>, f32, bool) {
+    let (style, typesetter) = (cx.style, cx.typesetter);
+    let mut placed = Vec::new();
+    for inserted in &block.inserted {
+        if inserted.kind == BlockKind::Image || inserted.text.is_empty() {
+            continue;
+        }
+        let (heading, base) = block_face(inserted, style);
+        let em = block_em(inserted, style);
+        let (ascent, line_height) = block_line(inserted, style, typesetter.line(base), em);
+        let leading = block_leading(inserted, em);
+        let (ascent, line_height) = (ascent + leading, line_height + leading);
+        let align = block_align(inserted, style, heading);
+        y += style.paragraph_spacing;
+        let indent = first_indent(inserted, style, align);
+        for (line, (first_x, available)) in block_lines(inserted, 0, base, cx, heading, indent) {
+            if y + line_height > height {
+                return (placed, y, false);
+            }
+            let free = (available - line.width).max(0.0);
+            let x = match align {
+                Align::Center => first_x + free / 2.0,
+                Align::End => first_x + free,
+                _ => first_x,
+            };
+            let mut text = String::from(&inserted.text[line.range.clone()]);
+            if line.hyphen {
+                text.push('-');
+            }
+            let runs = line_runs(
+                inserted,
+                base,
+                line.range.clone(),
+                usize::from(line.hyphen),
+                style.book,
+            );
+            placed.push(PageLine {
+                x,
+                baseline: y + ascent,
+                text,
+                word_spacing: 0.0,
+                runs,
+                section,
+                words: Vec::new(),
+                leading,
+                inserted: true,
+                annotations: Vec::new(),
+            });
+            y += line_height;
+        }
+    }
+    (placed, y, true)
+}
+
 /// The room above each of `block`'s lines that a plugin asked for
 /// ([`Block::leading_above`]), in pixels for its text size `em`.
 fn block_leading(block: &Block, em: f32) -> f32 {
@@ -859,7 +977,7 @@ fn malformed() -> DocumentError {
 mod tests {
     use super::*;
     use alloc::vec;
-    use paperpaw_document::{Metadata, OffsetMap, Run};
+    use paperpaw_document::{MAX_INSERTED, MAX_INSERTED_TEXT, Metadata, OffsetMap, Run};
 
     /// Paragraphs separated by single newlines; offsets are bytes. Lines
     /// starting with `#` are headings; `*word*` is bold.
@@ -1455,6 +1573,83 @@ aa bb cc dd
         assert_eq!(most.lines[0].leading, 40.0);
         assert!(most.end < plain.end, "the page breaks sooner");
         assert_eq!(most.end.offset, plain.lines[1].words[0].0);
+    }
+
+    /// A page `height` high from `start`, of the one block `block`.
+    fn page_of(block: Block, start: u32, height: f32) -> Page {
+        let end = block.end;
+        let doc = Blocks::new(move |at: Locator| (at.offset < end).then(|| block.clone()));
+        let storage = paperpaw_document::NoStorage;
+        let cx = LayoutContext::new(&doc, &storage, 40.0, &STYLE, &Units);
+        layout_page(&cx, Locator::new(0, start), height).unwrap()
+    }
+
+    /// `words()` with a filter's translation inserted after it.
+    fn translated() -> Block {
+        let mut block = words();
+        assert!(block.insert_after(block_of("xxxx yyyy")));
+        block
+    }
+
+    fn block_of(text: &str) -> Block {
+        Block::new(
+            BlockKind::Paragraph,
+            0,
+            text.len() as u32,
+            String::from(text),
+        )
+    }
+
+    #[test]
+    fn blocks_a_filter_inserts_follow_the_block_without_places() {
+        let page = page_of(translated(), 0, 100.0);
+        let (anchor, inserted): (Vec<_>, Vec<_>) = page.lines.iter().partition(|l| !l.inserted);
+        assert_eq!(anchor.len(), 2);
+        assert_eq!(inserted.len(), 1);
+        assert_eq!(inserted[0].text, "xxxx yyyy");
+        assert!(inserted[0].words.is_empty(), "no places of its own");
+        assert!(inserted[0].baseline > anchor[1].baseline);
+        // The page ends where the book's block does.
+        assert_eq!(page.end, Locator::new(0, 79));
+        // Bounded: no more than four, nor more than 4 KiB of text.
+        let mut block = words();
+        for _ in 0..MAX_INSERTED {
+            assert!(block.insert_after(block_of("z")));
+        }
+        assert!(!block.insert_after(block_of("z")));
+        let mut big = words();
+        assert!(!big.insert_after(block_of(&"z".repeat(MAX_INSERTED_TEXT + 1))));
+    }
+
+    #[test]
+    fn the_last_line_of_a_block_goes_with_what_was_inserted_after_it() {
+        // Two lines of 10 px fit in 25, the translation's third does not:
+        // the second line goes on with it.
+        let first = page_of(translated(), 0, 25.0);
+        assert_eq!(first.lines.len(), 1);
+        assert!(!first.lines[0].inserted);
+        let second_start = page_of(translated(), 0, 100.0).lines[1].words[0].0;
+        assert_eq!(first.end, Locator::new(0, second_start));
+        let next = page_of(translated(), first.end.offset, 25.0);
+        assert_eq!(next.lines.len(), 2);
+        assert!(!next.lines[0].inserted && next.lines[1].inserted);
+        assert_eq!(next.end, Locator::new(0, 79));
+        // A block's only line at the top of a page with no room for what
+        // follows it: what fits stays, the rest goes, the page goes on.
+        let mut short = block_of("aaaa");
+        short.end = 4;
+        assert!(short.insert_after(block_of("xxxx yyyy")));
+        let page = page_of(short, 0, 15.0);
+        assert_eq!(page.lines.len(), 1);
+        assert_eq!(page.end, Locator::new(0, 4));
+        // Taller than any page: no line moves on (a page of nothing but
+        // the last line would not show it whole either); what fits stays.
+        let mut long = words();
+        assert!(long.insert_after(block_of(&"xxxx ".repeat(100))));
+        let page = page_of(long, 0, 50.0);
+        assert_eq!(page.lines.iter().filter(|l| !l.inserted).count(), 2);
+        assert_eq!(page.lines.len(), 5);
+        assert_eq!(page.end, Locator::new(0, 79));
     }
 
     #[test]

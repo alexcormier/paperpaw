@@ -830,7 +830,8 @@ pub fn small_caps_parts(text: &str) -> impl Iterator<Item = (&str, bool)> {
 pub fn word_boxes(faces: &ReadingFaces<'_>, page_type: &PageType, page: &Page) -> Vec<WordBox> {
     let t = page_type;
     let mut words: Vec<WordBox> = Vec::new();
-    for line in &page.lines {
+    // Lines a filter inserted have no places: no words of the book.
+    for line in page.lines.iter().filter(|l| !l.inserted) {
         let mut x = t.x + line.x;
         // Inside a word that continues in the next run (e.g. bold).
         let mut joined = false;
@@ -907,6 +908,12 @@ pub fn draw_lines(
     // in the next run (e.g. bold) is one word.
     let mut ordinal = 0usize;
     for line in lines {
+        // Words of lines a filter inserted are not counted (they are not
+        // the book's): drawn in black.
+        let ink_of = |i: usize| match line.inserted {
+            true => None,
+            false => inks.get(i).copied().flatten(),
+        };
         let baseline = (top + line.baseline + 0.5) as i32;
         let above = baseline - (2.0 * page_type.line_height) as i32;
         let below = baseline + page_type.line_height as i32;
@@ -921,7 +928,7 @@ pub fn draw_lines(
                     // Lines under and through words go on under the space
                     // between them, in the first word's ink.
                     if shown && !word.is_empty() {
-                        let ink = inks.get(ordinal.saturating_sub(1)).copied().flatten();
+                        let ink = ink_of(ordinal.saturating_sub(1));
                         let ink = ink.unwrap_or(Color::BLACK);
                         faces.decorate(canvas, run.face, (x, space), baseline, ink);
                     }
@@ -931,7 +938,7 @@ pub fn draw_lines(
                 if word.is_empty() {
                     continue;
                 }
-                if !joined {
+                if !joined && !line.inserted {
                     ordinal += 1;
                 }
                 joined = true;
@@ -939,7 +946,7 @@ pub fn draw_lines(
                     x += faces.measure(run.face, word);
                     continue;
                 }
-                let ink = inks.get(ordinal - 1).copied().flatten();
+                let ink = ink_of(ordinal.saturating_sub(1));
                 let width = match ink {
                     Some(ink) => faces.draw_in(canvas, run.face, x, baseline, word, ink),
                     None => faces.draw(canvas, run.face, x, baseline, word),

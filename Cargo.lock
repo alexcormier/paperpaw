@@ -1511,6 +1511,7 @@ dependencies = [
  "paperpaw-platform",
  "paperpaw-sample-frame-test",
  "paperpaw-sample-hello",
+ "paperpaw-sample-interlinear",
  "paperpaw-serve",
  "paperpaw-zip",
  "png",
@@ -2358,6 +2359,16 @@ version = "0.5.0-beta.8"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-sample-interlinear"
+version = "0.5.0-beta.8"
+dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
  "paperpaw-platform",
  "paperpaw-sdk",
 ]

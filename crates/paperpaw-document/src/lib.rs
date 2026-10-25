@@ -328,6 +328,66 @@ pub struct Block {
     pub leading_above: Option<u16>,
     /// The image of an [`BlockKind::Image`] block.
     pub image: Option<ImageRef>,
+    /// Blocks a text filter inserted after this one (a translation, a
+    /// gloss, a note), laid out after it, at most [`MAX_INSERTED`] of
+    /// them with [`MAX_INSERTED_TEXT`] bytes of text in all. They have no
+    /// place of their own in the book: their `start` and `end` are this
+    /// block's end, their words no places, so positions, progress,
+    /// bookmarks and highlights keep to the book's own text. A page does
+    /// not break inside them: this block's last line goes on to the next
+    /// page with them where they fit there whole, else what fits stays and
+    /// the rest goes (they have no place a page could start from: keep
+    /// them shorter than a page). Not run through the filters again;
+    /// formats leave it empty.
+    pub inserted: Vec<Block>,
+    /// Words or letters annotated above them: ruby, furigana, phonetics,
+    /// glosses ([`Annotation`]). Reserved: the layout does not set them
+    /// yet (see ADR 0032), formats and filters may fill it already.
+    pub annotations: Vec<Annotation>,
+}
+
+/// The most blocks a text filter inserts after one ([`Block::inserted`]).
+pub const MAX_INSERTED: usize = 4;
+/// The most text, in bytes, of the blocks inserted after one.
+pub const MAX_INSERTED_TEXT: usize = 4096;
+
+/// A text set small above a part of a block's text (see
+/// [`Block::annotations`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Annotation {
+    /// The byte range of the block's text it stands above.
+    pub start: u32,
+    pub end: u32,
+    pub text: String,
+    pub kind: AnnotationKind,
+    /// Its size in percent of the text below it; 0 for the reader's.
+    pub size: u16,
+}
+
+impl Annotation {
+    pub fn new(start: u32, end: u32, text: impl Into<String>, kind: AnnotationKind) -> Self {
+        Self {
+            start,
+            end,
+            text: text.into(),
+            kind,
+            size: 0,
+        }
+    }
+}
+
+/// What an [`Annotation`] is.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum AnnotationKind {
+    /// Ruby: how characters are read (furigana, pinyin).
+    #[default]
+    Ruby,
+    /// How a word sounds (phonetic script).
+    Phonetic,
+    /// What a word means (an interlinear gloss).
+    Gloss,
 }
 
 /// The most room [`Block::leading_above`] adds above a line: four ems.
@@ -352,6 +412,8 @@ impl Block {
             line_height: None,
             leading_above: None,
             image: None,
+            inserted: Vec::new(),
+            annotations: Vec::new(),
         }
     }
 
@@ -408,6 +470,44 @@ impl Block {
     pub fn image(mut self, image: impl Into<Option<ImageRef>>) -> Self {
         self.image = image.into();
         self
+    }
+
+    /// Inserts `block` after this one (see [`Block::inserted`]): whether
+    /// it went in, within [`MAX_INSERTED`] blocks and
+    /// [`MAX_INSERTED_TEXT`] bytes. It takes no place in the book.
+    pub fn insert_after(&mut self, mut block: Block) -> bool {
+        let used: usize = self.inserted.iter().map(|b| b.text.len()).sum();
+        if self.inserted.len() >= MAX_INSERTED || used + block.text.len() > MAX_INSERTED_TEXT {
+            return false;
+        }
+        block.anchor_at(self.end);
+        self.inserted.push(block);
+        true
+    }
+
+    /// Keeps the blocks inserted after this one within their bounds, each
+    /// at this block's end without places or blocks of its own.
+    pub fn bound_inserted(&mut self) {
+        self.inserted.truncate(MAX_INSERTED);
+        let mut room = MAX_INSERTED_TEXT;
+        let end = self.end;
+        self.inserted.retain_mut(|block| {
+            if block.text.len() > room {
+                return false;
+            }
+            room -= block.text.len();
+            block.anchor_at(end);
+            true
+        });
+    }
+
+    /// Placed at `end` of the book, its text at no place of its own.
+    fn anchor_at(&mut self, end: u32) {
+        self.start = end;
+        self.end = end;
+        self.map = OffsetMap::IDENTITY;
+        self.continues = false;
+        self.inserted.clear();
     }
 }
 
@@ -790,6 +890,8 @@ mod tests {
             line_height: None,
             leading_above: None,
             image: None,
+            inserted: Vec::new(),
+            annotations: Vec::new(),
         };
         block.replace(0..3, "Mister");
         assert_eq!(block.text, "Mister Smith is here.");
@@ -835,6 +937,8 @@ mod tests {
             line_height: None,
             leading_above: None,
             image: None,
+            inserted: Vec::new(),
+            annotations: Vec::new(),
         }
     }
 

@@ -94,6 +94,12 @@ impl ReaderScreen {
                     }
                     None
                 }
+                Some(Target::Item(i)) => {
+                    if let Some((layer, item)) = book.layer_items(&env).get(i) {
+                        book.tap_item(layer, item, None, cx);
+                    }
+                    None
+                }
                 None => None,
             };
             let link = link.map(|l| (l.href.clone(), link_label(book, words, &l)));
@@ -195,6 +201,20 @@ pub(super) fn draw_linking(ui: &mut ui::Ui<'_>, book: &Book, words: &[WordBox], 
         .focus
         .and_then(|i| book.targets(env).get(i).copied());
     let line = env.metrics().tenth_mm(4).max(2);
+    // An item a layer drew, framed.
+    if let Some(Target::Item(i)) = target
+        && let Some((_, item)) = book.layer_items(env).get(i)
+    {
+        let a = item.area;
+        ui.canvas().stroke_rect(
+            i32::from(a.x) - 2,
+            i32::from(a.y) - 2,
+            u32::from(a.width) + 4,
+            u32::from(a.height) + 4,
+            line,
+            Color::BLACK,
+        );
+    }
     // A layer's room, framed whole.
     if let Some(Target::Layer(i)) = target
         && let Some((_, room)) = book.typography.rooms.get(i)
@@ -233,7 +253,24 @@ pub(super) fn draw_linking(ui: &mut ui::Ui<'_>, book: &Book, words: &[WordBox], 
     let Some(font) = ui.font() else {
         return;
     };
-    let text = match target {
+    let text = bar_text(env, book, target);
+    let margin = style.margin() as f32;
+    let text = ui::fit(
+        &font,
+        style.small(),
+        &text,
+        f32::from(bar.width) - 2.0 * margin,
+    );
+    ui::Label::new(&text)
+        .px(style.small())
+        .color(Color::BLACK)
+        .draw_from(ui, f32::from(bar.x) + margin, bar);
+}
+
+/// What the bar says while `target` is chosen: where it leads, or whose
+/// it is, and what the buttons do.
+fn bar_text(env: &Env<'_>, book: &Book, target: Option<Target>) -> String {
+    match target {
         Some(Target::Link(i)) => {
             let href = book.links.get(i).map_or("", |l| l.href.as_str());
             let place = if paperpaw_sdk::document::is_external(href) {
@@ -261,17 +298,24 @@ pub(super) fn draw_linking(ui: &mut ui::Ui<'_>, book: &Book, words: &[WordBox], 
                 .map_or("", |l| env.i18n().tr(&l.title));
             format!("{name} · {}", env.i18n().tr("reader.link.hint"))
         }
+        Some(Target::Item(i)) => {
+            let items = book.layer_items(env);
+            let said = items
+                .get(i)
+                .map(|(layer, item)| match item.label.is_empty() {
+                    true => env
+                        .page_layers()
+                        .get(layer)
+                        .map_or("", |l| env.i18n().tr(&l.title))
+                        .to_string(),
+                    false => item.label.clone(),
+                });
+            format!(
+                "{} · {}",
+                said.unwrap_or_default(),
+                env.i18n().tr("reader.link.hint")
+            )
+        }
         None => env.i18n().tr("reader.link.none").to_string(),
-    };
-    let margin = style.margin() as f32;
-    let text = ui::fit(
-        &font,
-        style.small(),
-        &text,
-        f32::from(bar.width) - 2.0 * margin,
-    );
-    ui::Label::new(&text)
-        .px(style.small())
-        .color(Color::BLACK)
-        .draw_from(ui, f32::from(bar.x) + margin, bar);
+    }
 }

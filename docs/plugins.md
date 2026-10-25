@@ -1089,7 +1089,7 @@ r.add_page_layer(
   band of the page: they read nothing from storage there. Those of an
   order below 0 are drawn behind the text.
 - A layer whose drawing changes while the page stays asks for the
-  screen to be drawn again (`Command::Redraw`).
+  screen to be drawn again (`Command::Redraw(RefreshMode::Fast)`).
 
 A layer that writes between the lines, an interlinear reading with a
 small translation above each line, takes two parts: a text filter asks
@@ -1128,6 +1128,36 @@ r.add_page_layer(
     .words(),
 )?;
 ```
+
+A filter may also insert blocks after the one it gets: a translation
+after each paragraph (a parallel text), a gloss, a note. They show after
+the block and never apart from its last line, and take no place in the
+book: positions, progress, bookmarks, highlights and search stay the
+book's. At most four, 4 KiB of text, and best shorter than a page (they
+cannot go on over a page break):
+
+```rust
+let translation = translate(&block.text);
+let len = translation.len() as u32;
+block.insert_after(Block::new(BlockKind::Paragraph, 0, len, translation));
+```
+
+A layer takes taps on what it draws by saying where its items are; a tap
+on one, or Select on one chosen with the buttons as links are, comes to
+its plugin as `events::PAGE_LAYER_TAPPED` with the item's id
+(`tapped.item`), and every other tap and button stays the reader's:
+
+```rust
+PageLayerSpec::new(id, "interlinear.words", draw)
+    .items(|_, page| {
+        page.lines.iter().enumerate()
+            .filter(|(_, l)| l.leading > 0)
+            .map(|(i, l)| LayerItem::new(i as u32, Rect::new(l.area.x, l.area.y - l.leading, l.area.width, l.leading)).label("Translation"))
+            .collect()
+    })
+```
+
+`samples/interlinear` is all of this as a plugin to start from.
 
 A frame (`layers::PageFrameSpec`) sets the text in columns: two
 columns, two pages side by side. The setting `core.page-frame` (each

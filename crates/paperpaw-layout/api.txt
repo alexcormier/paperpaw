@@ -33,6 +33,13 @@ pub fn paperpaw_layout::LayoutContext<'a>::hyphenate(self, impl core::convert::I
 pub fn paperpaw_layout::LayoutContext<'a>::new(&'a dyn paperpaw_document::Document, &'a dyn paperpaw_platform::storage::Storage, f32, &'a paperpaw_layout::Style, &'a dyn paperpaw_layout::Typesetter) -> Self
 impl core::fmt::Debug for paperpaw_layout::LayoutContext<'_>
 pub fn paperpaw_layout::LayoutContext<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_layout::LineAnnotation
+pub paperpaw_layout::LineAnnotation::baseline: f32
+pub paperpaw_layout::LineAnnotation::kind: paperpaw_document::AnnotationKind
+pub paperpaw_layout::LineAnnotation::size: f32
+pub paperpaw_layout::LineAnnotation::text: alloc::string::String
+pub paperpaw_layout::LineAnnotation::width: f32
+pub paperpaw_layout::LineAnnotation::x: f32
 pub struct paperpaw_layout::LineRun
 pub paperpaw_layout::LineRun::end: usize
 pub paperpaw_layout::LineRun::face: paperpaw_layout::Face
@@ -53,7 +60,9 @@ pub paperpaw_layout::PageImage::width: f32
 pub paperpaw_layout::PageImage::x: f32
 pub paperpaw_layout::PageImage::y: f32
 #[non_exhaustive] pub struct paperpaw_layout::PageLine
+pub paperpaw_layout::PageLine::annotations: alloc::vec::Vec<paperpaw_layout::LineAnnotation>
 pub paperpaw_layout::PageLine::baseline: f32
+pub paperpaw_layout::PageLine::inserted: bool
 pub paperpaw_layout::PageLine::leading: f32
 pub paperpaw_layout::PageLine::runs: alloc::vec::Vec<paperpaw_layout::LineRun>
 pub paperpaw_layout::PageLine::section: u32

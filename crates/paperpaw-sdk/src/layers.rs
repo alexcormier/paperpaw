@@ -32,6 +32,14 @@
 //! ([`Block::leading_above`](crate::document::Block::leading_above)),
 //! which each line's [`LineBox::leading`] tells.
 //!
+//! A layer that takes input on what it drew (a translation that opens,
+//! a note) says where its items are ([`PageLayerSpec::items`], from the
+//! page as it draws it): a tap on one, or Select on one chosen with the
+//! buttons as links are, comes to its plugin as
+//! [`events::PAGE_LAYER_TAPPED`](crate::builtin::events::PAGE_LAYER_TAPPED)
+//! with the item's id, and the reader does nothing else with it. Taps
+//! anywhere else, and every other button, stay the reader's.
+//!
 //! A layer whose drawing changes while the page stays (its data changed)
 //! asks for the screen to be drawn again
 //! ([`Command::Redraw`](crate::Command::Redraw)): readers keep nothing of
@@ -185,10 +193,13 @@ impl<'a> PageView<'a> {
     }
 
     /// The line at the height of `point` nearest to it (in the column it
-    /// is in), e.g. the one beside a tap in a margin.
+    /// is in), e.g. the one beside a tap in a margin; the room above a
+    /// line ([`LineBox::leading`]) is the line's.
     pub fn line_at(&self, point: crate::Point) -> Option<&LineBox> {
         let (x, y) = (point.x, point.y);
-        let beside = |line: &&LineBox| i32::from(line.area.y) <= y && y < line.area.bottom() as i32;
+        let beside = |line: &&LineBox| {
+            i32::from(line.area.y) - i32::from(line.leading) <= y && y < line.area.bottom() as i32
+        };
         let distance = |line: &&LineBox| {
             let (left, right) = (i32::from(line.area.x), line.area.right() as i32);
             if x < left {
@@ -200,6 +211,38 @@ impl<'a> PageView<'a> {
         self.lines.iter().filter(beside).min_by_key(distance)
     }
 }
+
+/// Something a layer drew that takes a tap, or Select when chosen with
+/// the buttons ([`PageLayerSpec::items`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct LayerItem {
+    /// The layer's own id for it, told back when it is tapped.
+    pub id: u32,
+    /// Where it is on the screen.
+    pub area: Rect,
+    /// What the reader says it does while it is chosen with the buttons,
+    /// e.g. "Show the translation"; empty for the layer's name.
+    pub label: alloc::string::String,
+}
+
+impl LayerItem {
+    pub fn new(id: u32, area: Rect) -> Self {
+        Self {
+            id,
+            area,
+            label: alloc::string::String::new(),
+        }
+    }
+
+    pub fn label(mut self, label: impl Into<alloc::string::String>) -> Self {
+        self.label = label.into();
+        self
+    }
+}
+
+/// The items of a layer on a page, as it draws them.
+pub type ItemsFn = Box<dyn Fn(&Env<'_>, &PageView<'_>) -> Vec<LayerItem>>;
 
 /// How much room a layer reserves, and at which side.
 pub type ReserveFn = Box<dyn Fn(&Env<'_>) -> Option<(Side, u16)>>;
@@ -223,6 +266,8 @@ pub struct PageLayerSpec {
     pub taps: bool,
     /// It draws by the page's words ([`PageView::words`]).
     pub words: bool,
+    /// Where its items are on a page ([`PageLayerSpec::items`]).
+    pub items: Option<ItemsFn>,
     pub reserve: Option<ReserveFn>,
     pub draw: DrawLayerFn,
 }
@@ -254,6 +299,7 @@ impl PageLayerSpec {
             switch: None,
             taps: false,
             words: false,
+            items: None,
             reserve: None,
             draw: Box::new(draw),
         }
@@ -273,6 +319,20 @@ impl PageLayerSpec {
     /// Hears taps on its room.
     pub fn taps(mut self) -> Self {
         self.taps = true;
+        self
+    }
+
+    /// Items it drew that take taps, and Select when chosen with the
+    /// buttons: `items` says where they are on a page (as it draws them,
+    /// from the same [`PageView`]). A tap on one, or Select, comes to the
+    /// plugin as [`events::PAGE_LAYER_TAPPED`](crate::builtin::events::PAGE_LAYER_TAPPED)
+    /// with the item's id; nothing else happens with it. Items of layers
+    /// drawn later (over the others) are hit first.
+    pub fn items(
+        mut self,
+        items: impl Fn(&Env<'_>, &PageView<'_>) -> Vec<LayerItem> + 'static,
+    ) -> Self {
+        self.items = Some(Box::new(items));
         self
     }
 
@@ -424,6 +484,35 @@ impl PageLayers {
     /// The layers that are on, by order.
     pub fn on<'s>(&'s self, env: &'s Env<'_>) -> impl Iterator<Item = &'s PageLayerSpec> {
         self.layers.iter().filter(move |l| is_on(env, l))
+    }
+
+    /// The items of the layers that are on, on `page` ([`PageLayerSpec::items`]),
+    /// with their layers: those drawn last (on top) first, as taps hit
+    /// them.
+    pub fn items(&self, env: &Env<'_>, page: &PageView<'_>) -> Vec<(Id, LayerItem)> {
+        let mut items = Vec::new();
+        for layer in self.on(env).collect::<Vec<_>>().into_iter().rev() {
+            if let Some(of) = &layer.items {
+                items.extend(
+                    of(env, page)
+                        .into_iter()
+                        .map(|item| (layer.id.clone(), item)),
+                );
+            }
+        }
+        items
+    }
+
+    /// The item of a layer that is on at `point` on `page`, if any.
+    pub fn item_at(
+        &self,
+        env: &Env<'_>,
+        page: &PageView<'_>,
+        point: crate::Point,
+    ) -> Option<(Id, LayerItem)> {
+        self.items(env, page)
+            .into_iter()
+            .find(|(_, item)| item.area.contains(point))
     }
 
     /// Whether a layer that is on draws by the page's words

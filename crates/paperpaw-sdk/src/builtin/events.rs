@@ -342,8 +342,9 @@ impl DecorationTapped {
 }
 
 crate::event_data! {
-    /// The room of a page layer that was tapped, or chosen with the
-    /// buttons ([`PAGE_LAYER_TAPPED`]).
+    /// The room of a page layer that was tapped, or one of the items it
+    /// drew ([`PageLayerSpec::items`](crate::layers::PageLayerSpec::items)),
+    /// or chosen with the buttons ([`PAGE_LAYER_TAPPED`]).
     pub struct PageLayerTapped {
         pub layer: Id,
         /// The book.
@@ -358,6 +359,10 @@ crate::event_data! {
         /// [`PageView::line_at`](crate::layers::PageView::line_at)).
         pub section: u32,
         pub offset: u32,
+        /// The item tapped or chosen, by the id the layer gave it
+        /// ([`LayerItem::id`](crate::layers::LayerItem)); none for its
+        /// room.
+        pub item: u32,
     }
 }
 
@@ -533,9 +538,10 @@ pub const TEXT_CHOSEN: Event<TextChosen> = Event::new("core.text-chosen");
 /// ([`DecorationTapped`]); sent for decorators that take taps (see
 /// [`decorations`](crate::decorations)), whose plugin answers.
 pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
-/// The room of a page layer was tapped, or chosen with the buttons
-/// ([`PageLayerTapped`]); sent for layers that take taps (see
-/// [`layers`](crate::layers)), whose plugin answers.
+/// The room of a page layer was tapped, or an item it drew, or either
+/// was chosen with the buttons ([`PageLayerTapped`]); sent for layers
+/// that take taps or have items (see [`layers`](crate::layers)), whose
+/// plugin answers.
 pub const PAGE_LAYER_TAPPED: Event<PageLayerTapped> = Event::new("core.page-layer-tapped");
 /// A lookup provider that answered later ([`LookupAnswered`], see
 /// [`lookup`](crate::lookup)) has its entry, for a query that names

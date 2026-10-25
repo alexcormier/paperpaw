@@ -121,10 +121,13 @@ impl<'d, 'e> FilteredDocument<'d, 'e> {
     }
 
     /// Runs the filters on `block` of `section`, telling them where it
-    /// starts.
+    /// starts; what they inserted after it kept within its bounds, at its
+    /// end (see [`Block::inserted`]).
     fn filter(&self, section: u32, block: &mut Block) -> Verdict {
         let cx = FilterContext::new(self.path, self.language, Locator::new(section, block.start));
-        self.env.text_filters().apply_in(self.env, &cx, block)
+        let verdict = self.env.text_filters().apply_in(self.env, &cx, block);
+        block.bound_inserted();
+        verdict
     }
 }
 

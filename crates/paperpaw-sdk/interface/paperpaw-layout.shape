@@ -15,9 +15,10 @@ const paperpaw_layout::VERSION: u32 = 7u32
 struct paperpaw_layout::BookStyles(0: u16)
 struct paperpaw_layout::Face { style: paperpaw_document::TextStyle, heading: u8, size: u16 }
 struct paperpaw_layout::LayoutContext<'a> { document: &'a dyn paperpaw_document::Document, storage: &'a dyn paperpaw_platform::storage::Storage, width: f32, style: &'a paperpaw_layout::Style, typesetter: &'a dyn paperpaw_layout::Typesetter, hyphenate: core::option::Option<paperpaw_text::layout::Hyphenate<'a>> }
+struct paperpaw_layout::LineAnnotation { x: f32, width: f32, baseline: f32, text: alloc::string::String, kind: paperpaw_document::AnnotationKind, size: f32 }
 struct paperpaw_layout::LineRun { start: usize, end: usize, face: paperpaw_layout::Face }
 struct paperpaw_layout::Page { start: paperpaw_document::Locator, end: paperpaw_document::Locator, lines: alloc::vec::Vec<paperpaw_layout::PageLine>, images: alloc::vec::Vec<paperpaw_layout::PageImage> }
 struct paperpaw_layout::PageImage { x: f32, y: f32, width: f32, height: f32, image: paperpaw_document::ImageRef }
-struct paperpaw_layout::PageLine { x: f32, baseline: f32, text: alloc::string::String, word_spacing: f32, runs: alloc::vec::Vec<paperpaw_layout::LineRun>, section: u32, words: alloc::vec::Vec<(u32, u32)>, leading: f32 }
+struct paperpaw_layout::PageLine { x: f32, baseline: f32, text: alloc::string::String, word_spacing: f32, runs: alloc::vec::Vec<paperpaw_layout::LineRun>, section: u32, words: alloc::vec::Vec<(u32, u32)>, leading: f32, inserted: bool, annotations: alloc::vec::Vec<paperpaw_layout::LineAnnotation> }
 struct paperpaw_layout::Style { paragraph_spacing: f32, indent: f32, em: f32, justify: bool, widows: u8, orphans: u8, book: paperpaw_layout::BookStyles, balanced: bool }
 trait paperpaw_layout::Typesetter { function advance, function kern, function line }

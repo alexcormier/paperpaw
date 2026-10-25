@@ -30,7 +30,11 @@ change the plugin SDK.
   changes (`ListChange`), with room for what comes later (the developer
   link, `Command::Extended`), and room between the lines for page
   layers (`Block::leading_above`, `PageLine::leading`,
-  `LineBox::leading`, `PageView::words`, `PageLayerSpec::words`).
+  `LineBox::leading`, `PageView::words`, `PageLayerSpec::words`),
+  blocks filters insert (`Block::inserted`, `PageLine::inserted`),
+  input on layers (`PageLayerSpec::items`, `LayerItem`,
+  `PageLayerTapped::item`) and room for annotations
+  (`Block::annotations`, `PageLine::annotations`).
   PaperPaw's own store plugins come as updates.
 - Moving through the settings with the buttons is quicker: a step draws
   only the row left and the row reached, no longer the whole screen (on
@@ -106,6 +110,23 @@ change the plugin SDK.
   with their boxes and places (`PageView::words`, `reading::WordBox`,
   now without the feature `unstable`), measured once a page and only
   where a layer asks.
+- Text filters insert blocks after the one they get
+  (`Block::insert_after`: a translation after each paragraph, a gloss,
+  a note), at most four with 4 KiB of text: shown after it, never apart
+  from its last line, with no place in the book (`PageLine::inserted`),
+  so positions, progress, bookmarks, highlights, search and the page's
+  words stay the book's.
+- Page layers take input on what they draw: a layer says where its items
+  are (`PageLayerSpec::items`, `LayerItem`); a tap on one, or Select on
+  one chosen with the buttons as links are, comes to its plugin
+  (`PAGE_LAYER_TAPPED` with `item`), and every other tap and button
+  stays the reader's. The room above a line counts as the line's
+  (`PageView::line_at`).
+- Room for annotations over words (ruby, furigana, phonetics, glosses):
+  `Block::annotations` and `PageLine::annotations`, empty until the
+  layout sets them (ADR 0032).
+- A sample plugin, `samples/interlinear`: a translation above each line
+  that opens on a tap, or after each paragraph.
 - With buttons alone, holding Back finishes typing and keeps the text,
   wherever the focus is (Back alone cancels); the field says so. Holding
   Select still finishes on any key that is no letter.

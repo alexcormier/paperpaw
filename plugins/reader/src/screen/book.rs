@@ -105,6 +105,8 @@ pub(super) enum Target {
     Mark(usize),
     /// The room of a page layer that hears taps, of the type's `rooms`.
     Layer(usize),
+    /// An item a page layer drew, of [`Book::layer_items`].
+    Item(usize),
 }
 
 /// Why a book did not open: the message to show instead, and whether it
@@ -887,7 +889,9 @@ impl Book {
         );
         order.sort_by_cached_key(|(at, _)| *at);
         let mut targets: Vec<Target> = order.into_iter().map(|(_, target)| target).collect();
-        // Then the rooms of layers that hear taps.
+        // Then the items layers drew, and the rooms of those that hear
+        // taps.
+        targets.extend((0..self.layer_items(env).len()).map(Target::Item));
         targets.extend(
             self.typography
                 .rooms
@@ -908,7 +912,7 @@ impl Book {
                 .get(i)
                 .map(|l| (Locator::new(section, l.start), Locator::new(section, l.end))),
             Target::Mark(i) => self.decorated.get(i).map(|m| (m.start, m.end)),
-            Target::Layer(_) => None,
+            Target::Layer(_) | Target::Item(_) => None,
         }
     }
 

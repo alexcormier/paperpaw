@@ -996,6 +996,10 @@ fn build_kernel(
         {
             builder = builder.plugin(paperpaw_sample_frame_test::FrameTest);
         }
+        #[cfg(feature = "interlinear")]
+        {
+            builder = builder.plugin(paperpaw_sample_interlinear::Interlinear);
+        }
         if let Some(light) = profile.light {
             builder = builder.plugin(crate::light::Emulated(light));
         }
