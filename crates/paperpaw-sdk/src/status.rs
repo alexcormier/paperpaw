@@ -988,48 +988,13 @@ fn shrink(widths: &[f32], texts: &[bool], gap: f32, room: f32) -> Option<(usize,
     Some((longest, (widths[longest] - (total - room)).max(0.0)))
 }
 
-/// How the battery is drawn: the looks the owner chooses from (one stays).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "the looks not drawn are pictured to choose from")
-)]
-enum BatteryLook {
-    /// Corners rounded by a quarter of its height, a bolt when charging.
-    Rounded,
-    /// Nearly a pill, a bolt when charging.
-    Pill,
-    /// As `Rounded`, a plus when charging.
-    RoundedPlus,
-}
-
-/// The look drawn.
-const BATTERY_LOOK: BatteryLook = BatteryLook::Rounded;
-
-/// A battery filled to `percent`, a mark when charging.
-fn draw_battery(
-    canvas: &mut Canvas<'_>,
-    area: Rect,
-    size: f32,
-    percent: u8,
-    charging: bool,
-    color: Color,
-) {
-    draw_battery_as(BATTERY_LOOK, canvas, area, size, percent, charging, color);
-}
-
-/// A battery drawn as `look`, in the style of the UI's shapes: a rounded
+/// A battery filled to `percent`, in the style of the UI's shapes: a rounded
 /// body, a small rounded nub, the level as a rounded bar inside with a
-/// gap as wide as the line all round, and a bolt or a plus when charging,
-/// in ink with a rim of paper, so that it reads on the level, beside it
+/// gap as wide as the line all round, and a bolt when charging, in ink
+/// with a rim of paper, so that it reads on the level, beside it
 /// and across its edge alike. Crisp at every size: whole pixels only,
 /// nothing blended.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "draw_battery's own arguments and the look; for the looks to choose from only"
-)]
-fn draw_battery_as(
-    look: BatteryLook,
+fn draw_battery(
     canvas: &mut Canvas<'_>,
     area: Rect,
     size: f32,
@@ -1041,10 +1006,7 @@ fn draw_battery_as(
     let line = ((size / 10.0) as u32).max(1);
     let nub = ((size / 8.0) as u32).max(2);
     let width = u32::from(area.width).saturating_sub(nub);
-    let radius = match look {
-        BatteryLook::Pill => height * 2 / 5,
-        BatteryLook::Rounded | BatteryLook::RoundedPlus => (height / 4).max(1),
-    };
+    let radius = (height / 4).max(1);
     canvas.stroke_round_rect(x, y, width, height, line, radius, color);
     // The nub, half as tall as the body and centred on it to the pixel,
     // rounded on its outer side (its inner side lies on the body's line).
@@ -1066,11 +1028,7 @@ fn draw_battery_as(
     let bar_height = height.saturating_sub(2 * inset);
     let full = width.saturating_sub(2 * inset);
     let fill = full * u32::from(percent.min(100)) / 100;
-    let bar_radius = match look {
-        BatteryLook::Pill => bar_height / 3,
-        BatteryLook::Rounded | BatteryLook::RoundedPlus => radius.saturating_sub(inset).max(1),
-    }
-    .min(bar_height / 2);
+    let bar_radius = radius.saturating_sub(inset).max(1).min(bar_height / 2);
     let (bar_x, bar_y) = (x + inset as i32, y + inset as i32);
     if fill > 0 && bar_height > 0 {
         canvas.fill_round_rect(bar_x, bar_y, fill, bar_height, bar_radius, color);
@@ -1078,32 +1036,17 @@ fn draw_battery_as(
     if !charging {
         return;
     }
-    // The mark in the middle of the inside: in ink, with a rim of paper
+    // The bolt in the middle of the inside: in ink, with a rim of paper
     // a pixel wide inside the body.
     let mark_height = height.saturating_sub(2 * line + 2).max(3);
-    let bolt = look != BatteryLook::RoundedPlus;
-    let mark_width = if bolt {
-        (mark_height * 2 / 3).max(4)
-    } else {
-        mark_height
-    };
+    let mark_width = (mark_height * 2 / 3).max(4);
     let left = x + (width as i32 - mark_width as i32) / 2;
     let top = y + (height as i32 - mark_height as i32) / 2;
     let in_mark = |column: i32, row: i32| {
         if column < 0 || row < 0 || column >= mark_width as i32 || row >= mark_height as i32 {
             return false;
         }
-        let (column, row) = (column as u32, row as u32);
-        if bolt {
-            in_bolt(column, row, mark_width, mark_height, line + 1)
-        } else {
-            // A plus with arms as thick as the line, centred.
-            let middle = |n: u32, at: u32| {
-                let from = (n - line.min(n)) / 2;
-                at >= from && at < from + line
-            };
-            middle(mark_height, row) || middle(mark_width, column)
-        }
+        in_bolt(column as u32, row as u32, mark_width, mark_height, line + 1)
     };
     let (inside_left, inside_right) = (x + line as i32, x + (width - line) as i32);
     let (inside_top, inside_bottom) = (y + line as i32, y + (height - line) as i32);
@@ -1148,74 +1091,6 @@ fn in_bolt(column: u32, row: u32, width: u32, height: u32, thickness: u32) -> bo
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// With `PAPERPAW_BATTERY_PICTURES=<folder>`: each look of the battery
-    /// at the X4's and the Boox's status size (6 pt), at 20, 60 and 100 %,
-    /// charging and not, as a PGM each, for choosing one.
-    #[test]
-    fn battery_pictures() {
-        extern crate std;
-        let Some(folder) = std::env::var_os("PAPERPAW_BATTERY_PICTURES") else {
-            return;
-        };
-        let folder = std::path::PathBuf::from(folder);
-        std::fs::create_dir_all(&folder).unwrap();
-        let looks = [
-            ("a-rounded", BatteryLook::Rounded),
-            ("b-pill", BatteryLook::Pill),
-            ("c-rounded-plus", BatteryLook::RoundedPlus),
-        ];
-        // 6 pt at 220 and 300 dpi; the battery as the status line sizes it
-        // (its height three quarters of the font's ascent, about its size).
-        for (device, size) in [
-            ("x4", 6.0f32 * 220.0 / 72.0),
-            ("boox", 6.0f32 * 300.0 / 72.0),
-        ] {
-            let height = (size * 0.75) as u16;
-            let width = battery_width(size) as u16;
-            for (name, look) in looks {
-                for percent in [20u8, 60, 100] {
-                    for charging in [false, true] {
-                        let mut frame = paperpaw_graphics::Framebuffer::new(
-                            width + 4,
-                            height + 4,
-                            paperpaw_platform::PixelFormat::Gray8,
-                        )
-                        .unwrap();
-                        let mut canvas = frame.canvas();
-                        canvas.fill_rect(
-                            0,
-                            0,
-                            u32::from(width) + 4,
-                            u32::from(height) + 4,
-                            Color::WHITE,
-                        );
-                        let area = Rect::new(2, 2, width, height);
-                        draw_battery_as(
-                            look,
-                            &mut canvas,
-                            area,
-                            size,
-                            percent,
-                            charging,
-                            Color::BLACK,
-                        );
-                        let view = frame.view();
-                        let mut pgm = alloc::format!("P5\n{} {}\n255\n", view.width, view.height)
-                            .into_bytes();
-                        for py in 0..view.height {
-                            for px in 0..view.width {
-                                pgm.push(view.pixel(px, py).r);
-                            }
-                        }
-                        let state = if charging { "charging" } else { "plain" };
-                        let file = alloc::format!("{name}-{device}-{percent}-{state}.pgm");
-                        std::fs::write(folder.join(file), pgm).unwrap();
-                    }
-                }
-            }
-        }
-    }
 
     #[test]
     fn only_lines_too_long_give_way() {
