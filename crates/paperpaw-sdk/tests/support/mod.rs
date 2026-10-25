@@ -266,7 +266,7 @@ impl Harness {
             content: paperpaw_platform::Rect::default(),
             stack: &[],
             slots: &[],
-            screens: &[],
+            screens: paperpaw_sdk::ScreenList::default(),
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,

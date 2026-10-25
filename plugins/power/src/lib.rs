@@ -158,6 +158,22 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [paperpaw_sdk::FixedAction; 1] =
+    [
+        paperpaw_sdk::FixedAction::new(OPEN, "power.title").handler(|_, _, out| {
+            let page =
+                paperpaw_sdk::Params::new().with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
+            out.push(paperpaw_sdk::Command::OpenSlot(
+                paperpaw_sdk::builtin::slots::SETTINGS,
+                page,
+            ));
+        }),
+    ];
+/// The mode in the quick panel, as segments.
+static ENTRIES: [MenuEntry; 1] =
+    [MenuEntry::new(menus::QUICK, Id::new_static(MODE.static_str())).order(30)];
+static ICONS: [(Id, &str); 2] = [(GROUP, "leaf"), (OPEN, "leaf")];
+
 impl Plugin for Power {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Power", paperpaw_sdk::package_version!())
@@ -174,10 +190,9 @@ impl Plugin for Power {
                 paperpaw_sdk::SettingGroupSpec::new(GROUP, "power.title").order(86);
             &SPEC
         })?;
-        r.add_icon(GROUP, Cow::Borrowed("leaf"))?;
+        r.add_icons(&ICONS)?;
         r.add_settings(&SETTINGS)?;
-        // The mode in the quick panel, as segments.
-        r.add_menu_entry(MenuEntry::new(menus::QUICK, MODE.id().clone()).order(30))?;
+        r.add_menu_entries(&ENTRIES)?;
         // Tapped, the power settings.
         r.add_status_item(
             StatusItemSpec::new(
@@ -195,17 +210,7 @@ impl Plugin for Power {
             )
             .tap(OPEN),
         )?;
-        r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "power.title").handler(
-            |_: &paperpaw_sdk::Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
-                let page = paperpaw_sdk::Params::new()
-                    .with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
-                out.push(paperpaw_sdk::Command::OpenSlot(
-                    paperpaw_sdk::builtin::slots::SETTINGS,
-                    page,
-                ));
-            },
-        ))?;
-        r.add_icon(OPEN, Cow::Borrowed("leaf"))?;
+        r.add_actions(&ACTIONS)?;
         // Silently: the mode changes, only the status mark says so.
         for event in [
             events::STARTED.id(),

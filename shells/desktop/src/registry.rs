@@ -105,8 +105,8 @@ fn describe(device: &Device) -> String {
         let _ = write!(
             out,
             "{comma}\n{{\"id\": {}, \"title\": {}}}",
-            string(action.id.as_str()),
-            tr(&action.title)
+            string(action.id().as_str()),
+            tr(action.title())
         );
     }
     out.push_str("\n],\n\"profiles\": [");

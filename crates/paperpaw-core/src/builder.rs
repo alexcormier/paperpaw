@@ -47,6 +47,7 @@ struct BuilderParts {
     panel: paperpaw_sdk::realtime::PanelInfo,
     /// Network settings kept in the program, by plugin.
     network_settings: &'static [crate::NetworkSettings],
+    catalog_indexes: paperpaw_i18n::FixedIndexes,
     /// The most Bluetooth links the shell keeps; none without a radio.
     bluetooth_links: u8,
 }
@@ -88,6 +89,14 @@ impl KernelBuilder {
     /// other networked plugin are made as before.
     pub fn network_settings(mut self, settings: &'static [crate::NetworkSettings]) -> Self {
         self.0.network_settings = settings;
+        self
+    }
+
+    /// The indexes of the translation catalogs built in, made when the
+    /// program was built: such catalogs keep no index on the heap (see
+    /// [`FixedIndexes`](paperpaw_i18n::FixedIndexes)).
+    pub fn catalog_indexes(mut self, indexes: paperpaw_i18n::FixedIndexes) -> Self {
+        self.0.catalog_indexes = indexes;
         self
     }
 
@@ -428,7 +437,6 @@ impl BuilderParts {
         }
         // The power mode worn before, over the reader's settings.
         kernel.restore_power();
-        kernel.set_menu_titles();
         kernel.apply_reading_font();
         kernel.apply_status_font();
         kernel.validate();
@@ -477,13 +485,15 @@ impl BuilderParts {
         caps.button_row = !self.button_row.is_empty();
         caps = with_buttons(caps, &self.device.input);
         let links = self.bluetooth_links;
+        let mut translator = Translator::new();
+        translator.fixed_indexes(self.catalog_indexes);
         Kernel {
             shared: Shared {
                 registry: Registry::default(),
                 meter,
                 device: self.device,
                 settings: Settings::new(),
-                translator: Translator::new(),
+                translator,
                 fonts: Fonts::new(self.glyph_cache),
                 formats: Formats::new(),
                 hyphenation: Hyphenation::new(),
@@ -1075,6 +1085,7 @@ impl Kernel {
                     .map_or(255, |l| l.min(255) as u8),
             ),
             network_settings: &[],
+            catalog_indexes: &[],
             bluetooth_links: 0,
         }))
     }

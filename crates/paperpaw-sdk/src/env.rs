@@ -229,7 +229,7 @@ pub struct Env<'a> {
     pub(crate) slots: &'a [crate::Id],
     /// Every screen: its id and the translation key of its name, e.g. for
     /// settings that differ per screen (what gestures do there).
-    pub(crate) screens: &'a [(crate::Id, alloc::borrow::Cow<'static, str>)],
+    pub(crate) screens: crate::screen::ScreenList<'a>,
     /// The folders reading fonts are found in at start-up, the first one
     /// PaperPaw's own (where new fonts go); empty where the device has
     /// only its built-in fonts.
@@ -309,9 +309,9 @@ impl<'a> Env<'a> {
         self.hyphenation
     }
 
-    /// Its `menus`.
-    pub fn menus(&self) -> &'a Menus {
-        self.menus
+    /// Its menus, labelled by its actions and settings.
+    pub fn menus(&self) -> crate::menus::MenuView<'a> {
+        crate::menus::MenuView::new(self.menus, self.actions, self.settings)
     }
 
     /// Every action, e.g. to offer them in a menu editor.
@@ -516,7 +516,7 @@ impl<'a> Env<'a> {
 
     /// Every screen: its id and the translation key of its name, e.g. for
     /// settings that differ per screen (what gestures do there).
-    pub fn screens(&self) -> &'a [(crate::Id, alloc::borrow::Cow<'static, str>)] {
+    pub fn screens(&self) -> crate::screen::ScreenList<'a> {
         self.screens
     }
 
@@ -714,7 +714,7 @@ pub struct EnvParts<'a> {
     pub slots: &'a [crate::Id],
     /// Every screen: its id and the translation key of its name, e.g. for
     /// settings that differ per screen (what gestures do there).
-    pub screens: &'a [(crate::Id, alloc::borrow::Cow<'static, str>)],
+    pub screens: crate::screen::ScreenList<'a>,
     /// The folders reading fonts are found in at start-up, the first one
     /// PaperPaw's own (where new fonts go); empty where the device has
     /// only its built-in fonts.

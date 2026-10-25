@@ -56,12 +56,12 @@ use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::widgets::Widget;
-use paperpaw_sdk::{ActionSpec, MenuEntry};
 use paperpaw_sdk::{
-    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Level, Manifest, Params,
-    Plugin, PointerEvent, PointerPhase, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue,
+    Canvas, Command, Cx, Env, FixedScreen, Gesture, GestureKind, Handled, Hint, Id, Level,
+    Manifest, Params, Plugin, PointerEvent, PointerPhase, Priority, Rect, RefreshMode,
+    RegisterError, Registrar, Screen, SettingKind, SettingSpec, SettingValue,
 };
+use paperpaw_sdk::{FixedAction, MenuEntry};
 
 use self::chooser::*;
 use self::group_list::*;
@@ -110,6 +110,56 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(secrets::OPEN, "settings.secrets")
+    .handler(|_, _, out| out.push(Command::OpenScreen(secrets::SCREEN, Params::new())))];
+/// In the device's part, after the system.
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, secrets::OPEN).order(95)];
+static ICONS: [(Id, &str); 1] = [(secrets::OPEN, "key")];
+
+static SCREENS: [FixedScreen; 7] = [
+    FixedScreen::new(SCREEN, "settings.title", |env, params| {
+        let group = params.get(ID).and_then(|id| Id::parse(id).ok());
+        // A setting to focus: on its page, unless a group is named.
+        let focus = params.get(FOCUS).and_then(|id| env.settings().spec(id));
+        let group = group.or_else(|| focus.map(|spec| env.settings().group_of(spec)));
+        match group {
+            Some(group) => {
+                let mut page = GroupPage::new(env, group);
+                if let Some(spec) = focus {
+                    page.focus_on(env, spec.id.as_str());
+                }
+                Box::new(page) as Box<dyn Screen>
+            }
+            None => Box::new(GroupList::new(env)),
+        }
+    }),
+    FixedScreen::new(GROUP_SCREEN, "settings.title", |env, params| {
+        let group = params.get(ID).and_then(|id| Id::parse(id).ok());
+        let more = params.get(MORE) == Some("1");
+        let mut page = GroupPage::of(env, group.unwrap_or(groups::OTHER), more);
+        if let Some(focus) = params.get(FOCUS) {
+            page.focus_on(env, focus);
+        }
+        Box::new(page)
+    }),
+    FixedScreen::new(themes::SCREEN, "settings.theme", |env, params| {
+        Box::new(themes::Themes::new(env, params))
+    }),
+    FixedScreen::new(CHOOSE_SCREEN, "settings.title", |env, params| {
+        let id = params.get(ID).unwrap_or_default();
+        Box::new(Chooser::new(env, id))
+    }),
+    FixedScreen::new(search::SCREEN, "settings.search", |env, params| {
+        Box::new(search::SearchScreen::new(env, params))
+    }),
+    FixedScreen::new(secrets::SCREEN, "settings.secrets", |env, _| {
+        Box::new(secrets::SecretList::new(env))
+    }),
+    FixedScreen::new(secrets::SECRET_SCREEN, "settings.secrets", |env, params| {
+        Box::new(secrets::SecretPage::new(env, params))
+    }),
+];
+
 impl Plugin for SettingsPlugin {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Settings", paperpaw_sdk::package_version!())
@@ -119,75 +169,10 @@ impl Plugin for SettingsPlugin {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "settings.title",
-            Box::new(|env, params| {
-                let group = params.get(ID).and_then(|id| Id::parse(id).ok());
-                // A setting to focus: on its page, unless a group is named.
-                let focus = params.get(FOCUS).and_then(|id| env.settings().spec(id));
-                let group = group.or_else(|| focus.map(|spec| env.settings().group_of(spec)));
-                match group {
-                    Some(group) => {
-                        let mut page = GroupPage::new(env, group);
-                        if let Some(spec) = focus {
-                            page.focus_on(env, spec.id.as_str());
-                        }
-                        Box::new(page) as Box<dyn Screen>
-                    }
-                    None => Box::new(GroupList::new(env)),
-                }
-            }),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            GROUP_SCREEN,
-            "settings.title",
-            Box::new(|env, params| {
-                let group = params.get(ID).and_then(|id| Id::parse(id).ok());
-                let more = params.get(MORE) == Some("1");
-                let mut page = GroupPage::of(env, group.unwrap_or(groups::OTHER), more);
-                if let Some(focus) = params.get(FOCUS) {
-                    page.focus_on(env, focus);
-                }
-                Box::new(page)
-            }),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            themes::SCREEN,
-            "settings.theme",
-            Box::new(|env, params| Box::new(themes::Themes::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOOSE_SCREEN,
-            "settings.title",
-            Box::new(|env, params| {
-                let id = params.get(ID).unwrap_or_default();
-                Box::new(Chooser::new(env, id))
-            }),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            search::SCREEN,
-            "settings.search",
-            Box::new(|env, params| Box::new(search::SearchScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            secrets::SCREEN,
-            "settings.secrets",
-            Box::new(|env, _| Box::new(secrets::SecretList::new(env))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            secrets::SECRET_SCREEN,
-            "settings.secrets",
-            Box::new(|env, params| Box::new(secrets::SecretPage::new(env, params))),
-        ))?;
-        r.add_action(ActionSpec::new(secrets::OPEN, "settings.secrets").handler(
-            |_: &Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
-                out.push(Command::OpenScreen(secrets::SCREEN, Params::new()));
-            },
-        ))?;
-        // In the device's part, after the system.
-        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, secrets::OPEN).order(95))?;
-        r.add_icon(secrets::OPEN, Cow::Borrowed("key"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.on(secrets::ENTERED, secrets::entered)?;
         r.bind_slot(slots::SETTINGS, SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::CHOOSE_VALUE, CHOOSE_SCREEN, Priority::DEFAULT)?;

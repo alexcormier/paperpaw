@@ -256,7 +256,8 @@ fn entries_come_in_their_order_headings_among_them() {
         MenuSection::new(Id::new_static("t.heading"), "t.heading.title", menu.clone()).order(20),
     );
     menus.set_icon(Id::new_static("t.a"), Cow::Borrowed("books"));
-    let items = menus.items("t.menu");
+    let (actions, settings) = (paperpaw_sdk::Actions::new(), paperpaw_sdk::Settings::new());
+    let items = paperpaw_sdk::MenuView::new(&menus, &actions, &settings).items("t.menu");
     let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
     // Equal orders keep the order they were added in.
     assert_eq!(ids, ["t.d", "t.a", "t.b", "t.heading", "t.c"]);
@@ -269,7 +270,7 @@ fn entries_come_in_their_order_headings_among_them() {
         menu.clone(),
         vec![Id::new_static("t.gone"), Id::new_static("t.c")],
     );
-    let ids: Vec<&str> = menus
+    let ids: Vec<&str> = paperpaw_sdk::MenuView::new(&menus, &actions, &settings)
         .items("t.menu")
         .iter()
         .map(|i| i.id.as_str())

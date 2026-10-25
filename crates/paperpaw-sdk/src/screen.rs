@@ -101,6 +101,105 @@ impl ScreenSpec {
     }
 }
 
+/// What makes a screen kept in the program ([`FixedScreen`]): a
+/// function, not a closure.
+pub type FixedFactory = fn(&Env<'_>, &Params) -> Box<dyn Screen>;
+
+/// A screen contribution kept in the program: as a [`ScreenSpec`], in a
+/// `static` list ([`Registrar::add_screens`](crate::Registrar::add_screens)),
+/// so it takes next to no memory where a [`ScreenSpec`] takes some 60
+/// bytes. Its factory is a function ([`FixedFactory`]); a screen whose
+/// factory needs state of its own is a [`ScreenSpec`].
+#[derive(Debug)]
+pub struct FixedScreen {
+    id: Id,
+    title: &'static str,
+    factory: FixedFactory,
+    refresh_on_open: Option<RefreshMode>,
+    instances: Instances,
+}
+
+impl FixedScreen {
+    /// Screen `id`, called `title` (a translation key), made by `factory`.
+    pub const fn new(id: Id, title: &'static str, factory: FixedFactory) -> Self {
+        Self {
+            id,
+            title,
+            factory,
+            refresh_on_open: None,
+            instances: Instances::PER_PARAMS,
+        }
+    }
+
+    /// How the panel is refreshed when it opens ([`ScreenSpec::refresh_on_open`]).
+    pub const fn refresh_on_open(mut self, mode: RefreshMode) -> Self {
+        self.refresh_on_open = Some(mode);
+        self
+    }
+
+    /// How many of it may be open at once ([`ScreenSpec::instances`]).
+    pub const fn instances(mut self, instances: Instances) -> Self {
+        self.instances = instances;
+        self
+    }
+
+    pub const fn id(&self) -> &Id {
+        &self.id
+    }
+
+    /// Translation key of its name.
+    pub const fn title(&self) -> &'static str {
+        self.title
+    }
+
+    /// The screen, made with `params`.
+    pub fn make(&self, env: &Env<'_>, params: &Params) -> Box<dyn Screen> {
+        (self.factory)(env, params)
+    }
+
+    /// How the panel is refreshed when it opens, if it says.
+    pub const fn refresh(&self) -> Option<RefreshMode> {
+        self.refresh_on_open
+    }
+
+    /// How many of it may be open at once.
+    pub const fn how_many(&self) -> Instances {
+        self.instances
+    }
+}
+
+/// Every screen plugins added, with the translation key of its name
+/// ([`Env::screens`](crate::Env::screens)): those kept in the program
+/// and the others.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ScreenList<'a> {
+    added: &'a [(Id, Cow<'static, str>)],
+    fixed: &'a [&'static FixedScreen],
+}
+
+impl<'a> ScreenList<'a> {
+    /// The screens of `added` and `fixed`, each by id.
+    #[cfg(feature = "kernel")]
+    pub fn new(added: &'a [(Id, Cow<'static, str>)], fixed: &'a [&'static FixedScreen]) -> Self {
+        Self { added, fixed }
+    }
+
+    /// Each screen's id and the translation key of its name.
+    pub fn iter(self) -> impl Iterator<Item = (&'a Id, &'a str)> + 'a {
+        let added = self.added.iter().map(|(id, title)| (id, title.as_ref()));
+        let fixed = self.fixed.iter().map(|f| (f.id(), f.title()));
+        added.chain(fixed)
+    }
+
+    pub fn len(&self) -> usize {
+        self.added.len() + self.fixed.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
 /// How many of a screen may be open at once ([`ScreenSpec::instances`]).
 /// Opening one that is open already goes back to it: the screens above it
 /// close, as with [`Command::BackTo`], and it hears the params it was

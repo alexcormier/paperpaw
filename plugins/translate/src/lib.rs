@@ -31,8 +31,8 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::web::encode;
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
-    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Canvas, Color, Command, Cx, Env, FixedScreen, Gesture, GestureKind, Handled, HttpRequest, Id,
+    Manifest, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
     SettingSpec,
 };
 
@@ -187,6 +187,12 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    SCREEN,
+    "translate.title",
+    |env, params| Box::new(Panel::new(env, params)),
+)];
+
 impl Plugin for Translate {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Translation", paperpaw_sdk::package_version!())
@@ -197,11 +203,7 @@ impl Plugin for Translate {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "translate.title",
-            Box::new(|env, params| Box::new(Panel::new(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.bind_slot(slots::TRANSLATE, SCREEN, Priority::DEFAULT)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

@@ -42,7 +42,7 @@ fn label(env: &Env<'_>, labels: &str, option: &str) -> String {
     if labels.is_empty()
         && let Some(action) = env.actions().get(option)
     {
-        return env.i18n().tr(&action.title).to_string();
+        return env.i18n().tr(action.title()).to_string();
     }
     env.i18n()
         .tr(&alloc::format!("{labels}{option}"))

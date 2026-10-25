@@ -67,7 +67,7 @@ pub fn merge<'a>(catalogs: impl IntoIterator<Item = &'a Catalog>) -> Vec<Languag
 
 /// Every language the translator has but the pseudo-language.
 pub fn languages(translator: &Translator) -> Vec<Language> {
-    let mut languages = merge(translator.catalogs());
+    let mut languages = merge(&translator.catalogs());
     languages.retain(|l| l.code != super::PSEUDO);
     languages
 }

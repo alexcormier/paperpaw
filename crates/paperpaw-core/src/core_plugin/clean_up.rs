@@ -17,11 +17,13 @@ pub(super) fn register_clean_up(r: &mut Registrar) -> Result<(), RegisterError> 
     r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
     r.add_book_cache(alloc::format!("{}/covers", library::DIR), "")?;
     // With the device's settings.
-    r.add_menu_entry(paperpaw_sdk::MenuEntry::new(
+    static ENTRY: [paperpaw_sdk::MenuEntry; 1] = [paperpaw_sdk::MenuEntry::new(
         groups::SYSTEM,
         actions::CLEAN_UP,
-    ))?;
-    r.add_icon(actions::CLEAN_UP, Cow::Borrowed("eraser"))?;
+    )];
+    static ICON: [(paperpaw_sdk::Id, &str); 1] = [(actions::CLEAN_UP, "eraser")];
+    r.add_menu_entries(&ENTRY)?;
+    r.add_icons(&ICON)?;
     r.on(CLEAN_UP_ANSWERED, |env, answer, out| {
         if answer.yes {
             let text = clean_up(env, out, BookDataKind::UserData);

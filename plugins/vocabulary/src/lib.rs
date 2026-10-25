@@ -58,9 +58,9 @@ use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
-    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, SettingExtra, SettingSpec, StorageError,
+    Arg, Canvas, Command, Commands, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind,
+    Handled, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
+    Screen, ScreenSpec, SettingExtra, SettingSpec, StorageError,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -192,6 +192,41 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(OPEN, "vocabulary.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new()))),
+    FixedAction::new(CARDS, "vocabulary.cards.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(decks::SCREEN, Params::new()))),
+];
+static ENTRIES: [MenuEntry; 3] = [
+    MenuEntry::new(menus::READER_MORE, Id::new_static(MARK.static_str())).order(40),
+    MenuEntry::new(menus::TOOLS, OPEN).order(36),
+    MenuEntry::new(menus::TOOLS, CARDS).order(36),
+];
+static ICONS: [(Id, &str); 3] = [
+    (Id::new_static(MARK.static_str()), "vocabulary"),
+    (OPEN, "vocabulary"),
+    (CARDS, "stack-2"),
+];
+
+static SCREENS: [FixedScreen; 4] = [
+    FixedScreen::new(decks::SCREEN, "vocabulary.cards.title", |env, _| {
+        Box::new(decks::DecksScreen::new(env))
+    }),
+    FixedScreen::new(review::SCREEN, "vocabulary.review.title", |env, params| {
+        Box::new(review::ReviewScreen::new(env, params))
+    }),
+    FixedScreen::new(
+        Id::new_static(SLEEP_CARD),
+        "vocabulary.sleep-card",
+        |env, _| Box::new(sleep::SleepCard::new(env)),
+    ),
+    FixedScreen::new(phone::SCREEN, "vocabulary.phone.title", |env, _| {
+        Box::new(phone::PhoneScreen::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+];
+
 impl Plugin for Vocabulary {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Vocabulary", paperpaw_sdk::package_version!())
@@ -221,8 +256,8 @@ impl Plugin for Vocabulary {
                 out.push(Command::Notify(message));
             }
         })?;
-        r.add_menu_entry(MenuEntry::new(menus::READER_MORE, MARK.id().clone()).order(40))?;
-        r.add_icon(&MARK, Cow::Borrowed("vocabulary"))?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_settings(&LEARNING_LOOK)?;
         r.add_decorator(marks::decorator(&changes))?;
         r.on(events::DECORATION_TAPPED, marks::tapped)?;
@@ -231,23 +266,8 @@ impl Plugin for Vocabulary {
             "vocabulary.title",
             Box::new(move |env, _| Box::new(WordsScreen::new(env, changes.clone()))),
         ))?;
-        r.add_action(ActionSpec::new(OPEN, "vocabulary.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(36))?;
-        r.add_icon(OPEN, Cow::Borrowed("vocabulary"))?;
-        r.add_screen(ScreenSpec::new(
-            decks::SCREEN,
-            "vocabulary.cards.title",
-            Box::new(|env, _| Box::new(decks::DecksScreen::new(env))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            review::SCREEN,
-            "vocabulary.review.title",
-            Box::new(|env, params| Box::new(review::ReviewScreen::new(env, params))),
-        ))?;
+        r.add_actions(&ACTIONS)?;
+        r.add_screens(&SCREENS)?;
         // The first review: the answers, by touch or with the buttons.
         paperpaw_sdk::help::add(
             r,
@@ -259,28 +279,8 @@ impl Plugin for Vocabulary {
                 paperpaw_sdk::help::HelpHint::any("vocabulary.help.back"),
             ],
         )?;
-        r.add_screen(ScreenSpec::new(
-            Id::new_static(SLEEP_CARD),
-            "vocabulary.sleep-card",
-            Box::new(|env, _| Box::new(sleep::SleepCard::new(env))),
-        ))?;
         r.add_choice(Id::new_static(SLEEP_SHOW), SLEEP_CARD)?;
         r.on(events::RESUME, |env, _, out| wake(env, out))?;
-        r.add_screen(
-            ScreenSpec::new(
-                phone::SCREEN,
-                "vocabulary.phone.title",
-                Box::new(|env, _| Box::new(phone::PhoneScreen::new(env))),
-            )
-            .instances(paperpaw_sdk::Instances::SINGLE),
-        )?;
-        r.add_action(ActionSpec::new(CARDS, "vocabulary.cards.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(decks::SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, CARDS).order(36))?;
-        r.add_icon(CARDS, Cow::Borrowed("stack-2"))?;
         widget::register(r)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
@@ -700,9 +700,9 @@ mod tests {
         assert!(decorator.is_some_and(|d| d.taps && d.switch.as_ref() == Some(super::MARK.id())));
         assert!(contributions.iter().any(|c| matches!(
             c,
-            Contribution::MenuEntry(e)
-                if e.menu == paperpaw_sdk::builtin::menus::READER_MORE
-                    && e.item == *super::MARK.id()
+            Contribution::FixedMenuEntries(list)
+                if list.iter().any(|e| e.menu == paperpaw_sdk::builtin::menus::READER_MORE
+                    && e.item == *super::MARK.id())
         )));
     }
 }

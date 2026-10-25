@@ -32,9 +32,9 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, ServerNotice};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
-    Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec, ServerResponse,
+    Arg, Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled,
+    Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
+    Screen, ServerResponse,
 };
 
 use paperpaw_sdk::served::{self, Guard};
@@ -75,6 +75,25 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "transfer.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(46)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "transfer")];
+
+static SCREENS: [FixedScreen; 3] = [
+    FixedScreen::new(PHONE_SCREEN, "transfer.phone.title", |env, params| {
+        Box::new(phone::PhoneScreen::new(env, params))
+    }),
+    FixedScreen::new(SCREEN, "transfer.title", |env, _| {
+        Box::new(TransferScreen::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+    FixedScreen::new(CABLE_SCREEN, "transfer.cable.title", |env, _| {
+        Box::new(cable::CableScreen::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+];
+
 impl Plugin for Transfer {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Transfer", paperpaw_sdk::package_version!())
@@ -86,35 +105,11 @@ impl Plugin for Transfer {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(
-            ScreenSpec::new(
-                SCREEN,
-                "transfer.title",
-                Box::new(|env, _| Box::new(TransferScreen::new(env))),
-            )
-            .instances(paperpaw_sdk::Instances::SINGLE),
-        )?;
-        r.add_action(ActionSpec::new(OPEN, "transfer.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(46))?;
-        r.add_icon(OPEN, Cow::Borrowed("transfer"))?;
-        r.add_screen(ScreenSpec::new(
-            PHONE_SCREEN,
-            "transfer.phone.title",
-            Box::new(|env, params| Box::new(phone::PhoneScreen::new(env, params))),
-        ))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.bind_slot(slots::REMOTE_KEYBOARD, PHONE_SCREEN, Priority::DEFAULT)?;
-        r.add_screen(
-            ScreenSpec::new(
-                CABLE_SCREEN,
-                "transfer.cable.title",
-                Box::new(|env, _| Box::new(cable::CableScreen::new(env))),
-            )
-            .instances(paperpaw_sdk::Instances::SINGLE),
-        )?;
         r.bind_slot(slots::CABLE, CABLE_SCREEN, Priority::DEFAULT)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

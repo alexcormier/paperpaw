@@ -39,8 +39,8 @@ use count::Trigger;
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::firmware::Firmware;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Commands, Env, Id, ItemState, Manifest, MenuEntry, MenuNeed, Params,
-    Plugin, RegisterError, Registrar, ScreenSpec, SettingSpec, Storage,
+    Arg, Command, Commands, Env, FixedAction, FixedScreen, Id, ItemState, Manifest, MenuEntry,
+    MenuNeed, Params, Plugin, RegisterError, Registrar, SettingSpec, Storage,
 };
 
 pub use look::LOOK;
@@ -178,6 +178,30 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(OPEN, "update.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(PAGE, Params::new()))),
+    FixedAction::new(CHECK, "update.check").handler(|env, _, out| {
+        if env.reader() {
+            online::check(env, true, Trigger::Manual, out);
+        } else {
+            let due = CHECK_DUE.id().clone();
+            out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
+                due,
+                core::time::Duration::from_secs(3600),
+            )));
+        }
+    }),
+];
+/// In the device's part of the settings, before *About*.
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, OPEN).order(98)];
+static ICONS: [(Id, &str); 2] = [(CHECK, "cloud-download"), (OPEN, "circle-arrow-up")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(PAGE, "update.title", |env, _| {
+    Box::new(page::UpdatePage::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for Update {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Update", paperpaw_sdk::package_version!())
@@ -192,32 +216,8 @@ impl Plugin for Update {
         r.add_settings(&SETTINGS)?;
         // Only where PaperPaw updates the firmware.
         r.set_menu_need(online::SERVER.id().clone(), MenuNeed::Firmware)?;
-        r.add_screen(
-            ScreenSpec::new(
-                PAGE,
-                "update.title",
-                Box::new(|env, _| Box::new(page::UpdatePage::new(env))),
-            )
-            .instances(paperpaw_sdk::Instances::SINGLE),
-        )?;
-        r.add_action(ActionSpec::new(OPEN, "update.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(PAGE, Params::new()));
-            },
-        ))?;
-        r.add_action(ActionSpec::new(CHECK, "update.check").handler(
-            |env: &Env<'_>, _, out: &mut Commands| {
-                if env.reader() {
-                    online::check(env, true, Trigger::Manual, out);
-                } else {
-                    let due = CHECK_DUE.id().clone();
-                    out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
-                        due,
-                        core::time::Duration::from_secs(3600),
-                    )));
-                }
-            },
-        ))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
         r.on(CHECK_DUE, |env, (), out| {
             online::check(env, true, Trigger::Auto, out);
         })?;
@@ -241,15 +241,13 @@ impl Plugin for Update {
             .applies(alloc::boxed::Box::new(|env| env.firmware().is_some())),
         )?;
         r.set_menu_need(CHECK, MenuNeed::Firmware)?;
-        r.add_icon(CHECK, Cow::Borrowed("cloud-download"))?;
+        r.add_icons(&ICONS)?;
         // Answers and downloads go on while the page is closed.
         r.on(online::CHECKED, online::checked)?;
         r.on(online::DOWNLOADED, online::downloaded)?;
         r.on(fetch::FETCHED, fetch::received)?;
-        // In the device's part of the settings, before *About*.
-        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(98))?;
+        r.add_menu_entries(&ENTRIES)?;
         r.set_menu_need(OPEN, MenuNeed::Firmware)?;
-        r.add_icon(OPEN, Cow::Borrowed("circle-arrow-up"))?;
         // An update the server named waits quietly: a badge on the entry.
         r.set_item_state(OPEN, |env| {
             if online::has_offer(env.storage()) {

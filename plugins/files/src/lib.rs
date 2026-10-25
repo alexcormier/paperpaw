@@ -39,8 +39,8 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Color, Command, Commands, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect,
-    RegisterError, Registrar, ScreenSpec, SettingSpec,
+    Color, Command, Commands, Cx, Env, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params,
+    Plugin, Priority, Rect, RegisterError, Registrar, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("files");
@@ -145,6 +145,79 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+const SORT_ID: Id = Id::new_static(SORT.static_str());
+const VIEW_ID: Id = Id::new_static(VIEW.static_str());
+const ROOT_ID: Id = Id::new_static(ROOT.static_str());
+
+/// Opens the shelves by `mode`.
+fn open_shelf(out: &mut Commands, mode: &'static str) {
+    out.push(Command::OpenScreen(
+        SHELF_SCREEN,
+        Params::new().with(params::MODE, mode),
+    ));
+}
+
+static ACTIONS: [FixedAction; 6] = [
+    FixedAction::new(BY_AUTHOR, "files.by-author")
+        .handler(|_, _, out| open_shelf(out, shelves::MODE_AUTHORS)),
+    FixedAction::new(BY_SERIES, "files.by-series")
+        .handler(|_, _, out| open_shelf(out, shelves::MODE_SERIES)),
+    FixedAction::new(BY_TAG, "files.by-tag")
+        .handler(|_, _, out| open_shelf(out, shelves::MODE_TAGS)),
+    FixedAction::new(FAVOURITES, "files.favourites")
+        .handler(|_, _, out| out.push(list::shelf::open(list::shelf::Kind::Favourites, ""))),
+    FixedAction::new(SEARCH, "files.search").handler(|env, _, out| {
+        out.push(ask::text(env.i18n().tr("files.search.prompt"), &SEARCH_ENTERED).command());
+    }),
+    // The shelves as a submenu: an action named like its menu.
+    FixedAction::new(SHELVES_MENU, "files.shelves").handler(|_, _, out| {
+        out.push(Command::OpenSlot(
+            slots::MENU,
+            Params::new().with(params::MENU, String::from(SHELVES_MENU.as_str())),
+        ));
+    }),
+];
+static ICONS: [(Id, &str); 9] = [
+    (BY_AUTHOR, "user"),
+    (BY_SERIES, "list-details"),
+    (BY_TAG, "tag"),
+    (FAVOURITES, "star"),
+    (SEARCH, "search"),
+    (SHELVES_MENU, "books"),
+    // The menu's settings, with icons as its other rows.
+    (SORT_ID, "sort-ascending"),
+    (VIEW_ID, "layout-grid"),
+    (ROOT_ID, "folder"),
+];
+static ENTRIES: [MenuEntry; 11] = [
+    MenuEntry::new(SHELVES_MENU, FAVOURITES).order(5),
+    MenuEntry::new(SHELVES_MENU, BY_AUTHOR).order(10),
+    MenuEntry::new(SHELVES_MENU, BY_SERIES).order(20),
+    MenuEntry::new(SHELVES_MENU, BY_TAG).order(30),
+    // Only what is about the library: night mode and home are the
+    // device's (in the main menu and the quick panel).
+    MenuEntry::new(MENU, SORT_ID).order(10),
+    MenuEntry::new(MENU, VIEW_ID).order(11),
+    MenuEntry::new(MENU, list::FIND).order(20),
+    MenuEntry::new(MENU, SEARCH).order(21),
+    MenuEntry::new(MENU, SHELVES_MENU).order(30),
+    MenuEntry::new(MENU, ROOT_ID).order(80),
+    MenuEntry::new(MENU, core_actions::SETTINGS).order(90),
+];
+
+static SCREENS: [FixedScreen; 4] = [
+    FixedScreen::new(SCREEN, "files.title", list::screen),
+    FixedScreen::new(CHOOSE_FOLDER, "files.choose.title", |env, params| {
+        Box::new(folders::FolderChooser::new(env, params))
+    }),
+    FixedScreen::new(INFO_SCREEN, "files.info", |env, params| {
+        Box::new(info::InfoScreen::new(env, params))
+    }),
+    FixedScreen::new(SHELF_SCREEN, "files.title", |env, params| {
+        Box::new(shelves::ShelfScreen::new(env, params))
+    }),
+];
+
 impl Plugin for Files {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "File browser", paperpaw_sdk::package_version!())
@@ -153,62 +226,11 @@ impl Plugin for Files {
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "longer than the limit from before it was set; split it when it is next changed"
-    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "files.title",
-            Box::new(list::screen),
-        ))?;
+        r.add_screens(&SCREENS)?;
         list::register(r)?;
-        r.add_screen(ScreenSpec::new(
-            CHOOSE_FOLDER,
-            "files.choose.title",
-            Box::new(|env, params| Box::new(folders::FolderChooser::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            INFO_SCREEN,
-            "files.info",
-            Box::new(|env, params| Box::new(info::InfoScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            SHELF_SCREEN,
-            "files.title",
-            Box::new(|env, params| Box::new(shelves::ShelfScreen::new(env, params))),
-        ))?;
-        for (action, mode, title, icon) in [
-            (BY_AUTHOR, shelves::MODE_AUTHORS, "files.by-author", "user"),
-            (
-                BY_SERIES,
-                shelves::MODE_SERIES,
-                "files.by-series",
-                "list-details",
-            ),
-            (BY_TAG, shelves::MODE_TAGS, "files.by-tag", "tag"),
-        ] {
-            r.add_action(
-                paperpaw_sdk::ActionSpec::new(action.clone(), title).handler(
-                    move |_: &Env<'_>, _, out: &mut Commands| {
-                        out.push(Command::OpenScreen(
-                            SHELF_SCREEN,
-                            Params::new().with(params::MODE, mode),
-                        ));
-                    },
-                ),
-            )?;
-            r.add_icon(action, Cow::Borrowed(icon))?;
-        }
-        r.add_action(
-            paperpaw_sdk::ActionSpec::new(FAVOURITES, "files.favourites").handler(
-                |_: &Env<'_>, _, out: &mut Commands| {
-                    out.push(list::shelf::open(list::shelf::Kind::Favourites, ""));
-                },
-            ),
-        )?;
-        r.add_icon(FAVOURITES, Cow::Borrowed("star"))?;
+        r.add_actions(&ACTIONS)?;
+        r.add_icons(&ICONS)?;
         r.bind_slot(slots::CHOOSE_FOLDER, CHOOSE_FOLDER, Priority::DEFAULT)?;
         r.bind_slot(slots::BOOK_INFO, INFO_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
@@ -225,63 +247,13 @@ impl Plugin for Files {
             ],
         )?;
         r.add_settings(&SETTINGS)?;
-        r.add_action(
-            paperpaw_sdk::ActionSpec::new(SEARCH, "files.search").handler(
-                |env: &Env<'_>, _, out: &mut Commands| {
-                    out.push(
-                        ask::text(env.i18n().tr("files.search.prompt"), &SEARCH_ENTERED).command(),
-                    );
-                },
-            ),
-        )?;
-        r.add_icon(SEARCH, Cow::Borrowed("search"))?;
-        // The menu's settings, with icons as its other rows.
-        for (setting, icon) in [
-            (Id::from(SORT), "sort-ascending"),
-            (VIEW.into(), "layout-grid"),
-            (ROOT.into(), "folder"),
-        ] {
-            r.add_icon(setting, Cow::Borrowed(icon))?;
-        }
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
             if !text.is_empty() {
                 out.push(list::shelf::open(list::shelf::Kind::Search, text));
             }
         })?;
-        // The shelves as a submenu: an action named like its menu.
-        r.add_action(
-            paperpaw_sdk::ActionSpec::new(SHELVES_MENU, "files.shelves").handler(
-                |_: &Env<'_>, _, out: &mut Commands| {
-                    out.push(Command::OpenSlot(
-                        slots::MENU,
-                        Params::new().with(params::MENU, String::from(SHELVES_MENU.as_str())),
-                    ));
-                },
-            ),
-        )?;
-        r.add_icon(SHELVES_MENU, Cow::Borrowed("books"))?;
-        for (item, order) in [
-            (FAVOURITES, 5),
-            (BY_AUTHOR, 10),
-            (BY_SERIES, 20),
-            (BY_TAG, 30),
-        ] {
-            r.add_menu_entry(MenuEntry::new(SHELVES_MENU, item).order(order))?;
-        }
-        // Only what is about the library: night mode and home are the
-        // device's (in the main menu and the quick panel).
-        for (item, order) in [
-            (Id::from(SORT), 10),
-            (VIEW.into(), 11),
-            (list::FIND, 20),
-            (SEARCH, 21),
-            (SHELVES_MENU, 30),
-            (ROOT.into(), 80),
-            (core_actions::SETTINGS, 90),
-        ] {
-            r.add_menu_entry(MenuEntry::new(MENU, item).order(order))?;
-        }
+        r.add_menu_entries(&ENTRIES)?;
         // As on phones: down on the home screen searches.
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.home]\nswipe.down = files.search\n",

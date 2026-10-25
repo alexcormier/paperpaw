@@ -40,7 +40,6 @@ mod rows;
 mod sheet;
 pub(crate) mod shelf;
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -52,8 +51,8 @@ use paperpaw_sdk::library::{self, catalog::State};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
-    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Arg, Canvas, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
+    Params, Rect, RefreshMode, RegisterError, Registrar, Screen,
 };
 
 use index::{Filter, Index, NEVER, cap, hash};
@@ -85,33 +84,29 @@ const SHOW_FILTERS: [Filter; 6] = [
 /// Where the index is kept while a book covers the library.
 const KEPT: &str = ".paperpaw/plugins/files/index.bin";
 
+static SCREENS: [FixedScreen; 3] = [
+    FixedScreen::new(SHELF, "files.title", |env, params| {
+        Box::new(shelf::ShelfScreen::new(env, params))
+    }),
+    FixedScreen::new(SHEET, "files.title", |env, params| {
+        Box::new(sheet::BookSheet::new(env, params))
+    }),
+    FixedScreen::new(FIND, "files.list.find", |env, params| {
+        Box::new(find::FindScreen::new(env, params))
+    }),
+];
+
 /// Registers the list's screens and actions.
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_screen(ScreenSpec::new(
-        SHELF,
-        "files.title",
-        Box::new(|env, params| Box::new(shelf::ShelfScreen::new(env, params))),
-    ))?;
-    r.add_screen(ScreenSpec::new(
-        SHEET,
-        "files.title",
-        Box::new(|env, params| Box::new(sheet::BookSheet::new(env, params))),
-    ))?;
-    r.add_screen(ScreenSpec::new(
-        FIND,
-        "files.list.find",
-        Box::new(|env, params| Box::new(find::FindScreen::new(env, params))),
-    ))?;
-    r.add_action(
-        paperpaw_sdk::ActionSpec::new(FIND, "files.list.find").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(FIND, Params::new()));
-            },
-        ),
-    )?;
-    r.add_icon(FIND, Cow::Borrowed("letter-case"))?;
+    r.add_screens(&SCREENS)?;
+    r.add_actions(&ACTIONS)?;
+    r.add_icons(&ICONS)?;
     Ok(())
 }
+
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(FIND, "files.list.find")
+    .handler(|_, _, out| out.push(Command::OpenScreen(FIND, Params::new())))];
+static ICONS: [(Id, &str); 1] = [(FIND, "letter-case")];
 
 /// The library screen.
 pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {

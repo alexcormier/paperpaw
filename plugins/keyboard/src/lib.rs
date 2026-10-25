@@ -55,8 +55,9 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
-    Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
+    Canvas, Color, Command, Cx, Env, FixedScreen, Gesture, GestureKind, Handled, Id, Manifest,
+    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("keyboard");
@@ -184,6 +185,12 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    CHOOSE_SCREEN,
+    "keyboard.setting.layouts",
+    |env, _| Box::new(choose::ChooseScreen::new(env)),
+)];
+
 impl Plugin for Keyboard {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Keyboard", paperpaw_sdk::package_version!())
@@ -207,11 +214,7 @@ impl Plugin for Keyboard {
         )?;
         r.bind_slot(slots::KEYBOARD, SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            CHOOSE_SCREEN,
-            "keyboard.setting.layouts",
-            Box::new(|env, _| Box::new(choose::ChooseScreen::new(env))),
-        ))?;
+        r.add_screens(&SCREENS)?;
         // The first-run setup: the layouts to type with.
         r.add_setup_step(
             paperpaw_sdk::setup::SetupStepSpec::new(

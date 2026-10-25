@@ -59,6 +59,9 @@ outline = ["paperpaw-plugin-fonts-default/outline"]
 # Bitmap font packs next to the scalable fonts.
 packs = ["paperpaw-plugin-fonts-default/packs"]
 
+[build-dependencies]
+paperpaw-i18n.workspace = true
+
 [dependencies]
 paperpaw-core.workspace = true
 paperpaw-plugin-diagnostics = { workspace = true, optional = true }

@@ -453,7 +453,7 @@ fn known_ids(session: &Session) -> Vec<String> {
     ids.extend(kernel.settings().specs().map(|s| s.id.to_string()));
     ids.extend(kernel.settings().groups().map(|g| g.id.to_string()));
     ids.extend(kernel.widgets().iter().map(|(id, _)| id.to_string()));
-    ids.extend(kernel.actions().iter().map(|a| a.id.to_string()));
+    ids.extend(kernel.actions().iter().map(|a| a.id().to_string()));
     ids.extend(kernel.plugins().iter().map(|p| p.manifest.id.to_string()));
     ids.sort();
     ids

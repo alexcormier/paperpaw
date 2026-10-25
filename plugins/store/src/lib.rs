@@ -38,8 +38,8 @@ use paperpaw_sdk::install::{Installer, Progress, Received};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, ScreenSpec, SettingSpec,
+    Arg, Command, Commands, Env, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar, SettingSpec,
 };
 use trust::Verdict;
 
@@ -109,6 +109,47 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(OPEN, "store.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(LIST_SCREEN, Params::new()))),
+    FixedAction::new(DISCOVER_FONTS, "store.discover-fonts").handler(|env, _, out| {
+        if env.actions().contains(FONTS.as_str()) {
+            out.push(Command::run(FONTS));
+        } else {
+            let page = Params::new().with(params::ID, "fonts-browser");
+            out.push(Command::OpenScreen(PAGE_SCREEN, page));
+        }
+    }),
+];
+static ENTRIES: [MenuEntry; 3] = [
+    // With the tools, and in the plugin manager.
+    MenuEntry::new(menus::TOOLS, OPEN).order(90),
+    MenuEntry::new(MANAGER_MORE, OPEN).order(10),
+    // On the page of the text, below the font size, whose largest
+    // sizes are the font's.
+    MenuEntry::new(groups::READING_TEXT, DISCOVER_FONTS),
+];
+static ICONS: [(Id, &str); 2] = [(OPEN, "cloud-download"), (DISCOVER_FONTS, "typography")];
+
+static SCREENS: [FixedScreen; 5] = [
+    FixedScreen::new(PAGE_SCREEN, "store.title", |env, params| {
+        Box::new(page::PageScreen::new(env, params))
+    }),
+    FixedScreen::new(VIEW_SCREEN, "store.title", |env, params| {
+        Box::new(view::ViewScreen::new(env, params))
+    }),
+    FixedScreen::new(SOURCE_SCREEN, "store.source", |env, params| {
+        Box::new(source::SourceScreen::new(env, params))
+    }),
+    FixedScreen::new(SHOTS_SCREEN, "store.shots", |env, params| {
+        Box::new(shots::ShotsScreen::new(env, params))
+    }),
+    FixedScreen::new(LIST_SCREEN, "store.title", |env, _| {
+        Box::new(list::ListScreen::new(env))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
+];
+
 impl Plugin for Store {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "More plugins", paperpaw_sdk::package_version!())
@@ -119,60 +160,10 @@ impl Plugin for Store {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(
-            ScreenSpec::new(
-                LIST_SCREEN,
-                "store.title",
-                Box::new(|env, _| Box::new(list::ListScreen::new(env))),
-            )
-            .instances(paperpaw_sdk::Instances::SINGLE),
-        )?;
-        r.add_screen(ScreenSpec::new(
-            PAGE_SCREEN,
-            "store.title",
-            Box::new(|env, params| Box::new(page::PageScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            VIEW_SCREEN,
-            "store.title",
-            Box::new(|env, params| Box::new(view::ViewScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            SOURCE_SCREEN,
-            "store.source",
-            Box::new(|env, params| Box::new(source::SourceScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            SHOTS_SCREEN,
-            "store.shots",
-            Box::new(|env, params| Box::new(shots::ShotsScreen::new(env, params))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "store.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
-            },
-        ))?;
-        // With the tools, and in the plugin manager.
-        for (menu, order) in [(menus::TOOLS, 90), (MANAGER_MORE, 10)] {
-            r.add_menu_entry(MenuEntry::new(menu, OPEN).order(order))?;
-        }
-        r.add_icon(OPEN, Cow::Borrowed("cloud-download"))?;
-        r.add_action(
-            ActionSpec::new(DISCOVER_FONTS, "store.discover-fonts").handler(
-                |env: &Env<'_>, _: &Params, out: &mut Commands| {
-                    if env.actions().contains(FONTS.as_str()) {
-                        out.push(Command::run(FONTS));
-                    } else {
-                        let page = Params::new().with(params::ID, "fonts-browser");
-                        out.push(Command::OpenScreen(PAGE_SCREEN, page));
-                    }
-                },
-            ),
-        )?;
-        // On the page of the text, below the font size, whose largest
-        // sizes are the font's.
-        r.add_menu_entry(MenuEntry::new(groups::READING_TEXT, DISCOVER_FONTS))?;
-        r.add_icon(DISCOVER_FONTS, Cow::Borrowed("typography"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         // Downloads go on while no screen of the store is open; one cut
         // off by a restart is begun anew from the plugin's page.
         r.on(DOWNLOADED, received)?;

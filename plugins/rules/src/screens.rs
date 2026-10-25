@@ -771,7 +771,7 @@ impl PickScreen {
         } else {
             env.actions()
                 .iter()
-                .map(|a| (a.id.clone(), env.i18n().tr(&a.title).to_string()))
+                .map(|a| (a.id().clone(), env.i18n().tr(a.title()).to_string()))
                 .collect()
         };
         entries.sort_by_key(|e| e.1.to_lowercase());

@@ -728,7 +728,7 @@ fn action_title(env: &Env<'_>, id: &Id) -> String {
     let title = env
         .actions()
         .get(id.as_str())
-        .map_or(id.as_str(), |a| a.title.as_ref());
+        .map_or(id.as_str(), |a| a.title());
     env.i18n().tr(title).to_string()
 }
 

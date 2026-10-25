@@ -26,8 +26,8 @@ use paperpaw_sdk::builtin::{actions, events, menus, params, slots};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
-    Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingKind,
+    Canvas, Color, Command, Cx, Env, FixedScreen, Gesture, GestureKind, Handled, Id, Manifest,
+    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, SettingKind,
     SettingSpec,
 };
 
@@ -66,6 +66,22 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static SCREENS: [FixedScreen; 3] = [
+    FixedScreen::new(SCREEN, "menu.title", |env, params| {
+        if params.get(params::MODE) == Some(bar::MODE) || tiles(env, params) {
+            Box::new(bar::BarScreen::new(env, params))
+        } else {
+            Box::new(MenuScreen::new(env, params))
+        }
+    }),
+    FixedScreen::new(PANEL, "menu.title", |env, params| {
+        Box::new(panel::PanelScreen::open(env, params))
+    }),
+    FixedScreen::new(NOTICE, "menu.title", |env, params| {
+        Box::new(notice::NoticeScreen::new(env, params))
+    }),
+];
+
 impl Plugin for Menu {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Menu", paperpaw_sdk::package_version!())
@@ -75,23 +91,8 @@ impl Plugin for Menu {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "menu.title",
-            Box::new(|env, params| {
-                if params.get(params::MODE) == Some(bar::MODE) || tiles(env, params) {
-                    Box::new(bar::BarScreen::new(env, params))
-                } else {
-                    Box::new(MenuScreen::new(env, params))
-                }
-            }),
-        ))?;
+        r.add_screens(&SCREENS)?;
         r.bind_slot(slots::MENU, SCREEN, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec::new(
-            PANEL,
-            "menu.title",
-            Box::new(|env, params| Box::new(panel::PanelScreen::open(env, params))),
-        ))?;
         r.bind_slot(slots::PANEL, PANEL, Priority::DEFAULT)?;
         paperpaw_sdk::help::add(
             r,
@@ -103,11 +104,6 @@ impl Plugin for Menu {
                 paperpaw_sdk::help::HelpHint::buttons("menu.help.panel-buttons"),
             ],
         )?;
-        r.add_screen(ScreenSpec::new(
-            NOTICE,
-            "menu.title",
-            Box::new(|env, params| Box::new(notice::NoticeScreen::new(env, params))),
-        ))?;
         r.bind_slot(slots::NOTICE, NOTICE, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

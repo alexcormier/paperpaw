@@ -558,7 +558,7 @@ impl Screen for GroupPage {
                         return ui::Row::value(title, &name).focused(focused).draw(ui, row);
                     }
                     Row::Action(action) => {
-                        let title = env.actions().get(action.as_str()).map_or("", |a| &a.title);
+                        let title = env.actions().get(action.as_str()).map_or("", |a| a.title());
                         let title = env.i18n().tr(title);
                         return ui::Row::plain(title).focused(focused).draw(ui, row);
                     }

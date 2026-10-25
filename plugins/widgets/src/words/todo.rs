@@ -10,7 +10,6 @@
 //! read is left as it is, and the widget and the screen say so. Items
 //! past the first [`MAX_ITEMS`] are not shown and kept as they are.
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -28,8 +27,8 @@ use paperpaw_sdk::widgets::{
     self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, FontHandle, Gesture, GestureKind,
-    Handled, Id, Params, Point, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Arg, Canvas, Color, Command, Cx, Env, FixedAction, FontHandle, Gesture, GestureKind, Handled,
+    Id, Params, Point, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
     SettingSpec, Storage, StorageError,
 };
 
@@ -113,6 +112,10 @@ static SETTINGS: [SettingSpec; 8] = [
     widgets::padding_spec("widgets.todo.padding", ID, Padding::Auto),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "widgets.todo")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ICONS: [(Id, &str); 1] = [(OPEN, "list-check")];
+
 pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), RegisterError> {
     r.add_setting_group({
         static SPEC: paperpaw_sdk::SettingGroupSpec =
@@ -155,12 +158,8 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
             move |env, _| Box::new(TodoScreen::new(env, changes.clone()))
         }),
     ))?;
-    r.add_action(ActionSpec::new(OPEN, "widgets.todo").handler(
-        |_: &Env<'_>, _, out: &mut Commands| {
-            out.push(Command::OpenScreen(SCREEN, Params::new()));
-        },
-    ))?;
-    r.add_icon(OPEN, Cow::Borrowed("list-check"))?;
+    r.add_actions(&ACTIONS)?;
+    r.add_icons(&ICONS)?;
     r.add_widget(
         WidgetSpec::new(ID, "widgets.todo", {
             let changes = changes.clone();

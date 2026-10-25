@@ -159,11 +159,11 @@ impl Kernel {
             return Hint::Hidden;
         };
         let translator = &self.shared.translator;
-        match &spec.hint {
+        match spec.hint() {
             ActionHint::Icon(icon) => Hint::Icon(icon),
             ActionHint::Label(key) => Hint::Text(translator.tr(key).to_string()),
             ActionHint::Hidden => Hint::Hidden,
-            _ => Hint::Text(translator.tr(&spec.title).to_string()),
+            _ => Hint::Text(translator.tr(spec.title()).to_string()),
         }
     }
 }

@@ -30,9 +30,9 @@ use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Arg, Canvas, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, SettingSpec, Storage, StorageError,
+    SettingSpec, Storage, StorageError,
 };
 
 use paperpaw_sdk::files::{self as ops, Entry};
@@ -96,6 +96,17 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "file-manager.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(45)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "folder")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    SCREEN,
+    "file-manager.title",
+    |env, params| Box::new(Browser::new(env, params)),
+)];
+
 impl Plugin for FileManager {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "File manager", paperpaw_sdk::package_version!())
@@ -108,18 +119,10 @@ impl Plugin for FileManager {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "file-manager.title",
-            Box::new(|env, params| Box::new(Browser::new(env, params))),
-        ))?;
-        r.add_action(ActionSpec::new(OPEN, "file-manager.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(45))?;
-        r.add_icon(OPEN, Cow::Borrowed("folder"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

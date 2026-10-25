@@ -27,6 +27,9 @@ struct SlotCandidate {
 pub(crate) struct Screens {
     titles: Vec<(Id, Cow<'static, str>)>,
     made: Vec<Made>,
+    /// Those kept in the program, sorted by id; none of an id `titles`
+    /// has (the one added last stays).
+    fixed: Vec<&'static paperpaw_sdk::FixedScreen>,
 }
 
 /// What makes a screen, of its [`ScreenSpec`].
@@ -34,6 +37,40 @@ pub(crate) struct Made {
     pub(crate) factory: paperpaw_sdk::ScreenFactory,
     pub(crate) refresh_on_open: Option<paperpaw_sdk::RefreshMode>,
     pub(crate) instances: paperpaw_sdk::Instances,
+}
+
+/// What makes a screen of either kind.
+#[derive(Clone, Copy)]
+pub(crate) enum Maker<'a> {
+    Added(&'a Made),
+    Fixed(&'static paperpaw_sdk::FixedScreen),
+}
+
+impl Maker<'_> {
+    pub(crate) fn make(
+        self,
+        env: &paperpaw_sdk::Env<'_>,
+        params: &paperpaw_sdk::Params,
+    ) -> alloc::boxed::Box<dyn paperpaw_sdk::Screen> {
+        match self {
+            Maker::Added(made) => (made.factory)(env, params),
+            Maker::Fixed(fixed) => fixed.make(env, params),
+        }
+    }
+
+    pub(crate) fn refresh_on_open(self) -> Option<paperpaw_sdk::RefreshMode> {
+        match self {
+            Maker::Added(made) => made.refresh_on_open,
+            Maker::Fixed(fixed) => fixed.refresh(),
+        }
+    }
+
+    pub(crate) fn instances(self) -> paperpaw_sdk::Instances {
+        match self {
+            Maker::Added(made) => made.instances,
+            Maker::Fixed(fixed) => fixed.how_many(),
+        }
+    }
 }
 
 impl core::fmt::Debug for Screens {
@@ -50,16 +87,43 @@ impl Screens {
             .binary_search_by(|(other, _)| other.as_str().cmp(id))
     }
 
-    pub(crate) fn contains_key<Q: core::borrow::Borrow<str> + ?Sized>(&self, id: &Q) -> bool {
-        self.find(id.borrow()).is_ok()
+    fn find_fixed(&self, id: &str) -> Result<usize, usize> {
+        self.fixed.binary_search_by(|f| f.id().as_str().cmp(id))
     }
 
-    pub(crate) fn get<Q: core::borrow::Borrow<str> + ?Sized>(&self, id: &Q) -> Option<&Made> {
-        self.find(id.borrow()).ok().map(|at| &self.made[at])
+    pub(crate) fn contains_key<Q: core::borrow::Borrow<str> + ?Sized>(&self, id: &Q) -> bool {
+        self.find(id.borrow()).is_ok() || self.find_fixed(id.borrow()).is_ok()
+    }
+
+    pub(crate) fn get<Q: core::borrow::Borrow<str> + ?Sized>(&self, id: &Q) -> Option<Maker<'_>> {
+        match self.find(id.borrow()) {
+            Ok(at) => Some(Maker::Added(&self.made[at])),
+            Err(_) => self
+                .find_fixed(id.borrow())
+                .ok()
+                .map(|at| Maker::Fixed(self.fixed[at])),
+        }
     }
 
     fn title(&self, id: &str) -> Option<&str> {
-        self.find(id).ok().map(|at| self.titles[at].1.as_ref())
+        match self.find(id) {
+            Ok(at) => Some(self.titles[at].1.as_ref()),
+            Err(_) => self.find_fixed(id).ok().map(|at| self.fixed[at].title()),
+        }
+    }
+
+    /// Adds screens kept in the program, in place of those of their ids.
+    fn insert_fixed(&mut self, screens: &'static [paperpaw_sdk::FixedScreen]) {
+        for screen in screens {
+            if let Ok(at) = self.find(screen.id().as_str()) {
+                self.titles.remove(at);
+                self.made.remove(at);
+            }
+            match self.find_fixed(screen.id().as_str()) {
+                Ok(at) => self.fixed[at] = screen,
+                Err(at) => self.fixed.insert(at, screen),
+            }
+        }
     }
 
     /// Adds `spec`, in place of one of its id.
@@ -79,6 +143,9 @@ impl Screens {
             refresh_on_open,
             instances,
         };
+        if let Ok(at) = self.find_fixed(id.as_str()) {
+            self.fixed.remove(at);
+        }
         match self.find(id.as_str()) {
             Ok(at) => {
                 self.titles[at].1 = title;
@@ -91,14 +158,15 @@ impl Screens {
         }
     }
 
-    /// Every screen with the translation key of its name, by id.
-    pub(crate) fn titles(&self) -> &[(Id, Cow<'static, str>)] {
-        &self.titles
+    /// Every screen with the translation key of its name.
+    pub(crate) fn list(&self) -> paperpaw_sdk::ScreenList<'_> {
+        paperpaw_sdk::ScreenList::new(&self.titles, &self.fixed)
     }
 
     fn shrink_to_fit(&mut self) {
         self.titles.shrink_to_fit();
         self.made.shrink_to_fit();
+        self.fixed.shrink_to_fit();
     }
 }
 
@@ -237,8 +305,8 @@ impl paperpaw_sdk::ScreenMaker for Registry {
         env: &paperpaw_sdk::Env<'_>,
         params: &paperpaw_sdk::Params,
     ) -> Option<alloc::boxed::Box<dyn paperpaw_sdk::Screen>> {
-        let spec = self.screens.get(id.as_str())?;
-        Some((spec.factory)(env, params))
+        let maker = self.screens.get(id.as_str())?;
+        Some(maker.make(env, params))
     }
 
     fn slot_screen(&self, slot: &str) -> Option<&Id> {
@@ -324,11 +392,15 @@ pub(crate) struct Staging {
     pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionHandler)>,
     pub(crate) action_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) event_observers: Vec<paperpaw_sdk::ObserverSpec>,
+    pub(crate) fixed_actions: Vec<&'static [paperpaw_sdk::FixedAction]>,
+    pub(crate) fixed_screens: Vec<&'static [paperpaw_sdk::FixedScreen]>,
     pub(crate) menu_entries: Vec<MenuEntry>,
+    pub(crate) fixed_menu_entries: Vec<&'static [MenuEntry]>,
     pub(crate) menu_sections: Vec<paperpaw_sdk::MenuSection>,
     pub(crate) points: Vec<paperpaw_sdk::services::PointSpec>,
     pub(crate) events: Vec<paperpaw_sdk::services::EventSpec>,
     pub(crate) icons: Vec<(Id, Cow<'static, str>)>,
+    pub(crate) fixed_icons: Vec<&'static [(Id, &'static str)]>,
     pub(crate) menu_needs: Vec<(Id, paperpaw_sdk::MenuNeed)>,
     /// (menu, item, the plugin hiding it).
     pub(crate) hidden_entries: Vec<(Id, Id, Id)>,
@@ -382,11 +454,21 @@ impl Staging {
             .actions
             .iter()
             .map(|a| &a.id)
+            .chain(
+                self.fixed_actions
+                    .iter()
+                    .flat_map(|list| list.iter().map(|a| a.id())),
+            )
             .find(|id| actions.contains(id.as_str()))
             .or_else(|| {
                 self.screens
                     .iter()
                     .map(|s| &s.id)
+                    .chain(
+                        self.fixed_screens
+                            .iter()
+                            .flat_map(|l| l.iter().map(|s| s.id())),
+                    )
                     .find(|id| registry.screens.contains_key(id.as_str()))
             })
             .or_else(|| {
@@ -401,8 +483,14 @@ impl Staging {
         for action in self.actions.drain(..) {
             actions.insert(action);
         }
+        for list in self.fixed_actions.drain(..) {
+            actions.insert_fixed(list);
+        }
         for screen in self.screens.drain(..) {
             registry.screens.insert(screen);
+        }
+        for list in self.fixed_screens.drain(..) {
+            registry.screens.insert_fixed(list);
         }
         for slot in self.slots.drain(..) {
             registry.slots.insert(slot.id.clone(), slot);
@@ -426,7 +514,9 @@ pub(crate) fn stage(
     for contribution in contributions {
         match contribution {
             Contribution::Action(action) => staging.actions.push(*action),
+            Contribution::FixedActions(list) => staging.fixed_actions.push(list),
             Contribution::Screen(screen) => staging.screens.push(screen),
+            Contribution::FixedScreens(list) => staging.fixed_screens.push(list),
             Contribution::Slot(slot) => staging.slots.push(slot),
             Contribution::SlotBinding {
                 slot,
@@ -493,6 +583,8 @@ pub(crate) fn stage(
                 staging.hyphenation.push(spec);
             }
             Contribution::MenuEntry(entry) => staging.menu_entries.push(entry),
+            Contribution::FixedMenuEntries(list) => staging.fixed_menu_entries.push(list),
+            Contribution::FixedIcons(list) => staging.fixed_icons.push(list),
             Contribution::MenuSection(section) => staging.menu_sections.push(section),
             Contribution::Icon { item, icon, .. } => staging.icons.push((item, icon)),
             Contribution::MenuNeed { item, need, .. } => staging.menu_needs.push((item, need)),

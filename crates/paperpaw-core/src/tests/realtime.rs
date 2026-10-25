@@ -296,6 +296,7 @@ fn leased(asked: u32, free: u32, log: &Log) -> Kernel {
     FREE.store(free, core::sync::atomic::Ordering::Relaxed);
     let mut kernel = Kernel::builder(DEVICE)
         .memory(probe)
+        .frame_rows(30)
         .plugin(Game {
             log: log.clone(),
             mode: ScreenMode::new().raw_keys().memory(asked),
@@ -340,6 +341,11 @@ fn room_is_made_only_where_needed_and_given_back() {
         room.steps()
             .contains(paperpaw_sdk::realtime::RoomSteps::SCREENS)
     );
+    assert!(
+        room.steps()
+            .contains(paperpaw_sdk::realtime::RoomSteps::BANDS)
+    );
+    assert_eq!(kernel.framebuffer.rows(), 15, "bands of half the rows");
     assert_eq!(kernel.stack.len(), 2, "the screen between closed");
     assert!(kernel.works.is_held());
     // Closed by Back held: the screen between opens again, work goes on.
@@ -350,6 +356,7 @@ fn room_is_made_only_where_needed_and_given_back() {
     assert_eq!(kernel.stack.len(), 2);
     assert!(!kernel.works.is_held());
     assert_eq!(kernel.shared.room, paperpaw_sdk::realtime::Room::default());
+    assert_eq!(kernel.framebuffer.rows(), 30, "bands as they were");
 }
 
 /// The memory free for the squeeze test: what the screen below lets go

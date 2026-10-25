@@ -149,7 +149,7 @@ impl Kit {
             content: paperpaw_platform::Rect::default(),
             stack: &[],
             slots: &[],
-            screens: &[],
+            screens: crate::ScreenList::default(),
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,

@@ -1002,8 +1002,12 @@ impl Kernel {
 
     /// The menus every plugin added to, with their icons (e.g. for a tool
     /// that checks a plugin's).
-    pub fn menus(&self) -> &Menus {
-        &self.shared.menus
+    pub fn menus(&self) -> paperpaw_sdk::MenuView<'_> {
+        paperpaw_sdk::MenuView::new(
+            &self.shared.menus,
+            &self.shared.actions,
+            &self.shared.settings,
+        )
     }
 
     /// Every plugin with its state, `core` first.
@@ -1023,12 +1027,7 @@ impl Kernel {
 
     /// The ids of every screen plugins added, whether open or not.
     pub fn known_screens(&self) -> impl Iterator<Item = &Id> {
-        self.shared
-            .registry
-            .screens
-            .titles()
-            .iter()
-            .map(|(id, _)| id)
+        self.shared.registry.screens.list().iter().map(|(id, _)| id)
     }
 
     /// What the device did since start (see [`paperpaw_sdk::usage`]).
@@ -1390,7 +1389,7 @@ impl Shared {
             content: self.content,
             stack: &self.stack,
             slots: &self.slots,
-            screens: self.registry.screens.titles(),
+            screens: self.registry.screens.list(),
             font_dirs: &self.font_dirs,
             catalog_device: self.catalog_device,
             secrets: &self.secrets,

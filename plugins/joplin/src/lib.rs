@@ -46,8 +46,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingExtra, SettingSpec,
+    ActionSpec, Command, Commands, Env, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params,
+    Plugin, RegisterError, Registrar, SettingExtra, SettingSpec,
 };
 
 pub use send::DEFAULT_NOTEBOOK;
@@ -124,6 +124,16 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "joplin.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(49)];
+static ICONS: [(Id, &str); 2] = [(OPEN, "note"), (SEND, "upload")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "joplin.title", |env, _| {
+    Box::new(setup::SetupScreen::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for Joplin {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Joplin", paperpaw_sdk::package_version!())
@@ -135,19 +145,8 @@ impl Plugin for Joplin {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let run: Rc<RefCell<Run>> = Rc::default();
         r.add_settings(&SETTINGS)?;
-        r.add_screen(
-            ScreenSpec::new(
-                SCREEN,
-                "joplin.title",
-                Box::new(|env, _| Box::new(setup::SetupScreen::new(env))),
-            )
-            .instances(paperpaw_sdk::Instances::SINGLE),
-        )?;
-        r.add_action(ActionSpec::new(OPEN, "joplin.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
         let state = run.clone();
         r.add_action(ActionSpec::new(SEND, "joplin.send").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
@@ -166,9 +165,8 @@ impl Plugin for Joplin {
         r.on(SEND_DUE, move |env, (), out| {
             state.borrow_mut().start(env, Start::Action, out);
         })?;
-        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(49))?;
-        r.add_icon(OPEN, Cow::Borrowed("note"))?;
-        r.add_icon(SEND, Cow::Borrowed("upload"))?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
 
         // Any reader's notes, once exported as Markdown.
         let state = run.clone();

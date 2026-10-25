@@ -43,9 +43,9 @@ use paperpaw_sdk::install::{self, Origin};
 use paperpaw_sdk::native::{NotInstalled, NotInstalledReason, SafeMode, SafeModeReason};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Arg, Canvas, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
-    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    RefreshMode, RegisterError, Registrar, Screen,
 };
 
 pub const PLUGIN: Id = Id::new_static("plugin-manager");
@@ -67,6 +67,16 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "plugin-manager.title")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, OPEN).order(220)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "puzzle")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "plugin-manager.title", |env, _| {
+    Box::new(PluginList::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for PluginManager {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Plugin manager", paperpaw_sdk::package_version!())
@@ -76,21 +86,10 @@ impl Plugin for PluginManager {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(
-            ScreenSpec::new(
-                SCREEN,
-                "plugin-manager.title",
-                Box::new(|env, _| Box::new(PluginList::new(env))),
-            )
-            .instances(paperpaw_sdk::Instances::SINGLE),
-        )?;
-        r.add_action(ActionSpec::new(OPEN, "plugin-manager.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(220))?;
-        r.add_icon(OPEN, Cow::Borrowed("puzzle"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         // Which plugin shows each place several offer a screen for.
         screens::register(r)?;
         r.on(events::STARTED, |env, _, out| {
@@ -490,7 +489,7 @@ impl Screen for PluginList {
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
             if let Some(action) = more.get(index) {
                 // Named by its action, told by the plugin that added it.
-                let name = env.actions().get(action.as_str()).map_or("", |a| &a.title);
+                let name = env.actions().get(action.as_str()).map_or("", |a| a.title());
                 let note = env
                     .plugins()
                     .owner(action)

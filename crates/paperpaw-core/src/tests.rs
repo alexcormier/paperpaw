@@ -1339,8 +1339,7 @@ fn menus_follow_order_and_user_definitions() {
         .unwrap();
     let env_items = |kernel: &Kernel| -> Vec<String> {
         kernel
-            .shared
-            .menus
+            .menus()
             .items("core.main")
             .iter()
             .map(|i| i.id.to_string())
@@ -1354,7 +1353,7 @@ fn menus_follow_order_and_user_definitions() {
         ["core.quick-panel", "core.home", "core.home", "core.library"]
     );
     assert!(items.iter().any(|i| i == "core.tools"));
-    assert!(!kernel.shared.menus.items("core.main")[0].section);
+    assert!(!kernel.menus().items("core.main")[0].section);
     assert_eq!(kernel.shared.menus.icon("core.library"), Some("books"));
     assert_eq!(kernel.shared.menus.icon("core.tools"), Some("apps"));
     assert!(items.iter().filter(|a| *a == "core.home").count() == 2);
@@ -1522,8 +1521,7 @@ ui-size = 12
         .unwrap();
     let items = |kernel: &Kernel| -> Vec<String> {
         kernel
-            .shared
-            .menus
+            .menus()
             .items("core.main")
             .iter()
             .map(|i| i.id.to_string())

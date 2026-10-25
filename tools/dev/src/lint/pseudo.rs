@@ -197,7 +197,7 @@ pub fn english(session: &Session) -> BTreeMap<String, String> {
         if catalog.language() != paperpaw_i18n::FALLBACK_LANGUAGE {
             continue;
         }
-        let mut catalog = catalog.clone();
+        let mut catalog = catalog;
         catalog.load();
         for key in catalog.keys() {
             if let Some(value) = catalog.get(key) {

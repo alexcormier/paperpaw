@@ -32,9 +32,9 @@ use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
-    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec,
+    Arg, Canvas, Color, Command, Commands, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind,
+    Handled, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
+    Screen,
 };
 
 use crate::profile::Profile;
@@ -76,6 +76,30 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(OPEN, "profiles.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(LIST_SCREEN, Params::new()))),
+    FixedAction::new(NEXT, "profiles.next").handler(|env, _, out| {
+        let profiles = profile::load(env.storage()).unwrap_or_default();
+        let last = profile::last(env.storage());
+        let at = profiles.iter().position(|p| p.name == last);
+        let next = at.map_or(0, |at| (at + 1) % profiles.len().max(1));
+        if let Some(profile) = profiles.get(next) {
+            apply(env, profile, out);
+        }
+    }),
+];
+static ENTRIES: [MenuEntry; 2] = [
+    MenuEntry::new(menus::READER_MORE, OPEN).order(15),
+    MenuEntry::new(menus::SETTINGS, OPEN).order(205),
+];
+static ICONS: [(Id, &str); 1] = [(OPEN, "stack-2")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(LIST_SCREEN, "profiles.title", |env, _| {
+    Box::new(ListScreen::new(env))
+})
+.instances(paperpaw_sdk::Instances::SINGLE)];
+
 impl Plugin for Profiles {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Reading profiles", paperpaw_sdk::package_version!())
@@ -85,34 +109,10 @@ impl Plugin for Profiles {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(
-            ScreenSpec::new(
-                LIST_SCREEN,
-                "profiles.title",
-                Box::new(|env, _| Box::new(ListScreen::new(env))),
-            )
-            .instances(paperpaw_sdk::Instances::SINGLE),
-        )?;
-        r.add_action(ActionSpec::new(OPEN, "profiles.title").handler(
-            |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
-            },
-        ))?;
-        r.add_action(ActionSpec::new(NEXT, "profiles.next").handler(
-            |env: &Env<'_>, _, out: &mut Commands| {
-                let profiles = profile::load(env.storage()).unwrap_or_default();
-                let last = profile::last(env.storage());
-                let at = profiles.iter().position(|p| p.name == last);
-                let next = at.map_or(0, |at| (at + 1) % profiles.len().max(1));
-                if let Some(profile) = profiles.get(next) {
-                    apply(env, profile, out);
-                }
-            },
-        ))?;
-        for (menu, order) in [(menus::READER_MORE, 15), (menus::SETTINGS, 205)] {
-            r.add_menu_entry(MenuEntry::new(menu, OPEN).order(order))?;
-        }
-        r.add_icon(OPEN, Cow::Borrowed("stack-2"))?;
+        r.add_screens(&SCREENS)?;
+        r.add_actions(&ACTIONS)?;
+        r.add_menu_entries(&ENTRIES)?;
+        r.add_icons(&ICONS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

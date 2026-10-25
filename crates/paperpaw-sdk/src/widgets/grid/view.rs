@@ -241,6 +241,16 @@ impl GridView {
         self.target(env);
     }
 
+    /// Lets go of the widgets and what they keep (covers made small, …)
+    /// while a screen above needs the memory
+    /// ([`Screen::on_squeeze`](crate::Screen::on_squeeze)): the screen
+    /// lays the grid out again before it draws it next.
+    pub fn let_go(&mut self) {
+        for shown in &mut self.items {
+            shown.widget = None;
+        }
+    }
+
     /// The targets of the items and the buttons as they are now.
     fn target(&mut self, env: &Env<'_>) {
         self.targets.clear();

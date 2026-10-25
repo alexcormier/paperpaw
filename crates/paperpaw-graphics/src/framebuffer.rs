@@ -158,6 +158,30 @@ impl Framebuffer {
         self.rows
     }
 
+    /// Holds `rows` rows at a time from now on, e.g. fewer to give memory
+    /// back (more bands a frame, drawn more slowly), from the top band.
+    /// Only where it holds bands already, not all of the screen: what it
+    /// holds is drawn anew each band.
+    pub fn set_rows(&mut self, rows: u16) -> Result<(), GraphicsError> {
+        let rows = rows.clamp(1, self.height.max(1));
+        if self.blind || self.rows >= self.height || rows == self.rows {
+            return Ok(());
+        }
+        let bytes = self.stride * rows as usize;
+        if bytes > self.data.len() {
+            self.data
+                .try_reserve_exact(bytes - self.data.len())
+                .map_err(|_| GraphicsError::OutOfMemory { bytes })?;
+        }
+        self.data.resize(bytes, 0xff);
+        self.data.shrink_to_fit();
+        self.rows = rows;
+        self.top = 0;
+        self.dirty = None;
+        self.diffusions.clear();
+        Ok(())
+    }
+
     /// The part of the screen currently held.
     pub fn band(&self) -> Rect {
         Rect::new(
@@ -803,6 +827,20 @@ mod tests {
                 PixelFormat::Gray8,
             ]
         }
+    }
+
+    #[test]
+    fn bands_change_their_rows() {
+        let mut band = Framebuffer::banded(8, 10, 4, PixelFormat::Gray2).unwrap();
+        let four = band.byte_len();
+        band.set_rows(2).unwrap();
+        assert_eq!((band.rows(), band.byte_len()), (2, four / 2));
+        band.set_rows(4).unwrap();
+        assert_eq!((band.rows(), band.byte_len()), (4, four));
+        // All of the screen held: as it is.
+        let mut full = Framebuffer::new(8, 10, PixelFormat::Gray2).unwrap();
+        full.set_rows(2).unwrap();
+        assert_eq!(full.rows(), 10);
     }
 
     #[test]

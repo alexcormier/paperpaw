@@ -32,6 +32,8 @@ pub(crate) struct Lease {
     wifi: Option<WifiWas>,
     /// Bluetooth held off.
     bluetooth: bool,
+    /// The rows of a frame's band before it was made smaller.
+    rows: Option<u16>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,13 +96,15 @@ impl Kernel {
             closed: Vec::new(),
             wifi: None,
             bluetooth: false,
+            rows: None,
         });
         let enough = |k: &Kernel| k.free_for(place).is_none_or(|free| free >= asked);
-        let steps: [fn(&mut Kernel) -> Option<RoomSteps>; 5] = [
+        let steps: [fn(&mut Kernel) -> Option<RoomSteps>; 6] = [
             Kernel::room_from_caches,
             Kernel::room_from_work,
             Kernel::room_from_radios,
             Kernel::room_from_squeeze,
+            Kernel::room_from_bands,
             Kernel::room_from_screens,
         ];
         for step in steps {
@@ -189,6 +193,22 @@ impl Kernel {
         taken.then_some(RoomSteps::SQUEEZED)
     }
 
+    /// Frames drawn in bands of half the rows, where they are drawn in
+    /// bands: each frame takes more passes.
+    fn room_from_bands(&mut self) -> Option<RoomSteps> {
+        let rows = self.framebuffer.rows();
+        let align = self.frame.row_align.max(1);
+        let half = (rows / 2 / align * align).max(align);
+        if rows >= self.framebuffer.height() || half >= rows {
+            return None;
+        }
+        self.framebuffer.set_rows(half).ok()?;
+        if let Some(lease) = &mut self.lease {
+            lease.rows = Some(rows);
+        }
+        Some(RoomSteps::BANDS)
+    }
+
     /// The screens below closed, the lowest kept (something must be there
     /// once the screen closes): each keeps what it has as it closes, a
     /// book its place.
@@ -219,6 +239,11 @@ impl Kernel {
         let Some(lease) = self.lease.take() else {
             return;
         };
+        // Bands as they were, where there is room again (else smaller
+        // ones go on).
+        if let Some(rows) = lease.rows {
+            let _ = self.framebuffer.set_rows(rows);
+        }
         for (id, slot, params) in &lease.closed {
             self.open(id.clone(), slot.clone(), params);
         }

@@ -179,8 +179,8 @@ impl Emulator {
                     .kernel
                     .actions()
                     .iter()
-                    .filter(|a| a.id.as_str().starts_with(prefix.as_str()))
-                    .map(|a| json_string(a.id.as_str()))
+                    .filter(|a| a.id().as_str().starts_with(prefix.as_str()))
+                    .map(|a| json_string(a.id().as_str()))
                     .collect();
                 format!("{{\"actions\":[{}]}}", ids.join(","))
             }

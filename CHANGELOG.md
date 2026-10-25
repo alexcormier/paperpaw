@@ -41,6 +41,20 @@ change the plugin SDK.
 - Plugins see what the buttons are good for: `Capability::PAGE_KEYS`
   and `Capability::BUTTONS` (enough for every screen without touch),
   from the buttons the shell lists.
+- Less memory at rest: actions, screens, menu entries and icons can be
+  `static` lists that stay in flash (`FixedAction` and
+  `Registrar::add_actions`, `FixedScreen` and `add_screens`,
+  `add_menu_entries`, `add_icons`; `MenuEntry::new` is `const`), as the
+  kernel's and the plugins' are now. `Actions::get` gives an `Action`
+  of either kind; `Env::screens` gives a `ScreenList`. Menus no longer copy the labels of the actions and
+  settings they list (`Env::menus` gives a `MenuView`). Translations
+  keep only the languages in use as catalogs; English catalogs a
+  language covers drop their index; the indexes of the catalogs built
+  in are made when PaperPaw is built (`FixedIndexes`,
+  `KernelBuilder::catalog_indexes`). The X4 emulator's home at start
+  takes some 30 KiB less.
+- Room for a screen that needs memory may also draw frames in more,
+  smaller bands (`RoomSteps::BANDS`), as they were once it closes.
 - Plugins can keep the device awake for a while (`power::WakeHold`,
   `Command::KeepAwake`, `Cx::keep_awake`): bounded, renewed by id, a
   screen's ended with it, never with a battery nearly empty. *Let

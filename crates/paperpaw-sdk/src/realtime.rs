@@ -272,6 +272,9 @@ impl RoomSteps {
     /// book its pages laid out and its chapter read, keeping its place;
     /// see [`Screen::on_squeeze`](crate::Screen::on_squeeze)).
     pub const SQUEEZED: Self = Self(1 << 4);
+    /// Frames drawn in more bands of fewer rows: less memory, drawn more
+    /// slowly, until the screen closes.
+    pub const BANDS: Self = Self(1 << 5);
 
     /// Whether all of `steps` were taken.
     pub const fn contains(self, steps: Self) -> bool {

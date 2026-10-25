@@ -11,7 +11,6 @@
 //! - When a plugin that offers a screen for such a slot comes, once, a
 //!   question: use it now?
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -21,8 +20,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
-    MenuEntry, Params, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Arg, Canvas, Command, Commands, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind,
+    Handled, Id, MenuEntry, Params, RefreshMode, RegisterError, Registrar, Screen,
 };
 
 use crate::{MORE, PLUGIN};
@@ -38,19 +37,22 @@ const SLOT: &str = "slot";
 const USE: Event<Picked> = Event::new("plugin-manager.screens.use");
 const YES: &str = "yes";
 
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "plugin-manager.screens")
+    .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
+static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(MORE, OPEN).order(-10)];
+static ICONS: [(Id, &str); 1] = [(OPEN, "layout")];
+
+static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
+    SCREEN,
+    "plugin-manager.screens",
+    |env, params| Box::new(Screens::new(env, params)),
+)];
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_screen(ScreenSpec::new(
-        SCREEN,
-        "plugin-manager.screens",
-        Box::new(|env, params| Box::new(Screens::new(env, params))),
-    ))?;
-    r.add_action(ActionSpec::new(OPEN, "plugin-manager.screens").handler(
-        |_: &Env<'_>, _, out: &mut Commands| {
-            out.push(Command::OpenScreen(SCREEN, Params::new()));
-        },
-    ))?;
-    r.add_menu_entry(MenuEntry::new(MORE, OPEN).order(-10))?;
-    r.add_icon(OPEN, Cow::Borrowed("layout"))?;
+    r.add_screens(&SCREENS)?;
+    r.add_actions(&ACTIONS)?;
+    r.add_menu_entries(&ENTRIES)?;
+    r.add_icons(&ICONS)?;
     r.on(events::STARTED, |env, _, out| offer(env, out))?;
     r.on(events::PLUGINS_CHANGED, |env, _, out| offer(env, out))?;
     r.on(USE, |_, picked, out| {

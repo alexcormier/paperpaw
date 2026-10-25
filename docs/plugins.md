@@ -1609,6 +1609,11 @@ xteink-x4 --headless --script wait:500`). A plugin that should run
 there:
 
 - keeps little in memory: lists in files, read as they are needed;
+- registers what does not change as `static` lists, which stay in flash:
+  actions (`FixedAction`, `r.add_actions`), screens (`FixedScreen`,
+  `r.add_screens`), menu entries (`r.add_menu_entries`), icons
+  (`r.add_icons`) and settings (`r.add_settings`); an `ActionSpec` or a
+  `ScreenSpec` is for a handler or factory that keeps state of its own;
 - reads files a piece at a time (`Storage::read_at`), never whole books;
 - writes downloads straight to storage (`HttpRequest::save_to`);
 - reserves large buffers with `try_reserve` and copes when that fails;

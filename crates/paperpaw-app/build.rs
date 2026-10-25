@@ -9,6 +9,14 @@
 //! ones of the features switched on. The X4's firmware writes that list
 //! into its image (ADR 0022); its `Cargo.lock` cannot say it, as a lock
 //! file names optional dependencies whether they are built or not.
+//!
+//! It also makes the indexes of the translation catalogs of those plugins,
+//! the kernel's and the app's, kept in the program
+//! (`paperpaw_i18n::FixedIndexes`): their catalogs then keep none on the
+//! heap.
+
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
 
 fn main() {
     println!("cargo::rerun-if-changed=Cargo.toml");
@@ -53,4 +61,62 @@ fn main() {
     let list = crates.join(",");
     println!("cargo::metadata=crates={list}");
     println!("cargo::rustc-env=PAPERPAW_APP_CRATES={list}");
+    catalog_indexes(&crates);
+}
+
+/// Writes `catalog_indexes.rs`: the index of every catalog in the
+/// `i18n` folders of the kernel, the app and the plugin crates built.
+fn catalog_indexes(crates: &[String]) {
+    let root = Path::new("../..");
+    let mut folders = vec![
+        root.join("crates/paperpaw-core/i18n"),
+        PathBuf::from("i18n"),
+    ];
+    folders.extend(
+        crates
+            .iter()
+            .filter_map(|name| name.strip_prefix("paperpaw-plugin-"))
+            .map(|dir| root.join("plugins").join(dir).join("i18n")),
+    );
+    let mut files = Vec::new();
+    for folder in &folders {
+        ini_files(folder, &mut files);
+    }
+    files.sort();
+    let mut out = String::from("&[\n");
+    let mut seen = Vec::new();
+    for file in files {
+        println!("cargo::rerun-if-changed={}", file.display());
+        let source = std::fs::read_to_string(&file).expect("a catalog");
+        let print = paperpaw_i18n::fingerprint(&source);
+        let Ok(catalog) = paperpaw_i18n::Catalog::parse(source) else {
+            continue;
+        };
+        let Some(index) = catalog.narrow_index() else {
+            continue;
+        };
+        if seen.contains(&print) {
+            continue;
+        }
+        seen.push(print);
+        let _ = writeln!(out, "    ({print:#x}, &{index:?}),");
+    }
+    out.push(']');
+    let target = Path::new(&std::env::var("OUT_DIR").expect("OUT_DIR")).join("catalog_indexes.rs");
+    std::fs::write(target, out).expect("catalog_indexes.rs written");
+}
+
+/// The `.ini` files in `folder` and the folders in it.
+fn ini_files(folder: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            ini_files(&path, files);
+        } else if path.extension().is_some_and(|e| e == "ini") {
+            files.push(path);
+        }
+    }
 }

@@ -124,7 +124,8 @@ pub mod words;
 pub mod work;
 
 pub use action::{
-    ActionHandler, ActionHint, ActionOverride, ActionSpec, Actions, Observer, ObserverSpec,
+    Action, ActionHandler, ActionHint, ActionOverride, ActionSpec, Actions, FixedAction,
+    FixedHandler, Observer, ObserverSpec,
 };
 pub use command::{
     Broadcast, Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
@@ -158,7 +159,7 @@ pub use hyphenation::{Hyphenation, HyphenationSpec};
 pub use id::{Id, InvalidId};
 pub use memory_storage::{MemoryStorage, read_file};
 pub use menus::{
-    ItemState, ItemStateFn, MenuEntry, MenuItem, MenuNeed, MenuPlace, MenuSection, Menus,
+    ItemState, ItemStateFn, MenuEntry, MenuItem, MenuNeed, MenuPlace, MenuSection, MenuView, Menus,
 };
 pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
@@ -167,8 +168,8 @@ pub use replies::{
     FolderChosen, HttpError, HttpProgress, HttpReply, ServerNotice, SocketNotice, Typed,
 };
 pub use screen::{
-    CloseCause, Cx, Handled, Hint, HintVisibility, Instances, Output, Outside, Screen,
-    ScreenFactory, ScreenKey, ScreenSpec, ShowsThrough, StackEntry,
+    CloseCause, Cx, FixedFactory, FixedScreen, Handled, Hint, HintVisibility, Instances, Output,
+    Outside, Screen, ScreenFactory, ScreenKey, ScreenList, ScreenSpec, ShowsThrough, StackEntry,
 };
 pub use setting::{Setting, Text};
 pub use settings::{

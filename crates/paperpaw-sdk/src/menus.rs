@@ -127,8 +127,10 @@ pub struct MenuEntry {
 }
 
 impl MenuEntry {
-    /// Made of what it needs; the rest as set with its methods.
-    pub fn new(menu: Id, item: Id) -> Self {
+    /// Made of what it needs; the rest as set with its methods. A `const`
+    /// fn, so that a plugin's entries can be a `static` list
+    /// ([`Registrar::add_menu_entries`](crate::Registrar::add_menu_entries)).
+    pub const fn new(menu: Id, item: Id) -> Self {
         Self {
             menu,
             item,
@@ -137,7 +139,7 @@ impl MenuEntry {
         }
     }
 
-    pub fn order(mut self, order: i16) -> Self {
+    pub const fn order(mut self, order: i16) -> Self {
         self.order = order;
         self
     }
@@ -146,6 +148,17 @@ impl MenuEntry {
     pub fn place(mut self, place: MenuPlace) -> Self {
         self.place = Some(place);
         self
+    }
+
+    /// Put into `menu` at `place`, as [`MenuEntry::place`] puts it; for
+    /// `static` lists.
+    pub const fn placed(menu: Id, item: Id, place: MenuPlace) -> Self {
+        Self {
+            menu,
+            item,
+            order: 0,
+            place: Some(place),
+        }
     }
 
     /// Where it goes as entries placed by order go.
@@ -274,11 +287,137 @@ pub struct MenuItem<'a> {
     pub section: bool,
 }
 
+/// The menus as plugins read them ([`Env::menus`](crate::Env::menus)):
+/// [`Menus`], with the labels of the actions and settings they list read
+/// from those, not kept twice.
+#[derive(Clone, Copy)]
+pub struct MenuView<'a> {
+    menus: &'a Menus,
+    actions: &'a crate::Actions,
+    settings: &'a crate::Settings,
+}
+
+impl fmt::Debug for MenuView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.menus, f)
+    }
+}
+
+impl core::ops::Deref for MenuView<'_> {
+    type Target = Menus;
+
+    fn deref(&self) -> &Menus {
+        self.menus
+    }
+}
+
+impl<'a> MenuView<'a> {
+    /// The menus, labelled by `actions` and `settings`.
+    pub fn new(
+        menus: &'a Menus,
+        actions: &'a crate::Actions,
+        settings: &'a crate::Settings,
+    ) -> Self {
+        Self {
+            menus,
+            actions,
+            settings,
+        }
+    }
+
+    /// The label of an item (a translation key): a heading's, an
+    /// action's or a setting's.
+    pub fn title(&self, item: &str) -> Option<&'a str> {
+        self.menus
+            .titles
+            .get(item)
+            .map(AsRef::as_ref)
+            .or_else(|| self.actions.get(item).map(crate::Action::title))
+            .or_else(|| self.settings.spec(item).map(|spec| spec.title.as_ref()))
+    }
+
+    /// The entries of `menu`, in display order. Items without a known
+    /// title are skipped.
+    pub fn items(&self, menu: &str) -> Vec<MenuItem<'a>> {
+        self.menus
+            .ids(menu)
+            .into_iter()
+            .filter_map(|id| self.item(id))
+            .collect()
+    }
+
+    /// The entries of `menu` shown now: as [`MenuView::items`], without
+    /// those their plugins hide at the moment ([`ItemState::shown`]).
+    pub fn shown_items(&self, env: &crate::Env<'_>, menu: &str) -> Vec<MenuItem<'a>> {
+        self.items(menu)
+            .into_iter()
+            .filter(|item| item.section || self.menus.state(env, item.id.as_str()).shown)
+            .collect()
+    }
+
+    /// The menus themselves, for as long as they are lent.
+    pub fn menus(&self) -> &'a Menus {
+        self.menus
+    }
+
+    /// As [`Menus::icon`], for as long as the menus are lent.
+    pub fn icon(&self, item: &str) -> Option<&'a str> {
+        self.menus.icon(item)
+    }
+
+    /// As [`Menus::description`], for as long as the menus are lent.
+    pub fn description(&self, item: &str) -> Option<&'a str> {
+        self.menus.description(item)
+    }
+
+    /// As [`Menus::ids`], for as long as the menus are lent.
+    pub fn ids(&self, menu: &str) -> Vec<&'a Id> {
+        self.menus.ids(menu)
+    }
+
+    /// As [`Menus::known`], for as long as the menus are lent.
+    pub fn known(&self, menu: &str) -> Option<&'a [Id]> {
+        self.menus.known(menu)
+    }
+
+    /// As [`Menus::hidden_by`], for as long as the menus are lent.
+    pub fn hidden_by(&self, menu: &str, item: &str) -> Option<&'a Id> {
+        self.menus.hidden_by(menu, item)
+    }
+
+    /// As [`Menus::menu_ids`], for as long as the menus are lent.
+    pub fn menu_ids(&self) -> Vec<&'a Id> {
+        self.menus.menu_ids()
+    }
+
+    /// As [`Menus::default_ids`], for as long as the menus are lent.
+    pub fn default_ids(&self, menu: &str) -> Vec<&'a Id> {
+        self.menus.default_ids(menu)
+    }
+
+    /// As [`Menus::contributed_ids`], for as long as the menus are lent.
+    pub fn contributed_ids(&self, menu: &str) -> Vec<&'a Id> {
+        self.menus.contributed_ids(menu)
+    }
+
+    fn item(&self, id: &'a Id) -> Option<MenuItem<'a>> {
+        self.title(id.as_str()).map(|title| MenuItem {
+            id,
+            title,
+            icon: self.menus.icon(id.as_str()),
+            section: self.menus.is_section(id.as_str()),
+        })
+    }
+}
+
 /// All menus: contributed entries, the user's menu definitions and the
-/// action titles used as labels.
+/// headings' titles; the labels of actions and settings are theirs
+/// ([`MenuView`]).
 #[derive(Debug, Default)]
 pub struct Menus {
     entries: Vec<MenuEntry>,
+    /// Entries kept in the program (`static` lists of plugins').
+    fixed: Vec<&'static [MenuEntry]>,
     /// Menus redefined by the user (`[menus] reader.menu = a, b, c`).
     custom: VecMap<Id, Vec<Id>>,
     /// The entries plugins contributed to a menu when the user redefined
@@ -294,6 +433,9 @@ pub struct Menus {
     descriptions: VecMap<Id, Text>,
     titles: VecMap<Id, Text>,
     icons: VecMap<Id, Text>,
+    /// Icons kept in the program (`static` lists of plugins'); those of
+    /// `icons` win, and a later list over an earlier one.
+    fixed_icons: Vec<&'static [(Id, &'static str)]>,
     sections: Vec<Id>,
     needs: VecMap<Id, MenuNeed>,
     /// The device has a touch screen; it cannot speak; PaperPaw shows
@@ -312,6 +454,8 @@ impl Menus {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.entries.shrink_to_fit();
+        self.fixed.shrink_to_fit();
+        self.fixed_icons.shrink_to_fit();
         self.custom.shrink_to_fit();
         for menu in self.custom.values_mut() {
             menu.shrink_to_fit();
@@ -373,6 +517,28 @@ impl Menus {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, entry: MenuEntry) {
         self.entries.push(entry);
+    }
+
+    /// Adds entries kept in the program.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_fixed(&mut self, entries: &'static [MenuEntry]) {
+        self.fixed.push(entries);
+    }
+
+    /// Adds icons kept in the program.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_fixed_icons(&mut self, icons: &'static [(Id, &'static str)]) {
+        self.fixed_icons.push(icons);
+    }
+
+    /// Every entry: those kept in the program, then the others.
+    fn all(&self) -> impl Iterator<Item = &MenuEntry> + Clone {
+        self.fixed
+            .iter()
+            .flat_map(|list| list.iter())
+            .chain(&self.entries)
     }
 
     /// Replaces a menu's entries with exactly `actions`, in this order.
@@ -457,8 +623,7 @@ impl Menus {
     /// Every menu: those plugins contribute to and those the user defined.
     pub fn menu_ids(&self) -> Vec<&Id> {
         let mut ids: Vec<&Id> = self
-            .entries
-            .iter()
+            .all()
             .map(|e| &e.menu)
             .chain(self.custom.keys())
             .collect();
@@ -486,14 +651,12 @@ impl Menus {
         let placed_too = |e: &MenuEntry| {
             e.by_order().is_some()
                 && self
-                    .entries
-                    .iter()
+                    .all()
                     .filter(in_menu)
                     .any(|other| other.item == e.item && other.by_order().is_none())
         };
         let entries: Vec<&MenuEntry> = self
-            .entries
-            .iter()
+            .all()
             .filter(in_menu)
             .filter(|e| !placed_too(e))
             .filter(|e| {
@@ -601,26 +764,11 @@ impl Menus {
             .collect()
     }
 
-    /// The entries of `menu` shown now: as [`Menus::items`], without
-    /// those their plugins hide at the moment ([`ItemState::shown`]).
-    pub fn shown_items(&self, env: &crate::Env<'_>, menu: &str) -> Vec<MenuItem<'_>> {
-        self.items(menu)
-            .into_iter()
-            .filter(|item| item.section || self.state(env, item.id.as_str()).shown)
-            .collect()
-    }
-
-    /// Registers the label of an action or setting.
+    /// Registers the label of an item that is no action or setting.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_title(&mut self, item: Id, title: Cow<'static, str>) {
         self.titles.insert(item, Text::new(title));
-    }
-
-    /// The label of an action or setting (a translation key), if it has
-    /// one.
-    pub fn title(&self, item: &str) -> Option<&str> {
-        self.titles.get(item).map(AsRef::as_ref)
     }
 
     /// Gives an action or setting an icon (by name; see
@@ -633,7 +781,13 @@ impl Menus {
 
     /// The icon of an action or setting, if it has one.
     pub fn icon(&self, item: &str) -> Option<&str> {
-        self.icons.get(item).map(AsRef::as_ref)
+        self.icons.get(item).map(AsRef::as_ref).or_else(|| {
+            self.fixed_icons
+                .iter()
+                .rev()
+                .find_map(|list| list.iter().find(|(id, _)| id.as_str() == item))
+                .map(|&(_, icon)| icon)
+        })
     }
 
     /// Adds a heading to a menu.
@@ -654,8 +808,7 @@ impl Menus {
     /// The position of `item` in `menu` as plugins contribute it, e.g. to
     /// place it among other things listed with the menu's entries.
     pub fn order_of(&self, menu: &str, item: &str) -> Option<i16> {
-        self.entries
-            .iter()
+        self.all()
             .find(|e| e.menu.as_str() == menu && e.item.as_str() == item)
             .map(|e| e.order)
     }
@@ -665,28 +818,9 @@ impl Menus {
         self.sections.iter().any(|s| s.as_str() == item)
     }
 
-    /// The entries of `menu`, in display order. Items without a known
-    /// title are skipped.
-    pub fn items(&self, menu: &str) -> Vec<MenuItem<'_>> {
-        self.ids(menu)
-            .into_iter()
-            .filter_map(|id| self.item(id))
-            .collect()
-    }
-
-    fn item<'a>(&'a self, id: &'a Id) -> Option<MenuItem<'a>> {
-        self.titles.get(id).map(|title| MenuItem {
-            id,
-            title: title.as_ref(),
-            icon: self.icon(id.as_str()),
-            section: self.is_section(id.as_str()),
-        })
-    }
-
     /// Every action or setting referenced by a menu, for validation.
     pub fn referenced_items(&self) -> impl Iterator<Item = &Id> {
-        self.entries
-            .iter()
+        self.all()
             .map(|e| &e.item)
             .chain(self.custom.values().flatten())
     }
@@ -829,14 +963,24 @@ mod tests {
         }
         menus.set_title(Id::new_static("a.first"), Cow::Borrowed("First"));
         menus.set_title(Id::new_static("a.second"), Cow::Borrowed("Second"));
-        fn titles(menus: &Menus) -> Vec<&str> {
-            menus.items("a.menu").iter().map(|i| i.title).collect()
+        fn titles(menus: &Menus) -> Vec<String> {
+            let (actions, settings) = (crate::Actions::new(), crate::Settings::new());
+            let view = MenuView::new(menus, &actions, &settings);
+            view.items("a.menu")
+                .iter()
+                .map(|i| String::from(i.title))
+                .collect()
         }
         assert_eq!(titles(&menus), ["First", "Second"]);
 
         menus.customize(Id::new_static("a.menu"), vec![Id::new_static("a.second")]);
         assert_eq!(titles(&menus), ["Second"]);
-        assert!(menus.items("other").is_empty());
+        let (actions, settings) = (crate::Actions::new(), crate::Settings::new());
+        assert!(
+            MenuView::new(&menus, &actions, &settings)
+                .items("other")
+                .is_empty()
+        );
 
         // Entries for devices without touch, or that speak.
         menus.reset("a.menu");
@@ -848,17 +992,17 @@ mod tests {
         });
         menus.set_title(Id::new_static("a.links"), Cow::Borrowed("Links"));
         menus.set_need(Id::new_static("a.links"), MenuNeed::NoTouch);
-        assert_eq!(titles(&menus).last(), Some(&"Links"));
+        assert_eq!(titles(&menus).last().map(String::as_str), Some("Links"));
         menus.set_capabilities(crate::Capabilities {
             touch: true,
             ..Default::default()
         });
-        assert_eq!(titles(&menus).last(), Some(&"Second"));
+        assert_eq!(titles(&menus).last().map(String::as_str), Some("Second"));
         // One for touch screens shows only on them.
         menus.set_need(Id::new_static("a.second"), MenuNeed::Touch);
-        assert_eq!(titles(&menus).last(), Some(&"Second"));
+        assert_eq!(titles(&menus).last().map(String::as_str), Some("Second"));
         menus.set_capabilities(crate::Capabilities::default());
-        assert_eq!(titles(&menus).last(), Some(&"Links"));
+        assert_eq!(titles(&menus).last().map(String::as_str), Some("Links"));
         menus.set_capabilities(crate::Capabilities {
             touch: true,
             ..Default::default()

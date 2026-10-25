@@ -17,7 +17,7 @@ impl Kernel {
         let Some(spec) = self.shared.registry.screens.get(&id) else {
             return self.warn_runtime(format!("unknown screen `{id}`"));
         };
-        let on_open = spec.refresh_on_open;
+        let on_open = spec.refresh_on_open();
         let serial = self.next_serial;
         self.next_serial = serial.wrapping_add(1);
         let key = paperpaw_sdk::ScreenKey::new(serial);
@@ -28,7 +28,7 @@ impl Kernel {
         let mut area = self.layout(hinted, Some(&entry), None);
         set_area(&mut self.shared.device, &mut self.shared.content, area);
         let running = self.shared.meter.enter(id.namespace());
-        let mut screen = (spec.factory)(&self.shared.env(self.now), params);
+        let mut screen = spec.make(&self.shared.env(self.now), params);
         // It says otherwise of the row of hints: made again for the part
         // of the screen it then has.
         let own = match screen.mode().is_full_screen() {
@@ -42,7 +42,7 @@ impl Kernel {
             hinted = !hinted;
             area = self.layout(hinted, Some(&entry), None);
             set_area(&mut self.shared.device, &mut self.shared.content, area);
-            screen = (spec.factory)(&self.shared.env(self.now), params);
+            screen = spec.make(&self.shared.env(self.now), params);
         }
         // An overlay shares its full screen's part, a guard has no bars:
         // made again for that part.
@@ -50,7 +50,7 @@ impl Kernel {
         if place != area {
             area = place;
             set_area(&mut self.shared.device, &mut self.shared.content, area);
-            screen = (spec.factory)(&self.shared.env(self.now), params);
+            screen = spec.make(&self.shared.env(self.now), params);
         }
         drop(running);
         let active = ActiveScreen {
@@ -100,7 +100,7 @@ impl Kernel {
             .registry
             .screens
             .get(&id)
-            .map(|spec| spec.instances)
+            .map(|spec| spec.instances())
         else {
             return self.open(id, slot, params);
         };
@@ -195,7 +195,7 @@ impl Kernel {
         let env = self.shared.env(self.now);
         let params = Params::new().with(builtin_params::TEXT, text);
         let running = self.shared.meter.enter(id.namespace());
-        let screen = (spec.factory)(&env, &params);
+        let screen = spec.make(&env, &params);
         drop(running);
         let seconds = self
             .shared
@@ -589,7 +589,7 @@ impl Kernel {
             return;
         };
         let _running = self.shared.meter.enter(active.id.namespace());
-        active.screen = (spec.factory)(&env, &active.params);
+        active.screen = spec.make(&env, &active.params);
     }
 
     /// Runs `f` with the screen at `index` and a context for it.
