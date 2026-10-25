@@ -351,3 +351,27 @@ fn home_shows_the_book_read_last() {
     assert!(shown.contains("Continue reading"), "{shown}");
     assert!(shown.contains("Alice"), "{shown}");
 }
+
+/// A group's advanced settings, a page one level down, stay that page
+/// when one of them changes.
+#[test]
+fn a_groups_advanced_page_stays_when_a_setting_changes() {
+    let mut app = App::new();
+    app.now += 100;
+    let params = Params::new()
+        .with(params::ID, "core.group.reading-layout")
+        .with("more", "1");
+    let effects =
+        app.kernel
+            .open_screen(Instant(app.now), Id::new_static("settings.group"), params);
+    app.settle(effects);
+    assert!(app.described().contains("Heading \"Layout · More\""));
+    // A margin changed with the buttons and kept: the page is made anew,
+    // as the advanced page still.
+    app.run(actions::CONFIRM);
+    app.run(actions::UP);
+    app.run(actions::CONFIRM);
+    let shown = app.described();
+    assert!(shown.contains("Heading \"Layout · More\""), "{shown}");
+    assert!(shown.contains("bottom, 5 mm"), "{shown}");
+}

@@ -101,7 +101,7 @@ impl Screen for SecretList {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = cx.env().secrets().listed().count();
         if let Some(change) = self.list.navigate(action, len) {
-            change.request(cx);
+            self.list.request(change, cx);
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {
@@ -228,7 +228,7 @@ impl Screen for SecretPage {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if let Some(change) = self.list.navigate(action, self.choices.len()) {
-            change.request(cx);
+            self.list.request(change, cx);
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {

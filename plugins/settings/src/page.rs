@@ -50,10 +50,14 @@ impl core::fmt::Debug for Preview {
 }
 
 impl Preview {
-    /// The preview of `group`, if a widget previews it, at the top of
-    /// `area`; `area` is left with the room below it.
+    /// The preview of `group`, if a widget previews it or the group it is
+    /// a part of, at the top of `area`; `area` is left with the room below
+    /// it.
     fn of(env: &Env<'_>, style: &UiStyle, group: &Id, area: &mut Rect) -> Option<Self> {
-        let id = env.widgets().preview(group.as_str())?;
+        let id = env.widgets().preview(group.as_str()).or_else(|| {
+            let parent = env.settings().parent_of(group)?;
+            env.widgets().preview(parent.as_str())
+        })?;
         let widget = env.widgets().make(id.as_str(), env)?;
         let heading = ui::heading_height(env, style);
         let most = (env.device().display.height / PREVIEW_SHARE).saturating_sub(heading);
@@ -127,6 +131,8 @@ pub(super) enum Row {
 #[derive(Debug)]
 pub(super) struct GroupPage {
     pub(super) group: Id,
+    /// The group's advanced settings alone (its page one level down).
+    pub(super) more: bool,
     pub(super) title: String,
     pub(super) entries: Vec<Row>,
     pub(super) style: UiStyle,
@@ -153,11 +159,117 @@ pub(super) struct GroupPage {
     pub(super) covered: Covered,
 }
 
+/// The settings `group`'s page shows (`own`: the widget's group, for a
+/// placement's): its basic ones, or its advanced ones alone (`more`).
+fn specs(env: &Env<'_>, group: &Id, own: Option<&Id>, more: bool) -> Vec<SettingSpec> {
+    let of = own.unwrap_or(group);
+    let shown = |spec: &SettingSpec| match more {
+        true => spec.level == Level::Advanced && offered(env, spec),
+        false => visible(env, spec),
+    };
+    env.settings()
+        .specs()
+        .filter(|spec| env.settings().group_of(spec) == *of && shown(spec))
+        .cloned()
+        .map(|mut spec| {
+            if own.is_some() {
+                spec.id = placed(&spec.id, of, group);
+            }
+            spec
+        })
+        .collect()
+}
+
+/// The rows of group `of`'s page with `specs` (`placed`: a placement's,
+/// `more`: its advanced settings alone): its parts, the themes, the
+/// settings by section, its advanced ones a page down, what plugins do
+/// with them and resetting them.
+fn entries(env: &Env<'_>, of: &Id, placed: bool, more: bool, specs: &[SettingSpec]) -> Vec<Row> {
+    // Advanced settings one level down, unless they are shown with the
+    // others (the advanced switch).
+    let has_more = !more
+        && !env.settings().read(&ADVANCED)
+        && env.settings().specs().any(|spec| {
+            env.settings().group_of(spec) == *of
+                && spec.level == Level::Advanced
+                && offered(env, spec)
+        });
+    // Its parts, each a page of its own, where they hold something.
+    let mut entries: Vec<Row> = match more || placed {
+        true => Vec::new(),
+        false => env
+            .settings()
+            .groups()
+            .filter(|g| g.parent.as_ref() == Some(of))
+            .filter(|g| {
+                env.settings().specs().any(|spec| {
+                    env.settings().within(&env.settings().group_of(spec), &g.id)
+                        && visible(env, spec)
+                })
+            })
+            .map(|g| Row::Part(g.id.clone(), env.i18n().tr(&g.title).to_string()))
+            .collect(),
+    };
+    // Sections: settings without one first, then the standard ones,
+    // then the others as they come.
+    let mut sections: Vec<Option<Cow<'static, str>>> = Vec::new();
+    for spec in specs {
+        let section = spec.section_key();
+        if !sections.contains(&section) {
+            sections.push(section);
+        }
+    }
+    let rank = |section: &Option<Cow<'static, str>>| match section {
+        None => 0,
+        Some(key) => group_sections::ORDER
+            .iter()
+            .position(|s| *s == key.as_ref())
+            .map_or(group_sections::ORDER.len() + 1, |p| p + 1),
+    };
+    sections.sort_by_cached_key(rank);
+    // Headings only where there is more than one part.
+    let headed = sections.len() > 1;
+    if *of == groups::LOOK && !placed && !more {
+        use super::themes::{Chooser, themes};
+        for chooser in [Chooser::Theme, Chooser::Widgets] {
+            if themes(env, chooser).next().is_some() {
+                entries.push(Row::Theme(chooser));
+            }
+        }
+    }
+    for section in &sections {
+        if let Some(key) = section.as_deref().filter(|_| headed) {
+            entries.push(Row::Heading(env.i18n().tr(key).to_string()));
+        }
+        entries.extend(
+            specs
+                .iter()
+                .filter(|spec| spec.section_key() == *section)
+                .cloned()
+                .map(|spec| Row::Setting(Box::new(spec))),
+        );
+    }
+    if has_more {
+        entries.push(Row::More);
+    }
+    // What plugins do with the group's settings (cleaning up the
+    // storage in the device's).
+    if !placed && !more {
+        entries.extend(
+            env.menus()
+                .items(of.as_str())
+                .into_iter()
+                .filter(|item| !item.section && env.actions().contains(item.id.as_str()))
+                .map(|item| Row::Action(item.id.clone())),
+        );
+    }
+    if !specs.is_empty() {
+        entries.push(Row::Reset);
+    }
+    entries
+}
+
 impl GroupPage {
-    #[expect(
-        clippy::too_many_lines,
-        reason = "longer than the limit from before it was set; split it when it is next changed"
-    )]
     pub(super) fn new(env: &Env<'_>, group: Id) -> Self {
         Self::of(env, group, false)
     }
@@ -177,119 +289,14 @@ impl GroupPage {
             true => alloc::format!("{title} · {}", env.i18n().tr("settings.more")),
             false => title,
         };
-        // Advanced settings one level down, unless they are shown with the
-        // others (the advanced switch).
-        let inline = env.settings().read(&ADVANCED);
-        let shown = |spec: &SettingSpec| match more {
-            true => spec.level == Level::Advanced && offered(env, spec),
-            false => visible(env, spec),
-        };
-        let has_more = !more
-            && !inline
-            && env.settings().specs().any(|spec| {
-                env.settings().group_of(spec) == *of
-                    && spec.level == Level::Advanced
-                    && offered(env, spec)
-            });
-        // Its parts, each a page of its own, where they hold something.
-        let parts: Vec<Row> = match more || own.is_some() {
-            true => Vec::new(),
-            false => env
-                .settings()
-                .groups()
-                .filter(|g| g.parent.as_ref() == Some(of))
-                .filter(|g| {
-                    env.settings().specs().any(|spec| {
-                        env.settings().within(&env.settings().group_of(spec), &g.id)
-                            && visible(env, spec)
-                    })
-                })
-                .map(|g| Row::Part(g.id.clone(), env.i18n().tr(&g.title).to_string()))
-                .collect(),
-        };
-        let specs = env
-            .settings()
-            .specs()
-            .filter(|spec| env.settings().group_of(spec) == *of && shown(spec))
-            .cloned()
-            .map(|mut spec| {
-                if own.is_some() {
-                    spec.id = placed(&spec.id, of, &group);
-                }
-                spec
-            })
-            .collect::<Vec<SettingSpec>>();
-        // Sections: settings without one first, then the standard ones,
-        // then the others as they come.
-        let mut sections: Vec<Option<Cow<'static, str>>> = Vec::new();
-        for spec in &specs {
-            let section = spec.section_key();
-            if !sections.contains(&section) {
-                sections.push(section);
-            }
-        }
-        let rank = |section: &Option<Cow<'static, str>>| match section {
-            None => 0,
-            Some(key) => group_sections::ORDER
-                .iter()
-                .position(|s| *s == key.as_ref())
-                .map_or(group_sections::ORDER.len() + 1, |p| p + 1),
-        };
-        sections.sort_by_cached_key(rank);
-        // Headings only where there is more than one part.
-        let headed = sections.len() > 1;
-        let mut entries = parts;
-        if *of == groups::LOOK && own.is_none() && !more {
-            use super::themes::{Chooser, themes};
-            for chooser in [Chooser::Theme, Chooser::Widgets] {
-                if themes(env, chooser).next().is_some() {
-                    entries.push(Row::Theme(chooser));
-                }
-            }
-        }
-        for section in &sections {
-            if let Some(key) = section.as_deref().filter(|_| headed) {
-                entries.push(Row::Heading(env.i18n().tr(key).to_string()));
-            }
-            entries.extend(
-                specs
-                    .iter()
-                    .filter(|spec| spec.section_key() == *section)
-                    .cloned()
-                    .map(|spec| Row::Setting(Box::new(spec))),
-            );
-        }
-        if has_more {
-            entries.push(Row::More);
-        }
-        // What plugins do with the group's settings (cleaning up the
-        // storage in the device's).
-        if own.is_none() && !more {
-            entries.extend(
-                env.menus()
-                    .items(of.as_str())
-                    .into_iter()
-                    .filter(|item| !item.section && env.actions().contains(item.id.as_str()))
-                    .map(|item| Row::Action(item.id.clone())),
-            );
-        }
-        if !specs.is_empty() {
-            entries.push(Row::Reset);
-        }
+        let specs = specs(env, &group, own.as_ref(), more);
+        let entries = entries(env, of, own.is_some(), more, &specs);
         let noted = specs.iter().any(|spec| spec.description.is_some());
         let (style, header, mut area) = page(env);
         // A placement's settings have none (they are the widget's).
-        // A part's preview is its group's, where it has none of its own.
-        let previewed = env
-            .widgets()
-            .preview(group.as_str())
-            .is_none()
-            .then(|| env.settings().parent_of(&group).cloned())
-            .flatten()
-            .unwrap_or_else(|| group.clone());
         let preview = own
             .is_none()
-            .then(|| Preview::of(env, &style, &previewed, &mut area))
+            .then(|| Preview::of(env, &style, &group, &mut area))
             .flatten();
         let heading = ui::heading_height(env, &style);
         let row = if noted {
@@ -354,6 +361,7 @@ impl GroupPage {
             .collect();
         Self {
             group,
+            more,
             title,
             entries,
             style,
@@ -377,7 +385,7 @@ impl GroupPage {
         let focus = self.rows.focus();
         let (keys, drag, dragged) = (self.keys, self.drag, self.dragged);
         let edit = core::mem::take(&mut self.edit);
-        *self = Self::new(env, self.group.clone());
+        *self = Self::of(env, self.group.clone(), self.more);
         refocus(&mut self.rows, focus);
         self.keys = keys;
         self.edit = edit;
@@ -627,7 +635,7 @@ impl Screen for GroupPage {
                 .handled();
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
-            change.request(cx);
+            self.rows.request(change, cx);
         } else if *action == actions::CONFIRM {
             self.activate(&env, cx);
         } else {

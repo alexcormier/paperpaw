@@ -178,7 +178,7 @@ impl Screen for SearchScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if let Some(change) = self.list.navigate(action, self.hits.len()) {
-            change.request(cx);
+            self.list.request(change, cx);
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {

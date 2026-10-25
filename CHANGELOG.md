@@ -179,6 +179,9 @@ change the plugin SDK.
   is built again with this release's SDK, and the plugin manager says
   so. PaperPaw's own store plugins come as updates. `Work`'s `network`
   and `charging` became `needs` (`Needs::NETWORK | Needs::CHARGING`).
+- Moving through the settings with the buttons is quicker: a step draws
+  only the row left and the row reached, no longer the whole screen (on
+  the X4 a sixth to a third of it), in every list of the settings.
 - The release keeps room for the updates to come: `paperpaw-sign
   check-image` prints the margin an image leaves in the smallest app
   slot (its own or CrossPoint's), warns below 512 KB and fails below

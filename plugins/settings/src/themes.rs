@@ -204,7 +204,7 @@ impl Screen for Themes {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.themes.len();
         if let Some(change) = self.list.navigate(action, len) {
-            change.request(cx);
+            self.list.request(change, cx);
         } else if *action == actions::CONFIRM {
             self.choose(self.list.focus(), cx);
         } else {
