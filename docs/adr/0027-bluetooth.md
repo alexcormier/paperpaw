@@ -327,6 +327,21 @@ cheap one and the kernel never spends more than someone asked for:
   power someone asks for right now, and drop again when they stop.
 - **Counted**: the time the radio was on goes into
   `Usage::bluetooth_ms`, for the battery's statistics.
+- **Reconnecting remotes**: while a plugin wants a bonded device's keys
+  (the Remotes setting) and its link is gone (a remote falls asleep), the
+  shell watches for it: a passive scan of 30 ms every 1.28 s (2.3 % of
+  the time), only the bonded devices' advertisements told, and the
+  kernel connects one as soon as it advertises (on the X4 Pro a keyboard
+  woken by a key was connected within a second or two). Never when the
+  keys are not wanted, never in sleep. The radio stays on meanwhile, and
+  as long as the main loop cannot light-sleep with it on (§4) that is
+  what it costs; measured before "While reading" is the default.
+- **Beside Wi-Fi**: the S3 has one radio for both. With Bluetooth on,
+  Wi-Fi's modem always sleeps between beacons, and links run at the slow
+  intervals while Wi-Fi joins or moves data, with supervision timeouts of
+  8 s. On the X4 Pro a keyboard's link then held through a Wi-Fi join, a
+  search and downloads (downloads took 1.4 s instead of 0.3 s), and keys
+  kept coming.
 
 The X4 Pro measures a bonded remote's current, idle and while keys
 come, and light sleep with the radio on works before the Remotes
