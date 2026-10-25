@@ -335,6 +335,35 @@ fn settings_set_under_their_old_ids_are_kept() {
     );
 }
 
+/// Smooth text from beta.7 (`reader.smooth-text`) on a panel of black
+/// and white: a choice made then is kept, either way; never made, it is
+/// off (every page with it is a refresh of the whole screen in grays).
+#[test]
+fn smooth_text_chosen_before_is_kept_and_else_off_in_black_and_white() {
+    const BLACK_AND_WHITE: DeviceInfo = DeviceInfo {
+        display: DisplayInfo {
+            format: PixelFormat::Mono1,
+            ..DEVICE.display
+        },
+        ..DEVICE
+    };
+    let smooth = |config: &str| {
+        let kernel = Kernel::builder(BLACK_AND_WHITE)
+            .user_config(config)
+            .build()
+            .unwrap();
+        kernel.settings().bool("core.smooth-text")
+    };
+    assert!(!smooth(""));
+    assert!(!smooth("[reader]\nfont-size = 10\n"));
+    assert!(smooth("[reader]\nsmooth-text = on\n"));
+    assert!(!smooth("[reader]\nsmooth-text = off\n"));
+    assert!(smooth("[core]\nsmooth-text = on\n"));
+    // Where the panel shows grays itself it is on at first.
+    let kernel = Kernel::builder(DEVICE).build().unwrap();
+    assert!(kernel.settings().bool("core.smooth-text"));
+}
+
 /// A setting kept under the id it had before it moved, reset, does not
 /// come back from that id at the next start.
 #[test]
