@@ -37,6 +37,8 @@ You MUST NOT:
   fingerprint, a key, a SHA-256, a field, a check code or an address:
   read fingerprints and keys with `paperpaw-sign plugin`, hashes with
   `sha256sum`, and take names from this file or the site's guide.
+- **Tag a release that `check-publish` refuses.** Run it before every
+  tag (section 6b) and fix every error it names; never tag past one.
 - **Get around a check.** Never change an `abi` or `sha256` to fit a
   file, strip or forge a signature, edit a `.ppn` by hand, or put one
   reader's file in another reader's field. Fix the cause (section 8).
@@ -596,6 +598,28 @@ and a tag; the site does the rest. It suits an author who already keeps
 the plugin on GitHub. Sections 3 to 5b (the id, `plugin.ini`,
 `store/store.ini`, the key, the builds) hold as they are.
 
+**Always** make the repository with `paperpaw-dev new --github <id>`
+(`--code` for a plugin with code; `--dir <path>` where it goes): it
+writes the plugin's folder `plugin/` with `plugin.ini` and
+`store/store.ini` (a valid group), the release workflow with its
+switches set, a README that says what is left, and `.gitignore`; with
+`--code` also the crate, its build settings and the linker script. Never
+lay out such a repository by hand. Then, **before every tag**, check it
+as the site will, and fix every error it names:
+
+```sh
+paperpaw-dev check-publish            # in the repository
+paperpaw-sign check-publish .         # the same check, a smaller tool
+```
+
+Both take the rules the site checks by (`--rules <file>` takes the
+site's newest, `https://paperpaw.org/api/v1/store-rules.json`). The
+workflow runs the same check before it builds and again on the files it
+made (`--release-dir`), and releases nothing where it fails. paperpaw-dev
+comes from PaperPaw's repository at the release's tag (`cargo install
+--git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.7
+paperpaw-dev`); paperpaw-sign the same way, and much smaller.
+
 1. **The repository**: public on `github.com`, not archived, not a
    fork, with the topic `paperpaw-plugin` (*About*, the gear, *Topics*,
    or with the user's yes `gh repo edit --add-topic paperpaw-plugin`).
@@ -664,6 +688,34 @@ the plugin on GitHub. Sections 3 to 5b (the id, `plugin.ini`,
    fills in everything from the newest release, and the author sends it
    to the moderators. A plugin with code is theirs by its key. Once
    approved, each new release waits for the moderators as an update.
+
+**Checklist before the tag**:
+
+- [ ] made with `paperpaw-dev new --github`, the topic `paperpaw-plugin`
+  set on GitHub;
+- [ ] `plugin.ini`: id, name, a one-sentence description, the version
+  to tag;
+- [ ] `store/store.ini`: one of the 12 groups, at most 5 tags, a licence;
+  each screenshot named in `[screenshots]` with what it shows;
+- [ ] code: `Cargo.lock` committed, `paperpaw-sdk` by the release's
+  version, the secret `PAPERPAW_PLUGIN_KEY` set, `*.key` ignored;
+- [ ] `check-publish` passes with no error;
+- [ ] the tag is `v` + `plugin.ini`'s version.
+
+**Refused most often, and the fix**:
+
+| `check-publish` says | Fix |
+|---|---|
+| `the group ... is none of the store's` | `group =` one of reading, formats, library, sync, home, look, notes, learning, news, tools, games, system |
+| `N tags: at most 5`, `the tag ...` | at most five, lower-case words with hyphens, separated by commas |
+| `say what it shows: home.png = ...` | a line under `[screenshots]` for each picture in `store/` |
+| `no summary`, `the summary is one sentence` | `description` in `plugin.ini` of one sentence (at most 160 characters), or `summary` in `store.ini` |
+| `the id ...` | lower-case letters, digits and hyphens, at most 40 |
+| `a plugin's folder holds only ...` | keep README, LICENSE and the like outside the plugin's folder (`PLUGIN_DIR: plugin`) |
+| `tag it v...` | tag `v` + `plugin.ini`'s version, or change the version |
+| `no Cargo.lock`, `name the SDK ... by its version` | build once and commit `Cargo.lock`; `paperpaw-sdk = "<release>"` |
+| `not signed`, `signed by different keys` | the secret `PAPERPAW_PLUGIN_KEY` set, one key for every build |
+| `names no reader`, `not the ...'s chip` | let the workflow name the builds; never rename a `.ppn` |
 
 Do not say the plugin is published until the user has seen it listed on
 the site; report what the site says, word for word. An update is a new

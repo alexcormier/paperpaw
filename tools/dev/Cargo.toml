@@ -24,6 +24,8 @@ paperpaw-graphics = { workspace = true, features = ["color"] }
 paperpaw-i18n.workspace = true
 paperpaw-native.workspace = true
 paperpaw-platform.workspace = true
+# The plugin store's rules and the check before publishing (`check-publish`).
+paperpaw-publish.workspace = true
 paperpaw-sdk.workspace = true
 png = "0.18"
 

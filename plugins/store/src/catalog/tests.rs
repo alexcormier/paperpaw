@@ -478,3 +478,11 @@ fn keys_are_read_from_hex() {
     assert_eq!(key("11"), None);
     assert_eq!(key(&"zz".repeat(32)), None);
 }
+
+#[test]
+fn the_groups_are_the_plugin_stores() {
+    // The site's rules (tools/publish/store-rules.json): the same groups,
+    // in its order.
+    let rules = paperpaw_publish::Rules::built_in();
+    assert_eq!(GROUPS.as_slice(), rules.groups.as_slice());
+}
