@@ -99,7 +99,7 @@ pub(crate) mod tests {
         let mut list = ListView::new(Rect::new(0, 100, 200, 300), 100);
         assert_eq!(list.rows(), 3);
         assert_eq!(list.pages(7), 3);
-        assert_eq!(list.move_focus(1, 7), ListChange::Focus);
+        assert!(list.move_focus(1, 7).is_focus());
         assert_eq!(list.move_focus(2, 7), ListChange::Page);
         assert_eq!(list.page(), 1);
         assert_eq!(list.move_focus(100, 7), ListChange::Page);

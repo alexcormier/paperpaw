@@ -142,7 +142,7 @@ impl Choice {
     fn moved(&self, change: ListChange, cx: &mut Cx<'_, '_>) {
         match change {
             ListChange::None => {}
-            ListChange::Focus => self.list.request(change, cx),
+            ListChange::Focus { .. } => change.request(cx),
             ListChange::Page => {
                 cx.request_redraw_area(self.region);
                 cx.request_refresh(RefreshMode::Fast);
@@ -241,7 +241,7 @@ impl Screen for Choice {
             }
             match self.list.confirm() {
                 Some(index) => self.choose(index, cx),
-                None => self.moved(ListChange::Focus, cx),
+                None => self.moved(self.list.focus_change(), cx),
             }
             return Handled::Yes;
         }

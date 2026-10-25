@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
+    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
 use crate::cards::{self, Day, Deck};
@@ -113,15 +113,7 @@ impl DecksScreen {
     }
 
     fn changed(&mut self, change: ListChange, cx: &mut Cx<'_, '_>) {
-        if change == ListChange::None {
-            return;
-        }
-        cx.request_redraw();
-        cx.request_refresh(if change == ListChange::Page {
-            RefreshMode::Partial
-        } else {
-            RefreshMode::Fast
-        });
+        change.request(cx);
     }
 }
 

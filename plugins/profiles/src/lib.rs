@@ -30,7 +30,7 @@ use paperpaw_sdk::builtin::{actions, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
@@ -247,9 +247,7 @@ impl ListScreen {
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.rows().len();
-        if self.list.move_focus(delta, len) != ListChange::None {
-            self.redraw(cx);
-        }
+        self.list.move_focus(delta, len).request(cx);
     }
 
     /// Keeps the profiles; not kept, the list goes back to what the card

@@ -14,8 +14,7 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen,
+    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
 use paperpaw_sdk::library;
@@ -110,14 +109,23 @@ impl FindScreen {
     /// Moves the focus `delta` places (a row of letters for the page
     /// buttons); the search is before the first letter.
     fn step(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
+        let before = self.focus;
         if !self.shown {
             self.shown = true;
         } else {
             let len = self.letters.len() as isize + 1;
             self.focus = (self.focus as isize + delta).rem_euclid(len) as usize;
         }
-        cx.request_redraw();
-        cx.request_refresh(RefreshMode::Fast);
+        // The search or the letter the focus left, and where it came to.
+        ui::ListChange::focus(self.place(before), self.place(self.focus)).request(cx);
+    }
+
+    /// Where place `index` is: the search, then the letters.
+    fn place(&self, index: usize) -> Rect {
+        match index.checked_sub(1) {
+            Some(letter) => self.cells.get(letter).copied().unwrap_or(self.search),
+            None => self.search,
+        }
     }
 
     fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {

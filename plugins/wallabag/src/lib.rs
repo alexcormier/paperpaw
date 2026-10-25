@@ -37,7 +37,7 @@ use paperpaw_sdk::json::stream::{self, Event as Json};
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, encode};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
@@ -626,10 +626,14 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Wallabag {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Wallabag articles", paperpaw_sdk::package_version!())
-            .description("Articles saved in Wallabag, fetched as books.")
-            .how(&HOW)
-            .uses(paperpaw_sdk::Uses::NETWORK)
+        Manifest::new(
+            PLUGIN,
+            "Wallabag articles",
+            paperpaw_sdk::package_version!(),
+        )
+        .description("Articles saved in Wallabag, fetched as books.")
+        .how(&HOW)
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -869,10 +873,7 @@ impl Screen for SetupScreen {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, ROWS.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area());
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, ROWS.len()).request(cx);
         Handled::Yes
     }
 

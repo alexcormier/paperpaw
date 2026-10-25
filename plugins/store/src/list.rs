@@ -449,7 +449,7 @@ impl Screen for ListScreen {
         } else {
             return Handled::No;
         };
-        self.list.request(change, cx);
+        change.request(cx);
         Handled::Yes
     }
 

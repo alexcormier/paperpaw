@@ -336,7 +336,7 @@ fn navigate_rows(rows: &mut ui::Rows, keys: &mut bool, action: &Id) -> Option<Li
     let forward = forward?;
     if !*keys {
         *keys = true;
-        return Some(ListChange::Focus);
+        return Some(rows.focus_change());
     }
     Some(rows.step(forward))
 }

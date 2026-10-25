@@ -170,9 +170,21 @@ impl Screen for Confirm {
         match self.dialog.step(self.focus, along) {
             Some(focus) => {
                 if focus != self.focus {
+                    let reach = |i| {
+                        self.dialog
+                            .button(i)
+                            .map(|b| crate::ui::button_reach(&self.style, b))
+                    };
+                    match (reach(self.focus), reach(focus)) {
+                        (Some(left), Some(reached)) => {
+                            crate::ui::ListChange::focus(left, reached).request(cx);
+                        }
+                        _ => {
+                            cx.request_redraw_area(self.dialog.panel());
+                            cx.request_refresh(RefreshMode::Fast);
+                        }
+                    }
                     self.focus = focus;
-                    cx.request_redraw_area(self.dialog.panel());
-                    cx.request_refresh(RefreshMode::Fast);
                 }
                 Handled::Yes
             }

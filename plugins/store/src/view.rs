@@ -291,7 +291,7 @@ impl ViewScreen {
             let env = *cx.env();
             self.read_page(&env);
         }
-        self.list.request(change, cx);
+        change.request(cx);
     }
 
     fn title(&self, env: &Env<'_>) -> String {

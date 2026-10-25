@@ -156,6 +156,25 @@ impl SkimScreen {
         }
     }
 
+    /// What a focus on button `focus`, or on the bar where none, draws
+    /// over: the bar's row widened as its focus is, or the button and its
+    /// frame.
+    fn focus_area(&self, focus: Option<usize>) -> Rect {
+        let style = &self.style;
+        match focus.and_then(|i| self.buttons.get(i)) {
+            Some(slot) => ui::button_reach(style, ui::button_in_slot(style, *slot)),
+            None => {
+                let side = style.margin() / 2;
+                Rect::new(
+                    self.bar.x.saturating_sub(side),
+                    self.bar.y,
+                    self.bar.width + 2 * side,
+                    self.bar.height,
+                )
+            }
+        }
+    }
+
     /// The side of the knob that says where one is.
     fn knob(&self) -> u16 {
         (self.bar.height / 2).max(8)
@@ -302,14 +321,14 @@ impl Screen for SkimScreen {
             // The bar, then the buttons, then the bar again.
             let len = BUTTONS.len();
             let down = *a == actions::DOWN;
+            let left = self.focus_area(self.focus);
             self.focus = match self.focus {
                 None if down => Some(0),
                 None => Some(len - 1),
                 Some(at) if down => (at + 1 < len).then_some(at + 1),
                 Some(at) => at.checked_sub(1),
             };
-            cx.request_redraw_area(self.region);
-            cx.request_refresh(RefreshMode::Fast);
+            ui::ListChange::focus(left, self.focus_area(self.focus)).request(cx);
         } else if *a == actions::CONFIRM {
             match self.focus {
                 Some(i) => self.press(i, cx),

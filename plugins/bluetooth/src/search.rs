@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::bluetooth::{self, BtError, BtEvent, BtFailure, Device, DeviceId, ScanPower};
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen,
@@ -249,9 +249,7 @@ impl Screen for Search {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, len) != ListChange::None {
-            Self::changed(cx);
-        }
+        self.list.move_focus(delta, len).request(cx);
         Handled::Yes
     }
 

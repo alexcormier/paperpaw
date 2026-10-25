@@ -799,6 +799,7 @@ impl Screen for LockScreen {
         }
         if self.step == Step::Choose {
             let kinds = Self::kinds(&env);
+            let (before, shown) = (self.focus, self.shown);
             let a = action;
             let up = [
                 actions::UP,
@@ -824,7 +825,10 @@ impl Screen for LockScreen {
                 return Handled::No;
             }
             self.shown = true;
-            self.redraw(cx);
+            // The rows the focus left and came to.
+            let list = self.kind_list();
+            let left = list.row_rect(if shown { before } else { self.focus });
+            ui::ListChange::focus(left, list.row_rect(self.focus)).request(cx);
             return Handled::Yes;
         }
         let count = self.targets(&env);

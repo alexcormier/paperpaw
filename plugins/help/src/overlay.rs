@@ -224,9 +224,20 @@ impl Screen for Overlay {
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
         } else if let Some(focus) = self.dialog.step(self.focus, action) {
+            // The buttons the focus left and came to.
+            let reach = |i| {
+                self.dialog
+                    .button(i)
+                    .map(|b| ui::button_reach(&self.style, b))
+            };
+            match (reach(self.focus), reach(focus)) {
+                (Some(left), Some(reached)) => ui::ListChange::focus(left, reached).request(cx),
+                _ => {
+                    cx.request_redraw();
+                    cx.request_refresh(RefreshMode::Fast);
+                }
+            }
             self.focus = focus;
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
         } else {
             // Back, and every other button: closed, the hints seen.
             self.close(true, cx);

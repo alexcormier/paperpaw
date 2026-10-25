@@ -174,7 +174,7 @@ impl ListScreen {
         if change == ui::ListChange::Page {
             self.want_samples(cx);
         }
-        self.list.request(change, cx);
+        change.request(cx);
     }
 
     /// What the row of `font` says at its end.

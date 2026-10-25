@@ -642,7 +642,7 @@ impl Screen for GroupPage {
                 .handled();
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
-            self.rows.request(change, cx);
+            change.request(cx);
         } else if *action == actions::CONFIRM {
             self.activate(&env, cx);
         } else {

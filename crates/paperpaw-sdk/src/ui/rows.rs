@@ -190,21 +190,12 @@ impl Rows {
         }
     }
 
-    /// Asks for what `change` needs, for screens where the focus changes
-    /// nothing but the rows: a focus moved within the page draws the row
-    /// it left and the one it came to again, nothing else (a step in a
-    /// menu on the X4: a third of the drawing); otherwise as
-    /// [`ListChange::request`].
-    pub fn request(&self, change: ListChange, cx: &mut crate::Cx<'_, '_>) {
-        if change != ListChange::Focus {
-            return change.request(cx);
-        }
-        for index in [self.before, self.focus] {
-            if let Some(rect) = self.rect_of(index) {
-                cx.request_redraw_area(rect);
-            }
-        }
-        cx.request_refresh(crate::RefreshMode::Fast);
+    /// The focus as it last moved within the page: from the row focused
+    /// before to the one focused now (both the same where it only came to
+    /// show).
+    pub fn focus_change(&self) -> ListChange {
+        let rect = |index| self.rect_of(index).unwrap_or(self.area);
+        ListChange::focus(rect(self.before), rect(self.focus))
     }
 
     /// The entry at `point`, if any (headings are not hit).
@@ -224,7 +215,7 @@ impl Rows {
         self.before = self.focus;
         self.focus = focus;
         if self.page_of(focus) == page {
-            ListChange::Focus
+            self.focus_change()
         } else {
             ListChange::Page
         }
@@ -452,7 +443,7 @@ mod tests {
         let mut rows = Rows::new(Rect::new(0, 0, 100, 30), heights, headings);
         assert_eq!(rows.pages, [(None, 0..3), (None, 3..6)]);
         assert_eq!(rows.focus, 1, "the first entry");
-        assert_eq!(rows.step(true), ListChange::Focus);
+        assert!(rows.step(true).is_focus());
         assert_eq!(rows.step(true), ListChange::Page, "over the heading");
         assert_eq!(rows.focus, 4);
         assert_eq!(rows.paging(), super::super::Paging::new(1, 2));

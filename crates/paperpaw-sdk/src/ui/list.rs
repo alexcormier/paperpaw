@@ -11,24 +11,50 @@ use super::*;
 #[non_exhaustive]
 pub enum ListChange {
     None,
-    /// The focus moved within the visible page.
-    Focus,
+    /// The focus moved within the visible page: from the item at `left`
+    /// to the one at `reached` (the same where a focus only came to
+    /// show). Made with [`ListChange::focus`].
+    #[non_exhaustive]
+    Focus {
+        left: Rect,
+        reached: Rect,
+    },
     /// The visible page changed.
     Page,
 }
 
 impl ListChange {
-    /// Asks for what the change needs, as every list does: the screen
-    /// drawn again, refreshed fast for a focus that moved and a little
-    /// more thoroughly for a new page; nothing for no change.
+    /// Asks for what the change needs, as every list does: for a focus
+    /// moved within the page the item it left and the one it came to
+    /// drawn again, refreshed fast (a step in a menu on the X4: a fraction
+    /// of a whole frame); for a new page the screen, a little more
+    /// thoroughly; nothing for no change. A screen whose focus changes
+    /// more than its items, such as a line about the focused one, asks
+    /// for that too (`Cx::request_redraw_area`).
     pub fn request(self, cx: &mut crate::Cx<'_, '_>) {
-        let mode = match self {
-            ListChange::None => return,
-            ListChange::Focus => crate::RefreshMode::Fast,
-            ListChange::Page => crate::RefreshMode::Partial,
-        };
-        cx.request_redraw();
-        cx.request_refresh(mode);
+        match self {
+            ListChange::None => {}
+            ListChange::Focus { left, reached } => {
+                cx.request_redraw_area(left);
+                cx.request_redraw_area(reached);
+                cx.request_refresh(crate::RefreshMode::Fast);
+            }
+            ListChange::Page => {
+                cx.request_redraw();
+                cx.request_refresh(crate::RefreshMode::Partial);
+            }
+        }
+    }
+
+    /// Whether the focus moved within the page.
+    pub fn is_focus(self) -> bool {
+        matches!(self, ListChange::Focus { .. })
+    }
+
+    /// A focus moved within the page from the item at `left` to the one
+    /// at `reached`: for lists of a plugin's own.
+    pub fn focus(left: Rect, reached: Rect) -> Self {
+        ListChange::Focus { left, reached }
     }
 }
 
@@ -119,7 +145,7 @@ impl ListView {
         self.before = self.focus;
         self.focus = index;
         if self.page() == page {
-            ListChange::Focus
+            self.focus_change()
         } else {
             ListChange::Page
         }
@@ -145,19 +171,15 @@ impl ListView {
         self.shown = shown;
     }
 
-    /// Asks for what `change` needs, for screens where the focus changes
-    /// nothing but its items: a focus moved within the page draws the item
-    /// it left and the one it came to again, nothing else (see
-    /// [`Rows::request`]); otherwise as [`ListChange::request`].
-    pub fn request(&self, change: ListChange, cx: &mut crate::Cx<'_, '_>) {
-        if change != ListChange::Focus {
-            return change.request(cx);
-        }
+    /// The focus as it last moved within the page: from the item focused
+    /// before to the one focused now (both the same where it only came to
+    /// show, as after [`confirm`](Self::confirm)).
+    pub fn focus_change(&self) -> ListChange {
         let rows = self.rows();
-        for index in [self.before, self.focus] {
-            cx.request_redraw_area(self.row_rect(index % rows));
-        }
-        cx.request_refresh(crate::RefreshMode::Fast);
+        ListChange::focus(
+            self.row_rect(self.before % rows),
+            self.row_rect(self.focus % rows),
+        )
     }
 
     /// A grid of `columns` items a row instead of a list (rows are then
@@ -213,7 +235,7 @@ impl ListView {
     /// The item a confirming button chooses, or `None` while the focus is
     /// hidden (on touch screens before a button moved it): then this first
     /// press shows the focus instead, so that a button never chooses a row
-    /// nobody saw (draw again, as for [`ListChange::Focus`]).
+    /// nobody saw (draw it again: [`focus_change`](Self::focus_change)).
     pub fn confirm(&mut self) -> Option<usize> {
         if self.shown {
             Some(self.focus)
@@ -255,7 +277,7 @@ impl ListView {
             // does not: on touch screens it stays hidden.
             self.shown = true;
             self.before = self.focus;
-            return ListChange::Focus;
+            return self.focus_change();
         }
         let focus = step_focus(self.focus, delta, len);
         if focus == self.focus {
@@ -265,7 +287,7 @@ impl ListView {
         self.before = self.focus;
         self.focus = focus;
         if self.page() == page {
-            ListChange::Focus
+            self.focus_change()
         } else {
             ListChange::Page
         }

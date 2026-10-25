@@ -491,10 +491,7 @@ impl Screen for Overview {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, self.entries.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area());
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, self.entries.len()).request(cx);
         Handled::Yes
     }
 
