@@ -988,7 +988,12 @@ fn shrink(widths: &[f32], texts: &[bool], gap: f32, room: f32) -> Option<(usize,
     Some((longest, (widths[longest] - (total - room)).max(0.0)))
 }
 
-/// A battery outline filled to `percent`; a plus when charging.
+/// A battery filled to `percent`, in the style of the UI's shapes: a rounded
+/// body, a small rounded nub, the level as a rounded bar inside with a
+/// gap as wide as the line all round, and a bolt when charging, in ink
+/// with a rim of paper, so that it reads on the level, beside it
+/// and across its edge alike. Crisp at every size: whole pixels only,
+/// nothing blended.
 fn draw_battery(
     canvas: &mut Canvas<'_>,
     area: Rect,
@@ -997,39 +1002,90 @@ fn draw_battery(
     charging: bool,
     color: Color,
 ) {
-    let (x, y, height) = (i32::from(area.x), i32::from(area.y), i32::from(area.height));
+    let (x, y, height) = (i32::from(area.x), i32::from(area.y), u32::from(area.height));
     let line = ((size / 10.0) as u32).max(1);
-    let nub = ((size / 8.0) as i32).max(2);
-    let width = i32::from(area.width) - nub;
-    canvas.stroke_rect(x, y, width as u32, height as u32, line, color);
-    canvas.fill_rect(
-        x + width,
-        y + height / 4,
-        nub as u32,
-        (height / 2) as u32,
-        color,
-    );
-    let inner = width - 2 * (line as i32 + 1);
-    let fill = inner * i32::from(percent.min(100)) / 100;
-    let inset = line as i32 + 1;
-    canvas.fill_rect(
-        x + inset,
-        y + inset,
-        fill.max(0) as u32,
-        (height - 2 * inset).max(0) as u32,
-        color,
-    );
-    if charging {
-        // A plus in the middle of the battery, white on its fill when it
-        // is more than half full.
-        let s = (height / 2).max(3);
-        let cx = x + width / 2;
-        let cy = y + height / 2;
-        let bar = (line as i32).max(1);
-        let ink = if percent > 50 { Color::WHITE } else { color };
-        canvas.fill_rect(cx - s / 2, cy - bar / 2, s as u32, bar as u32, ink);
-        canvas.fill_rect(cx - bar / 2, cy - s / 2, bar as u32, s as u32, ink);
+    let nub = ((size / 8.0) as u32).max(2);
+    let width = u32::from(area.width).saturating_sub(nub);
+    let radius = (height / 4).max(1);
+    canvas.stroke_round_rect(x, y, width, height, line, radius, color);
+    // The nub, half as tall as the body and centred on it to the pixel,
+    // rounded on its outer side (its inner side lies on the body's line).
+    let mut nub_height = height / 2;
+    if (height - nub_height) % 2 == 1 {
+        nub_height += 1;
     }
+    let nub_radius = line.min(nub_height / 2).max(1);
+    canvas.fill_round_rect(
+        x + width as i32 - nub_radius as i32,
+        y + ((height - nub_height) / 2) as i32,
+        nub + nub_radius,
+        nub_height,
+        nub_radius,
+        color,
+    );
+    // The level: a bar inside, as far from the line as the line is wide.
+    let inset = 2 * line;
+    let bar_height = height.saturating_sub(2 * inset);
+    let full = width.saturating_sub(2 * inset);
+    let fill = full * u32::from(percent.min(100)) / 100;
+    let bar_radius = radius.saturating_sub(inset).max(1).min(bar_height / 2);
+    let (bar_x, bar_y) = (x + inset as i32, y + inset as i32);
+    if fill > 0 && bar_height > 0 {
+        canvas.fill_round_rect(bar_x, bar_y, fill, bar_height, bar_radius, color);
+    }
+    if !charging {
+        return;
+    }
+    // The bolt in the middle of the inside: in ink, with a rim of paper
+    // a pixel wide inside the body.
+    let mark_height = height.saturating_sub(2 * line + 2).max(3);
+    let mark_width = (mark_height * 2 / 3).max(4);
+    let left = x + (width as i32 - mark_width as i32) / 2;
+    let top = y + (height as i32 - mark_height as i32) / 2;
+    let in_mark = |column: i32, row: i32| {
+        if column < 0 || row < 0 || column >= mark_width as i32 || row >= mark_height as i32 {
+            return false;
+        }
+        in_bolt(column as u32, row as u32, mark_width, mark_height, line + 1)
+    };
+    let (inside_left, inside_right) = (x + line as i32, x + (width - line) as i32);
+    let (inside_top, inside_bottom) = (y + line as i32, y + (height - line) as i32);
+    for row in -1..=mark_height as i32 {
+        for column in -1..=mark_width as i32 {
+            let (px, py) = (left + column, top + row);
+            let ink = if in_mark(column, row) {
+                color
+            } else if (-1..=1).any(|dy| (-1..=1).any(|dx| in_mark(column + dx, row + dy))) {
+                Color::WHITE
+            } else {
+                continue;
+            };
+            if px >= inside_left && px < inside_right && py >= inside_top && py < inside_bottom {
+                canvas.fill_rect(px, py, 1, 1, ink);
+            }
+        }
+    }
+}
+
+/// Whether the pixel at `column` and `row` of a box `width` by `height`
+/// is a lightning bolt's, drawn as pixels are at small sizes: a stroke
+/// `thickness` wide from the top right down to the middle's left, a bar
+/// across the middle, and a stroke from the middle's right down to the
+/// bottom left.
+fn in_bolt(column: u32, row: u32, width: u32, height: u32, thickness: u32) -> bool {
+    let thickness = thickness.min(width / 2).max(1);
+    let middle = height / 2;
+    let run = width - thickness;
+    let left = if row < middle {
+        // Rounded to the nearest pixel, as the steps fall.
+        (run * (middle - row) + middle / 2) / middle.max(1)
+    } else if row == middle {
+        return column < width;
+    } else {
+        let rest = height - 1 - middle;
+        (run * (height - 1 - row) + rest / 2) / rest.max(1)
+    };
+    column >= left && column < left + thickness
 }
 
 #[cfg(test)]
