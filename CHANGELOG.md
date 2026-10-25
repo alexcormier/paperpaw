@@ -35,10 +35,13 @@ change the plugin SDK.
   keys work (when switched on, while reading, or always). A remote that
   falls asleep connects again by itself when it wakes, as long as its
   keys are wanted.
-- Plugin interface 3: code plugins are built again for it (`Command`,
-  `Env`, `Capabilities`, `MenuNeed`, `Usage` and `Work` changed for
-  Bluetooth). `Work`'s `network` and `charging` became `needs`
-  (`Needs::NETWORK | Needs::CHARGING`).
+- **Code plugins must be built again.** The plugin interface is now 3
+  (`Command`, `Env`, `Capabilities`, `MenuNeed`, `Usage`, `Work` and
+  `FirmwareCommand` changed, for Bluetooth and another firmware): a code
+  plugin built for an earlier release does not run on this one until it
+  is built again with this release's SDK, and the plugin manager says
+  so. PaperPaw's own store plugins come as updates. `Work`'s `network`
+  and `charging` became `needs` (`Needs::NETWORK | Needs::CHARGING`).
 
 ## [0.5.0-beta.6] - 2026-10-25
 
