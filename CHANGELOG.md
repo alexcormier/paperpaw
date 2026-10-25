@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.7] - 2026-10-25
+
 ### Added
 
 - The notices of everything PaperPaw ships: the crates of the firmware

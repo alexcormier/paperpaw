@@ -292,8 +292,8 @@ library crate, tested on a computer and tried in the emulator.
 ### The key (once per author)
 
 ```sh
-# paperpaw-sign of the release built for (its tag, here v0.5.0-beta.6):
-cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.6 paperpaw-sign
+# paperpaw-sign of the release built for (its tag, here v0.5.0-beta.7):
+cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.7 paperpaw-sign
 mkdir -p ~/.paperpaw
 paperpaw-sign key ~/.paperpaw/author.key
 ```
@@ -335,7 +335,7 @@ files with its own. *About* on the reader shows its fingerprint and
 compiler; each PaperPaw release lists the fingerprints in its files
 `paperpaw-<reader>-<version>-abi.txt`.
 
-- Name the SDK of the release in `Cargo.toml` (`paperpaw-sdk = "0.5.0-beta.6"`),
+- Name the SDK of the release in `Cargo.toml` (`paperpaw-sdk = "0.5.0-beta.7"`),
   never a path or a development version.
 - Build for the readers without the SDK's `outline` feature: it is in the
   fingerprint, and the readers' firmware has none. Give it to the
