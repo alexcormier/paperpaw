@@ -3,6 +3,7 @@
 //! placeholder screen.
 
 mod clean_up;
+mod finishing;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -901,6 +902,11 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
         screens::PLACEHOLDER,
         "core.screen.placeholder",
         Box::new(|_, _| Box::new(PlaceholderScreen)),
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        screens::FINISHING_UPDATE,
+        "core.finishing-update.title",
+        Box::new(|_, params| Box::new(finishing::Finishing::new(params))),
     ))?;
     // A folder for a setting: the folder chooser's, whichever plugin
     // fills its slot.

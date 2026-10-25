@@ -14,6 +14,11 @@ change the plugin SDK.
   "Charge to 20 % or plug in to install." Downloading goes on. SDK:
   `InstallFailure::LowBattery`, `firmware::INSTALL_BATTERY`,
   `firmware::battery_allows_install`.
+- No surprise restart after an update: while the new firmware runs on
+  trial, without its code plugins, the X4 shows "Finishing the
+  update…" with a bar that fills, takes no input meanwhile, and starts
+  again from there once the update is kept, with its code plugins. SDK:
+  `builtin::screens::FINISHING_UPDATE`.
 - Back to CrossPoint without a computer: *Update* installs another
   firmware's image from the card (not signed, only as chosen, with a
   warning), checked whole for this device first. SDK:

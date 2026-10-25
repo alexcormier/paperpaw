@@ -177,6 +177,7 @@ const paperpaw_sdk::builtin::roles::SEARCH_HIT: paperpaw_sdk::id::Id = Id::new_s
 const paperpaw_sdk::builtin::screens::ADD_WIDGET: paperpaw_sdk::id::Id = Id::new_static("core.add-widget")
 const paperpaw_sdk::builtin::screens::CHOICE: paperpaw_sdk::id::Id = Id::new_static("core.choice-dialog")
 const paperpaw_sdk::builtin::screens::CONFIRM: paperpaw_sdk::id::Id = Id::new_static("core.confirm-dialog")
+const paperpaw_sdk::builtin::screens::FINISHING_UPDATE: paperpaw_sdk::id::Id = Id::new_static("core.finishing-update")
 const paperpaw_sdk::builtin::screens::FOLDER_EDITOR: paperpaw_sdk::id::Id = Id::new_static("core.folder-editor")
 const paperpaw_sdk::builtin::screens::PLACEHOLDER: paperpaw_sdk::id::Id = Id::new_static("core.placeholder")
 const paperpaw_sdk::builtin::screens::STATUS_ITEMS: paperpaw_sdk::id::Id = Id::new_static("core.status-items")

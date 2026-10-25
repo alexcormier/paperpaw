@@ -134,11 +134,34 @@ impl Firmware {
         }
         let effects = self.kernel.start(now());
         self.apply(effects);
+        self.finishing_update();
         // Its first frame is shown: its code plugins started cleanly.
         crate::safe_mode::started();
         loop {
             self.step();
         }
+    }
+
+    /// An update on trial with code plugins to load once it is kept: it
+    /// starts again then, and says so meanwhile, on a screen that takes no
+    /// input (nothing begun is cut off).
+    fn finishing_update(&mut self) {
+        let start = now();
+        let Some(left) = self.ota.as_ref().and_then(|ota| ota.trial_left(start.0)) else {
+            return;
+        };
+        if !paperpaw_core::code_to_load(self.kernel.storage(), &crate::native::this_firmware()) {
+            return;
+        }
+        let params = paperpaw_sdk::Params::new()
+            .with("from", alloc::format!("{}", start.0))
+            .with("until", alloc::format!("{}", start.0 + left));
+        let effects = self.kernel.open_screen(
+            start,
+            paperpaw_sdk::builtin::screens::FINISHING_UPDATE,
+            params,
+        );
+        self.apply(effects);
     }
 
     /// The X4 ends cleanly (sleeps or restarts): an update on trial goes

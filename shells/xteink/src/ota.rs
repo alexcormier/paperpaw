@@ -284,6 +284,13 @@ impl Ota {
         self.trial.is_some()
     }
 
+    /// How long the running firmware is still on trial, at `now` (ms
+    /// since the start); `None` where it is not.
+    pub fn trial_left(&self, now: u64) -> Option<u64> {
+        let trial = self.trial.as_ref()?;
+        Some(TRIAL_MS.saturating_sub(trial.before + now.saturating_sub(trial.since)))
+    }
+
     /// The running firmware on trial ran long enough, at `now` (ms since
     /// the start): it is marked as good. Whether it was, just now.
     pub fn check_trial(&mut self, now: u64) -> bool {

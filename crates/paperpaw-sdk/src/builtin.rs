@@ -415,6 +415,11 @@ pub mod screens {
     /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
     /// plugin fills it: name it as a text setting's editor.
     pub const FOLDER_EDITOR: Id = Id::new_static("core.folder-editor");
+    /// Says that an update is being finished while the firmware just
+    /// installed runs on trial, until the device starts again to load its
+    /// code plugins; takes no input. The shell opens it with params
+    /// `from` and `until`, the trial's start and end in milliseconds.
+    pub const FINISHING_UPDATE: Id = Id::new_static("core.finishing-update");
 }
 
 /// Global settings.
