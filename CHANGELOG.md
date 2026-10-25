@@ -231,6 +231,14 @@ change the plugin SDK.
   `ui::button_reach` says where a focused button draws. Their `request`
   methods are gone: `change.request(cx)` does it. A screen whose focus
   changes more than its items asks for that part too.
+- The store finds its way in a library of thousands: its start shows
+  what the library picks (Recommended, New, Popular now, Recently
+  updated, Discover) between the search and the groups, and a group
+  lists its plugins in the library's fair mix of the day, so that every
+  plugin gets seen. A to Z stays a choice, sorted on the device a run at
+  a time, and long groups go to a letter (*Go to letter*, a grid of A to
+  Z for buttons and fingers). The list still streams to the card. A
+  library without picks shows the start and the order as before.
 - Plugins that work with another product say what they do with it:
   KOReader highlights, Calibre connection, Readwise export, Wallabag
   articles and Wikipedia lookup (their ids stay, and so do their

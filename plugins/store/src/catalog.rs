@@ -1,9 +1,10 @@
 //! The plugin library's list and its plugins (ADR 0023, format 2), read
 //! as they stream from the files they were saved to.
 //!
-//! The list (`plugins.json?device=x4&lang=de`) holds only the plugins for
-//! this device, in the order to show them (by group, then by name in the
-//! language asked for), without their files:
+//! The list (`plugins.json?device=x4&lang=de&order=fair`) holds only the
+//! plugins for this device, in the order to show them (by group, then in
+//! the library's fair order of the day, or by name in the language asked
+//! for where the library knows no fair order), without their files:
 //!
 //! ```json
 //! {"format": 2, "plugins": [{
@@ -11,6 +12,11 @@
 //!   "author": "…", "licence": "Apache-2.0", "kind": "data",
 //!   "latest": {"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 2345}}]}
 //! ```
+//!
+//! A library with a fair order says so with `sections`: the plugins it
+//! picks for a start (`recommended`, `new`, `trending`, `updated`,
+//! `discover`: lists of ids). Without them the list is by name, and the
+//! store shows its start as before.
 //!
 //! A code plugin is `"kind": "code"`, with `latest.builds` (each a
 //! `device`, the `abi` it was built for, `url`, `size`, `sha256`) and the
@@ -53,7 +59,7 @@ use crate::PLUGIN;
 mod runs;
 
 pub(crate) use runs::RUN;
-use runs::{Cursor, Keyed, Output, before, order_of};
+use runs::{Cursor, KEYED, Keyed, Output, before, order_of};
 
 /// The format of the list and of a plugin's page this plugin reads.
 const FORMAT: u32 = 2;
@@ -80,6 +86,13 @@ pub(crate) const FIRST_PARTY_KEY: [u8; 32] = [
     0x14, 0x8c, 0xcf, 0x3e, 0xbc, 0x30, 0x50, 0x6b, 0x35, 0x5c, 0x6b, 0x5c, 0xb2, 0xba, 0xf8, 0x7d,
     0x92, 0x65, 0x60, 0x6c, 0xc6, 0xa8, 0x1f, 0x08, 0x5b, 0xb3, 0xb9, 0x74, 0x0a, 0x95, 0xae, 0xbd,
 ];
+
+/// The plugins a library picks for a start (its `sections`), in the order
+/// the start shows them.
+pub(crate) const SECTIONS: [&str; 5] = ["recommended", "new", "trending", "updated", "discover"];
+
+/// The plugins of a section kept at most.
+const MAX_SECTION: usize = 20;
 
 /// The groups, in the order the website shows them (its `catalogue.rs`,
 /// and paperpaw-dev's `package/folder.rs`: keep them in step). `system`
@@ -540,18 +553,41 @@ fn is_build(path: &[String]) -> bool {
     matches!(path, [latest, builds, at] if latest == "latest" && builds == "builds" && at == "[]")
 }
 
+/// What a list says beside its plugins: whether it is in a fair order
+/// (it has `sections`), and the plugins of each section.
+#[derive(Debug, Default)]
+struct Picks {
+    fair: bool,
+    sections: [Vec<String>; SECTIONS.len()],
+}
+
 /// Reads the list at `path` for `device`, handing each plugin that fits to
-/// `found`. `false` if it is no list this plugin reads.
+/// `found`; what it says beside them. `None` if it is no list this plugin
+/// reads.
 fn read_list(
     storage: &dyn Storage,
     path: &str,
     device: &Device<'_>,
     found: &mut dyn FnMut(Entry),
-) -> bool {
+) -> Option<Picks> {
     let mut format = None;
     let mut item: Option<Item> = None;
+    let mut picks = Picks::default();
     read_file(storage, path, &mut |event| match event {
         Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
+        Event::Open([key, ..]) if key == "sections" => picks.fair = true,
+        Event::Value([key, section, at], value) if key == "sections" && at == "[]" => {
+            picks.fair = true;
+            let ids = SECTIONS
+                .iter()
+                .position(|s| s == section)
+                .map(|s| &mut picks.sections[s]);
+            if let Some(ids) = ids.filter(|ids| ids.len() < MAX_SECTION)
+                && install::is_plugin_name(value)
+            {
+                ids.push(value.to_string());
+            }
+        }
         Event::Open([list, at]) if list == "plugins" && at == "[]" => item = Some(Item::new()),
         Event::Close([list, at]) if list == "plugins" && at == "[]" => {
             if let Some(done) = item.take().filter(|item| item.fits(device)) {
@@ -572,7 +608,7 @@ fn read_list(
         }
         _ => {}
     });
-    format == Some(FORMAT)
+    (format == Some(FORMAT)).then_some(picks)
 }
 
 /// A plugin as its page at the library gives it: what it is, its files
@@ -676,9 +712,14 @@ fn hits_path() -> String {
     file("search.bin")
 }
 
+fn sections_path() -> String {
+    file("sections.txt")
+}
+
 /// The first line of an index's head: its format, then the runs of
-/// plugins of one group (`group:count`), in order.
-const HEADER: &str = "store-index 4";
+/// plugins of one group (`group:count`), in order, then `fair` where the
+/// list is in a fair order, then how many plugins each section has.
+const HEADER: &str = "store-index 5";
 
 /// The address of the list at `list` for `device` in `language`, with
 /// the community plugins where `community`.
@@ -719,7 +760,7 @@ pub(crate) fn plugin_url(
 fn build(
     storage: &dyn Storage,
     json: &str,
-    [index, offsets, head]: [&str; 3],
+    [index, offsets, head, sections]: [&str; 4],
     device: &Device<'_>,
 ) -> bool {
     let mut runs: Vec<(usize, u32)> = Vec::new();
@@ -746,14 +787,27 @@ fn build(
     });
     written &= storage.append(index, lines.as_bytes()).is_ok();
     written &= storage.append(offsets, &starts).is_ok();
+    let read_whole = read.is_some();
+    let picks = read.unwrap_or_default();
+    let mut text = String::new();
+    for (key, ids) in SECTIONS.iter().zip(&picks.sections) {
+        text.push_str(&format!("{key}\t{}\n", ids.join(",")));
+    }
+    written &= storage.write(sections, text.as_bytes()).is_ok();
     let runs: Vec<String> = runs
         .iter()
         .map(|(group, count)| format!("{group}:{count}"))
         .collect();
-    let text = format!("{HEADER}\t{}\n", runs.join(","));
+    let counts: Vec<String> = picks.sections.iter().map(|s| s.len().to_string()).collect();
+    let fair = if picks.fair { "fair" } else { "name" };
+    let text = format!(
+        "{HEADER}\t{}\t{fair}\t{}\n",
+        runs.join(","),
+        counts.join(",")
+    );
     written &= storage.write(head, text.as_bytes()).is_ok();
-    if !read || !written {
-        for path in [index, offsets, head] {
+    if !read_whole || !written {
+        for path in [index, offsets, head, sections] {
             let _ = storage.remove(path);
         }
         return false;
@@ -792,10 +846,13 @@ fn number_at(storage: &dyn Storage, path: &str, n: usize) -> Option<u32> {
 }
 
 /// The plugins of the index on the storage: in memory only the runs of
-/// plugins of one group, in order.
+/// plugins of one group, in order, and how many each section has.
 #[derive(Debug, Default)]
 pub(crate) struct Index {
     runs: Vec<(usize, usize)>,
+    /// The list is in the library's fair order (else by name).
+    fair: bool,
+    sections: [usize; SECTIONS.len()],
 }
 
 impl Index {
@@ -806,9 +863,18 @@ impl Index {
 
     fn open(storage: &dyn Storage, head: &str) -> Option<Index> {
         let text = line_at(storage, head, 0)?;
-        let (format, runs) = text.split_once('\t').unwrap_or((&text, ""));
-        if format != HEADER {
+        let mut fields = text.split('\t');
+        if fields.next() != Some(HEADER) {
             return None;
+        }
+        let runs = fields.next().unwrap_or("");
+        let fair = fields.next() == Some("fair");
+        let mut sections = [0; SECTIONS.len()];
+        for (count, text) in sections
+            .iter_mut()
+            .zip(fields.next().unwrap_or("").split(','))
+        {
+            *count = text.parse().unwrap_or(0);
         }
         let runs = runs
             .split(',')
@@ -819,7 +885,66 @@ impl Index {
             })
             .filter(|&(group, _)| group < GROUPS.len())
             .collect();
-        Some(Index { runs })
+        Some(Index {
+            runs,
+            fair,
+            sections,
+        })
+    }
+
+    /// The list is in the library's fair order: its order is
+    /// [`Order::Fair`], and A to Z is sorted here.
+    pub(crate) fn fair(&self) -> bool {
+        self.fair
+    }
+
+    /// How many plugins section `section` (of [`SECTIONS`]) has.
+    pub(crate) fn section_len(&self, section: usize) -> usize {
+        self.sections.get(section).copied().unwrap_or(0)
+    }
+
+    /// The ids of the plugins of section `section`, in its order.
+    pub(crate) fn section(&self, storage: &dyn Storage, section: usize) -> Vec<String> {
+        let Some(key) = SECTIONS.get(section) else {
+            return Vec::new();
+        };
+        let mut ids = Vec::new();
+        let mut at = 0u32;
+        while let Some(line) = line_at(storage, &sections_path(), at) {
+            at += line.len() as u32 + 1;
+            if let Some(list) = line.strip_prefix(key).and_then(|l| l.strip_prefix('\t')) {
+                ids.extend(
+                    list.split(',')
+                        .filter(|id| !id.is_empty())
+                        .map(String::from),
+                );
+                break;
+            }
+            if line.is_empty() {
+                break;
+            }
+        }
+        ids
+    }
+
+    /// The orders a list of the index may show: the list's own first.
+    pub(crate) fn orders(&self) -> &'static [Order] {
+        if self.fair {
+            &[Order::Fair, Order::Name, Order::Added, Order::Updated]
+        } else {
+            &[Order::Name, Order::Added, Order::Updated]
+        }
+    }
+
+    /// The order a list shows `key` in: one of [`Index::orders`], the first
+    /// where `key` is none of them.
+    pub(crate) fn order(&self, key: &str) -> Order {
+        let orders = self.orders();
+        orders
+            .iter()
+            .copied()
+            .find(|o| o.key() == key)
+            .unwrap_or(orders[0])
     }
 
     /// The runs of plugins of one group, in order: (group, how many).
@@ -849,7 +974,7 @@ impl Index {
                     || entry.summary.to_lowercase().contains(&query))
                 .then_some(0)
             },
-            Order::Name,
+            Order::Fair,
             usize::MAX,
         )
     }
@@ -885,10 +1010,12 @@ impl Index {
     /// [`Order::Rank`]), in `order`, `most` of them at most, on the storage
     /// (read back with [`hit`]); how many there are.
     ///
-    /// However many plugins there are, little is held at once: by name
-    /// they are written as they are read; by a key, the best `most` are
-    /// kept while reading where that is few, and otherwise runs of
-    /// [`RUN`] are sorted, kept on the storage and merged.
+    /// However many plugins there are, little is held at once: in the
+    /// list's order they are written as they are read; by a key, the best
+    /// `most` are kept while reading where that is few, and otherwise runs
+    /// of [`RUN`] are sorted, kept on the storage and merged. A to Z is
+    /// the list's order where it is not fair, and sorted by [`name_key`]
+    /// where it is.
     pub(crate) fn pick(
         &self,
         storage: &dyn Storage,
@@ -898,7 +1025,7 @@ impl Index {
     ) -> usize {
         let hits = hits_path();
         let mut out = Output::new(storage, &hits);
-        if order == Order::Name {
+        if order == Order::Fair || (order == Order::Name && !self.fair) {
             self.scan(storage, &mut |n, entry| {
                 if out.count < most && keep(n, &entry).is_some() {
                     out.push(n as u32);
@@ -907,9 +1034,11 @@ impl Index {
             return out.finish();
         }
         let key = |entry: &Entry, rank: u32| match order {
-            Order::Added => entry.added,
-            Order::Updated => entry.updated,
-            Order::Name | Order::Rank => rank,
+            Order::Added => u64::from(entry.added),
+            Order::Updated => u64::from(entry.updated),
+            // The first of A to Z the highest.
+            Order::Name => u64::MAX - name_key(&entry.name),
+            Order::Fair | Order::Rank => u64::from(rank),
         };
         if most <= RUN {
             // The best few, kept in order while reading.
@@ -938,7 +1067,7 @@ impl Index {
         let mut kept = storage.write(&runs_path, b"").is_ok();
         let mut flush = |run: &mut Vec<Keyed>, runs: &mut Vec<u32>| {
             run.sort_by(|a, b| order_of(*a, *b));
-            let mut bytes = Vec::with_capacity(run.len() * 8);
+            let mut bytes = Vec::with_capacity(run.len() * KEYED);
             for (key, n) in run.iter() {
                 bytes.extend_from_slice(&key.to_le_bytes());
                 bytes.extend_from_slice(&n.to_le_bytes());
@@ -967,7 +1096,7 @@ impl Index {
         let mut at = 0u64;
         for len in runs {
             cursors.push(Cursor::new(at, len));
-            at += u64::from(len) * 8;
+            at += u64::from(len) * KEYED as u64;
         }
         while out.count < most {
             let mut first: Option<(usize, Keyed)> = None;
@@ -992,33 +1121,78 @@ impl Index {
 /// The order a view of the plugins shows them in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Order {
-    /// The list's: by name.
+    /// The library's fair order of the day: the list's where it is fair.
+    Fair,
+    /// A to Z: the list's where it is not fair.
     Name,
     /// Newest first.
     Added,
     /// Most recently updated first.
     Updated,
-    /// Highest rank first (as `pick` was given), then by name.
+    /// Highest rank first (as `pick` was given), then in the list's order.
     Rank,
 }
 
 impl Order {
-    pub(crate) const ALL: [Order; 3] = [Order::Name, Order::Added, Order::Updated];
-
     pub(crate) fn key(self) -> &'static str {
         match self {
+            Order::Fair => "fair",
             Order::Name => "name",
             Order::Added => "added",
             Order::Updated => "updated",
             Order::Rank => "rank",
         }
     }
+}
 
-    pub(crate) fn of(key: &str) -> Order {
-        Order::ALL
-            .into_iter()
-            .find(|o| o.key() == key)
-            .unwrap_or(Order::Name)
+/// Letters and digits a name is sorted by: so many fit a [`name_key`].
+const KEY_CHARS: u32 = 12;
+
+/// Where `name` goes from A to Z, as a number: its first [`KEY_CHARS`]
+/// letters and digits, accents and case left aside, digits first and
+/// letters of other scripts after z (names alike in those keep the
+/// list's order). Twelve of 38 values fit 64 bits.
+pub(crate) fn name_key(name: &str) -> u64 {
+    let mut key = 0u64;
+    let mut taken = 0;
+    for value in name
+        .chars()
+        .flat_map(char::to_lowercase)
+        .filter_map(sort_value)
+    {
+        if taken == KEY_CHARS {
+            break;
+        }
+        key = key * 38 + value;
+        taken += 1;
+    }
+    key * 38u64.pow(KEY_CHARS - taken)
+}
+
+/// Where `c` (in lower case) sorts: 1 to 10 for digits, 11 to 36 for
+/// the letters (accented ones as their base letter), 37 for letters of
+/// other scripts; `None` for what is passed over (spaces, signs).
+fn sort_value(c: char) -> Option<u64> {
+    let c = match c {
+        'à'..='å' | 'æ' | 'ā' | 'ą' => 'a',
+        'ç' | 'ć' | 'č' => 'c',
+        'è'..='ë' | 'ē' | 'ę' | 'ě' => 'e',
+        'ì'..='ï' => 'i',
+        'ł' => 'l',
+        'ñ' | 'ń' | 'ň' => 'n',
+        'ò'..='ö' | 'ø' | 'œ' => 'o',
+        'ř' => 'r',
+        'ß' | 'ś' | 'š' => 's',
+        'ù'..='ü' | 'ů' => 'u',
+        'ý' | 'ÿ' => 'y',
+        'ź' | 'ż' | 'ž' => 'z',
+        c => c,
+    };
+    match c {
+        '0'..='9' => Some(1 + u64::from(c) - u64::from('0')),
+        'a'..='z' => Some(11 + u64::from(c) - u64::from('a')),
+        c if c.is_alphanumeric() => Some(37),
+        _ => None,
     }
 }
 
@@ -1030,8 +1204,14 @@ pub(crate) fn hit(storage: &dyn Storage, n: usize) -> Option<usize> {
 /// Takes the list fetched to `fetched`: its index, kept for the next
 /// visits. `None` (and the file gone) if it is no list this plugin reads.
 pub(crate) fn take(storage: &dyn Storage, fetched: &str, device: &Device<'_>) -> Option<Index> {
-    let fresh = [index_path(), offsets_path(), head_path()].map(|path| format!("{path}.part"));
-    let built = build(storage, fetched, [&fresh[0], &fresh[1], &fresh[2]], device);
+    let fresh = [index_path(), offsets_path(), sections_path(), head_path()]
+        .map(|path| format!("{path}.part"));
+    let built = build(
+        storage,
+        fetched,
+        [&fresh[0], &fresh[1], &fresh[3], &fresh[2]],
+        device,
+    );
     let _ = storage.remove(fetched);
     if !built {
         return None;
@@ -1040,7 +1220,7 @@ pub(crate) fn take(storage: &dyn Storage, fetched: &str, device: &Device<'_>) ->
     let _ = storage.remove(&head_path());
     for (from, to) in fresh
         .iter()
-        .zip([index_path(), offsets_path(), head_path()])
+        .zip([index_path(), offsets_path(), sections_path(), head_path()])
     {
         if paperpaw_sdk::files::move_to(storage, from, &to).is_err() {
             return None;

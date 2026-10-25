@@ -17,6 +17,7 @@
 extern crate alloc;
 
 mod catalog;
+mod letters;
 mod list;
 mod origin;
 mod page;
@@ -51,6 +52,7 @@ const PAGE_SCREEN: Id = Id::new_static("store.plugin");
 const VIEW_SCREEN: Id = Id::new_static("store.view");
 const SOURCE_SCREEN: Id = Id::new_static("store.source");
 const SHOTS_SCREEN: Id = Id::new_static("store.shots");
+const LETTERS_SCREEN: Id = Id::new_static("store.letters");
 /// The fonts browser's list, offered as the entry *Fonts*.
 pub(crate) const FONTS: Id = Id::new_static("fonts-browser.open");
 /// Fonts with larger sizes, from the reading settings: the fonts browser,
@@ -133,6 +135,11 @@ impl Plugin for Store {
             VIEW_SCREEN,
             "store.title",
             Box::new(|env, params| Box::new(view::ViewScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            LETTERS_SCREEN,
+            "store.letter",
+            Box::new(|env, params| Box::new(letters::LettersScreen::new(env, params))),
         ))?;
         r.add_screen(ScreenSpec::new(
             SOURCE_SCREEN,

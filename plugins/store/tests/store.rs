@@ -409,7 +409,8 @@ fn the_pages_of_a_library_with_a_key_keep_it() {
         )
         .unwrap();
     shopping.run(OPEN);
-    let call = shopping.request("https://example.org/p/plugins.json?key=abc&device=x4&lang=en");
+    let call =
+        shopping.request("https://example.org/p/plugins.json?key=abc&device=x4&lang=en&order=fair");
     shopping.answer(&call, 200, list("1.0.0").as_bytes());
     shopping.choose("Reading");
     shopping.choose("Airy");

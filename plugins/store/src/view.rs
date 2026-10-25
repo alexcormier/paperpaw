@@ -1,7 +1,9 @@
 //! A list of plugins: those of a group, those installed (those with an
-//! update first), the newest, or those a search found. A group's list can be
-//! ordered by name, newest first or most recently updated first; long
-//! lists can jump to a page. The plugins to show are picked through the
+//! update first), the newest, those a library picked for its start (a
+//! section), or those a search found. A group's list shows the library's
+//! fair order of the day where it has one, and can be ordered by name,
+//! newest first or most recently updated first; long lists can jump to a
+//! letter (from A to Z) and to a page. The plugins to show are picked through the
 //! index on the storage once, as the list opens or its order changes, and
 //! kept there; the screen holds only those of the page shown.
 
@@ -19,10 +21,11 @@ use paperpaw_sdk::{
     Screen, ask,
 };
 
-use crate::catalog::{self, Entry, Index, Order};
-use crate::list::{group_name, open_page};
+use crate::catalog::{self, Entry, Index, Order, SECTIONS, name_key};
+use crate::letters::LETTER;
+use crate::list::{group_name, open_page, section_name};
 use crate::room::Room;
-use crate::{DOWNLOADED, INSTALLER, queue, rows};
+use crate::{DOWNLOADED, INSTALLER, LETTERS_SCREEN, queue, rows};
 
 /// Parameters: which list, its order.
 const VIEW: &str = "view";
@@ -41,6 +44,8 @@ pub(crate) enum View {
     Group(usize),
     Installed,
     New,
+    /// A section of the library's start (of [`SECTIONS`]).
+    Section(usize),
     Search(String),
 }
 
@@ -50,6 +55,7 @@ impl View {
             View::Group(group) => alloc::format!("group:{group}"),
             View::Installed => "installed".to_string(),
             View::New => "new".to_string(),
+            View::Section(section) => alloc::format!("section:{section}"),
             View::Search(_) => "search".to_string(),
         };
         let params = Params::new().with(VIEW, view);
@@ -65,6 +71,12 @@ impl View {
             "installed" => View::Installed,
             "new" => View::New,
             "search" => View::Search(params.get(params::TEXT).unwrap_or_default().to_string()),
+            view if view.starts_with("section:") => View::Section(
+                view.strip_prefix("section:")
+                    .and_then(|s| s.parse().ok())
+                    .filter(|&s| s < SECTIONS.len())
+                    .unwrap_or(0),
+            ),
             _ => View::Group(
                 view.strip_prefix("group:")
                     .and_then(|g| g.parse().ok())
@@ -82,6 +94,8 @@ enum Top {
     Fonts,
     /// The order, to choose another.
     Sort,
+    /// Go to a letter, from A to Z.
+    Letter,
     /// Updates all plugins of the list that have an update.
     UpdateAll,
 }
@@ -128,7 +142,10 @@ impl ViewScreen {
         };
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(0, top, display.width, status.y.saturating_sub(top));
-        let order = Order::of(params.get(ORDER).unwrap_or_default());
+        let index = Index::kept(env.storage());
+        let order = index.as_ref().map_or(Order::Name, |index| {
+            index.order(params.get(ORDER).unwrap_or_default())
+        });
         let mut screen = Self {
             list: ListView::new(area, rows::height(&style)).focus_on_keys(env),
             status,
@@ -136,7 +153,7 @@ impl ViewScreen {
             header,
             view,
             order,
-            index: Index::kept(env.storage()),
+            index,
             top: Vec::new(),
             hits: 0,
             page: Vec::new(),
@@ -185,6 +202,19 @@ impl ViewScreen {
                 )
             }
             View::New => index.pick(storage, |_, _| Some(0), Order::Added, NEWEST),
+            View::Section(section) => {
+                // In the library's order: the first the highest.
+                let ids = index.section(storage, *section);
+                index.pick(
+                    storage,
+                    |_, e| {
+                        let at = ids.iter().position(|id| *id == e.id)?;
+                        Some((ids.len() - at) as u32)
+                    },
+                    Order::Rank,
+                    usize::MAX,
+                )
+            }
             View::Search(text) => index.search(storage, text),
         };
         self.top.clear();
@@ -196,6 +226,10 @@ impl ViewScreen {
                 }
                 if self.hits > 0 {
                     self.top.push(Top::Sort);
+                }
+                // More than a page: a letter is quicker than paging.
+                if self.hits > self.list.rows() {
+                    self.top.push(Top::Letter);
                 }
             }
             View::Installed if !updates.is_empty() => self.top.push(Top::UpdateAll),
@@ -250,8 +284,13 @@ impl ViewScreen {
         if let Some(&top) = self.top.get(row) {
             match top {
                 Top::Fonts => cx.command(Command::run(crate::FONTS)),
+                Top::Letter => {
+                    let params = Params::new().with(VIEW, self.view_key());
+                    cx.command(Command::OpenScreen(LETTERS_SCREEN, params));
+                }
                 Top::Sort => {
-                    let options: Vec<&str> = Order::ALL.iter().map(|o| o.key()).collect();
+                    let orders = self.index.as_ref().map_or(&[][..], Index::orders);
+                    let options: Vec<&str> = orders.iter().map(|o| o.key()).collect();
                     cx.command(
                         paperpaw_sdk::ask::choice(env.i18n().tr("store.sort"), &SORTED)
                             .options("store.order.", &options)
@@ -274,6 +313,43 @@ impl ViewScreen {
         if let Some((n, plugin)) = self.plugin(row) {
             cx.command(open_page(*n, plugin));
         }
+    }
+
+    /// What says which list this is, for a letter chosen for it.
+    fn view_key(&self) -> String {
+        self.view.params().get(VIEW).unwrap_or_default().to_string()
+    }
+
+    /// Shows the plugins from `letter` on, from A to Z: the first whose
+    /// name sorts at or after it, found by halving.
+    fn go_to_letter(&mut self, letter: &str, env: &Env<'_>) {
+        if self.order != Order::Name {
+            self.order = Order::Name;
+            self.pick(env);
+        }
+        let Some(index) = &self.index else {
+            return;
+        };
+        let storage = env.storage();
+        let target = name_key(letter);
+        let key_of = |hit: usize| {
+            catalog::hit(storage, hit)
+                .and_then(|n| index.entry(storage, n))
+                .map_or(u64::MAX, |entry| name_key(&entry.name))
+        };
+        let (mut low, mut high) = (0, self.hits);
+        while low < high {
+            let mid = (low + high) / 2;
+            if key_of(mid) < target {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+        let row = (self.top.len() + low).min(self.len().saturating_sub(1));
+        self.list.set_focus(row);
+        self.list.set_shown(true);
+        self.read_page(env);
     }
 
     /// Asks which page to go to.
@@ -299,6 +375,7 @@ impl ViewScreen {
             View::Group(group) => group_name(env, *group),
             View::Installed => env.i18n().tr("store.installed-list").to_string(),
             View::New => env.i18n().tr("store.new").to_string(),
+            View::Section(section) => section_name(env, *section),
             View::Search(text) => env
                 .i18n()
                 .format("store.search.title", &[("query", Arg::Str(text))]),
@@ -362,6 +439,11 @@ impl Screen for ViewScreen {
                         "circle-arrow-up",
                         env.i18n().tr("store.update-all"),
                         String::new(),
+                    ),
+                    Top::Letter => (
+                        "letter-case",
+                        env.i18n().tr("store.letter"),
+                        "›".to_string(),
                     ),
                 };
                 // Below the order of a long list: how to go to a page.
@@ -444,8 +526,16 @@ impl Screen for ViewScreen {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if let Some(picked) = SORTED.read(event, params) {
-            self.order = Order::of(&picked.option);
+        if let Some(typed) = LETTER.read(event, params) {
+            if typed.context.get(VIEW) == Some(self.view_key().as_str()) {
+                self.go_to_letter(&typed.text, &env);
+                self.redraw(cx);
+            }
+        } else if let Some(picked) = SORTED.read(event, params) {
+            self.order = self
+                .index
+                .as_ref()
+                .map_or(Order::Name, |index| index.order(&picked.option));
             self.list.set_focus(0);
             self.pick(&env);
             self.redraw(cx);

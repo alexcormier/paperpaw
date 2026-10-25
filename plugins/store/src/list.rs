@@ -1,6 +1,7 @@
 //! The store's start: *Search*, the plugins installed (with how many
-//! have an update), the newest, then the groups with how many plugins
-//! each has. Each opens a list of its own ([`crate::view`]); *Fonts* is
+//! have an update), what the library picked (recommended, new, popular,
+//! recently updated, to discover; the newest where it picks nothing), then
+//! the groups with how many plugins each has. Each opens a list of its own ([`crate::view`]); *Fonts* is
 //! in the list of looks. The list
 //! kept from the last visit shows at once, while a fresh one is fetched.
 //!
@@ -24,7 +25,7 @@ use paperpaw_sdk::{
     RefreshMode, Screen, ask,
 };
 
-use crate::catalog::{self, Entry, GROUPS, Index};
+use crate::catalog::{self, Entry, GROUPS, Index, SECTIONS};
 use crate::view::View;
 use crate::{CATALOG, PAGE_SCREEN, VIEW_SCREEN, rows};
 
@@ -50,6 +51,8 @@ enum Row {
     Search,
     Installed,
     New,
+    /// What the library picked (of [`SECTIONS`]).
+    Section(usize),
     Group(usize),
 }
 
@@ -59,10 +62,14 @@ impl Row {
             Row::Search => "search",
             Row::Installed => "circle-check",
             Row::New => "sparkles",
+            Row::Section(s) => SECTION_ICONS[s],
             Row::Group(g) => GROUP_ICONS[g],
         }
     }
 }
+
+/// The icons of the sections, as [`SECTIONS`].
+const SECTION_ICONS: [&str; 5] = ["star", "sparkles", "chart-bar", "circle-arrow-up", "bulb"];
 
 /// The icons of the groups, as [`GROUPS`].
 const GROUP_ICONS: [&str; 12] = [
@@ -87,6 +94,8 @@ struct Counts {
     groups: [usize; GROUPS.len()],
     installed: usize,
     updates: usize,
+    /// The plugins of each section this device can install.
+    sections: [usize; SECTIONS.len()],
 }
 
 pub(crate) struct ListScreen {
@@ -153,10 +162,23 @@ impl ListScreen {
                 counts.groups[group] += count;
             }
             let origins = paperpaw_sdk::install::Origins::read(env.storage());
+            // A few dozen ids at most: those the library picked.
+            let picked: Vec<Vec<alloc::string::String>> = (0..SECTIONS.len())
+                .map(|s| {
+                    if index.fair() && index.section_len(s) > 0 {
+                        index.section(env.storage(), s)
+                    } else {
+                        Vec::new()
+                    }
+                })
+                .collect();
             index.scan(env.storage(), &mut |_, entry: Entry| {
                 if entry.installed(env).is_some() {
                     counts.installed += 1;
                     counts.updates += usize::from(entry.newer_in(env, &origins));
+                }
+                for (count, ids) in counts.sections.iter_mut().zip(&picked) {
+                    *count += usize::from(ids.contains(&entry.id));
                 }
             });
         }
@@ -170,7 +192,14 @@ impl ListScreen {
         if counts.installed > 0 {
             self.rows.push(Row::Installed);
         }
-        self.rows.push(Row::New);
+        // What the library picked, where it picks; else the newest.
+        let picked: Vec<usize> = (0..SECTIONS.len())
+            .filter(|&s| counts.sections[s] > 0)
+            .collect();
+        if picked.is_empty() {
+            self.rows.push(Row::New);
+        }
+        self.rows.extend(picked.into_iter().map(Row::Section));
         self.first = self.rows.len();
         // The looks also without plugins of their own: *Fonts* is there.
         let fonts = env.actions().contains(crate::FONTS.as_str());
@@ -212,11 +241,16 @@ impl ListScreen {
             return self.redraw(cx);
         }
         let list = env.settings().read(&CATALOG);
-        let url = catalog::list_url(
-            list.trim(),
-            device,
-            env.i18n().language(),
-            crate::community(&env),
+        // In the library's fair order, with what it picks for a start;
+        // a library that knows neither sends its list as before.
+        let url = alloc::format!(
+            "{}&order=fair",
+            catalog::list_url(
+                list.trim(),
+                device,
+                env.i18n().language(),
+                crate::community(&env),
+            )
         );
         let mut request = HttpRequest::new("GET", &url, LOADED);
         request = request.save_to(catalog::list_part());
@@ -273,6 +307,7 @@ impl ListScreen {
             }
             Some(Row::Installed) => cx.command(open(View::Installed)),
             Some(Row::New) => cx.command(open(View::New)),
+            Some(Row::Section(section)) => cx.command(open(View::Section(section))),
             Some(Row::Group(group)) => cx.command(open(View::Group(group))),
             None => {
                 if self.retry() {
@@ -306,7 +341,7 @@ impl ListScreen {
             // The looks without plugins: only the fonts are there.
             Row::Group(group) if self.counts.groups[group] == 0 => "›".to_string(),
             Row::Group(group) => self.counts.groups[group].to_string(),
-            Row::Search | Row::New => "›".to_string(),
+            Row::Search | Row::New | Row::Section(_) => "›".to_string(),
         }
     }
 }
@@ -319,6 +354,12 @@ pub(crate) fn open_page(n: usize, plugin: &Entry) -> Command {
             .with(params::ID, plugin.id.clone())
             .with(ENTRY, n.to_string()),
     )
+}
+
+/// The name of section `section` (of [`SECTIONS`]).
+pub(crate) fn section_name(env: &Env<'_>, section: usize) -> alloc::string::String {
+    let key = format!("store.section.{}", SECTIONS[section]);
+    env.i18n().tr(&key).to_string()
 }
 
 /// The name of group `group`.
@@ -374,6 +415,7 @@ impl Screen for ListScreen {
                     Row::Search => env.i18n().tr("store.search"),
                     Row::Installed => env.i18n().tr("store.installed-list"),
                     Row::New => env.i18n().tr("store.new"),
+                    Row::Section(section) => &section_name(env, section),
                     Row::Group(group) => &group_name(env, group),
                 };
                 if row == Row::Installed && self.counts.updates > 0 {
