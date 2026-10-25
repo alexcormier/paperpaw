@@ -591,7 +591,9 @@ pub(crate) fn draw_note_line(
     canvas.describe(Role::Text, &as_shown(text, &lines, cut, &last), block);
 }
 
-/// `text` shortened with an ellipsis to fit `width` pixels.
+/// `text` shortened with an ellipsis to fit `width` pixels, its pairs
+/// kerned as [`FontHandle::measure`] sets them (a pair kerned apart, `f\`
+/// in the UI font, takes more than its advances).
 pub fn fit(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> String {
     if font.measure(size, text) <= width {
         return text.to_string();
@@ -599,13 +601,15 @@ pub fn fit(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> String {
     let ellipsis = font.measure(size, "…");
     let mut result = String::new();
     let mut used = 0.0;
+    let mut before = None;
     for c in text.chars() {
-        let w = font.advance(size, c);
-        if used + w + ellipsis > width {
+        let w = before.map_or(0.0, |b| font.kern(size, b, c)) + font.advance(size, c);
+        if used + w + font.kern(size, c, '…') + ellipsis > width {
             break;
         }
         used += w;
         result.push(c);
+        before = Some(c);
     }
     result.push('…');
     result

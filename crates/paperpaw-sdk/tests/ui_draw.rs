@@ -48,6 +48,23 @@ fn the_ui_font_and_icons_are_there() {
 
 // ---- Shortening -------------------------------------------------------
 
+/// A text shortened counts its pairs as they are set: the UI font kerns
+/// `f\` apart, so a text of such pairs takes more than its advances.
+#[test]
+fn shortening_counts_the_pairs_kerned_apart() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let font = style.font(&env).unwrap();
+    let size = style.text();
+    assert!(font.kern(size, 'f', '\\') > 1.0, "the pair the test needs");
+    let text = "f\\".repeat(40);
+    for width in [60.0, 120.0, 200.0, 333.0] {
+        let shown = ui::fit(&font, size, &text, width);
+        assert!(font.measure(size, &shown) <= width, "{width}: {shown}");
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 

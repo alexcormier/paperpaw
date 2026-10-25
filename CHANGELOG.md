@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- A text shortened to its room (`ui::fit`, rows' titles and values)
+  counts kerning as it is drawn: pairs set apart (`f\` in the UI font)
+  could take it up to a few pixels past its room, into the value beside
+  it.
+
 ## [0.5.0-beta.8] - 2026-10-25
 
 ### Changed
