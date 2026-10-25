@@ -34,6 +34,8 @@ struct Para {
     size: Option<u16>,
     /// The book's first-line indent, hundredths of an em.
     indent: Option<i16>,
+    /// The book's margins at the sides, hundredths of an em.
+    margins: (u16, u16),
 }
 
 /// Sections of paragraphs; in the source every paragraph ends with `\n`,
@@ -84,6 +86,7 @@ impl Document for Book {
                         .runs(para.runs.clone())
                         .align(para.align)
                         .indent(para.indent)
+                        .margins(para.margins.0, para.margins.1)
                         .size(para.size),
                 ));
             }
@@ -204,6 +207,7 @@ fn para() -> impl Strategy<Value = Para> {
                 align: Align::from_bits(align),
                 size,
                 indent: None,
+                margins: (0, 0),
             }
         })
 }
@@ -493,6 +497,7 @@ fn one_paragraph(text: &str, align: Align) -> Book {
             align,
             size: None,
             indent: None,
+            margins: (0, 0),
         }]],
         metadata: Metadata::default(),
     }
@@ -547,17 +552,22 @@ fn a_word_moved_to_the_next_line_still_fits_it() {
     }
 }
 
-/// A book's negative indent (a hanging first line) makes the first line
-/// wider than the others; what does not fit it is carried to the second
-/// line, which must still fit the box. Here "aaaaaaaaaaa" (11) comes on a
-/// line of 10.
+/// A book's negative indent (a hanging first line) hangs into the book's
+/// margin, never out of the box: the first line is wider than the
+/// others; what does not fit it is carried to the second line, which
+/// must still fit the box. Here "aaaaaaaaaaa" (11) comes on a line of 10.
 #[test]
 fn lines_after_a_hanging_first_line_fit_the_box() {
     let mut book = one_paragraph("aaaa-aaaaaaaaaaa", Align::Auto);
     book.sections[0][0].indent = Some(-50);
+    book.sections[0][0].margins = (50, 0);
     let cx = context(&book, 10.0, &PLAIN, false, &EVEN);
     let pages = paginate(&cx, 100.0, &book);
-    assert_eq!(pages[0].lines[0].x, -5.0, "the first line hangs");
+    assert_eq!(pages[0].lines[0].x, 0.0, "the first line hangs");
+    assert!(
+        pages[0].lines[1..].iter().all(|l| l.x > 0.0),
+        "the others in the margin"
+    );
     for line in &pages[0].lines[1..] {
         let right = line.x + line_width(line, EVEN);
         assert!(right <= cx.width, "{:?} ends at {right}", line.text);

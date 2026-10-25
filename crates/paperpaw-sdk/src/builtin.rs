@@ -712,6 +712,25 @@ pub mod settings {
     /// The book's own styles (an EPUB's CSS), see
     /// [`OpenOptions::publisher_styles`](crate::OpenOptions).
     pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("core.publisher-styles");
+    /// With [`PUBLISHER_STYLES`] on, which of the book's own styles are
+    /// followed, each on its own (see `layout::BookStyles`): its
+    /// alignment, indents, text sizes, space between paragraphs, fonts,
+    /// margins at the sides and distance between lines.
+    pub const BOOK_ALIGN: Setting<bool> = Setting::new("core.book-align");
+    pub const BOOK_INDENT: Setting<bool> = Setting::new("core.book-indent");
+    pub const BOOK_SIZES: Setting<bool> = Setting::new("core.book-sizes");
+    pub const BOOK_SPACING: Setting<bool> = Setting::new("core.book-spacing");
+    pub const BOOK_FONTS: Setting<bool> = Setting::new("core.book-fonts");
+    pub const BOOK_MARGINS: Setting<bool> = Setting::new("core.book-margins");
+    pub const BOOK_LINE_HEIGHT: Setting<bool> = Setting::new("core.book-line-height");
+    /// Space between letters, in percent of the text size (-5 to 20).
+    pub const LETTER_SPACING: Setting<i64> = Setting::new("core.letter-spacing");
+    /// How far [`INDENT`] indents first lines, in percent of the text size
+    /// (50 to 400).
+    pub const INDENT_SIZE: Setting<i64> = Setting::new("core.indent-size");
+    /// How much space [`PARAGRAPH_SPACING`] leaves, in percent of a line
+    /// (20 to 150).
+    pub const PARAGRAPH_SPACE: Setting<i64> = Setting::new("core.paragraph-space");
     /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or gone to
     /// ([`FOOTNOTES_JUMP`]) when their mark is followed.
     pub const FOOTNOTES: Setting<Text> = Setting::new("core.footnotes");

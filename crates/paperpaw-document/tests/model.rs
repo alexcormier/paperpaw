@@ -79,7 +79,7 @@ fn runs_for(text: &str, cuts: &[(prop::sample::Index, u8)]) -> Vec<Run> {
         .map(|pair| Run {
             start: pair[0].0 as u32,
             end: pair[1].0 as u32,
-            style: TextStyle::from_bits(pair[0].1 % 4 + 1),
+            style: TextStyle::from_bits(u16::from(pair[0].1 % 4 + 1)),
         })
         .collect()
 }
@@ -223,13 +223,18 @@ proptest! {
     }
 
     #[test]
-    fn styles_survive_their_bits_and_combine_like_sets(a in any::<u8>(), b in any::<u8>(), c in any::<u8>()) {
+    fn styles_survive_their_bits_and_combine_like_sets(a in 0..0x1000u16, b in 0..0x1000u16, c in 0..0x1000u16) {
         let (a, b, c) = (TextStyle::from_bits(a), TextStyle::from_bits(b), TextStyle::from_bits(c));
         prop_assert_eq!(TextStyle::from_bits(a.bits()), a);
         let ab = a.union(b);
         prop_assert_eq!(ab.bold(), a.bold() || b.bold());
         prop_assert_eq!(ab.italic(), a.italic() || b.italic());
         prop_assert_eq!(ab.small_caps(), a.small_caps() || b.small_caps());
+        prop_assert_eq!(ab.superscript(), a.superscript() || b.superscript());
+        prop_assert_eq!(ab.underline(), a.underline() || b.underline());
+        prop_assert_eq!(ab.strike(), a.strike() || b.strike());
+        prop_assert!(!a.without(TextStyle::UNDERLINE).underline());
+        prop_assert_eq!(a.without(TextStyle::UNDERLINE).family(), a.family());
         prop_assert_eq!(ab.family(), if b.family() != 0 { b.family() } else { a.family() });
         prop_assert_eq!(a.union(a), a);
         prop_assert_eq!(ab.union(c), a.union(b.union(c)));

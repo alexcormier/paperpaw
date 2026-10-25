@@ -4,11 +4,13 @@
 //! more complex (descendants, pseudo-classes, attributes) is skipped, as
 //! are `@` rules except `@font-face`. Properties: `text-align`,
 //! `font-weight`, `font-style`, `font-family`, `display: none`,
-//! `text-indent`, `font-size` and the vertical `margin` and `padding`.
-//! That covers how
-//! books mark centred title pages, bold and italic classes, hidden
-//! elements, their embedded fonts, paragraphs without indent and the
-//! space around blocks.
+//! `text-indent` (also negative, a hanging indent), `font-size`,
+//! `line-height`, `margin` and `padding` on all sides, `vertical-align`
+//! (`super`, `sub`) and `text-decoration` (`underline`,
+//! `line-through`). That covers how books mark centred title pages, bold
+//! and italic classes, hidden elements, their embedded fonts, paragraphs
+//! without indent or hanging, the space around blocks, block quotes and
+//! poems set in, footnote marks and struck words.
 //!
 //! The parser is fed text in chunks and keeps only the rule being read.
 
@@ -42,6 +44,46 @@ pub(crate) struct Props {
     pub padding_bottom: Option<u16>,
     /// `font-size`.
     pub size: Option<FontSize>,
+    /// `margin-left`, `margin-right`, `padding-left` and `padding-right`,
+    /// in hundredths of an em (negative ones as none).
+    pub margin_left: Option<u16>,
+    pub margin_right: Option<u16>,
+    pub padding_left: Option<u16>,
+    pub padding_right: Option<u16>,
+    /// `line-height`, in percent of the text size.
+    pub line_height: Option<u16>,
+    /// `vertical-align`: raised, lowered or on the baseline.
+    pub vertical: Option<Vertical>,
+    /// `text-decoration`: a line under, a line through.
+    pub underline: Option<bool>,
+    pub strike: Option<bool>,
+}
+
+/// Where text sits on its line (`vertical-align`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Vertical {
+    Baseline,
+    Super,
+    Sub,
+}
+
+impl Vertical {
+    fn code(self) -> u8 {
+        match self {
+            Vertical::Baseline => 0,
+            Vertical::Super => 1,
+            Vertical::Sub => 2,
+        }
+    }
+
+    fn from_code(code: u8) -> Option<Vertical> {
+        match code {
+            0 => Some(Vertical::Baseline),
+            1 => Some(Vertical::Super),
+            2 => Some(Vertical::Sub),
+            _ => None,
+        }
+    }
 }
 
 /// A `font-size`, in percent.
@@ -88,6 +130,23 @@ impl Props {
         self.padding_top = other.padding_top.or(self.padding_top);
         self.padding_bottom = other.padding_bottom.or(self.padding_bottom);
         self.size = other.size.or(self.size);
+        self.margin_left = other.margin_left.or(self.margin_left);
+        self.margin_right = other.margin_right.or(self.margin_right);
+        self.padding_left = other.padding_left.or(self.padding_left);
+        self.padding_right = other.padding_right.or(self.padding_right);
+        self.line_height = other.line_height.or(self.line_height);
+        self.vertical = other.vertical.or(self.vertical);
+        self.underline = other.underline.or(self.underline);
+        self.strike = other.strike.or(self.strike);
+    }
+
+    /// The margin and padding at the start and the end of the lines, in
+    /// hundredths of an em.
+    pub fn sides(&self) -> (u16, u16) {
+        (
+            sum(self.margin_left, self.padding_left).unwrap_or(0),
+            sum(self.margin_right, self.padding_right).unwrap_or(0),
+        )
     }
 
     /// Reads declarations such as `text-align: center; font-weight: bold`;
@@ -135,10 +194,33 @@ impl Props {
                 "font-family" => props.family = Some(family_number(&value, families)),
                 "font-size" => props.size = font_size(&value).or(props.size),
                 "text-indent" => {
-                    // Negative indents hang out of a margin, which is not
-                    // supported: no indent instead.
-                    let indent = length(&value).map(|l| l.clamp(0, MAX_INDENT) as i16);
+                    // Negative: a hanging first line (into the margin).
+                    let indent = length(&value).map(|l| l.clamp(-MAX_INDENT, MAX_INDENT) as i16);
                     props.indent = indent.or(props.indent);
+                }
+                "margin-left" => props.margin_left = side(&value).or(props.margin_left),
+                "margin-right" => props.margin_right = side(&value).or(props.margin_right),
+                "padding-left" => props.padding_left = side(&value).or(props.padding_left),
+                "padding-right" => props.padding_right = side(&value).or(props.padding_right),
+                "line-height" => props.line_height = line_height(&value).or(props.line_height),
+                "vertical-align" => {
+                    props.vertical = match value.as_str() {
+                        "super" | "text-top" => Some(Vertical::Super),
+                        "sub" | "text-bottom" => Some(Vertical::Sub),
+                        "baseline" => Some(Vertical::Baseline),
+                        _ => props.vertical,
+                    }
+                }
+                "text-decoration" | "text-decoration-line" => {
+                    if value.contains("none") {
+                        (props.underline, props.strike) = (Some(false), Some(false));
+                    }
+                    if value.contains("underline") {
+                        props.underline = Some(true);
+                    }
+                    if value.contains("line-through") {
+                        props.strike = Some(true);
+                    }
                 }
                 "margin-top" => props.margin_top = space(&value).or(props.margin_top),
                 "margin-bottom" => props.margin_bottom = space(&value).or(props.margin_bottom),
@@ -147,17 +229,25 @@ impl Props {
                     props.padding_bottom = space(&value).or(props.padding_bottom);
                 }
                 "margin" | "padding" => {
-                    // One to four values: the first is the top, the third
-                    // (or else the first) the bottom.
+                    // One to four values: top, right, bottom, left; the
+                    // bottom as the top and the left as the right where
+                    // they are not given, the right as the top.
                     let values: Vec<&str> = value.split_whitespace().collect();
                     let top = values.first().and_then(|v| space(v));
                     let bottom = values.get(2).or(values.first()).and_then(|v| space(v));
+                    let right = values.get(1).or(values.first());
+                    let left = values.get(3).or(right).and_then(|v| side(v));
+                    let right = right.and_then(|v| side(v));
                     if property.trim().eq_ignore_ascii_case("margin") {
                         props.margin_top = top.or(props.margin_top);
                         props.margin_bottom = bottom.or(props.margin_bottom);
+                        props.margin_left = left.or(props.margin_left);
+                        props.margin_right = right.or(props.margin_right);
                     } else {
                         props.padding_top = top.or(props.padding_top);
                         props.padding_bottom = bottom.or(props.padding_bottom);
+                        props.padding_left = left.or(props.padding_left);
+                        props.padding_right = right.or(props.padding_right);
                     }
                 }
                 _ => {}
@@ -187,6 +277,12 @@ impl Props {
             ('n', self.margin_bottom),
             ('p', self.padding_top),
             ('q', self.padding_bottom),
+            ('L', self.margin_left),
+            ('R', self.margin_right),
+            ('P', self.padding_left),
+            ('Q', self.padding_right),
+            ('H', self.line_height),
+            ('v', self.vertical.map(|v| u16::from(v.code()))),
         ] {
             if let Some(value) = value {
                 out.push_str(&alloc::format!(" {key}{value}"));
@@ -197,6 +293,8 @@ impl Props {
             ('i', self.italic),
             ('c', self.small_caps),
             ('h', self.hidden),
+            ('u', self.underline),
+            ('s', self.strike),
         ] {
             if let Some(value) = value {
                 out.push(' ');
@@ -226,6 +324,14 @@ impl Props {
                 'n' => props.margin_bottom = item[1..].parse().ok(),
                 'p' => props.padding_top = item[1..].parse().ok(),
                 'q' => props.padding_bottom = item[1..].parse().ok(),
+                'L' => props.margin_left = item[1..].parse().ok(),
+                'R' => props.margin_right = item[1..].parse().ok(),
+                'P' => props.padding_left = item[1..].parse().ok(),
+                'Q' => props.padding_right = item[1..].parse().ok(),
+                'H' => props.line_height = item[1..].parse().ok(),
+                'v' => props.vertical = item[1..].parse().ok().and_then(Vertical::from_code),
+                'u' => props.underline = Some(flag),
+                's' => props.strike = Some(flag),
                 'r' => props.size = item[1..].parse().ok().map(FontSize::Relative),
                 'z' => props.size = item[1..].parse().ok().map(FontSize::Absolute),
                 _ => {}
@@ -238,6 +344,40 @@ impl Props {
 /// The largest indent and space taken from a book, in hundredths of an
 /// em, so a stray value cannot push text off the page.
 const MAX_INDENT: i32 = 500;
+/// The largest margin at a side, in hundredths of an em (the layout also
+/// keeps it to a quarter of a line).
+const MAX_SIDE: i32 = 1000;
+
+/// A margin or padding at a side, in hundredths of an em: a percentage
+/// of the width taken as a quarter of an em per percent (a line holds
+/// some 25 to 40 ems); negative ones as none.
+fn side(value: &str) -> Option<u16> {
+    let value = value.trim();
+    let side = match value.strip_suffix('%') {
+        Some(percent) => percent
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .map(|p| (p * 25.0) as i32),
+        None if value == "auto" => Some(0),
+        None => length(value),
+    };
+    side.map(|s| s.clamp(0, MAX_SIDE) as u16)
+}
+
+/// A `line-height`, in percent of the text size: a number (`1.5`), a
+/// percentage or a length; `normal` and what is not understood as none.
+fn line_height(value: &str) -> Option<u16> {
+    let value = value.trim();
+    let percent = if let Some(percent) = value.strip_suffix('%') {
+        percent.trim().parse::<f32>().ok()?
+    } else if let Ok(number) = value.parse::<f32>() {
+        number * 100.0
+    } else {
+        length(value)? as f32
+    };
+    (percent > 0.0).then(|| (percent as i32).clamp(50, 400) as u16)
+}
 const MAX_SPACE: i32 = 800;
 
 /// A CSS length in hundredths of an em: `em` and `rem` as they are, `pt`
@@ -832,10 +972,41 @@ mod tests {
         );
         let h = r.props("p", "head");
         assert_eq!((h.padding_top, h.padding_bottom), (Some(600), Some(100)));
-        // Hanging indents need a margin we do not support: none instead.
+        // A hanging indent, into the margin at the left.
         let hang = r.props("div", "hang");
-        assert_eq!(hang.indent, Some(0));
+        assert_eq!(hang.indent, Some(-150));
         assert_eq!((hang.margin_top, hang.margin_bottom), (Some(50), Some(100)));
+        assert_eq!((hang.margin_left, hang.margin_right), (Some(200), Some(0)));
+        assert_eq!(hang.sides(), (200, 0));
+        let copy = Rules::decode(&r.encode());
+        assert_eq!(copy.rules, r.rules);
+    }
+
+    #[test]
+    fn reads_sides_line_heights_and_marks() {
+        let r = rules(
+            ".poem { margin-left: 3em; padding-right: 10%; line-height: 1.6 }              .tight { line-height: 120% } .px { line-height: 24px } .normal { line-height: normal }              .two { margin: 1em 2em } .neg { margin-left: -2em }              .up { vertical-align: super } .down { vertical-align: sub }              .u { text-decoration: underline } .gone { text-decoration: line-through underline }              .plain { text-decoration: none }",
+        );
+        let p = |class| r.props("p", class);
+        assert_eq!(p("poem").sides(), (300, 250));
+        assert_eq!(p("poem").line_height, Some(160));
+        assert_eq!(p("tight").line_height, Some(120));
+        assert_eq!(p("px").line_height, Some(150));
+        assert_eq!(p("normal").line_height, None);
+        // Two values: top and bottom, then the sides.
+        assert_eq!(p("two").sides(), (200, 200));
+        assert_eq!(p("neg").margin_left, Some(0));
+        assert_eq!(p("up").vertical, Some(Vertical::Super));
+        assert_eq!(p("down").vertical, Some(Vertical::Sub));
+        assert_eq!((p("u").underline, p("u").strike), (Some(true), None));
+        assert_eq!(
+            (p("gone").underline, p("gone").strike),
+            (Some(true), Some(true))
+        );
+        assert_eq!(
+            (p("plain").underline, p("plain").strike),
+            (Some(false), Some(false))
+        );
         let copy = Rules::decode(&r.encode());
         assert_eq!(copy.rules, r.rules);
     }

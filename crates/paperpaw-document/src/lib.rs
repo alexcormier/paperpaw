@@ -141,18 +141,17 @@ pub struct ImageRef {
     pub height: u32,
 }
 
-/// The character style of a run of text: bold, italic, small capitals
-/// and the font family embedded in the document, if any (see
-/// [`Document::fonts`]).
+/// The character style of a run of text: bold, italic, small capitals,
+/// superscript or subscript, underlined or struck through, and the font
+/// family embedded in the document, if any (see [`Document::fonts`]).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct TextStyle(u8);
+pub struct TextStyle(u16);
 
 /// Most embedded font families a document can use.
 pub const MAX_FAMILIES: u8 = 31;
 
-/// The bits of bold, italic and small capitals; the family is in the
-/// others.
-const FLAGS: u8 = 0b1000_0011;
+/// The bits of everything but the family, which is in bits 2 to 6.
+const FLAGS: u16 = 0b1111_1000_0011;
 
 impl TextStyle {
     pub const REGULAR: TextStyle = TextStyle(0);
@@ -161,6 +160,14 @@ impl TextStyle {
     pub const BOLD_ITALIC: TextStyle = TextStyle(3);
     /// Small capitals: lower case letters set as smaller capitals.
     pub const SMALL_CAPS: TextStyle = TextStyle(0b1000_0000);
+    /// Set smaller and raised, e.g. a footnote's mark.
+    pub const SUPERSCRIPT: TextStyle = TextStyle(1 << 8);
+    /// Set smaller and lowered, e.g. a chemical formula's numbers.
+    pub const SUBSCRIPT: TextStyle = TextStyle(1 << 9);
+    /// A line under the text.
+    pub const UNDERLINE: TextStyle = TextStyle(1 << 10);
+    /// A line through the text.
+    pub const STRIKE: TextStyle = TextStyle(1 << 11);
 
     pub const fn bold(self) -> bool {
         self.0 & 1 != 0
@@ -174,16 +181,38 @@ impl TextStyle {
         self.0 & Self::SMALL_CAPS.0 != 0
     }
 
+    pub const fn superscript(self) -> bool {
+        self.0 & Self::SUPERSCRIPT.0 != 0
+    }
+
+    pub const fn subscript(self) -> bool {
+        self.0 & Self::SUBSCRIPT.0 != 0
+    }
+
+    pub const fn underline(self) -> bool {
+        self.0 & Self::UNDERLINE.0 != 0
+    }
+
+    pub const fn strike(self) -> bool {
+        self.0 & Self::STRIKE.0 != 0
+    }
+
+    /// This style without what `other` sets (its family aside), e.g.
+    /// without the lines a reader chose not to see.
+    pub const fn without(self, other: TextStyle) -> TextStyle {
+        TextStyle(self.0 & !(other.0 & FLAGS))
+    }
+
     /// The embedded font family (1 to [`MAX_FAMILIES`]); 0 for the
     /// reader's font.
     pub const fn family(self) -> u8 {
-        (self.0 >> 2) & MAX_FAMILIES
+        ((self.0 >> 2) & MAX_FAMILIES as u16) as u8
     }
 
     /// This style in embedded family `family` (0: the reader's font).
     pub const fn with_family(self, family: u8) -> TextStyle {
         let family = if family > MAX_FAMILIES { 0 } else { family };
-        TextStyle((self.0 & FLAGS) | (family << 2))
+        TextStyle((self.0 & FLAGS) | ((family as u16) << 2))
     }
 
     /// Both styles combined, e.g. bold text in an italic paragraph; the
@@ -198,11 +227,11 @@ impl TextStyle {
     }
 
     /// For storing styles compactly.
-    pub const fn bits(self) -> u8 {
+    pub const fn bits(self) -> u16 {
         self.0
     }
 
-    pub const fn from_bits(bits: u8) -> TextStyle {
+    pub const fn from_bits(bits: u16) -> TextStyle {
         TextStyle(bits)
     }
 }
@@ -272,8 +301,9 @@ pub struct Block {
     /// run is regular.
     pub runs: Vec<Run>,
     pub align: Align,
-    /// The book's indent of the first line, in hundredths of an em;
-    /// `None` leaves it to the reader.
+    /// The book's indent of the first line, in hundredths of an em
+    /// (negative: it hangs out into [`Block::margins`]); `None` leaves it
+    /// to the reader.
     pub indent: Option<i16>,
     /// The book's space above the block, in hundredths of an em; `None`
     /// leaves it to the reader.
@@ -281,6 +311,13 @@ pub struct Block {
     /// The book's text size, in percent of body text; `None` leaves it to
     /// the reader (body text, or by heading level).
     pub size: Option<u16>,
+    /// The book's margins at the start and the end of the lines (left and
+    /// right in left-to-right text), in hundredths of an em: a block
+    /// quote's, a poem's, a hanging indent's room. 0 for none.
+    pub margins: (u16, u16),
+    /// The book's distance between lines, in percent of the text size;
+    /// `None` leaves it to the reader.
+    pub line_height: Option<u16>,
     /// The image of an [`BlockKind::Image`] block.
     pub image: Option<ImageRef>,
 }
@@ -300,6 +337,8 @@ impl Block {
             indent: None,
             space: None,
             size: None,
+            margins: (0, 0),
+            line_height: None,
             image: None,
         }
     }
@@ -336,6 +375,16 @@ impl Block {
 
     pub fn size(mut self, size: impl Into<Option<u16>>) -> Self {
         self.size = size.into();
+        self
+    }
+
+    pub fn margins(mut self, start: u16, end: u16) -> Self {
+        self.margins = (start, end);
+        self
+    }
+
+    pub fn line_height(mut self, line_height: impl Into<Option<u16>>) -> Self {
+        self.line_height = line_height.into();
         self
     }
 
@@ -720,6 +769,8 @@ mod tests {
             indent: None,
             space: None,
             size: None,
+            margins: (0, 0),
+            line_height: None,
             image: None,
         };
         block.replace(0..3, "Mister");
@@ -762,6 +813,8 @@ mod tests {
             indent: None,
             space: None,
             size: None,
+            margins: (0, 0),
+            line_height: None,
             image: None,
         }
     }

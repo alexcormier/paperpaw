@@ -1781,8 +1781,124 @@ static READING: [SettingSpec; 19] = [
     .description("core.setting.scope-only.help"),
 ];
 
+/// Shown while the book's own styles are followed at all.
+static BOOK_STYLE: SettingExtra = SettingExtra::new().section(group_sections::PAGE).shown_if(
+    Id::new_static(settings::PUBLISHER_STYLES.static_str()),
+    "true",
+);
+static LETTERS: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .section(group_sections::FONT)
+    .slider();
+static INDENT_SIZE: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(25)
+    .section(group_sections::PAGE)
+    .shown_if(Id::new_static(settings::INDENT.static_str()), "true");
+static PARAGRAPH_SPACE: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(10)
+    .section(group_sections::PAGE)
+    .shown_if(
+        Id::new_static(settings::PARAGRAPH_SPACING.static_str()),
+        "true",
+    );
+
+/// A switch for one of the book's own styles.
+const fn book_style(id: &'static str, title: &'static str, on: bool) -> SettingSpec {
+    SettingSpec::switch(id, title, on, groups::READING)
+        .advanced()
+        .scoped()
+        .with_extra(&BOOK_STYLE)
+}
+
+/// Which of the book's own styles are followed, and the finer measures
+/// of the type: letter spacing, the indent's and the paragraph space's
+/// size. Their defaults keep pages as they were.
+static TYPE: [SettingSpec; 10] = [
+    book_style(
+        settings::BOOK_ALIGN.static_str(),
+        "core.setting.book-align",
+        true,
+    )
+    .description("core.setting.book-align.help"),
+    book_style(
+        settings::BOOK_INDENT.static_str(),
+        "core.setting.book-indent",
+        true,
+    )
+    .description("core.setting.book-indent.help"),
+    book_style(
+        settings::BOOK_SIZES.static_str(),
+        "core.setting.book-sizes",
+        true,
+    )
+    .description("core.setting.book-sizes.help"),
+    book_style(
+        settings::BOOK_SPACING.static_str(),
+        "core.setting.book-spacing",
+        true,
+    )
+    .description("core.setting.book-spacing.help"),
+    book_style(
+        settings::BOOK_FONTS.static_str(),
+        "core.setting.book-fonts",
+        true,
+    )
+    .description("core.setting.book-fonts.help"),
+    book_style(
+        settings::BOOK_MARGINS.static_str(),
+        "core.setting.book-margins",
+        true,
+    )
+    .description("core.setting.book-margins.help"),
+    book_style(
+        settings::BOOK_LINE_HEIGHT.static_str(),
+        "core.setting.book-line-height",
+        false,
+    )
+    .description("core.setting.book-line-height.help"),
+    SettingSpec::number(
+        settings::LETTER_SPACING.static_str(),
+        "core.setting.letter-spacing",
+        -5,
+        20,
+        0,
+        groups::READING,
+    )
+    .with_extra(&LETTERS)
+    .advanced()
+    .scoped()
+    .description("core.setting.letter-spacing.help"),
+    SettingSpec::number(
+        settings::INDENT_SIZE.static_str(),
+        "core.setting.indent-size",
+        50,
+        400,
+        150,
+        groups::READING,
+    )
+    .with_extra(&INDENT_SIZE)
+    .advanced()
+    .scoped()
+    .description("core.setting.indent-size.help"),
+    SettingSpec::number(
+        settings::PARAGRAPH_SPACE.static_str(),
+        "core.setting.paragraph-space",
+        20,
+        150,
+        60,
+        groups::READING,
+    )
+    .with_extra(&PARAGRAPH_SPACE)
+    .advanced()
+    .scoped()
+    .description("core.setting.paragraph-space.help"),
+];
+
 fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_settings(&READING)
+    r.add_settings(&READING)?;
+    r.add_settings(&TYPE)
 }
 
 /// The roles of the marks every reader draws: highlights, links, a

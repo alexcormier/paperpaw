@@ -8,6 +8,20 @@ change the plugin SDK.
 
 ### Added
 
+- A book's own styles one by one: with *Publisher's formatting* on, its
+  alignment, indents, text sizes, spacing, fonts, margins and line
+  spacing can each be left to the reader (its line spacing is by
+  default). SDK: `layout::BookStyles`, `Style::book`, settings
+  `core.book-*`.
+- More of a book's formatting comes along: margins at the sides (block
+  quotes, poems, lists set in), hanging indents, line heights,
+  superscript and subscript, underline and strike, numbered and nested
+  lists, and a table's rows each on a line of their own. SDK:
+  `Block::margins`, `Block::line_height`, `TextStyle::SUPERSCRIPT`,
+  `SUBSCRIPT`, `UNDERLINE` and `STRIKE` (a `TextStyle` has 16 bits now).
+- Letter spacing, and the size of indents and of the space between
+  paragraphs, as settings (`core.letter-spacing`, `core.indent-size`,
+  `core.paragraph-space`); their defaults keep pages as they were.
 - The emulator starts online with `--wifi online` (also given before
   `--stdio`, for the devices it starts; or `"wifi": "online"` in
   `start`): the X4s on USB, their radio on and in

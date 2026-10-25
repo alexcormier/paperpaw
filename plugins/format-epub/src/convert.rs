@@ -3,13 +3,16 @@
 //!
 //! - `<n>.txt`: records of an 8-byte header (kind, heading level, flags,
 //!   alignment, text length and number of style runs as u16), the block's
-//!   UTF-8 text and its style runs (start and end as u16, style as u8).
+//!   UTF-8 text and its style runs (start, end and style as u16).
 //! - `<n>.idx`: for every record, the offset of its text as u32 (for
 //!   binary search), the book's indent as i16 and the book's space above
 //!   as u16, in hundredths of an em ([`NO_INDENT`] and [`NO_SPACE`] if it
-//!   sets none), and its text size as u16 in percent of body text (0 if it
-//!   sets none). Kept apart from the text so positions in it stay the same
-//!   when more is stored per block.
+//!   sets none), its text size as u16 in percent of body text (0 if it
+//!   sets none), its margins at the start and the end of the lines as u16
+//!   each, in hundredths of an em, and its distance between lines as u16
+//!   in percent of its text size (0 if it sets none). Kept apart from the
+//!   text so positions in it stay the same when more is stored per
+//!   block.
 //! - `<n>.anc`: `id<TAB>offset` lines for anchors (table of contents).
 //! - `<n>.lnk`: `start<TAB>end<TAB>href` lines for links, in order: `href`
 //!   as an archive path with its fragment (`text/ch2.xhtml#note3`), or as
@@ -59,12 +62,16 @@ use crate::package::error;
 /// Size of a record header.
 pub(crate) const HEADER: u32 = 8;
 /// Bytes per record in `<n>.idx`.
-pub(crate) const INDEX: u32 = 10;
+pub(crate) const INDEX: u32 = 16;
 /// A record without the book's indent or space.
 pub(crate) const NO_INDENT: i16 = i16::MIN;
 pub(crate) const NO_SPACE: u16 = u16::MAX;
 /// Size of a style run after a record's text.
-pub(crate) const RUN: usize = 5;
+pub(crate) const RUN: usize = 6;
+/// The most a block is set in from each side by the elements around it,
+/// in hundredths of an em (the layout also keeps it to a quarter of a
+/// line).
+const MAX_MARGIN: u16 = 1000;
 /// Longer paragraphs are split into continued blocks; no record's text
 /// is longer.
 pub(crate) const LIMIT: usize = 4000;
@@ -200,6 +207,15 @@ struct Frame {
     indent: Option<i16>,
     /// The book's text size in percent of body text, inherited.
     size: Option<u16>,
+    /// How far its blocks are set in from the start and the end of the
+    /// lines: its own margin and padding at the sides and those of the
+    /// blocks around it, in hundredths of an em.
+    margins: (u16, u16),
+    /// The book's distance between lines, in percent of the text size,
+    /// inherited.
+    line_height: Option<u16>,
+    /// The items of a numbered list (`<ol>`) so far.
+    numbered: Option<u32>,
     /// The margin and padding below the element, taken over by the next
     /// block.
     after: (Option<u16>, Option<u16>),
@@ -256,9 +272,16 @@ fn element_props(
 ) -> Props {
     let mut props = Props::default();
     match tag {
-        "b" | "strong" => props.bold = Some(true),
+        "b" | "strong" | "th" => props.bold = Some(true),
         "i" | "em" | "cite" | "dfn" | "var" => props.italic = Some(true),
         "center" => props.align = Some(Align::Center),
+        "sup" => props.vertical = Some(css::Vertical::Super),
+        "sub" => props.vertical = Some(css::Vertical::Sub),
+        "u" | "ins" => props.underline = Some(true),
+        "s" | "strike" | "del" => props.strike = Some(true),
+        // Set in as browsers set them in, if a little less.
+        "blockquote" => (props.margin_left, props.margin_right) = (Some(150), Some(150)),
+        "ul" | "ol" | "dd" => props.margin_left = Some(150),
         _ => {}
     }
     let classes = attrs.get("class").unwrap_or_default();
@@ -272,14 +295,24 @@ fn element_props(
     props
 }
 
-/// `style` with bold, italic, small capitals and the font family as
-/// `props` sets them.
+/// `style` with bold, italic, small capitals, raised or lowered, the
+/// lines under or through and the font family as `props` sets them.
 fn styled(style: TextStyle, props: &Props) -> TextStyle {
     let mut bits = style.bits();
+    let (sup, sub) = match props.vertical {
+        Some(css::Vertical::Super) => (Some(true), Some(false)),
+        Some(css::Vertical::Sub) => (Some(false), Some(true)),
+        Some(css::Vertical::Baseline) => (Some(false), Some(false)),
+        None => (None, None),
+    };
     for (flag, on) in [
         (TextStyle::BOLD, props.bold),
         (TextStyle::ITALIC, props.italic),
         (TextStyle::SMALL_CAPS, props.small_caps),
+        (TextStyle::SUPERSCRIPT, sup),
+        (TextStyle::SUBSCRIPT, sub),
+        (TextStyle::UNDERLINE, props.underline),
+        (TextStyle::STRIKE, props.strike),
     ] {
         match on {
             Some(true) => bits |= flag.bits(),
@@ -353,6 +386,10 @@ struct Converter<'a> {
     indent: Option<i16>,
     /// The book's text size of the current block, set likewise.
     size: Option<u16>,
+    /// The book's margins at the sides of the current block and its
+    /// distance between lines, set likewise.
+    margins: (u16, u16),
+    line_height: Option<u16>,
     /// The book's space above the next block, as in CSS: the largest of
     /// the margins met since the last block (margins collapse) plus all
     /// paddings.
@@ -412,6 +449,8 @@ impl Converter<'_> {
             self.align.get_or_insert(align);
             self.indent = self.stack.last().and_then(|f| f.indent);
             self.size = self.stack.last().and_then(|f| f.size);
+            self.margins = self.stack.last().map_or((0, 0), |f| f.margins);
+            self.line_height = self.stack.last().and_then(|f| f.line_height);
             self.block_path.clone_from(&self.path);
         }
         let start = self.text.len() as u32;
@@ -667,6 +706,22 @@ impl Converter<'_> {
             Some(size) => Some(size.of(parent_size.unwrap_or(100))),
             None => parent_size,
         };
+        // Blocks are set in by their own margins at the sides and those of
+        // the blocks around them; text elements are not.
+        let parent_margins = self.stack.last().map_or((0, 0), |f| f.margins);
+        let margins = match is_block(&tag) || matches!(tag.as_str(), "li" | "pre") {
+            true => {
+                let (start, end) = props.sides();
+                (
+                    parent_margins.0.saturating_add(start).min(MAX_MARGIN),
+                    parent_margins.1.saturating_add(end).min(MAX_MARGIN),
+                )
+            }
+            false => parent_margins,
+        };
+        let line_height = props
+            .line_height
+            .or_else(|| self.stack.last().and_then(|f| f.line_height));
         if self.stack.len() >= MAX_DEPTH {
             // Read as part of the deepest element kept.
             self.overflow += 1;
@@ -747,6 +802,14 @@ impl Converter<'_> {
             align: props.align.unwrap_or(align),
             indent,
             size,
+            margins,
+            line_height,
+            numbered: (tag == "ol").then(|| {
+                attrs
+                    .get("start")
+                    .and_then(|s| s.trim().parse::<u32>().ok())
+                    .map_or(0, |s| s.saturating_sub(1))
+            }),
             after: (props.margin_bottom, props.padding_bottom),
             hides,
         });
@@ -784,10 +847,27 @@ impl Converter<'_> {
                 self.flush();
             }
             "li" => {
-                self.push_str("• ");
+                // Numbered in a numbered list, the nearest list's.
+                let list = self
+                    .stack
+                    .iter_mut()
+                    .rev()
+                    .find(|f| matches!(f.tag.as_str(), "ol" | "ul"));
+                match list.and_then(|f| f.numbered.as_mut()) {
+                    Some(number) => {
+                        *number = number.saturating_add(1);
+                        let mark = alloc::format!("{number}. ");
+                        self.push_str(&mark);
+                    }
+                    None => self.push_str("• "),
+                }
             }
             "td" | "th" => {
-                self.space = true;
+                // A row's cells on its line, set apart.
+                if !self.text.is_empty() {
+                    self.push_str(" · ");
+                }
+                self.space = false;
                 self.space_origin = None;
             }
             "pre" => {
@@ -1034,6 +1114,8 @@ impl Converter<'_> {
         self.align = None;
         self.indent = None;
         self.size = None;
+        self.margins = (0, 0);
+        self.line_height = None;
         self.kind = BlockKind::Paragraph;
         self.continues = false;
         self.space = false;
@@ -1098,6 +1180,10 @@ impl Converter<'_> {
         self.index.extend_from_slice(&space.to_le_bytes());
         let size = self.size.filter(|&s| s != 100).unwrap_or(0);
         self.index.extend_from_slice(&size.to_le_bytes());
+        self.index.extend_from_slice(&self.margins.0.to_le_bytes());
+        self.index.extend_from_slice(&self.margins.1.to_le_bytes());
+        let line_height = self.line_height.unwrap_or(0);
+        self.index.extend_from_slice(&line_height.to_le_bytes());
         if self.index.len() >= FLUSH_SMALL {
             self.write_index();
         }
@@ -1128,7 +1214,7 @@ impl Converter<'_> {
             self.out
                 .extend_from_slice(&(run.start as u16).to_le_bytes());
             self.out.extend_from_slice(&(run.end as u16).to_le_bytes());
-            self.out.push(run.style.bits());
+            self.out.extend_from_slice(&run.style.bits().to_le_bytes());
         }
         self.length += HEADER + len as u32 + (runs.len() * RUN) as u32;
         self.drop_front(len);
@@ -1434,6 +1520,8 @@ pub(crate) fn convert(
         align: None,
         indent: None,
         size: None,
+        margins: (0, 0),
+        line_height: None,
         margin: None,
         padding: None,
         stack: Vec::new(),
