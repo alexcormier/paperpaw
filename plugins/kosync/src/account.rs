@@ -162,6 +162,7 @@ impl AccountScreen {
         match row {
             Row::Server => cx.command(
                 ask::text(env.i18n().tr("kosync.server"), &SERVER_ENTERED)
+                    .url()
                     .initial(server(&env))
                     .command(),
             ),

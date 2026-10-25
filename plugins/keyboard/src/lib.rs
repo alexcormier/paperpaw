@@ -5,19 +5,28 @@
 //! (see [`slots::KEYBOARD`]). It is an overlay at the bottom of the screen
 //! with a text field and the keys, used by tapping or with the buttons:
 //! left and right move along a row, page forward and back (or up and
-//! down) between rows, confirm presses the key, back cancels and a long
-//! press on confirm finishes.
+//! down) between rows, confirm presses the key and back cancels.
 //!
 //! - Layouts: the setting *Keyboard layouts* chooses one or more of the
 //!   built-in ones (see `layouts`); by default the UI language's, which
 //!   a translation brings under `keyboard.letters`. With several, a key
 //!   with the layout's code (e.g. `DE`) switches between them.
-//! - Accents and other variants: a long press on a letter (with buttons:
-//!   a long press on confirm) shows its variants, e.g. `é è ê ë` for `e`,
-//!   and German quotes on `"`. German has ten keys a row, as English, and
-//!   types ä, ö, ü and ß so (first on a, o, u and s); with buttons, the
-//!   field says so on those letters. The setting *Umlaut keys* gives them
-//!   keys of their own instead.
+//! - Capitals: *Shift* types the next letter as a capital; pressed twice
+//!   in a row it locks them (the key filled) until pressed again. The
+//!   setting *Automatic capitals* (off by default) starts a text and each
+//!   sentence with one, but not in passwords, numbers, web addresses and
+//!   e-mail addresses (by the question's mode, see `ask::TextQuestion`).
+//! - A long press on a letter (with buttons: a long press on confirm)
+//!   shows its capital first, chosen, then its variants, e.g. `E é è ê ë`
+//!   for `e`, and German quotes on `"`. German has ten keys a row, as
+//!   English, and types ä, ö, ü and ß so (after the capital on a, o, u and
+//!   s); with buttons, the field says so on those letters. The setting
+//!   *Umlaut keys* gives them keys of their own instead. A long press on
+//!   confirm elsewhere finishes.
+//! - With buttons the rows are those of a computer's keyboard whatever
+//!   the size, which sets how high the keys and their letters are; a row
+//!   is split only where its letters would not fit their keys. Left and
+//!   right go round a row, up and down keep to the column one came along.
 //! - When there is text on the clipboard, *Paste* in the text field
 //!   inserts it, and so does a long press in the field (with buttons: up
 //!   from the first row).
@@ -79,6 +88,8 @@ pub const KEY_SIZE: Setting<Text> = Setting::new("keyboard.size");
 pub const SIZE_SMALL: &str = "keyboard.size.small";
 pub const SIZE_MEDIUM: &str = "keyboard.size.medium";
 pub const SIZE_LARGE: &str = "keyboard.size.large";
+/// Whether a text and each sentence start with a capital by themselves.
+pub const AUTO_CAPITALS: Setting<bool> = Setting::new("keyboard.auto-capitals");
 const CHOOSE_SCREEN: Id = Id::new_static("keyboard.choose");
 /// The clipboard's text, asked for by *Paste*.
 const PASTED: Event<Typed> = Event::new("keyboard.pasted");
@@ -143,7 +154,7 @@ pub struct Keyboard;
 
 /// The layouts to type with, chosen on their screen.
 static CHOSEN: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_SCREEN);
-static SETTINGS: [SettingSpec; 4] = [
+static SETTINGS: [SettingSpec; 5] = [
     SettingSpec::new(
         paperpaw_sdk::Id::new_static(LAYOUTS_SETTING.static_str()),
         "keyboard.setting.layouts",
@@ -176,6 +187,13 @@ static SETTINGS: [SettingSpec; 4] = [
         groups::SYSTEM,
     )
     .description("keyboard.setting.size.help"),
+    SettingSpec::switch(
+        AUTO_CAPITALS.static_str(),
+        "keyboard.setting.auto-capitals",
+        false,
+        groups::SYSTEM,
+    )
+    .description("keyboard.setting.auto-capitals.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -247,18 +265,54 @@ enum Key {
 /// A key and its width in units (a letter is 2).
 type Slot = (Key, u8);
 
-/// The least width of a letter's key where keys are chosen with buttons,
-/// in tenths of a millimetre, by the keyboard's size ([`KEY_SIZE`]): at
-/// Large room for the letter and the focus frame round it, so that on a
-/// narrow screen (the X4) the rows are split into short ones, few presses
-/// along each; at Medium the longest row is split; at Small the rows are
-/// whole, as where keys are tapped: a lower keyboard, more presses.
-fn least_key_tenths(size: &str) -> u32 {
+/// How high keys chosen with buttons are, and how large their letters, in
+/// hundredths of a row and of the text, by the keyboard's size
+/// ([`KEY_SIZE`]). Their rows stay a computer keyboard's whatever the size:
+/// the letters grow less, as ten keys a row leave them little room on a
+/// narrow screen (the X4).
+fn button_scale(size: &str) -> (u32, u32) {
     match size {
-        SIZE_SMALL => LEAST_TAP_MM * 10,
-        SIZE_LARGE => 60,
-        _ => 50,
+        SIZE_SMALL => (100, 100),
+        SIZE_LARGE => (150, 110),
+        _ => (125, 105),
     }
+}
+
+/// The least width of a letter's key, in pixels: tapped, what a finger
+/// hits; chosen with buttons, room for its letter (`scale` hundredths of
+/// the text) inside the focus frame, so that a row is split only where its
+/// letters would not fit.
+fn least_letter(env: &Env<'_>, style: &UiStyle, touch: bool, scale: u32) -> u32 {
+    if touch {
+        return env.metrics().tenth_mm(LEAST_TAP_MM * 10);
+    }
+    let px = style.text() * scale as f32 / 100.0;
+    let widest = style.font(env).map_or(px, |font| font.measure(px, "M"));
+    // Inside the room the focus frame leaves (see `key_inset`).
+    widest as u32 + 2 * 3 * ui::button_border(style)
+}
+
+/// Two presses of *Shift* this close, in milliseconds, lock capitals.
+const DOUBLE_MS: u64 = 800;
+
+/// What *Shift* does to the next letters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shift {
+    Off,
+    /// The next letter is a capital.
+    Once,
+    /// Every letter is, until *Shift* is pressed again.
+    Locked,
+}
+
+/// Whether the next letter after `text` starts a sentence: at its start,
+/// or after ". ", "! ", "? " or a new line.
+fn sentence_starts(text: &str) -> bool {
+    let trimmed = text.trim_end_matches(' ');
+    if trimmed.is_empty() || text.ends_with('\n') {
+        return true;
+    }
+    trimmed.len() < text.len() && trimmed.ends_with(['.', '!', '?'])
 }
 
 /// The least width of a letter's key where keys are tapped, in
@@ -443,11 +497,23 @@ struct KeyboardScreen {
     current: Rc<Cell<usize>>,
     /// Shown as dots (mode `password`).
     password: bool,
-    /// The next letter is a capital.
-    shift: bool,
+    /// Capitals: the next letter, or all.
+    shift: Shift,
+    /// When *Shift* was pressed for one capital, for a second press that
+    /// locks them.
+    shifted_at: Option<u64>,
+    /// Capitals start the text and its sentences ([`AUTO_CAPITALS`], only
+    /// in plain text: not in passwords, numbers, addresses).
+    auto: bool,
     rows: Vec<Vec<Slot>>,
     /// The key chosen with buttons, as `(row, index)`; none while tapping.
     focus: Option<(usize, usize)>,
+    /// Where across the keys the focus came along a row, kept while it
+    /// moves up and down (rows of other widths would let it drift).
+    column: Option<u32>,
+    /// How large the keys' letters are, in hundredths of the text (with
+    /// buttons, by the size).
+    letters: u32,
     /// The buttons in the text field (*Phone*, *Paste*) where they work,
     /// left to right.
     buttons: Vec<(FieldButton, Rect)>,
@@ -480,15 +546,14 @@ impl KeyboardScreen {
         }
         let display = env.device().display;
         let touch = env.device().input.touch;
-        // As many units in a row as leave a letter (2 units) its least
-        // width: where keys are tapped the size sets their height, chosen
-        // with buttons their width.
-        let least = if touch {
-            LEAST_TAP_MM * 10
+        let (high, scale) = if touch {
+            (100, 100)
         } else {
-            least_key_tenths(env.settings().read(&KEY_SIZE))
+            button_scale(env.settings().read(&KEY_SIZE))
         };
-        let unit = (env.metrics().tenth_mm(least) / 2).max(1);
+        // As many units in a row as leave a letter (2 units) its least
+        // width.
+        let unit = (least_letter(env, &style, touch, scale) / 2).max(1);
         let most = (u32::from(display.width) - 2 * u32::from(style.margin())) / unit;
         let letters = &layouts[current.get()].1;
         // As high as the layer with the most rows needs, so that turning
@@ -517,7 +582,9 @@ impl KeyboardScreen {
                 room,
             )
         } else {
-            (touch_row, ui::edge_room(&style, touch_row))
+            // Chosen with buttons, a row high, higher by the size.
+            let high = (u32::from(touch_row) * high / 100) as u16;
+            (high, ui::edge_room(&style, high))
         };
         // On the screen whatever the rows: keys get smaller first.
         let room_for_keys = display
@@ -533,17 +600,22 @@ impl KeyboardScreen {
             display.width,
             keys_height,
         );
+        let mode = params.get(params::MODE).unwrap_or("text");
         let mut screen = Self {
             title: params.get(params::TITLE).unwrap_or_default().to_string(),
             text: params.get(params::TEXT).unwrap_or_default().to_string(),
             params: params.clone(),
-            password: params.get(params::MODE) == Some("password"),
+            password: mode == "password",
             layer,
             layouts,
             current,
-            shift: false,
+            shift: Shift::Off,
+            shifted_at: None,
+            auto: env.settings().read(&AUTO_CAPITALS) && mode == "text",
             rows,
             focus: ui::focus_shown(env).then_some((0, 0)),
+            column: None,
+            letters: scale,
             buttons: Vec::new(),
             popup: None,
             style,
@@ -557,6 +629,7 @@ impl KeyboardScreen {
             shape: env.settings().read(&KEY_SHAPE).to_string(),
         };
         screen.buttons = screen.field_buttons(env);
+        screen.shift = screen.auto_shift();
         // With buttons alone a text is typed a letter at a time: the focus
         // starts on *Phone*, where it can be typed on a phone instead.
         let phone = screen
@@ -690,13 +763,33 @@ impl KeyboardScreen {
 
     /// `c` as typed now: a capital after *Shift* (if it has one capital).
     fn cased(&self, c: char) -> char {
-        if !self.shift {
-            return c;
+        if self.shift == Shift::Off {
+            c
+        } else {
+            capital(c)
         }
-        let mut upper = c.to_uppercase();
-        match (upper.next(), upper.next()) {
-            (Some(u), None) => u,
-            _ => c,
+    }
+
+    /// What *Shift* is after the text changed: locked capitals stay, else
+    /// one where a sentence starts and capitals come by themselves.
+    fn auto_shift(&self) -> Shift {
+        match self.shift {
+            Shift::Locked => Shift::Locked,
+            _ if self.auto && self.layer == Layer::Letters && sentence_starts(&self.text) => {
+                Shift::Once
+            }
+            _ => Shift::Off,
+        }
+    }
+
+    /// Sets *Shift* after the text changed; the keys again where their
+    /// letters change.
+    fn shift_after_typing(&mut self, cx: &mut Cx<'_, '_>) {
+        let shift = self.auto_shift();
+        if shift != self.shift {
+            self.shift = shift;
+            self.shifted_at = None;
+            self.redraw(cx, self.keys);
         }
     }
 
@@ -723,10 +816,7 @@ impl KeyboardScreen {
             );
             cx.command(Command::Notify(full));
         }
-        if self.shift {
-            self.shift = false;
-            self.redraw(cx, self.keys);
-        }
+        self.shift_after_typing(cx);
         self.changed(cx);
     }
 
@@ -741,11 +831,19 @@ impl KeyboardScreen {
             Key::Space => return self.insert(" ", cx),
             Key::Delete => {
                 if self.text.pop().is_some() {
+                    self.shift_after_typing(cx);
                     return self.changed(cx);
                 }
             }
             Key::Shift => {
-                self.shift = !self.shift;
+                // One capital, locked when pressed again at once, then off.
+                let now = env.now().0;
+                let soon = self.shifted_at.is_some_and(|at| now <= at + DOUBLE_MS);
+                (self.shift, self.shifted_at) = match self.shift {
+                    Shift::Off => (Shift::Once, Some(now)),
+                    Shift::Once if soon => (Shift::Locked, None),
+                    _ => (Shift::Off, None),
+                };
                 self.redraw(cx, self.keys);
             }
             Key::Layer(layer) => {
@@ -768,7 +866,8 @@ impl KeyboardScreen {
     /// The keys again, after the layer or layout changed.
     fn rebuild(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
         let _ = env;
-        self.shift = false;
+        self.shift = Shift::Off;
+        self.shift = self.auto_shift();
         let letters = self.layouts[self.current.get()].1.clone();
         self.rows = rows(&letters, self.layer, self.layouts.len() > 1, self.most);
         if let Some((row, index)) = self.focus.filter(|(row, _)| *row != PASTE_ROW) {
@@ -816,9 +915,19 @@ impl KeyboardScreen {
             .find(|(base, _)| c.to_lowercase().eq(core::iter::once(*base)))
             .map_or("", |(_, variants)| variants.as_str());
         let builtin = layouts::variants(c).unwrap_or_default();
+        // First the letter in the other case, chosen: its capital (small
+        // while capitals are on) is a long press away.
+        let other = if self.shift == Shift::Off {
+            capital(c)
+        } else {
+            small(c)
+        };
         let mut chars: Vec<char> = Vec::new();
+        if other != self.cased(c) {
+            chars.push(other);
+        }
         for v in own.chars().chain(builtin.chars()).map(|v| self.cased(v)) {
-            if !chars.contains(&v) && chars.len() < 2 * layouts::MAX_VARIANTS {
+            if !chars.contains(&v) && chars.len() <= 2 * layouts::MAX_VARIANTS {
                 chars.push(v);
             }
         }
@@ -916,23 +1025,17 @@ impl KeyboardScreen {
             } else {
                 return false;
             }
-        } else if *a == actions::LEFT || *a == actions::PREVIOUS {
-            match index.checked_sub(1) {
-                Some(index) => (row, index),
-                None if *a == actions::PREVIOUS => {
-                    let row = row.checked_sub(1).unwrap_or(last_row);
-                    (row, self.rows[row].len() - 1)
-                }
-                None => (row, self.rows[row].len() - 1),
-            }
-        } else if *a == actions::RIGHT || *a == actions::NEXT {
-            if index + 1 < self.rows[row].len() {
-                (row, index + 1)
-            } else if *a == actions::NEXT {
-                (if row == last_row { 0 } else { row + 1 }, 0)
-            } else {
-                (row, 0)
-            }
+        } else if [
+            actions::LEFT,
+            actions::PREVIOUS,
+            actions::RIGHT,
+            actions::NEXT,
+        ]
+        .contains(a)
+        {
+            let to = self.along(row, index, a);
+            self.column = Some(self.center(to.0, to.1));
+            to
         } else if up {
             match row.checked_sub(1) {
                 Some(above) => self.nearest(row, index, above),
@@ -966,10 +1069,41 @@ impl KeyboardScreen {
             .any(|(base, _)| c.to_lowercase().eq(core::iter::once(*base)))
     }
 
-    /// The key of row `to` nearest below the centre of key `index` of `row`.
+    /// Where left, right, next or previous go from key `index` of `row`:
+    /// round the row; next and previous on to the next row.
+    fn along(&self, row: usize, index: usize, a: &Id) -> (usize, usize) {
+        let last_row = self.rows.len() - 1;
+        if *a == actions::LEFT || *a == actions::PREVIOUS {
+            match index.checked_sub(1) {
+                Some(index) => (row, index),
+                None if *a == actions::PREVIOUS => {
+                    let row = row.checked_sub(1).unwrap_or(last_row);
+                    (row, self.rows[row].len() - 1)
+                }
+                None => (row, self.rows[row].len() - 1),
+            }
+        } else if index + 1 < self.rows[row].len() {
+            (row, index + 1)
+        } else if *a == actions::NEXT {
+            (if row == last_row { 0 } else { row + 1 }, 0)
+        } else {
+            (row, 0)
+        }
+    }
+
+    /// The middle of key `index` of `row`, across.
+    fn center(&self, row: usize, index: usize) -> u32 {
+        let area = self.key_area(row, index);
+        u32::from(area.x) + u32::from(area.width) / 2
+    }
+
+    /// The key of row `to` below the column the focus keeps (see
+    /// `column`), else below the middle of key `index` of `row`.
     fn nearest(&self, row: usize, index: usize, to: usize) -> (usize, usize) {
-        let from = self.key_area(row, index);
-        let center = u32::from(from.x) + u32::from(from.width) / 2;
+        let center = match self.column {
+            Some(column) if row != PASTE_ROW && to != PASTE_ROW => column,
+            _ => self.center(row, index),
+        };
         let at = (0..self.rows[to].len())
             .find(|&i| self.key_area(to, i).right() > center)
             .unwrap_or(self.rows[to].len() - 1);
@@ -1122,7 +1256,12 @@ impl KeyboardScreen {
     fn key_style(&self, height: u16) -> UiStyle {
         let mut style = self.style;
         if !self.touch {
-            return style;
+            // Ten narrow keys a row: soft corners, not round ends, leave
+            // their letters the whole width, however high they are.
+            return style
+                .with_text(style.text() * self.letters as f32 / 100.0)
+                .with_pill(false)
+                .with_corner((style.text() / 4.0) as u16);
         }
         match self.shape.as_str() {
             SHAPE_ROUND => {
@@ -1146,14 +1285,14 @@ impl KeyboardScreen {
         let focused = self.focus == Some((row, index));
         // Buttons as everywhere. Tapped, they fill their place but for a
         // seam, the focused one (after a button was used) smaller by its
-        // focus frame, which stays in its place; chosen with buttons, as
-        // high as buttons are, with room for the frame.
+        // focus frame, which stays in its place; chosen with buttons, they
+        // fill it but for the room the frame takes, higher by the size.
         let frame = ui::button_border(&style) * 3;
         let pad = if focused { frame } else { self.key_inset() } as u16;
         let h = if self.touch {
             area.height.saturating_sub(2 * pad)
         } else {
-            ui::button_height(&style, area)
+            area.height.saturating_sub(2 * frame as u16)
         };
         let r = Rect::new(
             area.x + pad,
@@ -1164,9 +1303,9 @@ impl KeyboardScreen {
         // The key's own style: its shape.
         let style = self.key_style(r.height);
         let mut ui = ui::Ui::new(ui.canvas(), env, &style);
-        // Shift while on, and *OK* always: the key that ends typing stands
-        // out.
-        let active = (key == Key::Shift && self.shift) || key == Key::Done;
+        // Shift while capitals are locked (one capital, the letters show
+        // it), and *OK* always: the key that ends typing stands out.
+        let active = (key == Key::Shift && self.shift == Shift::Locked) || key == Key::Done;
         let name = match key {
             Key::Shift => "keyboard.shift",
             Key::Delete => "keyboard.delete",
@@ -1240,6 +1379,24 @@ impl KeyboardScreen {
     }
 }
 
+/// `c`'s capital, where it has one of its own.
+fn capital(c: char) -> char {
+    let mut upper = c.to_uppercase();
+    match (upper.next(), upper.next()) {
+        (Some(u), None) => u,
+        _ => c,
+    }
+}
+
+/// `c` small, where it has one small letter of its own.
+fn small(c: char) -> char {
+    let mut lower = c.to_lowercase();
+    match (lower.next(), lower.next()) {
+        (Some(l), None) => l,
+        _ => c,
+    }
+}
+
 /// An arrow pointing up (*Shift*), centred at `(x, y)`.
 fn arrow_up(canvas: &mut Canvas<'_>, x: i32, y: i32, size: i32, color: Color) {
     let half = size / 2;
@@ -1308,7 +1465,8 @@ impl Screen for KeyboardScreen {
             return Handled::Yes;
         }
         if held(action) {
-            // A long press on confirm: the variants of a letter, else done.
+            // A long press on confirm: a letter's capital and variants,
+            // else done.
             let opened = self
                 .focus
                 .is_some_and(|(row, index)| self.open_variants(row, index, cx));

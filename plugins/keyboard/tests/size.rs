@@ -1,7 +1,7 @@
 //! The keyboard's size (`keyboard.size`) on the X4 Pro and the Boox Go 7:
 //! larger sizes give higher keys, no size goes below a finger's least
-//! key or past half the screen, Medium is the keyboard as before, and
-//! with buttons only the size changes nothing.
+//! key or past half the screen, Medium is the keyboard as before; with
+//! buttons only the size makes keys higher and the rows stay whole.
 
 #![allow(
     clippy::unwrap_used,
@@ -203,13 +203,11 @@ fn medium_is_the_keyboard_as_before() {
     }
 }
 
-/// Keys chosen with buttons: the size sets how many a row holds. Large
-/// splits the rows into short ones (few presses along each, the X4's
-/// keyboard as before), Medium splits the longest row only, Small keeps
-/// them whole, as where keys are tapped: a lower keyboard. Their height
-/// stays a row's.
+/// Keys chosen with buttons: the rows stay a computer keyboard's at
+/// every size (qwertyuiop, asdfghjkl, zxcvbnm whole), and the size makes
+/// the keys higher.
 #[test]
-fn the_size_sets_how_many_keys_a_row_has_with_buttons() {
+fn with_buttons_the_size_makes_keys_higher_in_whole_rows() {
     // The letters' rows, by the top of their keys.
     let rows = |parts: &[Part]| {
         let mut tops: Vec<u16> = parts
@@ -225,19 +223,12 @@ fn the_size_sets_how_many_keys_a_row_has_with_buttons() {
         sized(X4, "keyboard.size.medium"),
         sized(X4, "keyboard.size.large"),
     );
-    assert_eq!(rows(&small), 3, "qwertyuiop, asdfghjkl, zxcvbnm whole");
-    assert!(rows(&small) < rows(&medium) && rows(&medium) < rows(&large));
-    // Small is as low as the keyboard on touch screens of that width
-    // would let it be; Large is the highest, its keys the widest.
-    assert!(height(X4, &small) < height(X4, &medium) && height(X4, &medium) < height(X4, &large));
-    assert!(key(&small, "q").area.width < key(&large, "q").area.width);
     for parts in [&small, &medium, &large] {
-        assert_eq!(
-            key(parts, "q").area.height,
-            key(&large, "q").area.height,
-            "a row high"
-        );
+        assert_eq!(rows(parts), 3, "qwertyuiop, asdfghjkl, zxcvbnm whole");
     }
+    let high = |parts: &[Part]| key(parts, "q").area.height;
+    assert!(high(&small) < high(&medium) && high(&medium) < high(&large));
+    assert!(height(X4, &small) < height(X4, &medium) && height(X4, &medium) < height(X4, &large));
 }
 
 #[test]

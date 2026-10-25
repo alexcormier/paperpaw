@@ -71,6 +71,18 @@ impl TextQuestion {
         self
     }
 
+    /// A web address: typed as it is, never with capitals of its own.
+    pub fn url(mut self) -> Self {
+        self.params.set(params::MODE, "url");
+        self
+    }
+
+    /// An e-mail address: typed as it is, never with capitals of its own.
+    pub fn email(mut self) -> Self {
+        self.params.set(params::MODE, "email");
+        self
+    }
+
     /// Answers on each change too, with [`Typed::typing`] set, e.g. for a
     /// list that filters as the reader types; the last answer, when the
     /// reader is done, has it unset.

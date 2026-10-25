@@ -212,10 +212,10 @@ impl SetupScreen {
                     paperpaw_sdk::ask::text(env.i18n().tr(row.title(self.service)), &ENTERED)
                         .initial(initial)
                         .with(FIELD, row.field());
-                let question = if row == Row::Password {
-                    question.password()
-                } else {
-                    question
+                let question = match row {
+                    Row::Password => question.password(),
+                    Row::Address => question.url(),
+                    _ => question,
                 };
                 cx.command(question.command());
             }

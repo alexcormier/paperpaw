@@ -311,7 +311,8 @@ pub mod params {
     /// Text, e.g. entered on the keyboard.
     pub const TEXT: &str = "text";
     /// What kind of text a keyboard asks for: `text` (the default),
-    /// `number` or `password` (shown as dots).
+    /// `number`, `password` (shown as dots), `url` or `email` (typed as
+    /// they are, never with capitals of the keyboard's own).
     pub const MODE: &str = "mode";
     /// The event a screen emits with its result, e.g. the keyboard's text.
     pub const REPLY: &str = "reply";

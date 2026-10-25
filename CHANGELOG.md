@@ -6,6 +6,27 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- The keyboard locks capitals with *Shift* pressed twice in a row (the
+  key filled until pressed again), and a long press on a letter offers
+  its capital first, chosen: with buttons a long press and Select type
+  it. *Automatic capitals* (off by default) starts a text and each
+  sentence with one, not in passwords, numbers and addresses.
+- SDK: `ask::TextQuestion::url()` and `email()` ask for a web or e-mail
+  address (modes `url` and `email`), typed as it is. The browser,
+  catalogs, news, KOReader sync, Joplin, Wallabag and the statistics'
+  sync ask for their addresses so.
+
+### Changed
+
+- With buttons alone (the X4) the keyboard keeps a computer keyboard's
+  rows at every size (qwertyuiop above asdfghjkl); the size makes keys
+  higher and their letters larger, and a row is split only where its
+  letters would not fit. Up and down keep to the column one came along.
+  Typing takes about as many presses as before (627 against 633 for the
+  sample texts in `plugins/keyboard/tests/presses.rs`), capitals fewer.
+
 ## [0.5.0-beta.7] - 2026-10-25
 
 ### Added

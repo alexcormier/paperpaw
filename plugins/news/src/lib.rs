@@ -557,6 +557,7 @@ impl FeedsScreen {
         if self.is_add(row) {
             cx.command(
                 ask::text(env.i18n().tr("news.address"), &ADDED)
+                    .url()
                     .initial("https://")
                     .command(),
             );
