@@ -29,7 +29,6 @@ paperpaw_json::stream::Event
 paperpaw_layout::Face
 paperpaw_layout::LineRun
 paperpaw_layout::PageImage
-paperpaw_layout::PageLine
 paperpaw_native::Api
 paperpaw_native::Chip
 paperpaw_native::Entry
