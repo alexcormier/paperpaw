@@ -37,7 +37,9 @@ pub paperpaw_document::Block::end: u32
 pub paperpaw_document::Block::image: core::option::Option<paperpaw_document::ImageRef>
 pub paperpaw_document::Block::indent: core::option::Option<i16>
 pub paperpaw_document::Block::kind: paperpaw_document::BlockKind
+pub paperpaw_document::Block::line_height: core::option::Option<u16>
 pub paperpaw_document::Block::map: paperpaw_document::OffsetMap
+pub paperpaw_document::Block::margins: (u16, u16)
 pub paperpaw_document::Block::runs: alloc::vec::Vec<paperpaw_document::Run>
 pub paperpaw_document::Block::size: core::option::Option<u16>
 pub paperpaw_document::Block::space: core::option::Option<u16>
@@ -48,7 +50,9 @@ pub fn paperpaw_document::Block::align(self, paperpaw_document::Align) -> Self
 pub fn paperpaw_document::Block::continues(self, bool) -> Self
 pub fn paperpaw_document::Block::image(self, impl core::convert::Into<core::option::Option<paperpaw_document::ImageRef>>) -> Self
 pub fn paperpaw_document::Block::indent(self, impl core::convert::Into<core::option::Option<i16>>) -> Self
+pub fn paperpaw_document::Block::line_height(self, impl core::convert::Into<core::option::Option<u16>>) -> Self
 pub fn paperpaw_document::Block::map(self, paperpaw_document::OffsetMap) -> Self
+pub fn paperpaw_document::Block::margins(self, u16, u16) -> Self
 pub fn paperpaw_document::Block::new(paperpaw_document::BlockKind, u32, u32, alloc::string::String) -> Self
 pub fn paperpaw_document::Block::runs(self, alloc::vec::Vec<paperpaw_document::Run>) -> Self
 pub fn paperpaw_document::Block::size(self, impl core::convert::Into<core::option::Option<u16>>) -> Self
@@ -109,14 +113,23 @@ pub const paperpaw_document::TextStyle::BOLD_ITALIC: paperpaw_document::TextStyl
 pub const paperpaw_document::TextStyle::ITALIC: paperpaw_document::TextStyle
 pub const paperpaw_document::TextStyle::REGULAR: paperpaw_document::TextStyle
 pub const paperpaw_document::TextStyle::SMALL_CAPS: paperpaw_document::TextStyle
-pub const fn paperpaw_document::TextStyle::bits(self) -> u8
+pub const paperpaw_document::TextStyle::STRIKE: paperpaw_document::TextStyle
+pub const paperpaw_document::TextStyle::SUBSCRIPT: paperpaw_document::TextStyle
+pub const paperpaw_document::TextStyle::SUPERSCRIPT: paperpaw_document::TextStyle
+pub const paperpaw_document::TextStyle::UNDERLINE: paperpaw_document::TextStyle
+pub const fn paperpaw_document::TextStyle::bits(self) -> u16
 pub const fn paperpaw_document::TextStyle::bold(self) -> bool
 pub const fn paperpaw_document::TextStyle::family(self) -> u8
-pub const fn paperpaw_document::TextStyle::from_bits(u8) -> paperpaw_document::TextStyle
+pub const fn paperpaw_document::TextStyle::from_bits(u16) -> paperpaw_document::TextStyle
 pub const fn paperpaw_document::TextStyle::italic(self) -> bool
 pub const fn paperpaw_document::TextStyle::small_caps(self) -> bool
+pub const fn paperpaw_document::TextStyle::strike(self) -> bool
+pub const fn paperpaw_document::TextStyle::subscript(self) -> bool
+pub const fn paperpaw_document::TextStyle::superscript(self) -> bool
+pub const fn paperpaw_document::TextStyle::underline(self) -> bool
 pub const fn paperpaw_document::TextStyle::union(self, paperpaw_document::TextStyle) -> paperpaw_document::TextStyle
 pub const fn paperpaw_document::TextStyle::with_family(self, u8) -> paperpaw_document::TextStyle
+pub const fn paperpaw_document::TextStyle::without(self, paperpaw_document::TextStyle) -> paperpaw_document::TextStyle
 pub struct paperpaw_document::TocEntry
 pub paperpaw_document::TocEntry::at: paperpaw_document::Locator
 pub paperpaw_document::TocEntry::level: u8

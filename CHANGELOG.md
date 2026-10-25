@@ -107,6 +107,11 @@ change the plugin SDK.
 
 ### Changed
 
+- **Code plugins must be built again for beta.8.** The plugin interface
+  is now 4 (`Block`, `TextStyle`, `Typesetter`, `layout::Style`,
+  `FontHandle` and `SettingGroupSpec` changed, for a book's formatting,
+  kerning and the settings' pages). PaperPaw's own store plugins come as
+  updates.
 - Keyboard size works on readers with buttons alone too: Large splits
   the rows into short ones (few presses along each, as before and the
   X4s' default), Medium splits the longest, Small keeps them whole as on
