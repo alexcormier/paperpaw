@@ -1,7 +1,8 @@
 //! Room made for a screen that needs memory ([`ScreenMode::memory`],
 //! ADR 0030): as it shows, step by step until there is enough (caches
 //! let go, background work held back, radios off where it does not need
-//! them, the screens below closed), and everything given back once it
+//! them, the screens below asked to let go of what they make again, then
+//! closed), and everything given back once it
 //! closes: the radios as they were, the work going on, the screens opened
 //! again, a book at its place. Nothing is said to the reader.
 //!
@@ -11,9 +12,9 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::memory::Placement;
-use paperpaw_sdk::realtime::{Room, RoomSteps};
+use paperpaw_sdk::realtime::{Room, RoomSteps, Squeeze};
 use paperpaw_sdk::wifi::{WifiCommand, WifiState};
-use paperpaw_sdk::{Id, Params, ScreenKey};
+use paperpaw_sdk::{Handled, Id, Params, ScreenKey};
 
 use crate::Kernel;
 
@@ -95,10 +96,11 @@ impl Kernel {
             bluetooth: false,
         });
         let enough = |k: &Kernel| k.free_for(place).is_none_or(|free| free >= asked);
-        let steps: [fn(&mut Kernel) -> Option<RoomSteps>; 4] = [
+        let steps: [fn(&mut Kernel) -> Option<RoomSteps>; 5] = [
             Kernel::room_from_caches,
             Kernel::room_from_work,
             Kernel::room_from_radios,
+            Kernel::room_from_squeeze,
             Kernel::room_from_screens,
         ];
         for step in steps {
@@ -171,6 +173,20 @@ impl Kernel {
             }
         }
         taken.then_some(RoomSteps::RADIOS)
+    }
+
+    /// The screens below let go of what they make again as they show (a
+    /// book its pages, keeping its place), the lowest too
+    /// ([`Screen::on_squeeze`](paperpaw_sdk::Screen::on_squeeze)).
+    fn room_from_squeeze(&mut self) -> Option<RoomSteps> {
+        let top = self.stack.len().checked_sub(1)?;
+        let squeeze = Squeeze::new(self.lease.as_ref()?.asked);
+        let mut taken = false;
+        for index in 0..top {
+            taken |= self.with_screen(index, |screen, cx| screen.on_squeeze(&squeeze, cx))
+                == Handled::Yes;
+        }
+        taken.then_some(RoomSteps::SQUEEZED)
     }
 
     /// The screens below closed, the lowest kept (something must be there

@@ -167,8 +167,8 @@ pub use replies::{
     FolderChosen, HttpError, HttpProgress, HttpReply, ServerNotice, SocketNotice, Typed,
 };
 pub use screen::{
-    CloseCause, Cx, Handled, Hint, HintVisibility, Output, Outside, Screen, ScreenFactory,
-    ScreenKey, ScreenSpec, ShowsThrough, StackEntry,
+    CloseCause, Cx, Handled, Hint, HintVisibility, Instances, Output, Outside, Screen,
+    ScreenFactory, ScreenKey, ScreenSpec, ShowsThrough, StackEntry,
 };
 pub use setting::{Setting, Text};
 pub use settings::{

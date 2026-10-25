@@ -18,7 +18,7 @@ fn german() -> &'static [u8] {
     static TABLE: OnceLock<Vec<u8>> = OnceLock::new();
     TABLE.get_or_init(|| {
         compile(
-            include_str!("../../../plugins/hyphenation/patterns/hyph-de-1996.pat.txt"),
+            include_str!("../../../plugins/hyphenation-de/patterns/hyph-de-1996.pat.txt"),
             "",
             2,
             2,

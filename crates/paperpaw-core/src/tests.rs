@@ -1735,7 +1735,7 @@ fn plugins_serve_through_the_shell() {
     // A server stops with the screen it was started on.
     kernel.output.commands.push(Command::OpenScreen(
         Id::new_static("ov.base"),
-        paperpaw_sdk::Params::new(),
+        paperpaw_sdk::Params::new().with("n", "2"),
     ));
     kernel.run_commands();
     kernel.output.commands.push(Command::serve(

@@ -306,17 +306,23 @@ impl Plugin for Wifi {
             r.set_menu_need(spec.id.clone(), MenuNeed::Wifi)?;
         }
         let p = policy.clone();
-        r.add_screen(ScreenSpec::new(
-            PAGE,
-            "wifi.title",
-            Box::new(move |env, _| Box::new(page::WifiPage::new(env, p.clone()))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                PAGE,
+                "wifi.title",
+                Box::new(move |env, _| Box::new(page::WifiPage::new(env, p.clone()))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         let p = policy.clone();
-        r.add_screen(ScreenSpec::new(
-            PHONE,
-            "wifi.phone.title",
-            Box::new(move |env, _| Box::new(phone::PhoneScreen::new(env, p.clone()))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                PHONE,
+                "wifi.phone.title",
+                Box::new(move |env, _| Box::new(phone::PhoneScreen::new(env, p.clone()))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         // Networks put on the card: kept, the file removed once they are.
         r.on(events::STARTED, |env, (), out| {
             if env.wifi().is_some() {

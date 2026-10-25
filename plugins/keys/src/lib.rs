@@ -428,11 +428,14 @@ impl Plugin for Keys {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "keys.title",
-            Box::new(|env, _| Box::new(ListScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                LIST_SCREEN,
+                "keys.title",
+                Box::new(|env, _| Box::new(ListScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_screen(ScreenSpec::new(
             PICK_SCREEN,
             "keys.title",

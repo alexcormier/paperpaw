@@ -79,6 +79,13 @@ impl Capability {
     /// Code plugins can mark hot code that runs from internal RAM
     /// (`paperpaw_sdk::hot!`).
     pub const HOT_CODE: Self = Self(1 << 4);
+    /// Keys that turn pages (page forward and back, or left and right).
+    pub const PAGE_KEYS: Self = Self(1 << 5);
+    /// Buttons enough for every screen without touch: *Back*, *Confirm*
+    /// and keys to move the focus (up and down, or left and right). Where
+    /// a device has page keys alone, screens offer by touch what they
+    /// would by buttons.
+    pub const BUTTONS: Self = Self(1 << 6);
 }
 
 impl Capabilities {

@@ -635,11 +635,14 @@ impl Plugin for Wallabag {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::default();
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "wallabag.title",
-            Box::new(|env, _| Box::new(SetupScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "wallabag.title",
+                Box::new(|env, _| Box::new(SetupScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(OPEN, "wallabag.title").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));

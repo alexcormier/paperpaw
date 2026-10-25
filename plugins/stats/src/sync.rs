@@ -518,13 +518,16 @@ pub(crate) fn register(
     r.on(DECIDED, move |env, answer, out| {
         s.borrow_mut().decide(env, answer, out);
     })?;
-    r.add_screen(ScreenSpec::new(
-        SCREEN,
-        "stats.sync.title",
-        alloc::boxed::Box::new(move |env, _| {
-            alloc::boxed::Box::new(SyncScreen::new(env, sync.clone()))
-        }),
-    ))
+    r.add_screen(
+        ScreenSpec::new(
+            SCREEN,
+            "stats.sync.title",
+            alloc::boxed::Box::new(move |env, _| {
+                alloc::boxed::Box::new(SyncScreen::new(env, sync.clone()))
+            }),
+        )
+        .instances(paperpaw_sdk::Instances::SINGLE),
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

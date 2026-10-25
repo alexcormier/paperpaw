@@ -81,11 +81,14 @@ impl Plugin for Diagnostics {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "diagnostics.title",
-            Box::new(|env, _| Box::new(DiagnosticsScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "diagnostics.title",
+                Box::new(|env, _| Box::new(DiagnosticsScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(RESET, "diagnostics.action.reset"))?;
         r.add_screen(ScreenSpec::new(
             CHECK,

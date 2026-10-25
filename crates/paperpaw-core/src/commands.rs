@@ -266,6 +266,7 @@ impl Kernel {
                 // Room made for it where it needs memory, given back where
                 // the screen that had it is gone (ADR 0030).
                 self.sync_room();
+                self.hint_escape();
                 self.with_top(|screen, cx| {
                     screen.on_show(cx);
                     Handled::Yes
@@ -354,7 +355,7 @@ impl Kernel {
             Command::SetKeyLayer(..) => {
                 self.warn_runtime("a key map layer is laid by its screen alone; not laid");
             }
-            Command::OpenScreen(screen, params) => self.open(screen, None, &params),
+            Command::OpenScreen(screen, params) => self.open_once(screen, None, &params),
             // Not past a screen that guards the device, but from it: a
             // screen above it closes itself (the sleep screen on waking).
             Command::Back
@@ -468,7 +469,7 @@ impl Kernel {
             }
         }
         match screen.or_else(|| self.shared.registry.resolve_slot(slot.as_str()).cloned()) {
-            Some(screen) => self.open(screen, Some(slot), &params),
+            Some(screen) => self.open_once(screen, Some(slot), &params),
             None => self.warn_runtime(format!("no screen for slot `{slot}`")),
         }
     }

@@ -119,11 +119,14 @@ impl Plugin for Store {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "store.title",
-            Box::new(|env, _| Box::new(list::ListScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                LIST_SCREEN,
+                "store.title",
+                Box::new(|env, _| Box::new(list::ListScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_screen(ScreenSpec::new(
             PAGE_SCREEN,
             "store.title",

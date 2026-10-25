@@ -232,11 +232,14 @@ impl Plugin for Opds {
         let temp = TempFiles::default();
         let state = Rc::new(RefCell::new(Sync::new(temp.clone())));
         let shared = state.clone();
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "opds.title",
-            Box::new(move |env, _| Box::new(list::ListScreen::new(env, shared.clone()))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                LIST_SCREEN,
+                "opds.title",
+                Box::new(move |env, _| Box::new(list::ListScreen::new(env, shared.clone()))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_screen(ScreenSpec::new(
             BROWSE_SCREEN,
             "opds.title",

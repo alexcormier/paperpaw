@@ -475,6 +475,7 @@ impl BuilderParts {
         caps.black_and_white = display.format == paperpaw_platform::PixelFormat::Mono1;
         caps.firmware = self.firmware.is_some();
         caps.button_row = !self.button_row.is_empty();
+        caps = with_buttons(caps, &self.device.input);
         let links = self.bluetooth_links;
         Kernel {
             shared: Shared {
@@ -1077,4 +1078,36 @@ impl Kernel {
             bluetooth_links: 0,
         }))
     }
+}
+
+/// What the device's buttons are good for ([`Capability::PAGE_KEYS`],
+/// [`Capability::BUTTONS`]), of the buttons the shell lists; a shell that
+/// lists none but has buttons has a full set.
+///
+/// [`Capability::PAGE_KEYS`]: paperpaw_sdk::Capability::PAGE_KEYS
+/// [`Capability::BUTTONS`]: paperpaw_sdk::Capability::BUTTONS
+fn with_buttons(
+    caps: paperpaw_sdk::Capabilities,
+    input: &paperpaw_platform::InputCaps,
+) -> paperpaw_sdk::Capabilities {
+    use paperpaw_platform::buttons as b;
+    use paperpaw_sdk::Capability;
+    if !input.buttons {
+        return caps;
+    }
+    if input.keys.is_empty() {
+        return caps.with(Capability::PAGE_KEYS).with(Capability::BUTTONS);
+    }
+    let has = |name: &str| input.keys.contains(&name);
+    let sideways = has(b::LEFT) && has(b::RIGHT);
+    let pages = (has(b::PAGE_FORWARD) && has(b::PAGE_BACK)) || sideways;
+    let moves = (has(b::UP) && has(b::DOWN)) || sideways;
+    let mut caps = caps;
+    if pages {
+        caps = caps.with(Capability::PAGE_KEYS);
+    }
+    if has(b::BACK) && has(b::CONFIRM) && moves {
+        caps = caps.with(Capability::BUTTONS);
+    }
+    caps
 }

@@ -464,11 +464,14 @@ impl Plugin for News {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "news.title",
-            Box::new(|env, _| Box::new(FeedsScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "news.title",
+                Box::new(|env, _| Box::new(FeedsScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(OPEN, "news.title").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));

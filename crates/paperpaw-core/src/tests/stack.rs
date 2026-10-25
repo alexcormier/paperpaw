@@ -1,16 +1,20 @@
 //! The screen stack as plugins read and steer it:
 //! `Env::stack`, closing a screen of one's own, replacing, going back to
 //! a screen, slots chosen for the user, asking before closing, taps
-//! outside, input passed through, a screen's own row of hints.
+//! outside, input passed through, a screen's own row of hints, a screen
+//! opened again.
 
 use super::*;
 use paperpaw_sdk::builtin::events;
-use paperpaw_sdk::{CloseCause, Gesture, HintVisibility, Outside, Params};
+use paperpaw_sdk::{CloseCause, Commands, Gesture, HintVisibility, Instances, Outside, Params};
 
 const SCREEN: Id = Id::new_static("s.screen");
 const HOME: Id = Id::new_static("s.home");
 const CLOSE: Id = Id::new_static("s.close");
 const WHO: Id = Id::new_static("s.who");
+const ONE: Id = Id::new_static("s.one");
+const MANY: Id = Id::new_static("s.many");
+const OPEN_T: Id = Id::new_static("s.open-t");
 
 /// A screen that does what its params say: `name` (logged), `overlay`
 /// (the lower half), `refuse` (to close), `outside` (`ignore`, `pass`),
@@ -90,6 +94,12 @@ impl Screen for Configured {
         self.note("show");
     }
 
+    fn on_reopen(&mut self, params: &Params, _: &mut Cx<'_, '_>) {
+        let new = params.get("name").unwrap_or("?");
+        self.note(&alloc::format!("reopen {new}"));
+        self.params = params.clone();
+    }
+
     fn on_close(&mut self, _: &mut Cx<'_, '_>) {
         self.note("close");
     }
@@ -104,24 +114,37 @@ impl Plugin for StackPlugin {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        for (id, home) in [(SCREEN, false), (HOME, true)] {
+        for (id, home, instances) in [
+            (SCREEN, false, Instances::PER_PARAMS),
+            (HOME, true, Instances::PER_PARAMS),
+            (ONE, false, Instances::SINGLE),
+            (MANY, false, Instances::MANY),
+        ] {
             let log = self.0.clone();
-            r.add_screen(ScreenSpec::new(
-                id,
-                "screen",
-                Box::new(move |_, params| {
-                    let params = if home {
-                        Params::new().with("name", "home")
-                    } else {
-                        params.clone()
-                    };
-                    Box::new(Configured {
-                        log: log.clone(),
-                        params,
-                    })
-                }),
-            ))?;
+            r.add_screen(
+                ScreenSpec::new(
+                    id,
+                    "screen",
+                    Box::new(move |_, params| {
+                        let params = if home {
+                            Params::new().with("name", "home")
+                        } else {
+                            params.clone()
+                        };
+                        Box::new(Configured {
+                            log: log.clone(),
+                            params,
+                        })
+                    }),
+                )
+                .instances(instances),
+            )?;
         }
+        r.add_action(ActionSpec::new(OPEN_T, "s.action").handler(
+            |_: &Env<'_>, _, out: &mut Commands| {
+                out.push(Command::OpenScreen(SCREEN, named("t")));
+            },
+        ))?;
         r.bind_slot(slots::HOME, HOME, Priority::DEFAULT)?;
         r.bind_slot(slots::MENU, SCREEN, Priority::DEFAULT)?;
         for action in [CLOSE, WHO] {
@@ -336,4 +359,78 @@ fn a_screen_says_its_own_row_of_hints() {
     kernel.open_screen(Instant(1), SCREEN, named("page").with("hints", "hidden"));
     assert!(!kernel.stack[1].hinted);
     assert_eq!(kernel.shared.device.display.height, 90);
+}
+
+/// A screen opened again with the same params while it is open is gone
+/// back to, not stacked: by a remote control, an action (as a key or a
+/// widget's tap runs it) and its slot. *Back* then leaves it in one press.
+/// With other params, another opens above it.
+#[test]
+fn a_screen_opened_again_is_gone_back_to() {
+    let log = log();
+    let mut kernel = stack_kernel(&log);
+    kernel.open_screen(Instant(1), SCREEN, named("t"));
+    kernel.open_screen(Instant(2), SCREEN, named("u"));
+    assert_eq!(names(&kernel), ["s.home", "s.screen", "s.screen"]);
+    log.borrow_mut().clear();
+    kernel.open_screen(Instant(3), SCREEN, named("t"));
+    assert_eq!(names(&kernel), ["s.home", "s.screen"]);
+    assert_eq!(
+        *log.borrow(),
+        ["u close", "t reopen t", "t show", "shown s.screen for -"]
+    );
+    kernel.run_action(Instant(4), OPEN_T);
+    kernel.run_action(Instant(5), OPEN_T);
+    kernel.open_screen(Instant(6), SCREEN, named("t"));
+    assert_eq!(names(&kernel), ["s.home", "s.screen"]);
+    // Params alike in another order.
+    let v = Params::new().with("name", "v").with("x", "1");
+    kernel.open_screen(Instant(7), SCREEN, v);
+    let v = Params::new().with("x", "1").with("name", "v");
+    kernel.open_screen(Instant(8), SCREEN, v);
+    assert_eq!(names(&kernel), ["s.home", "s.screen", "s.screen"]);
+    kernel.open_slot(Instant(9), slots::MENU, named("menu"));
+    kernel.open_slot(Instant(10), slots::MENU, named("menu"));
+    assert_eq!(
+        names(&kernel),
+        ["s.home", "s.screen", "s.screen", "s.screen"]
+    );
+    kernel.run_action(Instant(11), actions::BACK);
+    kernel.run_action(Instant(12), actions::BACK);
+    kernel.run_action(Instant(13), actions::BACK);
+    assert_eq!(names(&kernel), ["s.home"]);
+}
+
+/// A screen of one instance at most is gone back to whatever the params,
+/// and hears the new ones; a screen of many opens each time.
+#[test]
+fn screens_say_how_many_of_them_open() {
+    let log = log();
+    let mut kernel = stack_kernel(&log);
+    kernel.open_screen(Instant(1), ONE, named("a"));
+    kernel.open_screen(Instant(2), SCREEN, named("x"));
+    log.borrow_mut().clear();
+    kernel.open_screen(Instant(3), ONE, named("b"));
+    assert_eq!(names(&kernel), ["s.home", "s.one"]);
+    assert_eq!(
+        *log.borrow(),
+        ["x close", "a reopen b", "b show", "shown s.one for -"]
+    );
+    kernel.run_action(Instant(4), actions::BACK);
+    assert_eq!(names(&kernel), ["s.home"]);
+    kernel.open_screen(Instant(5), MANY, named("m"));
+    kernel.open_screen(Instant(6), MANY, named("m"));
+    assert_eq!(names(&kernel), ["s.home", "s.many", "s.many"]);
+}
+
+/// A screen opened again that a screen above it keeps from closing: the
+/// stack stays as it is, nothing more opens.
+#[test]
+fn a_screen_opened_again_waits_for_the_ones_above() {
+    let log = log();
+    let mut kernel = stack_kernel(&log);
+    kernel.open_screen(Instant(1), ONE, named("a"));
+    kernel.open_screen(Instant(2), SCREEN, named("form").with("refuse", "y"));
+    kernel.open_screen(Instant(3), ONE, named("b"));
+    assert_eq!(names(&kernel), ["s.home", "s.one", "s.screen"]);
 }

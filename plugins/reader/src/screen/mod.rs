@@ -140,6 +140,9 @@ pub(crate) struct ReaderScreen {
     waiting: Option<Params>,
     /// Pages with smooth letters (in grays, where the panel can).
     smooth: bool,
+    /// The book let go of while a screen above needed the memory, its
+    /// place kept: opened again as it shows (see `on_squeeze`).
+    squeezed: Option<Params>,
 }
 
 impl ReaderScreen {
@@ -170,6 +173,16 @@ impl ReaderScreen {
             resume: None,
             auto_turn: None,
             skim_from: None,
+            squeezed: None,
+        }
+    }
+
+    /// Opens the book again where it was let go of for memory.
+    fn unsqueeze(&mut self, env: &Env<'_>) {
+        if let Some(params) = self.squeezed.take() {
+            let (book, not_ready) = open_book(env, &params);
+            self.book = book;
+            self.waiting = not_ready.then_some(params);
         }
     }
 
@@ -386,8 +399,27 @@ impl Screen for ReaderScreen {
     }
 
     /// The book is closed: said, where it was left.
+    /// A screen above needs the memory: the book is let go of, its place
+    /// kept, and opened there again as it shows (not a page a plugin
+    /// shows, nor while it reads aloud or turns its pages).
+    fn on_squeeze(&mut self, _: &paperpaw_sdk::realtime::Squeeze, cx: &mut Cx<'_, '_>) -> Handled {
+        let Ok(book) = &mut self.book else {
+            return Handled::No;
+        };
+        if book.web() || book.page_back || self.aloud.is_some() || self.auto_turn.is_some() {
+            return Handled::No;
+        }
+        book.save_due(cx, true);
+        self.squeezed = Some(Params::new().with(params::PATH, book.path.clone()));
+        self.book = Err(String::new());
+        self.selection = None;
+        self.linking = None;
+        Handled::Yes
+    }
+
     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        self.unsqueeze(&env);
         if let Ok(book) = &mut self.book {
             book.save_due(cx, true);
             // With its XPointer, for a sync (found when the place was
@@ -413,6 +445,7 @@ impl Screen for ReaderScreen {
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        self.unsqueeze(env);
         self.draw_book(canvas, env);
         // Kept from the first band of a frame to its last only: on the X4
         // a page's words take some 15 KiB.
@@ -423,6 +456,7 @@ impl Screen for ReaderScreen {
         }
     }
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.unsqueeze(cx.env());
         if self.preparing.is_some() {
             // Shown saying so first, then prepared.
             let now = cx.env().now();

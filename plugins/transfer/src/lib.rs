@@ -86,11 +86,14 @@ impl Plugin for Transfer {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "transfer.title",
-            Box::new(|env, _| Box::new(TransferScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "transfer.title",
+                Box::new(|env, _| Box::new(TransferScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(OPEN, "transfer.title").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
@@ -104,11 +107,14 @@ impl Plugin for Transfer {
             Box::new(|env, params| Box::new(phone::PhoneScreen::new(env, params))),
         ))?;
         r.bind_slot(slots::REMOTE_KEYBOARD, PHONE_SCREEN, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec::new(
-            CABLE_SCREEN,
-            "transfer.cable.title",
-            Box::new(|env, _| Box::new(cable::CableScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                CABLE_SCREEN,
+                "transfer.cable.title",
+                Box::new(|env, _| Box::new(cable::CableScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.bind_slot(slots::CABLE, CABLE_SCREEN, Priority::DEFAULT)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

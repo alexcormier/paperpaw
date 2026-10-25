@@ -137,6 +137,14 @@ Screens are made by a factory each time they open
 `Handled::No` for what a screen does not handle: the kernel then runs
 the action's own handler (e.g. the menu button opens the menu).
 
+A screen opened again while it is open is not made twice: the kernel
+goes back to the open one, closing the screens above it, and gives it
+the params in `on_reopen`, so *Back* leaves it in one press. By default
+that is one for each set of params (the details of another book open
+above those of the first); `.instances(Instances::SINGLE)` keeps one at
+most whatever the params (a transfer screen, a page of settings
+roots), and `Instances::MANY` opens each time.
+
 An action can be run with params: `Command::RunAction(id, params)`, or
 `Command::run(id)` without. Its handler gets them as its second argument
 (`.handler(|env, params, out| ..)`), and a screen reads them with
@@ -1496,9 +1504,13 @@ its heap; what does not fit runs from flash as before.
 A screen that needs much memory says so (`.memory(bytes)`, and
 `.needs_network()` or `.needs_bluetooth()` where it does): as it shows,
 the kernel lets caches go, holds background work back, switches off
-the radios it does not need and closes the screens below, until there
+the radios it does not need, asks the screens below to let go of what
+they can make again (`on_squeeze`; the reader lets its book go and
+keeps its place) and closes them where that is not enough, until there
 is enough, and gives everything back once it closes. Read what you got
-with `env.room()` in `on_show`, and make the large buffer there.
+with `env.room()` in `on_show`, and make the large buffer there. A
+screen of yours that keeps much (pictures, a long list) lets it go in
+`on_squeeze` and makes it again in `on_show`.
 
 To keep the device from going to sleep by itself for a while (a clock,
 a slideshow, a long download), hold it: `cx.keep_awake(WakeHold::new(id,

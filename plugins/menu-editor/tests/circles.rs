@@ -106,7 +106,8 @@ fn menus_in_a_circle_are_listed_and_reset() {
     let labels = test.all_labels();
     assert!(labels.contains("Main menu"), "{labels:?}");
     assert!(labels.iter().any(|l| l.contains("Tools")), "{labels:?}");
-    // *Reset all*, the last row: up from the first.
+    // *Reset all*, the last row: up from the first, opened anew.
+    test.press("back");
     let at = test.at();
     test.kernel.run_action(at, OPEN);
     test.press("up");

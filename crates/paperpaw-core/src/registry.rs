@@ -33,6 +33,7 @@ pub(crate) struct Screens {
 pub(crate) struct Made {
     pub(crate) factory: paperpaw_sdk::ScreenFactory,
     pub(crate) refresh_on_open: Option<paperpaw_sdk::RefreshMode>,
+    pub(crate) instances: paperpaw_sdk::Instances,
 }
 
 impl core::fmt::Debug for Screens {
@@ -70,11 +71,13 @@ impl Screens {
             title,
             factory,
             refresh_on_open,
+            instances,
             ..
         } = spec;
         let made = Made {
             factory,
             refresh_on_open,
+            instances,
         };
         match self.find(id.as_str()) {
             Ok(at) => {

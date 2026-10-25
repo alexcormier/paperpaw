@@ -192,11 +192,14 @@ impl Plugin for Update {
         r.add_settings(&SETTINGS)?;
         // Only where PaperPaw updates the firmware.
         r.set_menu_need(online::SERVER.id().clone(), MenuNeed::Firmware)?;
-        r.add_screen(ScreenSpec::new(
-            PAGE,
-            "update.title",
-            Box::new(|env, _| Box::new(page::UpdatePage::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                PAGE,
+                "update.title",
+                Box::new(|env, _| Box::new(page::UpdatePage::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(OPEN, "update.title").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(PAGE, Params::new()));

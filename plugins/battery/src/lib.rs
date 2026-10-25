@@ -201,14 +201,17 @@ impl Plugin for Battery {
 
         // The view.
         let s = state.clone();
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "battery.title",
-            Box::new(move |env, _| {
-                let now = reading(env, &s.borrow());
-                Box::new(view::BatteryView::new(env, now, &dir()))
-            }),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "battery.title",
+                Box::new(move |env, _| {
+                    let now = reading(env, &s.borrow());
+                    Box::new(view::BatteryView::new(env, now, &dir()))
+                }),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(OPEN, "battery.title").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));

@@ -68,11 +68,14 @@ impl Plugin for Setup {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "setup.title",
-            Box::new(|env, _| Box::new(guide::Guide::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "setup.title",
+                Box::new(|env, _| Box::new(guide::Guide::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
         r.add_action(ActionSpec::new(OPEN, "setup.open").handler(
             |_: &Env<'_>, _, out: &mut Commands| {

@@ -3088,6 +3088,7 @@ impl paperpaw_sdk::realtime::RoomSteps
 pub const paperpaw_sdk::realtime::RoomSteps::CACHES: Self
 pub const paperpaw_sdk::realtime::RoomSteps::RADIOS: Self
 pub const paperpaw_sdk::realtime::RoomSteps::SCREENS: Self
+pub const paperpaw_sdk::realtime::RoomSteps::SQUEEZED: Self
 pub const paperpaw_sdk::realtime::RoomSteps::WORK: Self
 pub const fn paperpaw_sdk::realtime::RoomSteps::contains(self, Self) -> bool
 pub const fn paperpaw_sdk::realtime::RoomSteps::is_empty(self) -> bool
@@ -3117,6 +3118,9 @@ pub const fn paperpaw_sdk::realtime::ScreenMode::takes_raw_keys(&self) -> bool
 pub const fn paperpaw_sdk::realtime::ScreenMode::wants_bluetooth(&self) -> bool
 pub const fn paperpaw_sdk::realtime::ScreenMode::wants_fastest(&self) -> bool
 pub const fn paperpaw_sdk::realtime::ScreenMode::wants_network(&self) -> bool
+pub struct paperpaw_sdk::realtime::Squeeze
+impl paperpaw_sdk::realtime::Squeeze
+pub const fn paperpaw_sdk::realtime::Squeeze::asked(&self) -> u32
 pub const paperpaw_sdk::realtime::ESCAPE_HOLD: core::time::Duration
 pub mod paperpaw_sdk::replies
 #[non_exhaustive] pub enum paperpaw_sdk::replies::HttpError
@@ -3673,7 +3677,9 @@ pub fn paperpaw_sdk::ui::choice::Choice::on_gesture(&mut self, paperpaw_sdk::Ges
 pub fn paperpaw_sdk::ui::choice::Choice::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::choice::Choice::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::choice::Choice::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::choice::Choice::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::choice::Choice::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::choice::Choice::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::choice::Choice::passes_through(&self) -> bool
@@ -3717,7 +3723,9 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::on_gesture(&mut self, paperpaw_sdk::G
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::confirm::Confirm::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::confirm::Confirm::passes_through(&self) -> bool
@@ -3758,7 +3766,9 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::on_gesture(&mut self, paperpaw_sdk:
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::items::ItemsScreen::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::items::ItemsScreen::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::items::ItemsScreen::passes_through(&self) -> bool
@@ -3973,7 +3983,9 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_gesture(&mut self, paperpaw_
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::passes_through(&self) -> bool
@@ -4006,7 +4018,9 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_gesture(&mut self, paperpaw
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::passes_through(&self) -> bool
@@ -5506,9 +5520,11 @@ pub const fn paperpaw_sdk::Capabilities::has(&self, paperpaw_sdk::Capability) ->
 pub struct paperpaw_sdk::Capability(_)
 impl paperpaw_sdk::Capability
 pub const paperpaw_sdk::Capability::AUDIO: Self
+pub const paperpaw_sdk::Capability::BUTTONS: Self
 pub const paperpaw_sdk::Capability::CHARGE_LIMIT: Self
 pub const paperpaw_sdk::Capability::HOT_CODE: Self
 pub const paperpaw_sdk::Capability::KEYBOARD: Self
+pub const paperpaw_sdk::Capability::PAGE_KEYS: Self
 pub const paperpaw_sdk::Capability::WARMTH: Self
 pub struct paperpaw_sdk::Commands
 impl paperpaw_sdk::Commands
@@ -5878,6 +5894,13 @@ impl<T: paperpaw_sdk::setting::SettingType> core::convert::From<&paperpaw_sdk::s
 pub fn paperpaw_sdk::Id::from(&paperpaw_sdk::setting::Setting<T>) -> paperpaw_sdk::Id
 impl<T: paperpaw_sdk::setting::SettingType> core::convert::From<paperpaw_sdk::setting::Setting<T>> for paperpaw_sdk::Id
 pub fn paperpaw_sdk::Id::from(paperpaw_sdk::setting::Setting<T>) -> paperpaw_sdk::Id
+pub struct paperpaw_sdk::Instances(_)
+impl paperpaw_sdk::Instances
+pub const paperpaw_sdk::Instances::MANY: Self
+pub const paperpaw_sdk::Instances::PER_PARAMS: Self
+pub const paperpaw_sdk::Instances::SINGLE: Self
+impl core::default::Default for paperpaw_sdk::Instances
+pub fn paperpaw_sdk::Instances::default() -> Self
 pub struct paperpaw_sdk::InvalidId
 impl core::error::Error for paperpaw_sdk::InvalidId
 impl core::fmt::Display for paperpaw_sdk::InvalidId
@@ -6141,9 +6164,11 @@ pub struct paperpaw_sdk::ScreenKey(_)
 #[non_exhaustive] pub struct paperpaw_sdk::ScreenSpec
 pub paperpaw_sdk::ScreenSpec::factory: paperpaw_sdk::ScreenFactory
 pub paperpaw_sdk::ScreenSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::ScreenSpec::instances: paperpaw_sdk::Instances
 pub paperpaw_sdk::ScreenSpec::refresh_on_open: core::option::Option<paperpaw_platform::display::RefreshMode>
 pub paperpaw_sdk::ScreenSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::ScreenSpec
+pub fn paperpaw_sdk::ScreenSpec::instances(self, paperpaw_sdk::Instances) -> Self
 pub fn paperpaw_sdk::ScreenSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::ScreenFactory) -> Self
 pub fn paperpaw_sdk::ScreenSpec::refresh_on_open(self, paperpaw_platform::display::RefreshMode) -> Self
 impl core::fmt::Debug for paperpaw_sdk::ScreenSpec
@@ -6632,7 +6657,9 @@ pub fn paperpaw_sdk::Screen::on_gesture(&mut self, paperpaw_sdk::Gesture, &mut p
 pub fn paperpaw_sdk::Screen::on_hide(&mut self)
 pub fn paperpaw_sdk::Screen::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::Screen::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::Screen::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::Screen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::Screen::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::Screen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::Screen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::Screen::passes_through(&self) -> bool
@@ -6662,7 +6689,9 @@ pub fn paperpaw_sdk::ui::choice::Choice::on_gesture(&mut self, paperpaw_sdk::Ges
 pub fn paperpaw_sdk::ui::choice::Choice::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::choice::Choice::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::choice::Choice::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::choice::Choice::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::choice::Choice::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::choice::Choice::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::choice::Choice::passes_through(&self) -> bool
@@ -6692,7 +6721,9 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::on_gesture(&mut self, paperpaw_sdk::G
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::confirm::Confirm::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::confirm::Confirm::passes_through(&self) -> bool
@@ -6722,7 +6753,9 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::on_gesture(&mut self, paperpaw_sdk:
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::items::ItemsScreen::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::items::ItemsScreen::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::items::ItemsScreen::passes_through(&self) -> bool
@@ -6752,7 +6785,9 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_gesture(&mut self, paperpaw_
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::passes_through(&self) -> bool
@@ -6782,7 +6817,9 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_gesture(&mut self, paperpaw
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_hide(&mut self)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_key(&mut self, &paperpaw_sdk::realtime::KeyEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_reopen(&mut self, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_squeeze(&mut self, &paperpaw_sdk::realtime::Squeeze, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::passes_through(&self) -> bool

@@ -135,11 +135,14 @@ impl Plugin for Joplin {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let run: Rc<RefCell<Run>> = Rc::default();
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "joplin.title",
-            Box::new(|env, _| Box::new(setup::SetupScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "joplin.title",
+                Box::new(|env, _| Box::new(setup::SetupScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(OPEN, "joplin.title").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));

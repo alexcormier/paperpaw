@@ -399,6 +399,12 @@ impl Screen for ListScreen {
         }
     }
 
+    /// Opened again while open: the list is fetched anew, as on opening.
+    fn on_reopen(&mut self, _: &Params, cx: &mut Cx<'_, '_>) {
+        self.asked = true;
+        self.fetch(cx);
+    }
+
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !self.asked {
             self.asked = true;

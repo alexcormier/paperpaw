@@ -64,11 +64,14 @@ impl Plugin for FontsBrowser {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "fonts-browser.title",
-            Box::new(|env, _| Box::new(list::ListScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                LIST_SCREEN,
+                "fonts-browser.title",
+                Box::new(|env, _| Box::new(list::ListScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_screen(ScreenSpec::new(
             FONT_SCREEN,
             "fonts-browser.title",

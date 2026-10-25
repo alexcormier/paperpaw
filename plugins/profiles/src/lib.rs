@@ -85,11 +85,14 @@ impl Plugin for Profiles {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "profiles.title",
-            Box::new(|env, _| Box::new(ListScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                LIST_SCREEN,
+                "profiles.title",
+                Box::new(|env, _| Box::new(ListScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(OPEN, "profiles.title").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));

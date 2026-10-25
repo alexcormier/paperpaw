@@ -195,13 +195,16 @@ impl Plugin for Keyboard {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // The layout in use; the next keyboard opens with it.
         let current = Rc::new(Cell::new(0usize));
-        r.add_screen(ScreenSpec::new(
-            SCREEN,
-            "keyboard.title",
-            Box::new(move |env, params| {
-                Box::new(KeyboardScreen::new(env, params, current.clone()))
-            }),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SCREEN,
+                "keyboard.title",
+                Box::new(move |env, params| {
+                    Box::new(KeyboardScreen::new(env, params, current.clone()))
+                }),
+            )
+            .instances(paperpaw_sdk::Instances::MANY),
+        )?;
         r.bind_slot(slots::KEYBOARD, SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec::new(

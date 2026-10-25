@@ -21,12 +21,26 @@ change the plugin SDK.
   bitmaps at a whole scale, `memory::vec_in` keeps data in internal RAM
   or PSRAM, and code plugins get `Api::alloc_in`. On the X4 the main
   loop goes on while the panel refreshes for such a screen, and every
-  frame's times are measured. `samples/frame-test` shows it all.
+  frame's times are measured. `samples/frame-test` shows it all. The
+  first time such a screen opens, a notice says how to leave it.
 - Room for a screen that needs memory: the kernel lets caches go, holds
   background work back, switches Wi-Fi and Bluetooth off where the
-  screen does not need them and closes the screens below (a book keeps
-  its place), until there is enough; everything comes back once it
-  closes (`ScreenMode::memory`, `Env::room`).
+  screen does not need them, asks the screens below to let go of what
+  they make again (the reader its book, keeping its place;
+  `Screen::on_squeeze`, `RoomSteps::SQUEEZED`) and closes them where
+  that is not enough, until there is enough; everything comes back once
+  it closes (`ScreenMode::memory`, `Env::room`).
+- A screen opened again while it is open is gone back to, not stacked
+  (several *Transfer over Wi-Fi* screens one over another took as many
+  presses of *Back*): the screens above it close and it hears the
+  params (`Screen::on_reopen`). Each screen says how many of it may be
+  open (`ScreenSpec::instances`, `Instances`): one for each set of
+  params (the default), one at most (the transfer, Wi-Fi, Bluetooth,
+  store and diagnostics screens and other roots) or many (the
+  keyboard). Params are alike in any order.
+- Plugins see what the buttons are good for: `Capability::PAGE_KEYS`
+  and `Capability::BUTTONS` (enough for every screen without touch),
+  from the buttons the shell lists.
 - Plugins can keep the device awake for a while (`power::WakeHold`,
   `Command::KeepAwake`, `Cx::keep_awake`): bounded, renewed by id, a
   screen's ended with it, never with a battery nearly empty. *Let

@@ -167,18 +167,24 @@ impl Plugin for Bluetooth {
             },
         ))?;
         r.add_icon(OPEN, Cow::Borrowed(ICON))?;
-        r.add_screen(ScreenSpec::new(
-            PAGE,
-            "bluetooth.title",
-            Box::new(|env, _| Box::new(page::BluetoothPage::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                PAGE,
+                "bluetooth.title",
+                Box::new(|env, _| Box::new(page::BluetoothPage::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         // The Bluetooth manager: it sees every bond and connects remotes.
         r.bind_slot(slots::BLUETOOTH, PAGE, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec::new(
-            SEARCH,
-            "bluetooth.add",
-            Box::new(|env, _| Box::new(search::Search::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                SEARCH,
+                "bluetooth.add",
+                Box::new(|env, _| Box::new(search::Search::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         // When remotes connect.
         let s = state.clone();
         r.on(events::BOOK_OPENED, move |env, _, out| {

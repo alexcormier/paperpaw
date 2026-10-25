@@ -89,6 +89,53 @@ impl Kernel {
         }
     }
 
+    /// Opens screen `id` as [`Command::OpenScreen`] asks: where one of it
+    /// is open that may not be opened twice ([`paperpaw_sdk::Instances`]),
+    /// goes back to that one instead, closing the screens above it, and
+    /// gives it the params ([`Screen::on_reopen`]). *Back* then leaves it
+    /// in one press.
+    pub(crate) fn open_once(&mut self, id: Id, slot: Option<Id>, params: &Params) {
+        let Some(instances) = self
+            .shared
+            .registry
+            .screens
+            .get(&id)
+            .map(|spec| spec.instances)
+        else {
+            return self.open(id, slot, params);
+        };
+        let open = match instances {
+            paperpaw_sdk::Instances::SINGLE => {
+                self.stack.iter().rposition(|active| active.id == id)
+            }
+            paperpaw_sdk::Instances::MANY => None,
+            // One for each set of params, also for kinds to come.
+            _ => self
+                .stack
+                .iter()
+                .rposition(|active| active.id == id && active.params == *params),
+        };
+        let Some(index) = open else {
+            return self.open(id, slot, params);
+        };
+        // Below a screen that guards the device, for another: it stays
+        // there, as it is.
+        if self.held_by_guard() && self.guard() > Some(index) {
+            return;
+        }
+        if index + 1 < self.stack.len() {
+            if !self.may_close_above(index, paperpaw_sdk::CloseCause::Slot) {
+                return;
+            }
+            self.close_above(index);
+        }
+        self.stack[index].params = params.clone();
+        self.with_screen(index, |screen, cx| {
+            screen.on_reopen(params, cx);
+            Handled::Yes
+        });
+    }
+
     /// The topmost screen that guards the device ([`Screen::guards`]).
     pub(crate) fn guard(&self) -> Option<usize> {
         self.stack.iter().rposition(|active| active.screen.guards())

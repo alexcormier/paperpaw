@@ -24,7 +24,28 @@ pub(crate) struct RawKeys {
     frames_asked: u16,
 }
 
+/// Kept once the way out of a screen that takes every key was shown.
+const ESCAPE_HINTED: &str = ".paperpaw/core/escape-hinted";
+
 impl Kernel {
+    /// The first time a screen that takes every key shows, a notice says
+    /// how to leave it (*Back* held, or a corner held on touch screens);
+    /// never again.
+    pub(crate) fn hint_escape(&mut self) {
+        if !self.top_mode().takes_raw_keys() || self.shared.storage.exists(ESCAPE_HINTED) {
+            return;
+        }
+        let key = match self.shared.device.input.touch {
+            true => "core.escape.touch",
+            false => "core.escape.buttons",
+        };
+        let text = alloc::string::String::from(self.shared.translator.tr(key));
+        // Kept before it shows: a card that takes nothing shows it once a
+        // start at most.
+        let _ = self.shared.storage.write(ESCAPE_HINTED, b"");
+        self.notify(text);
+    }
+
     /// How the screen on top runs; a screen of pages where there is none.
     pub(crate) fn top_mode(&self) -> ScreenMode {
         self.stack

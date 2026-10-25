@@ -304,7 +304,11 @@ fn leased(asked: u32, free: u32, log: &Log) -> Kernel {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    kernel.open_screen(Instant(5), Id::new_static("b.screen"), Params::new());
+    kernel.open_screen(
+        Instant(5),
+        Id::new_static("b.screen"),
+        Params::new().with("n", "2"),
+    );
     kernel.open_screen(Instant(10), Id::new_static("game.play"), Params::new());
     render(&mut kernel);
     kernel
@@ -346,6 +350,96 @@ fn room_is_made_only_where_needed_and_given_back() {
     assert_eq!(kernel.stack.len(), 2);
     assert!(!kernel.works.is_held());
     assert_eq!(kernel.shared.room, paperpaw_sdk::realtime::Room::default());
+}
+
+/// The memory free for the squeeze test: what the screen below lets go
+/// of comes free.
+static SQUEEZE_FREE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+fn squeeze_probe() -> Option<paperpaw_sdk::memory::MemoryUse> {
+    let free = SQUEEZE_FREE.load(core::sync::atomic::Ordering::Relaxed);
+    Some(paperpaw_sdk::memory::MemoryUse::new(free, 256 * 1024))
+}
+
+/// A screen that lets go of 60 KB when squeezed, and makes it again as it
+/// shows.
+struct Squeezer(Log);
+
+impl Plugin for Squeezer {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("sq"), "Squeezer", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let log = self.0.clone();
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("sq.screen"),
+            "squeezer",
+            Box::new(move |_, _| Box::new(SqueezerScreen(log.clone()))),
+        ))
+    }
+}
+
+struct SqueezerScreen(Log);
+
+impl Screen for SqueezerScreen {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+
+    fn on_squeeze(
+        &mut self,
+        squeeze: &paperpaw_sdk::realtime::Squeeze,
+        _: &mut Cx<'_, '_>,
+    ) -> Handled {
+        SQUEEZE_FREE.fetch_add(60_000, core::sync::atomic::Ordering::Relaxed);
+        let line = alloc::format!("squeezed for {}", squeeze.asked());
+        self.0.borrow_mut().push(line);
+        Handled::Yes
+    }
+
+    fn on_show(&mut self, _: &mut Cx<'_, '_>) {
+        self.0.borrow_mut().push(String::from("shown"));
+    }
+}
+
+/// The screens below a screen that needs memory let go of what they make
+/// again: where that is enough, none is closed, and each makes it again
+/// as it shows.
+#[test]
+fn screens_below_are_squeezed_before_they_close() {
+    let log = log();
+    SQUEEZE_FREE.store(1000, core::sync::atomic::Ordering::Relaxed);
+    let mut kernel = Kernel::builder(DEVICE)
+        .memory(squeeze_probe)
+        .plugin(Game {
+            log: log.clone(),
+            mode: ScreenMode::new().raw_keys().memory(48_000),
+        })
+        .plugin(Squeezer(log.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.open_screen(Instant(5), Id::new_static("sq.screen"), Params::new());
+    log.borrow_mut().clear();
+    kernel.open_screen(Instant(10), Id::new_static("game.play"), Params::new());
+    render(&mut kernel);
+    let room = kernel.shared.room;
+    assert!(room.is_granted(), "{room:?}");
+    let steps = room.steps();
+    assert!(steps.contains(paperpaw_sdk::realtime::RoomSteps::SQUEEZED));
+    assert!(!steps.contains(paperpaw_sdk::realtime::RoomSteps::SCREENS));
+    assert_eq!(kernel.stack.len(), 3, "the screens below stay");
+    assert!(log.borrow().iter().any(|l| l == "squeezed for 48000"));
+    log.borrow_mut().clear();
+    button(&mut kernel, 1000, "back", ButtonState::Pressed);
+    kernel.tick(Instant(3000));
+    render(&mut kernel);
+    assert_eq!(kernel.active_screen().map(Id::as_str), Some("sq.screen"));
+    assert!(log.borrow().iter().any(|l| l == "shown"));
 }
 
 /// A screen that holds the device awake for five minutes when *up* is

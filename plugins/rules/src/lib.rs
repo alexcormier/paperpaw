@@ -380,11 +380,14 @@ impl Plugin for Rules {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(State::default());
         let shared = state.clone();
-        r.add_screen(ScreenSpec::new(
-            LIST_SCREEN,
-            "rules.title",
-            Box::new(move |env, _| Box::new(screens::RulesScreen::new(env, shared.clone()))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                LIST_SCREEN,
+                "rules.title",
+                Box::new(move |env, _| Box::new(screens::RulesScreen::new(env, shared.clone()))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_screen(ScreenSpec::new(
             PICK_SCREEN,
             "rules.title",

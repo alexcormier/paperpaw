@@ -266,11 +266,14 @@ impl Plugin for Vocabulary {
         ))?;
         r.add_choice(Id::new_static(SLEEP_SHOW), SLEEP_CARD)?;
         r.on(events::RESUME, |env, _, out| wake(env, out))?;
-        r.add_screen(ScreenSpec::new(
-            phone::SCREEN,
-            "vocabulary.phone.title",
-            Box::new(|env, _| Box::new(phone::PhoneScreen::new(env))),
-        ))?;
+        r.add_screen(
+            ScreenSpec::new(
+                phone::SCREEN,
+                "vocabulary.phone.title",
+                Box::new(|env, _| Box::new(phone::PhoneScreen::new(env))),
+            )
+            .instances(paperpaw_sdk::Instances::SINGLE),
+        )?;
         r.add_action(ActionSpec::new(CARDS, "vocabulary.cards.title").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(decks::SCREEN, Params::new()));

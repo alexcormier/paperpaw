@@ -268,6 +268,10 @@ impl RoomSteps {
     /// The screens below closed (a book after its place was kept), opened
     /// again once the screen closes.
     pub const SCREENS: Self = Self(1 << 3);
+    /// The screens below let go of what they make again as they show (a
+    /// book its pages laid out and its chapter read, keeping its place;
+    /// see [`Screen::on_squeeze`](crate::Screen::on_squeeze)).
+    pub const SQUEEZED: Self = Self(1 << 4);
 
     /// Whether all of `steps` were taken.
     pub const fn contains(self, steps: Self) -> bool {
@@ -283,6 +287,32 @@ impl RoomSteps {
     /// Whether none was taken.
     pub const fn is_empty(self) -> bool {
         self.0 == 0
+    }
+}
+
+/// What a screen below one that needs memory is asked to let go of
+/// ([`Screen::on_squeeze`](crate::Screen::on_squeeze)): the bytes the
+/// screen on top asked for. More can come without a new plugin interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Squeeze {
+    asked: u32,
+    /// Room for numbers to come.
+    numbers: [u32; 3],
+}
+
+impl Squeeze {
+    /// For `asked` bytes.
+    #[cfg(feature = "kernel")]
+    pub const fn new(asked: u32) -> Self {
+        Self {
+            asked,
+            numbers: [0; 3],
+        }
+    }
+
+    /// The bytes the screen on top asked for.
+    pub const fn asked(&self) -> u32 {
+        self.asked
     }
 }
 
