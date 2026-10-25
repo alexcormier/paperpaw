@@ -331,6 +331,10 @@ struct KeyboardScreen {
     most: u32,
     /// Whether the keys are tapped (else only chosen with buttons).
     touch: bool,
+    /// Half the room between two keys: tapped, as much as tells them apart
+    /// under a finger ([`TOUCH_GAP_TENTHS`]); chosen with buttons, where
+    /// the focus fills a key, a pixel ([`BUTTONS_SEAM`]).
+    seam: u16,
     /// The shape of the keys where they are tapped ([`KEY_SHAPE`]).
     shape: String,
 }
@@ -430,6 +434,12 @@ impl KeyboardScreen {
             key_height: keys_height / count as u16,
             most,
             touch,
+            seam: if touch {
+                let half = env.metrics().tenth_mm(TOUCH_GAP_TENTHS) / 2;
+                half.max(ui::button_border(&style)) as u16
+            } else {
+                BUTTONS_SEAM
+            },
             shape: env.settings().read(&KEY_SHAPE).to_string(),
         };
         screen.buttons = screen.field_buttons(env);
@@ -465,8 +475,7 @@ impl KeyboardScreen {
     /// they are tapped, room for the focus frame where only buttons
     /// choose them.
     fn key_inset(&self) -> u32 {
-        let border = ui::button_border(&self.style);
-        if self.touch { border } else { border * 3 }
+        u32::from(self.seam)
     }
 
     /// The buttons at the right end of the text field: *Phone* where text

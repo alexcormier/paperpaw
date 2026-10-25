@@ -53,9 +53,18 @@ pub(crate) fn least_letter(env: &Env<'_>, style: &UiStyle, touch: bool, scale: u
     }
     let px = style.text() * scale as f32 / 100.0;
     let widest = style.font(env).map_or(px, |font| font.measure(px, "M"));
-    // Inside the room the focus frame leaves (see `key_inset`).
-    widest as u32 + 2 * 3 * ui::button_border(style)
+    // Inside the key's outline and the seams beside it (see `key_inset`).
+    widest as u32 + 2 * (ui::button_border(style) + u32::from(BUTTONS_SEAM))
 }
+
+/// The room between keys that are tapped, in tenths of a millimetre: as
+/// much as keeps a finger on one key and shows them apart.
+pub(crate) const TOUCH_GAP_TENTHS: u32 = 6;
+
+/// Half the room between keys chosen with buttons, in pixels: the focus
+/// fills a key, so they need no room for a frame round it, and the keys of
+/// a computer's rows get the width (two pixels between keys).
+pub(crate) const BUTTONS_SEAM: u16 = 1;
 
 /// The least width of a letter's key where keys are tapped, in
 /// millimetres: as much as a finger hits reliably.

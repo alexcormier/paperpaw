@@ -135,15 +135,17 @@ impl KeyboardScreen {
         let focused = self.focus == Some((row, index));
         // Buttons as everywhere. Tapped, they fill their place but for a
         // seam, the focused one (after a button was used) smaller by its
-        // focus frame, which stays in its place; chosen with buttons, they
-        // fill it but for the room the frame takes, higher by the size.
+        // focus frame, which stays in its place. Chosen with buttons, they
+        // fill it but for a pixel on each side, and the focused one is
+        // filled: no frame round it needs room, so ten keys a row are wide
+        // on the X4.
         let frame = ui::button_border(&style) * 3;
-        let pad = if focused { frame } else { self.key_inset() } as u16;
-        let h = if self.touch {
-            area.height.saturating_sub(2 * pad)
+        let pad = if focused && self.touch {
+            frame
         } else {
-            area.height.saturating_sub(2 * frame as u16)
-        };
+            self.key_inset()
+        } as u16;
+        let h = area.height.saturating_sub(2 * pad);
         let r = Rect::new(
             area.x + pad,
             area.y + (area.height - h) / 2,
@@ -152,22 +154,38 @@ impl KeyboardScreen {
         );
         // The key's own style: its shape.
         let style = self.key_style(r.height);
-        let mut ui = ui::Ui::new(ui.canvas(), env, &style);
+        // Within its place: chosen with buttons, within the key itself, so
+        // that the focus is its fill alone (the frame a button draws round
+        // it would reach into the next key).
+        let mut canvas = ui.canvas().clipped(if self.touch { area } else { r });
+        let mut ui = ui::Ui::new(&mut canvas, env, &style);
         // Shift while capitals are locked (one capital, the letters show
         // it), and *OK* always: the key that ends typing stands out.
         let active = (key == Key::Shift && self.shift == Shift::Locked) || key == Key::Done;
+        // With buttons the focus fills the key; a key filled already gets
+        // a light line inside.
+        let on = active || (focused && !self.touch);
+        let framed = focused;
+        let ring = !self.touch && focused && active;
         let name = match key {
             Key::Shift => "keyboard.shift",
             Key::Delete => "keyboard.delete",
             Key::Space => "keyboard.space",
             _ => {
                 let label = self.label(env, key);
-                return ui.button(r, &label, active, focused);
+                ui.button(r, &label, on, framed);
+                if ring {
+                    inner_ring(&mut ui, r);
+                }
+                return;
             }
         };
         // The key drawn: an arrow, a space.
         let name = env.i18n().tr(name);
-        let ink = ui.icon_button(r, name, active, focused);
+        let ink = ui.icon_button(r, name, on, framed);
+        if ring {
+            inner_ring(&mut ui, r);
+        }
         let size = (style.text() * 0.6) as i32;
         let (cx, cy) = (
             i32::from(r.x) + i32::from(r.width) / 2,
@@ -227,6 +245,21 @@ impl KeyboardScreen {
             ui.button(r, &c.to_string(), false, focused);
         }
     }
+}
+
+/// A light line just inside a filled key `r`: the focus on a key that is
+/// filled already (*OK*, *Shift* while locked).
+fn inner_ring(ui: &mut ui::Ui<'_>, r: Rect) {
+    let style = *ui.style();
+    let border = ui::button_border(&style);
+    let inset = (border * 2) as u16;
+    let inner = Rect::new(
+        r.x + inset,
+        r.y + inset,
+        r.width.saturating_sub(2 * inset),
+        r.height.saturating_sub(2 * inset),
+    );
+    ui::stroke_round(ui.canvas(), &style, inner, border, Color::WHITE);
 }
 
 /// An arrow pointing up (*Shift*), centred at `(x, y)`.

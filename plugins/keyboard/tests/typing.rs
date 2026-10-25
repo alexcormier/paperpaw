@@ -844,7 +844,7 @@ fn the_layout_key_by_buttons() {
     // On the `o` the field says what holding Select types; it comes
     // after the capital there.
     typing.focus_by_buttons("o");
-    assert!(typing.says("Hold for ö"));
+    assert!(typing.says("Hold: ö"));
     typing.hold_button("confirm");
     // After the capital.
     assert_eq!(typing.focused().as_deref(), Some("O"));
@@ -853,7 +853,7 @@ fn the_layout_key_by_buttons() {
     typing.run(actions::CONFIRM);
     // Not on a letter without.
     typing.press_by_buttons("y");
-    assert!(!typing.says("Hold for ö"));
+    assert!(!typing.says("Hold: ö"));
     typing.press_by_buttons("OK");
     assert_eq!(typing.answer(), "öy");
 }
@@ -880,7 +880,7 @@ layouts = keyboard.layout.de
     typing.open(&[]);
     typing.run(actions::DOWN);
     typing.focus_by_buttons("a");
-    assert!(typing.says("Hold for ä"));
+    assert!(typing.says("Hold: ä"));
     let field = typing
         .parts()
         .into_iter()
@@ -897,7 +897,7 @@ layouts = keyboard.layout.de
             .any(|(top, bottom)| *top <= field.y && field.y < *bottom),
         "{rows:?} {field:?}"
     );
-    assert!(!typing.says("Hold for ä"));
+    assert!(!typing.says("Hold: ä"));
 }
 
 /// German with *Umlaut keys*: ä, ö, ü and ß have keys of their own.

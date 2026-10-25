@@ -33,6 +33,12 @@ change the plugin SDK.
   letters would not fit. Up and down keep to the column one came along.
   Typing takes about as many presses as before (627 against 633 for the
   sample texts in `plugins/keyboard/tests/presses.rs`), capitals fewer.
+- Its keys are wider with buttons alone: the focus fills a key instead
+  of framing it, so two pixels between keys do (on the X4 a letter's key
+  is 39 pixels wide, was 25). On touch screens the room between keys
+  follows the screen's size (0.6 mm). The plain X4s start with the
+  keyboard at Small, the X4 Pro at Large; a size chosen stays. "Hold: ö"
+  in place of "Hold for ö" leaves the field's title whole.
 
 ## [0.5.0-beta.7] - 2026-10-25
 

@@ -247,3 +247,40 @@ fn the_floor_wins_where_a_size_cannot_be_reached() {
     let small = sized(coarse, "keyboard.size.small");
     assert!(step(&small) >= least, "{}", step(&small));
 }
+
+#[test]
+#[ignore = "measures, for the notes"]
+fn key_widths_on_the_x4() {
+    for size in [
+        "keyboard.size.small",
+        "keyboard.size.medium",
+        "keyboard.size.large",
+    ] {
+        let parts = sized(X4, size);
+        let q = key(&parts, "q").area;
+        let w = key(&parts, "w").area;
+        std::println!(
+            "{size}: q {}x{} at x {}, gap {}, keyboard {} high",
+            q.width,
+            q.height,
+            q.x,
+            w.x - (q.x + q.width),
+            height(X4, &parts)
+        );
+    }
+    for size in [
+        "keyboard.size.small",
+        "keyboard.size.medium",
+        "keyboard.size.large",
+    ] {
+        let parts = sized(BOOX, size);
+        let q = key(&parts, "q").area;
+        let w = key(&parts, "w").area;
+        std::println!(
+            "boox {size}: q {}x{}, gap {}",
+            q.width,
+            q.height,
+            w.x - (q.x + q.width)
+        );
+    }
+}
