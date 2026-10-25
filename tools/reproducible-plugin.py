@@ -22,10 +22,12 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
+import tomllib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SAMPLE = REPO / "samples" / "hello-native"
@@ -67,7 +69,7 @@ def packages():
 
 
 def project(at, ver, extra_toml=""):
-    """The sample as an author's project at `at`."""
+    """The hello binary alone as an author's project at `at`."""
     shutil.rmtree(at, ignore_errors=True)
     at.mkdir(parents=True)
     for item in ["src", "plugin", "rust-toolchain.toml", "paperpaw-plugin.x"]:
@@ -77,8 +79,18 @@ def project(at, ver, extra_toml=""):
         elif src.exists():
             shutil.copy(src, at / item)
     toml = (SAMPLE / "Cargo.toml").read_text(encoding="utf-8")
-    toml = toml.replace('paperpaw-sdk = { path = "../../crates/paperpaw-sdk" }', f'paperpaw-sdk = "={ver}"')
-    toml = toml.replace('paperpaw-sample-hello = { path = "../hello-plugin" }', 'paperpaw-sample-hello = { path = "hello-plugin" }')
+    # Other examples in hello-native have their own sample dependencies.
+    # Only the hello binary is copied here; keep its two dependencies,
+    # with the SDK from the registry, and the sample's build settings.
+    deps = tomllib.loads(toml)["dependencies"]
+    sdk = dict(deps["paperpaw-sdk"], version=f"={ver}")
+    sdk.pop("path", None)
+    hello = dict(deps["paperpaw-sample-hello"], path="hello-plugin")
+    entries = "".join(
+        f'{name} = {{ ' + ", ".join(f"{k} = {json.dumps(v)}" for k, v in fields.items()) + " }\n"
+        for name, fields in [("paperpaw-sdk", sdk), ("paperpaw-sample-hello", hello)]
+    )
+    toml = re.sub(r"(?ms)^\[dependencies\]\n.*?(?=^\[|\Z)", "[dependencies]\n" + entries + "\n", toml)
     (at / "Cargo.toml").write_text(toml + extra_toml, encoding="utf-8")
     lib = at / "hello-plugin"
     for item in ["src", "i18n", "how"]:

@@ -1621,7 +1621,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-about"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "miniz_oxide 0.9.1",
  "paperpaw-core",
@@ -1654,7 +1654,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-bluetooth"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-platform",
@@ -1701,7 +1701,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-dictionary"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1714,7 +1714,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-file-manager"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-files"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -1758,7 +1758,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-fonts-default"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-i18n",
  "paperpaw-sdk",
@@ -1767,7 +1767,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-format-epub"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "miniz_oxide 0.9.1",
  "paperpaw-i18n",
@@ -1798,7 +1798,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-help"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1809,7 +1809,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-home"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -1941,7 +1941,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-keyboard"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-lock"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2007,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-menu"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-opds"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2059,7 +2059,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-plugin-manager"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-power"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-platform",
@@ -2092,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-reader"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2142,7 +2142,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-settings"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2154,7 +2154,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-setup"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2166,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-sleep"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2191,7 +2191,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-store"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
@@ -2209,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-transfer"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
@@ -2237,7 +2237,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-update"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
@@ -2302,7 +2302,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-wifi"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2314,7 +2314,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-wikipedia"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",

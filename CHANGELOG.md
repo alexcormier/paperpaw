@@ -8,6 +8,8 @@ change the plugin SDK.
 
 ### Fixed
 
+- Crates.io releases use new versions for changed built-in plugins, so packaged applications compile against the matching plugin sources.
+
 - A text shortened to its room (`ui::fit`, rows' titles and values)
   counts kerning as it is drawn: pairs set apart (`f\` in the UI font)
   could take it up to a few pixels past its room, into the value beside

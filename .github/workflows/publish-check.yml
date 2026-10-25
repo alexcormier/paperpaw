@@ -16,6 +16,9 @@ on:
       - "**/Cargo.toml"
       - ".github/workflows/publish-check.yml"
       - "tools/publish-dry-run.sh"
+      - "tools/published_crates.py"
+      - "tools/test_published_crates.py"
+      - "plugins/**"
 
 permissions:
   contents: read
@@ -30,6 +33,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
+      - name: The published crate guard
+        run: python3 -m unittest discover -s tools -p test_published_crates.py
       - name: Publish as a pre-release, without publishing
         env:
           VERSION: ${{ inputs.version }}
