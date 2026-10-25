@@ -373,5 +373,5 @@ fn a_groups_advanced_page_stays_when_a_setting_changes() {
     app.run(actions::CONFIRM);
     let shown = app.described();
     assert!(shown.contains("Heading \"Layout · More\""), "{shown}");
-    assert!(shown.contains("bottom, 5 mm"), "{shown}");
+    assert!(shown.contains("Top and bottom margins, 5 mm"), "{shown}");
 }

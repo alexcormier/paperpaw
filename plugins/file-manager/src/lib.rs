@@ -518,7 +518,9 @@ impl Browser {
     /// What the focus draws over: its row, or the bar below the list.
     fn focus_rect(&self) -> Rect {
         match self.focus {
-            Focus::List => self.list.row_rect(self.list.focus() % self.list.rows().max(1)),
+            Focus::List => self
+                .list
+                .row_rect(self.list.focus() % self.list.rows().max(1)),
             Focus::Bar(_) => self.bar,
         }
     }

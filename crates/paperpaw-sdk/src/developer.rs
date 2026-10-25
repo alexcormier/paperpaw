@@ -181,9 +181,10 @@ impl DevEvent {
 /// over it; heard whole by the plugin it is for, carried as it is.
 impl EventData for DevEvent {
     fn to_params(&self) -> Params {
-        Params::new()
-            .with("kind", self.kind())
-            .with(crate::builtin::params::ID, alloc::string::String::from(self.link().as_str()))
+        Params::new().with("kind", self.kind()).with(
+            crate::builtin::params::ID,
+            alloc::string::String::from(self.link().as_str()),
+        )
     }
 
     fn from_params(params: &Params) -> Option<Self> {

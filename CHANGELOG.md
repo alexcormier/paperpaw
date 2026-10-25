@@ -13,9 +13,13 @@ change the plugin SDK.
   reader stays in the network one chose. *Join first* (Last picked,
   Strongest) sets it.
 - **Code plugins must be built again for beta.8.** The plugin interface
-  is now 4 (`Block`, `TextStyle`, `Typesetter`, `layout::Style`,
-  `FontHandle` and `SettingGroupSpec` changed, for a book's formatting,
-  kerning and the settings' pages). PaperPaw's own store plugins come as
+  is now 4: what crosses changed for a book's formatting and kerning
+  (`Block`, `TextStyle`, `Typesetter`, `layout::Style`, `FontHandle`),
+  the settings' pages (`SettingGroupSpec`), screens that run in real
+  time, screens opened once, static registration (`Actions::get`,
+  `Env::menus`, `Env::screens`) and lists that draw only what a step
+  changes (`ListChange`), with room for what comes later (the developer
+  link, `Command::Extended`). PaperPaw's own store plugins come as
   updates.
 - Moving through the settings with the buttons is quicker: a step draws
   only the row left and the row reached, no longer the whole screen (on
@@ -60,6 +64,25 @@ change the plugin SDK.
   firmware leaves out, are plugins of the store: the release builds
   PaperPaw's own data plugins (`tools/plugin-files/data.toml`) and
   publishes them with the others, versions checked as theirs.
+- With buttons alone (the X4) the keyboard keeps a computer keyboard's
+  rows at every size (qwertyuiop above asdfghjkl); the size makes keys
+  higher and their letters larger, and a row is split only where its
+  letters would not fit. Up and down keep to the column one came along.
+  Typing takes about as many presses as before (627 against 633 for the
+  sample texts in `plugins/keyboard/tests/presses.rs`), capitals fewer.
+- Its keys are wider with buttons alone: the focus fills a key instead
+  of framing it, so two pixels between keys do (on the X4 a letter's key
+  is 39 pixels wide, was 25). On touch screens the room between keys
+  follows the screen's size (0.6 mm). The plain X4s start with the
+  keyboard at Small, the X4 Pro at Large; a size chosen stays. "Hold: ö"
+  in place of "Hold for ö" leaves the field's title whole.
+- Settings where readers look for them: *Date and time* (the clock, the
+  first day of the week, the time zone), *Plugins* (each plugin's
+  network) and *Words* are groups of their own; the auto sleep is under
+  *Power*, the device's name under *Wi-Fi*, the sleep screen's logo with
+  the sleep screen, the widgets' frame with the home screen. Reading's
+  settings have shorter names (*Invert pictures*, *Paragraph spacing*,
+  *Top and bottom margins* …).
 
 ### Added
 
@@ -186,7 +209,7 @@ change the plugin SDK.
   Spanish, Italian, Dutch, Portuguese, Swedish, Danish, Norwegian
   (Bokmål), Polish, Russian and Ukrainian. The firmware keeps
   German and English; each language takes flash, almost no memory.
-- Settings *Letters before a hyphen* and *Letters after a hyphen*
+- Settings *Letters before hyphen* and *Letters after hyphen*
   (advanced, 0 to 5; 0: the language's own): how short a piece of a word
   may be. Books are laid out again when they change. SDK:
   `settings::HYPHEN_MIN_LEFT`, `HYPHEN_MIN_RIGHT`,
@@ -204,21 +227,12 @@ change the plugin SDK.
   `reader.smooth-text`, taken over), each book may have its own. SDK:
   `settings::SMOOTH_TEXT`, `settings::TEXT_CONTRAST`, `text::ToneCurve`,
   `FontHandle::draw_toned`, `Canvas::mono_coverage`.
-
-### Changed
-
-- With buttons alone (the X4) the keyboard keeps a computer keyboard's
-  rows at every size (qwertyuiop above asdfghjkl); the size makes keys
-  higher and their letters larger, and a row is split only where its
-  letters would not fit. Up and down keep to the column one came along.
-  Typing takes about as many presses as before (627 against 633 for the
-  sample texts in `plugins/keyboard/tests/presses.rs`), capitals fewer.
-- Its keys are wider with buttons alone: the focus fills a key instead
-  of framing it, so two pixels between keys do (on the X4 a letter's key
-  is 39 pixels wide, was 25). On touch screens the room between keys
-  follows the screen's size (0.6 mm). The plain X4s start with the
-  keyboard at Small, the X4 Pro at Large; a size chosen stays. "Hold: ö"
-  in place of "Hold for ö" leaves the field's title whole.
+- Room for USB developer tools as a plugin ([ADR 0031](docs/adr/0031-developer-link.md)):
+  `Uses::DEVELOPER`, `Capability::USB_LINK`, `Command::Developer` with
+  `developer::open`, `write`, `screen` and `close`, heard as `DevEvent`.
+  Reserved: this release answers that the link is not available.
+- SDK: `Ui::filled_button` and `filled_icon_button`, filled as an `on`
+  button without saying it is on (a key whose fill is the focus).
 
 ## [0.5.0-beta.7] - 2026-10-25
 

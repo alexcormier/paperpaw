@@ -912,6 +912,7 @@ pub const paperpaw_sdk::builtin::groups::LIBRARY: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::LOOK: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::MARKS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::OTHER: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::groups::PLUGINS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::READING: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::READING_AIDS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::READING_ALOUD: paperpaw_sdk::Id
@@ -923,6 +924,8 @@ pub const paperpaw_sdk::builtin::groups::READING_LAYOUT: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::READING_TEXT: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::STATUS_LINES: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::groups::SYSTEM: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::groups::TIME: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::groups::WORDS: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::keymap_presets
 pub const paperpaw_sdk::builtin::keymap_presets::LEFT_HANDED: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::keymap_presets::STANDARD: paperpaw_sdk::Id
@@ -1426,6 +1429,56 @@ pub fn paperpaw_sdk::decorations::draw_over(&mut paperpaw_graphics::canvas::Canv
 pub fn paperpaw_sdk::decorations::join_boxes(impl core::iter::traits::collect::IntoIterator<Item = (usize, paperpaw_platform::geometry::Rect)>) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
 pub type paperpaw_sdk::decorations::DecorateFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<paperpaw_sdk::decorations::Decorated>>
 pub type paperpaw_sdk::decorations::DecoratorSignatureFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> u64>
+pub mod paperpaw_sdk::developer
+#[non_exhaustive] pub enum paperpaw_sdk::developer::DevClose
+pub paperpaw_sdk::developer::DevClose::Asked
+pub paperpaw_sdk::developer::DevClose::SwitchedOff
+pub paperpaw_sdk::developer::DevClose::Unplugged
+#[non_exhaustive] pub enum paperpaw_sdk::developer::DevCommand
+pub paperpaw_sdk::developer::DevCommand::Close
+pub paperpaw_sdk::developer::DevCommand::Close::link: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevCommand::Open
+pub paperpaw_sdk::developer::DevCommand::Open::events: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevCommand::Open::link: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevCommand::Screen
+pub paperpaw_sdk::developer::DevCommand::Screen::link: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevCommand::Write
+pub paperpaw_sdk::developer::DevCommand::Write::data: alloc::vec::Vec<u8>
+pub paperpaw_sdk::developer::DevCommand::Write::link: paperpaw_sdk::Id
+#[non_exhaustive] pub enum paperpaw_sdk::developer::DevError
+pub paperpaw_sdk::developer::DevError::Busy
+pub paperpaw_sdk::developer::DevError::NotAllowed
+pub paperpaw_sdk::developer::DevError::NotAvailable
+pub paperpaw_sdk::developer::DevError::NotDeclared
+pub paperpaw_sdk::developer::DevError::NotOpen
+#[non_exhaustive] pub enum paperpaw_sdk::developer::DevEvent
+pub paperpaw_sdk::developer::DevEvent::Closed
+pub paperpaw_sdk::developer::DevEvent::Closed::link: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevEvent::Closed::why: paperpaw_sdk::developer::DevClose
+pub paperpaw_sdk::developer::DevEvent::Failed
+pub paperpaw_sdk::developer::DevEvent::Failed::error: paperpaw_sdk::developer::DevError
+pub paperpaw_sdk::developer::DevEvent::Failed::link: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevEvent::Opened
+pub paperpaw_sdk::developer::DevEvent::Opened::link: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevEvent::Received
+pub paperpaw_sdk::developer::DevEvent::Received::data: alloc::vec::Vec<u8>
+pub paperpaw_sdk::developer::DevEvent::Received::link: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevEvent::Screen
+pub paperpaw_sdk::developer::DevEvent::Screen::data: alloc::vec::Vec<u8>
+pub paperpaw_sdk::developer::DevEvent::Screen::height: u16
+pub paperpaw_sdk::developer::DevEvent::Screen::link: paperpaw_sdk::Id
+pub paperpaw_sdk::developer::DevEvent::Screen::width: u16
+impl paperpaw_sdk::developer::DevEvent
+pub fn paperpaw_sdk::developer::DevEvent::link(&self) -> &paperpaw_sdk::Id
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::developer::DevEvent
+pub fn paperpaw_sdk::developer::DevEvent::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::developer::DevEvent::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::developer::DevEvent::to_params(&self) -> paperpaw_sdk::Params
+pub struct paperpaw_sdk::developer::DevRequest
+pub fn paperpaw_sdk::developer::close(paperpaw_sdk::Id) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::developer::open(paperpaw_sdk::Id, paperpaw_sdk::Id) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::developer::screen(paperpaw_sdk::Id) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::developer::write(paperpaw_sdk::Id, alloc::vec::Vec<u8>) -> paperpaw_sdk::Command
 pub mod paperpaw_sdk::device_name
 pub const paperpaw_sdk::device_name::MAX_CHARS: usize
 pub const paperpaw_sdk::device_name::MAX_HOST: usize
@@ -1619,6 +1672,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::WordLooke
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::developer::DevEvent
+pub fn paperpaw_sdk::developer::DevEvent::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::developer::DevEvent::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::developer::DevEvent::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::reading::PageWords
 pub fn paperpaw_sdk::reading::PageWords::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::reading::PageWords::into_params(self) -> paperpaw_sdk::Params
@@ -4353,6 +4410,8 @@ pub fn paperpaw_sdk::ui::Ui<'c>::disabling(&mut self, bool) -> paperpaw_sdk::ui:
 pub fn paperpaw_sdk::ui::Ui<'c>::empty(&mut self, paperpaw_platform::geometry::Rect, &str, &str, &str)
 pub fn paperpaw_sdk::ui::Ui<'c>::env(&self) -> &'c paperpaw_sdk::Env<'c>
 pub fn paperpaw_sdk::ui::Ui<'c>::faint_button(&mut self, paperpaw_platform::geometry::Rect, &str, bool)
+pub fn paperpaw_sdk::ui::Ui<'c>::filled_button(&mut self, paperpaw_platform::geometry::Rect, &str, bool)
+pub fn paperpaw_sdk::ui::Ui<'c>::filled_icon_button(&mut self, paperpaw_platform::geometry::Rect, &str, bool) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::ui::Ui<'c>::focus(&mut self, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::ui::Ui<'c>::font(&self) -> core::option::Option<paperpaw_sdk::FontHandle<'c>>
 pub fn paperpaw_sdk::ui::Ui<'c>::header(&mut self, paperpaw_platform::geometry::Rect, &str, core::option::Option<&str>)
@@ -5200,6 +5259,7 @@ pub paperpaw_sdk::Command::Connect::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Connect::host: alloc::string::String
 pub paperpaw_sdk::Command::Connect::port: u16
 pub paperpaw_sdk::Command::Connect::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::Command::Developer(alloc::boxed::Box<paperpaw_sdk::developer::DevRequest>)
 pub paperpaw_sdk::Command::Disconnect(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Emit(paperpaw_sdk::Id, paperpaw_sdk::Params)
 #[non_exhaustive] pub paperpaw_sdk::Command::Extended
@@ -5551,6 +5611,7 @@ pub const paperpaw_sdk::Capability::CHARGE_LIMIT: Self
 pub const paperpaw_sdk::Capability::HOT_CODE: Self
 pub const paperpaw_sdk::Capability::KEYBOARD: Self
 pub const paperpaw_sdk::Capability::PAGE_KEYS: Self
+pub const paperpaw_sdk::Capability::USB_LINK: Self
 pub const paperpaw_sdk::Capability::WARMTH: Self
 pub struct paperpaw_sdk::Commands
 impl paperpaw_sdk::Commands
@@ -6500,6 +6561,7 @@ pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
 pub struct paperpaw_sdk::Uses(_)
 impl paperpaw_sdk::Uses
 pub const paperpaw_sdk::Uses::BLUETOOTH: paperpaw_sdk::Uses
+pub const paperpaw_sdk::Uses::DEVELOPER: paperpaw_sdk::Uses
 pub const paperpaw_sdk::Uses::NETWORK: paperpaw_sdk::Uses
 pub const paperpaw_sdk::Uses::NOTHING: paperpaw_sdk::Uses
 pub const fn paperpaw_sdk::Uses::bits(self) -> u8
@@ -6663,6 +6725,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::WordLooke
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::developer::DevEvent
+pub fn paperpaw_sdk::developer::DevEvent::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::developer::DevEvent::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::developer::DevEvent::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::reading::PageWords
 pub fn paperpaw_sdk::reading::PageWords::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::reading::PageWords::into_params(self) -> paperpaw_sdk::Params

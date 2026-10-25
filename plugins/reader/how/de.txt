@@ -1,4 +1,4 @@
-Die Leseansicht zeigt Bücher Seite für Seite. Öffne ein Buch aus der Bibliothek; das zuletzt gelesene kann beim Start wieder aufgehen (Einstellung Zuletzt gelesenes Buch beim Start öffnen).
+Die Leseansicht zeigt Bücher Seite für Seite. Öffne ein Buch aus der Bibliothek; das zuletzt gelesene kann beim Start wieder aufgehen (Einstellung Letztes Buch beim Start öffnen).
 
 Mit einem Tipp links oder rechts oder mit den Blättertasten blätterst du. Ein Tipp in die Mitte oder Wählen öffnet das Lesemenü: Inhaltsverzeichnis, Suchen, Gehe zu Seite, Schrift und Layout, Lesezeichen und Markierungen und mehr. Vom oberen Rand nach unten wischen öffnet den Schnellzugriff, vom unteren Rand nach oben geht es zur Startseite; Zurück lange drücken ebenso.
 

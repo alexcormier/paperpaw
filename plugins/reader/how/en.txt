@@ -1,4 +1,4 @@
-The reader shows books page by page. Open a book from the library; the last book can reopen at start (setting Reopen the last book at start).
+The reader shows books page by page. Open a book from the library; the last book can reopen at start (setting Open last book at start).
 
 Tap the left or right of the screen, or use the page buttons, to turn pages. Tap the middle or press Select for the reading menu: Contents, Search, Go to page, Font and layout, Bookmarks and highlights and more. Down from the top edge opens the quick panel, up from the bottom edge goes home; so does holding Back.
 
