@@ -605,8 +605,9 @@ impl Radio {
 
     /// The keys of bonded `device` go to the key maps (`on`), or no
     /// longer.
-    fn keys(&mut self, device: DeviceId, on: bool, now: Instant) -> Result<(), BtError> {
+    pub(super) fn keys(&mut self, device: DeviceId, on: bool, now: Instant) -> Result<(), BtError> {
         let known = self.known_mut(device).ok_or(BtError::NotFound)?;
+        known.wanted = on;
         if known.keys != on {
             known.keys = on;
             self.bonds_changed = true;

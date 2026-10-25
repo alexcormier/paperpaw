@@ -318,6 +318,25 @@ fn another_plugin_cannot_use_a_device_it_did_not_find() {
 }
 
 #[test]
+fn the_pairing_question_closes_when_the_link_drops() {
+    let mut test = Test::new();
+    let belt = test.belt();
+    let link = test.link(belt);
+    test.run(GO, [bluetooth::pair(belt)]);
+    test.report(BtReport::Ask {
+        link,
+        question: PairQuestion::Show(123_456),
+    });
+    assert_eq!(test.kernel.active_screen(), Some(&ASK));
+    test.report(BtReport::Disconnected { link, reason: None });
+    assert_ne!(
+        test.kernel.active_screen(),
+        Some(&ASK),
+        "the question closed"
+    );
+}
+
+#[test]
 fn pairing_asks_the_reader_and_keeps_the_bond() {
     let mut test = Test::new();
     let belt = test.belt();

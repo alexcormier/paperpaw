@@ -12,8 +12,9 @@ impl Radio {
         match report {
             BtReport::Radio { on } => {
                 if !on && self.radio_on {
-                    // Off by itself: what used it ends.
-                    self.suspend(now, out);
+                    // Off by itself: what used it ends, the remotes still
+                    // wanted come back after a rest.
+                    self.went_off(now, out);
                 }
             }
             BtReport::Found(found) => self.found(found, now, out),
@@ -176,6 +177,11 @@ impl Radio {
         if known.kind == DeviceKind::Other || known.found.appearance.is_some() {
             known.kind = kind_of(known.found.appearance, &known.found.services);
         }
+        // A bonded device whose keys are wanted is back: connected at once.
+        let awaited = known.wanted && known.bond.is_some();
+        if awaited && !self.links.iter().any(|l| l.device == id) {
+            let _ = self.keys(id, true, now);
+        }
         if !changed {
             return;
         }
@@ -250,6 +256,10 @@ impl Radio {
         let Some(at) = self.link_at(link) else { return };
         self.release_keys(at);
         let link = self.links.remove(at);
+        let asked = self.asking.is_some_and(|(d, _)| d == link.device);
+        if link.pairing.is_some() || asked {
+            self.pairing_over(link.device, true);
+        }
         let reason = reason.or(Some(BtError::Lost));
         let mut told: Vec<Id> = link.users.iter().map(|u| u.asker.events.clone()).collect();
         told.extend(link.raw.iter().map(|r| r.events.clone()));
@@ -403,6 +413,9 @@ impl Radio {
         for events in told {
             out.push(fail(&events, failure));
         }
+        if op == BtOp::Pair {
+            self.pairing_over(device, false);
+        }
         if !self.links[at].up {
             // Never connected: the link is gone.
             self.links.remove(at);
@@ -413,6 +426,7 @@ impl Radio {
         let Some(at) = self.link_at(link) else { return };
         let device = self.links[at].device;
         let events = self.links[at].pairing.take();
+        self.pairing_over(device, false);
         if let Some(known) = self.known_mut(device) {
             known.bond = Some(keys);
             if let Some(events) = &events

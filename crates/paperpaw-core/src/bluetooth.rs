@@ -174,6 +174,7 @@ impl Kernel {
             .collect();
         let bonds = radio.take_bonds(&kept);
         let question = radio.take_question();
+        let ended = radio.take_pairing_ended();
         for (id, label, value) in bonds {
             let change = if value.is_empty() {
                 paperpaw_sdk::secrets::SecretChange::remove(&id)
@@ -182,8 +183,40 @@ impl Kernel {
             };
             self.set_secret(change);
         }
+        if let Some((_, lost, name)) = ended {
+            self.end_pairing(lost, &name);
+        }
         if let Some((device, question, name)) = question {
             self.ask_pairing(device, question, &name);
+        }
+    }
+
+    /// The pairing question closes where it shows: the pairing is over,
+    /// and where its link was lost (`lost`) a notice says so.
+    fn end_pairing(&mut self, lost: bool, name: &str) {
+        let Some(nonce) = self.pairing_nonce.take() else {
+            return;
+        };
+        let nonce = nonce.to_string();
+        let open = self
+            .stack
+            .iter()
+            .find(|s| s.params.get(NONCE) == Some(nonce.as_str()))
+            .map(|s| s.serial);
+        if let Some(serial) = open {
+            self.output
+                .commands
+                .push(Command::Close(paperpaw_sdk::ScreenKey::new(serial)));
+        }
+        if lost {
+            let i18n = &self.shared.translator;
+            let name = if name.is_empty() {
+                i18n.tr("core.bluetooth.unnamed").to_string()
+            } else {
+                String::from(name)
+            };
+            let text = i18n.format("core.bluetooth.pair-lost", &[("name", Arg::Str(&name))]);
+            self.output.commands.push(Command::Notify(text));
         }
     }
 

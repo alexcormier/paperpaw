@@ -101,6 +101,23 @@ fn all_remotes(env: &Env<'_>, on: bool, out: &mut Commands) {
     }
 }
 
+/// The remotes switched on by hand, wanted again (at start, on waking):
+/// the kernel connects them, and again whenever they come back.
+fn switched_on(env: &Env<'_>, out: &mut Commands) {
+    let on: Vec<DeviceId> = env
+        .bluetooth()
+        .map(|b| {
+            b.bonded()
+                .filter(|d| d.kind.can_type() && d.keys)
+                .map(|d| d.id)
+                .collect()
+        })
+        .unwrap_or_default();
+    for device in on {
+        out.push(bluetooth::remote_keys(device, &DONE));
+    }
+}
+
 static HOW: [(&str, &str); 2] = [
     ("en", include_str!("../how/en.txt")),
     ("de", include_str!("../how/de.txt")),
@@ -188,6 +205,8 @@ impl Plugin for Bluetooth {
                 };
                 if wanted {
                     all_remotes(env, true, out);
+                } else if remotes == BY_HAND {
+                    switched_on(env, out);
                 }
             })?;
         }

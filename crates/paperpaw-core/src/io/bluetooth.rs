@@ -26,6 +26,9 @@ use paperpaw_sdk::{Command, Id};
 
 /// How long the radio stays on after the last request, for the next one.
 pub const RADIO_GRACE_MS: u64 = 3_000;
+/// How long the radio rests after it went off by itself (the shell's
+/// host failed) before it comes on again for what still wants it.
+pub const RADIO_REST_MS: u64 = 10_000;
 /// Devices found that nobody bonded, kept at most while the radio is off
 /// (the newest).
 pub const FOUND_KEPT: usize = 16;
@@ -122,6 +125,12 @@ pub enum BtCall {
     /// Forget the bond with the device at `address`.
     Forget {
         address: String,
+    },
+    /// Watch for the bonded devices at `addresses` (empty for none):
+    /// passively and seldom, while no other scan runs, reporting one that
+    /// advertises as `Found`; the kernel connects it then.
+    Watch {
+        addresses: Vec<String>,
     },
 }
 
@@ -285,6 +294,9 @@ struct Known {
     given: Vec<Id>,
     /// Its keys go to the key maps.
     keys: bool,
+    /// A plugin wants its keys now (not kept): it is connected again
+    /// when it drops.
+    wanted: bool,
 }
 
 impl Known {
@@ -357,6 +369,7 @@ impl Known {
             bond,
             given,
             keys,
+            wanted: false,
         })
     }
 }
@@ -479,6 +492,12 @@ pub(crate) struct Radio {
     bonds_changed: bool,
     /// A pairing asks the reader: device, question.
     asking: Option<(DeviceId, PairQuestion)>,
+    /// A pairing ended: the device, and whether its link was lost.
+    pairing_ended: Option<(DeviceId, bool)>,
+    /// The bonded devices the shell watches for.
+    watching: Vec<String>,
+    /// The radio went off by itself: it stays off until then.
+    rest_until: Option<Instant>,
     /// The Bluetooth manager's plugin.
     manager: Option<String>,
 }
@@ -670,7 +689,21 @@ impl Radio {
 
     /// Something needs the radio.
     fn wanted(&self) -> bool {
-        !self.scans.is_empty() || !self.adverts.is_empty() || !self.links.is_empty()
+        !self.scans.is_empty()
+            || !self.adverts.is_empty()
+            || !self.links.is_empty()
+            || !self.awaited().is_empty()
+    }
+
+    /// The addresses of the bonded devices whose keys are wanted and that
+    /// have no link: watched for, to connect them again.
+    fn awaited(&self) -> Vec<String> {
+        self.known
+            .iter()
+            .filter(|k| k.wanted && k.bond.is_some())
+            .filter(|k| !self.links.iter().any(|l| l.device == k.id))
+            .map(|k| k.address.clone())
+            .collect()
     }
 
     /// When something it waits for is due: a scan's or advertising's end,
@@ -695,7 +728,12 @@ impl Radio {
             .idle_since
             .filter(|_| self.radio_on)
             .map(|since| since.add_millis(RADIO_GRACE_MS));
-        ends.chain(adverts).chain(idle).chain(off).min()
+        let rested = self.rest_until.filter(|_| !self.radio_on && self.wanted());
+        ends.chain(adverts)
+            .chain(idle)
+            .chain(off)
+            .chain(rested)
+            .min()
     }
 
     /// Time passed: scans and advertising ended, idle links let go or
@@ -786,7 +824,12 @@ impl Radio {
     /// The radio, the scan and advertising as what is asked needs them, at
     /// the cheapest power that serves everyone.
     fn settle(&mut self, now: Instant) {
+        let resting = !self.radio_on && self.rest_until.is_some_and(|until| now < until);
+        if self.wanted() && resting {
+            return;
+        }
         if self.wanted() {
+            self.rest_until = None;
             self.power_up(now);
         } else if self.radio_on {
             let since = *self.idle_since.get_or_insert(now);
@@ -817,6 +860,11 @@ impl Radio {
             self.advertised.clone_from(&advert);
             self.calls
                 .push(BtCall::Advertise(advert.unwrap_or_default()));
+        }
+        let awaited = self.awaited();
+        if awaited != self.watching {
+            self.watching.clone_from(&awaited);
+            self.calls.push(BtCall::Watch { addresses: awaited });
         }
     }
 
@@ -865,6 +913,7 @@ impl Radio {
             self.on_ms += now.since(since);
         }
         self.calls.push(BtCall::Radio { on: false });
+        self.watching.clear();
         self.forget_found();
     }
 
@@ -1001,6 +1050,24 @@ impl Radio {
 
     /// The device goes to sleep: everything ends, the radio off.
     pub fn suspend(&mut self, now: Instant, out: &mut Vec<Command>) {
+        // Never in sleep: the plugins ask again when it wakes.
+        for known in &mut self.known {
+            known.wanted = false;
+        }
+        self.rest_until = None;
+        self.end_all(now, out);
+    }
+
+    /// The radio went off by itself (the shell's host failed): what used
+    /// it ends, and after a rest it comes on again for the remotes still
+    /// wanted.
+    fn went_off(&mut self, now: Instant, out: &mut Vec<Command>) {
+        self.end_all(now, out);
+        self.rest_until = Some(now.add_millis(RADIO_REST_MS));
+    }
+
+    /// Everything ends: scans, advertising, links; the radio off.
+    fn end_all(&mut self, now: Instant, out: &mut Vec<Command>) {
         for scan in core::mem::take(&mut self.scans) {
             out.push(tell(&scan.asker.events, BtEvent::ScanEnded));
         }
@@ -1018,6 +1085,28 @@ impl Radio {
         if self.radio_on {
             self.radio_off(now);
         }
+    }
+
+    /// A pairing that ended since this was last asked: the device, whether
+    /// its link was lost meanwhile, its name.
+    pub fn take_pairing_ended(&mut self) -> Option<(DeviceId, bool, String)> {
+        let (device, lost) = self.pairing_ended.take()?;
+        let name = self
+            .known
+            .iter()
+            .find(|k| k.id == device)
+            .and_then(|k| k.name().map(String::from))
+            .unwrap_or_default();
+        Some((device, lost, name))
+    }
+
+    /// The pairing with `device` ended (`lost`: with its link): its
+    /// question, asked or still to ask, is over.
+    fn pairing_over(&mut self, device: DeviceId, lost: bool) {
+        if self.asking.is_some_and(|(d, _)| d == device) {
+            self.asking = None;
+        }
+        self.pairing_ended = Some((device, lost));
     }
 
     /// The reader answered the pairing question about `device`.
@@ -1050,6 +1139,7 @@ impl Radio {
             bond: None,
             given: Vec::new(),
             keys: false,
+            wanted: false,
         });
         id
     }

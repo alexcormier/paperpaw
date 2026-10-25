@@ -102,6 +102,7 @@ fn a_bond_is_kept_and_read_again() {
         bond: Some("1234abcd".into()),
         given: vec![Id::new_static("pulse")],
         keys: true,
+        wanted: false,
     };
     let read = Known::read(4, &known.written()).unwrap();
     assert_eq!(read.address, "aa:bb");
@@ -739,6 +740,173 @@ fn advertising_is_time_bound_and_merged() {
     // Ten minutes at most.
     radio.tick(Instant(600_000), &mut out);
     assert!(told(&out, &FOUND).contains(&BtEvent::AdvertisingEnded));
+}
+
+/// The watch the shell was last asked for, in `calls`.
+fn watched(calls: &[BtCall]) -> Option<Vec<String>> {
+    calls.iter().rev().find_map(|c| match c {
+        BtCall::Watch { addresses } => Some(addresses.clone()),
+        _ => None,
+    })
+}
+
+#[test]
+fn a_remote_whose_keys_are_wanted_is_connected_again_when_it_advertises() {
+    let mut radio = radio();
+    radio.load([("core.bluetooth.1", "aa\tRemote\tremote\t0\t\tkeys")].into_iter());
+    let mut out = Vec::new();
+    let device = DeviceId::new(1);
+    run(
+        &mut radio,
+        "a",
+        bt::remote_keys(device, &DONE),
+        readers(0),
+        &mut out,
+    )
+    .unwrap();
+    let link = link_of(&radio.take());
+    radio.report(connected(link), Instant(10), &mut out);
+    radio.take();
+    // It falls asleep: its link drops, and it is watched for.
+    let lost = BtReport::Disconnected {
+        link,
+        reason: Some(BtError::Lost),
+    };
+    radio.report(lost, Instant(20), &mut out);
+    let calls = radio.take();
+    assert_eq!(watched(&calls), Some(vec![String::from("aa")]), "{calls:?}");
+    assert!(!calls.contains(&BtCall::Radio { on: false }));
+    // A key wakes it: it advertises, and is connected at once.
+    found(&mut radio, "aa", Vec::new(), &mut out);
+    let calls = radio.take();
+    assert!(
+        calls
+            .iter()
+            .any(|c| matches!(c, BtCall::Connect { address, .. } if address == "aa")),
+        "{calls:?}"
+    );
+    assert_eq!(watched(&calls), Some(Vec::new()));
+}
+
+#[test]
+fn nothing_is_watched_for_once_the_keys_are_not_wanted_or_in_sleep() {
+    let mut radio = radio();
+    radio.load([("core.bluetooth.1", "aa\tRemote\tremote\t0\t\tkeys")].into_iter());
+    let mut out = Vec::new();
+    let device = DeviceId::new(1);
+    run(
+        &mut radio,
+        "a",
+        bt::remote_keys(device, &DONE),
+        readers(0),
+        &mut out,
+    )
+    .unwrap();
+    let link = link_of(&radio.take());
+    let failed = BtReport::Failed {
+        link,
+        op: BtOp::Connect,
+        handle: None,
+        error: BtError::Timeout,
+    };
+    radio.report(failed, Instant(15_000), &mut out);
+    assert_eq!(watched(&radio.take()), Some(vec![String::from("aa")]));
+    // Keys off: no watch, and the radio goes off after its grace.
+    run(
+        &mut radio,
+        "a",
+        bt::remote_keys_off(device, &DONE),
+        readers(16_000),
+        &mut out,
+    )
+    .unwrap();
+    assert_eq!(watched(&radio.take()), Some(Vec::new()));
+    radio.tick(Instant(16_000 + RADIO_GRACE_MS), &mut out);
+    assert!(radio.take().contains(&BtCall::Radio { on: false }));
+    // Wanted again, then sleep: nothing wanted after it.
+    run(
+        &mut radio,
+        "a",
+        bt::remote_keys(device, &DONE),
+        readers(20_000),
+        &mut out,
+    )
+    .unwrap();
+    radio.suspend(Instant(21_000), &mut out);
+    assert!(radio.known.iter().all(|k| !k.wanted));
+    assert_eq!(radio.deadline(), None);
+}
+
+#[test]
+fn after_the_radio_went_off_by_itself_a_wanted_remote_comes_back() {
+    let mut radio = radio();
+    radio.load([("core.bluetooth.1", "aa\tRemote\tremote\t0\t\tkeys")].into_iter());
+    let mut out = Vec::new();
+    let device = DeviceId::new(1);
+    run(
+        &mut radio,
+        "a",
+        bt::remote_keys(device, &DONE),
+        readers(0),
+        &mut out,
+    )
+    .unwrap();
+    let link = link_of(&radio.take());
+    radio.report(connected(link), Instant(10), &mut out);
+    radio.take();
+    radio.report(BtReport::Radio { on: false }, Instant(20), &mut out);
+    assert!(!radio.take().contains(&BtCall::Radio { on: true }));
+    // It rests, then comes on again and watches for the remote.
+    assert_eq!(radio.deadline(), Some(Instant(20 + RADIO_REST_MS)));
+    radio.tick(Instant(20 + RADIO_REST_MS), &mut out);
+    let calls = radio.take();
+    assert_eq!(
+        calls.first(),
+        Some(&BtCall::Radio { on: true }),
+        "{calls:?}"
+    );
+    assert_eq!(watched(&calls), Some(vec![String::from("aa")]));
+}
+
+#[test]
+fn a_pairing_that_loses_its_link_ends_its_question() {
+    let mut radio = radio();
+    let mut out = Vec::new();
+    run(
+        &mut radio,
+        "a",
+        bt::scan(&FOUND).command(),
+        asked(0),
+        &mut out,
+    )
+    .unwrap();
+    found(&mut radio, "kb", vec![Uuid::sig(0x1812)], &mut out);
+    let device = radio.known[0].id;
+    run(
+        &mut radio,
+        "a",
+        bt::connect(device, &FOUND).command(),
+        asked(10),
+        &mut out,
+    )
+    .unwrap();
+    let link = link_of(&radio.take());
+    radio.report(connected(link), Instant(20), &mut out);
+    run(&mut radio, "a", bt::pair(device), asked(30), &mut out).unwrap();
+    let ask = BtReport::Ask {
+        link,
+        question: PairQuestion::Show(123_456),
+    };
+    radio.report(ask, Instant(40), &mut out);
+    assert!(radio.take_question().is_some());
+    radio.report(
+        BtReport::Disconnected { link, reason: None },
+        Instant(50),
+        &mut out,
+    );
+    let (ended, lost, name) = radio.take_pairing_ended().expect("ended");
+    assert_eq!((ended, lost, name.as_str()), (device, true, "KB"));
+    assert!(radio.take_pairing_ended().is_none());
 }
 
 #[test]

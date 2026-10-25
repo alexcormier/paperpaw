@@ -117,6 +117,15 @@ impl Bluetooth {
                     self.report(after(FOUND_MS), found);
                 }
             }
+            // Watched for: the remote is always awake, and advertises.
+            BtCall::Watch { addresses } if self.on && addresses.iter().any(|a| a == REMOTE) => {
+                let found = BtReport::Found(Found {
+                    address: String::from(REMOTE),
+                    signal: Some(-55),
+                    ..Found::default()
+                });
+                self.report(after(FOUND_MS), found);
+            }
             BtCall::Connect { link, address, .. } => {
                 let known = [REMOTE, BELT].into_iter().find(|a| *a == address);
                 match known {

@@ -39,12 +39,14 @@ const DEVICE: DeviceInfo = DeviceInfo {
 
 /// A kernel with a remote bonded before and `remotes` chosen.
 fn kernel(remotes: &str) -> Kernel {
+    kernel_with(remotes, false)
+}
+
+/// The same, with the remote's keys switched on (`keys`) or not.
+fn kernel_with(remotes: &str, keys: bool) -> Kernel {
     let mut secrets = Secrets::default();
-    secrets.apply(SecretChange::keep(
-        "core.bluetooth.1",
-        "Remote",
-        "aa:bb\tRemote\tremote\t0\t\tkeys",
-    ));
+    let bond = format!("aa:bb\tRemote\tremote\t{}\t\tkeys", u8::from(keys));
+    secrets.apply(SecretChange::keep("core.bluetooth.1", "Remote", &bond));
     let mut kernel = Kernel::builder(DEVICE)
         .storage(MemoryStorage::new().with(FILE, secrets.encode()))
         .user_config(format!("[bluetooth]\nremotes = {remotes}\n"))
@@ -80,6 +82,16 @@ fn by_hand_never_by_itself() {
     kernel.send_event(Instant(10), events::BOOK_OPENED.id().clone(), reading());
     kernel.resume(Instant(20));
     assert!(!connects(&mut kernel));
+}
+
+#[test]
+fn switched_on_by_hand_at_start_and_on_waking() {
+    let mut kernel = kernel_with("bluetooth.remotes.hand", true);
+    assert!(connects(&mut kernel));
+    kernel.suspend(Instant(10));
+    kernel.take_io();
+    kernel.resume(Instant(20));
+    assert!(connects(&mut kernel));
 }
 
 #[test]
