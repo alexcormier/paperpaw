@@ -67,10 +67,7 @@ impl Widget for Sample {
         let Some(faces) = Faces::new(env, &t, None) else {
             return false;
         };
-        let patterns = t
-            .hyphenation
-            .as_deref()
-            .and_then(|language| env.hyphenation().get(language));
+        let patterns = t.patterns(env);
         let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| {
             if let Some(patterns) = patterns {
                 patterns.hyphenate(word, out);

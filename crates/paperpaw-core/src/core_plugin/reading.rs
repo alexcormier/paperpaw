@@ -1,0 +1,242 @@
+//! The kernel's reading settings: the reading font, the page's text
+//! (justified, hyphenated, indented, kept in lines) and whether a book's
+//! settings are its own.
+
+use paperpaw_sdk::builtin::{group_sections, groups, settings};
+use paperpaw_sdk::{RegisterError, Registrar, SettingExtra, SettingSpec};
+
+use super::{
+    FONT, FONT_PT, IN_APPS, IN_BEHAVIOUR, IN_PAGE, LINES, MARGINS, MARGINS_ENDS, WEIGHT, WORDS,
+};
+
+static LINES_KEPT: SettingExtra = SettingExtra::new()
+    .unit("core.unit.lines")
+    .section(group_sections::PAGE);
+static LETTERS_KEPT: SettingExtra = SettingExtra::new()
+    .unit("core.unit.letters")
+    .section(group_sections::PAGE);
+
+/// The reading font, and whether a book's settings are its own. The
+/// status lines' font: the menus', the book's or one of its own (the
+/// families are offered once all fonts are known).
+static READING: [SettingSpec; 21] = [
+    SettingSpec::choice(
+        settings::STATUS_FONT.static_str(),
+        "core.setting.status-font",
+        &[settings::STATUS_FONT_UI, settings::STATUS_FONT_BOOK],
+        settings::STATUS_FONT_UI,
+        groups::STATUS_LINES,
+    )
+    .description("core.setting.status-font.help"),
+    SettingSpec::choice(
+        settings::READING_FONT.static_str(),
+        "core.setting.reading-font",
+        &[settings::DEFAULT_FONT],
+        settings::DEFAULT_FONT,
+        groups::READING,
+    )
+    .with_extra(&FONT)
+    .scoped()
+    .description("core.setting.reading-font.help"),
+    SettingSpec::number(
+        settings::FONT_SIZE.static_str(),
+        "core.setting.font-size",
+        crate::plugins::FONT_SIZES.0,
+        crate::plugins::FONT_SIZES.1,
+        11,
+        groups::READING,
+    )
+    .with_extra(&FONT_PT)
+    .scoped()
+    .description("core.setting.font-size.help"),
+    SettingSpec::number(
+        settings::LINE_SPACING.static_str(),
+        "core.setting.line-spacing",
+        80,
+        250,
+        135,
+        groups::READING,
+    )
+    .with_extra(&LINES)
+    .scoped()
+    .description("core.setting.line-spacing.help"),
+    SettingSpec::number(
+        settings::FONT_WEIGHT.static_str(),
+        "core.setting.font-weight",
+        0,
+        4,
+        0,
+        groups::READING,
+    )
+    .with_extra(&WEIGHT)
+    .scoped()
+    .description("core.setting.font-weight.help"),
+    SettingSpec::number(
+        settings::WORD_SPACING.static_str(),
+        "core.setting.word-spacing",
+        50,
+        200,
+        100,
+        groups::READING,
+    )
+    .with_extra(&WORDS)
+    .scoped()
+    .description("core.setting.word-spacing.help"),
+    SettingSpec::number(
+        settings::MARGIN.static_str(),
+        "core.setting.margin",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&MARGINS)
+    .scoped()
+    .description("core.setting.margin.help"),
+    SettingSpec::number(
+        settings::MARGIN_ENDS.static_str(),
+        "core.setting.margin-ends",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&MARGINS_ENDS)
+    .advanced()
+    .scoped()
+    .description("core.setting.margin-ends.help"),
+    SettingSpec::switch(
+        settings::JUSTIFY.static_str(),
+        "core.setting.justify",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .description("core.setting.justify.help"),
+    SettingSpec::switch(
+        settings::HYPHENATE.static_str(),
+        "core.setting.hyphenate",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .description("core.setting.hyphenate.help"),
+    SettingSpec::number(
+        settings::HYPHEN_MIN_LEFT.static_str(),
+        "core.setting.hyphen-min-left",
+        0,
+        5,
+        0,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LETTERS_KEPT)
+    .description("core.setting.hyphen-min-left.help"),
+    SettingSpec::number(
+        settings::HYPHEN_MIN_RIGHT.static_str(),
+        "core.setting.hyphen-min-right",
+        0,
+        5,
+        0,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LETTERS_KEPT)
+    .description("core.setting.hyphen-min-right.help"),
+    SettingSpec::switch(
+        settings::PUBLISHER_STYLES.static_str(),
+        "core.setting.publisher-styles",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .description("core.setting.publisher-styles.help"),
+    SettingSpec::switch(
+        settings::INDENT.static_str(),
+        "core.setting.indent",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .description("core.setting.indent.help"),
+    SettingSpec::switch(
+        settings::PARAGRAPH_SPACING.static_str(),
+        "core.setting.paragraph-spacing",
+        false,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .description("core.setting.paragraph-spacing.help"),
+    SettingSpec::number(
+        settings::WIDOWS.static_str(),
+        "core.setting.widows",
+        1,
+        4,
+        1,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LINES_KEPT)
+    .description("core.setting.widows.help"),
+    SettingSpec::number(
+        settings::ORPHANS.static_str(),
+        "core.setting.orphans",
+        1,
+        4,
+        1,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LINES_KEPT)
+    .description("core.setting.orphans.help"),
+    SettingSpec::choice(
+        settings::READING_APP.static_str(),
+        "core.setting.reading-app",
+        &[settings::READING_APP_DEFAULT],
+        settings::READING_APP_DEFAULT,
+        groups::READING,
+    )
+    .with_extra(&IN_APPS)
+    .description("core.setting.reading-app.help"),
+    SettingSpec::choice(
+        settings::FOOTNOTES.static_str(),
+        "core.setting.footnotes",
+        &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
+        settings::FOOTNOTES_POPUP,
+        groups::READING,
+    )
+    .advanced()
+    .with_extra(&IN_BEHAVIOUR)
+    .description("core.setting.footnotes.help"),
+    SettingSpec::choice(
+        settings::PAGE_FRAME.static_str(),
+        "core.setting.page-frame",
+        &[settings::PAGE_FRAME_SINGLE],
+        settings::PAGE_FRAME_SINGLE,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .description("core.setting.page-frame.help"),
+    SettingSpec::switch(
+        settings::SCOPE_ONLY.static_str(),
+        "core.setting.scope-only",
+        false,
+        groups::READING,
+    )
+    .scoped()
+    .description("core.setting.scope-only.help"),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_settings(&READING)
+}

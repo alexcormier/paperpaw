@@ -10,6 +10,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use paperpaw_hyphen::Patterns;
+
 use crate::builtin::{fonts, settings};
 use crate::document::{Document, DocumentError, Locator};
 use crate::layout::{Face, Page, PageImage, PageLine, Style, Typesetter};
@@ -159,6 +161,9 @@ pub struct PageType {
     pub columns: Vec<Rect>,
     /// The language whose hyphenation patterns are used, if hyphenating.
     pub hyphenation: Option<String>,
+    /// The fewest letters before and after a hyphen the reader asks for
+    /// (0: the language's own), see [`PageType::patterns`].
+    pub hyphen_minimums: (u8, u8),
     /// What the plugins' text filters did when it was made
     /// ([`TextFilters::signature`](crate::filters::TextFilters)).
     pub filters: u64,
@@ -270,6 +275,17 @@ impl PageType {
         let hyphenation = (s.read(&settings::HYPHENATE)
             && env.hyphenation().get(language).is_some())
         .then(|| language.to_string());
+        let hyphen_minimums = (
+            s.read(&settings::HYPHEN_MIN_LEFT).clamp(0, 5) as u8,
+            s.read(&settings::HYPHEN_MIN_RIGHT).clamp(0, 5) as u8,
+        );
+        // The language and, where the reader changed them, the minimums:
+        // pages laid out with the language's own keep their key.
+        let hyphenation_key = match (&hyphenation, hyphen_minimums) {
+            (None, _) => String::from("-"),
+            (Some(language), (0, 0)) => language.clone(),
+            (Some(language), (left, right)) => format!("{language}:{left}:{right}"),
+        };
         // The plugins' stylesheets change what the book's text looks like.
         let stylesheets = env.stylesheets().iter().fold(0u64, |hash, sheet| {
             hash.rotate_left(5) ^ paperpaw_digest::fnv1a64(sheet.as_bytes())
@@ -285,7 +301,7 @@ impl PageType {
                 face_id(env, &fonts::READING_BOLD_ITALIC),
                 style.indent,
                 style.paragraph_spacing,
-                hyphenation.as_deref().unwrap_or("-"),
+                hyphenation_key,
                 s.read(&settings::PUBLISHER_STYLES),
                 uses_book_fonts(env),
                 env.text_filters().signature(env),
@@ -313,9 +329,21 @@ impl PageType {
             rooms,
             columns,
             hyphenation,
+            hyphen_minimums,
             filters: env.text_filters().signature(env),
             key,
         }
+    }
+
+    /// The patterns words are hyphenated with: those of the page's
+    /// language, with the minimums the reader set where they are not 0;
+    /// `None` where the page is not hyphenated.
+    pub fn patterns(&self, env: &Env<'_>) -> Option<Patterns<'static>> {
+        let language = self.hyphenation.as_deref()?;
+        let (left, right) = self.hyphen_minimums;
+        env.hyphenation()
+            .get(language)
+            .map(|patterns| patterns.with_minimums(left.into(), right.into()))
     }
 
     /// The type of a sample of text `height` pixels high in `language`

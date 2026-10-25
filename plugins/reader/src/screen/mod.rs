@@ -51,7 +51,7 @@ pub(crate) use paperpaw_sdk::reading::open_options;
 
 /// The kernel's settings of the type of book pages: a change lays the
 /// book out anew (the font and the book's own styles open it again).
-const TYPE_SETTINGS: [&str; 12] = [
+const TYPE_SETTINGS: [&str; 14] = [
     FONT_SIZE.static_str(),
     FONT_WEIGHT.static_str(),
     WORD_SPACING.static_str(),
@@ -60,6 +60,8 @@ const TYPE_SETTINGS: [&str; 12] = [
     MARGIN_ENDS.static_str(),
     JUSTIFY.static_str(),
     HYPHENATE.static_str(),
+    paperpaw_sdk::builtin::settings::HYPHEN_MIN_LEFT.static_str(),
+    paperpaw_sdk::builtin::settings::HYPHEN_MIN_RIGHT.static_str(),
     INDENT.static_str(),
     PARAGRAPH_SPACING.static_str(),
     paperpaw_sdk::builtin::settings::WIDOWS.static_str(),

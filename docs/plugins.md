@@ -834,7 +834,7 @@ that their choices go along; a shell opens a book with
 | Text chosen, and the action chosen for it | `menus::SELECTION`, `events::TEXT_CHOSEN` | add an action to the menu, hear the event |
 | Notes exported as Markdown | `events::NOTES_EXPORTED` | for notes apps and syncs |
 | The reader's menus | `menus::READER`, `READER_MORE`, `READER_PANEL` | add entries there |
-| The type of pages | `settings::FONT_SIZE`, `FONT_WEIGHT`, `WORD_SPACING`, `LINE_SPACING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`, `INDENT`, `PARAGRAPH_SPACING`, `WIDOWS`, `ORPHANS`, `PUBLISHER_STYLES`, `FOOTNOTES` | the kernel's settings (each book may have its own), which readers read |
+| The type of pages | `settings::FONT_SIZE`, `FONT_WEIGHT`, `WORD_SPACING`, `LINE_SPACING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`, `HYPHEN_MIN_LEFT`, `HYPHEN_MIN_RIGHT`, `INDENT`, `PARAGRAPH_SPACING`, `WIDOWS`, `ORPHANS`, `PUBLISHER_STYLES`, `FOOTNOTES` | the kernel's settings (each book may have its own), which readers read |
 | The page's words | `events::PAGE_WORDS_WANTED`, `reading::PageWords` | readers answer `reading::ask_page_words` |
 | Where a book was left | `positions::{load, save}`, `Reading::xpointer` with `BOOK_CLOSED` | readers keep it; syncs and lists read it without opening the book |
 | The contents, search, the marks, a footnote, skimming | `slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`, `SKIM`, `events::FOLLOW_LINK`, `SKIM`, `SKIMMED` | bind a screen of one's own; readers open the slots, follow the links and go where skimming asks |
@@ -884,6 +884,11 @@ least `Style::widows` lines of a paragraph at the top of a page and
 `WIDOWS` and `ORPHANS`; a paragraph that goes on whole takes its
 heading along), and
 `layout::wrap_lines_hyphenated` breaks lines of one's own as pages do.
+`PageType::patterns` gives the patterns of the page's language with the
+letters the reader keeps before and after a hyphen (`HYPHEN_MIN_LEFT`,
+`HYPHEN_MIN_RIGHT`; 0: the table's own, see
+`hyphen::Patterns::with_minimums`); a reader of one's own hyphenates
+with them.
 
 A text filter that needs to know where a block is, or leaves blocks out
 (a web page's adverts, printed page numbers in a book), is a block
