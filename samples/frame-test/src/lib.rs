@@ -49,6 +49,9 @@ const STEPS: u32 = 20_000;
 /// Its memory, and its program's length.
 const MEMORY: usize = 8192;
 const PROGRAM: usize = 256;
+/// The memory it asks to have free, as an emulator would for its own
+/// screen and memory (see `Env::room`).
+pub const ROOM: u32 = 64 * 1024;
 /// The four grays of the pattern, from white to black.
 const PALETTE: [u8; 4] = [255, 170, 85, 0];
 
@@ -296,8 +299,16 @@ impl FrameScreen {
             || "-".into(),
             |(_, time)| format!("{} ms", time.as_millis()),
         );
+        let room = env.room();
+        let room = match (room.is_granted(), room.free()) {
+            (_, None) => "room: not measured".into(),
+            (true, Some(free)) => format!("room: {} KB free, granted", free / 1024),
+            (false, Some(free)) => {
+                format!("room: {} KB free of {} KB asked", free / 1024, ROOM / 1024)
+            }
+        };
         format!(
-            "{} fps (refresh {fastest})\nwork {} steps: hot {}, ordinary {}{}\ndrawing {} us\nheap free {heap}",
+            "{} fps (refresh {fastest})\nwork {} steps: hot {}, ordinary {}{}\ndrawing {} us\nheap free {heap}\n{room}",
             self.measured.fps,
             self.steps,
             us(self.measured.hot_us),
@@ -318,6 +329,7 @@ impl Screen for FrameScreen {
             .grays(2)
             .frame_every(FRAME)
             .awake_for(Duration::from_secs(600))
+            .memory(ROOM)
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
