@@ -642,8 +642,12 @@ fn kernel(
     // buttons); the X4 Pro is touched.
     #[cfg(feature = "x4")]
     let builder = builder.button_row(&buttons::ROW).catalog_device("x4");
+    // The X4 Pro's keys are tapped with a finger on a 4.3" screen: a
+    // large keyboard, unless the reader chose another size.
     #[cfg(feature = "x4-pro")]
-    let builder = builder.catalog_device("x4-pro");
+    let builder = builder
+        .catalog_device("x4-pro")
+        .setting_default_text("keyboard.size", "keyboard.size.large");
     #[cfg(feature = "x4-classic")]
     let builder = builder
         .button_row(&buttons::ROW)

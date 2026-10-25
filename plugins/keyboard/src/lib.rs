@@ -544,6 +544,15 @@ impl KeyboardScreen {
             shape: env.settings().read(&KEY_SHAPE).to_string(),
         };
         screen.buttons = screen.field_buttons(env);
+        // With buttons alone a text is typed a letter at a time: the focus
+        // starts on *Phone*, where it can be typed on a phone instead.
+        let phone = screen
+            .buttons
+            .iter()
+            .position(|(kind, _)| *kind == FieldButton::Phone);
+        if let (false, Some(_), Some(index)) = (touch, screen.focus, phone) {
+            screen.focus = Some((PASTE_ROW, index));
+        }
         screen
     }
 

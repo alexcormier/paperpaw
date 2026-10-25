@@ -25,8 +25,8 @@ use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
-    ActionSpec, Command, Commands, Env, Id, Manifest, MemoryStorage, Params, Plugin, RegisterError,
-    Registrar, Version,
+    ActionSpec, Canvas, Command, Commands, Env, Id, Manifest, MemoryStorage, Params, Plugin,
+    Priority, RegisterError, Registrar, Screen, ScreenSpec, Version,
 };
 use proptest::prelude::*;
 
@@ -115,6 +115,38 @@ impl Plugin for Listener {
     }
 }
 
+/// Where text is typed on a phone (as the transfer plugin's screen).
+struct PhoneSlot;
+
+/// A screen that shows nothing.
+struct Blank;
+
+impl Screen for Blank {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled {
+        paperpaw_sdk::Handled::No
+    }
+}
+
+impl Plugin for PhoneSlot {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("phone"), "Phone", Version::new(0, 1, 0))
+            .description("Takes text typed on a phone.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let screen = Id::new_static("phone.screen");
+        r.add_screen(ScreenSpec::new(
+            screen.clone(),
+            "Phone",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
+        r.bind_slot(slots::REMOTE_KEYBOARD, screen, Priority::DEFAULT)
+    }
+}
+
 struct Typing {
     kernel: Kernel,
     now: u64,
@@ -134,6 +166,29 @@ impl Typing {
             .user_config(format!("[core]\nlanguage = en\n{config}"))
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(Keyboard)
+            .plugin(Listener(answers.clone()))
+            .build()
+            .unwrap();
+        let mut typing = Self {
+            kernel,
+            now: 0,
+            answers,
+        };
+        let effects = typing.kernel.start(Instant(0));
+        typing.settle(effects);
+        typing
+    }
+
+    /// On `device` with a network and a phone to type on.
+    fn with_phone(device: DeviceInfo) -> Self {
+        let answers = Rc::new(RefCell::new(Vec::new()));
+        let kernel = Kernel::builder(device)
+            .storage(MemoryStorage::new())
+            .network(true)
+            .user_config("[core]\nlanguage = en\n")
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(Keyboard)
+            .plugin(PhoneSlot)
             .plugin(Listener(answers.clone()))
             .build()
             .unwrap();
@@ -363,6 +418,23 @@ fn every_letter_typed_by_buttons_gives_the_text() {
         typing.kernel.active_screen().map(Id::as_str),
         Some("keyboard.screen")
     );
+}
+
+/// Typed with buttons a letter at a time, a text is quicker on a phone:
+/// where one can be, the focus starts on *Phone*. Touched, nothing is
+/// focused.
+#[test]
+fn with_buttons_alone_the_focus_starts_on_phone() {
+    let mut typing = Typing::with_phone(BUTTONS);
+    typing.open(&[]);
+    assert_eq!(typing.focused().as_deref(), Some("Phone"));
+    // The keys are a press of Next away.
+    typing.press_by_buttons("a");
+    assert_eq!(typing.field(), "a");
+    let mut touched = Typing::with_phone(TOUCH);
+    touched.open(&[]);
+    assert!(touched.part("Phone").is_some());
+    assert_eq!(touched.focused(), None);
 }
 
 #[test]
