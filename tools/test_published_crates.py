@@ -126,6 +126,25 @@ class Dependencies(unittest.TestCase):
         self.current["dev-dependencies"] = {"paperpaw-app": {"path": "../../crates/paperpaw-app"}}
         self.assertFalse(self.changes())
 
+    def test_git_only_dev_dependencies_are_not_published(self):
+        self.current["dev-dependencies"] = {
+            "fatfs": {"git": "https://example.invalid/fatfs", "rev": "revision",
+                      "default-features": False, "features": ["alloc", "std"]},
+        }
+        self.assertFalse(self.changes())
+
+    def test_versioned_git_dev_dependencies_are_still_compared(self):
+        dependency = {"git": "https://example.invalid/fatfs", "rev": "old", "version": "0.4"}
+        self.current["dev-dependencies"] = {"fatfs": dependency | {"rev": "new"}}
+        self.published["dev-dependencies"] = {"fatfs": dependency}
+        self.assertTrue(self.changes())
+
+    def test_git_normal_and_build_dependencies_are_not_omitted(self):
+        for kind in ("dependencies", "build-dependencies"):
+            with self.subTest(kind=kind):
+                manifest = {kind: {"fatfs": {"git": "https://example.invalid/fatfs", "rev": "revision"}}}
+                self.assertIn(("", kind, "fatfs"), guard.dependencies(manifest, {}))
+
 
 class RegistryFailures(unittest.TestCase):
     def test_yanked_version_is_never_reused(self):
