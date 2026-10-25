@@ -118,6 +118,12 @@ change the plugin SDK.
 
 ### Fixed
 
+- Uploads over Wi-Fi no longer stall when the card fails to take a part:
+  the X4s answer at once, while the file still comes (*500* where the
+  card failed, *507* where it is full), instead of holding the upload
+  until it timed out. The X4 Pro tries a write to a card still busy
+  writing more often before it gives up, as some cards are while the
+  radio sends.
 - Status lines stand every item on one line: the battery, icons and bars
   centred on the figures of the time, the page and the percentage, and
   those in the middle of the line, to the pixel. The battery stood a

@@ -307,10 +307,17 @@ impl Servers {
                 let Some(at) = self.incoming.iter().position(|i| i.request == request) else {
                     return;
                 };
-                if storage.append(&self.incoming[at].path, &data).is_err() {
+                if let Err(error) = storage.append(&self.incoming[at].path, &data) {
                     let incoming = self.incoming.remove(at);
                     self.forget_body(request, &incoming.path, storage);
-                    self.refuse(request, 507, "the storage is full");
+                    // Answered at once, while the client still sends: the
+                    // shell ends the upload with it.
+                    match error {
+                        paperpaw_platform::StorageError::Full => {
+                            self.refuse(request, 507, "the storage is full");
+                        }
+                        _ => self.refuse(request, 500, "the card did not take the file"),
+                    }
                 } else if last {
                     let i = self.incoming.remove(at);
                     let body = Some(i.path);
