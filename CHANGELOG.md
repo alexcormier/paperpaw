@@ -19,6 +19,11 @@ change the plugin SDK.
   update…" with a bar that fills, takes no input meanwhile, and starts
   again from there once the update is kept, with its code plugins. SDK:
   `builtin::screens::FINISHING_UPDATE`.
+- Devices are counted without being known: the update search says
+  whether the reader asked (`trigger`: `auto` or `manual`) and of which
+  periods it is the device's first search (`first`: `day`, `week`,
+  `month`, in UTC; left out while the clock is not set). No id and no
+  request of its own; the device keeps only the date of its last search.
 - Back to CrossPoint without a computer: *Update* installs another
   firmware's image from the card (not signed, only as chosen, with a
   warning), checked whole for this device first. SDK:

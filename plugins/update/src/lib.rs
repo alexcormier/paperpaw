@@ -22,6 +22,7 @@
 
 extern crate alloc;
 
+mod count;
 mod fetch;
 mod found;
 mod look;
@@ -34,6 +35,7 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 
+use count::Trigger;
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::firmware::Firmware;
 use paperpaw_sdk::{
@@ -203,7 +205,7 @@ impl Plugin for Update {
         r.add_action(ActionSpec::new(CHECK, "update.check").handler(
             |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader() {
-                    online::check(env, true, out);
+                    online::check(env, true, Trigger::Manual, out);
                 } else {
                     let due = CHECK_DUE.id().clone();
                     out.push(Command::work(paperpaw_sdk::work::Work::when_cheap(
@@ -213,7 +215,9 @@ impl Plugin for Update {
                 }
             },
         ))?;
-        r.on(CHECK_DUE, |env, (), out| online::check(env, true, out))?;
+        r.on(CHECK_DUE, |env, (), out| {
+            online::check(env, true, Trigger::Auto, out);
+        })?;
         // Looking by itself: declared at each start and when the setting
         // changes.
         r.on(look::LOOK_DUE, |env, (), out| look::due(env, out))?;

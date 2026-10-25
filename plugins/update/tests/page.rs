@@ -662,6 +662,8 @@ fn an_update_from_the_server_is_downloaded_and_offered() {
     assert_eq!(call.url, "https://paperpaw.org/api/v1/updates");
     let question = String::from_utf8(call.body.clone().unwrap_or_default()).unwrap();
     assert!(question.contains(r#""version":"0.4.0""#), "{question}");
+    // Asked by the reader, counted without the time: no `first`.
+    assert!(question.ends_with(r#","trigger":"manual"}"#), "{question}");
     assert!(
         question.contains(r#""chess-for-paperpaw 1.0.0""#),
         "{question}"
@@ -1110,7 +1112,7 @@ fn betas_are_asked_for_when_wanted_and_shown_as_betas() {
     device.run(actions::CONFIRM);
     let call = device.request();
     let question = String::from_utf8(call.body.clone().unwrap_or_default()).unwrap();
-    assert!(question.ends_with(r#","betas":true}"#), "{question}");
+    assert!(question.contains(r#","betas":true"#), "{question}");
     let file = update_file("0.5.0-beta.2", &[("paperpaw-plugin-stats", "0.5.0-beta.2")]);
     let answer = offer(file.len()).replace("0.5.0", "0.5.0-beta.2");
     device.answer(&call, 200, answer.as_bytes());

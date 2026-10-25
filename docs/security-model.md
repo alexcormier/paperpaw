@@ -66,8 +66,12 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   An update search sends the chip, the version, the plugin crates built
   in, the fingerprint code plugins need and the code plugins installed
   with their versions, no identifier: when the
-  reader asks, and once a day while an update found waits for plugins
-  ([ADR 0022](adr/0022-plugins-in-updates.md)). The store asks for its
+  reader asks, once a week where the reader lets it look by itself, and
+  once a day while an update found waits for plugins
+  ([ADR 0022](adr/0022-plugins-in-updates.md)). To be counted without
+  being known, it also says whether the reader asked, and whether it is
+  the device's first search of the day, the week or the month (UTC): the
+  device keeps the date of its last search for that, and never sends it. The store asks for its
   list with the kind of device and the language, no identifier either.
 - **Files.** Books, fonts, pictures and catalogs are untrusted input.
   The parsers bound their memory and time, and they reject what they

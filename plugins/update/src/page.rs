@@ -660,7 +660,7 @@ impl UpdatePage {
             Button::Transfer => cx.command(Command::run(TRANSFER)),
             Button::Check => {
                 let mut out = paperpaw_sdk::Commands::new();
-                online::check(&env, false, &mut out);
+                online::check(&env, false, crate::count::Trigger::Manual, &mut out);
                 out.into_iter().for_each(|command| cx.command(command));
                 self.view = View::Checking;
                 self.focus = 0;

@@ -68,7 +68,7 @@ pub(crate) fn due(env: &Env<'_>, out: &mut Commands) {
         let _ = storage.create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
         let _ = storage.write(&file(LOOKED), alloc::format!("{now}\n").as_bytes());
     }
-    online::check(env, true, out);
+    online::check(env, true, crate::count::Trigger::Auto, out);
 }
 
 fn looked(storage: &dyn Storage) -> Option<i64> {
