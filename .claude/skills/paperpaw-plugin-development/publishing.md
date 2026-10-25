@@ -102,6 +102,12 @@ Ask the user for each, and suggest values from the plugin where you can
   code (`clock.open`). It must be free: not a plugin of the site's
   own, not another author's, not one taken down (look at
   `https://paperpaw.org/api/v1/plugins.json`). It cannot change later.
+- The **name** says what the plugin does. It is never only another
+  product's, project's or service's name, which would suggest the
+  plugin is theirs: "KOReader highlights", not "KOReader"; "Wikipedia
+  lookup", not "Wikipedia". Naming the other product to say what the
+  plugin works with is fine. Use no other's logo as the icon. The
+  store's review reports such names.
 - **name** (at most 60), **summary** (one sentence, at most 160),
   **description** (at most 2000): *How it works*, a few sentences on
   what the plugin does, where it is found and how it is used, shown on
