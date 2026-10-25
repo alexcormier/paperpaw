@@ -37,16 +37,14 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 
-use esp_bootloader_esp_idf::partitions::{
-    self, AppPartitionSubType, DataPartitionSubType, FlashStorage, PARTITION_TABLE_MAX_LEN,
-    PartitionType,
-};
+use esp_bootloader_esp_idf::partitions::{self, FlashStorage, PARTITION_TABLE_MAX_LEN};
 use log::{info, warn};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::firmware::{
     Check, Firmware, FirmwareState, ForeignCheck, ForeignImage, InstallFailure, Plugins, Update,
 };
-use paperpaw_x4::ota::{self, FlashError, Image, OtaData, State};
+use paperpaw_x4::ota::{self, FlashError, Image, OtaData, Start, State};
+use paperpaw_x4::partitions::{Slots, TABLE_AT, TABLE_LEN};
 
 // The plugin crates built in (`PLUGINS`), written by `build.rs`.
 include!(concat!(env!("OUT_DIR"), "/plugins.rs"));
@@ -216,39 +214,24 @@ impl Ota {
         info!("OTA: started {running}, chosen {chosen:?} ({state:?})");
         let mut trial = None;
         let mut undone = false;
-        match (chosen, state) {
-            // The one chosen did not start (marked bad here at the last
-            // start, or not startable): this one takes its place back.
-            (Some(chosen), _) if chosen != running => {
+        match ota_data.start(partition, running) {
+            Some(Start::Kept) => {}
+            Some(Start::Undone) => {
                 warn!("OTA: the update did not start, {running} is back");
                 undone = true;
-                if ota_data
-                    .choose(partition, running, State::Valid, 0)
-                    .is_err()
-                {
-                    warn!("OTA: could not choose {running}");
-                }
             }
-            // Undefined: chosen by a tool.
-            (Some(_), Some((State::New | State::Undefined, ran))) => {
+            Some(Start::Trial { ran }) => {
                 info!("OTA: an update on trial, {ran} ms run before");
-                if ota_data
-                    .set_state(partition, running, State::PendingVerify, ran)
-                    .is_ok()
-                {
-                    trial = Some(Trial {
-                        before: u64::from(ran),
-                        since: 0,
-                    });
-                }
+                trial = Some(Trial {
+                    before: u64::from(ran),
+                    since: 0,
+                });
             }
-            (Some(_), Some((State::PendingVerify, _))) => {
-                // The last run on trial ended other than cleanly.
+            Some(Start::Failed) => {
                 warn!("OTA: the update failed on trial: back to the one before");
-                let _ = ota_data.set_state(partition, running, State::Invalid, 0);
                 esp_hal::system::software_reset();
             }
-            _ => {}
+            None => warn!("OTA: could not mark the start of {running}"),
         }
         drop(flash);
         Some(Self {
@@ -589,44 +572,31 @@ fn running_from() -> Option<u32> {
     None
 }
 
-/// The partitions updates use; `None` without two app partitions (and
+/// The partitions updates use (`paperpaw_x4::partitions`, as the release
+/// checks each image's table); `None` without two app partitions (and
 /// only two) or when which runs cannot be told.
 fn partitions_of(flash: &mut FlashStorage<'static>) -> Option<Partitions> {
-    let mut table = Box::new([0u8; PARTITION_TABLE_MAX_LEN]);
-    let pt = partitions::read_partition_table(flash, &mut table[..]).ok()?;
-    let find = |kind| {
-        pt.find_partition(kind)
-            .ok()
-            .flatten()
-            .map(|p| (p.offset(), p.len()))
-    };
-    let (data, _) = find(PartitionType::Data(DataPartitionSubType::Ota))?;
-    let apps = [
-        find(PartitionType::App(AppPartitionSubType::Ota0))?,
-        find(PartitionType::App(AppPartitionSubType::Ota1))?,
-    ];
-    if find(PartitionType::App(AppPartitionSubType::Ota2)).is_some() {
-        return None;
-    }
-    let running = match pt.booted_partition().ok().flatten() {
-        Some(booted) => match booted.partition_type() {
-            PartitionType::App(AppPartitionSubType::Ota0) => 0,
-            PartitionType::App(AppPartitionSubType::Ota1) => 1,
-            _ => return None,
-        },
-        // Not told by the MMU's first entry: by where this code is.
-        None => {
-            let here = running_from()?;
-            u32::try_from(
-                apps.iter()
-                    .position(|&(at, len)| (at..at + len).contains(&here))?,
-            )
-            .ok()?
+    let mut table = Box::new([0u8; TABLE_LEN]);
+    flash.read(TABLE_AT, &mut table[..]).ok()?;
+    let slots = match Slots::find(&table[..]) {
+        Ok(slots) => slots,
+        Err(why) => {
+            warn!("OTA: the partition table has no room for updates: {why:?}");
+            return None;
         }
     };
+    // Where the bootloader started this: as the MMU's first entry says,
+    // else (the ESP32-S3) by where this code is.
+    let booted = partitions::read_partition_table(flash, &mut table[..PARTITION_TABLE_MAX_LEN])
+        .ok()
+        .and_then(|pt| pt.booted_partition().ok().flatten())
+        .map(|p| p.offset());
+    let running = booted
+        .and_then(|at| slots.slot_at(at))
+        .or_else(|| running_from().and_then(|at| slots.slot_at(at)))?;
     Some(Partitions {
-        data,
-        apps,
+        data: slots.data,
+        apps: slots.apps,
         running,
     })
 }

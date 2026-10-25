@@ -38,6 +38,7 @@ pub mod gt911;
 pub mod nvs;
 pub mod ota;
 pub mod panel;
+pub mod partitions;
 pub mod probe;
 pub mod provision;
 pub mod remote;

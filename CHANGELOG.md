@@ -82,7 +82,11 @@ change the plugin SDK.
   over USB) took no updates over the air ("OTA: no partitions for
   updates"): their image's two data segments hid which half of the
   flash runs. The firmware now finds it either way. Released firmware
-  was not affected.
+  was not affected. The release now fails for an image that could not
+  take the next update (`paperpaw-sign check-image`: two app slots in
+  its table, one data segment, room in either slot and CrossPoint's),
+  and host tests run whole updates with every partition table shipped
+  and CrossPoint's.
 
 ## [0.5.0-beta.6] - 2026-10-25
 

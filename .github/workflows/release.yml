@@ -276,6 +276,11 @@ jobs:
         uses: ./.github/actions/install-image
         with:
           out: ${{ github.workspace }}/dist/paperpaw-${{ matrix.device }}-${{ env.VERSION }}-install.bin
+      # Never an image that cannot take the next update: its own table has
+      # two app slots, read as the firmware reads it, and its app is one
+      # the bootloader maps whole and that fits them (and CrossPoint's).
+      - name: Updates have somewhere to go
+        run: cargo run -q --release -p paperpaw-sign -- check-image "dist/paperpaw-$DEVICE-$VERSION.bin"
       # Which code plugins run on it, for the plugin library and authors:
       # the fingerprint alone, 16 hexadecimal digits.
       - name: The sample code plugin fits the firmware

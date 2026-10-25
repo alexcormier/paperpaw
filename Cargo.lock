@@ -2199,6 +2199,7 @@ dependencies = [
  "paperpaw-digest",
  "paperpaw-native",
  "paperpaw-update",
+ "paperpaw-x4",
 ]
 
 [[package]]

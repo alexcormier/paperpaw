@@ -101,6 +101,22 @@ fn crc(sequence: u32) -> u32 {
     !crc
 }
 
+/// What a start found, and did, as [`OtaData::start`] says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Start {
+    /// Nothing to do: the firmware running is the one kept.
+    Kept,
+    /// The update chosen did not start (marked bad at the last start, or
+    /// not startable): the firmware running is chosen again, as before.
+    Undone,
+    /// An update's start, or a start of one on trial whose last run ended
+    /// cleanly: now on trial, after `ran` milliseconds run before.
+    Trial { ran: u32 },
+    /// An update on trial whose last run ended other than cleanly: marked
+    /// bad, the device starts again into the firmware before it.
+    Failed,
+}
+
 /// One of the two entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Entry([u8; ENTRY_LEN]);
@@ -245,6 +261,41 @@ impl OtaData {
             self.choose(flash, running, state, trial_ms)?;
         }
         Ok(target)
+    }
+
+    /// What to do at a start of the firmware in `running`, done: an update
+    /// put on trial, a failed one marked bad, or the firmware before chosen
+    /// again where the update did not start (see [`Start`]). `None` where
+    /// writing failed.
+    pub fn start(&mut self, flash: &mut impl Flash, running: u32) -> Option<Start> {
+        match (self.chosen(), self.state_of(running)) {
+            (Some(chosen), _) if chosen != running => {
+                self.choose(flash, running, State::Valid, 0).ok()?;
+                Some(Start::Undone)
+            }
+            // Undefined: chosen by a tool.
+            (Some(_), Some((State::New | State::Undefined, ran))) => {
+                self.set_state(flash, running, State::PendingVerify, ran)
+                    .ok()?;
+                Some(Start::Trial { ran })
+            }
+            (Some(_), Some((State::PendingVerify, _))) => {
+                self.set_state(flash, running, State::Invalid, 0).ok()?;
+                Some(Start::Failed)
+            }
+            _ => Some(Start::Kept),
+        }
+    }
+
+    /// The slot ESP-IDF's bootloader starts: the one the newest entry not
+    /// marked bad chooses; the first where none does.
+    pub fn booted(&self) -> u32 {
+        (0..2)
+            .filter(|&i| !matches!(self.entries[i].state(), State::Invalid | State::Aborted))
+            .filter_map(|i| self.entries[i].sequence().map(|s| (s, i)))
+            .max()
+            .and_then(|(_, i)| self.entries[i].slot())
+            .unwrap_or(0)
     }
 
     fn write(
