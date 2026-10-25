@@ -865,6 +865,13 @@ pub mod groups {
     pub const LIBRARY: Id = Id::new_static("core.group.library");
     /// Language and everything about the device.
     pub const SYSTEM: Id = Id::new_static("core.group.system");
+    /// Date and time: the clock's format, the first day of the week, the
+    /// time zone.
+    pub const TIME: Id = Id::new_static("core.group.time");
+    /// Plugins: the store, each plugin's network.
+    pub const PLUGINS: Id = Id::new_static("core.group.plugins");
+    /// Words: dictionaries, translation, vocabulary.
+    pub const WORDS: Id = Id::new_static("core.group.words");
     /// How menus and lists look: text size, margins, rows, lines, headers.
     /// Themes (data plugins) set its defaults.
     pub const LOOK: Id = Id::new_static("core.group.look");

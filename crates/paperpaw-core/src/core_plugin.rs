@@ -89,7 +89,9 @@ impl Plugin for CorePlugin {
         })?;
         // Each plugin's network (its settings made by the kernel).
         static NETWORK: SettingGroupSpec =
-            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87);
+            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network")
+                .order(87)
+                .within(groups::PLUGINS);
         r.add_setting_group(&NETWORK)?;
         static NETWORK_ICON: [(Id, &str); 1] = [(crate::work::NETWORK_GROUP, "world")];
         r.add_icons(&NETWORK_ICON)?;
@@ -882,7 +884,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         MenuEntry::new(menus::QUICK, actions::SETTINGS).order(90),
     ];
     r.add_menu_entries(&ENTRIES)?;
-    static ICONS: [(Id, &str); 18] = [
+    static ICONS: [(Id, &str); 21] = [
         (menus::READER_MORE, "dots"),
         (actions::SCREENSHOT, "camera"),
         (menus::APPS, "apps"),
@@ -901,6 +903,9 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         (groups::LOOK, "palette"),
         (groups::OTHER, "dots"),
         (groups::DEVELOPER, "bug"),
+        (groups::TIME, "clock"),
+        (groups::PLUGINS, "puzzle"),
+        (groups::WORDS, "language"),
     ];
     r.add_icons(&ICONS)?;
 
@@ -918,7 +923,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
             paperpaw_sdk::MenuSection::new(id, title, menus::SETTINGS).order(order),
         )?;
     }
-    static GROUPS: [SettingGroupSpec; 8] = [
+    static GROUPS: [SettingGroupSpec; 11] = [
         SettingGroupSpec::new(groups::READING, "core.group.reading").order(10),
         SettingGroupSpec::new(groups::LIBRARY, "core.group.library").order(20),
         SettingGroupSpec::new(groups::DISPLAY, "core.group.display").order(60),
@@ -927,6 +932,9 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         SettingGroupSpec::new(groups::LOOK, "core.group.look").order(210),
         SettingGroupSpec::new(groups::OTHER, "core.group.other").order(100),
         SettingGroupSpec::new(groups::DEVELOPER, "core.group.developer").order(95),
+        SettingGroupSpec::new(groups::TIME, "core.group.time").order(89),
+        SettingGroupSpec::new(groups::PLUGINS, "core.group.plugins").order(230),
+        SettingGroupSpec::new(groups::WORDS, "core.group.words").order(12),
     ];
     for group in &GROUPS {
         r.add_setting_group(group)?;
@@ -1131,7 +1139,7 @@ static LOOK: [SettingSpec; 14] = [
         "core.setting.widget-frame",
         paperpaw_sdk::widgets::ALL_FRAMES,
         paperpaw_sdk::widgets::OWN_FRAME,
-        groups::LOOK,
+        Id::new_static("home.group"),
     )
     .advanced()
     .description("core.setting.widget-frame.help"),
@@ -1229,7 +1237,7 @@ static LOOK: [SettingSpec; 14] = [
         paperpaw_sdk::logo::LOGO.static_str(),
         "core.setting.logo",
         "",
-        groups::LOOK,
+        Id::new_static("sleep.group"),
     )
     .advanced()
     .description("core.setting.logo.help"),
@@ -1292,7 +1300,7 @@ static DEVICE: [SettingSpec; 15] = [
         0,
         120,
         10,
-        groups::SYSTEM,
+        Id::new_static("power.group"),
     )
     .with_extra(&MINUTES_5)
     .description("core.setting.sleep-after.help"),
@@ -1325,7 +1333,7 @@ static DEVICE: [SettingSpec; 15] = [
         1,
         60,
         4,
-        groups::DISPLAY,
+        groups::LOOK,
     )
     .advanced()
     .with_extra(&SECONDS)
@@ -1495,7 +1503,7 @@ static TIME: [SettingSpec; 4] = [
         "core.setting.clock-format",
         &[CLOCK_24H, CLOCK_12H],
         CLOCK_24H,
-        groups::SYSTEM,
+        groups::TIME,
     )
     .description("core.setting.clock-format.help"),
     SettingSpec::choice(
@@ -1503,7 +1511,7 @@ static TIME: [SettingSpec; 4] = [
         "core.setting.week-start",
         time::WEEK_STARTS,
         time::WEEK_STARTS[0],
-        groups::SYSTEM,
+        groups::TIME,
     )
     .description("core.setting.week-start.help"),
     SettingSpec::choice(
@@ -1511,14 +1519,14 @@ static TIME: [SettingSpec; 4] = [
         "core.setting.time-zone",
         &ZONES,
         AUTO,
-        groups::SYSTEM,
+        groups::TIME,
     )
     .description("core.setting.time-zone.help"),
     SettingSpec::text(
         settings::TIME_ZONE_RULE.static_str(),
         "core.setting.time-zone-rule",
         "",
-        groups::SYSTEM,
+        groups::TIME,
     )
     .advanced()
     .description("core.setting.time-zone-rule.help"),
