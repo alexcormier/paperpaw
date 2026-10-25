@@ -5,7 +5,8 @@
 //! ([`native::author`]). At the first install the key must be the
 //! one the library names for the plugin; later it must be the one
 //! remembered, and an update signed by another waits until the reader,
-//! warned, says to install it anyway.
+//! warned, says to install it anyway; one of a community plugin, which
+//! nobody reviewed, is refused.
 
 use alloc::format;
 use alloc::string::String;
@@ -16,6 +17,7 @@ use paperpaw_sdk::native::{self, Author, check_file};
 use paperpaw_sdk::{Commands, Env, Storage};
 
 use crate::INSTALLER;
+use crate::catalog::Entry;
 
 /// Why a plugin downloaded is not installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +40,9 @@ pub(crate) enum Refusal {
     Taken,
     /// Its code does not fit in the room left for code plugins.
     NoRoom,
+    /// A community plugin's update signed by another key than the version
+    /// installed: nobody reviewed who signs it now.
+    KeyChanged,
 }
 
 impl Refusal {
@@ -52,6 +57,7 @@ impl Refusal {
             Refusal::Unsupported => "store.refused.unsupported",
             Refusal::Taken => "store.refused.taken",
             Refusal::NoRoom => "store.refused.no-room",
+            Refusal::KeyChanged => "store.refused.key-changed",
         }
     }
 }
@@ -87,14 +93,18 @@ fn expected_path() -> String {
 }
 
 /// Keeps the key the library names for the author of `plugin`, which is
-/// being downloaded (`None` for a data plugin).
-pub(crate) fn expect(storage: &dyn Storage, plugin: &str, key: Option<&[u8; 32]>) {
+/// being downloaded (`None` for a data plugin), and whether nobody
+/// reviewed it.
+pub(crate) fn expect(storage: &dyn Storage, plugin: &Entry, key: Option<&[u8; 32]>) {
     match key {
         Some(key) => {
-            let mut text = String::from(plugin);
+            let mut text = plugin.id.clone();
             text.push('\t');
             for byte in key {
                 text.push_str(&format!("{byte:02x}"));
+            }
+            if plugin.unreviewed {
+                text.push_str("\tunreviewed");
             }
             let _ = storage.write(&expected_path(), text.as_bytes());
         }
@@ -104,10 +114,15 @@ pub(crate) fn expect(storage: &dyn Storage, plugin: &str, key: Option<&[u8; 32]>
     }
 }
 
-fn expected(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
+/// The key named for `plugin`, and whether nobody reviewed it.
+fn expected(storage: &dyn Storage, plugin: &str) -> Option<([u8; 32], bool)> {
     let text = paperpaw_sdk::read_file(storage, &expected_path(), 256).ok()?;
     let text = core::str::from_utf8(&text).ok()?;
-    let (id, hex) = text.trim().split_once('\t')?;
+    let (id, rest) = text.trim().split_once('\t')?;
+    let (hex, unreviewed) = match rest.split_once('\t') {
+        Some((hex, mark)) => (hex, mark == "unreviewed"),
+        None => (rest, false),
+    };
     if id != plugin || hex.len() != 64 {
         return None;
     }
@@ -116,7 +131,7 @@ fn expected(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
         let pair = core::str::from_utf8(pair).ok()?;
         *byte = u8::from_str_radix(pair, 16).ok()?;
     }
-    Some(key)
+    Some((key, unreviewed))
 }
 
 /// Whether the plugin downloaded into `folder` may be installed.
@@ -166,10 +181,14 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
         author: key,
         sha256: header.sha256,
     };
+    let named = expected(storage, plugin);
     match native::author(storage, plugin, &key) {
         Author::Known => Verdict::Install { code: Some(code) },
+        Author::Other if named.is_some_and(|(_, unreviewed)| unreviewed) => {
+            Verdict::Refused(Refusal::KeyChanged)
+        }
         Author::Other => Verdict::OtherAuthor { code },
-        Author::New if expected(storage, plugin) == Some(key) => {
+        Author::New if named.is_some_and(|(named, _)| named == key) => {
             Verdict::Install { code: Some(code) }
         }
         Author::New => Verdict::Refused(Refusal::NotTheAuthor),

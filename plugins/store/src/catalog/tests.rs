@@ -285,20 +285,29 @@ fn unsafe_files_are_refused() {
 fn addresses_name_the_device_and_the_language() {
     let list = "https://paperpaw.org/api/v1/plugins.json";
     assert_eq!(
-        list_url(list, "x4-pro", "de"),
+        list_url(list, "x4-pro", "de", false),
         "https://paperpaw.org/api/v1/plugins.json?device=x4-pro&lang=de"
     );
     assert_eq!(
-        list_url("https://x/p.json?key=1", "x4", "en"),
+        list_url("https://x/p.json?key=1", "x4", "en", false),
         "https://x/p.json?key=1&device=x4&lang=en"
     );
     assert_eq!(
-        plugin_url(list, "x4", "en", "airy"),
+        plugin_url(list, "x4", "en", "airy", false),
         "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en"
+    );
+    // Community plugins only where the reader asked for them.
+    assert_eq!(
+        list_url(list, "x4", "en", true),
+        "https://paperpaw.org/api/v1/plugins.json?device=x4&lang=en&community=1"
+    );
+    assert_eq!(
+        plugin_url(list, "x4", "en", "airy", true),
+        "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en&community=1"
     );
     // A library's key goes with its pages.
     assert_eq!(
-        plugin_url("https://x/lib/p.json?key=1#top", "x4", "en", "airy"),
+        plugin_url("https://x/lib/p.json?key=1#top", "x4", "en", "airy", false),
         "https://x/lib/plugins/airy.json?key=1&device=x4&lang=en"
     );
 }

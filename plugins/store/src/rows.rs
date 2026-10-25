@@ -124,6 +124,8 @@ pub(crate) fn draw(
     // say so first.
     let summary = if plugin.official {
         format!("{} · {}", env.i18n().tr("store.official"), plugin.summary)
+    } else if plugin.unreviewed {
+        format!("{} · {}", env.i18n().tr("store.unreviewed"), plugin.summary)
     } else {
         plugin.summary.clone()
     };

@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- Community plugins: the store's new setting *Community plugins*
+  (Settings, System, off at first) also lists plugins that their authors
+  published on GitHub, which nobody reviewed. They are marked
+  *Unreviewed*, with the repository they come from; a code plugin's page
+  shows the key it is signed with, and an update of one signed by
+  another key is refused, with no way to install it anyway.
+
 ## [0.5.0-beta.6] - 2026-10-25
 
 ### Added

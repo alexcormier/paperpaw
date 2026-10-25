@@ -254,7 +254,8 @@ impl PageScreen {
         };
         let list = env.settings().read(&CATALOG);
         let language = env.i18n().language();
-        let url = catalog::plugin_url(list.trim(), device.name, language, &self.id);
+        let community = crate::community(&env);
+        let url = catalog::plugin_url(list.trim(), device.name, language, &self.id, community);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
         request = request.save_to(catalog::plugin_part(&self.id));
         request = request.with(Params::new().with(params::ID, self.id.clone()));
@@ -328,7 +329,7 @@ impl PageScreen {
         match &self.details {
             Details::Here(plugin) => {
                 let mut out = paperpaw_sdk::Commands::new();
-                trust::expect(env.storage(), &plugin.entry.id, plugin.author_key.as_ref());
+                trust::expect(env.storage(), &plugin.entry, plugin.author_key.as_ref());
                 if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
                 }
@@ -538,6 +539,15 @@ fn facts(
         Some("unverified") => facts.push(("circle", i18n.tr("store.verified.not").to_string())),
         _ => {}
     }
+    // Nobody reviewed it: said first, with where it comes from.
+    if plugin.unreviewed {
+        let repository = more.map_or("", |m| m.repository.trim_start_matches("https://"));
+        let text = match repository {
+            "" => i18n.tr("store.unreviewed.fact").to_string(),
+            from => i18n.format("store.unreviewed.from", &[("repository", Arg::Str(from))]),
+        };
+        facts.insert(0, ("alert-triangle", text));
+    }
     if plugin.official {
         facts.push(("paw", i18n.tr("store.official").to_string()));
     } else if !plugin.author.is_empty() {
@@ -556,6 +566,21 @@ fn facts(
             None => i18n.format("store.by", &[("author", Arg::Str(&plugin.author))]),
         };
         facts.push(("user", by));
+    }
+    // The key its code is signed with, which an update must have too: its
+    // first 16 digits, as the library's page shows it whole.
+    if plugin.code
+        && !plugin.official
+        && let Some(key) = more
+            .map(|m| m.author_key.as_str())
+            .filter(|k| k.len() == 64)
+    {
+        let groups: Vec<&str> = (0..4).map(|i| &key[i * 4..i * 4 + 4]).collect();
+        let short = groups.join(" ");
+        facts.push((
+            "key",
+            i18n.format("store.author-key", &[("key", Arg::Str(&short))]),
+        ));
     }
     let size = files::size(plugin.size, i18n.tr("store.decimal"));
     let mut version = i18n.format(
