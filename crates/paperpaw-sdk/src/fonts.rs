@@ -957,6 +957,28 @@ impl<'a> FontHandle<'a> {
         color: Color,
         extra: u16,
     ) -> f32 {
+        let tone = paperpaw_text::ToneCurve::SMOOTH;
+        self.draw_toned(canvas, size, x, baseline, text, color, extra, tone)
+    }
+
+    /// Like [`FontHandle::draw_bolder`], the glyphs' coverage drawn in
+    /// `tone`: on a contrast curve, or without grays (e.g. a reader's
+    /// settings for book text).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
+    pub fn draw_toned(
+        &self,
+        canvas: &mut Canvas<'_>,
+        size: f32,
+        x: f32,
+        baseline: i32,
+        text: &str,
+        color: Color,
+        extra: u16,
+        tone: paperpaw_text::ToneCurve,
+    ) -> f32 {
         // Only described, as a screen reader asks: no glyph made.
         if canvas.is_blind() || self.describing.get() {
             return self.measure(size, text);
@@ -976,6 +998,7 @@ impl<'a> FontHandle<'a> {
                 .map_or(rest.len(), |(at, _)| at);
             let style = paperpaw_text::TextStyle::new(font, index, size, color)
                 .bolder(extra)
+                .curve(tone)
                 .based(based);
             let run = &rest[..end];
             pen += paperpaw_text::draw_text(canvas, &mut cache, &style, pen, baseline, run);

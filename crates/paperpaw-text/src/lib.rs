@@ -26,6 +26,7 @@ extern crate alloc;
 mod bitmap;
 mod cache;
 pub mod charset;
+mod curve;
 mod font;
 mod glyph;
 mod layout;
@@ -44,6 +45,7 @@ mod stored;
 
 pub use bitmap::{BitmapFont, PackBuilder};
 pub use cache::GlyphCache;
+pub use curve::ToneCurve;
 pub use font::{Font, FontError, LineMetrics};
 pub use stored::{PackSource, StoredPack};
 
@@ -63,7 +65,7 @@ pub fn measure(font: &Font, size: f32, text: &str) -> f32 {
 }
 
 /// How a line of text is drawn: its font (and the font's number in the
-/// glyph cache), size and colour, and how much bolder.
+/// glyph cache), size and colour, how much bolder, and on what curve.
 #[derive(Clone, Copy)]
 pub struct TextStyle<'a> {
     pub font: &'a Font,
@@ -75,6 +77,9 @@ pub struct TextStyle<'a> {
     /// bolder text with any font, also bitmap packs. Advances stay as
     /// they are.
     pub bolder: u16,
+    /// How the glyphs' coverage is drawn: smooth, on a contrast curve,
+    /// or without grays ([`ToneCurve`]).
+    pub curve: ToneCurve,
     /// The text goes on from one with a character before it, which
     /// combining marks at its start sit on (see [`glyph_x`]).
     pub based: bool,
@@ -90,6 +95,7 @@ impl<'a> TextStyle<'a> {
             size,
             color,
             bolder: 0,
+            curve: ToneCurve::SMOOTH,
             based: false,
         }
     }
@@ -97,6 +103,12 @@ impl<'a> TextStyle<'a> {
     /// Glyphs widened by `extra` pixels (see [`TextStyle::bolder`]).
     pub fn bolder(mut self, extra: u16) -> Self {
         self.bolder = extra;
+        self
+    }
+
+    /// Glyphs drawn on `curve` (see [`TextStyle::curve`]).
+    pub fn curve(mut self, curve: ToneCurve) -> Self {
+        self.curve = curve;
         self
     }
 
@@ -138,6 +150,7 @@ impl core::fmt::Debug for TextStyle<'_> {
             .field("size", &self.size)
             .field("color", &self.color)
             .field("bolder", &self.bolder)
+            .field("curve", &self.curve)
             .finish_non_exhaustive()
     }
 }
@@ -159,6 +172,7 @@ pub fn draw_text(
         size,
         color,
         bolder: extra,
+        curve: tone,
         mut based,
     } = *style;
     let mut pen = x;
@@ -170,14 +184,14 @@ pub fn draw_text(
         based |= !mark;
         let gy = baseline.saturating_add(i32::from(glyph.top));
         if !glyph.is_empty() && extra == 0 {
-            // The usual weight: each pixel's own coverage.
+            // The usual weight: each pixel's own coverage, on its curve.
             canvas.draw_mask(
                 gx,
                 gy,
                 u32::from(glyph.width),
                 u32::from(glyph.height),
                 color,
-                |px, py| glyph.coverage(px as u16, py as u16),
+                |px, py| tone.alpha(glyph.level(px as u16, py as u16)),
             );
         } else if !glyph.is_empty() {
             let width = u32::from(glyph.width);
@@ -189,12 +203,14 @@ pub fn draw_text(
                 color,
                 |px, py| {
                     // The strongest coverage of the pixels up to `extra`
-                    // to the left.
-                    (0..=u32::from(extra))
+                    // to the left, on its curve (curves rise, so the
+                    // strongest stays the strongest).
+                    let level = (0..=u32::from(extra))
                         .filter(|k| *k <= px && px - k < width)
-                        .map(|k| glyph.coverage((px - k) as u16, py as u16))
+                        .map(|k| glyph.level((px - k) as u16, py as u16))
                         .max()
-                        .unwrap_or(0)
+                        .unwrap_or(0);
+                    tone.alpha(level)
                 },
             );
         }

@@ -13,6 +13,7 @@ use alloc::vec::Vec;
 use crate::builtin::{fonts, settings};
 use crate::document::{Document, DocumentError, Locator};
 use crate::layout::{Face, Page, PageImage, PageLine, Style, Typesetter};
+use crate::text::ToneCurve;
 use crate::{Canvas, Color, Env, FontHandle, FontSet, Id, Point, Rect};
 
 /// Relative sizes of headings 1 to 6.
@@ -423,12 +424,17 @@ fn face_id(env: &Env<'_>, role: &Id) -> String {
 /// The reading fonts by face, for layout and drawing: the faces bound to
 /// the reading roles (a font the user chose for book text is not mixed
 /// with the default bold or italic), the book's own where it uses them,
-/// headings larger, small capitals.
+/// headings larger, small capitals, the letters as smooth and as dark as
+/// the settings say.
 #[derive(Clone, Copy)]
 pub struct ReadingFaces<'a> {
     /// Regular, bold, italic and bold italic.
     fonts: [FontHandle<'a>; 4],
     weight: u8,
+    /// The contrast curve of the letters' edges.
+    tone: ToneCurve,
+    /// Letters black and white, without grays.
+    sharp: bool,
     word_spacing: f32,
     embedded: Option<&'a EmbeddedFonts>,
     size: f32,
@@ -464,9 +470,12 @@ impl<'a> ReadingFaces<'a> {
         let bold = face(&fonts::READING_BOLD).unwrap_or(regular);
         let italic = face(&fonts::READING_ITALIC).unwrap_or(regular);
         let bold_italic = face(&fonts::READING_BOLD_ITALIC).unwrap_or(bold);
+        let (tone, sharp) = ink(env);
         Some(Self {
             fonts: [regular, bold, italic, bold_italic],
             weight: page.weight,
+            tone,
+            sharp,
             word_spacing: page.word_spacing,
             embedded,
             size: page.size,
@@ -549,19 +558,24 @@ impl<'a> ReadingFaces<'a> {
             w => (f32::from(w) * size / 48.0 + 0.5).max(1.0) as u16,
         };
         let font = self.font(face);
+        // Without grays from the coverage a frame of black and white draws
+        // from: the letters it would draw.
+        let tone = match self.sharp {
+            true => self.tone.sharp(canvas.mono_coverage()),
+            false => self.tone,
+        };
+        let draw = |canvas: &mut Canvas<'_>, size, x, text: &str| {
+            font.draw_toned(canvas, size, x, baseline, text, ink, extra, tone)
+        };
         if !face.style.small_caps() {
-            return font.draw_bolder(canvas, size, x, baseline, text, ink, extra);
+            return draw(canvas, size, x, text);
         }
         // Lower case letters as smaller capitals.
         let mut width = 0.0;
         for (part, lower) in small_caps_parts(text) {
             width += match lower {
-                true => {
-                    let upper = part.to_uppercase();
-                    let small = size * SMALL_CAPS;
-                    font.draw_bolder(canvas, small, x + width, baseline, &upper, ink, extra)
-                }
-                false => font.draw_bolder(canvas, size, x + width, baseline, part, ink, extra),
+                true => draw(canvas, size * SMALL_CAPS, x + width, &part.to_uppercase()),
+                false => draw(canvas, size, x + width, part),
             };
         }
         width
@@ -690,6 +704,23 @@ pub fn word_boxes(faces: &ReadingFaces<'_>, page_type: &PageType, page: &Page) -
         }
     }
     words
+}
+
+/// The contrast curve of book text ([`settings::TEXT_CONTRAST`]), and
+/// whether it is drawn without grays ([`settings::SMOOTH_TEXT`] off).
+/// Not where the panel shows black and white alone: its frame draws the
+/// same letters already, and a page shown in grays there for its
+/// pictures keeps its letters smooth, as before.
+fn ink(env: &Env<'_>) -> (ToneCurve, bool) {
+    let s = env.settings();
+    let level = s.read(&settings::TEXT_CONTRAST);
+    let step = settings::TEXT_CONTRAST_LEVELS
+        .iter()
+        .position(|l| *l == level)
+        .map_or(0, |at| at as i8 + ToneCurve::LIGHTEST);
+    let mono = env.device().display.format.gray_levels() == Some(2);
+    let sharp = !mono && !s.read(&settings::SMOOTH_TEXT);
+    (ToneCurve::contrast(step), sharp)
 }
 
 /// Draws `lines` laid out with `faces` in `page_type`, their content box

@@ -304,6 +304,15 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// From what coverage (1 to 255) a pixel at the edge of a letter is
+    /// drawn where the frame is black and white
+    /// ([`Framebuffer::set_mono_coverage`](crate::Framebuffer::set_mono_coverage)):
+    /// for those who draw text without grays elsewhere too, so that it
+    /// looks the same on every panel and in every pass.
+    pub fn mono_coverage(&self) -> u8 {
+        self.framebuffer.mono_coverage()
+    }
+
     /// The error of a picture diffused from its first row ([`Atkinson`]),
     /// as the band above left it at row `y`
     /// ([`Canvas::keep_diffusion`]): the picture goes on from there

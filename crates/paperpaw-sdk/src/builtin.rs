@@ -684,6 +684,27 @@ pub mod settings {
     /// registers them, each book may have its own ([`SCOPE_ONLY`]), every
     /// reader reads them.
     pub const FONT_WEIGHT: Setting<i64> = Setting::new("core.font-weight");
+    /// Book text with smooth letters, their edges in grays; off, each
+    /// pixel black or white, from as much coverage as [`MONO_TEXT`] says.
+    /// Where the panel shows black and white but grays with a refresh of
+    /// its own (the X4), it is off at first: on, every page is shown in
+    /// grays, slower and costing more battery; off, only pages with
+    /// pictures are, and their letters stay smooth. Each book may have
+    /// its own ([`SCOPE_ONLY`]); the interface's text is as it is.
+    pub const SMOOTH_TEXT: Setting<bool> = Setting::new("core.smooth-text");
+    /// How dark book text is drawn: its letters' edges on a contrast
+    /// curve, finer than [`FONT_WEIGHT`] and with it, one of
+    /// [`TEXT_CONTRAST_LEVELS`] (lighter, normal, darker, darkest; see
+    /// [`ToneCurve::contrast`](crate::text::ToneCurve::contrast), whose steps go
+    /// from -1 for the first). Each book may have its own
+    /// ([`SCOPE_ONLY`]).
+    pub const TEXT_CONTRAST: Setting<Text> = Setting::new("core.text-contrast");
+    pub const TEXT_CONTRAST_LEVELS: &[&str] = &[
+        "core.text-contrast.lighter",
+        "core.text-contrast.normal",
+        "core.text-contrast.darker",
+        "core.text-contrast.darkest",
+    ];
     /// Space between words in percent of the font's (50 to 200).
     pub const WORD_SPACING: Setting<i64> = Setting::new("core.word-spacing");
     /// Distance between baselines in percent of the font size, at least

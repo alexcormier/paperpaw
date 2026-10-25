@@ -60,7 +60,14 @@ impl Widget for Sample {
         let pad = env.metrics().mm(2) as f32;
         let t = Typography::sample(env, &font, language, f32::from(height(env)), pad);
         let text = text(env);
-        let shown = format!("{}|{text}", t.key);
+        // How the letters are inked too, which the type's key leaves out.
+        let s = env.settings();
+        let ink = (
+            t.weight,
+            s.read(&crate::settings::TEXT_CONTRAST),
+            s.read(&crate::settings::SMOOTH_TEXT),
+        );
+        let shown = format!("{}|{ink:?}|{text}", t.key);
         if shown == self.shown {
             return false;
         }
