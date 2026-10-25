@@ -83,6 +83,10 @@ impl Uses {
     /// pairing, being seen. Without it its commands fail
     /// ([`BtError::NotAllowed`](crate::bluetooth::BtError)).
     pub const BLUETOOTH: Uses = Uses(2);
+    /// The developer link over USB ([`developer`](crate::developer)): for
+    /// tools the reader installs and allows under *Developer*. Without it
+    /// its commands fail ([`DevError::NotDeclared`](crate::developer::DevError)).
+    pub const DEVELOPER: Uses = Uses(4);
 
     /// Whether everything in `other` is declared.
     pub const fn contains(self, other: Uses) -> bool {
@@ -94,7 +98,7 @@ impl Uses {
     }
 
     pub const fn from_bits(bits: u8) -> Uses {
-        Uses(bits & (Uses::NETWORK.0 | Uses::BLUETOOTH.0))
+        Uses(bits & (Uses::NETWORK.0 | Uses::BLUETOOTH.0 | Uses::DEVELOPER.0))
     }
 }
 

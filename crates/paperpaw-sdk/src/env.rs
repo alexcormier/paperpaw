@@ -86,6 +86,9 @@ impl Capability {
     /// a device has page keys alone, screens offer by touch what they
     /// would by buttons.
     pub const BUTTONS: Self = Self(1 << 6);
+    /// A USB link to a computer that developer tools may use
+    /// ([`developer`](crate::developer)), once the reader allows them.
+    pub const USB_LINK: Self = Self(1 << 7);
 }
 
 impl Capabilities {

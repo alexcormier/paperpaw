@@ -35,6 +35,8 @@ is a new record that links back.
 | [0026](0026-plugin-interface-version.md) | Code plugins bound to a plugin interface version, built without build scripts | Accepted |
 | [0027](0027-bluetooth.md) | Bluetooth Low Energy | Accepted |
 | [0029](0029-kerning-and-ligatures.md) | Kerning and ligatures | Accepted |
+| [0030](0030-real-time-screens.md) | Screens that run in real time | Accepted |
+| [0031](0031-developer-link.md) | A developer link over USB for plugins | Accepted; reserved, carried out later |
 
 ## Template
 

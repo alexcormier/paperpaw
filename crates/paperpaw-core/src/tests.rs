@@ -3283,6 +3283,7 @@ mod action_runs;
 mod chrome;
 mod clean_up;
 mod declared_work;
+mod developer;
 mod frames;
 mod guard;
 mod hosting;

@@ -799,6 +799,11 @@ pub enum Command {
     /// Bluetooth, for plugins declaring [`Uses::BLUETOOTH`](crate::Uses):
     /// written with the functions of [`bluetooth`](crate::bluetooth).
     Bluetooth(alloc::boxed::Box<crate::bluetooth::BtRequest>),
+    /// The developer link over USB, for plugins declaring
+    /// [`Uses::DEVELOPER`](crate::Uses): written with the functions of
+    /// [`developer`](crate::developer). Reserved: answered as not
+    /// available in this release.
+    Developer(alloc::boxed::Box<crate::developer::DevRequest>),
     /// Tells the radio what to do, where PaperPaw manages Wi-Fi
     /// ([`Env::wifi`](crate::Env)); see [`wifi`](crate::wifi). Ignored
     /// elsewhere.

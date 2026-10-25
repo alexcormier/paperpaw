@@ -803,6 +803,20 @@ impl Kernel {
                 }
             }
             Command::Bluetooth(request) => self.apply_bluetooth(*request),
+            // Reserved (ADR 0031): no link in this release, said as such.
+            Command::Developer(request) => {
+                if let paperpaw_sdk::developer::DevCommand::Open { link, events } =
+                    request.command()
+                {
+                    let failed = paperpaw_sdk::developer::DevEvent::Failed {
+                        link: link.clone(),
+                        error: paperpaw_sdk::developer::DevError::NotAvailable,
+                    };
+                    self.output
+                        .commands
+                        .push(Command::Emit(events.clone(), failed.into_params()));
+                }
+            }
             Command::Wifi(command) => match &mut self.shared.wifi {
                 Some(wifi) => {
                     if command == WifiCommand::Scan {

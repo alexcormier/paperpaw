@@ -53,6 +53,7 @@ mod action;
 pub mod annotations;
 pub mod ask;
 pub mod bluetooth;
+pub mod developer;
 pub mod builtin;
 pub mod chrome;
 pub mod collections;
