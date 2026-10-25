@@ -193,7 +193,7 @@ static SETTINGS: [SettingSpec; 5] = [
         AUTO_CAPITALS.static_str(),
         "keyboard.setting.auto-capitals",
         false,
-        groups::SYSTEM,
+        GROUP,
     )
     .description("keyboard.setting.auto-capitals.help"),
 ];
