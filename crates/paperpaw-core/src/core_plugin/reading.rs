@@ -33,7 +33,7 @@ static READING: [SettingSpec; 21] = [
         "core.setting.reading-font",
         &[settings::DEFAULT_FONT],
         settings::DEFAULT_FONT,
-        groups::READING,
+        groups::READING_TEXT,
     )
     .with_extra(&FONT)
     .scoped()
@@ -44,7 +44,7 @@ static READING: [SettingSpec; 21] = [
         crate::plugins::FONT_SIZES.0,
         crate::plugins::FONT_SIZES.1,
         11,
-        groups::READING,
+        groups::READING_TEXT,
     )
     .with_extra(&FONT_PT)
     .scoped()
@@ -55,7 +55,7 @@ static READING: [SettingSpec; 21] = [
         80,
         250,
         135,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .with_extra(&LINES)
     .scoped()
@@ -66,7 +66,7 @@ static READING: [SettingSpec; 21] = [
         0,
         4,
         0,
-        groups::READING,
+        groups::READING_TEXT,
     )
     .with_extra(&WEIGHT)
     .scoped()
@@ -77,7 +77,7 @@ static READING: [SettingSpec; 21] = [
         50,
         200,
         100,
-        groups::READING,
+        groups::READING_TEXT,
     )
     .with_extra(&WORDS)
     .scoped()
@@ -88,7 +88,7 @@ static READING: [SettingSpec; 21] = [
         0,
         30,
         4,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .with_extra(&MARGINS)
     .scoped()
@@ -99,7 +99,7 @@ static READING: [SettingSpec; 21] = [
         0,
         30,
         4,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .with_extra(&MARGINS_ENDS)
     .advanced()
@@ -109,7 +109,7 @@ static READING: [SettingSpec; 21] = [
         settings::JUSTIFY.static_str(),
         "core.setting.justify",
         true,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .scoped()
     .with_extra(&IN_PAGE)
@@ -118,7 +118,7 @@ static READING: [SettingSpec; 21] = [
         settings::HYPHENATE.static_str(),
         "core.setting.hyphenate",
         true,
-        groups::READING,
+        groups::READING_HYPHENATION,
     )
     .scoped()
     .with_extra(&IN_PAGE)
@@ -129,7 +129,7 @@ static READING: [SettingSpec; 21] = [
         0,
         5,
         0,
-        groups::READING,
+        groups::READING_HYPHENATION,
     )
     .advanced()
     .scoped()
@@ -141,7 +141,7 @@ static READING: [SettingSpec; 21] = [
         0,
         5,
         0,
-        groups::READING,
+        groups::READING_HYPHENATION,
     )
     .advanced()
     .scoped()
@@ -151,7 +151,7 @@ static READING: [SettingSpec; 21] = [
         settings::PUBLISHER_STYLES.static_str(),
         "core.setting.publisher-styles",
         true,
-        groups::READING,
+        groups::READING_BOOK_STYLES,
     )
     .scoped()
     .with_extra(&IN_PAGE)
@@ -160,7 +160,7 @@ static READING: [SettingSpec; 21] = [
         settings::INDENT.static_str(),
         "core.setting.indent",
         true,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .scoped()
     .with_extra(&IN_PAGE)
@@ -169,7 +169,7 @@ static READING: [SettingSpec; 21] = [
         settings::PARAGRAPH_SPACING.static_str(),
         "core.setting.paragraph-spacing",
         false,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .scoped()
     .with_extra(&IN_PAGE)
@@ -180,7 +180,7 @@ static READING: [SettingSpec; 21] = [
         1,
         4,
         1,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .advanced()
     .scoped()
@@ -192,7 +192,7 @@ static READING: [SettingSpec; 21] = [
         1,
         4,
         1,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .advanced()
     .scoped()
@@ -262,8 +262,7 @@ static PARAGRAPH_SPACE: SettingExtra = SettingExtra::new()
 
 /// A switch for one of the book's own styles.
 const fn book_style(id: &'static str, title: &'static str, on: bool) -> SettingSpec {
-    SettingSpec::switch(id, title, on, groups::READING)
-        .advanced()
+    SettingSpec::switch(id, title, on, groups::READING_BOOK_STYLES)
         .scoped()
         .with_extra(&BOOK_STYLE)
 }
@@ -280,7 +279,7 @@ static TYPE: [SettingSpec; 11] = [
             settings::LINE_BREAKING_FAST,
         ],
         settings::LINE_BREAKING_BALANCED,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .with_extra(&IN_PAGE)
     .advanced()
@@ -334,7 +333,7 @@ static TYPE: [SettingSpec; 11] = [
         -5,
         20,
         0,
-        groups::READING,
+        groups::READING_TEXT,
     )
     .with_extra(&LETTERS)
     .advanced()
@@ -346,7 +345,7 @@ static TYPE: [SettingSpec; 11] = [
         50,
         400,
         150,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .with_extra(&INDENT_SIZE)
     .advanced()
@@ -358,7 +357,7 @@ static TYPE: [SettingSpec; 11] = [
         20,
         150,
         60,
-        groups::READING,
+        groups::READING_LAYOUT,
     )
     .with_extra(&PARAGRAPH_SPACE)
     .advanced()
@@ -367,6 +366,28 @@ static TYPE: [SettingSpec; 11] = [
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    // The parts of the reading settings, each a page of its own.
+    for (id, title, order) in [
+        (groups::READING_TEXT, "core.group.reading-text", 1),
+        (groups::READING_LAYOUT, "core.group.reading-layout", 2),
+        (
+            groups::READING_HYPHENATION,
+            "core.group.reading-hyphenation",
+            3,
+        ),
+        (
+            groups::READING_BOOK_STYLES,
+            "core.group.reading-book-styles",
+            4,
+        ),
+        (groups::READING_DISPLAY, "core.group.reading-display", 5),
+    ] {
+        r.add_setting_group(
+            paperpaw_sdk::SettingGroupSpec::new(id, title)
+                .order(order)
+                .within(groups::READING),
+        )?;
+    }
     r.add_settings(&READING)?;
     r.add_settings(&TYPE)?;
     r.add_settings(&super::text_look::SETTINGS)

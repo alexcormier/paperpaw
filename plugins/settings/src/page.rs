@@ -117,6 +117,11 @@ pub(super) enum Row {
     /// appearance settings where there are such presets (see
     /// [`themes`](super::themes)).
     Theme(super::themes::Chooser),
+    /// A part of the group, a page of its own ([`SettingGroupSpec::within`]):
+    /// its id and title.
+    Part(Id, String),
+    /// The group's advanced settings, a page one level down.
+    More,
 }
 
 #[derive(Debug)]
@@ -154,6 +159,11 @@ impl GroupPage {
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
     pub(super) fn new(env: &Env<'_>, group: Id) -> Self {
+        Self::of(env, group, false)
+    }
+
+    /// The page of `group`, or of its advanced settings alone (`more`).
+    pub(super) fn of(env: &Env<'_>, group: Id, more: bool) -> Self {
         // A placement's group (`widgets.clock@2`): the widget's settings,
         // as that placement has them.
         let own = group.unplaced();
@@ -163,10 +173,44 @@ impl GroupPage {
             .groups()
             .find(|g| g.id == *of)
             .map_or_else(String::new, |g| env.i18n().tr(&g.title).to_string());
+        let title = match more {
+            true => alloc::format!("{title} · {}", env.i18n().tr("settings.more")),
+            false => title,
+        };
+        // Advanced settings one level down, unless they are shown with the
+        // others (the advanced switch).
+        let inline = env.settings().read(&ADVANCED);
+        let shown = |spec: &SettingSpec| match more {
+            true => spec.level == Level::Advanced && offered(env, spec),
+            false => visible(env, spec),
+        };
+        let has_more = !more
+            && !inline
+            && env.settings().specs().any(|spec| {
+                env.settings().group_of(spec) == *of
+                    && spec.level == Level::Advanced
+                    && offered(env, spec)
+            });
+        // Its parts, each a page of its own, where they hold something.
+        let parts: Vec<Row> = match more || own.is_some() {
+            true => Vec::new(),
+            false => env
+                .settings()
+                .groups()
+                .filter(|g| g.parent.as_ref() == Some(of))
+                .filter(|g| {
+                    env.settings().specs().any(|spec| {
+                        env.settings().within(&env.settings().group_of(spec), &g.id)
+                            && visible(env, spec)
+                    })
+                })
+                .map(|g| Row::Part(g.id.clone(), env.i18n().tr(&g.title).to_string()))
+                .collect(),
+        };
         let specs = env
             .settings()
             .specs()
-            .filter(|spec| env.settings().group_of(spec) == *of && visible(env, spec))
+            .filter(|spec| env.settings().group_of(spec) == *of && shown(spec))
             .cloned()
             .map(|mut spec| {
                 if own.is_some() {
@@ -194,8 +238,8 @@ impl GroupPage {
         sections.sort_by_cached_key(rank);
         // Headings only where there is more than one part.
         let headed = sections.len() > 1;
-        let mut entries = Vec::new();
-        if *of == groups::LOOK && own.is_none() {
+        let mut entries = parts;
+        if *of == groups::LOOK && own.is_none() && !more {
             use super::themes::{Chooser, themes};
             for chooser in [Chooser::Theme, Chooser::Widgets] {
                 if themes(env, chooser).next().is_some() {
@@ -215,9 +259,12 @@ impl GroupPage {
                     .map(|spec| Row::Setting(Box::new(spec))),
             );
         }
+        if has_more {
+            entries.push(Row::More);
+        }
         // What plugins do with the group's settings (cleaning up the
         // storage in the device's).
-        if own.is_none() {
+        if own.is_none() && !more {
             entries.extend(
                 env.menus()
                     .items(of.as_str())
@@ -232,9 +279,17 @@ impl GroupPage {
         let noted = specs.iter().any(|spec| spec.description.is_some());
         let (style, header, mut area) = page(env);
         // A placement's settings have none (they are the widget's).
+        // A part's preview is its group's, where it has none of its own.
+        let previewed = env
+            .widgets()
+            .preview(group.as_str())
+            .is_none()
+            .then(|| env.settings().parent_of(&group).cloned())
+            .flatten()
+            .unwrap_or_else(|| group.clone());
         let preview = own
             .is_none()
-            .then(|| Preview::of(env, &style, &group, &mut area))
+            .then(|| Preview::of(env, &style, &previewed, &mut area))
             .flatten();
         let heading = ui::heading_height(env, &style);
         let row = if noted {
@@ -248,7 +303,12 @@ impl GroupPage {
             &style,
             entries.iter().filter_map(|e| match e {
                 Row::Setting(spec) => Some(&**spec),
-                Row::Heading(_) | Row::Reset | Row::Theme(_) | Row::Action(_) => None,
+                Row::Heading(_)
+                | Row::Reset
+                | Row::Theme(_)
+                | Row::Action(_)
+                | Row::Part(..)
+                | Row::More => None,
             }),
         );
         // A title that does not fit beside its control gets a line of its
@@ -283,7 +343,9 @@ impl GroupPage {
                     slider_row
                         + ui::slider::title_extra(env, &style, area.width, title, &number_room)
                 }
-                (Row::Reset | Row::Theme(_) | Row::Action(_), _) => style.row(),
+                (Row::Reset | Row::Theme(_) | Row::Action(_) | Row::Part(..) | Row::More, _) => {
+                    style.row()
+                }
             })
             .collect();
         let headings = entries
@@ -418,6 +480,18 @@ impl GroupPage {
                 cx.command(Command::run(action.clone()));
                 return;
             }
+            Some(Row::Part(part, _)) => {
+                let params = Params::new().with(params::ID, part.as_str().to_string());
+                cx.command(Command::OpenScreen(GROUP_SCREEN, params));
+                return;
+            }
+            Some(Row::More) => {
+                let params = Params::new()
+                    .with(params::ID, self.group.as_str().to_string())
+                    .with(MORE, "1");
+                cx.command(Command::OpenScreen(GROUP_SCREEN, params));
+                return;
+            }
             _ => {}
         }
         let Some(spec) = self.focused() else {
@@ -472,6 +546,13 @@ impl Screen for GroupPage {
                         let title = env.actions().get(action.as_str()).map_or("", |a| &a.title);
                         let title = env.i18n().tr(title);
                         return ui::Row::plain(title).focused(focused).draw(ui, row);
+                    }
+                    Row::Part(_, title) => {
+                        return ui::Row::value(title, "›").focused(focused).draw(ui, row);
+                    }
+                    Row::More => {
+                        let title = env.i18n().tr("settings.more");
+                        return ui::Row::value(title, "›").focused(focused).draw(ui, row);
                     }
                     Row::Setting(spec) => spec,
                 };

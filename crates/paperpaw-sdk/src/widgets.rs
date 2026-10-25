@@ -1078,6 +1078,7 @@ pub fn settings_group(widget: &Id, title: impl Into<Cow<'static, str>>) -> Setti
         title: title.into(),
         order: 0,
         page: None,
+        parent: None,
     }
 }
 

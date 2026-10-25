@@ -831,6 +831,16 @@ pub mod groups {
 
     /// Book text: font size, spacing, hyphenation, …
     pub const READING: Id = Id::new_static("core.group.reading");
+    /// Parts of [`READING`], each a page of its own: the text (font, size,
+    /// weight, spacing), the layout of pages (margins, line spacing,
+    /// justification and line breaking, lines kept together),
+    /// hyphenation, which of a book's own styles are followed, and how
+    /// text is shown (smooth, its contrast).
+    pub const READING_TEXT: Id = Id::new_static("core.group.reading-text");
+    pub const READING_LAYOUT: Id = Id::new_static("core.group.reading-layout");
+    pub const READING_HYPHENATION: Id = Id::new_static("core.group.reading-hyphenation");
+    pub const READING_BOOK_STYLES: Id = Id::new_static("core.group.reading-book-styles");
+    pub const READING_DISPLAY: Id = Id::new_static("core.group.reading-display");
     /// Screen: night mode, menu size, refresh.
     pub const DISPLAY: Id = Id::new_static("core.group.display");
     /// Buttons and gestures.

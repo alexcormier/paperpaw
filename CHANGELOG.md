@@ -8,6 +8,12 @@ change the plugin SDK.
 
 ### Added
 
+- The reading settings in pages of their own: *Text*, *Layout*,
+  *Hyphenation*, *Publisher's formatting* and *Display*, each short, its
+  rarely needed settings one level down under *More* (or with the
+  others, with *Show advanced settings*). SDK: groups within groups
+  (`SettingGroupSpec::within`, `Settings::parent_of` and `within`),
+  `groups::READING_TEXT` and the other parts of `READING`.
 - Balanced line breaking: paragraphs are broken over all their lines,
   so lines end more evenly and justified text has fewer wide gaps;
   *Line breaking* can be set back to *Fast*, line by line

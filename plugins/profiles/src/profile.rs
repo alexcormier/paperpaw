@@ -139,7 +139,10 @@ pub(crate) fn set_last(storage: &dyn Storage, name: &str) {
 pub(crate) fn capture(env: &Env<'_>) -> Vec<(Id, String)> {
     env.settings()
         .specs()
-        .filter(|spec| GROUPS.contains(&env.settings().group_of(spec)))
+        .filter(|spec| {
+            let group = env.settings().group_of(spec);
+            GROUPS.iter().any(|g| env.settings().within(&group, g))
+        })
         // Folders and languages belong to the device, not to a way of
         // reading.
         .filter(|spec| !matches!(spec.kind, SettingKind::Text | SettingKind::Language))

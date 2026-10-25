@@ -11,7 +11,7 @@ pub(super) static SETTINGS: [SettingSpec; 2] = [
         settings::SMOOTH_TEXT.static_str(),
         "core.setting.smooth-text",
         true,
-        groups::READING,
+        groups::READING_DISPLAY,
     )
     .with_extra(&super::FONT)
     .scoped()
@@ -21,7 +21,7 @@ pub(super) static SETTINGS: [SettingSpec; 2] = [
         "core.setting.text-contrast",
         settings::TEXT_CONTRAST_LEVELS,
         settings::TEXT_CONTRAST_LEVELS[1],
-        groups::READING,
+        groups::READING_DISPLAY,
     )
     .with_extra(&super::FONT)
     .scoped()

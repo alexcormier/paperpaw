@@ -84,6 +84,9 @@ const CHOSEN: Event<choice::Picked> = Event::new("settings.chosen");
 const RESTART: &str = "restart";
 
 const ID: &str = "id";
+/// `1`: a group's advanced settings, one level down from its page
+/// (parameter of [`GROUP_SCREEN`]).
+pub const MORE: &str = "more";
 /// A setting to focus on its group's page (parameter of [`SCREEN`] and
 /// [`GROUP_SCREEN`]).
 const FOCUS: &str = paperpaw_sdk::builtin::params::FOCUS;
@@ -141,7 +144,8 @@ impl Plugin for SettingsPlugin {
             "settings.title",
             Box::new(|env, params| {
                 let group = params.get(ID).and_then(|id| Id::parse(id).ok());
-                let mut page = GroupPage::new(env, group.unwrap_or(groups::OTHER));
+                let more = params.get(MORE) == Some("1");
+                let mut page = GroupPage::of(env, group.unwrap_or(groups::OTHER), more);
                 if let Some(focus) = params.get(FOCUS) {
                     page.focus_on(env, focus);
                 }
@@ -248,6 +252,15 @@ fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
 }
 
 fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
+    offered(env, spec)
+        && (spec.level == Level::Basic
+            || env.settings().read(&ADVANCED)
+            || env.settings().group_of(spec) == groups::DEVELOPER)
+}
+
+/// Whether `spec` is offered here at all, advanced or not: it means
+/// something now and on this device.
+fn offered(env: &Env<'_>, spec: &SettingSpec) -> bool {
     // "Only this book" and the like mean nothing outside a scope.
     let scope_only = spec.id == paperpaw_sdk::builtin::settings::SCOPE_ONLY;
     if scope_only && env.settings().scope().is_none() {
@@ -271,7 +284,7 @@ fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
             .settings()
             .bool(paperpaw_sdk::builtin::settings::DEVELOPER.as_str());
     }
-    spec.level == Level::Basic || env.settings().read(&ADVANCED)
+    true
 }
 
 /// The header, list area and list for a screen; rows have notes if

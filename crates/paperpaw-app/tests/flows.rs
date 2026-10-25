@@ -349,6 +349,9 @@ fn settings_changed_in_the_ui_are_saved_and_read_back_after_a_restart() {
     buttons.run(actions::SETTINGS);
     buttons.focus_on("Reading", 10);
     buttons.run(actions::CONFIRM);
+    // On the page of the text, a part of the reading settings.
+    buttons.focus_on("Text", 10);
+    buttons.run(actions::CONFIRM);
     buttons.focus_on("Font size", 10);
     buttons.run(actions::CONFIRM);
     buttons.run(actions::RIGHT);
