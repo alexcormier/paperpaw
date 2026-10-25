@@ -573,7 +573,7 @@ fn running_from() -> Option<u32> {
     const MMU_TABLE: usize = 0x600C_5000;
     const INVALID: u32 = 1 << 14;
     const PSRAM: u32 = 1 << 15;
-    let here = running_from as usize;
+    let here = running_from as *const () as usize;
     let entry = (here & 0x1FF_FFFF) >> 16;
     // SAFETY: a read of the MMU table, within its 512 entries.
     let value = unsafe { ((MMU_TABLE + entry * 4) as *const u32).read_volatile() };
