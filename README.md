@@ -299,6 +299,7 @@ cargo run -p paperpaw-emulator -- --headless --profile boox-go-7 --set core.lang
 | `tools/dev` | `paperpaw-dev`, which checks plugins on emulated devices |
 | `tools/sign` | `paperpaw-sign`, which signs updates, makes keys, and packs and signs plugin files |
 | `tools/plugin-files` | Builds PaperPaw's own store plugins as files for each release |
+| `tools/publish-workspace.py` | Plans, verifies and resumes crate publication ([release procedure](docs/releases.md)) |
 | `tools/xtensa-std` | The X4 Pro's core libraries for code plugins |
 | `tools/x4-remote.py` | Drives an X4 over USB with developer firmware |
 | `tools/usb-transfer.py` | Installs plugins and adds books over the USB cable or to the emulator ([docs/usb-transfer.md](docs/usb-transfer.md)) |

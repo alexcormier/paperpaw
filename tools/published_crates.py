@@ -75,8 +75,10 @@ def dependencies(manifest, workspace):
                     inherited = {"version": inherited} if isinstance(inherited, str) else dict(inherited)
                     features = inherited.get("features", []) + spec.get("features", [])
                     spec = inherited | spec | {"features": features}
-                # Cargo omits development dependencies with a path but no version.
-                if kind == "dev-dependencies" and "path" in spec and "version" not in spec:
+                # Cargo omits local or Git development dependencies
+                # without a version: they cannot be found in a registry.
+                if (kind == "dev-dependencies" and "version" not in spec
+                        and ("path" in spec or "git" in spec)):
                     continue
                 spec.pop("path", None)
                 spec.setdefault("optional", False)
