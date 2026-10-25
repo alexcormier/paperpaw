@@ -30,6 +30,8 @@ mod flags {
     pub const RAW_KEYS: u32 = 1 << 1;
     pub const CLEANS_ITSELF: u32 = 1 << 2;
     pub const FASTEST: u32 = 1 << 3;
+    pub const NEEDS_NETWORK: u32 = 1 << 4;
+    pub const NEEDS_BLUETOOTH: u32 = 1 << 5;
 }
 
 /// Places of [`ScreenMode`]'s numbers.
@@ -40,6 +42,10 @@ mod slots {
     pub const AWAKE: usize = 1;
     /// Grays that are enough.
     pub const GRAYS: usize = 2;
+    /// Bytes of memory the screen needs free, and where
+    /// ([`Placement`](crate::memory::Placement)'s number, 0 anywhere).
+    pub const MEMORY: usize = 3;
+    pub const PLACE: usize = 4;
 }
 
 /// How a screen runs while it is on top: what it asks of the panel, the
@@ -139,6 +145,57 @@ impl ScreenMode {
         self.number(slots::AWAKE, millis(idle).max(1))
     }
 
+    /// The screen needs `bytes` of memory free (a large buffer it makes
+    /// once it shows): the kernel makes room as it shows, step by step
+    /// until there is enough, and gives everything back once it closes
+    /// (see [`Room`]). Nothing the reader has is lost: a book closed for
+    /// the room opens again at its place. Make the buffer in
+    /// [`Screen::on_show`](crate::Screen::on_show), after reading
+    /// [`Env::room`](crate::Env::room), not when the screen is made.
+    pub fn memory(self, bytes: u32) -> Self {
+        self.number(slots::MEMORY, bytes)
+    }
+
+    /// The same, the room where `placement` says (internal RAM for
+    /// [`Placement::FAST`](crate::memory::Placement::FAST) on the X4 Pro).
+    pub fn memory_in(self, placement: crate::memory::Placement, bytes: u32) -> Self {
+        self.number(slots::MEMORY, bytes)
+            .number(slots::PLACE, placement.code())
+    }
+
+    /// The screen needs the network while it shows: making room leaves
+    /// Wi-Fi as it is.
+    pub const fn needs_network(self) -> Self {
+        self.with(flags::NEEDS_NETWORK)
+    }
+
+    /// The screen needs Bluetooth while it shows: making room leaves it
+    /// as it is.
+    pub const fn needs_bluetooth(self) -> Self {
+        self.with(flags::NEEDS_BLUETOOTH)
+    }
+
+    /// The memory the screen needs free, if it said, and where.
+    pub fn memory_wanted(&self) -> Option<(u32, Option<crate::memory::Placement>)> {
+        match self.numbers[slots::MEMORY] {
+            0 => None,
+            bytes => Some((
+                bytes,
+                crate::memory::Placement::of(self.numbers[slots::PLACE]),
+            )),
+        }
+    }
+
+    /// Whether the screen needs the network while it shows.
+    pub const fn wants_network(&self) -> bool {
+        self.flags & flags::NEEDS_NETWORK != 0
+    }
+
+    /// Whether the screen needs Bluetooth while it shows.
+    pub const fn wants_bluetooth(&self) -> bool {
+        self.flags & flags::NEEDS_BLUETOOTH != 0
+    }
+
     /// Whether the screen has all of the panel.
     pub const fn is_full_screen(&self) -> bool {
         self.flags & flags::FULL_SCREEN != 0
@@ -192,6 +249,106 @@ const fn duration(millis: u32) -> Option<Duration> {
     match millis {
         0 => None,
         ms => Some(Duration::from_millis(ms as u64)),
+    }
+}
+
+/// What the kernel did to make room for a screen ([`Room::steps`]):
+/// kinds of room are constants of one type, so more can come without a
+/// new plugin interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct RoomSteps(u32);
+
+impl RoomSteps {
+    /// Caches let go: glyphs drawn, files read, pictures made small.
+    pub const CACHES: Self = Self(1);
+    /// Background work held back until the screen closes.
+    pub const WORK: Self = Self(1 << 1);
+    /// Wi-Fi or Bluetooth switched off until the screen closes.
+    pub const RADIOS: Self = Self(1 << 2);
+    /// The screens below closed (a book after its place was kept), opened
+    /// again once the screen closes.
+    pub const SCREENS: Self = Self(1 << 3);
+
+    /// Whether all of `steps` were taken.
+    pub const fn contains(self, steps: Self) -> bool {
+        self.0 & steps.0 == steps.0
+    }
+
+    /// These steps and `other`.
+    #[must_use]
+    pub const fn with(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Whether none was taken.
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+
+/// The room the screen on top asked for ([`ScreenMode::memory`]) and
+/// what it got ([`Env::room`](crate::Env::room)): granted, granted in
+/// part, or refused, with the memory free once the kernel made what room
+/// it could. Where the device cannot tell how much is free, the room
+/// counts as granted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Room {
+    asked: u32,
+    free: u32,
+    steps: RoomSteps,
+    /// Free is known.
+    known: bool,
+    /// Room for numbers to come.
+    numbers: [u32; 3],
+}
+
+impl Room {
+    /// `asked` bytes asked for, `free` free after the `steps` taken;
+    /// `None` free where the device cannot tell.
+    #[cfg(feature = "kernel")]
+    pub const fn new(asked: u32, free: Option<u32>, steps: RoomSteps) -> Self {
+        let (free, known) = match free {
+            Some(free) => (free, true),
+            None => (0, false),
+        };
+        Self {
+            asked,
+            free,
+            steps,
+            known,
+            numbers: [0; 3],
+        }
+    }
+
+    /// The bytes asked for (0: none).
+    pub const fn asked(&self) -> u32 {
+        self.asked
+    }
+
+    /// The bytes free once room was made, where known.
+    pub const fn free(&self) -> Option<u32> {
+        if self.known { Some(self.free) } else { None }
+    }
+
+    /// What was done to make it.
+    pub const fn steps(&self) -> RoomSteps {
+        self.steps
+    }
+
+    /// Whether there is as much as asked (or nothing was asked, or the
+    /// device cannot tell).
+    pub const fn is_granted(&self) -> bool {
+        !self.known || self.free >= self.asked
+    }
+
+    /// Whether there is less than asked, though room was made.
+    pub const fn is_partial(&self) -> bool {
+        !self.is_granted() && !self.steps.is_empty()
+    }
+
+    /// Whether there is less than asked and nothing could be done.
+    pub const fn is_refused(&self) -> bool {
+        !self.is_granted() && self.steps.is_empty()
     }
 }
 

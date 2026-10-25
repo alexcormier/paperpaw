@@ -113,6 +113,12 @@ impl Storage for Card {
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         self.on(|s| s.append(path, data))
     }
+    fn write_at(&self, path: &str, offset: u64, data: &[u8]) -> Result<(), StorageError> {
+        self.on(|s| s.write_at(path, offset, data))
+    }
+    fn truncate(&self, path: &str, len: u64) -> Result<(), StorageError> {
+        self.on(|s| s.truncate(path, len))
+    }
     fn sync(&self) -> Result<(), StorageError> {
         self.on(|s| s.sync())
     }

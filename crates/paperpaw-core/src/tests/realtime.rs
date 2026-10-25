@@ -281,3 +281,209 @@ fn frames_shown_are_told_to_plugins() {
         Some(Duration::from_millis(400))
     );
 }
+
+/// The memory the test's probe says is free.
+static FREE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+fn probe() -> Option<paperpaw_sdk::memory::MemoryUse> {
+    let free = FREE.load(core::sync::atomic::Ordering::Relaxed);
+    Some(paperpaw_sdk::memory::MemoryUse::new(free, 256 * 1024))
+}
+
+/// A kernel with the page at the bottom, a screen above it, and the game
+/// asking for `asked` bytes on top, `free` free.
+fn leased(asked: u32, free: u32, log: &Log) -> Kernel {
+    FREE.store(free, core::sync::atomic::Ordering::Relaxed);
+    let mut kernel = Kernel::builder(DEVICE)
+        .memory(probe)
+        .plugin(Game {
+            log: log.clone(),
+            mode: ScreenMode::new().raw_keys().memory(asked),
+        })
+        .plugin(TestPlugin::new("b", log))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.open_screen(Instant(5), Id::new_static("b.screen"), Params::new());
+    kernel.open_screen(Instant(10), Id::new_static("game.play"), Params::new());
+    render(&mut kernel);
+    kernel
+}
+
+/// Room made, and given back, in one test: the probe's number is shared.
+#[test]
+fn room_is_made_only_where_needed_and_given_back() {
+    let log = log();
+    // Room enough: nothing is done for it.
+    let kernel = leased(4000, 10_000, &log);
+    let room = kernel.shared.room;
+    assert!(room.is_granted() && room.steps().is_empty(), "{room:?}");
+    assert_eq!(room.free(), Some(10_000));
+    assert_eq!(kernel.stack.len(), 3, "the screens below stay");
+    // Not enough: caches, work, the screens below.
+    let mut kernel = leased(64_000, 1000, &log);
+    let room = kernel.shared.room;
+    assert!(room.is_partial(), "{room:?}");
+    assert!(
+        room.steps()
+            .contains(paperpaw_sdk::realtime::RoomSteps::CACHES)
+    );
+    assert!(
+        room.steps()
+            .contains(paperpaw_sdk::realtime::RoomSteps::WORK)
+    );
+    assert!(
+        room.steps()
+            .contains(paperpaw_sdk::realtime::RoomSteps::SCREENS)
+    );
+    assert_eq!(kernel.stack.len(), 2, "the screen between closed");
+    assert!(kernel.works.is_held());
+    // Closed by Back held: the screen between opens again, work goes on.
+    button(&mut kernel, 1000, "back", ButtonState::Pressed);
+    kernel.tick(Instant(3000));
+    render(&mut kernel);
+    assert_eq!(kernel.active_screen().map(Id::as_str), Some("b.screen"));
+    assert_eq!(kernel.stack.len(), 2);
+    assert!(!kernel.works.is_held());
+    assert_eq!(kernel.shared.room, paperpaw_sdk::realtime::Room::default());
+}
+
+/// A screen that holds the device awake for five minutes when *up* is
+/// pressed, and lets go when *down* is.
+struct Holder;
+
+impl Plugin for Holder {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("holder"), "Holder", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("holder.screen"),
+            "holder",
+            Box::new(|_, _| Box::new(HolderScreen)),
+        ))
+    }
+}
+
+struct HolderScreen;
+
+impl Screen for HolderScreen {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn mode(&self) -> ScreenMode {
+        ScreenMode::new().raw_keys()
+    }
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+
+    fn on_key(&mut self, key: &KeyEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        match (key.name(), key.is_press()) {
+            ("up", true) => cx.keep_awake(
+                paperpaw_sdk::power::WakeHold::new(Id::new_static("holder.clock"), "clock")
+                    .lasting(Duration::from_secs(300)),
+            ),
+            ("down", true) => cx.let_sleep(Id::new_static("holder.clock")),
+            _ => {}
+        }
+        Handled::Yes
+    }
+}
+
+fn holding(config: &'static str) -> Kernel {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .user_config(config)
+        .sleep(true)
+        .plugin(Holder)
+        .plugin(TestPlugin::new("a", &log))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.open_screen(Instant(0), Id::new_static("holder.screen"), Params::new());
+    button(&mut kernel, 0, "up", ButtonState::Pressed);
+    button(&mut kernel, 0, "up", ButtonState::Released);
+    kernel
+}
+
+/// A hold puts the sleep off until it ends; let go, closed with its
+/// screen, ignored with the setting off or a battery nearly empty.
+#[test]
+fn holds_put_sleep_off_within_bounds() {
+    let config = "[core]\nsleep-after = 1\n";
+    let mut kernel = holding(config);
+    assert_eq!(
+        kernel.sleep_due(),
+        Some(Instant(300_000)),
+        "held five minutes"
+    );
+    // Its time is counted for its plugin.
+    kernel.tick(Instant(30_000));
+    let table = kernel.shared.meter.table.borrow();
+    let holder = table
+        .iter()
+        .find(|u| u.plugin.as_str() == "holder")
+        .unwrap();
+    assert_eq!(holder.awake_ms, 30_000);
+    assert_eq!(holder.awake_reason, "clock");
+    drop(table);
+    // Let go.
+    button(&mut kernel, 31_000, "down", ButtonState::Pressed);
+    assert_eq!(kernel.sleep_due(), Some(Instant(91_000)));
+    // Ended with its screen.
+    let mut kernel = holding(config);
+    let key = paperpaw_sdk::ScreenKey::new(kernel.stack.last().unwrap().serial);
+    kernel.close_screen(key);
+    kernel.count_awake();
+    assert_eq!(kernel.sleep_due(), Some(Instant(60_000)));
+    // Not with the setting off.
+    let kernel = holding("[core]\nsleep-after = 1\nawake-holds = off\n");
+    assert_eq!(kernel.sleep_due(), Some(Instant(60_000)));
+    // Nor with the battery nearly empty.
+    let mut kernel = holding(config);
+    let status = paperpaw_platform::SystemStatus {
+        battery: Some(paperpaw_platform::Battery {
+            percent: 8,
+            charging: false,
+            millivolts: None,
+        }),
+        ..Default::default()
+    };
+    kernel.set_status(Instant(1000), status);
+    assert_eq!(kernel.sleep_due(), Some(Instant(60_000)));
+}
+
+/// On a touch screen, a finger held two seconds in the top left corner
+/// leaves a full screen, as Back held does; one moved out of it does not.
+#[test]
+fn a_finger_held_in_the_corner_leaves_a_full_screen() {
+    let log = log();
+    let mode = ScreenMode::new().full_screen();
+    let mut kernel = kernel(Kernel::builder(DEVICE), mode, &log);
+    let finger = |kernel: &mut Kernel, at: u64, phase: PointerPhase, x: i32, y: i32| {
+        let event = paperpaw_platform::PointerEvent {
+            id: 0,
+            phase,
+            point: paperpaw_platform::Point::new(x, y),
+            tool: paperpaw_platform::PointerTool::Finger,
+            pressure: 1000,
+        };
+        kernel.handle(Instant(at), InputEvent::Pointer(event))
+    };
+    // Moved out of the corner: nothing.
+    finger(&mut kernel, 100, PointerPhase::Down, 3, 3);
+    finger(&mut kernel, 200, PointerPhase::Move, 60, 60);
+    kernel.tick(Instant(2500));
+    assert_eq!(kernel.active_screen().map(Id::as_str), Some("game.play"));
+    finger(&mut kernel, 2600, PointerPhase::Up, 60, 60);
+    // Held there: it leaves.
+    let effects = finger(&mut kernel, 3000, PointerPhase::Down, 4, 5);
+    assert!(effects.wake_at().is_some_and(|at| at <= Instant(5000)));
+    assert_eq!(kernel.escape_due(), Some(Instant(5000)));
+    kernel.tick(Instant(5000));
+    render(&mut kernel);
+    assert_eq!(kernel.active_screen().map(Id::as_str), Some("game.page"));
+}

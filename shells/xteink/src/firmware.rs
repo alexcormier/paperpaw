@@ -131,7 +131,7 @@ pub struct State {
     /// A paced frame on its way to the panel, and what changed since,
     /// waiting for it.
     in_flight: Option<paced::InFlight>,
-    waiting: Option<(Rect, RefreshMode)>,
+    frames: paperpaw_x4::paced::Frames,
     /// The panel's memories may differ after a paced frame: the next one
     /// drives every pixel.
     frame_stale: bool,

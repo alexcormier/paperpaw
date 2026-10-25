@@ -233,6 +233,9 @@ impl Kernel {
         .into_iter()
         .flatten()
         .min();
+        if self.lease.is_some() {
+            self.note_room();
+        }
         // A screen came or went: presses until it shows are dropped, and
         // those the one before took as raw keys are its no more.
         if mem::take(&mut self.screens_changed) {
@@ -260,6 +263,9 @@ impl Kernel {
                 if !mem::take(&mut self.show_pending) {
                     return;
                 }
+                // Room made for it where it needs memory, given back where
+                // the screen that had it is gone (ADR 0030).
+                self.sync_room();
                 self.with_top(|screen, cx| {
                     screen.on_show(cx);
                     Handled::Yes
@@ -374,6 +380,10 @@ impl Kernel {
             Command::RemovePlugin(id) => self.remove_plugin(&id),
             Command::InstallPlugin(id, folder) => self.install_plugin(&id, &folder),
             Command::Sleep => self.sleep = self.shared.caps.sleep,
+            Command::KeepAwake(hold) => self.keep_awake(hold),
+            Command::LetSleep(id) => self.let_sleep(&id),
+            // Keys of later releases: none known yet, left as they are.
+            Command::Extended { .. } => {}
             command @ (Command::SetSetting(..)
             | Command::ResetSetting(_)
             | Command::PreviewSettings(_)

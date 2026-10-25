@@ -190,6 +190,16 @@ impl Storage for Recalled {
         self.inner.append(path, data)
     }
 
+    fn write_at(&self, path: &str, offset: u64, data: &[u8]) -> Result<(), StorageError> {
+        self.recall.forget(path);
+        self.inner.write_at(path, offset, data)
+    }
+
+    fn truncate(&self, path: &str, len: u64) -> Result<(), StorageError> {
+        self.recall.forget(path);
+        self.inner.truncate(path, len)
+    }
+
     fn sync(&self) -> Result<(), StorageError> {
         self.inner.sync()
     }

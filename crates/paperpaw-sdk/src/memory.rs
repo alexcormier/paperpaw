@@ -145,8 +145,16 @@ impl Placement {
     pub const LARGE: Self = Self(2);
 
     /// Its number in the firmware's table (`Api::alloc_in`).
-    const fn code(self) -> u32 {
+    pub(crate) const fn code(self) -> u32 {
         self.0
+    }
+
+    /// The placement of number `code`, `None` for 0 (anywhere).
+    pub(crate) const fn of(code: u32) -> Option<Self> {
+        match code {
+            0 => None,
+            code => Some(Self(code)),
+        }
     }
 }
 

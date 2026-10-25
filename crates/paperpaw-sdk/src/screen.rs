@@ -157,6 +157,13 @@ impl ScreenKey {
     pub const fn new(serial: u32) -> Self {
         Self(serial)
     }
+
+    /// Its number, as the kernel gave it.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub const fn serial(self) -> u32 {
+        self.0
+    }
 }
 
 /// What an overlay lets show through it ([`Screen::shows_through`]).
@@ -463,6 +470,15 @@ pub trait Screen {
         Handled::No
     }
 
+    /// A call that comes after this release, by its key (see
+    /// [`Command::Extended`]): what PaperPaw asks of screens later reaches
+    /// screens built now, which answer [`Handled::No`] to keys they do not
+    /// know.
+    fn on_extended(&mut self, key: &Id, params: &Params, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = (key, params, cx);
+        Handled::No
+    }
+
     /// How the row of hints below the screen labels the button that runs
     /// `action` here, on devices with buttons in a row under the screen
     /// ([`settings::BUTTON_HINTS`](crate::builtin::settings::BUTTON_HINTS)):
@@ -672,6 +688,19 @@ impl<'a, 'e> Cx<'a, 'e> {
     /// possible". It comes while the screen is on top: covered by another
     /// (a menu, a keyboard), the time waits until it is on top again. It
     /// is kept when the screen is made anew for another size.
+    /// Keeps the device from going to sleep by itself while this screen
+    /// is on top, for as long as `hold` lasts (renew it before it ends):
+    /// a clock, a timer, a slideshow. It ends when the screen closes.
+    pub fn keep_awake(&mut self, hold: crate::power::WakeHold) {
+        let hold = hold.of_screen(self.key);
+        self.output.commands.push(Command::KeepAwake(hold));
+    }
+
+    /// Lets go of the hold of `id`.
+    pub fn let_sleep(&mut self, id: impl Into<Id>) {
+        self.output.commands.push(Command::LetSleep(id.into()));
+    }
+
     pub fn wake_at(&mut self, at: Instant) {
         self.output.wake_at = Some(self.output.wake_at.map_or(at, |w| w.min(at)));
     }

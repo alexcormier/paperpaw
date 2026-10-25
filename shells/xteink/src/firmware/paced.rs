@@ -10,6 +10,7 @@ use core::time::Duration;
 use log::{debug, warn};
 use paperpaw_platform::{FrameView, Instant, Rect, RefreshMode};
 use paperpaw_x4::display::{Planes, Refresh};
+use paperpaw_x4::paced::Ask;
 use paperpaw_x4::sent::{Check, Sent};
 
 use super::{Firmware, heap_free};
@@ -39,13 +40,9 @@ impl Firmware {
     /// Shows `area` in `mode` without waiting for the panel: at once if it
     /// is free, else once the frame on its way is shown.
     pub(super) fn queue_frame(&mut self, area: Rect, mode: RefreshMode) {
-        if self.state.in_flight.is_none() {
-            return self.start_frame(area, mode);
+        if self.state.frames.ask(area, mode) == Ask::Start {
+            self.start_frame(area, mode);
         }
-        self.state.waiting = Some(match self.state.waiting {
-            Some((before, was)) => (before.union(&area), was.max(mode)),
-            None => (area, mode),
-        });
     }
 
     /// Draws and sends what changed and starts its refresh, not waiting
@@ -94,7 +91,7 @@ impl Firmware {
             return;
         }
         self.finish_frame();
-        if let Some((area, mode)) = self.state.waiting.take() {
+        if let Some((area, mode)) = self.state.frames.shown() {
             self.start_frame(area, mode);
         }
     }
@@ -102,13 +99,11 @@ impl Firmware {
     /// Waits for the frame on its way and the one that waited, if any:
     /// before anything else uses the panel, or the device sleeps.
     pub(super) fn settle_frame(&mut self) {
-        if self.state.in_flight.is_none() {
-            return;
-        }
-        self.finish_frame();
-        if let Some((area, mode)) = self.state.waiting.take() {
-            self.start_frame(area, mode);
+        while self.state.in_flight.is_some() {
             self.finish_frame();
+            if let Some((area, mode)) = self.state.frames.shown() {
+                self.start_frame(area, mode);
+            }
         }
     }
 

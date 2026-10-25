@@ -223,6 +223,9 @@ pub(crate) struct Queue {
     /// The device goes to sleep or PaperPaw stops: the worn mode is
     /// written down.
     keep: bool,
+    /// Held back to make room for a screen (ADR 0030): nothing runs, and
+    /// nothing wakes the device for work, until let go.
+    held: bool,
     /// Plugins that declared work under another's name, to warn of.
     foreign: Vec<String>,
 }
@@ -234,6 +237,17 @@ impl Queue {
             stale: true,
             ..Self::default()
         }
+    }
+
+    /// Holds all work back (to make room for a screen), or lets it go on.
+    pub(crate) fn hold(&mut self, held: bool) {
+        self.held = held;
+    }
+
+    /// Whether work is held back.
+    #[cfg(test)]
+    pub(crate) fn is_held(&self) -> bool {
+        self.held
     }
 
     /// Whether the reader switched `plugin`'s network off.
@@ -356,6 +370,9 @@ impl Queue {
 
     /// When the kernel must look at the work again, at the latest.
     pub(crate) fn next_wake(&self, power: &Power, last_activity: Instant) -> Option<Instant> {
+        if self.held {
+            return None;
+        }
         let mut next: Option<Instant> = None;
         let mut earliest = |at: Instant| next = Some(next.map_or(at, |n: Instant| n.min(at)));
         if !self.moments.is_empty() {
@@ -708,6 +725,9 @@ impl Kernel {
     /// they say becomes notes, their requests are not the reader's); and a
     /// job's step where allowed. Whether anything ran, or moments wait.
     pub(crate) fn run_work(&mut self) -> bool {
+        if self.works.held {
+            return false;
+        }
         self.read_policy();
         // Network work of a plugin whose network is off can never run.
         let mut index = 0;

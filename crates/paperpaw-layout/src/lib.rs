@@ -76,7 +76,7 @@ pub trait Typesetter {
 /// can be left to the reader alone, e.g. a book's alignment but not its
 /// margins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BookStyles(u8);
+pub struct BookStyles(u16);
 
 impl BookStyles {
     /// None: the reader's settings alone.
@@ -115,7 +115,7 @@ impl BookStyles {
     }
 
     /// For a layout's key.
-    pub const fn bits(self) -> u8 {
+    pub const fn bits(self) -> u16 {
         self.0
     }
 }

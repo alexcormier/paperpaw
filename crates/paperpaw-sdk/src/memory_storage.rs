@@ -80,6 +80,28 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
+    fn write_at(&self, path: &str, offset: u64, data: &[u8]) -> Result<(), StorageError> {
+        Self::check(path)?;
+        let mut files = self.files.borrow_mut();
+        let file = files.get_mut(path).ok_or(StorageError::NotFound)?;
+        let at = usize::try_from(offset).map_err(|_| StorageError::TooLarge)?;
+        let end = at.checked_add(data.len()).ok_or(StorageError::TooLarge)?;
+        if file.len() < end {
+            file.resize(end, 0);
+        }
+        file[at..end].copy_from_slice(data);
+        Ok(())
+    }
+
+    fn truncate(&self, path: &str, len: u64) -> Result<(), StorageError> {
+        Self::check(path)?;
+        let mut files = self.files.borrow_mut();
+        let file = files.get_mut(path).ok_or(StorageError::NotFound)?;
+        let len = usize::try_from(len).map_err(|_| StorageError::TooLarge)?;
+        file.resize(len, 0);
+        Ok(())
+    }
+
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
         if !dir.is_empty() {
             Self::check(dir)?;
@@ -229,6 +251,20 @@ impl Storage for Unreadable {
 mod tests {
     use super::*;
     use alloc::vec;
+
+    #[test]
+    fn writes_in_place_and_cuts() {
+        let storage = MemoryStorage::new().with("save.bin", "abcdef");
+        storage.write_at("save.bin", 2, b"XY").unwrap();
+        storage.write_at("save.bin", 8, b"Z").unwrap();
+        assert_eq!(read_file(&storage, "save.bin", 64).unwrap(), b"abXYef\0\0Z");
+        storage.truncate("save.bin", 3).unwrap();
+        assert_eq!(read_file(&storage, "save.bin", 64).unwrap(), b"abX");
+        assert_eq!(
+            storage.write_at("none", 0, b"x"),
+            Err(StorageError::NotFound)
+        );
+    }
 
     #[test]
     fn reads_writes_and_lists() {

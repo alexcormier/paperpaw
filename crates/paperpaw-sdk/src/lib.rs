@@ -147,7 +147,7 @@ pub use contribution::item::Contribution;
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use env::EnvParts;
-pub use env::{Capabilities, Env, Metrics};
+pub use env::{Capabilities, Capability, Env, Metrics};
 pub use event::{Event, EventData, EventHandler};
 pub use fonts::{FontFace, FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{

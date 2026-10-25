@@ -136,6 +136,20 @@ impl Meter {
         }
     }
 
+    /// `plugin`'s holds kept the device awake for `millis`, the last for
+    /// `reason`.
+    pub(crate) fn awake(
+        &self,
+        plugin: &str,
+        millis: u64,
+        reason: alloc::borrow::Cow<'static, str>,
+    ) {
+        let index = self.index(plugin);
+        let mut table = self.table.borrow_mut();
+        table[index].awake_ms = table[index].awake_ms.saturating_add(millis);
+        table[index].awake_reason = reason;
+    }
+
     /// `plugin`'s screen was on top for `millis`.
     pub(crate) fn shown(&self, plugin: &str, millis: u64) {
         let index = self.index(plugin);
@@ -185,6 +199,15 @@ impl Storage for Metered {
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         self.meter.io(0, data.len());
         self.inner.append(path, data)
+    }
+
+    fn write_at(&self, path: &str, offset: u64, data: &[u8]) -> Result<(), StorageError> {
+        self.meter.io(0, data.len());
+        self.inner.write_at(path, offset, data)
+    }
+
+    fn truncate(&self, path: &str, len: u64) -> Result<(), StorageError> {
+        self.inner.truncate(path, len)
     }
 
     fn sync(&self) -> Result<(), StorageError> {

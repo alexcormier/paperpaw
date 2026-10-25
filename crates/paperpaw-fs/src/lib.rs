@@ -265,6 +265,29 @@ impl Storage for DirStorage {
             .map_err(error)
     }
 
+    fn write_at(&self, path: &str, offset: u64, data: &[u8]) -> Result<(), StorageError> {
+        let target = self.resolve(path)?;
+        self.forget(path);
+        OpenOptions::new()
+            .write(true)
+            .open(&target)
+            .and_then(|mut file| {
+                file.seek(SeekFrom::Start(offset))?;
+                file.write_all(data)
+            })
+            .map_err(error)
+    }
+
+    fn truncate(&self, path: &str, len: u64) -> Result<(), StorageError> {
+        let target = self.resolve(path)?;
+        self.forget(path);
+        OpenOptions::new()
+            .write(true)
+            .open(&target)
+            .and_then(|file| file.set_len(len))
+            .map_err(error)
+    }
+
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
         // By name: the order `read_dir` gives differs between systems
         // (sorted on Windows, as stored on Linux), and with it what is
@@ -430,6 +453,19 @@ mod tests {
             .unwrap();
         names.sort();
         assert_eq!(names, ["a.paperpaw-tmp", "a.x", "a.y"]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A file written in place and cut, as an emulator's saved memory.
+    #[test]
+    fn written_in_place_and_cut() {
+        let root = std::env::temp_dir().join(format!("paperpaw-at-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        storage.write("save.bin", b"abcdef").unwrap();
+        storage.write_at("save.bin", 2, b"XY").unwrap();
+        assert_eq!(fs::read(root.join("save.bin")).unwrap(), b"abXYef");
+        storage.truncate("save.bin", 3).unwrap();
+        assert_eq!(fs::read(root.join("save.bin")).unwrap(), b"abX");
         fs::remove_dir_all(root).unwrap();
     }
 

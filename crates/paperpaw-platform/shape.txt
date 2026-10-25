@@ -41,4 +41,4 @@ struct paperpaw_platform::storage::DirEntry<'a> { name: &'a str, is_dir: bool, s
 struct paperpaw_platform::storage::Mounted<B, M> { base: B, at: &'static str, mounted: M }
 struct paperpaw_platform::storage::NoStorage
 trait paperpaw_platform::display::Display { function info, function refresh }
-trait paperpaw_platform::storage::Storage { function read_at, function size, function write, function append, function sync, function list, function remove, function modified, function exists, function rename, function create_dir, function remove_dir_all, function ignores_case, function free_space, function total_space, function local_path }
+trait paperpaw_platform::storage::Storage { function read_at, function size, function write, function append, function write_at, function truncate, function sync, function list, function remove, function modified, function exists, function rename, function create_dir, function remove_dir_all, function ignores_case, function free_space, function total_space, function local_path }

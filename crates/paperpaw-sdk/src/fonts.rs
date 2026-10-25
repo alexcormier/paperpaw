@@ -199,6 +199,13 @@ impl Fonts {
         }
     }
 
+    /// Lets the glyphs drawn at runtime go, to make room; they are drawn
+    /// again as they are needed.
+    #[cfg(feature = "kernel")]
+    pub fn clear_cache(&self) {
+        self.cache.borrow_mut().clear();
+    }
+
     fn check_new(&self, id: &Id) -> Result<(), RegisterError> {
         if self.entries.iter().any(|e| e.id == *id) {
             return Err(RegisterError::Duplicate { id: id.clone() });

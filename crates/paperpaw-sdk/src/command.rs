@@ -698,6 +698,17 @@ pub enum Command {
     /// Redraws the current screen completely; with
     /// [`RefreshMode::Full`] the whole screen, flashing.
     Redraw(RefreshMode),
+    /// Keeps the device from going to sleep by itself for a while (see
+    /// [`WakeHold`](crate::power::WakeHold)); the same id again renews
+    /// it.
+    KeepAwake(crate::power::WakeHold),
+    /// Lets go of the hold of this id ([`Command::KeepAwake`]).
+    LetSleep(Id),
+    /// A command that comes after this release, by its key: what PaperPaw
+    /// adds later reaches plugins built now without a new plugin
+    /// interface. A kernel that does not know the key leaves it.
+    #[non_exhaustive]
+    Extended { key: Id, params: Params },
     /// Notifies all subscribers of an event, then every open screen.
     Emit(Id, Params),
     /// Runs action `.0` as if the user had triggered it (e.g. from a

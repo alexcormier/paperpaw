@@ -196,6 +196,13 @@ pub enum Contribution {
         painters: &'static crate::ui::look::Painters,
         priority: Priority,
     },
+    /// A contribution of a kind that comes after this release, by its key
+    /// (see [`Registrar::add_extended`](crate::Registrar::add_extended)).
+    #[non_exhaustive]
+    Extended {
+        key: Id,
+        params: crate::Params,
+    },
 }
 
 impl Contribution {
@@ -264,6 +271,7 @@ impl Contribution {
             Contribution::EventDeclared(_) => "event",
             Contribution::Translations(_) => "translations",
             Contribution::UiLook { .. } => "ui-look",
+            Contribution::Extended { .. } => "extended",
         }
     }
 

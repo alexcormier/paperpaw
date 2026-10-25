@@ -495,6 +495,10 @@ pub mod settings {
     /// The charge in percent at and below which the battery counts as low
     /// (the status item [`BATTERY_LOW`](super::status_items::BATTERY_LOW)).
     pub const BATTERY_LOW: Setting<i64> = Setting::new("core.battery-low");
+    /// Whether plugins may keep the device from going to sleep by itself
+    /// ([`WakeHold`](crate::power::WakeHold)): on by default; off, the
+    /// device sleeps after [`SLEEP_AFTER`] whatever plugins ask.
+    pub const AWAKE_HOLDS: Setting<bool> = Setting::new("core.awake-holds");
     /// How the screen is turned: one of [`ROTATIONS`], where the shell
     /// can turn it (see [`MenuNeed::Rotation`](crate::MenuNeed)); each
     /// book may have its own ([`SCOPE_ONLY`]).

@@ -545,6 +545,8 @@ pub(crate) fn stage(
             Contribution::UiLook {
                 painters, priority, ..
             } => staging.ui_looks.push((painters, priority)),
+            // Keys of later releases: none known yet, left as they are.
+            Contribution::Extended { .. } => {}
             // A kind of a newer SDK than this kernel knows: said, not lost.
             other => {
                 return Err(RegisterError::Invalid {

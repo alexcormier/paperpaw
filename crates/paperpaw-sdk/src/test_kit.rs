@@ -160,6 +160,7 @@ impl Kit {
             started: crate::power::Start::Unknown,
             panel: crate::realtime::PanelInfo::default(),
             keys_held: &[],
+            room: crate::realtime::Room::default(),
             storage: &self.storage,
         })
     }

@@ -13,7 +13,7 @@ pub const paperpaw_layout::BookStyles::MARGINS: paperpaw_layout::BookStyles
 pub const paperpaw_layout::BookStyles::NONE: paperpaw_layout::BookStyles
 pub const paperpaw_layout::BookStyles::SIZE: paperpaw_layout::BookStyles
 pub const paperpaw_layout::BookStyles::SPACING: paperpaw_layout::BookStyles
-pub const fn paperpaw_layout::BookStyles::bits(self) -> u8
+pub const fn paperpaw_layout::BookStyles::bits(self) -> u16
 pub const fn paperpaw_layout::BookStyles::has(self, paperpaw_layout::BookStyles) -> bool
 pub const fn paperpaw_layout::BookStyles::with(self, paperpaw_layout::BookStyles) -> paperpaw_layout::BookStyles
 pub const fn paperpaw_layout::BookStyles::without(self, paperpaw_layout::BookStyles) -> paperpaw_layout::BookStyles

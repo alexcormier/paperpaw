@@ -242,6 +242,21 @@ impl Registrar {
     /// long.back = core.home
     /// tap.center = core.menu
     /// ```
+    /// Adds a contribution of a kind that comes after this release, by its
+    /// key: what PaperPaw takes from plugins later can be given by plugins
+    /// built now, without a new plugin interface. A kernel that does not
+    /// know the key leaves it.
+    pub fn add_extended(
+        &mut self,
+        key: impl Into<Id>,
+        params: crate::Params,
+    ) -> Result<(), RegisterError> {
+        self.add_checked(Contribution::Extended {
+            key: key.into(),
+            params,
+        })
+    }
+
     pub fn add_keymap(
         &mut self,
         source: impl Into<Cow<'static, str>>,

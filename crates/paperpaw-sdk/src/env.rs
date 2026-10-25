@@ -56,6 +56,44 @@ pub struct Capabilities {
     pub frontlight: bool,
     /// The panel shows black and white alone (no grays), e.g. the X4.
     pub black_and_white: bool,
+    /// More of what the device can do, by [`Capability`] (new ones come as
+    /// constants, without a new plugin interface).
+    pub(crate) more: u64,
+}
+
+/// What a device can do beyond [`Capabilities`]' fields
+/// ([`Capabilities::has`]): constants of one type, so more can come
+/// without a new plugin interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Capability(u64);
+
+impl Capability {
+    /// Sound can be played.
+    pub const AUDIO: Self = Self(1);
+    /// The front light's warmth can be set.
+    pub const WARMTH: Self = Self(1 << 1);
+    /// Charging can be stopped at a limit.
+    pub const CHARGE_LIMIT: Self = Self(1 << 2);
+    /// A keyboard of keys (not one on the screen) is there.
+    pub const KEYBOARD: Self = Self(1 << 3);
+    /// Code plugins can mark hot code that runs from internal RAM
+    /// (`paperpaw_sdk::hot!`).
+    pub const HOT_CODE: Self = Self(1 << 4);
+}
+
+impl Capabilities {
+    /// Whether the device can do `capability`.
+    pub const fn has(&self, capability: Capability) -> bool {
+        self.more & capability.0 == capability.0
+    }
+
+    /// With `capability` too (the kernel and shells say so).
+    #[cfg(feature = "kernel")]
+    #[must_use]
+    pub const fn with(mut self, capability: Capability) -> Self {
+        self.more |= capability.0;
+        self
+    }
 }
 
 /// Read-only view of the environment a plugin runs in.
@@ -213,6 +251,9 @@ pub struct Env<'a> {
     pub(crate) panel: crate::realtime::PanelInfo,
     /// The buttons held down now, in the order they went down.
     pub(crate) keys_held: &'a [&'static str],
+    /// The room the screen on top asked for and got (see
+    /// [`realtime::Room`](crate::realtime::Room)).
+    pub(crate) room: crate::realtime::Room,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub(crate) storage: &'a dyn Storage,
@@ -529,6 +570,13 @@ impl<'a> Env<'a> {
         crate::realtime::KeysHeld::of(self.keys_held)
     }
 
+    /// The memory the screen on top asked for
+    /// ([`ScreenMode::memory`](crate::realtime::ScreenMode::memory)) and
+    /// what it got.
+    pub fn room(&self) -> crate::realtime::Room {
+        self.room
+    }
+
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub fn storage(&self) -> &'a dyn Storage {
@@ -691,6 +739,9 @@ pub struct EnvParts<'a> {
     pub panel: crate::realtime::PanelInfo,
     /// The buttons held down now, in the order they went down.
     pub keys_held: &'a [&'static str],
+    /// The room the screen on top asked for and got (see
+    /// [`realtime::Room`](crate::realtime::Room)).
+    pub room: crate::realtime::Room,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -755,6 +806,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             started: p.started,
             panel: p.panel,
             keys_held: p.keys_held,
+            room: p.room,
             storage: p.storage,
         }
     }

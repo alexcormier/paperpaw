@@ -102,6 +102,22 @@ pub trait Storage {
     /// until the file is wanted otherwise; reading it sees it at once.
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError>;
 
+    /// Writes `data` at `offset` of the file at `path`, past its end if
+    /// need be (an emulator's saved memory, a database's pages); the file
+    /// must be there. Storages that cannot say
+    /// [`StorageError::Unsupported`].
+    fn write_at(&self, path: &str, offset: u64, data: &[u8]) -> Result<(), StorageError> {
+        let _ = (path, offset, data);
+        Err(StorageError::Unsupported)
+    }
+
+    /// Cuts the file at `path` to `len` bytes. Storages that cannot say
+    /// [`StorageError::Unsupported`].
+    fn truncate(&self, path: &str, len: u64) -> Result<(), StorageError> {
+        let _ = (path, len);
+        Err(StorageError::Unsupported)
+    }
+
     /// Writes back everything kept back, e.g. before the device sleeps.
     fn sync(&self) -> Result<(), StorageError> {
         Ok(())

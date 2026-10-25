@@ -87,7 +87,7 @@ use crate::params::Params;
 /// Natural moments at which work may run, cheaply: the radio is on
 /// anyway, or about to be for the reader.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
-pub struct Moments(u8);
+pub struct Moments(u32);
 
 impl Moments {
     pub const NONE: Moments = Moments(0);
@@ -134,11 +134,11 @@ impl Moments {
         self.0 == 0
     }
 
-    pub const fn bits(self) -> u8 {
+    pub const fn bits(self) -> u32 {
         self.0
     }
 
-    pub const fn from_bits(bits: u8) -> Moments {
+    pub const fn from_bits(bits: u32) -> Moments {
         Moments(bits & Moments::ALL.0)
     }
 

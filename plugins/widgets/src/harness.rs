@@ -231,6 +231,7 @@ impl Harness {
             started: paperpaw_sdk::power::Start::Unknown,
             panel: paperpaw_sdk::realtime::PanelInfo::default(),
             keys_held: &[],
+            room: paperpaw_sdk::realtime::Room::default(),
             storage: &self.storage,
         })
     }

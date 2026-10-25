@@ -47,8 +47,9 @@ impl GlyphCache {
         self.bytes
     }
 
+    /// Lets every glyph go, and the memory that held them.
     pub fn clear(&mut self) {
-        self.entries.clear();
+        self.entries = Vec::new();
         self.bytes = 0;
     }
 

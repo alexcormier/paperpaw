@@ -500,6 +500,9 @@ pub(crate) struct Radio {
     rest_until: Option<Instant>,
     /// The Bluetooth manager's plugin.
     manager: Option<String>,
+    /// Held off to make room (ADR 0030): off where no link is up, until
+    /// let go.
+    held_off: bool,
 }
 
 /// The command that tells `events` of `event`.
@@ -550,6 +553,19 @@ impl Radio {
                 self.known.push(known);
             }
         }
+    }
+
+    /// Holds the radio off (to make room), where no link is up; or lets
+    /// it come back as what is asked needs it. Whether it is off now.
+    pub fn hold_off(&mut self, off: bool, now: Instant) -> bool {
+        self.held_off = off;
+        self.settle(now);
+        !self.radio_on
+    }
+
+    /// Whether the radio is on.
+    pub fn is_on(&self) -> bool {
+        self.radio_on
     }
 
     /// The Bluetooth manager: the plugin whose screen the slot shows.
@@ -824,6 +840,12 @@ impl Radio {
     /// The radio, the scan and advertising as what is asked needs them, at
     /// the cheapest power that serves everyone.
     fn settle(&mut self, now: Instant) {
+        if self.held_off {
+            if self.radio_on && self.links.is_empty() {
+                self.radio_off(now);
+            }
+            return;
+        }
         let resting = !self.radio_on && self.rest_until.is_some_and(|until| now < until);
         if self.wanted() && resting {
             return;

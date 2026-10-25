@@ -17,6 +17,9 @@ pub(crate) struct RawKeys {
     taken: alloc::vec::Vec<&'static str>,
     /// When *Back* went down while taken, for the way out.
     back_since: Option<Instant>,
+    /// The finger held in the top left corner over such a screen, and
+    /// since when: the same way out by touch.
+    corner: Option<(u8, Instant)>,
     /// Frames asked for since the last one shown.
     frames_asked: u16,
 }
@@ -76,10 +79,39 @@ impl Kernel {
         true
     }
 
-    /// When *Back*, held down and taken, leaves the screen.
+    /// When *Back* held down and taken, or a finger held in the top left
+    /// corner, leaves the screen.
     pub(crate) fn escape_due(&self) -> Option<Instant> {
         let hold = u64::try_from(ESCAPE_HOLD.as_millis()).unwrap_or(u64::MAX);
-        self.raw.back_since.map(|since| since.add_millis(hold))
+        let since = match (self.raw.back_since, self.raw.corner) {
+            (Some(back), Some((_, corner))) => Some(back.min(corner)),
+            (back, corner) => back.or(corner.map(|(_, at)| at)),
+        };
+        since.map(|since| since.add_millis(hold))
+    }
+
+    /// Follows a finger in the top left corner of a screen that has all
+    /// of the panel or takes raw keys: held there for [`ESCAPE_HOLD`], it
+    /// leaves the screen, as *Back* held does (touch screens may have no
+    /// *Back*). It is offered to the screen as ever.
+    pub(crate) fn note_corner(&mut self, pointer: &paperpaw_platform::PointerEvent, now: Instant) {
+        use paperpaw_platform::PointerPhase;
+        let mode = self.top_mode();
+        if !(mode.is_full_screen() || mode.takes_raw_keys()) {
+            self.raw.corner = None;
+            return;
+        }
+        let panel = self.framebuffer.bounds();
+        let size = i32::from(panel.width.min(panel.height) / 8);
+        let inside = pointer.point.x < size && pointer.point.y < size;
+        self.raw.corner = match (pointer.phase, self.raw.corner) {
+            (PointerPhase::Down, _) if inside => Some((pointer.id, now)),
+            (PointerPhase::Move, Some((id, since))) if id == pointer.id && inside => {
+                Some((id, since))
+            }
+            (_, Some((id, since))) if id != pointer.id => Some((id, since)),
+            _ => None,
+        };
     }
 
     /// The way out of a screen that takes raw keys: *Back* held long
@@ -89,10 +121,12 @@ impl Kernel {
         if !self.escape_due().is_some_and(|due| due <= now) {
             return;
         }
-        self.raw.back_since = None;
-        self.raw.taken.retain(|n| *n != buttons::BACK);
-        let key = KeyEvent::released(buttons::BACK, now);
-        self.with_top(|screen, cx| screen.on_key(&key, cx));
+        self.raw.corner = None;
+        if self.raw.back_since.take().is_some() {
+            self.raw.taken.retain(|n| *n != buttons::BACK);
+            let key = KeyEvent::released(buttons::BACK, now);
+            self.with_top(|screen, cx| screen.on_key(&key, cx));
+        }
         if let Some(top) = self.stack.last() {
             let key = ScreenKey::new(top.serial);
             self.output.commands.push(Command::Close(key));
@@ -104,6 +138,7 @@ impl Kernel {
     pub(crate) fn forget_raw(&mut self) {
         self.raw.taken.clear();
         self.raw.back_since = None;
+        self.raw.corner = None;
     }
 
     /// The refresh mode for changes where the screen asked for the fastest

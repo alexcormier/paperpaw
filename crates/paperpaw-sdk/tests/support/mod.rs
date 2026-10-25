@@ -224,6 +224,7 @@ impl Harness {
             started: paperpaw_sdk::power::Start::Unknown,
             panel: paperpaw_sdk::realtime::PanelInfo::default(),
             keys_held: &[],
+            room: paperpaw_sdk::realtime::Room::default(),
             metrics: Metrics::new(self.device.display.dpi),
             settings: &self.settings,
             i18n: &self.i18n,
