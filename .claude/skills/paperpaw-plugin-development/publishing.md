@@ -608,10 +608,11 @@ the plugin on GitHub. Sections 3 to 5b (the id, `plugin.ini`,
    with code), `X4` and `X4_PRO` (the readers to build for), `PLUGIN_DIR`
    (the folder with `plugin.ini`), `BIN` (the binary crate) and, for
    code, `PAPERPAW`, `RUST_X4`, `RUST_X4_PRO` and `ESP_GCC` as in
-   section 5b. It builds as `build.sh` does. The X4 Classic is not built
-   by it. Keep one workflow that makes the release: the sample's
-   `build.yml` makes one too, and its `<id>-<version>.zip` leaves out
-   `store/`, which this way needs.
+   section 5b. It builds as `build.sh` does, and publishes the X4 Pro's
+   file for the X4 Classic too (`X4_CLASSIC`: same chip, same
+   fingerprint). Keep one workflow that makes the release: the sample's
+   `build.yml` makes one too (the site then takes its
+   `<id>-<version>-upload.zip`, the folder with `store/`).
 3. **The key** (code plugins): section 5b. The file's contents are the
    repository's secret `PAPERPAW_PLUGIN_KEY`; the job writes it to a
    temporary file and never prints it. All builds of a version, and all
@@ -652,10 +653,17 @@ the plugin on GitHub. Sections 3 to 5b (the id, `plugin.ini`,
    a link to the repository, the key's fingerprint and a report button.
    Readers download from the site, never from GitHub. The admins can
    block a repository, an owner or a key, which takes it down at once.
-8. **Ids**: the id of a reviewed plugin (PaperPaw's own, a release's or
-   one from the form) is never listed from GitHub; reviewed wins. Of two
-   repositories with one id, the one the site took first keeps it. Look
-   at `https://paperpaw.org/api/v1/plugins.json` first (section 3).
+8. **Ids**: an id belongs to whoever it first appeared with, reviewed or
+   from GitHub (by key; a data plugin by account or GitHub owner). A
+   release with another's id or key is not offered, and the ids and
+   names of PaperPaw's own plugins are reserved. Look at
+   `https://paperpaw.org/api/v1/plugins.json?community=1` first (section
+   3).
+9. **Reviewed later**: the author names the repository in the form at
+   `https://paperpaw.org/submit` (*From GitHub*, signed in); the site
+   fills in everything from the newest release, and the author sends it
+   to the moderators. A plugin with code is theirs by its key. Once
+   approved, each new release waits for the moderators as an update.
 
 Do not say the plugin is published until the user has seen it listed on
 the site; report what the site says, word for word. An update is a new

@@ -123,7 +123,7 @@ lists the plugin as "Community, unreviewed".
    for a folder of data), the readers to build for (`X4`, `X4_PRO`), the
    plugin's folder `PLUGIN_DIR` and, for code, the binary `BIN` and the
    PaperPaw release's pins, as in `samples/hello-native`. The X4 Classic
-   is not built yet.
+   gets the X4 Pro's file under its own name (`X4_CLASSIC`).
 3. For a plugin with code, make a key once with
    `paperpaw-sign key author.key`, keep the file safe and out of every
    repository, and paste its contents as the repository's secret
@@ -148,10 +148,13 @@ Some things to know:
 - A plugin with code needs its source: `store/store.ini` names it
   (`[source]`), or the site takes the repository at the release's tag.
   Commit `Cargo.lock`.
-- The first version the site takes fixes the plugin's key. A later
-  version signed by another key is not offered, and readers refuse it.
-- An id of a reviewed plugin (PaperPaw's own, or one from the upload form)
-  is never listed from GitHub. Between two repositories with one id, the
-  one the site took first keeps it.
+- An id belongs to whoever it first appeared with, on GitHub or through
+  the upload form: by its key, or for a data plugin by its account or
+  GitHub owner. A version with another's id or another key is not
+  offered, and readers refuse an update signed by another key. The ids
+  and names of PaperPaw's own plugins are reserved.
+- To get it reviewed, name the repository in the store's form (*From
+  GitHub*). After that, every new release waits for the moderators as an
+  update and goes live once approved.
 - Whoever installs it sees the author (the GitHub owner), the link to the
   repository and the key's fingerprint, and can report it.

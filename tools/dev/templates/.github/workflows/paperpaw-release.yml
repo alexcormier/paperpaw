@@ -7,6 +7,7 @@
 #   my-plugin-1.0.0.zip                   the plugin's folder (always)
 #   my-plugin-1.0.0-x4.ppn                a code plugin's signed builds,
 #   my-plugin-1.0.0-x4-pro.ppn            one for each reader chosen below
+#   my-plugin-1.0.0-x4-classic.ppn        (the X4 Pro's file: the same build)
 #
 # A code plugin is signed with the author's key, kept as the repository's
 # secret PAPERPAW_PLUGIN_KEY (`paperpaw-sign key author.key` makes it
@@ -34,9 +35,11 @@ env:
   # and nothing is built or signed), "true" for a plugin with code.
   CODE: "false"
   # The readers a code plugin is built for (the X3 runs the X4's file).
-  # The X4 Classic is not built here yet.
+  # The X4 Classic runs the X4 Pro's file (same chip and fingerprint): it is
+  # published under the Classic's name too, where X4_PRO is built.
   X4: "true"
   X4_PRO: "true"
+  X4_CLASSIC: "true"
 
   # The plugin's folder, the one with plugin.ini at its top (and
   # store/store.ini and the screenshots in store/). Use "." only when the
@@ -163,6 +166,9 @@ jobs:
           if [ "$X4_PRO" = true ]; then
             cargo +esp x4pro --locked --config "$(remap xtensa-esp32s3-none-elf)"
             pack xtensa-esp32s3-none-elf x4-pro
+            if [ "$X4_CLASSIC" = true ]; then
+              cp "release/$ID-$VERSION-x4-pro.ppn" "release/$ID-$VERSION-x4-classic.ppn"
+            fi
           fi
 
       - name: Release

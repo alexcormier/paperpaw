@@ -1977,10 +1977,15 @@ signs a code plugin with the key in the repository's secret
 `PAPERPAW_PLUGIN_KEY`, and creates the release.
 
 Unreviewed means the moderators did not read it; the checks are the same.
-The id of a reviewed plugin is never taken from GitHub, and the first
-version the site takes fixes the plugin's key, as in
-[The author's key](#the-authors-key). The admins can block a repository,
-an owner or a key, which takes its plugins down at once. The skill's
+An id belongs to whoever it first appeared with, reviewed or from
+GitHub: its key, as in [The author's key](#the-authors-key), or for a
+data plugin its account or GitHub owner. A release with another's id or
+key is not offered; the ids and names of PaperPaw's own plugins are
+reserved. Readers refuse an update signed by another key. The admins can
+block a repository, an owner or a key, which takes its plugins down at
+once. To have it reviewed later, name the repository in the store's form
+(*From GitHub*): from then on each new release waits for the moderators
+as an update. The skill's
 [`publishing.md`](../.claude/skills/paperpaw-plugin-development/publishing.md)
 has the steps.
 
