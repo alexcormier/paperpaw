@@ -5,17 +5,16 @@
 
 use alloc::boxed::Box;
 
-use smoltcp::iface::SocketHandle;
 use smoltcp::socket::tcp;
 
-use crate::net::Net;
+use crate::net::{Handle, Net};
 use crate::tls;
 
 /// Plain bytes read from TLS at a time.
 const READ_PART: usize = 1024;
 
 pub struct Link {
-    pub socket: SocketHandle,
+    pub socket: Handle,
     tls: Option<Box<tls::Session>>,
     /// Some bytes came over the connection (see `paperpaw_x4::stall`).
     received: bool,
@@ -40,7 +39,7 @@ fn tcp_ended(socket: &tcp::Socket<'_>) -> bool {
 impl Link {
     /// Over the open socket `socket`, with TLS if given a session (made
     /// first: it takes the most memory).
-    pub fn new(socket: SocketHandle, tls: Option<Box<tls::Session>>) -> Self {
+    pub fn new(socket: Handle, tls: Option<Box<tls::Session>>) -> Self {
         Self {
             socket,
             tls,

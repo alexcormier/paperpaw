@@ -5,8 +5,9 @@
 //!   lets it ([`ON_DEMAND`](crate::ON_DEMAND)); then a secured network
 //!   joined before is joined: the one the user picked last, if it is in
 //!   reach and *Join first* says so ([`JOIN_FIRST`](crate::JOIN_FIRST)),
-//!   else the strongest; the next one if that fails (open networks only
-//!   when chosen, see [`best_known`]).
+//!   else the strongest; the next one if that fails, the one picked last
+//!   after a second try (open networks only when chosen, see
+//!   [`best_known`]).
 //! - A scan that finds no network joined before is made again, up to
 //!   [`SCANS`] times, before none counts as in reach.
 //! - A round that joins nothing is tried again a little later while the
@@ -71,6 +72,8 @@ pub struct Policy {
     /// The network to join first when in reach: the one the user picked
     /// last ([`JOIN_FIRST`](crate::JOIN_FIRST)); none for the strongest.
     pub first: Option<String>,
+    /// `first` failed once this round and was tried again.
+    pub first_again: bool,
 }
 
 /// Of `networks` joined before (`known`) and not tried yet, the one to
@@ -139,6 +142,7 @@ impl Policy {
 
     fn start_round(&mut self, goal: Goal) {
         self.goal = goal;
+        self.first_again = false;
         self.tried.clear();
         self.scans = 0;
     }
@@ -224,6 +228,23 @@ impl Policy {
         }
         match self.goal {
             Goal::Known => {
+                // The network to join first gets a second try before the
+                // next: one of its access points, weak or far, refuses a
+                // join now and then (seen on the X4 at -72 and -90 dBm),
+                // and the next network would then stay joined.
+                if !self.first_again
+                    && self.first.as_deref() == Some(ssid)
+                    && networks.iter().any(|n| n.ssid == ssid)
+                    && let Some((ssid, password)) = known
+                        .iter()
+                        .find(|(known, password)| known == ssid && !password.is_empty())
+                {
+                    self.first_again = true;
+                    return Some(alloc::vec![WifiCommand::Join {
+                        ssid: ssid.clone(),
+                        password: password.clone(),
+                    }]);
+                }
                 if !self.tried.iter().any(|t| t == ssid) {
                     self.tried.push(String::from(ssid));
                 }
@@ -269,9 +290,16 @@ mod tests {
             policy.scanned(&networks, &known).unwrap(),
             [join("FRITZ!Box", "b")]
         );
+        // A second try, then the next.
         assert_eq!(
             policy
                 .failed("FRITZ!Box", JoinFailure::Timeout, &networks, &known)
+                .unwrap(),
+            [join("FRITZ!Box", "b")]
+        );
+        assert_eq!(
+            policy
+                .failed("FRITZ!Box", JoinFailure::Password, &networks, &known)
                 .unwrap(),
             [join("Hannes", "a")]
         );
@@ -287,6 +315,50 @@ mod tests {
         assert_eq!(
             policy.scanned(&networks, &known).unwrap(),
             [join("Hannes", "a")]
+        );
+    }
+
+    /// After the radio started anew (switched off and on, or restarted
+    /// for a stalled connection), the network picked last is joined
+    /// again, though another one joined before is stronger.
+    #[test]
+    fn the_network_picked_last_is_joined_again_after_a_restart() {
+        let known = alloc::vec![
+            (String::from("Hannes"), String::from("a")),
+            (String::from("FRITZ!Box"), String::from("b")),
+        ];
+        let networks = [net("Hannes", -45), net("FRITZ!Box", -72)];
+        let mut policy = Policy {
+            first: Some(String::from("FRITZ!Box")),
+            ..Policy::default()
+        };
+        let joins_fritz = |policy: &mut Policy| {
+            assert_eq!(policy.wanted(&WifiState::Off, &known), [WifiCommand::On]);
+            assert_eq!(policy.changed(&WifiState::On), [WifiCommand::Scan]);
+            assert_eq!(
+                policy.scanned(&networks, &known).unwrap(),
+                [join("FRITZ!Box", "b")]
+            );
+            let online = WifiState::Online {
+                ssid: String::from("FRITZ!Box"),
+                address: String::from("192.168.178.39"),
+            };
+            assert!(policy.changed(&online).is_empty());
+        };
+        joins_fritz(&mut policy);
+        assert!(policy.changed(&WifiState::Off).is_empty());
+        joins_fritz(&mut policy);
+        // A failed try last round does not use up this round's second try.
+        policy.first_again = true;
+        assert!(policy.changed(&WifiState::Off).is_empty());
+        assert_eq!(policy.wanted(&WifiState::Off, &known), [WifiCommand::On]);
+        assert_eq!(policy.changed(&WifiState::On), [WifiCommand::Scan]);
+        policy.scanned(&networks, &known);
+        assert_eq!(
+            policy
+                .failed("FRITZ!Box", JoinFailure::Other, &networks, &known)
+                .unwrap(),
+            [join("FRITZ!Box", "b")]
         );
     }
 

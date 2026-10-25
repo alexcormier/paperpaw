@@ -37,6 +37,13 @@ pub struct Buffers {
 /// opened on an earlier one is gone.
 static mut GENERATION: u32 = 0;
 
+/// A socket of one [`Net`]. Kept past the radio's restart, it is an
+/// earlier one's: the Net passes over it (`paperpaw_x4::generation`), a
+/// connection gone.
+pub type Handle = paperpaw_x4::generation::Tagged<SocketHandle>;
+/// A name lookup of one [`Net`], passed over by a later one as [`Handle`].
+pub type Query = paperpaw_x4::generation::Tagged<dns::QueryHandle>;
+
 #[derive(Debug)]
 pub enum Error {
     /// No address yet (DHCP has not answered).
@@ -127,6 +134,9 @@ pub struct Net {
     /// When DHCP was last (re)started while joined without an address.
     asked: Option<Instant>,
     generation: u32,
+    /// What an earlier Net's handles reach: a TCP connection closed and a
+    /// UDP socket not bound, both without buffers, made when first used.
+    gone: Option<alloc::boxed::Box<(tcp::Socket<'static>, udp::Socket<'static>)>>,
 }
 
 impl Net {
@@ -161,7 +171,7 @@ impl Net {
         let socket = net.udp(handle);
         socket.close();
         socket.bind(dhcp::SERVER_PORT).ok()?;
-        net.server = Some((handle, dhcp::Server::new(address)));
+        net.server = Some((handle.of(net.generation)?, dhcp::Server::new(address)));
         Some(net)
     }
 
@@ -192,6 +202,7 @@ impl Net {
             port: 49152 + (rng.random() % 16000) as u16,
             asked: None,
             generation,
+            gone: None,
         }
     }
 
@@ -346,12 +357,16 @@ impl Net {
         self.sockets
             .get_mut::<dns::Socket<'_>>(handle)
             .start_query(self.stack.context(), name, DnsQueryType::A)
-            .map(Resolve::Asking)
+            .map(|query| Resolve::Asking(Query::new(query, self.generation)))
             .map_err(|_| Error::Name)
     }
 
-    /// The address asked for with [`Net::resolve`], once known.
-    pub fn resolved(&mut self, query: dns::QueryHandle) -> Option<Result<IpAddress, Error>> {
+    /// The address asked for with [`Net::resolve`], once known; an
+    /// earlier Net's lookup failed.
+    pub fn resolved(&mut self, query: Query) -> Option<Result<IpAddress, Error>> {
+        let Some(query) = query.of(self.generation) else {
+            return Some(Err(Error::Offline));
+        };
         let handle = self.dns?;
         match self
             .sockets
@@ -365,8 +380,8 @@ impl Net {
     }
 
     /// Stops finding an address no longer wanted.
-    pub fn forget(&mut self, query: dns::QueryHandle) {
-        if let Some(handle) = self.dns {
+    pub fn forget(&mut self, query: Query) {
+        if let (Some(handle), Some(query)) = (self.dns, query.of(self.generation)) {
             self.sockets
                 .get_mut::<dns::Socket<'_>>(handle)
                 .cancel_query(query);
@@ -375,7 +390,7 @@ impl Net {
 
     /// Opens a TCP connection to `to`; [`Net::socket`] then reaches it, and
     /// [`Net::release`] lets it go.
-    pub fn open(&mut self, to: (IpAddress, u16), buffers: Buffers) -> Result<SocketHandle, Error> {
+    pub fn open(&mut self, to: (IpAddress, u16), buffers: Buffers) -> Result<Handle, Error> {
         let handle = self.sockets.add(tcp_socket(buffers)?);
         let local = self.next_port();
         let connected = self.sockets.get_mut::<tcp::Socket<'_>>(handle).connect(
@@ -387,21 +402,24 @@ impl Net {
             self.sockets.remove(handle);
             return Err(Error::Connection);
         }
-        Ok(handle)
+        Ok(Handle::new(handle, self.generation))
     }
 
     /// Waits for a connection on `port` (from any address of the local
     /// network); [`Net::socket`] reaches it, [`Net::listen_again`] makes it
     /// wait for the next once done, and [`Net::release`] lets it go.
-    pub fn listen(&mut self, port: u16, buffers: Buffers) -> Result<SocketHandle, Error> {
+    pub fn listen(&mut self, port: u16, buffers: Buffers) -> Result<Handle, Error> {
         let mut socket = tcp_socket(buffers)?;
         socket.listen(port).map_err(|_| Error::Connection)?;
-        Ok(self.sockets.add(socket))
+        Ok(Handle::new(self.sockets.add(socket), self.generation))
     }
 
     /// Ends the connection of a socket made by [`Net::listen`] at once,
     /// and waits for the next one on `port`.
-    pub fn listen_again(&mut self, handle: SocketHandle, port: u16) {
+    pub fn listen_again(&mut self, handle: Handle, port: u16) {
+        let Some(handle) = handle.of(self.generation) else {
+            return;
+        };
         self.sockets.get_mut::<tcp::Socket<'_>>(handle).abort();
         // Sends the reset before the socket listens again.
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
@@ -411,7 +429,7 @@ impl Net {
     /// Opens a UDP socket for small datagrams (SNTP's, broadcasts):
     /// `packets` of `bytes` in all, each way; let it go with
     /// [`Net::release_udp`].
-    pub fn open_udp(&mut self, packets: usize, bytes: usize) -> Result<SocketHandle, Error> {
+    pub fn open_udp(&mut self, packets: usize, bytes: usize) -> Result<Handle, Error> {
         let buffer = || -> Result<udp::PacketBuffer<'static>, Error> {
             let mut metadata = Vec::new();
             metadata
@@ -423,15 +441,22 @@ impl Net {
         let mut socket = udp::Socket::new(buffer()?, buffer()?);
         let local = self.next_port();
         socket.bind(local).map_err(|_| Error::Connection)?;
-        Ok(self.sockets.add(socket))
+        Ok(Handle::new(self.sockets.add(socket), self.generation))
     }
 
-    pub fn udp(&mut self, handle: SocketHandle) -> &mut udp::Socket<'static> {
-        self.sockets.get_mut::<udp::Socket<'_>>(handle)
+    /// A UDP socket of [`Net::open_udp`]; an earlier Net's sends nothing
+    /// and receives nothing.
+    pub fn udp(&mut self, handle: Handle) -> &mut udp::Socket<'static> {
+        match handle.of(self.generation) {
+            Some(handle) => self.sockets.get_mut::<udp::Socket<'_>>(handle),
+            None => &mut self.gone().1,
+        }
     }
 
-    pub fn release_udp(&mut self, handle: SocketHandle) {
-        self.sockets.remove(handle);
+    pub fn release_udp(&mut self, handle: Handle) {
+        if let Some(handle) = handle.of(self.generation) {
+            self.sockets.remove(handle);
+        }
     }
 
     /// The next local port for a connection.
@@ -445,12 +470,35 @@ impl Net {
         port
     }
 
-    pub fn socket(&mut self, handle: SocketHandle) -> &mut tcp::Socket<'static> {
-        self.sockets.get_mut::<tcp::Socket<'_>>(handle)
+    /// A TCP connection of [`Net::open`] or [`Net::listen`]; an earlier
+    /// Net's is closed.
+    pub fn socket(&mut self, handle: Handle) -> &mut tcp::Socket<'static> {
+        match handle.of(self.generation) {
+            Some(handle) => self.sockets.get_mut::<tcp::Socket<'_>>(handle),
+            None => &mut self.gone().0,
+        }
     }
 
-    /// Closes a connection at once and frees it.
-    pub fn release(&mut self, handle: SocketHandle) {
+    /// What an earlier Net's handles reach, made when first asked for.
+    fn gone(&mut self) -> &mut (tcp::Socket<'static>, udp::Socket<'static>) {
+        self.gone.get_or_insert_with(|| {
+            let packets = || udp::PacketBuffer::new(Vec::new(), Vec::new());
+            alloc::boxed::Box::new((
+                tcp::Socket::new(
+                    tcp::SocketBuffer::new(Vec::new()),
+                    tcp::SocketBuffer::new(Vec::new()),
+                ),
+                udp::Socket::new(packets(), packets()),
+            ))
+        })
+    }
+
+    /// Closes a connection at once and frees it (an earlier Net's is
+    /// gone already).
+    pub fn release(&mut self, handle: Handle) {
+        let Some(handle) = handle.of(self.generation) else {
+            return;
+        };
         self.sockets.get_mut::<tcp::Socket<'_>>(handle).abort();
         // Sends the reset before the socket goes.
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
@@ -469,5 +517,5 @@ fn tcp_socket(buffers: Buffers) -> Result<tcp::Socket<'static>, Error> {
 /// Finding a host's address.
 pub enum Resolve {
     Done(IpAddress),
-    Asking(dns::QueryHandle),
+    Asking(Query),
 }
