@@ -92,11 +92,12 @@ fn main() {
         };
         write(&out.join(format!("{name}.ppfp")), &pack);
     }
-    // Icons sit in the private use area and just above it.
+    // Icons sit in the private use area and above it, Tabler's newer ones
+    // (`tag`) past U+FFFF.
     let path = "fonts/PaperPawIcons.ttf";
     let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
     let font = paperpaw_text::OutlineFont::new(data, &[]).unwrap_or_else(|e| panic!("{path}: {e}"));
-    let chars = ('\u{e000}'..='\u{ffff}').filter(|ch| font.has_char(*ch));
+    let chars = ('\u{e000}'..=char::MAX).filter(|ch| font.has_char(*ch));
     let pack = paperpaw_text::build_pack(&font, &sizes, chars);
     write(&out.join("icons.ppfp"), &pack);
 }
