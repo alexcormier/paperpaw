@@ -9,6 +9,7 @@ calibre library
 diagnostics system
 fonts-browser look
 hyphenation-da reading
+hyphenation-de reading
 hyphenation-es reading
 hyphenation-fr reading
 hyphenation-it reading

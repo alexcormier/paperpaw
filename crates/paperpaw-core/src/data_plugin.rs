@@ -774,8 +774,10 @@ fn extensions(source: &str, path: &str) -> Vec<(String, String)> {
 }
 
 /// The family `[family]` in a `plugin.ini` names, with its faces' keys and
-/// paths under the plugin's `fonts` folder; no faces without a name or a
-/// regular face.
+/// paths under the plugin's `fonts` folder; no faces without a name. A
+/// plugin may bring faces of a family without its regular one, e.g. the
+/// bold italic face of a family built in that leaves it out (the
+/// firmware's Literata), bound to its role with `[fonts]`.
 fn family(source: &str, path: &str) -> (Option<String>, Vec<(&'static str, String)>) {
     let mut name = None;
     let mut faces = Vec::new();
@@ -794,7 +796,7 @@ fn family(source: &str, path: &str) -> (Option<String>, Vec<(&'static str, Strin
         }
     }
     match name.filter(|n| !n.is_empty()) {
-        Some(name) if faces.iter().any(|(key, _)| *key == "regular") => (Some(name), faces),
+        Some(name) if !faces.is_empty() => (Some(name), faces),
         _ => (None, Vec::new()),
     }
 }
@@ -1053,11 +1055,25 @@ italic = ../escape.ppfp
             *plugin.fonts.borrow(),
             ["plugins/font-round/fonts/Extra.ttf"]
         );
-        // No family without a name and a regular face.
+        // A face of a family without its regular face: e.g. a bold
+        // italic face the firmware leaves out.
         assert_eq!(
             family(
                 "[family]
-bold = a.ppfp
+bold-italic = a.ppfp
+name = Literata
+",
+                "p"
+            ),
+            (
+                Some(String::from("Literata")),
+                alloc::vec![("bold-italic", String::from("p/fonts/a.ppfp"))]
+            )
+        );
+        // No family without a name, nor without a face.
+        assert_eq!(
+            family(
+                "[family]
 name = A
 ",
                 "p"

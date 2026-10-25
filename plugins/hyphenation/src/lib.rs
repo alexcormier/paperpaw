@@ -1,10 +1,10 @@
-//! Hyphenation patterns for German (reformed spelling) and English
-//! (American spelling).
+//! Hyphenation patterns for English (American spelling).
 //!
 //! The patterns are compiled at build time and read in place, so they cost
-//! flash but almost no RAM. Other languages are separate plugins that add
-//! their own patterns the same way; a later registration for a language
-//! replaces an earlier one.
+//! flash but almost no RAM. Other languages, German among them, are
+//! plugins of the store that add their own patterns the same way: the
+//! firmware stays small. A later registration for a language replaces an
+//! earlier one.
 
 #![no_std]
 
@@ -15,10 +15,8 @@ extern crate alloc;
 use paperpaw_sdk::{HyphenationSpec, Id, Manifest, Plugin, RegisterError, Registrar};
 
 pub const PLUGIN: Id = Id::new_static("hyphenation");
-pub const GERMAN: Id = Id::new_static("hyphenation.de");
 pub const ENGLISH: Id = Id::new_static("hyphenation.en");
 
-const DE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/de.pphp"));
 const EN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/en.pphp"));
 
 /// The hyphenation plugin.
@@ -35,10 +33,10 @@ impl Plugin for Hyphenation {
     fn manifest(&self) -> Manifest {
         Manifest::new(
             PLUGIN,
-            "Hyphenation (German, English)",
+            "Hyphenation (English)",
             paperpaw_sdk::package_version!(),
         )
-        .description("Hyphenation patterns for German and English, for evenly set text.")
+        .description("Hyphenation patterns for English, for evenly set text.")
         .how(&HOW)
         .uses(paperpaw_sdk::Uses::NOTHING)
     }
@@ -46,9 +44,7 @@ impl Plugin for Hyphenation {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
-        for (id, language, patterns) in [(ENGLISH, "en", EN), (GERMAN, "de", DE)] {
-            r.add_hyphenation(HyphenationSpec::new(id, language, patterns))?;
-        }
+        r.add_hyphenation(HyphenationSpec::new(ENGLISH, "en", EN))?;
         Ok(())
     }
 }
@@ -72,14 +68,6 @@ mod tests {
             out.push(c);
         }
         out
-    }
-
-    #[test]
-    fn hyphenates_german() {
-        assert_eq!(hyphenated(DE, "Verwandlung"), "Ver-wand-lung");
-        assert_eq!(hyphenated(DE, "Musterkollektion"), "Mus-ter-kol-lek-ti-on");
-        assert_eq!(hyphenated(DE, "Ungeziefer"), "Un-ge-zie-fer");
-        assert_eq!(hyphenated(DE, "Rücken"), "Rü-cken");
     }
 
     #[test]

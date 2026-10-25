@@ -58,7 +58,7 @@ pub const PAPERPAW_SANS_FAMILY: &str = "PaperPaw Sans";
 pub const UI_FAMILY: &str = preferred::UI_FAMILY;
 
 /// The faces: id, role, font data and weight (for variable fonts).
-type Faces = [(Id, Id, &'static [u8], f32); 5];
+type Faces = &'static [(Id, Id, &'static [u8], f32)];
 
 #[cfg(feature = "outline")]
 mod outlines {
@@ -71,7 +71,7 @@ mod outlines {
     /// Bold faces are instances of the variable fonts.
     pub fn faces() -> super::Faces {
         use super::*;
-        [
+        static FACES: super::Faces = &[
             (LITERATA, fonts::READING, self::LITERATA, 400.0),
             (LITERATA_BOLD, fonts::READING_BOLD, self::LITERATA, 700.0),
             (
@@ -87,7 +87,8 @@ mod outlines {
                 700.0,
             ),
             (SOURCE_SANS, fonts::UI, self::SOURCE_SANS, UI_WEIGHT),
-        ]
+        ];
+        FACES
     }
 }
 
@@ -104,7 +105,7 @@ mod packs {
 
     pub fn faces() -> super::Faces {
         use super::*;
-        [
+        static FACES: super::Faces = &[
             (LITERATA, fonts::READING, pack!("literata"), 400.0),
             (
                 LITERATA_BOLD,
@@ -118,6 +119,7 @@ mod packs {
                 pack!("literata-italic"),
                 400.0,
             ),
+            #[cfg(not(paperpaw_lean_fonts))]
             (
                 LITERATA_BOLD_ITALIC,
                 fonts::READING_BOLD_ITALIC,
@@ -125,7 +127,8 @@ mod packs {
                 700.0,
             ),
             (SOURCE_SANS, fonts::UI, pack!("paperpaw-sans"), UI_WEIGHT),
-        ]
+        ];
+        FACES
     }
 }
 
@@ -164,7 +167,7 @@ fn register(
 ) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
-    for (id, role, data, weight) in faces {
+    for (id, role, data, weight) in faces.iter().cloned() {
         let font =
             Font::from_data(data, &[("wght", weight)]).map_err(|e| RegisterError::Invalid {
                 message: Cow::Owned(alloc::format!("{id}: {e}")),

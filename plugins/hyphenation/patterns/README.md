@@ -5,40 +5,6 @@ The pattern files are taken unchanged from the
 (`hyph-utf8/tex/generic/hyph-utf8/patterns/txt`). The build script compiles
 them into tables for `paperpaw-hyphen`.
 
-## German, reformed spelling (`hyph-de-1996.pat.txt`)
-
-German Hyphenation Patterns (Reformed Orthography, 2006), version
-2024-02-28, by the Deutschsprachige Trennmustermannschaft
-(trennmuster@dante.de). Hyphen minimums: 2 characters before, 2 after.
-
-```text
-Copyright (c) 2013-2024
-Stephan Hennig, Werner Lemberg, Günter Milde,
-Sander van Geloven, Georg Pfeiffer, Gisbert W. Selke,
-Tobias Wendorf, Keno Wehr
-
-Permission is hereby granted, free of charge, to any person
-obtaining a copy of this software and associated documentation
-files (the “Software”), to deal in the Software without
-restriction, including without limitation the rights to use,
-copy, modify, merge, publish, distribute, sublicense, and/or
-sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
-```
-
 ## English, American spelling (`hyph-en-us.pat.txt`, `hyph-en-us.hyp.txt`)
 
 Hyphenation patterns for American English (`ushyphmax.tex`), version
@@ -60,7 +26,7 @@ underlying word list may not be redistributed.
 
 The hyphenation plugins of the store keep their own pattern files, with
 source, authors, licence and hyphen minimums, in
-`plugins/hyphenation-<language>/patterns/README.md`: French, Spanish,
+`plugins/hyphenation-<language>/patterns/README.md`: German, French, Spanish,
 Italian, Dutch, Portuguese, Swedish, Danish, Norwegian (Bokmål), Polish,
 Russian and Ukrainian. They come from the same project.
 

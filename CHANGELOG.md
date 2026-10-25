@@ -220,6 +220,12 @@ change the plugin SDK.
 - Moving through the settings with the buttons is quicker: a step draws
   only the row left and the row reached, no longer the whole screen (on
   the X4 a sixth to a third of it), in every list of the settings.
+- The firmware is leaner, so updates keep room: German hyphenation is a
+  plugin of the store (`hyphenation-de`), as the other languages are,
+  and the built-in one keeps English; Literata Bold Italic is no longer
+  built into the firmware (bold stands in for it; the emulator and the
+  app keep it). A data plugin may bring faces of a family without its
+  regular one, so the font library can bring that face back.
 - The release keeps room for the updates to come: `paperpaw-sign
   check-image` prints the margin an image leaves in the smallest app
   slot (its own or CrossPoint's), warns below 512 KB and fails below

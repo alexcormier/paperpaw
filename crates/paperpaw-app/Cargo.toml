@@ -40,6 +40,7 @@ store-plugins = [
     "dep:paperpaw-plugin-joplin",
     "dep:paperpaw-plugin-wallabag",
     "dep:paperpaw-plugin-hyphenation-da",
+    "dep:paperpaw-plugin-hyphenation-de",
     "dep:paperpaw-plugin-hyphenation-es",
     "dep:paperpaw-plugin-hyphenation-fr",
     "dep:paperpaw-plugin-hyphenation-it",
@@ -73,6 +74,7 @@ paperpaw-plugin-home.workspace = true
 paperpaw-plugin-hyphenation.workspace = true
 paperpaw-plugin-hyphenation-da = { workspace = true, optional = true }
 paperpaw-plugin-hyphenation-es = { workspace = true, optional = true }
+paperpaw-plugin-hyphenation-de = { workspace = true, optional = true }
 paperpaw-plugin-hyphenation-fr = { workspace = true, optional = true }
 paperpaw-plugin-hyphenation-it = { workspace = true, optional = true }
 paperpaw-plugin-hyphenation-nb = { workspace = true, optional = true }

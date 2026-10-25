@@ -36,6 +36,14 @@ fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=fonts");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_SIZES");
+    println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_LEAN");
+    println!("cargo::rustc-check-cfg=cfg(paperpaw_lean_fonts)");
+    // Lean (the firmware): no Literata Bold Italic, which few books use;
+    // bold stands in for it, and the font library has the face.
+    let lean = std::env::var_os("PAPERPAW_FONT_LEAN").is_some_and(|v| v == "1");
+    if lean {
+        println!("cargo::rustc-cfg=paperpaw_lean_fonts");
+    }
     if std::env::var_os("CARGO_FEATURE_OUTLINE").is_some()
         && std::env::var_os("CARGO_FEATURE_PACKS").is_none()
     {
@@ -56,6 +64,9 @@ fn main() {
         std::env::var_os("OUT_DIR").unwrap_or_else(|| panic!("OUT_DIR is set by cargo")),
     );
     for &(name, path, weight) in FONTS {
+        if lean && name == "literata-bold-italic" {
+            continue;
+        }
         let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
         let font = paperpaw_text::OutlineFont::new(data, &[("wght", weight)])
             .unwrap_or_else(|e| panic!("{path}: {e}"));
