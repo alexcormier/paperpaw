@@ -667,6 +667,35 @@ fn holding_a_letter_at_the_edge_shows_its_variants() {
     assert_eq!(typing.answer(), "ä…");
 }
 
+/// With buttons, Back held finishes and keeps the text, wherever the
+/// focus is (on a letter too, where a held Select shows its capital, and
+/// with the capital shown); Back alone cancels.
+#[test]
+fn back_held_finishes_and_keeps_the_text() {
+    let mut typing = Typing::new(BUTTONS);
+    typing.open(&[(params::TEXT, "abc")]);
+    typing.focus_by_buttons("q");
+    typing.hold_button("back");
+    assert_eq!(typing.answer(), "abc");
+
+    let mut shown = Typing::new(BUTTONS);
+    shown.open(&[(params::TEXT, "xy")]);
+    shown.focus_by_buttons("e");
+    shown.hold_button("confirm");
+    assert_eq!(shown.focused().as_deref(), Some("E"));
+    shown.hold_button("back");
+    assert_eq!(shown.answer(), "xy");
+
+    let mut password = Typing::new(BUTTONS);
+    password.open(&[(params::MODE, "password"), (params::TEXT, "pw")]);
+    password.hold_button("back");
+    // Done: the keyboard is gone (a password goes to the one who asked).
+    assert_ne!(
+        password.kernel.active_screen().map(Id::as_str),
+        Some("keyboard.screen")
+    );
+}
+
 #[test]
 fn a_long_press_on_confirm_off_a_letter_finishes() {
     let mut typing = Typing::new(BUTTONS);

@@ -22,8 +22,10 @@ impl KeyboardScreen {
         let title_height = (style.small() * 1.5) as u16;
         let title_area = Rect::new(f.x, f.y, f.width, title_height);
         // With buttons, on a letter that holds others: that it does, at
-        // the right end.
-        let held = self.held_hint(env);
+        // the right end; else how typing ends (held Back, [`DONE`]).
+        let held = self
+            .held_hint(env)
+            .or_else(|| (!self.touch).then(|| env.i18n().tr("keyboard.hold-back").to_string()));
         let held_width = held
             .as_ref()
             .map_or(0.0, |h| font.measure(style.small(), h) + margin);

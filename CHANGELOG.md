@@ -15,6 +15,9 @@ change the plugin SDK.
 
 ### Added
 
+- With buttons alone, holding Back finishes typing and keeps the text,
+  wherever the focus is (Back alone cancels); the field says so. Holding
+  Select still finishes on any key that is no letter.
 - The keyboard locks capitals with *Shift* pressed twice in a row (the
   key filled until pressed again), and a long press on a letter offers
   its capital first, chosen: with buttons a long press and Select type

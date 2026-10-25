@@ -16,6 +16,9 @@
 //!   setting *Automatic capitals* (off by default) starts a text and each
 //!   sentence with one, but not in passwords, numbers, web addresses and
 //!   e-mail addresses (by the question's mode, see `ask::TextQuestion`).
+//! - Finishing with buttons: holding Back (the key map's `long.back` on
+//!   this screen, [`DONE`]) keeps the text and closes the keyboard; Back
+//!   alone cancels. Holding Select finishes too, but on a letter.
 //! - A long press on a letter (with buttons: a long press on confirm)
 //!   shows its capital first, chosen, then its variants, e.g. `E é è ê ë`
 //!   for `e`, and German quotes on `"`. German has ten keys a row, as
@@ -74,6 +77,10 @@ use paperpaw_sdk::{
 
 pub const PLUGIN: Id = Id::new_static("keyboard");
 pub const SCREEN: Id = Id::new_static("keyboard.screen");
+/// Finishes typing, the text kept: held Back on the keyboard (its key
+/// map), where Back alone cancels and a held Select on a letter shows its
+/// capital.
+pub const DONE: Id = Id::new_static("keyboard.done");
 /// The layouts to type with: ids separated by commas, in the order the
 /// layout key switches through them.
 pub const LAYOUTS_SETTING: Setting<Text> = Setting::new("keyboard.layouts");
@@ -234,6 +241,15 @@ impl Plugin for Keyboard {
             &SPEC
         })?;
         r.add_icon(GROUP, Cow::Borrowed("keyboard"))?;
+        // Held Back finishes: elsewhere it goes home, which here would
+        // only close the keyboard and lose the text.
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(DONE, "keyboard.done-action")
+                .handler(|_: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {}),
+        )?;
+        r.add_keymap(Cow::Borrowed(
+            "[keymap.keyboard.screen]\nlong.back = keyboard.done\n",
+        ))?;
         r.add_settings(&SETTINGS)?;
         // Keys chosen with buttons take no shape.
         r.set_menu_need(KEY_SHAPE.id().clone(), paperpaw_sdk::MenuNeed::Touch)?;
@@ -1031,6 +1047,11 @@ impl Screen for KeyboardScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action == DONE {
+            self.popup = None;
+            self.finish(cx);
+            return Handled::Yes;
+        }
         if self.popup.is_some() {
             return self.on_variants_action(action, cx);
         }

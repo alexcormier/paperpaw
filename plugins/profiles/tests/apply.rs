@@ -211,8 +211,9 @@ impl Device {
         } else {
             self.focus("Save as new profile");
             self.run(actions::CONFIRM);
-            // On the keyboard: a long press on confirm finishes.
-            self.run(actions::MENU);
+            // On the keyboard: Back held finishes (the focus is on a
+            // letter, where a held Select shows its capital).
+            self.run(paperpaw_plugin_keyboard::DONE);
         }
         assert_eq!(self.on_top(), Some("profiles.list"));
     }
