@@ -40,6 +40,7 @@ extern crate alloc;
 mod awake;
 mod bluetooth;
 mod builder;
+mod card;
 mod chrome;
 mod code_plugin;
 mod commands;
@@ -95,6 +96,7 @@ use paperpaw_sdk::{
 };
 
 pub use crate::builder::KernelBuilder;
+pub use crate::card::CardTrouble;
 pub use crate::code_plugin::{CodeFile, CodeLoader, code_to_load};
 use crate::config::{mono_coverage, plugin_switches, read_config};
 use crate::core_plugin::{CORE, CorePlugin};
@@ -313,6 +315,9 @@ pub struct Kernel {
     /// `paperpaw.ini` is there but could not be read at start: the user
     /// is told once the first screen shows.
     config_unreadable: bool,
+    /// The shell found no card it can use: the reader is told why at
+    /// each start.
+    card_trouble: Option<CardTrouble>,
     /// The file of passwords and keys is there but could not be read at
     /// start: it is not written over.
     secrets_unreadable: bool,
@@ -431,6 +436,10 @@ impl Kernel {
         self.sync_bluetooth();
         if mem::take(&mut self.config_unreadable) {
             let text = self.config_notice();
+            self.output.commands.push(Command::Notify(text));
+        }
+        if let Some(trouble) = self.card_trouble {
+            let text = String::from(self.shared.translator.tr(trouble.key()));
             self.output.commands.push(Command::Notify(text));
         }
         self.finish()

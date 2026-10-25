@@ -15,8 +15,9 @@ use esp_hal::sdmmc::{
 };
 use esp_hal::time::{Duration, Instant};
 use log::{info, warn};
+use paperpaw_core::CardTrouble;
 use paperpaw_fat::{BLOCK, Blocks, DiskError};
-use paperpaw_platform::{NoStorage, Storage};
+use paperpaw_platform::Storage;
 
 use crate::board::CardParts;
 
@@ -60,7 +61,7 @@ type CardSlot = Slot<'static, 1, Blocking>;
 /// one PaperPaw cannot read, no storage.
 // A frame of its own, off the stack before the kernel is built.
 #[inline(never)]
-pub fn mount(parts: CardParts) -> Box<dyn Storage> {
+pub fn mount(parts: CardParts) -> Result<Box<dyn Storage>, CardTrouble> {
     let CardParts {
         host,
         clock,
@@ -73,12 +74,12 @@ pub fn mount(parts: CardParts) -> Box<dyn Storage> {
     delay.delay_millis(20);
     let Ok(host) = SdHostController::new(host, Config::default()) else {
         warn!("SD card: no host");
-        return Box::new(NoStorage);
+        return Err(CardTrouble::Missing);
     };
     let host: &'static SdHostController<'static> = Box::leak(Box::new(host));
     let Ok(slot) = host.slot::<1>(SlotConfig::default()) else {
         warn!("SD card: no slot");
-        return Box::new(NoStorage);
+        return Err(CardTrouble::Missing);
     };
     let mut slot = slot.with_clk(clock).with_cmd(command).with_data0(data);
     let mut started = Err("not started");
@@ -107,7 +108,7 @@ pub fn mount(parts: CardParts) -> Box<dyn Storage> {
         }
         Err(e) => {
             warn!("SD card: {e}");
-            Box::new(NoStorage)
+            Err(CardTrouble::Missing)
         }
     }
 }

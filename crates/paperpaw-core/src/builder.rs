@@ -35,6 +35,7 @@ struct BuilderParts {
     frame_rows: Option<u16>,
     row_align: u16,
     storage: Option<Box<dyn Storage>>,
+    card_trouble: Option<crate::CardTrouble>,
     clock: Option<fn() -> u64>,
     busy_mark: bool,
     setting_defaults: Vec<(String, String)>,
@@ -254,6 +255,14 @@ impl KernelBuilder {
         self
     }
 
+    /// The shell found no card it can use (see [`crate::CardTrouble`]):
+    /// its storage is none, and the reader is told why at each start, in
+    /// place of a guide whose choices could not be kept.
+    pub fn card_trouble(mut self, trouble: crate::CardTrouble) -> Self {
+        self.0.card_trouble = Some(trouble);
+        self
+    }
+
     /// This start goes without code plugins (safe mode): the shell found
     /// that the last ones did not get to their first frame, or the reader
     /// held the key for it. See [`paperpaw_sdk::native::SafeMode`]; the
@@ -378,6 +387,7 @@ impl BuilderParts {
     /// would take room on the stack while it is built (the X4's is small).
     fn build(&mut self, framebuffer: Framebuffer) -> Kernel {
         let mut kernel = self.new_kernel(framebuffer);
+        kernel.card_trouble = self.card_trouble;
         paperpaw_sdk::data::take_over_old_name(kernel.shared.storage.as_ref());
         kernel.read_secrets();
         paperpaw_sdk::library::take_over_old(kernel.shared.storage.as_ref());
@@ -642,6 +652,7 @@ impl BuilderParts {
             task: None,
             tasks: Vec::new(),
             config_unreadable: false,
+            card_trouble: None,
             secrets_unreadable: false,
             pairing_nonce: None,
             plugin_defaults: Vec::new(),
@@ -1068,6 +1079,7 @@ impl Kernel {
             frame_rows: None,
             row_align: 1,
             storage: None,
+            card_trouble: None,
             clock: None,
             busy_mark: false,
             setting_defaults: Vec::new(),

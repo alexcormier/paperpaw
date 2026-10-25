@@ -8,16 +8,17 @@ use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
 use esp_hal::time::Rate;
 use log::{info, warn};
+use paperpaw_core::CardTrouble;
 use paperpaw_fat::{BLOCK, Blocks, DiskError};
-use paperpaw_platform::{NoStorage, Storage};
+use paperpaw_platform::Storage;
 
 use crate::board::{self, CardParts};
 
 /// The card's FAT file system as PaperPaw's storage, then the bus at full
-/// speed; without a card or one PaperPaw cannot read, no storage.
+/// speed; without a card or one PaperPaw cannot read, why.
 // A frame of its own, off the stack before the kernel is built.
 #[inline(never)]
-pub fn mount(parts: CardParts) -> Box<dyn Storage> {
+pub fn mount(parts: CardParts) -> Result<Box<dyn Storage>, CardTrouble> {
     let CardParts {
         bus,
         spi,
@@ -30,7 +31,7 @@ pub fn mount(parts: CardParts) -> Box<dyn Storage> {
         Ok(sd) => sd,
         Err(e) => {
             warn!("SD card: {e:?}");
-            return Box::new(NoStorage);
+            return Err(CardTrouble::Missing);
         }
     };
     let _ = bus

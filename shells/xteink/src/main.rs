@@ -107,7 +107,8 @@ use paperpaw_core::Kernel;
 #[cfg(feature = "x4-pro")]
 use paperpaw_platform::buttons as names;
 use paperpaw_platform::{
-    DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation, Storage,
+    DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, NoStorage, PixelFormat, Rotation,
+    Storage,
 };
 use paperpaw_sdk::builtin::settings;
 #[cfg(not(feature = "x4-pro"))]
@@ -375,7 +376,13 @@ fn start() -> Firmware {
         light: ready.light,
         state: State::default(),
         // Last, and built right in its place: the kernel is large.
-        kernel: kernel(ready.storage, ready.firmware, ready.code, ready.staged),
+        kernel: kernel(
+            ready.storage,
+            ready.card_trouble,
+            ready.firmware,
+            ready.code,
+            ready.staged,
+        ),
     };
     // Its plugins installed: the web flasher's bundle goes (see
     // `native::bundle`).
@@ -397,6 +404,8 @@ struct Ready {
     #[cfg(feature = "x4-pro")]
     light: Option<light::Light>,
     storage: Box<dyn Storage>,
+    /// Why there is no card to keep things on, if there is none.
+    card_trouble: Option<paperpaw_core::CardTrouble>,
     firmware: Option<paperpaw_sdk::firmware::Firmware>,
     code: CodePlugins,
     staged: native::bundle::Staged,
@@ -456,7 +465,10 @@ fn prepare() -> Ready {
     #[cfg(feature = "x3")]
     let ota = x3_panel_or_back(ota, &board.display);
 
-    let storage = card::mount(board.card);
+    let (storage, card_trouble) = match card::mount(board.card) {
+        Ok(storage) => (storage, None),
+        Err(trouble) => (Box::new(NoStorage) as Box<dyn Storage>, Some(trouble)),
+    };
     // What the card keeps under PaperPaw's old name, moved before anything
     // is written to its folder (the kernel does it again, finding nothing).
     paperpaw_sdk::data::take_over_old_name(storage.as_ref());
@@ -525,6 +537,7 @@ fn prepare() -> Ready {
         #[cfg(feature = "x4-pro")]
         light: board.light,
         storage,
+        card_trouble,
         code,
         staged,
         flash,
@@ -634,6 +647,7 @@ const CALM_STATUS: [(&str, &str); 6] = [
 #[inline(never)]
 fn kernel(
     storage: Box<dyn Storage>,
+    card_trouble: Option<paperpaw_core::CardTrouble>,
     firmware: Option<paperpaw_sdk::firmware::Firmware>,
     code: CodePlugins,
     staged: native::bundle::Staged,
@@ -699,6 +713,10 @@ fn kernel(
     let builder = builder.bluetooth(bluetooth::LINKS as u8);
     let builder = match firmware {
         Some(firmware) => builder.firmware(firmware),
+        None => builder,
+    };
+    let builder = match card_trouble {
+        Some(trouble) => builder.card_trouble(trouble),
         None => builder,
     };
     let builder = match code {

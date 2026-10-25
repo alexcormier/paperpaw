@@ -463,8 +463,11 @@ impl Guide {
         let page = page as usize;
         self.edit.leave(&env, cx);
         if page > self.steps.len() {
-            mark_done(&env);
             cx.command(Command::Back);
+            // What tells that it was not kept shows over the screen below.
+            if let Some(notice) = mark_done(&env) {
+                cx.command(notice);
+            }
             return;
         }
         self.page = page;
@@ -474,8 +477,10 @@ impl Guide {
 
     fn skip(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        mark_done(&env);
         cx.command(Command::Back);
+        if let Some(notice) = mark_done(&env) {
+            cx.command(notice);
+        }
     }
 
     /// Asks whether to skip the setup: going on comes first.

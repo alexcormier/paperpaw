@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
-pub use paperpaw_core::{Effects, Kernel};
+pub use paperpaw_core::{Effects, Kernel, KernelBuilder};
 pub use paperpaw_platform::{
     ButtonState, DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat,
     Point, PointerEvent, PointerPhase, PointerTool, Rotation,
@@ -265,6 +265,8 @@ pub struct App {
     pub kernel: Kernel,
     pub storage: Shared,
     pub now: u64,
+    /// What the shell says to the kernel besides, at each start.
+    shell: fn(KernelBuilder) -> KernelBuilder,
     /// The screen as last drawn: whether each pixel is black, row by row.
     ink: Vec<bool>,
 }
@@ -272,13 +274,27 @@ pub struct App {
 impl App {
     /// The app on `device` over `storage`, started.
     pub fn new(device: DeviceInfo, storage: Shared) -> Self {
-        Self::at(device, storage, 0)
+        Self::at(device, storage, 0, |builder| builder)
     }
 
-    fn at(device: DeviceInfo, storage: Shared, now: u64) -> Self {
+    /// The same, with what `shell` says to the kernel besides.
+    pub fn with_shell(
+        device: DeviceInfo,
+        storage: Shared,
+        shell: fn(KernelBuilder) -> KernelBuilder,
+    ) -> Self {
+        Self::at(device, storage, 0, shell)
+    }
+
+    fn at(
+        device: DeviceInfo,
+        storage: Shared,
+        now: u64,
+        shell: fn(KernelBuilder) -> KernelBuilder,
+    ) -> Self {
         TYPED.with(|typed| typed.borrow_mut().clear());
         ASKED.with(|asked| asked.borrow_mut().clear());
-        let builder = Kernel::builder(device).storage(storage.clone());
+        let builder = shell(Kernel::builder(device).storage(storage.clone()));
         let mut kernel = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs)
             .plugin(TestKeyboard)
             .build()
@@ -289,6 +305,7 @@ impl App {
             kernel,
             storage,
             now,
+            shell,
             ink: vec![false; usize::from(display.width) * usize::from(display.height)],
         };
         app.settle(effects);
@@ -300,8 +317,9 @@ impl App {
         let device = *self.kernel.device();
         let storage = self.storage.clone();
         let now = self.now + 1000;
+        let shell = self.shell;
         drop(self);
-        Self::at(device, storage, now)
+        Self::at(device, storage, now, shell)
     }
 
     /// Lets timers run until nothing is due within a second.

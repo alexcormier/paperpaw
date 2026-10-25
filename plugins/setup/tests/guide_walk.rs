@@ -97,6 +97,8 @@ fn every_page_walked_through_ends_at_home_and_the_guide_stays_done() {
             "{asked:?}"
         );
         assert!(app.storage.exists(SETUP_DONE));
+        // The file tried before the guide opened is gone again.
+        assert!(!app.storage.exists(".paperpaw/plugins/setup/trial"));
         let app = app.restart();
         assert_eq!(app.screen(), HOME);
     }

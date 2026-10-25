@@ -14,7 +14,9 @@
 //!   replace it.
 //!
 //! Not shown on a device that was used before it came (a book was
-//! opened already).
+//! opened already), nor where the storage cannot be written: it would
+//! come again at every start, its choices lost (the kernel tells why,
+//! e.g. a card that is not FAT32).
 
 #![no_std]
 
@@ -43,10 +45,22 @@ fn done_file() -> alloc::string::String {
     format!("{}/done", Env::plugin_dir(PLUGIN.as_str()))
 }
 
+/// The file written before the guide opens: where it cannot be, the done
+/// mark could not be either.
+fn trial_file() -> alloc::string::String {
+    format!("{}/trial", Env::plugin_dir(PLUGIN.as_str()))
+}
+
 /// Notes that the setup was done or skipped: it does not come again by
-/// itself.
-pub(crate) fn mark_done(env: &Env<'_>) {
-    let _ = env.storage().write(&done_file(), b"");
+/// itself. Where that cannot be written, what tells the reader.
+#[must_use]
+pub(crate) fn mark_done(env: &Env<'_>) -> Option<Command> {
+    let storage = env.storage();
+    if storage.write(&done_file(), b"").is_err() {
+        return Some(Command::Notify(env.i18n().tr("setup.not-kept").into()));
+    }
+    let _ = storage.remove(&trial_file());
+    None
 }
 
 /// The first-run setup.
@@ -89,11 +103,11 @@ impl Plugin for Setup {
             if env.storage().exists(&done_file()) {
                 return;
             }
-            if library::opened_books(env.storage()).is_empty() {
-                out.push(Command::OpenSlot(slots::SETUP, Params::new()));
-            } else {
+            if !library::opened_books(env.storage()).is_empty() {
                 // Used before the guide came: not a first start.
-                mark_done(env);
+                out.extend(mark_done(env));
+            } else if env.storage().write(&trial_file(), b"").is_ok() {
+                out.push(Command::OpenSlot(slots::SETUP, Params::new()));
             }
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
