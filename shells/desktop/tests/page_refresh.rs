@@ -36,6 +36,10 @@ fn reading(profile: &str, settings: &str) -> Device {
             format!("[reader]\nlast = {BOOK}\n"),
         )
         .with("paperpaw.ini", format!("[help]\nshow = false\n{settings}"));
+    // Refreshes are checked here, not memory (tests/memory.rs does): the
+    // budget counts every thread's allocations at once, and the tests run
+    // side by side.
+    paperpaw_emulator::budget::override_limit(None);
     let profile = profiles::find(profile).unwrap();
     let mut device = Device::in_memory(profile, None, Rc::new(files), true, None).unwrap();
     device.start();
