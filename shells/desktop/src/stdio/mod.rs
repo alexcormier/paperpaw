@@ -15,7 +15,7 @@
 //!
 //! | `op` | Fields | Does |
 //! |------|--------|------|
-//! | `start` | `profile`, `library` (a folder), `settings` (INI text, optional), `trust_code` (optional), `wifi` (`online` or `off`, optional) | starts a device of that profile on the folder (setup done), with `trust_code` the code plugins built for this computer there installed (`native::trust`), with `wifi: online` online from the start as `--wifi online`; `started` follows, then a `frame` |
+//! | `start` | `profile`, `library` (a folder), `settings` (INI text, optional), `trust_code` (optional), `wifi` (`online` or `off`, optional) | starts a device of that profile on the folder (setup done), with `trust_code` the code plugins built for this computer there installed (`native::trust`), with `wifi: online` online from the start as `--wifi online` (`off`: the radio off; not given: as `--wifi` said); `started` follows, then a `frame` |
 //! | `button` | `name` (`confirm`, `page-forward`, …), `pressed` | a button pressed or let go |
 //! | `pointer` | `phase` (`down`, `move`, `up`, `cancel`), `x`, `y` | a finger on a touch screen, at the panel's pixels |
 //! | `reload` | | starts the device again on its folder: plugins changed there are read anew |
@@ -400,7 +400,7 @@ struct Started {
     library: PathBuf,
     settings: Option<String>,
     trust_code: bool,
-    wifi_online: bool,
+    wifi_online: Option<bool>,
 }
 
 impl Started {
@@ -439,7 +439,7 @@ fn start(
     profile: &str,
     library: &Path,
     settings: Option<&str>,
-    wifi_online: bool,
+    wifi_online: Option<bool>,
 ) -> Result<Device, String> {
     let profile = profiles::find(profile).ok_or_else(|| format!("no profile `{profile}`"))?;
     let at = |e: std::io::Error| format!("{}: {e}", library.display());
@@ -456,7 +456,9 @@ fn start(
     // Frames as they end up, not the panel's flashing on the way.
     device.panel.animate = false;
     device.requests = Some(Vec::new());
-    device.set_wifi_online(wifi_online);
+    if let Some(online) = wifi_online {
+        device.set_wifi_online(online);
+    }
     device.start();
     device.tick_if_due();
     Ok(device)
