@@ -131,7 +131,7 @@ pub struct PageView<'a> {
     /// The page's lines, in reading order.
     pub lines: &'a [LineBox],
     /// The page's words with their boxes and places in the book, in
-    /// reading order, as [`reading::word_boxes`](crate::reading::word_boxes)
+    /// reading order, as `reading::word_boxes`
     /// measures them, where a layer that is on asked for them
     /// ([`PageLayerSpec::words`]); else empty (and not measured).
     pub words: &'a [WordBox],
