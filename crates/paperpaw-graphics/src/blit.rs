@@ -15,38 +15,44 @@ use paperpaw_platform::{Color, PixelFormat, Point, Rect};
 use crate::framebuffer::Framebuffer;
 
 /// How the pixels of a [`Bitmap`] are packed: so many bits a pixel, the
-/// leftmost pixel in a byte's highest bits, each row starting on a byte.
+/// leftmost pixel in a byte's highest bits, each row starting on a byte,
+/// each pixel's value an index into the bitmap's palette. Formats are
+/// constants of one type, so more can come without a new plugin
+/// interface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum BitmapFormat {
-    /// 1 bit a pixel, 8 pixels a byte.
-    Gray1,
-    /// 2 bits a pixel, 4 pixels a byte.
-    Gray2,
-    /// 4 bits a pixel, 2 pixels a byte.
-    Gray4,
-    /// 8 bits a pixel.
-    Gray8,
+pub struct BitmapFormat {
+    bits: u8,
+    /// What a value means: 0, a gray (through the palette); others to
+    /// come.
+    kind: u8,
 }
 
 impl BitmapFormat {
+    /// 1 bit a pixel, 8 pixels a byte.
+    pub const GRAY1: Self = Self::gray(1);
+    /// 2 bits a pixel, 4 pixels a byte.
+    pub const GRAY2: Self = Self::gray(2);
+    /// 4 bits a pixel, 2 pixels a byte.
+    pub const GRAY4: Self = Self::gray(4);
+    /// 8 bits a pixel.
+    pub const GRAY8: Self = Self::gray(8);
+
+    const fn gray(bits: u8) -> Self {
+        Self { bits, kind: 0 }
+    }
+
     pub const fn bits_per_pixel(self) -> u8 {
-        match self {
-            BitmapFormat::Gray1 => 1,
-            BitmapFormat::Gray2 => 2,
-            BitmapFormat::Gray4 => 4,
-            BitmapFormat::Gray8 => 8,
-        }
+        self.bits
     }
 
     /// How many values a pixel can have (2 to 256).
     pub const fn values(self) -> u16 {
-        1 << self.bits_per_pixel()
+        1 << self.bits
     }
 
     /// Bytes of a row of `width` pixels, packed tight.
     pub const fn stride(self, width: u16) -> usize {
-        (width as usize * self.bits_per_pixel() as usize).div_ceil(8)
+        (width as usize * self.bits as usize).div_ceil(8)
     }
 }
 
@@ -189,16 +195,23 @@ impl<'a> Bitmap<'a> {
 }
 
 /// How the grays of a [`Bitmap`] become those of the frame where it has
-/// fewer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-#[non_exhaustive]
-pub enum Dither {
+/// fewer. Kinds are constants of one type, so more can come without a
+/// new plugin interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Dither(u8);
+
+impl Dither {
     /// Ordered, as pictures are: a gray between the frame's levels shows
     /// as a pattern of the levels around it.
-    #[default]
-    Ordered,
+    pub const ORDERED: Self = Self(0);
     /// The nearest level: sharp edges, flat areas.
-    None,
+    pub const NONE: Self = Self(1);
+}
+
+impl Default for Dither {
+    fn default() -> Self {
+        Self::ORDERED
+    }
 }
 
 /// Where and how a [`Bitmap`] is drawn
@@ -218,7 +231,7 @@ impl Blit {
         Self {
             at,
             scale: 1,
-            dither: Dither::Ordered,
+            dither: Dither::ORDERED,
         }
     }
 
@@ -300,11 +313,11 @@ pub(crate) fn draw(
         packed(fb, &job, bitmap, blit.dither);
     } else {
         let values = Values::new(fb, bitmap);
-        match bitmap.format {
-            BitmapFormat::Gray1 => bytewise::<1>(fb, &job, bitmap, &values),
-            BitmapFormat::Gray2 => bytewise::<2>(fb, &job, bitmap, &values),
-            BitmapFormat::Gray4 => bytewise::<4>(fb, &job, bitmap, &values),
-            BitmapFormat::Gray8 => bytewise::<8>(fb, &job, bitmap, &values),
+        match bitmap.format.bits_per_pixel() {
+            1 => bytewise::<1>(fb, &job, bitmap, &values),
+            2 => bytewise::<2>(fb, &job, bitmap, &values),
+            4 => bytewise::<4>(fb, &job, bitmap, &values),
+            _ => bytewise::<8>(fb, &job, bitmap, &values),
         }
     }
 }
@@ -366,8 +379,8 @@ fn stored(fb: &Framebuffer, gray: u8, offset: i32) -> u32 {
 fn offsets(fb: &Framebuffer, dither: Dither) -> [[i32; 4]; 4] {
     core::array::from_fn(|y| {
         core::array::from_fn(|x| match dither {
-            Dither::Ordered => fb.offset(x as u16, y as u16),
-            Dither::None => 0,
+            Dither::NONE => 0,
+            _ => fb.offset(x as u16, y as u16),
         })
     })
 }
@@ -393,7 +406,7 @@ fn packed(fb: &mut Framebuffer, job: &Job, bitmap: &Bitmap<'_>, dither: Dither) 
     let bpp = u32::from(fb.format().bits_per_pixel());
     let grays = bitmap.grays();
     let offsets = offsets(fb, dither);
-    if bitmap.format == BitmapFormat::Gray8 {
+    if bitmap.format.bits_per_pixel() == 8 {
         // 256 values times 16 places would be too large a table: the
         // stored value of every gray once, the pattern when it is drawn.
         let levels: [u8; 256] = core::array::from_fn(|gray| stored(fb, gray as u8, 0) as u8);
@@ -405,7 +418,7 @@ fn packed(fb: &mut Framebuffer, job: &Job, bitmap: &Bitmap<'_>, dither: Dither) 
             };
             repeated([level(0), level(1), level(2), level(3)], bpp)
         };
-        let uniform = dither == Dither::None;
+        let uniform = dither == Dither::NONE;
         return rows::<8>(fb, job, bitmap, pattern, uniform);
     }
     let values = usize::from(bitmap.format.values());
@@ -420,9 +433,9 @@ fn packed(fb: &mut Framebuffer, job: &Job, bitmap: &Bitmap<'_>, dither: Dither) 
     // same where no value's pattern changes from row to row.
     let uniform = patterns.iter().all(|row| row == &patterns[0]);
     let pattern = |y: usize, value: usize| patterns[y][value];
-    match bitmap.format {
-        BitmapFormat::Gray1 => rows::<1>(fb, job, bitmap, pattern, uniform),
-        BitmapFormat::Gray2 => rows::<2>(fb, job, bitmap, pattern, uniform),
+    match bitmap.format.bits_per_pixel() {
+        1 => rows::<1>(fb, job, bitmap, pattern, uniform),
+        2 => rows::<2>(fb, job, bitmap, pattern, uniform),
         _ => rows::<4>(fb, job, bitmap, pattern, uniform),
     }
 }

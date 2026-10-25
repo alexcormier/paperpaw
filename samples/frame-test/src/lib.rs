@@ -107,7 +107,7 @@ impl Machine {
         let program = (0..PROGRAM).map(|_| next()).collect();
         // Read by every step: kept in internal RAM where there is more
         // than one kind.
-        let mut memory = memory::vec_in(Placement::Fast, MEMORY).unwrap_or_default();
+        let mut memory = memory::vec_in(Placement::FAST, MEMORY).unwrap_or_default();
         memory.resize(MEMORY, 0);
         Self {
             registers: [0; 8],
@@ -185,8 +185,8 @@ struct FrameScreen {
 
 impl FrameScreen {
     fn new(env: &Env<'_>) -> Self {
-        let bytes = BitmapFormat::Gray2.stride(WIDTH) * usize::from(HEIGHT);
-        let mut pixels = memory::vec_in(Placement::Fast, bytes).unwrap_or_default();
+        let bytes = BitmapFormat::GRAY2.stride(WIDTH) * usize::from(HEIGHT);
+        let mut pixels = memory::vec_in(Placement::FAST, bytes).unwrap_or_default();
         pixels.resize(bytes, 0);
         Self {
             style: UiStyle::new(env),
@@ -220,7 +220,7 @@ impl FrameScreen {
 
     /// Stripes moving with the frames, and the square.
     fn paint(&mut self) {
-        let stride = BitmapFormat::Gray2.stride(WIDTH);
+        let stride = BitmapFormat::GRAY2.stride(WIDTH);
         let shift = self.frame as usize;
         for y in 0..usize::from(HEIGHT) {
             let row = &mut self.pixels[y * stride..(y + 1) * stride];
@@ -320,13 +320,13 @@ impl Screen for FrameScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let picture = Self::picture(env);
-        if let Ok(bitmap) = Bitmap::new(BitmapFormat::Gray2, WIDTH, HEIGHT, &self.pixels)
+        if let Ok(bitmap) = Bitmap::new(BitmapFormat::GRAY2, WIDTH, HEIGHT, &self.pixels)
             .and_then(|b| b.palette(&PALETTE))
         {
             let clock = env.clock();
             let started = clock.micros();
             let at = Point::new(i32::from(picture.x), i32::from(picture.y));
-            let blit = Blit::at(at).scale(SCALE).dither(Dither::Ordered);
+            let blit = Blit::at(at).scale(SCALE).dither(Dither::ORDERED);
             canvas.blit(&bitmap, blit);
             if let (Some(started), Some(ended)) = (started, clock.micros()) {
                 self.drawing_us += ended.saturating_sub(started);

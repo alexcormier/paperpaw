@@ -130,25 +130,23 @@ impl fmt::Debug for Memory {
 }
 
 /// Where data is kept, for what reads it all the time and what is large
-/// ([`vec_in`]). Devices with one kind of memory keep both alike.
+/// ([`vec_in`]). Devices with one kind of memory keep both alike. Places
+/// are constants of one type, so more can come without a new plugin
+/// interface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum Placement {
-    /// Read and written all the time, by a loop that runs every frame:
-    /// internal RAM where the device has more than one kind (the X4 Pro).
-    Fast,
-    /// Much data, read now and then (a whole file kept): PSRAM where the
-    /// device has it, so internal RAM stays for the rest.
-    Large,
-}
+pub struct Placement(u32);
 
 impl Placement {
+    /// Read and written all the time, by a loop that runs every frame:
+    /// internal RAM where the device has more than one kind (the X4 Pro).
+    pub const FAST: Self = Self(1);
+    /// Much data, read now and then (a whole file kept): PSRAM where the
+    /// device has it, so internal RAM stays for the rest.
+    pub const LARGE: Self = Self(2);
+
     /// Its number in the firmware's table (`Api::alloc_in`).
     const fn code(self) -> u32 {
-        match self {
-            Placement::Fast => 1,
-            Placement::Large => 2,
-        }
+        self.0
     }
 }
 
@@ -229,12 +227,12 @@ mod tests {
 
     #[test]
     fn vectors_go_anywhere_without_a_placer() {
-        let mut vec = vec_in::<u32>(Placement::Large, 100).unwrap();
+        let mut vec = vec_in::<u32>(Placement::LARGE, 100).unwrap();
         assert!(vec.capacity() >= 100 && vec.is_empty());
         vec.push(7);
-        assert_eq!(vec_in::<u8>(Placement::Fast, 0).unwrap().capacity(), 0);
+        assert_eq!(vec_in::<u8>(Placement::FAST, 0).unwrap().capacity(), 0);
         assert_eq!(
-            vec_in::<u64>(Placement::Fast, usize::MAX),
+            vec_in::<u64>(Placement::FAST, usize::MAX),
             Err(MemoryError::TooLarge)
         );
     }

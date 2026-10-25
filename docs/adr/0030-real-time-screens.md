@@ -88,8 +88,8 @@ without being rebuilt, and the SDK must not be redone for it.
   Pro keeps hot code in PSRAM for now: its calls cannot reach from
   internal RAM to PSRAM without trampolines, and PSRAM through its cache
   is already fast; the format leaves room to do it later.
-- **Data goes where it is used.** `memory::Placement` (`Fast` for data
-  a loop reads all the time, `Large` for much data read seldom) and
+- **Data goes where it is used.** `memory::Placement` (`FAST` for data
+  a loop reads all the time, `LARGE` for much data read seldom) and
   `memory::vec_in` allocate in internal RAM or PSRAM on the X4 Pro, and
   anywhere where a device has one kind of memory. The firmware gives
   code plugins the call through its table (`Api::alloc_in`), which grows
@@ -106,9 +106,11 @@ without being rebuilt, and the SDK must not be redone for it.
   firmware built before ignores what it does not know. So new modes of
   running, refresh times of new modes, more grays, overlapped or
   pipelined refreshes and faster panels come as kernel and device
-  changes behind the same calls. `RefreshMode`, `BitmapFormat`,
-  `Dither` and the errors are `#[non_exhaustive]`; a new button is a new
-  name; touch and pen are `Screen::on_pointer` already. What needs a new
+  changes behind the same calls. Bitmap formats, dithers and places of
+  memory are constants of one type each (`BitmapFormat::GRAY2`,
+  `Dither::ORDERED`, `Placement::FAST`), not enums: a new one is a new
+  constant, which the interface gate counts as free. A new button is a
+  new name; touch and pen are `Screen::on_pointer` already. What needs a new
   interface: a new item of `Screen` or of another trait, a field of a
   type whose layout crosses, a new relocation kind for hot code (the
   file's format names it), and anything gone.

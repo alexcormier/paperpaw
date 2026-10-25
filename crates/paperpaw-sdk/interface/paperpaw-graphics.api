@@ -26,18 +26,6 @@ pub paperpaw_graphics::BitmapError::ZeroSize
 impl core::error::Error for paperpaw_graphics::BitmapError
 impl core::fmt::Display for paperpaw_graphics::BitmapError
 pub fn paperpaw_graphics::BitmapError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-#[non_exhaustive] pub enum paperpaw_graphics::BitmapFormat
-pub paperpaw_graphics::BitmapFormat::Gray1
-pub paperpaw_graphics::BitmapFormat::Gray2
-pub paperpaw_graphics::BitmapFormat::Gray4
-pub paperpaw_graphics::BitmapFormat::Gray8
-impl paperpaw_graphics::BitmapFormat
-pub const fn paperpaw_graphics::BitmapFormat::bits_per_pixel(self) -> u8
-pub const fn paperpaw_graphics::BitmapFormat::stride(self, u16) -> usize
-pub const fn paperpaw_graphics::BitmapFormat::values(self) -> u16
-#[non_exhaustive] pub enum paperpaw_graphics::Dither
-pub paperpaw_graphics::Dither::None
-pub paperpaw_graphics::Dither::Ordered
 #[non_exhaustive] pub enum paperpaw_graphics::GraphicsError
 pub paperpaw_graphics::GraphicsError::OutOfMemory
 pub paperpaw_graphics::GraphicsError::OutOfMemory::bytes: usize
@@ -67,6 +55,15 @@ pub fn paperpaw_graphics::Bitmap<'a>::new(paperpaw_graphics::BitmapFormat, u16, 
 pub fn paperpaw_graphics::Bitmap<'a>::palette(self, &'a [u8]) -> core::result::Result<Self, paperpaw_graphics::BitmapError>
 pub fn paperpaw_graphics::Bitmap<'a>::stride(self, usize) -> core::result::Result<Self, paperpaw_graphics::BitmapError>
 pub fn paperpaw_graphics::Bitmap<'a>::width(&self) -> u16
+pub struct paperpaw_graphics::BitmapFormat
+impl paperpaw_graphics::BitmapFormat
+pub const paperpaw_graphics::BitmapFormat::GRAY1: Self
+pub const paperpaw_graphics::BitmapFormat::GRAY2: Self
+pub const paperpaw_graphics::BitmapFormat::GRAY4: Self
+pub const paperpaw_graphics::BitmapFormat::GRAY8: Self
+pub const fn paperpaw_graphics::BitmapFormat::bits_per_pixel(self) -> u8
+pub const fn paperpaw_graphics::BitmapFormat::stride(self, u16) -> usize
+pub const fn paperpaw_graphics::BitmapFormat::values(self) -> u16
 #[non_exhaustive] pub struct paperpaw_graphics::Blit
 impl paperpaw_graphics::Blit
 pub const fn paperpaw_graphics::Blit::at(paperpaw_platform::geometry::Point) -> Self
@@ -131,6 +128,12 @@ pub fn paperpaw_graphics::Described::disabled(self, bool) -> Self
 pub fn paperpaw_graphics::Described::focused(self, bool) -> Self
 pub fn paperpaw_graphics::Described::new(paperpaw_graphics::Role, impl core::convert::Into<alloc::string::String>, paperpaw_platform::geometry::Rect) -> Self
 pub fn paperpaw_graphics::Described::on(self, core::option::Option<bool>) -> Self
+pub struct paperpaw_graphics::Dither(_)
+impl paperpaw_graphics::Dither
+pub const paperpaw_graphics::Dither::NONE: Self
+pub const paperpaw_graphics::Dither::ORDERED: Self
+impl core::default::Default for paperpaw_graphics::Dither
+pub fn paperpaw_graphics::Dither::default() -> Self
 pub struct paperpaw_graphics::Framebuffer
 impl paperpaw_graphics::Framebuffer
 pub fn paperpaw_graphics::Framebuffer::band(&self) -> paperpaw_platform::geometry::Rect

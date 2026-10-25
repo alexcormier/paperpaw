@@ -116,7 +116,7 @@ fn reference(canvas: &mut Canvas<'_>, source: &Source, case: Case) {
             .collect();
         let y = case.at.y + dy as i32;
         match case.dither {
-            Dither::Ordered => canvas.draw_gray_row(case.at.x, y, &grays),
+            Dither::ORDERED => canvas.draw_gray_row(case.at.x, y, &grays),
             _ => {
                 for (dx, &gray) in grays.iter().enumerate() {
                     let gray = if keep { 255 - gray } else { gray };
@@ -170,10 +170,10 @@ fn background(format: PixelFormat) -> Framebuffer {
 
 fn sources() -> Vec<Source> {
     let formats = [
-        BitmapFormat::Gray1,
-        BitmapFormat::Gray2,
-        BitmapFormat::Gray4,
-        BitmapFormat::Gray8,
+        BitmapFormat::GRAY1,
+        BitmapFormat::GRAY2,
+        BitmapFormat::GRAY4,
+        BitmapFormat::GRAY8,
     ];
     let mut sources = Vec::new();
     for (i, format) in formats.into_iter().enumerate() {
@@ -193,7 +193,7 @@ fn a_blit_is_its_pixels_drawn_one_by_one() {
         for source in &sources {
             for scale in 1..=4 {
                 for (i, &(x, y)) in places.iter().enumerate() {
-                    for dither in [Dither::Ordered, Dither::None] {
+                    for dither in [Dither::ORDERED, Dither::NONE] {
                         for (inverted, kept) in [(false, false), (true, false), (true, true)] {
                             let case = Case {
                                 format,
@@ -218,14 +218,14 @@ fn a_blit_is_its_pixels_drawn_one_by_one() {
 fn bitmaps_that_do_not_fit_their_data_are_refused() {
     let data = [0u8; 8];
     assert_eq!(
-        Bitmap::new(BitmapFormat::Gray2, 0, 4, &data),
+        Bitmap::new(BitmapFormat::GRAY2, 0, 4, &data),
         Err(BitmapError::ZeroSize)
     );
     assert_eq!(
-        Bitmap::new(BitmapFormat::Gray2, 8, 5, &data),
+        Bitmap::new(BitmapFormat::GRAY2, 8, 5, &data),
         Err(BitmapError::DataTooShort { len: 8, needed: 10 })
     );
-    let bitmap = Bitmap::new(BitmapFormat::Gray2, 8, 3, &data).unwrap();
+    let bitmap = Bitmap::new(BitmapFormat::GRAY2, 8, 3, &data).unwrap();
     assert_eq!(
         bitmap.stride(1),
         Err(BitmapError::StrideTooSmall {
@@ -246,7 +246,7 @@ fn bitmaps_that_do_not_fit_their_data_are_refused() {
 #[test]
 fn nothing_is_drawn_on_a_blind_frame_or_outside_the_canvas() {
     let data = [0u8; 8];
-    let bitmap = Bitmap::new(BitmapFormat::Gray2, 8, 4, &data).unwrap();
+    let bitmap = Bitmap::new(BitmapFormat::GRAY2, 8, 4, &data).unwrap();
     let mut blind = Framebuffer::blind(20, 20);
     blind.canvas().blit(&bitmap, Blit::at(Point::new(0, 0)));
     assert_eq!(blind.take_all_pictured(), 0);
@@ -274,8 +274,8 @@ fn nothing_is_drawn_on_a_blind_frame_or_outside_the_canvas() {
 fn measure_a_game_screen() {
     use std::time::Instant;
     const FRAMES: u32 = 2000;
-    let data = noise(3, BitmapFormat::Gray2.stride(160) * 144);
-    let bitmap = Bitmap::new(BitmapFormat::Gray2, 160, 144, &data).unwrap();
+    let data = noise(3, BitmapFormat::GRAY2.stride(160) * 144);
+    let bitmap = Bitmap::new(BitmapFormat::GRAY2, 160, 144, &data).unwrap();
     let at = Point::new(0, 184);
     let grays: Vec<Vec<u8>> = (0..432)
         .map(|y| {
@@ -289,7 +289,7 @@ fn measure_a_game_screen() {
         })
         .collect();
     for (rows, label) in [(800, "whole"), (160, "bands of 160")] {
-        for dither in [Dither::Ordered, Dither::None] {
+        for dither in [Dither::ORDERED, Dither::NONE] {
             let mut fb = Framebuffer::banded(480, 800, rows, PixelFormat::Mono1).unwrap();
             let blit = Blit::at(at).scale(3).dither(dither);
             let start = Instant::now();

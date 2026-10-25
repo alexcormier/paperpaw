@@ -440,6 +440,8 @@ const paperpaw_sdk::library::what::PROGRESS: u32 = 2u32
 const paperpaw_sdk::library::what::STATUS: u32 = 16u32
 const paperpaw_sdk::logo::LOGO: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.logo")
 const paperpaw_sdk::memory::Memory::NONE: Self = Self { read: None }
+const paperpaw_sdk::memory::Placement::FAST: Self = Self(1)
+const paperpaw_sdk::memory::Placement::LARGE: Self = Self(2)
 const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "code-host.dll", "code-host.so", "code-host.dylib", ]
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = &[ "paperpaw_sdk", "paperpaw_platform", "paperpaw_graphics", "paperpaw_i18n", "paperpaw_config", "paperpaw_text", "paperpaw_document", "paperpaw_layout", "paperpaw_xml", "paperpaw_zip", "paperpaw_hyphen", "paperpaw_image", "paperpaw_update", "paperpaw_digest", "paperpaw_json", "paperpaw_qr", "paperpaw_native", ]
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
@@ -611,7 +613,6 @@ enum paperpaw_sdk::library::service::Badge { Text(0: alloc::string::String), Ico
 enum paperpaw_sdk::logo::Logo { Drawn, Picture(0: paperpaw_document::ImageRef) }
 enum paperpaw_sdk::lookup::LookupAnswer { Ready(0: alloc::vec::Vec<paperpaw_sdk::lookup::LookupEntry>), Pending(0: alloc::vec::Vec<paperpaw_sdk::command::Command>) }
 enum paperpaw_sdk::memory::MemoryError { Full { bytes: usize }, TooLarge }
-enum paperpaw_sdk::memory::Placement { Fast, Large }
 enum paperpaw_sdk::menus::MenuNeed { Speech, Sleep, Rotation, NoTouch, Touch, ButtonRow, Colors, Wifi, Firmware, BlackAndWhite, Frontlight, Bluetooth }
 enum paperpaw_sdk::menus::MenuPlace { Order(0: i16), After(0: paperpaw_sdk::id::Id), Before(0: paperpaw_sdk::id::Id), InSection(0: paperpaw_sdk::id::Id), First, Last }
 enum paperpaw_sdk::native::Author { Known, New, Other }
@@ -858,6 +859,7 @@ struct paperpaw_sdk::lookup::LookupQuery { word: alloc::string::String, language
 struct paperpaw_sdk::memory::Memory { read: core::option::Option<fn() -> core::option::Option<paperpaw_sdk::memory::MemoryUse>> }
 struct paperpaw_sdk::memory::MemoryRegion { free: u32, size: u32, external: bool }
 struct paperpaw_sdk::memory::MemoryUse { heap_free: u32, heap_size: u32, stack_free: core::option::Option<u32>, stack_size: core::option::Option<u32>, largest_free: core::option::Option<u32>, regions: [core::option::Option<paperpaw_sdk::memory::MemoryRegion>; 3] }
+struct paperpaw_sdk::memory::Placement(0: u32)
 struct paperpaw_sdk::memory_storage::MemoryStorage { files: core::cell::RefCell<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<u8>>> }
 struct paperpaw_sdk::menus::ItemState { label: core::option::Option<alloc::borrow::Cow<'static, str>>, checked: core::option::Option<bool>, enabled: bool, shown: bool, badge: core::option::Option<alloc::borrow::Cow<'static, str>> }
 struct paperpaw_sdk::menus::MenuEntry { menu: paperpaw_sdk::id::Id, item: paperpaw_sdk::id::Id, order: i16, place: core::option::Option<paperpaw_sdk::menus::MenuPlace> }

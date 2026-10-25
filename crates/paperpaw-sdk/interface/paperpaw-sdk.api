@@ -2683,9 +2683,6 @@ pub paperpaw_sdk::memory::MemoryError::TooLarge
 impl core::error::Error for paperpaw_sdk::memory::MemoryError
 impl core::fmt::Display for paperpaw_sdk::memory::MemoryError
 pub fn paperpaw_sdk::memory::MemoryError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-#[non_exhaustive] pub enum paperpaw_sdk::memory::Placement
-pub paperpaw_sdk::memory::Placement::Fast
-pub paperpaw_sdk::memory::Placement::Large
 pub struct paperpaw_sdk::memory::Memory
 impl paperpaw_sdk::memory::Memory
 pub const paperpaw_sdk::memory::Memory::NONE: Self
@@ -2712,6 +2709,10 @@ pub const fn paperpaw_sdk::memory::MemoryUse::new(u32, u32) -> Self
 pub const fn paperpaw_sdk::memory::MemoryUse::with_largest_free(self, u32) -> Self
 pub fn paperpaw_sdk::memory::MemoryUse::with_region(self, paperpaw_sdk::memory::MemoryRegion) -> Self
 pub const fn paperpaw_sdk::memory::MemoryUse::with_stack(self, u32, u32) -> Self
+pub struct paperpaw_sdk::memory::Placement(_)
+impl paperpaw_sdk::memory::Placement
+pub const paperpaw_sdk::memory::Placement::FAST: Self
+pub const paperpaw_sdk::memory::Placement::LARGE: Self
 pub fn paperpaw_sdk::memory::vec_in<T>(paperpaw_sdk::memory::Placement, usize) -> core::result::Result<alloc::vec::Vec<T>, paperpaw_sdk::memory::MemoryError>
 pub type paperpaw_sdk::memory::Placer = fn(usize, usize, u32) -> *mut u8
 pub mod paperpaw_sdk::native

@@ -1487,7 +1487,7 @@ whole scale, dithered or not. A 160×144 picture at three times its size
 costs a fraction of drawing it pixel by pixel.
 
 Keep what a loop reads all the time in internal RAM and large data in
-PSRAM (`memory::vec_in(Placement::Fast, n)` and `Placement::Large`);
+PSRAM (`memory::vec_in(Placement::FAST, n)` and `Placement::LARGE`);
 devices with one kind of memory keep both alike. In a code plugin, mark
 the few functions that run every frame with `paperpaw_sdk::hot! { … }`:
 the X4 runs them from internal RAM instead of flash, a bounded part of
