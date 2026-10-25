@@ -21,6 +21,11 @@ trailer of its message:
 
 The release rebuilds such a plugin anyway, for its firmware, at the
 version it has.
+
+Where the plugin interface was raised since the release
+(`native::INTERFACE`), every plugin needs a newer version, changed or
+not: its code built before does not run on the new firmware, and devices
+fetch the new build only as an update.
 """
 
 import pathlib
@@ -33,6 +38,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 VERSION = re.compile(r"\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?")
 TRAILER = re.compile(r"^Plugin-unchanged:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+INTERFACE = re.compile(r"pub const INTERFACE: u16 = (\d+);")
+NATIVE = "crates/paperpaw-sdk/src/native.rs"
 
 
 def git(*args):
@@ -80,12 +87,36 @@ def unchanged(message, plugin):
     return False
 
 
-def problem(plugin, before, now, changes):
+def interface_at(text):
+    """The plugin interface `native.rs` (its text) names."""
+    found = INTERFACE.search(text)
+    return int(found.group(1)) if found else None
+
+
+def interface_raised(since):
+    """The plugin interface now, where it was raised since `since`; None
+    where it was not (or `native.rs` is not there to say)."""
+    try:
+        now = interface_at((ROOT / NATIVE).read_text(encoding="utf-8"))
+        then = interface_at(git("show", f"{since}:{NATIVE}"))
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return now if None not in (now, then) and now != then else None
+
+
+def problem(plugin, before, now, changes, raised=None):
     """What is wrong with `plugin` at version `now`, `before` at the
     release, `changes` the messages of the commits that changed it since;
-    None where nothing is."""
+    `raised` the plugin interface now where it was raised since; None
+    where nothing is."""
     if semver(now) < semver(before):
         return f"its version {now} is older than the release's {before}"
+    if raised is not None and semver(now) == semver(before):
+        return (
+            f"the plugin interface was raised to {raised} since the release, its version "
+            f"{now} did not: raise it in plugins/{plugin}/Cargo.toml (and the Cargo.lock files "
+            f"that list it), so that devices fetch its new build"
+        )
     seen = [m for m in changes if not unchanged(m, plugin)]
     if seen and semver(now) == semver(before):
         first = seen[0].splitlines()[0] if seen[0] else ""
@@ -129,6 +160,7 @@ def main():
         "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD").strip()
     tags = git("tag", "--list").split()
     workspace_now = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
+    raised = interface_raised(since)
     failed = False
     for plugin in plugins():
         manifest = f"plugins/{plugin}/Cargo.toml"
@@ -151,7 +183,7 @@ def main():
         had = [f"^{tag}" for tag in versions if is_ancestor(tag)]
         log = git("log", "--no-merges", "--format=%B%x00", "HEAD", *had, "--", *paths)
         changes = [m.strip() for m in log.split("\0") if m.strip()]
-        found = problem(plugin, before, now, changes)
+        found = problem(plugin, before, now, changes, raised)
         if found:
             print(f"::error file={manifest}::{plugin}: {found}")
             failed = True
