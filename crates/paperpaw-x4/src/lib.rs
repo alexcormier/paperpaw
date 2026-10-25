@@ -12,7 +12,8 @@
 //! and can be tested here: remote control over USB ([`remote`]), the
 //! frame kept for the panel ([`sent`]), the clock set over the network
 //! ([`sntp`]), addresses in the device's own network ([`dhcp`]),
-//! updates over the air ([`ota`]) and Wi-Fi given with the firmware
+//! updates over the air ([`ota`]), handles of the network stack made
+//! anew ([`generation`]) and Wi-Fi given with the firmware
 //! ([`provision`]).
 //!
 //! PaperPaw draws the screen upright, 480 × 800, in bands of rows; the
@@ -34,6 +35,7 @@ pub mod cw2017;
 pub mod dhcp;
 pub mod display;
 pub mod ds3231;
+pub mod generation;
 pub mod gt911;
 pub mod nvs;
 pub mod ota;

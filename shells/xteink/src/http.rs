@@ -18,7 +18,6 @@ use paperpaw_core::sdk::HttpError;
 use paperpaw_core::{HttpCall, HttpResponse};
 use paperpaw_http::{Parser, Url};
 use paperpaw_platform::Storage;
-use smoltcp::socket::dns;
 
 use crate::link::{Link, Received};
 use crate::net::{self, Net, Resolve};
@@ -81,7 +80,7 @@ const UPLOAD_PART: usize = 1024;
 enum Phase {
     /// Waiting for the network, or for a free connection.
     Waiting,
-    Resolving(dns::QueryHandle, u16),
+    Resolving(net::Query, u16),
     Exchanging {
         link: Link,
         /// The head to send; the body (`HttpCall::body`) follows it. How
@@ -403,6 +402,11 @@ impl Call {
         }
         if progress {
             self.until = now + STALL_MS;
+            // A file's download or upload is limited by its bytes coming,
+            // not in all ([`HttpCall::timeout_ms`]).
+            if self.call.save_to.is_some() || self.call.body_from.is_some() {
+                self.deadline = now + u64::from(self.call.timeout_ms);
+            }
             None
         } else if now > self.until {
             log::warn!(

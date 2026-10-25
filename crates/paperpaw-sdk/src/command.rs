@@ -79,9 +79,10 @@ pub struct HttpParts {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct HttpOptions {
-    /// How long it may take in all, the connection and TLS counted;
-    /// `None`: the default, 30 s, or 10 minutes for a download to a file
-    /// ([`HttpRequest::save_to`]).
+    /// How long it may take in all, the connection and TLS counted; for
+    /// a download to a file ([`HttpRequest::save_to`]) or an upload from
+    /// one, how long it may go without a byte, however long it takes in
+    /// all. `None`: the default, 30 s, or a minute without a byte.
     pub timeout: Option<core::time::Duration>,
     /// Headers of the answer to pass back in
     /// [`HttpReply::headers`](crate::HttpReply), by name (any case).
@@ -239,7 +240,8 @@ impl HttpRequest {
         self
     }
 
-    /// Taking at most this long in all.
+    /// Taking at most this long in all (a file's download or upload: at
+    /// most this long without a byte).
     pub fn timeout(mut self, timeout: core::time::Duration) -> Self {
         self.options_mut().timeout = Some(timeout);
         self

@@ -11,11 +11,10 @@ use alloc::vec::Vec;
 
 use paperpaw_core::{Effects, Kernel, SocketCall, SocketEvent};
 use paperpaw_platform::Instant;
-use smoltcp::iface::SocketHandle;
-use smoltcp::socket::{dns, tcp};
+use smoltcp::socket::tcp;
 use smoltcp::wire::IpAddress;
 
-use crate::net::{self, Net, Resolve};
+use crate::net::{self, Handle, Net, Query, Resolve};
 
 /// Connections at a time.
 const MAX_SOCKETS: usize = 2;
@@ -38,11 +37,11 @@ const ANSWER_BYTES: usize = 1024;
 
 enum Phase {
     Resolving {
-        query: dns::QueryHandle,
+        query: Query,
         port: u16,
     },
-    Connecting(SocketHandle),
-    Open(SocketHandle),
+    Connecting(Handle),
+    Open(Handle),
     /// Nothing left to let go (a lookup that failed is gone by itself).
     Ended,
 }
@@ -63,7 +62,7 @@ struct Socket {
 
 struct Broadcast {
     number: u32,
-    udp: SocketHandle,
+    udp: Handle,
     until: u64,
 }
 

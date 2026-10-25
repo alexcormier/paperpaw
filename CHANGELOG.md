@@ -236,6 +236,24 @@ change the plugin SDK.
 - SDK: `Ui::filled_button` and `filled_icon_button`, filled as an `on`
   button without saying it is on (a key whose fill is the focus).
 
+### Fixed
+
+- The X4s no longer crash when a server does not answer at all: the
+  radio starts anew for such a connection, and the clock's question to
+  the time server, kept from before, then reached into the new network
+  stack. Handles of what the stack made now carry its number, and a
+  later stack passes over an earlier one's (also in beta.7).
+- A download to a file, or an upload from one, no longer breaks off
+  after a time in all (10 minutes for downloads, 30 s for uploads from a
+  file): it fails only once no byte came for a minute, so a large update
+  on a slow network goes through. SDK: `HttpOptions::timeout` means that
+  for them.
+- The network picked last (*Join first*) is looked for again when a scan
+  misses it, and gets a second try when joining it fails, before another
+  network joined before is joined: the first scans after the radio came
+  on often miss a weaker network, and one of its access points, weak or
+  far, refuses a join now and then.
+
 ## [0.5.0-beta.7] - 2026-10-25
 
 ### Added

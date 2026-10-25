@@ -16,6 +16,8 @@ embedded-hal = "1.0"
 paperpaw-platform.workspace = true
 
 [dev-dependencies]
+# The tests of `generation` on smoltcp's own socket set, as the firmware uses it.
+smoltcp = { version = "0.12", default-features = false, features = ["medium-ethernet", "proto-ipv4", "socket-udp", "alloc"] }
 paperpaw-core.workspace = true
 paperpaw-app.workspace = true
 

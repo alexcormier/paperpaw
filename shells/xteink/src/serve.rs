@@ -13,10 +13,9 @@ use alloc::vec::Vec;
 use paperpaw_core::{Effects, Kernel, ServedFile, ServerCall, ServerEvent};
 use paperpaw_http::server::{self as http, RequestHead};
 use paperpaw_platform::Instant;
-use smoltcp::iface::SocketHandle;
 use smoltcp::socket::tcp;
 
-use crate::net::{self, Net};
+use crate::net::{self, Handle, Net};
 
 /// Connections per server at a time; each socket waits for the next once
 /// its request is answered. Two, for a page and what it loads with it.
@@ -66,7 +65,7 @@ enum Phase {
 }
 
 struct Slot {
-    socket: SocketHandle,
+    socket: Handle,
     phase: Phase,
     /// When the phase started, or last made progress.
     since: u64,

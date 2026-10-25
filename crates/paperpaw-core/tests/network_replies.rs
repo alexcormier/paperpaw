@@ -136,7 +136,7 @@ fn shells_with_memory_to_spare_load_a_file_to_send_whole() {
     assert_eq!(calls.len(), 2);
     calls[0].load_body(kernel.storage()).unwrap();
     assert_eq!(calls[0].body.as_deref(), Some(&data[..]));
-    assert_eq!(calls[0].body_from, None);
+    assert_eq!(calls[0].body_from.as_deref(), Some("up.bin"));
     calls[1].load_body(kernel.storage()).unwrap();
     assert_eq!(calls[1].body.as_deref(), Some(&[][..]));
     // Gone since it was asked for: an error, for the shell to answer.

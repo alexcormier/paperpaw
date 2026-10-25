@@ -20,12 +20,9 @@ use crate::serve::Servers;
 use crate::sockets::Sockets;
 use paperpaw_platform::Instant;
 
-use smoltcp::iface::SocketHandle;
-use smoltcp::socket::dns;
-
 use crate::clock;
 use crate::http::Calls;
-use crate::net::{Net, Resolve};
+use crate::net::{Handle, Net, Query, Resolve};
 #[cfg(feature = "remote")]
 use crate::remote;
 use crate::wifi::{Parts, Radio};
@@ -47,11 +44,11 @@ enum Sync {
         not_before: u64,
     },
     Resolving {
-        query: dns::QueryHandle,
+        query: Query,
         until: u64,
     },
     Asking {
-        socket: SocketHandle,
+        socket: Handle,
         asked: sntp::Asked,
         until: u64,
     },

@@ -22,9 +22,11 @@ pub const MAX_RESPONSE_SMALL: usize = 64 << 10;
 /// How long a request may take in all unless it says
 /// ([`HttpOptions::timeout`]).
 pub const TIMEOUT_MS: u32 = 30_000;
-/// The same for a download to a file ([`HttpRequest::save_to`]), which
-/// may be large.
-pub const DOWNLOAD_TIMEOUT_MS: u32 = 10 * 60_000;
+/// How long a download to a file ([`HttpRequest::save_to`]) or an
+/// upload from one may go without a byte, unless it says: nothing limits
+/// it in all, as a large file on a slow network takes long, and slow is
+/// fine where breaking off is not.
+pub const DOWNLOAD_TIMEOUT_MS: u32 = 60_000;
 /// Longest response body saved to a file, and longest file sent.
 pub const MAX_FILE: usize = 64 << 20;
 /// A request's progress is passed on once it came this much further, in
@@ -54,7 +56,10 @@ pub struct HttpCall {
     /// short as if whole.
     pub max_response: usize,
     /// How long it may take in all, the connection and TLS counted; the
-    /// shell answers with status 0 after that.
+    /// shell answers with status 0 after that. For a download to a file
+    /// ([`save_to`](Self::save_to)) or an upload from one
+    /// ([`body_from`](Self::body_from)): how long it may go without a
+    /// byte, however long it takes in all.
     pub timeout_ms: u32,
     /// Headers of the answer to pass back ([`HttpResponse::headers`]),
     /// by name in any case.
@@ -76,9 +81,11 @@ pub struct HttpCall {
 
 impl HttpCall {
     /// Reads [`body_from`](Self::body_from) into `body`, for shells with
-    /// memory to spare (others send the file in parts).
+    /// memory to spare (others send the file in parts). `body_from` stays,
+    /// saying the body is a file's (limited as [`timeout_ms`](Self::timeout_ms)
+    /// says).
     pub fn load_body(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
-        if let Some(path) = self.body_from.take() {
+        if let Some(path) = self.body_from.clone() {
             let size = storage.size(&path)?;
             let mut body = alloc::vec![0; usize::try_from(size).unwrap_or(usize::MAX)];
             let mut at = 0;
@@ -268,7 +275,7 @@ impl Http {
         } else {
             max_body.unwrap_or(self.max_response).min(MAX_RESPONSE)
         };
-        let default = if request.save_to.is_some() {
+        let default = if request.save_to.is_some() || request.body_from.is_some() {
             DOWNLOAD_TIMEOUT_MS
         } else {
             TIMEOUT_MS

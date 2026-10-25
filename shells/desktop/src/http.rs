@@ -148,8 +148,16 @@ fn run(call: HttpCall, progress: Option<&Sender<Progress>>) -> HttpResponse {
     for name in &call.want_headers {
         written.push_str(&format!("\n%header{{{name}}}"));
     }
+    // A file's download or upload is limited by its bytes coming (under
+    // a byte a second for that long), not in all.
+    let limit: &[&str] = if call.save_to.is_some() || call.body_from.is_some() {
+        &["--speed-limit", "1", "--speed-time", &seconds]
+    } else {
+        &["--max-time", &seconds]
+    };
     command
-        .args(["-sS", "-L", "--max-redirs", "10", "--max-time", &seconds])
+        .args(["-sS", "-L", "--max-redirs", "10"])
+        .args(limit)
         .args(["-X", &call.method])
         .args(["-w", &written]);
     for (name, value) in &call.headers {
