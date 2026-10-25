@@ -167,6 +167,8 @@ impl KeyboardScreen {
         // With buttons the focus fills the key; a key filled already gets
         // a light line inside.
         let on = active || (focused && !self.touch);
+        // Filled for the focus alone: not said to be on.
+        let filled_only = on && !active;
         let framed = focused;
         let ring = !self.touch && focused && active;
         let name = match key {
@@ -175,7 +177,11 @@ impl KeyboardScreen {
             Key::Space => "keyboard.space",
             _ => {
                 let label = self.label(env, key);
-                ui.button(r, &label, on, framed);
+                if filled_only {
+                    ui.filled_button(r, &label, framed);
+                } else {
+                    ui.button(r, &label, on, framed);
+                }
                 if ring {
                     inner_ring(&mut ui, r);
                 }
@@ -184,7 +190,11 @@ impl KeyboardScreen {
         };
         // The key drawn: an arrow, a space.
         let name = env.i18n().tr(name);
-        let ink = ui.icon_button(r, name, on, framed);
+        let ink = if filled_only {
+            ui.filled_icon_button(r, name, framed)
+        } else {
+            ui.icon_button(r, name, on, framed)
+        };
         if ring {
             inner_ring(&mut ui, r);
         }
