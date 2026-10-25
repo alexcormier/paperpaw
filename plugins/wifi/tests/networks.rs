@@ -762,10 +762,17 @@ fn wanted_the_radio_joins_the_saved_network_and_goes_off_after() {
 fn the_network_picked_last_is_joined_first_after_a_restart() {
     let storage = Shared::default();
     let mut device = Device::on(TOUCH, storage.clone());
-    device.kernel.set_secret(paperpaw_sdk::wifi::keep("Strong", "pw1"));
-    device.kernel.set_secret(paperpaw_sdk::wifi::keep("Weak", "pw2"));
+    device
+        .kernel
+        .set_secret(paperpaw_sdk::wifi::keep("Strong", "pw1"));
+    device
+        .kernel
+        .set_secret(paperpaw_sdk::wifi::keep("Weak", "pw2"));
     device.open();
-    device.radio_on_with(vec![network("Strong", -45, true), network("Weak", -70, true)]);
+    device.radio_on_with(vec![
+        network("Strong", -45, true),
+        network("Weak", -70, true),
+    ]);
     device.told();
     device.tap("Weak");
     assert_eq!(
