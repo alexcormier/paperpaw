@@ -51,5 +51,6 @@ ESP_LOG = "info"
 # screens.
 PAPERPAW_FONT_SIZES = "20,24,28,32,36"
 # Lean font packs: no Literata Bold Italic (some 386 KB; bold stands in
-# for it, the font library has it), so updates keep room in the slots.
+# for it) and Literata's faces up to 32 px (36 px some 370 KB more); the
+# font library has both, so updates keep room in the slots.
 PAPERPAW_FONT_LEAN = "1"

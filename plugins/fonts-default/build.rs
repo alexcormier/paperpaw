@@ -29,6 +29,11 @@ const FONTS: &[(&str, &str, f32)] = &[
     ("paperpaw-sans", "fonts/SourceSans3.ttf", 430.0),
 ];
 
+/// The largest size of the reading faces in a lean build: larger ones
+/// come from a plugin that extends them (the font library's), drawn by
+/// it where text is asked larger.
+const LEAN_READING_MAX: f32 = 32.0;
+
 /// The pack of the UI font, which gets [`DISPLAY_SIZES`].
 const UI: &str = "paperpaw-sans";
 
@@ -38,8 +43,9 @@ fn main() {
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_SIZES");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_LEAN");
     println!("cargo::rustc-check-cfg=cfg(paperpaw_lean_fonts)");
-    // Lean (the firmware): no Literata Bold Italic, which few books use;
-    // bold stands in for it, and the font library has the face.
+    // Lean (the firmware): no Literata Bold Italic, which few books use
+    // (bold stands in for it), and the reading faces without their
+    // largest sizes; the font library has both.
     let lean = std::env::var_os("PAPERPAW_FONT_LEAN").is_some_and(|v| v == "1");
     if lean {
         println!("cargo::rustc-cfg=paperpaw_lean_fonts");
@@ -74,10 +80,15 @@ fn main() {
         let charset = paperpaw_text::charset::chars;
         let ligatures = charset(paperpaw_text::charset::LIGATURES).filter(|ch| font.has_char(*ch));
         let chars = charset(paperpaw_text::charset::LATIN).chain(ligatures);
+        let reading: Vec<f32> = sizes
+            .iter()
+            .copied()
+            .filter(|size| !lean || *size <= LEAN_READING_MAX)
+            .collect();
         let pack = if name == UI {
             with_display(&font, &sizes, chars)
         } else {
-            paperpaw_text::build_pack(&font, &sizes, chars)
+            paperpaw_text::build_pack(&font, &reading, chars)
         };
         write(&out.join(format!("{name}.ppfp")), &pack);
     }

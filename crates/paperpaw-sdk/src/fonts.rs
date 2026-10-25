@@ -135,6 +135,11 @@ const OTHERS: usize = 4;
 /// Largest font file loaded.
 const MAX_FONT_FILE: u64 = 48 * 1024 * 1024;
 
+/// The usual step between a pack's sizes, in pixels: a size asked more
+/// than half of it past a pack's largest is drawn by a pack with larger
+/// ones, where one extends it.
+const LARGER_STEP: f32 = 4.0;
+
 /// The lines of a heading or title, as many times its size apart
 /// ([`FontHandle::heading_line_height`]).
 const HEADING_LEADING: f32 = 1.2;
@@ -582,6 +587,15 @@ impl Fonts {
         for i in self.extensions_of(index) {
             add(i);
         }
+        // The extension with the largest sizes beyond this pack's own, if
+        // one has any.
+        let largest = |f: &Font| f.largest_size().unwrap_or(0.0);
+        let own = entry.font.as_ref().map_or(0.0, largest);
+        let larger = self
+            .extensions_of(index)
+            .filter_map(|i| self.entries[i].font.as_ref().map(|f| (f, i as u16)))
+            .filter(|(f, _)| own > 0.0 && largest(f) > own)
+            .max_by(|a, b| largest(a.0).total_cmp(&largest(b.0)));
         if let Some(fallback) = self.fallback_index() {
             add(fallback);
             for i in self.extensions_of(fallback) {
@@ -596,6 +610,7 @@ impl Fonts {
             describing: &self.describing,
             index: index as u16,
             others,
+            larger,
             display: false,
             kerning: true,
             ligatures: false,
@@ -730,6 +745,7 @@ impl FontSet {
             describing: &self.describing,
             index: index as u16,
             others: [None; OTHERS],
+            larger: None,
             display: false,
             kerning: true,
             ligatures: false,
@@ -751,6 +767,10 @@ pub struct FontHandle<'a> {
     /// Fonts for the characters this one lacks, asked in turn, and their
     /// numbers in the same cache.
     others: [Option<(&'a Font, u16)>; OTHERS],
+    /// A pack that extends this one with larger sizes (a plugin's, for
+    /// sizes the firmware leaves out), and its number: it draws text
+    /// asked larger than this font's largest size.
+    larger: Option<(&'a Font, u16)>,
     /// Draws at a pack's large sizes made for a few characters too (see
     /// [`FontHandle::display`]).
     display: bool,
@@ -791,16 +811,38 @@ impl<'a> FontHandle<'a> {
     }
 
     /// The largest size text can be set in, in pixels: a font pack has
-    /// the sizes it was made in; `None` for a scalable font, which has
-    /// every size.
+    /// the sizes it was made in, and those of a pack that extends it with
+    /// larger ones; `None` for a scalable font, which has every size.
     pub fn largest_size(&self) -> Option<f32> {
-        self.font().largest_size()
+        let own = self.font().largest_size();
+        match self.larger.and_then(|(font, _)| font.largest_size()) {
+            Some(larger) => Some(own.map_or(larger, |own| own.max(larger))),
+            None => own,
+        }
+    }
+
+    /// The handle of the pack that extends this one with larger sizes, for
+    /// text asked at `size`, where it is past this font's largest size by
+    /// more than half of the usual step between sizes; `None` where this
+    /// font draws it.
+    fn larger_for(&self, size: f32) -> Option<Self> {
+        let (font, index) = self.larger?;
+        let own = self.font.largest_size()?;
+        (size >= own + LARGER_STEP / 2.0).then_some(Self {
+            font,
+            index,
+            larger: None,
+            ..*self
+        })
     }
 
     /// Ascent, descent and line height at `size` pixels: of the size text
     /// is drawn at (see [`FontHandle::size_for`]; for a display, the size
     /// asked).
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.line_metrics(size);
+        }
         self.font()
             .line_metrics(self.font().size_for(size, "", self.display))
     }
@@ -812,6 +854,9 @@ impl<'a> FontHandle<'a> {
     /// line (capitals with accents) still stay clear of the lowest of the
     /// line above (descenders). Text keeps its line height.
     pub fn heading_line_height(&self, size: f32) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.heading_line_height(size);
+        }
         let drawn = self.font().size_for(size, "", self.display);
         // In whole pixels, rounded up (no float rounding in `no_std`).
         let apart = (drawn * HEADING_LEADING + 0.999) as u32 as f32;
@@ -846,6 +891,9 @@ impl<'a> FontHandle<'a> {
     /// Horizontal advance of one character in pixels, at the size it is
     /// drawn at alone (see [`FontHandle::size_for`]).
     pub fn advance(&self, size: f32, ch: char) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.advance(size, ch);
+        }
         let mut buffer = [0u8; 4];
         let size = self.size_for(size, ch.encode_utf8(&mut buffer));
         self.pick(ch).0.advance(ch, size)
@@ -882,6 +930,9 @@ impl<'a> FontHandle<'a> {
     /// [`FontHandle::ligatures`] the room a ligature saves. What a layout
     /// adds between the characters of a word it measures one by one.
     pub fn kern(&self, size: f32, left: char, right: char) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.kern(size, left, right);
+        }
         let font = match self.others[0] {
             None => self.font,
             Some(_) => {
@@ -937,12 +988,18 @@ impl<'a> FontHandle<'a> {
     /// [`FontHandle::display`]), one for the whole text; `size` where the
     /// font is scalable. Measuring, inking and drawing use it.
     pub fn size_for(&self, size: f32, text: &str) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.size_for(size, text);
+        }
         self.font.size_for(size, text, self.display)
     }
 
     /// Width of a single line of text in pixels, its pairs kerned (see
     /// [`FontHandle::kern`]).
     pub fn measure(&self, size: f32, text: &str) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.measure(size, text);
+        }
         let size = self.size_for(size, text);
         let single = self.others[0].is_none();
         let mut width = 0.0;
@@ -974,6 +1031,9 @@ impl<'a> FontHandle<'a> {
     ///
     /// [`Ui::header`]: crate::ui::Ui::header
     pub fn ink(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.ink(size, text);
+        }
         // Only described: as a line would be, no glyph made.
         if self.describing.get() {
             let metrics = self.line_metrics(size);
@@ -1005,6 +1065,9 @@ impl<'a> FontHandle<'a> {
     /// its advance (e.g. an icon in its column). `None` for text without
     /// ink.
     pub fn ink_across(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.ink_across(size, text);
+        }
         // Only described: as far as its advances go, no glyph made.
         if self.describing.get() {
             return Some((0, self.measure(size, text) as i32));
@@ -1110,6 +1173,9 @@ impl<'a> FontHandle<'a> {
         extra: u16,
         tone: paperpaw_text::ToneCurve,
     ) -> f32 {
+        if let Some(larger) = self.larger_for(size) {
+            return larger.draw_toned(canvas, size, x, baseline, text, color, extra, tone);
+        }
         // Only described, as a screen reader asks: no glyph made.
         if canvas.is_blind() || self.describing.get() {
             return self.measure(size, text);
@@ -1385,6 +1451,49 @@ mod tests {
         assert!(fonts.get("a.ui").unwrap().has_char('щ'));
         assert_eq!(fonts.get("a.ui").unwrap().measure(10.0, "aж"), 10.0);
         assert!(!fonts.get("a.ui").unwrap().has_char('ю'));
+    }
+
+    /// A pack at `size`, its glyphs `advance` wide.
+    fn pack_at(size: f32, advance: f32) -> alloc::vec::Vec<u8> {
+        let metrics = LineMetrics {
+            ascent: size * 0.8,
+            descent: size * 0.2,
+            line_height: size * 1.2,
+        };
+        let mut builder = PackBuilder::new();
+        let glyphs = "ab".chars().map(|c| (c, Glyph::empty(advance))).collect();
+        builder.add_strike(size, metrics, glyphs);
+        builder.build()
+    }
+
+    /// A pack that extends a font with larger sizes (the firmware leaves
+    /// the largest out): text asked larger than the font's largest is
+    /// measured and set in it, smaller text in the font, and the font's
+    /// largest size is its.
+    #[test]
+    fn extensions_add_larger_sizes() {
+        let storage: Rc<dyn Storage> =
+            Rc::new(MemoryStorage::new().with("plugins/big/fonts/big.ppfp", pack_at(36.0, 20.0)));
+        let mut fonts = Fonts::new(4096);
+        let base = Font::from_data(pack_at(32.0, 16.0), &[]).unwrap();
+        fonts
+            .add(FontSpec::new(Id::new_static("a.serif"), base))
+            .unwrap();
+        fonts
+            .add_extension(
+                Id::new_static("big.big"),
+                String::from("plugins/big/fonts/big.ppfp"),
+                Id::new_static("a.serif"),
+            )
+            .unwrap();
+        assert_eq!(fonts.get("a.serif").unwrap().largest_size(), Some(32.0));
+        assert!(fonts.load(&storage).is_empty());
+        let serif = fonts.get("a.serif").unwrap();
+        assert_eq!(serif.largest_size(), Some(36.0));
+        assert_eq!(serif.measure(36.7, "ab"), 40.0, "by the larger pack");
+        assert_eq!(serif.measure(33.0, "ab"), 32.0, "by the font itself");
+        // Its metrics, to a pack's 64th of a pixel.
+        assert!((serif.line_metrics(36.0).line_height - 36.0 * 1.2).abs() < 0.1);
     }
 
     /// A family of packs on the storage: its faces read a glyph at a time

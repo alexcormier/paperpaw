@@ -224,8 +224,12 @@ change the plugin SDK.
   plugin of the store (`hyphenation-de`), as the other languages are,
   and the built-in one keeps English; Literata Bold Italic is no longer
   built into the firmware (bold stands in for it; the emulator and the
-  app keep it). A data plugin may bring faces of a family without its
-  regular one, so the font library can bring that face back.
+  app keep it), and its faces go up to 32 px there (about 10 pt). A data
+  plugin may bring faces of a family without its regular one, and a pack
+  that extends a face with larger sizes draws text that large (the font
+  size goes as far), so the font library brings both back
+  (`tools/literata-packs.py`). At the largest size, its help says where
+  larger ones are found.
 - The release keeps room for the updates to come: `paperpaw-sign
   check-image` prints the margin an image leaves in the smallest app
   slot (its own or CrossPoint's), warns below 512 KB and fails below
