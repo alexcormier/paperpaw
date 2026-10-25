@@ -1,6 +1,7 @@
 //! Runtime rendering of OpenType/TrueType fonts via `skrifa`.
 
 use alloc::borrow::Cow;
+use alloc::vec::Vec;
 use core::fmt;
 
 use skrifa::instance::{Location, Size};
@@ -9,6 +10,7 @@ use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 use crate::font::{FontError, LineMetrics};
 use crate::glyph::{self, Glyph, pack_coverage};
+use crate::kerning::Kerning;
 use crate::raster::{self, Path, Pt};
 
 /// A scalable font, optionally at a fixed position of its variation axes
@@ -88,6 +90,56 @@ impl OutlineFont {
             .max(0.0)
     }
 
+    /// How much the pair `left`, `right` moves the second character, in
+    /// pixels at `size` (negative: closer): the font's kerning
+    /// ([`OutlineFont::kerning_pairs`]). 0 where either character is
+    /// missing.
+    pub fn kern(&self, left: char, right: char, size: f32) -> f32 {
+        let Some(font) = self.font_ref() else {
+            return 0.0;
+        };
+        let charmap = font.charmap();
+        let (Some(l), Some(r)) = (charmap.map(left), charmap.map(right)) else {
+            return 0.0;
+        };
+        let units = Kerning::new(font.clone(), self.location.coords()).pair((left, right), l, r);
+        if units == 0.0 {
+            return 0.0;
+        }
+        units * size / units_per_em(&font)
+    }
+
+    /// The kerning pairs among `chars`, each with how much it moves the
+    /// second character, in ems (negative: closer): the pairs of the
+    /// font's GPOS `kern` feature, or of its legacy `kern` table where it
+    /// has no GPOS kerning; at the instance of a variable font. Pairs that
+    /// change nothing and characters the font lacks are left out.
+    pub fn kerning_pairs(&self, chars: &[char]) -> Vec<(char, char, f32)> {
+        let Some(font) = self.font_ref() else {
+            return Vec::new();
+        };
+        let charmap = font.charmap();
+        let glyphs: Vec<(char, GlyphId)> = chars
+            .iter()
+            .filter_map(|&ch| Some((ch, charmap.map(ch)?)))
+            .collect();
+        let kerning = Kerning::new(font.clone(), self.location.coords());
+        if kerning.is_empty() {
+            return Vec::new();
+        }
+        let em = units_per_em(&font);
+        let mut pairs = Vec::new();
+        for &(left, l) in &glyphs {
+            for &(right, r) in &glyphs {
+                let units = kerning.pair((left, right), l, r);
+                if units != 0.0 {
+                    pairs.push((left, right, units / em));
+                }
+            }
+        }
+        pairs
+    }
+
     /// Rasterizes `ch`; missing characters render as U+FFFD or `.notdef`.
     pub fn rasterize(&self, ch: char, size: f32) -> Glyph {
         let Some(font) = self.font_ref() else {
@@ -143,6 +195,15 @@ impl OutlineFont {
             advance,
             data,
         }
+    }
+}
+
+/// The font's units per em; 1000 where it does not say.
+fn units_per_em(font: &FontRef<'_>) -> f32 {
+    use skrifa::raw::TableProvider;
+    match font.head().map(|head| head.units_per_em()) {
+        Ok(units) if units > 0 => f32::from(units),
+        _ => 1000.0,
     }
 }
 

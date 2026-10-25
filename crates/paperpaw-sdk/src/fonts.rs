@@ -590,6 +590,8 @@ impl Fonts {
             index: index as u16,
             others,
             display: false,
+            kerning: true,
+            ligatures: false,
         }
     }
 
@@ -722,6 +724,8 @@ impl FontSet {
             index: index as u16,
             others: [None; OTHERS],
             display: false,
+            kerning: true,
+            ligatures: false,
         })
     }
 }
@@ -743,7 +747,26 @@ pub struct FontHandle<'a> {
     /// Draws at a pack's large sizes made for a few characters too (see
     /// [`FontHandle::display`]).
     display: bool,
+    /// Pairs of characters kerned (see [`FontHandle::unkerned`]).
+    kerning: bool,
+    /// Ligatures drawn (see [`FontHandle::ligatures`]).
+    ligatures: bool,
 }
+
+/// The ligature of two characters, if there is one: drawn in their place
+/// where the font has it, the pair set as wide as the ligature is (see
+/// [`FontHandle::ligatures`]).
+fn ligature(left: char, right: char) -> Option<char> {
+    match (left, right) {
+        ('f', 'i') => Some('\u{fb01}'),
+        ('f', 'l') => Some('\u{fb02}'),
+        _ => None,
+    }
+}
+
+/// Ligatures of three characters and of `ff`: drawn only where they take
+/// the room their characters take apart, within this many pixels.
+const LIGATURE_FIT: f32 = 0.5;
 
 impl fmt::Debug for FontHandle<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -821,6 +844,75 @@ impl<'a> FontHandle<'a> {
         self.pick(ch).0.advance(ch, size)
     }
 
+    /// This font without kerning: each character set after the one
+    /// before by its advance alone, as fonts were set before kerning (e.g.
+    /// a reader's setting for book text). Measuring and drawing agree
+    /// either way.
+    pub fn unkerned(self) -> Self {
+        Self {
+            kerning: false,
+            ..self
+        }
+    }
+
+    /// This font with ligatures: `fi` and `fl` drawn as one glyph where
+    /// the font has it, the pair set as wide as that glyph (so measuring,
+    /// as [`FontHandle::kern`] does, agrees); `ff`, `ffi` and `ffl` drawn
+    /// as one only where that takes the room of their characters apart.
+    /// The text stays as it is: positions, hyphenation and search are
+    /// those of its characters. For book text, not for the menus.
+    pub fn ligatures(self) -> Self {
+        Self {
+            ligatures: true,
+            ..self
+        }
+    }
+
+    /// How much `right` moves when it follows `left` at `size`, in pixels
+    /// (negative: closer), as [`FontHandle::measure`] and the drawing
+    /// methods set the pair: the font's kerning (none where the two are
+    /// drawn by different fonts, or [`FontHandle::unkerned`]), or with
+    /// [`FontHandle::ligatures`] the room a ligature saves. What a layout
+    /// adds between the characters of a word it measures one by one.
+    pub fn kern(&self, size: f32, left: char, right: char) -> f32 {
+        let font = match self.others[0] {
+            None => self.font,
+            Some(_) => {
+                let (font, index) = self.pick(left);
+                if self.pick(right).1 != index {
+                    return 0.0;
+                }
+                font
+            }
+        };
+        let size = match self.display {
+            true => {
+                let mut pair = [0u8; 8];
+                let len = left.encode_utf8(&mut pair).len();
+                let len = len + right.encode_utf8(&mut pair[len..]).len();
+                self.size_for(size, core::str::from_utf8(&pair[..len]).unwrap_or(""))
+            }
+            false => size,
+        };
+        self.pair_in(font, size, left, right)
+    }
+
+    /// The adjustment of a pair both drawn by `font` at `size` (see
+    /// [`FontHandle::kern`]).
+    fn pair_in(&self, font: &Font, size: f32, left: char, right: char) -> f32 {
+        if self.ligatures
+            && let Some(joined) = ligature(left, right)
+            && font.has_char(joined)
+        {
+            let apart = font.advance(left, size) + font.advance(right, size);
+            return font.advance(joined, size) - apart;
+        }
+        match self.kerning {
+            true => font.kern(left, right, size),
+            false => 0.0,
+        }
+    }
+
     /// This font for a text of a few characters drawn large alone, a
     /// clock's time or a number: where its pack keeps large sizes only for
     /// some characters (the digits and the colon, on devices that draw
@@ -841,14 +933,30 @@ impl<'a> FontHandle<'a> {
         self.font.size_for(size, text, self.display)
     }
 
-    /// Width of a single line of text in pixels.
+    /// Width of a single line of text in pixels, its pairs kerned (see
+    /// [`FontHandle::kern`]).
     pub fn measure(&self, size: f32, text: &str) -> f32 {
         let size = self.size_for(size, text);
-        if self.others[0].is_none() {
-            paperpaw_text::measure(self.font(), size, text)
-        } else {
-            text.chars().map(|ch| self.advance(size, ch)).sum()
+        let single = self.others[0].is_none();
+        let mut width = 0.0;
+        let mut before: Option<(char, u16)> = None;
+        for ch in text.chars() {
+            let (font, index) = match single {
+                true => (self.font, self.index),
+                false => self.pick(ch),
+            };
+            if let Some((left, at)) = before
+                && at == index
+            {
+                width += self.pair_in(font, size, left, ch);
+            }
+            width += match single {
+                true => font.advance(ch, size),
+                false => self.advance(size, ch),
+            };
+            before = Some((ch, index));
         }
+        width
     }
 
     /// How far the ink of one line of `text` reaches above and below its
@@ -899,8 +1007,15 @@ impl<'a> FontHandle<'a> {
         let mut ink: Option<(i32, i32)> = None;
         let mut pen = 0.0f32;
         let mut based = false;
+        let mut before: Option<(char, u16)> = None;
         for ch in text.chars() {
             let (font, index) = self.pick(ch);
+            if let Some((left, at)) = before
+                && at == index
+            {
+                pen += self.pair_in(font, size, left, ch);
+            }
+            before = Some((ch, index));
             let glyph = cache.glyph(index, font, ch, size);
             let mark = paperpaw_text::is_mark(ch);
             // Where it is drawn ([`FontHandle::draw`]).
@@ -919,9 +1034,18 @@ impl<'a> FontHandle<'a> {
         ink
     }
 
-    /// Breaks `text` into lines that fit `max_width`.
+    /// Breaks `text` into lines that fit `max_width`, its pairs kerned
+    /// within each line as drawn.
     pub fn wrap(&self, size: f32, text: &str, max_width: f32) -> Vec<Range<usize>> {
-        paperpaw_text::wrap(text, max_width, |s| self.measure(size, s))
+        let advance = |_: usize, ch: char| {
+            let mut buffer = [0u8; 4];
+            self.measure(size, ch.encode_utf8(&mut buffer))
+        };
+        let kern = |_: usize, left: char, right: char| self.kern(size, left, right);
+        paperpaw_text::wrap_lines_kerned(text, |_| max_width, advance, kern, None)
+            .into_iter()
+            .map(|line| line.range)
+            .collect()
     }
 
     /// Draws one line with its baseline at `baseline`; returns its width.
@@ -1001,11 +1125,96 @@ impl<'a> FontHandle<'a> {
                 .curve(tone)
                 .based(based);
             let run = &rest[..end];
-            pen += paperpaw_text::draw_text(canvas, &mut cache, &style, pen, baseline, run);
+            pen += self.draw_run(canvas, &mut cache, &style, pen, baseline, run);
             based |= run.chars().any(|ch| !paperpaw_text::is_mark(ch));
             rest = &rest[end..];
         }
         pen - x
+    }
+
+    /// Draws `run`, all in `style`'s font, from `x`; its width. At once
+    /// where the font kerns it as this handle does; else character by
+    /// character, each where measuring puts it, ligatures in place of
+    /// their characters.
+    fn draw_run(
+        &self,
+        canvas: &mut Canvas<'_>,
+        cache: &mut GlyphCache,
+        style: &paperpaw_text::TextStyle<'_>,
+        x: f32,
+        baseline: i32,
+        run: &str,
+    ) -> f32 {
+        if self.kerning && !(self.ligatures && run.contains('f')) {
+            return paperpaw_text::draw_text(canvas, cache, style, x, baseline, run);
+        }
+        let (font, size) = (style.font, style.size);
+        let mut style = *style;
+        let mut pen = x;
+        let mut before: Option<char> = None;
+        let mut at = 0;
+        let mut buffer = [0u8; 4];
+        while let Some(ch) = run[at..].chars().next() {
+            if let Some(left) = before {
+                pen += self.pair_in(font, size, left, ch);
+            }
+            let joined = match self.ligatures && ch == 'f' {
+                true => self.ligature_at(font, size, &run[at..]),
+                false => None,
+            };
+            let (drawn, len, width) = joined.unwrap_or((ch, ch.len_utf8(), font.advance(ch, size)));
+            paperpaw_text::draw_text(
+                canvas,
+                cache,
+                &style,
+                pen,
+                baseline,
+                drawn.encode_utf8(&mut buffer),
+            );
+            if !paperpaw_text::is_mark(ch) {
+                style = style.based(true);
+            }
+            pen += width;
+            before = run[..at + len].chars().next_back();
+            at += len;
+        }
+        pen - x
+    }
+
+    /// The ligature drawn for the start of `text` (an `f`): its
+    /// character, the bytes of `text` it stands for and the width those
+    /// take as measured, with the pairs between them. `None` where the
+    /// `f` is drawn alone: the font lacks the ligature, or one of three
+    /// characters or `ff` would not take their room, or the next `f`
+    /// makes a ligature with the character after it.
+    fn ligature_at(&self, font: &Font, size: f32, text: &str) -> Option<(char, usize, f32)> {
+        let mut chars = text.chars();
+        let (Some('f'), Some(second)) = (chars.next(), chars.next()) else {
+            return None;
+        };
+        let advance = |ch: char| font.advance(ch, size);
+        if let Some(joined) = ligature('f', second) {
+            let width = advance('f') + self.pair_in(font, size, 'f', second) + advance(second);
+            return font.has_char(joined).then_some((joined, 2, width));
+        }
+        if second != 'f' {
+            return None;
+        }
+        let two = advance('f') + self.pair_in(font, size, 'f', 'f') + advance('f');
+        let fits = |joined: char, width: f32| {
+            font.has_char(joined) && (advance(joined) - width).abs() <= LIGATURE_FIT
+        };
+        if let Some(third @ ('i' | 'l')) = chars.next() {
+            let three = two + self.pair_in(font, size, 'f', third) + advance(third);
+            let joined = if third == 'i' { '\u{fb03}' } else { '\u{fb04}' };
+            if fits(joined, three) {
+                return Some((joined, 3, three));
+            }
+            if ligature('f', third).is_some_and(|l| font.has_char(l)) {
+                return None;
+            }
+        }
+        fits('\u{fb00}', two).then_some(('\u{fb00}', 2, two))
     }
 }
 
@@ -1026,6 +1235,83 @@ mod tests {
         let glyphs = chars.chars().map(|c| (c, Glyph::empty(5.0))).collect();
         builder.add_strike(10.0, metrics, glyphs);
         builder.build()
+    }
+
+    /// Kerned pairs and ligatures: what is drawn takes the room measured,
+    /// which is the characters' advances and their pairs (as a layout
+    /// adds them up); `ff`, `ffi` and `ffl` are drawn as one only where
+    /// that takes their room.
+    #[test]
+    fn kerned_and_ligated_text_is_drawn_as_measured() {
+        use paperpaw_graphics::Framebuffer;
+        use paperpaw_platform::PixelFormat;
+        let metrics = LineMetrics {
+            ascent: 8.0,
+            descent: 2.0,
+            line_height: 12.0,
+        };
+        let mut builder = PackBuilder::new();
+        // f i l 5 3 3; fi narrower than f + i, fl as wide, ff wider than
+        // f + f, ffl as wide as its letters, ffi not.
+        let advances = "AV5fil\u{fb00}\u{fb01}\u{fb02}\u{fb03}\u{fb04}";
+        let glyphs = advances
+            .chars()
+            .zip([6.0, 6.0, 2.0, 5.0, 3.0, 3.0, 12.0, 7.0, 8.0, 13.0, 13.0])
+            .map(|(c, advance)| (c, Glyph::empty(advance)))
+            .collect();
+        builder.add_strike(10.0, metrics, glyphs);
+        builder.kerning(&[('A', 'V', -0.25), ('V', 'A', -0.125)]);
+        let mut fonts = FontSet::new(4096);
+        let pack = Font::from_data(builder.build(), &[]).unwrap();
+        fonts.add(Id::new_static("a.font"), pack);
+        let font = fonts.get(0).unwrap();
+        let mut frame = Framebuffer::new(200, 20, PixelFormat::Gray8).unwrap();
+        let tone = paperpaw_text::ToneCurve::SMOOTH;
+        let all = [
+            font,
+            font.unkerned(),
+            font.ligatures(),
+            font.unkerned().ligatures(),
+        ];
+        for handle in all {
+            for text in ["AVA", "fi", "ffi", "ffl", "ff5fl", "Af"] {
+                let measured = handle.measure(10.0, text);
+                let mut canvas = frame.canvas();
+                let black = Color::BLACK;
+                let drawn = handle.draw_toned(&mut canvas, 10.0, 0.0, 10, text, black, 0, tone);
+                assert!(
+                    (drawn - measured).abs() < 1e-4,
+                    "{text}: {drawn} or {measured}"
+                );
+                let chars: Vec<char> = text.chars().collect();
+                let summed = chars.iter().map(|c| handle.advance(10.0, *c)).sum::<f32>()
+                    + chars
+                        .windows(2)
+                        .map(|w| handle.kern(10.0, w[0], w[1]))
+                        .sum::<f32>();
+                assert!(
+                    (summed - measured).abs() < 1e-4,
+                    "{text}: {summed} or {measured}"
+                );
+            }
+        }
+        assert_eq!(font.measure(10.0, "AV"), 9.5);
+        assert_eq!(font.unkerned().measure(10.0, "AV"), 12.0);
+        // fi as wide as its ligature, only with ligatures.
+        assert_eq!(font.measure(10.0, "fi"), 8.0);
+        assert_eq!(font.ligatures().measure(10.0, "fi"), 7.0);
+        let joined = |text: &str| {
+            let handle = font.ligatures();
+            handle
+                .ligature_at(handle.font, 10.0, text)
+                .map(|j| (j.0, j.1))
+        };
+        assert_eq!(joined("fil"), Some(('\u{fb01}', 2)));
+        assert_eq!(joined("fl"), Some(('\u{fb02}', 2)));
+        assert_eq!(joined("ffl"), Some(('\u{fb04}', 3)), "13 as f, f and l");
+        assert_eq!(joined("ffi"), None, "f alone, then fi: 13 is not 12");
+        assert_eq!(joined("ff5"), None, "12 is not 10");
+        assert_eq!(joined("f5"), None);
     }
 
     /// Any Tabler icon has a name; one the icon font lacks is drawn from

@@ -7,7 +7,9 @@
 //! they break at, what each line reports (width, spaces, paragraph end,
 //! hyphen) matches its text, no line is wider than its box but for a
 //! single glyph, and breaking from the start of any line gives the same
-//! lines as breaking the whole text.
+//! lines as breaking the whole text. Also with pairs of characters kerned
+//! (`wrap_lines_kerned`, `wrap_lines_balanced_kerned`): a line's width is
+//! that of its text alone, with the pairs inside it.
 
 #![allow(
     clippy::unwrap_used,
@@ -15,7 +17,7 @@
     reason = "tests panic on purpose when something is wrong"
 )]
 
-use paperpaw_text::{Line, wrap, wrap_lines, wrap_lines_hyphenated};
+use paperpaw_text::{Line, wrap, wrap_lines, wrap_lines_balanced_kerned, wrap_lines_kerned};
 use proptest::prelude::*;
 
 /// Character widths that differ a lot: narrow letters, wide CJK, zero
@@ -36,6 +38,27 @@ fn varied(c: char) -> f32 {
 /// Every character one unit wide.
 fn even(_: char) -> f32 {
     1.0
+}
+
+/// How much a pair moves its second character.
+type Kern = fn(char, char) -> f32;
+
+/// No kerning.
+fn flat(_: char, _: char) -> f32 {
+    0.0
+}
+
+/// Pairs closer and wider, as fonts kern them: some vowels after some
+/// consonants, a hyphen after a letter, a dash before one.
+fn kerned(left: char, right: char) -> f32 {
+    match (left, right) {
+        ('a' | 'e' | 'o', 'v' | 'w' | 'y') | ('v' | 'w' | 'y' | 't', 'a' | 'e' | 'o') => -0.3,
+        ('f', 'f' | 'i' | 'l') => -0.15,
+        (c, '-') if c.is_alphabetic() => 0.2,
+        ('\u{2014}', c) if c.is_alphabetic() => 0.25,
+        ('A', _) => -0.05,
+        _ => 0.0,
+    }
 }
 
 /// Breaks every word of four or more characters after every second.
@@ -62,28 +85,44 @@ fn text() -> impl Strategy<Value = String> {
     proptest::collection::vec(c, 0..120).prop_map(|chars| chars.into_iter().collect())
 }
 
-fn measure(text: &str, advance: fn(char) -> f32) -> f32 {
-    text.chars().map(advance).sum()
+/// The width of a line's text drawn alone: its advances and the pairs
+/// inside it, none with a space; with the hyphen after it, if `hyphen`.
+fn measure(text: &str, (advance, kern): (fn(char) -> f32, Kern), hyphen: bool) -> f32 {
+    let mut width = 0.0;
+    let mut before: Option<char> = None;
+    let hyphen = hyphen.then_some('-');
+    for c in text.chars().chain(hyphen) {
+        if let Some(left) = before
+            && left != ' '
+            && c != ' '
+        {
+            width += kern(left, c);
+        }
+        width += advance(c);
+        before = Some(c);
+    }
+    width
 }
 
 fn lines(
     text: &str,
     width: f32,
     first: f32,
-    advance: fn(char) -> f32,
+    (advance, kern): (fn(char) -> f32, Kern),
     hyphenate: bool,
 ) -> Vec<Line> {
     let hyphenate = hyphenate.then_some(&every_second as &dyn Fn(&str, &mut dyn FnMut(usize)));
-    wrap_lines_hyphenated(
+    wrap_lines_kerned(
         text,
         |n| if n == 0 { first } else { width },
         |_, c| advance(c),
+        |_, left, c| kern(left, c),
         hyphenate,
     )
 }
 
 /// What every result of line breaking must satisfy, whatever the widths.
-fn check_structure(text: &str, lines: &[Line], advance: fn(char) -> f32) {
+fn check_structure(text: &str, lines: &[Line], advance: (fn(char) -> f32, Kern)) {
     assert!(!lines.is_empty(), "even empty text is a line");
     let mut at = 0;
     for (n, line) in lines.iter().enumerate() {
@@ -107,8 +146,7 @@ fn check_structure(text: &str, lines: &[Line], advance: fn(char) -> f32) {
         assert!(!shown.contains('\n'));
         assert!(!shown.ends_with(' '), "trailing space in {shown:?}");
         assert_eq!(line.spaces, shown.matches(' ').count(), "{shown:?}");
-        let hyphen = if line.hyphen { advance('-') } else { 0.0 };
-        let width = measure(shown, advance) + hyphen;
+        let width = measure(shown, advance, line.hyphen);
         assert!(
             (line.width - width).abs() < 1e-3,
             "{shown:?} reported {} wide, is {width}",
@@ -134,12 +172,17 @@ fn check_structure(text: &str, lines: &[Line], advance: fn(char) -> f32) {
 }
 
 /// No line wider than its box, unless it is a single glyph.
-fn check_widths(lines: &[Line], text: &str, width: f32, first: f32, advance: fn(char) -> f32) {
+fn check_widths(
+    lines: &[Line],
+    text: &str,
+    width: f32,
+    first: f32,
+    advance: (fn(char) -> f32, Kern),
+) {
     for (n, line) in lines.iter().enumerate() {
         let available = if n == 0 { first } else { width };
         let shown = &text[line.range.clone()];
-        let hyphen = if line.hyphen { advance('-') } else { 0.0 };
-        let used = measure(shown, advance) + hyphen;
+        let used = measure(shown, advance, line.hyphen);
         assert!(
             used <= available + 1e-3 || shown.chars().count() <= 1,
             "line {n} {shown:?} is {used} wide, its box {available}",
@@ -148,7 +191,13 @@ fn check_widths(lines: &[Line], text: &str, width: f32, first: f32, advance: fn(
 }
 
 /// Breaking from the start of any line gives the same lines.
-fn check_stable(text: &str, lines: &[Line], width: f32, advance: fn(char) -> f32, hy: bool) {
+fn check_stable(
+    text: &str,
+    lines: &[Line],
+    width: f32,
+    advance: (fn(char) -> f32, Kern),
+    hy: bool,
+) {
     for line in &lines[1..] {
         let from = line.range.start;
         let rest = self::lines(&text[from..], width, width, advance, hy);
@@ -177,8 +226,10 @@ proptest! {
         hyphenate in any::<bool>(),
     ) {
         for advance in [even as fn(char) -> f32, varied] {
-            let result = lines(&text, width, first, advance, hyphenate);
-            check_structure(&text, &result, advance);
+            for kern in [flat as Kern, kerned] {
+                let result = lines(&text, width, first, (advance, kern), hyphenate);
+                check_structure(&text, &result, (advance, kern));
+            }
         }
     }
 
@@ -192,6 +243,7 @@ proptest! {
         hyphenate in any::<bool>(),
     ) {
         let first = first * width;
+        let even = (even as fn(char) -> f32, flat as Kern);
         let result = lines(&text, width, first, even, hyphenate);
         check_widths(&result, &text, width, first, even);
         let result = lines(&text, width, width, even, hyphenate);
@@ -205,10 +257,37 @@ proptest! {
         first in 0.0f32..30.0,
         hyphenate in any::<bool>(),
     ) {
-        let result = lines(&text, width, first, varied, hyphenate);
-        check_widths(&result, &text, width, first, varied);
-        let result = lines(&text, width, width, varied, hyphenate);
-        check_stable(&text, &result, width, varied, hyphenate);
+        for kern in [flat as Kern, kerned] {
+            let varied = (varied as fn(char) -> f32, kern);
+            let result = lines(&text, width, first, varied, hyphenate);
+            check_widths(&result, &text, width, first, varied);
+            let result = lines(&text, width, width, varied, hyphenate);
+            check_stable(&text, &result, width, varied, hyphenate);
+        }
+    }
+
+    /// Balanced lines with pairs kerned: each reports the width of its
+    /// text alone and fits its box (but for a single glyph).
+    #[test]
+    fn balanced_kerned_lines_report_their_width_and_fit(
+        text in text(),
+        width in 0.5f32..30.0,
+        hyphenate in any::<bool>(),
+    ) {
+        let hyphenate = hyphenate.then_some(&every_second as &dyn Fn(&str, &mut dyn FnMut(usize)));
+        let result = wrap_lines_balanced_kerned(
+            &text,
+            |_| width,
+            |_, c| varied(c),
+            |_, left, c| kerned(left, c),
+            hyphenate,
+        );
+        for line in &result {
+            let shown = &text[line.range.clone()];
+            let alone = measure(shown, (varied, kerned), line.hyphen);
+            prop_assert!((line.width - alone).abs() < 1e-3, "{:?}: {} or {}", shown, line.width, alone);
+        }
+        check_widths(&result, &text, width, width, (varied, kerned));
     }
 
     #[test]
@@ -270,7 +349,7 @@ fn the_last_line_is_reported_without_trailing_spaces() {
 #[test]
 fn hyphenated_lines_fit_with_even_glyphs() {
     let text = "ab abcdefghijkl mn";
-    let lines = lines(text, 5.0, 5.0, even, true);
+    let lines = lines(text, 5.0, 5.0, (even, flat), true);
     let shown: Vec<(&str, f32, bool)> = lines
         .iter()
         .map(|l| (&text[l.range.clone()], l.width, l.hyphen))

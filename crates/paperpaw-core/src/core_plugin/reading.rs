@@ -246,6 +246,8 @@ static LETTERS: SettingExtra = SettingExtra::new()
     .unit("core.unit.percent")
     .section(group_sections::FONT)
     .slider();
+/// Kerning and ligatures, beside letter spacing.
+static FONT_PAIRS: SettingExtra = SettingExtra::new().section(group_sections::FONT);
 static INDENT_SIZE: SettingExtra = SettingExtra::new()
     .unit("core.unit.percent")
     .step(25)
@@ -269,9 +271,10 @@ const fn book_style(id: &'static str, title: &'static str, on: bool) -> SettingS
 }
 
 /// Which of the book's own styles are followed, and the finer measures
-/// of the type: letter spacing, the indent's and the paragraph space's
-/// size. Their defaults keep pages as they were.
-static TYPE: [SettingSpec; 11] = [
+/// of the type: letter spacing, kerning and ligatures, the indent's and
+/// the paragraph space's size. Their defaults keep pages as they were,
+/// but kerning and ligatures are on, as other readers set them.
+static TYPE: [SettingSpec; 13] = [
     SettingSpec::choice(
         settings::LINE_BREAKING.static_str(),
         "core.setting.line-breaking",
@@ -340,6 +343,26 @@ static TYPE: [SettingSpec; 11] = [
     .advanced()
     .scoped()
     .description("core.setting.letter-spacing.help"),
+    SettingSpec::switch(
+        settings::KERNING.static_str(),
+        "core.setting.kerning",
+        true,
+        groups::READING,
+    )
+    .with_extra(&FONT_PAIRS)
+    .advanced()
+    .scoped()
+    .description("core.setting.kerning.help"),
+    SettingSpec::switch(
+        settings::LIGATURES.static_str(),
+        "core.setting.ligatures",
+        true,
+        groups::READING,
+    )
+    .with_extra(&FONT_PAIRS)
+    .advanced()
+    .scoped()
+    .description("core.setting.ligatures.help"),
     SettingSpec::number(
         settings::INDENT_SIZE.static_str(),
         "core.setting.indent-size",

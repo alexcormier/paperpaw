@@ -29,6 +29,9 @@ pub mod charset;
 mod curve;
 mod font;
 mod glyph;
+mod kern_table;
+#[cfg(feature = "outline")]
+mod kerning;
 mod layout;
 #[cfg(feature = "outline")]
 mod outline;
@@ -53,7 +56,8 @@ pub use stored::{PackSource, StoredPack};
 pub const OUTLINES: bool = cfg!(feature = "outline");
 pub use glyph::{Glyph, GlyphRef};
 pub use layout::{
-    Hyphenate, Line, MAX_BREAKS, wrap, wrap_lines, wrap_lines_balanced, wrap_lines_hyphenated,
+    Hyphenate, Line, MAX_BREAKS, wrap, wrap_lines, wrap_lines_balanced, wrap_lines_balanced_kerned,
+    wrap_lines_hyphenated, wrap_lines_kerned,
 };
 #[cfg(feature = "outline")]
 pub use outline::OutlineFont;
@@ -61,9 +65,18 @@ pub use outline::OutlineFont;
 use paperpaw_graphics::Canvas;
 use paperpaw_platform::Color;
 
-/// Width of `text` in pixels.
+/// Width of `text` in pixels, its pairs kerned ([`Font::kern`]).
 pub fn measure(font: &Font, size: f32, text: &str) -> f32 {
-    text.chars().map(|ch| font.advance(ch, size)).sum()
+    let mut width = 0.0;
+    let mut before = None;
+    for ch in text.chars() {
+        if let Some(left) = before {
+            width += font.kern(left, ch, size);
+        }
+        width += font.advance(ch, size);
+        before = Some(ch);
+    }
+    width
 }
 
 /// How a line of text is drawn: its font (and the font's number in the
@@ -158,8 +171,8 @@ impl core::fmt::Debug for TextStyle<'_> {
 }
 
 /// Draws one line of `text` in `style` with its baseline at `baseline` and
-/// returns the advance in pixels. Newlines are not interpreted; use
-/// [`wrap`] first.
+/// returns the advance in pixels, its pairs kerned as [`measure`] kerns
+/// them. Newlines are not interpreted; use [`wrap`] first.
 pub fn draw_text(
     canvas: &mut Canvas<'_>,
     cache: &mut GlyphCache,
@@ -178,7 +191,12 @@ pub fn draw_text(
         mut based,
     } = *style;
     let mut pen = x;
+    let mut before = None;
     for ch in text.chars() {
+        if let Some(left) = before {
+            pen += font.kern(left, ch, size);
+        }
+        before = Some(ch);
         let glyph = cache.glyph(font_index, font, ch, size);
         let mark = is_mark(ch);
         // Saturating: a pen far out (absurd advances) draws nothing.
@@ -221,8 +239,9 @@ pub fn draw_text(
     pen - x
 }
 
-/// Renders `chars` of `font` at each of `sizes` into a bitmap font pack.
-/// Characters the font lacks are skipped.
+/// Renders `chars` of `font` at each of `sizes` into a bitmap font pack,
+/// with the font's kerning of them. Characters the font lacks are
+/// skipped.
 #[cfg(feature = "outline")]
 pub fn build_pack(
     font: &OutlineFont,
@@ -230,6 +249,8 @@ pub fn build_pack(
     chars: impl IntoIterator<Item = char> + Clone,
 ) -> alloc::vec::Vec<u8> {
     let mut builder = PackBuilder::new();
+    let kerned: alloc::vec::Vec<char> = chars.clone().into_iter().collect();
+    builder.kerning(&font.kerning_pairs(&kerned));
     for &size in sizes {
         let glyphs = chars
             .clone()

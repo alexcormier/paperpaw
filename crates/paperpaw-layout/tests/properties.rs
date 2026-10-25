@@ -3,8 +3,9 @@
 //! spaces), headings, bold runs, book sizes and alignments, laid out at
 //! random widths and heights, with and without hyphenation.
 //!
-//! Checked: no line is wider than its box (except a line of a single
-//! glyph that is wider by itself), every character of the book is on
+//! Checked, also with pairs of characters kerned as fonts kern them: no
+//! line is wider than its box (except a line of a single glyph that is
+//! wider by itself), measured as its words are drawn, every character of the book is on
 //! exactly one line of exactly one page and in order, no page is taller
 //! than its box, a page laid out again from a kept position is the same,
 //! and a position kept at one width is on the page shown at another.
@@ -98,14 +99,25 @@ impl Document for Book {
 
 /// Widths by face size (book sizes, headings) and, if `varied`, also by
 /// character and style: CJK twice as wide, soft hyphens without width,
-/// bold wider.
+/// bold wider; if `kerned`, pairs closer and wider as fonts kern them.
 #[derive(Clone, Copy)]
 struct Widths {
     varied: bool,
+    kerned: bool,
 }
 
-const EVEN: Widths = Widths { varied: false };
-const VARIED: Widths = Widths { varied: true };
+const EVEN: Widths = Widths {
+    varied: false,
+    kerned: false,
+};
+const VARIED: Widths = Widths {
+    varied: true,
+    kerned: false,
+};
+const KERNED: Widths = Widths {
+    varied: true,
+    kerned: true,
+};
 
 fn scale(face: Face) -> f32 {
     let size = if face.size == 0 {
@@ -137,6 +149,21 @@ impl Typesetter for Widths {
     fn line(&self, face: Face) -> (f32, f32) {
         let h = 10.0 * scale(face);
         (0.8 * h, h)
+    }
+
+    fn kern(&self, face: Face, left: char, right: char) -> f32 {
+        if !self.kerned {
+            return 0.0;
+        }
+        let pair = match (left, right) {
+            ('a' | 'e' | 'o', 'v' | 'w' | 'y') | ('v' | 'w' | 'y' | 't', 'a' | 'e' | 'o') => -0.3,
+            ('f', 'f' | 'i' | 'l') => -0.15,
+            (c, '-') if c.is_alphabetic() => 0.2,
+            ('-', c) if c.is_alphabetic() => 0.1,
+            ('\u{4e00}'..='\u{9fff}', _) => -0.05,
+            _ => 0.0,
+        };
+        pair * scale(face)
     }
 }
 
@@ -264,18 +291,26 @@ fn paginate(cx: &LayoutContext<'_>, height: f32, book: &Book) -> Vec<Page> {
     pages
 }
 
-/// The width a line takes: its characters in their faces plus the extra
-/// space of justification.
+/// The width a line takes as it is drawn, word by word and each run of a
+/// face at once: its characters in their faces with the pairs inside
+/// each, plus the extra space of justification.
 fn line_width(line: &paperpaw_layout::PageLine, widths: Widths) -> f32 {
-    let glyphs: f32 = line
-        .runs
-        .iter()
-        .flat_map(|run| {
-            line.text[run.start..run.end]
-                .chars()
-                .map(move |c| widths.advance(run.face, c))
-        })
-        .sum();
+    let mut glyphs = 0.0;
+    for run in &line.runs {
+        for word in line.text[run.start..run.end].split(' ') {
+            let mut before = None;
+            for c in word.chars() {
+                if let Some(left) = before {
+                    glyphs += widths.kern(run.face, left, c);
+                }
+                glyphs += widths.advance(run.face, c);
+                before = Some(c);
+            }
+        }
+        // The spaces between the words.
+        let spaces = line.text[run.start..run.end].matches(' ').count();
+        glyphs += spaces as f32 * widths.advance(run.face, ' ');
+    }
     glyphs + line.word_spacing * line.text.matches(' ').count() as f32
 }
 
@@ -489,6 +524,22 @@ proptest! {
         for width in [widths.0, widths.1] {
             pages_fit(&book, &style, width, height, hyphenate, VARIED);
             positions_survive(&book, &style, width, height, hyphenate, VARIED, &picks);
+        }
+    }
+
+    #[test]
+    fn kerned_lines_fit_as_drawn_and_positions_survive(
+        book in book(),
+        style in style(),
+        widths in (3.0f32..60.0, 3.0f32..60.0),
+        lines in 1.0f32..15.0,
+        hyphenate in any::<bool>(),
+        picks in proptest::collection::vec((any::<usize>(), any::<usize>()), 1..8),
+    ) {
+        let height = lines * 10.0 * MAX_SCALE;
+        for width in [widths.0, widths.1] {
+            pages_fit(&book, &style, width, height, hyphenate, KERNED);
+            positions_survive(&book, &style, width, height, hyphenate, KERNED, &picks);
         }
     }
 }

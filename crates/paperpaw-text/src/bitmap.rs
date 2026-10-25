@@ -14,7 +14,14 @@
 //! glyphs   20 bytes  code point u32, advance i32 (1/64 px), left i16, top i16,
 //!   each, sorted     width u16, height u16, data offset u32 (from bitmap offset)
 //! bitmaps            4-bit coverage, two pixels per byte, rows padded
+//! kerning            optional, see below
 //! ```
+//!
+//! The first strike's last reserved field is the offset of the pack's
+//! kerning table (0: none), which holds pairs of characters and how much
+//! they move the second one, in classes (see `kern_table.rs`). Readers
+//! made before it ignore the field, and packs made before it read
+//! without kerning: the version stays 1.
 
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
@@ -22,6 +29,7 @@ use core::fmt;
 
 use crate::font::{FontError, LineMetrics};
 use crate::glyph::{Glyph, GlyphRef};
+use crate::kern_table;
 
 const MAGIC: &[u8; 4] = b"PPFP";
 /// Packs made before PaperPaw had its name (the same format): still read.
@@ -30,6 +38,8 @@ const VERSION: u8 = 1;
 const HEADER: usize = 12;
 const STRIKE: usize = 32;
 const RECORD: usize = 20;
+/// Where in the first strike's header the kerning table's offset is.
+const KERNING: usize = HEADER + 28;
 
 /// A bitmap font pack.
 #[derive(Clone)]
@@ -279,6 +289,27 @@ impl BitmapFont {
     pub fn advance(&self, ch: char, size: f32) -> f32 {
         self.glyph(ch, size).advance
     }
+
+    /// How much the pair `left`, `right` moves the second character, in
+    /// pixels at the strike nearest to `size` (negative: closer); 0 for a
+    /// pack without kerning. Read in place: no memory.
+    pub fn kern(&self, left: char, right: char, size: f32) -> f32 {
+        let table = u32_at(&self.data, KERNING).unwrap_or(0) as usize;
+        if table == 0 {
+            return 0.0;
+        }
+        let units = kern_table::lookup(&self.data, table, left, right);
+        if units == 0 {
+            return 0.0;
+        }
+        let Some(quarters) = self
+            .nearest_index(size)
+            .and_then(|i| u16_at(&self.data, HEADER + i * STRIKE))
+        else {
+            return 0.0;
+        };
+        f32::from(units) * f32::from(quarters) / (4.0 * kern_table::UNITS)
+    }
 }
 
 /// Where a strike's glyphs are (see [`BitmapFont::tables`]).
@@ -292,6 +323,8 @@ struct Tables {
 #[derive(Debug, Default)]
 pub struct PackBuilder {
     strikes: Vec<StrikeData>,
+    /// The kerning table, if any (see [`PackBuilder::kerning`]).
+    kerning: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -315,6 +348,15 @@ impl PackBuilder {
             metrics,
             glyphs,
         });
+    }
+
+    /// Kerns the pack's text with `pairs`: two characters each and how
+    /// much the second moves, in ems (negative: closer), as
+    /// [`OutlineFont::kerning_pairs`](crate::OutlineFont::kerning_pairs)
+    /// finds them. Kept in 1/1024 em; characters from U+10000 on are not
+    /// kerned.
+    pub fn kerning(&mut self, pairs: &[(char, char, f32)]) {
+        self.kerning = kern_table::build(pairs);
     }
 
     pub fn build(&self) -> Vec<u8> {
@@ -357,6 +399,11 @@ impl PackBuilder {
             header.extend_from_slice(&[0, 0, 0, 0]);
             let at = strike_table + index * STRIKE;
             out[at..at + STRIKE].copy_from_slice(&header);
+        }
+        if !self.kerning.is_empty() && !self.strikes.is_empty() {
+            let table = (out.len() as u32).to_le_bytes();
+            out[KERNING..KERNING + 4].copy_from_slice(&table);
+            out.extend_from_slice(&self.kerning);
         }
         out
     }

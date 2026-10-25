@@ -751,6 +751,11 @@ pub mod settings {
     pub const BOOK_LINE_HEIGHT: Setting<bool> = Setting::new("core.book-line-height");
     /// Space between letters, in percent of the text size (-5 to 20).
     pub const LETTER_SPACING: Setting<i64> = Setting::new("core.letter-spacing");
+    /// Pairs of letters set as the font kerns them (e.g. `AV` closer).
+    pub const KERNING: Setting<bool> = Setting::new("core.kerning");
+    /// `fi`, `fl` and the like drawn as ligatures where the font has them
+    /// (not with letter spacing).
+    pub const LIGATURES: Setting<bool> = Setting::new("core.ligatures");
     /// How far [`INDENT`] indents first lines, in percent of the text size
     /// (50 to 400).
     pub const INDENT_SIZE: Setting<i64> = Setting::new("core.indent-size");

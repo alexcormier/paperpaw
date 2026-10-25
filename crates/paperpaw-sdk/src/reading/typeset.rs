@@ -151,6 +151,11 @@ pub struct PageType {
     pub word_spacing: f32,
     /// Space added after every letter, in pixels.
     pub letter_spacing: f32,
+    /// Pairs of letters kerned ([`settings::KERNING`]).
+    pub kerning: bool,
+    /// Ligatures drawn ([`settings::LIGATURES`]); never with letter
+    /// spacing, which would pull them apart.
+    pub ligatures: bool,
     /// Body text lines: baseline from the top of a line, line height.
     pub ascent: f32,
     pub line_height: f32,
@@ -214,6 +219,8 @@ impl PageType {
         let paragraph_space = s.read(&settings::PARAGRAPH_SPACE).clamp(20, 150) as f32 / 100.0;
         let balanced = s.read(&settings::LINE_BREAKING) != settings::LINE_BREAKING_FAST;
         let letter_spacing = s.read(&settings::LETTER_SPACING).clamp(-5, 20) as f32 / 100.0 * size;
+        let kerning = s.read(&settings::KERNING);
+        let ligatures = s.read(&settings::LIGATURES) && letter_spacing == 0.0;
         let book = [
             (&settings::BOOK_ALIGN, BookStyles::ALIGN),
             (&settings::BOOK_INDENT, BookStyles::INDENT),
@@ -324,7 +331,7 @@ impl PageType {
         let key = format!(
             "{:016x}",
             paperpaw_digest::fnv1a64(format!(
-                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}|{widows}:{orphans}|{:x}|{letter_spacing}|{balanced}",
+                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}|{widows}:{orphans}|{:x}|{letter_spacing}|{balanced}|{kerning}|{ligatures}",
                 crate::layout::VERSION,
                 font.id(),
                 face_id(env, &fonts::READING_BOLD),
@@ -350,6 +357,8 @@ impl PageType {
             weight,
             word_spacing,
             letter_spacing,
+            kerning,
+            ligatures,
             ascent,
             line_height,
             style,
@@ -497,6 +506,9 @@ pub struct ReadingFaces<'a> {
     sharp: bool,
     word_spacing: f32,
     letter_spacing: f32,
+    /// Pairs kerned and ligatures drawn, as the page's type says.
+    kerning: bool,
+    ligatures: bool,
     embedded: Option<&'a EmbeddedFonts>,
     size: f32,
     ascent: f32,
@@ -539,6 +551,8 @@ impl<'a> ReadingFaces<'a> {
             sharp,
             word_spacing: page.word_spacing,
             letter_spacing: page.letter_spacing,
+            kerning: page.kerning,
+            ligatures: page.ligatures && page.letter_spacing == 0.0,
             embedded,
             size: page.size,
             ascent: page.ascent,
@@ -547,17 +561,22 @@ impl<'a> ReadingFaces<'a> {
     }
 
     /// The book's font for text in an embedded family, else the reading
-    /// face.
+    /// face; kerned and with ligatures as the settings say.
     pub fn font(&self, face: Face) -> FontHandle<'a> {
         let style = face.style;
-        if style.family() != 0
-            && let Some(font) = self
+        let font = match style.family() {
+            0 => None,
+            family => self
                 .embedded
-                .and_then(|e| e.face(style.family(), style.bold(), style.italic()))
-        {
-            return font;
+                .and_then(|e| e.face(family, style.bold(), style.italic())),
+        };
+        let font = font.unwrap_or(self.fonts[usize::from(style.bits() & 3)]);
+        let font = if self.kerning { font } else { font.unkerned() };
+        if self.ligatures {
+            font.ligatures()
+        } else {
+            font
         }
-        self.fonts[usize::from(style.bits() & 3)]
     }
 
     /// The size of the line's text in `face`, in pixels: what
@@ -688,14 +707,20 @@ impl<'a> ReadingFaces<'a> {
             true => self.tone.sharp(canvas.mono_coverage()),
             false => self.tone,
         };
-        // Letter by letter where letters are spaced; at once otherwise.
+        // Letter by letter where letters are spaced, each pair kerned as
+        // measuring kerns it; at once otherwise.
         let draw = |canvas: &mut Canvas<'_>, size: f32, x: f32, text: &str| -> f32 {
             if self.letter_spacing == 0.0 {
                 return font.draw_toned(canvas, size, x, baseline, text, ink, extra, tone);
             }
             let mut width = 0.0;
             let mut buf = [0u8; 4];
+            let mut before = None;
             for c in text.chars() {
+                if let Some(left) = before {
+                    width += font.kern(size, left, c);
+                }
+                before = Some(c);
                 let letter = c.encode_utf8(&mut buf);
                 width +=
                     font.draw_toned(canvas, size, x + width, baseline, letter, ink, extra, tone);
@@ -726,10 +751,41 @@ impl Typesetter for ReadingFaces<'_> {
         if face.style.small_caps() && c.is_lowercase() {
             let small = self.size(face) * SMALL_CAPS;
             let font = self.font(face);
-            let upper: f32 = c.to_uppercase().map(|u| font.advance(small, u)).sum();
+            // Its capitals (one or more: `ß` is `SS`), kerned among them.
+            let mut upper = 0.0;
+            let mut before = None;
+            for u in c.to_uppercase() {
+                if let Some(left) = before {
+                    upper += font.kern(small, left, u);
+                }
+                upper += font.advance(small, u);
+                before = Some(u);
+            }
             return upper + self.letter_spacing;
         }
         self.font(face).advance(self.size(face), c) + self.letter_spacing
+    }
+
+    /// The pair as drawing sets it ([`FontHandle::kern`]): in small
+    /// capitals, lower case letters as smaller capitals and no pair
+    /// between those and the rest, which are drawn apart.
+    fn kern(&self, face: Face, left: char, right: char) -> f32 {
+        if left == ' ' || right == ' ' {
+            return 0.0;
+        }
+        let font = self.font(face);
+        if face.style.small_caps() && (left.is_lowercase() || right.is_lowercase()) {
+            if left.is_lowercase() != right.is_lowercase() {
+                return 0.0;
+            }
+            let (Some(last), Some(first)) =
+                (left.to_uppercase().last(), right.to_uppercase().next())
+            else {
+                return 0.0;
+            };
+            return font.kern(self.size(face) * SMALL_CAPS, last, first);
+        }
+        font.kern(self.size(face), left, right)
     }
 
     fn line(&self, face: Face) -> (f32, f32) {
