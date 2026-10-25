@@ -135,14 +135,16 @@ fn step(m: &mut Machine) {
     m.pc = m.pc.wrapping_add(1);
 }
 
-/// `steps` steps, from internal RAM where the device runs hot code
-/// there.
-#[inline(never)]
-fn run_hot(m: &mut Machine, steps: u32) -> u8 {
-    for _ in 0..steps {
-        step(m);
+paperpaw_sdk::hot! {
+    /// `steps` steps, from internal RAM where the device runs hot code
+    /// there.
+    #[inline(never)]
+    fn run_hot(m: &mut Machine, steps: u32) -> u8 {
+        for _ in 0..steps {
+            step(m);
+        }
+        m.registers[0]
     }
-    m.registers[0]
 }
 
 /// The same, as ordinary code (from flash on the X4).

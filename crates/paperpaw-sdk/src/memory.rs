@@ -183,19 +183,42 @@ impl core::error::Error for MemoryError {}
 /// alignment, the [`Placement`]'s number; null when there is no room.
 pub type Placer = unsafe extern "C" fn(size: usize, align: usize, placement: u32) -> *mut u8;
 
-/// The firmware's allocation by placement, where it gave one.
+/// The firmware's allocation by placement, where it gave one. Not in a
+/// code plugin file, which has no writable data: it reads the
+/// firmware's table instead ([`placer`]).
+#[cfg(not(all(paperpaw_plugin, target_os = "none")))]
 static PLACER: core::sync::atomic::AtomicPtr<()> =
     core::sync::atomic::AtomicPtr::new(core::ptr::null_mut());
 
-/// Gives the SDK the firmware's allocation by placement, at start (a code
-/// plugin's own copy of the SDK takes it from the firmware's table).
+/// Gives the SDK the firmware's allocation by placement, at start.
 #[cfg(feature = "kernel")]
 pub fn set_placer(placer: Placer) {
-    place_with(placer);
+    PLACER.store(placer as *mut (), core::sync::atomic::Ordering::Release);
 }
 
-pub(crate) fn place_with(placer: Placer) {
-    PLACER.store(placer as *mut (), core::sync::atomic::Ordering::Release);
+/// The firmware's allocation by placement, where there is one.
+#[cfg(not(all(paperpaw_plugin, target_os = "none")))]
+fn placer() -> Option<Placer> {
+    let placer = PLACER.load(core::sync::atomic::Ordering::Acquire);
+    // SAFETY: only `set_placer` stores here, a `Placer`.
+    (!placer.is_null()).then(|| unsafe { core::mem::transmute::<*mut (), Placer>(placer) })
+}
+
+/// The firmware's allocation by placement, from its table, where the
+/// firmware that loaded this plugin file has it.
+#[cfg(all(paperpaw_plugin, target_os = "none"))]
+fn placer() -> Option<Placer> {
+    unsafe extern "C" {
+        /// The firmware's table: `paperpaw-plugin.x` makes the word, the
+        /// loader writes its address before the plugin's code runs.
+        static PAPERPAW_API: *const paperpaw_native::Api;
+    }
+    // SAFETY: a table that lives as long as the firmware runs, written
+    // before any code of the plugin ran.
+    let api = unsafe { &*PAPERPAW_API };
+    let has = core::mem::offset_of!(paperpaw_native::Api, alloc_in) + core::mem::size_of::<usize>()
+        <= api.size as usize;
+    has.then_some(api.alloc_in)
 }
 
 /// An empty vector with room for `capacity` values, kept where
@@ -205,17 +228,15 @@ pub(crate) fn place_with(placer: Placer) {
 /// once) to keep it where it is.
 pub fn vec_in<T>(placement: Placement, capacity: usize) -> Result<alloc::vec::Vec<T>, MemoryError> {
     let layout = core::alloc::Layout::array::<T>(capacity).map_err(|_| MemoryError::TooLarge)?;
-    let placer = PLACER.load(core::sync::atomic::Ordering::Acquire);
-    if layout.size() == 0 || placer.is_null() {
+    let placer = placer().filter(|_| layout.size() > 0);
+    let Some(placer) = placer else {
         let mut vec = alloc::vec::Vec::new();
         vec.try_reserve_exact(capacity)
             .map_err(|_| MemoryError::Full {
                 bytes: layout.size(),
             })?;
         return Ok(vec);
-    }
-    // SAFETY: only `set_placer` stores here, a `Placer`.
-    let placer: Placer = unsafe { core::mem::transmute::<*mut (), Placer>(placer) };
+    };
     // SAFETY: a layout of non-zero size, as the firmware's heap takes it.
     let ptr = unsafe { placer(layout.size(), layout.align(), placement.code()) };
     if ptr.is_null() {

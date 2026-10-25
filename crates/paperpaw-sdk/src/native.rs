@@ -811,7 +811,7 @@ macro_rules! plugin {
         }
 
         unsafe extern "C" fn paperpaw_make() -> *mut ::core::ffi::c_void {
-            $crate::native::support::make(paperpaw_api(), $plugin)
+            $crate::native::support::make($plugin)
         }
 
         #[unsafe(no_mangle)]
@@ -1104,13 +1104,7 @@ pub mod support {
     }
 
     /// The plugin made, as [`take`](super::take) reads it back.
-    pub fn make(api: &'static Api, plugin: impl crate::Plugin + 'static) -> *mut core::ffi::c_void {
-        // The firmware's allocation by placement, where its table has it.
-        let has_alloc_in = core::mem::offset_of!(Api, alloc_in) + core::mem::size_of::<usize>()
-            <= api.size as usize;
-        if has_alloc_in {
-            crate::memory::place_with(api.alloc_in);
-        }
+    pub fn make(plugin: impl crate::Plugin + 'static) -> *mut core::ffi::c_void {
         let plugin: Box<dyn crate::Plugin> = Box::new(plugin);
         Box::into_raw(Box::new(plugin)).cast()
     }
