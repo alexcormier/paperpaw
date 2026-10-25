@@ -562,6 +562,33 @@ struct Partitions {
     running: u32,
 }
 
+/// Where in the flash the code running is, on the ESP32-S3: its
+/// bootloader maps only the last of the image's DROM segments, so the
+/// MMU's first entry, which `booted_partition` reads, is not the app's
+/// there. The entry that maps this function's page is.
+#[cfg(feature = "esp32s3")]
+fn running_from() -> Option<u32> {
+    /// The MMU's table: one entry for each 64 KB page of the 32 MB the
+    /// caches map (instructions and data alike).
+    const MMU_TABLE: usize = 0x600C_5000;
+    const INVALID: u32 = 1 << 14;
+    const PSRAM: u32 = 1 << 15;
+    let here = running_from as usize;
+    let entry = (here & 0x1FF_FFFF) >> 16;
+    // SAFETY: a read of the MMU table, within its 512 entries.
+    let value = unsafe { ((MMU_TABLE + entry * 4) as *const u32).read_volatile() };
+    if value & (INVALID | PSRAM) != 0 {
+        return None;
+    }
+    Some(((value & 0x3FFF) << 16) | (here as u32 & 0xFFFF))
+}
+
+/// Elsewhere the MMU's first entry tells.
+#[cfg(not(feature = "esp32s3"))]
+fn running_from() -> Option<u32> {
+    None
+}
+
 /// The partitions updates use; `None` without two app partitions (and
 /// only two) or when which runs cannot be told.
 fn partitions_of(flash: &mut FlashStorage<'static>) -> Option<Partitions> {
@@ -581,10 +608,21 @@ fn partitions_of(flash: &mut FlashStorage<'static>) -> Option<Partitions> {
     if find(PartitionType::App(AppPartitionSubType::Ota2)).is_some() {
         return None;
     }
-    let running = match pt.booted_partition().ok()??.partition_type() {
-        PartitionType::App(AppPartitionSubType::Ota0) => 0,
-        PartitionType::App(AppPartitionSubType::Ota1) => 1,
-        _ => return None,
+    let running = match pt.booted_partition().ok().flatten() {
+        Some(booted) => match booted.partition_type() {
+            PartitionType::App(AppPartitionSubType::Ota0) => 0,
+            PartitionType::App(AppPartitionSubType::Ota1) => 1,
+            _ => return None,
+        },
+        // Not told by the MMU's first entry: by where this code is.
+        None => {
+            let here = running_from()?;
+            u32::try_from(
+                apps.iter()
+                    .position(|&(at, len)| (at..at + len).contains(&here))?,
+            )
+            .ok()?
+        }
     };
     Some(Partitions {
         data,
