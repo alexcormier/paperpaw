@@ -16,6 +16,8 @@ paperpaw-native = { workspace = true }
 paperpaw-digest = { workspace = true }
 # A plugin's repository and release checked by the store's rules.
 paperpaw-publish = { workspace = true }
+# The firmware's reading of the partition table (check-image).
+paperpaw-x4 = { workspace = true }
 # Only for new keys.
 ed25519-compact = { version = "2.6", default-features = false, features = ["random"] }
 

@@ -202,6 +202,8 @@ pub struct Device {
     /// Requests are answered from the emulator's fixtures
     /// ([`Device::use_fixtures`]).
     fixtures: bool,
+    /// Online from each start, on USB ([`Device::set_wifi_online`]).
+    wifi_online: bool,
 }
 
 /// How many of the kernel's warnings [`Device::warnings`] keeps.
@@ -293,6 +295,7 @@ impl Device {
             speech: std::collections::VecDeque::new(),
             warnings: Vec::new(),
             fixtures: false,
+            wifi_online: false,
             asleep: false,
             rotation,
             wall: None,
@@ -338,6 +341,34 @@ impl Device {
             let keep = paperpaw_core::sdk::wifi::keep(crate::wifi::TEST_NETWORK, "fixtures");
             self.kernel.set_secret(keep);
         }
+        if self.wifi_online && self.profile.wifi {
+            self.go_online(now);
+        }
+    }
+
+    /// Starts online from now on (`--wifi online`, the workshop's): where
+    /// PaperPaw manages Wi-Fi, the device is on USB, its radio on and in
+    /// the pretend radio's `Workshop Wi-Fi`, known as joined before, from
+    /// each start; a plugin's request goes out at once. The `wifi`
+    /// plugin keeps the radio on while charging (`wifi.while-charging`),
+    /// and switching it off and on in the settings works as on a device.
+    /// Elsewhere (a phone, a computer) the network is always there.
+    pub fn set_wifi_online(&mut self, online: bool) {
+        self.wifi_online = online;
+    }
+
+    fn go_online(&mut self, now: Instant) {
+        let keep = paperpaw_core::sdk::wifi::keep(
+            crate::wifi::WORKSHOP_NETWORK,
+            crate::wifi::WORKSHOP_PASSWORD,
+        );
+        self.kernel.set_secret(keep);
+        self.wifi.online(now);
+        // On USB: what keeps the radio on, as on a device.
+        let status = self.status(now);
+        let effects = budget::track(|| self.kernel.set_status(now, status));
+        self.execute(effects);
+        self.tick_if_due();
     }
 
     /// Whether network work is under way that the emulated time brings to
@@ -366,7 +397,7 @@ impl Device {
 
     /// The emulated clock and battery: the computer's time and time zone
     /// (with simulated time a fixed one, so screenshots repeat) and a
-    /// battery at 80 %.
+    /// battery at 80 %, charging where it starts online.
     fn status(&self, now: Instant) -> SystemStatus {
         let clock = match (self.wall, &self.clock) {
             (Some((at, unix_millis, utc_offset_minutes)), _) => WallClock {
@@ -395,7 +426,7 @@ impl Device {
             clock: Some(clock),
             battery: Some(Battery {
                 percent: 80,
-                charging: false,
+                charging: self.wifi_online && self.profile.wifi,
                 millivolts: None,
             }),
         }

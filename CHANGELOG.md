@@ -18,6 +18,11 @@ change the plugin SDK.
   handbook and core library archives carry LICENSE and NOTICE.
 - Weather names Open-Meteo, Wikipedia names each article below its
   summary, with their licences.
+- The emulator starts online with `--wifi online` (over `--stdio`,
+  `"wifi": "online"` in `start`): the X4s on USB, their radio on and in
+  a network `Workshop Wi-Fi` joined before, so plugins' requests go out
+  at once; Wi-Fi switches off and on in the settings as on a device.
+  Without it, nothing changes.
 - Plugins can be published from GitHub: tag a release in the plugin's
   own repository (topic `paperpaw-plugin`) and paperpaw.org lists it as
   "Community, unreviewed". `tools/dev/templates` has the release
@@ -105,6 +110,15 @@ change the plugin SDK.
   instead of showing `core.status-font` and `core.reading-font`. A test
   walks the menu editor, every settings page and chooser and every
   menu in each language shipped and fails on an id shown as a name.
+- Test builds for the X4 Pro and the X4 Classic (with remote control
+  over USB) took no updates over the air ("OTA: no partitions for
+  updates"): their image's two data segments hid which half of the
+  flash runs. The firmware now finds it either way. Released firmware
+  was not affected. The release now fails for an image that could not
+  take the next update (`paperpaw-sign check-image`: two app slots in
+  its table, one data segment, room in either slot and CrossPoint's),
+  and host tests run whole updates with every partition table shipped
+  and CrossPoint's.
 
 ## [0.5.0-beta.6] - 2026-10-25
 

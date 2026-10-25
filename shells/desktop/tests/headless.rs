@@ -439,3 +439,41 @@ fn the_configuration_file_is_read_and_set_wins_over_it() {
     );
     let _ = fs::remove_dir_all(&library);
 }
+
+/// `--wifi online` (the workshop's): the reader starts in a network, stays
+/// in it when nothing uses it, and Wi-Fi switches off and on in the
+/// settings as on a device. Without it the radio starts off.
+#[test]
+fn online_from_the_start_with_wifi_online() {
+    let connected = "Wi-Fi, Connected to Workshop Wi-Fi";
+    let online = run(
+        "wifi-online",
+        "xteink-x4",
+        "run:wifi.open,describe,run:core.home,wait:120000,run:wifi.open,describe,\
+         confirm,wait:3000,describe,confirm,wait:6000,describe",
+        &["--wifi", "online"],
+    );
+    assert!(online.ok, "{}", online.stderr);
+    let states: Vec<&str> = online
+        .stdout
+        .lines()
+        .filter(|line| line.starts_with("Row \"Wi-Fi, "))
+        .collect();
+    assert_eq!(states.len(), 4, "{}", online.stdout);
+    assert!(states[0].contains(connected), "at once: {}", states[0]);
+    assert!(
+        states[1].contains(connected),
+        "two minutes on: {}",
+        states[1]
+    );
+    assert!(
+        states[2].contains("Wi-Fi, Off"),
+        "switched off: {}",
+        states[2]
+    );
+    assert!(states[3].contains(connected), "switched on: {}", states[3]);
+
+    let off = run("wifi-off", "xteink-x4", "run:wifi.open,describe", &[]);
+    assert!(off.ok, "{}", off.stderr);
+    assert!(off.stdout.contains("Row \"Wi-Fi, Off\""), "{}", off.stdout);
+}

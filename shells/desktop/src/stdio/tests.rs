@@ -422,3 +422,26 @@ fn ready_says_the_protocol_and_profiles() {
     );
     assert!(ready.contains("\"release\": true") || ready.contains("\"release\": false"));
 }
+
+/// `"wifi": "online"` starts the device in the workshop's network, as
+/// `--wifi online` does; anything else but `off` is an error.
+#[test]
+fn a_device_starts_online_where_asked() {
+    assert!(parse(r#"{"op": "start", "profile": "p", "library": "l", "wifi": "maybe"}"#).is_err());
+    let _one = crate::one_device_at_a_time();
+    let folder = crate::private::dir("paperpaw-stdio-online").unwrap();
+    let library = string(&folder.display().to_string());
+    let events = through(&[
+        format!(
+            r#"{{"op": "start", "profile": "xteink-x4", "library": {library}, "wifi": "online"}}"#
+        ),
+        String::from(r#"{"op": "open", "screen": "wifi.page"}"#),
+        String::from(r#"{"op": "describe"}"#),
+    ]);
+    let described = event(&events, "described");
+    assert!(
+        described.contains("Connected to Workshop Wi-Fi"),
+        "{described}"
+    );
+    let _ = std::fs::remove_dir_all(&folder);
+}

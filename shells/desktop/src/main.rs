@@ -49,6 +49,12 @@ OPTIONS:
                           `fixtures`, answered offline from the emulator's own
                           (a small plugin library and the servers PaperPaw's
                           plugins ask; others fail), alike everywhere
+    --wifi online         Start online, on devices where PaperPaw switches Wi-Fi
+                          (the X4s): on USB, the radio on and in the network
+                          `Workshop Wi-Fi`, known as joined before, so that
+                          plugins' requests go out at once; Wi-Fi switches off
+                          and on in the settings as on a device. Without it,
+                          the radio starts off, as on a device
     --free-space <bytes>  Say the storage has this much free, not the computer's
                           disk (screenshots alike everywhere)
     --trace               Print what each frame's drawing asks the storage, band by band,
@@ -86,6 +92,8 @@ struct Options {
     trust_code: bool,
     /// Requests answered from the emulator's fixtures (`--network`).
     fixtures: bool,
+    /// Online from the start (`--wifi online`).
+    wifi_online: bool,
 }
 
 fn main() -> ExitCode {
@@ -135,6 +143,7 @@ fn run() -> Result<(), String> {
     if options.fixtures {
         device.use_fixtures();
     }
+    device.set_wifi_online(options.wifi_online);
 
     if options.headless {
         device.start();
@@ -191,6 +200,15 @@ fn run() -> Result<(), String> {
         .screenshot_dir
         .unwrap_or_else(|| PathBuf::from("out"));
     gui::run(device, dir, recorder, options.cable)
+}
+
+/// `--wifi`'s value: whether the device starts online.
+fn wifi_online(value: &str) -> Result<bool, String> {
+    match value {
+        "online" => Ok(true),
+        "off" => Ok(false),
+        other => Err(format!("--wifi expects online or off, got `{other}`")),
+    }
 }
 
 /// Reads `--config` and appends `--set` overrides as config sections.
@@ -311,6 +329,7 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
                     }
                 };
             }
+            "--wifi" => options.wifi_online = wifi_online(&value("--wifi")?)?,
             "--free-space" => {
                 let bytes = value("--free-space")?;
                 device::set_free_space(
