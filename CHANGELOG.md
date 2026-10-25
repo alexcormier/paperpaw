@@ -8,6 +8,16 @@ change the plugin SDK.
 
 ### Added
 
+- Hyphenation for more languages, as store plugins of their own: French,
+  Spanish, Italian, Dutch, Portuguese, Swedish, Danish, Norwegian
+  (Bokmål), Finnish, Polish, Russian and Ukrainian. The firmware keeps
+  German and English; each language takes flash, almost no memory.
+- Settings *Letters before a hyphen* and *Letters after a hyphen*
+  (advanced, 0 to 5; 0: the language's own): how short a piece of a word
+  may be. Books are laid out again when they change. SDK:
+  `settings::HYPHEN_MIN_LEFT`, `HYPHEN_MIN_RIGHT`,
+  `PageType::hyphen_minimums` and `patterns`,
+  `hyphen::Patterns::with_minimums`.
 - The emulator starts online with `--wifi online` (also given before
   `--stdio`, for the devices it starts; or `"wifi": "online"` in
   `start`): the X4s on USB, their radio on and in
