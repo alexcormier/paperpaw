@@ -224,6 +224,10 @@ change the plugin SDK.
   check-image` prints the margin an image leaves in the smallest app
   slot (its own or CrossPoint's), warns below 512 KB and fails below
   256 KB.
+- Plugins that work with another product say what they do with it:
+  KOReader highlights, Calibre connection, Readwise export, Wallabag
+  articles and Wikipedia lookup (their ids stay, and so do their
+  settings and data).
 
 ### Fixed
 

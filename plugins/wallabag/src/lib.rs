@@ -626,7 +626,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Wallabag {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Wallabag", paperpaw_sdk::package_version!())
+        Manifest::new(PLUGIN, "Wallabag articles", paperpaw_sdk::package_version!())
             .description("Articles saved in Wallabag, fetched as books.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)

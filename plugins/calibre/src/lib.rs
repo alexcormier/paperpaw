@@ -119,7 +119,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Calibre {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Calibre", paperpaw_sdk::package_version!())
+        Manifest::new(PLUGIN, "Calibre connection", paperpaw_sdk::package_version!())
             .description("Receive books from Calibre over the network, as its wireless device.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
