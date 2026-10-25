@@ -63,15 +63,35 @@ const MANAGER_MORE: Id = Id::new_static("plugin-manager.more");
 /// Where the list of plugins comes from.
 pub const CATALOG: Setting<paperpaw_sdk::setting::Text> = Setting::new("store.catalog");
 
+/// Whether the store lists community plugins too: published by their
+/// authors from GitHub, which nobody reviewed (off unless set).
+pub const COMMUNITY: Setting<bool> = Setting::new("store.community");
+
 /// The plugin library's address, for developers and libraries of one's
-/// own.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::text(
-    CATALOG.static_str(),
-    "store.setting.catalog",
-    catalog::OFFICIAL_LIST,
-    groups::DEVELOPER,
-)
-.description("store.setting.catalog.help")];
+/// own; and whether it lists community plugins, guarded: no other
+/// plugin's defaults, presets or commands switch it on.
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::text(
+        CATALOG.static_str(),
+        "store.setting.catalog",
+        catalog::OFFICIAL_LIST,
+        groups::DEVELOPER,
+    )
+    .description("store.setting.catalog.help"),
+    SettingSpec::switch(
+        COMMUNITY.static_str(),
+        "store.setting.community",
+        false,
+        groups::SYSTEM,
+    )
+    .description("store.setting.community.help")
+    .guarded(),
+];
+
+/// Whether the reader asked for community plugins too.
+pub(crate) fn community(env: &Env<'_>) -> bool {
+    env.settings().read(&COMMUNITY)
+}
 
 /// The answer to a file's download.
 const DOWNLOADED: Event<HttpReply> = Event::new("store.downloaded");
@@ -222,8 +242,6 @@ fn finish(env: &Env<'_>, done: &Progress, out: &mut Commands) -> bool {
             };
             (key, true)
         }
-        // It waits on its page for the reader's word.
-        Verdict::OtherAuthor { .. } => ("store.other-author.notice", false),
         Verdict::Refused(refusal) => {
             INSTALLER.cancel(env.storage());
             (refusal.key(), false)

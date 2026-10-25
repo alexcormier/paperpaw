@@ -212,7 +212,12 @@ impl ListScreen {
             return self.redraw(cx);
         }
         let list = env.settings().read(&CATALOG);
-        let url = catalog::list_url(list.trim(), device, env.i18n().language());
+        let url = catalog::list_url(
+            list.trim(),
+            device,
+            env.i18n().language(),
+            crate::community(&env),
+        );
         let mut request = HttpRequest::new("GET", &url, LOADED);
         request = request.save_to(catalog::list_part());
         cx.command(Command::http(request));

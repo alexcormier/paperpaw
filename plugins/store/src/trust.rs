@@ -3,9 +3,10 @@
 //! code is checked whole first ([`check_file`]): made for this PaperPaw,
 //! and signed by its author, whose key is remembered at the first install
 //! ([`native::author`]). At the first install the key must be the
-//! one the library names for the plugin; later it must be the one
-//! remembered, and an update signed by another waits until the reader,
-//! warned, says to install it anyway.
+//! one the library names for the plugin; later, an update or a new
+//! install after a removal, it must be the one remembered: one signed by
+//! another is refused, with a short warning, whichever library offers it
+//! (trust on first install; the key stays known after a removal).
 
 use alloc::format;
 use alloc::string::String;
@@ -38,6 +39,9 @@ pub(crate) enum Refusal {
     Taken,
     /// Its code does not fit in the room left for code plugins.
     NoRoom,
+    /// Signed by another key than the one this device knows for the
+    /// plugin, from its first install.
+    KeyChanged,
 }
 
 impl Refusal {
@@ -52,6 +56,7 @@ impl Refusal {
             Refusal::Unsupported => "store.refused.unsupported",
             Refusal::Taken => "store.refused.taken",
             Refusal::NoRoom => "store.refused.no-room",
+            Refusal::KeyChanged => "store.refused.key-changed",
         }
     }
 }
@@ -63,11 +68,6 @@ pub(crate) enum Verdict {
     /// code's digest to remember.
     Install {
         code: Option<Code>,
-    },
-    /// Its code is signed by another author than the version installed
-    /// before: only if the reader says so.
-    OtherAuthor {
-        code: Code,
     },
     Refused(Refusal),
 }
@@ -168,7 +168,7 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     };
     match native::author(storage, plugin, &key) {
         Author::Known => Verdict::Install { code: Some(code) },
-        Author::Other => Verdict::OtherAuthor { code },
+        Author::Other => Verdict::Refused(Refusal::KeyChanged),
         Author::New if expected(storage, plugin) == Some(key) => {
             Verdict::Install { code: Some(code) }
         }
@@ -179,8 +179,8 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
 
 /// Installs the complete job's plugin; once it is in place (see
 /// [`install::marks`]), its author's key is remembered, its code named as
-/// installed, and it is the store's, which offers its updates. For one
-/// signed by another author, after the reader said to. `None` where that
+/// installed, and it is the store's, which offers its updates. `None`
+/// where that
 /// cannot be written (its code would not run): not installed, the job
 /// left for another try.
 pub(crate) fn install(env: &Env<'_>, code: Option<Code>, out: &mut Commands) -> Option<Progress> {
@@ -199,17 +199,6 @@ pub(crate) fn install(env: &Env<'_>, code: Option<Code>, out: &mut Commands) -> 
     }
     let _ = env.storage().remove(&expected_path());
     INSTALLER.install(env, out)
-}
-
-/// Installs the plugin waiting for the reader's word, signed by another
-/// author than the one before: that author is remembered from now on.
-pub(crate) fn install_anyway(env: &Env<'_>, out: &mut Commands) -> Option<Progress> {
-    let progress = INSTALLER.progress(env.storage())?;
-    let folder = INSTALLER.folder(env.storage())?;
-    match verdict(env, &progress.plugin, &folder) {
-        Verdict::OtherAuthor { code } => install(env, Some(code), out),
-        _ => None,
-    }
 }
 
 /// Whether the reader was told once what code plugins are, before the

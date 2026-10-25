@@ -27,7 +27,7 @@ const NOTICES: [&str; 11] = [
     "store.failed",
     "store.installed-code",
     "store.updated-code",
-    "store.other-author.notice",
+    "store.refused.key-changed",
     "store.refused.damaged",
     "store.refused.other-build",
     "store.refused.unsigned",

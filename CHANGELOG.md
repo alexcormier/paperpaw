@@ -13,6 +13,18 @@ change the plugin SDK.
   "Community, unreviewed". `tools/dev/templates` has the release
   workflow that zips the folder, builds and signs a code plugin and
   makes the release; the handbook and the plugin skill explain it.
+- Community plugins: the store's new setting *Community plugins*
+  (Settings, System, off at first) also lists plugins that their authors
+  published on GitHub, which nobody reviewed. They are marked
+  *Unreviewed*, with the repository they come from; a code plugin's page
+  shows the key it is signed with.
+
+### Changed
+
+- A code plugin's key is trusted from its first install: an update or a
+  new install after a removal signed by another key is refused with a
+  short warning, from any library; there is no *Install anyway* any
+  more.
 
 ## [0.5.0-beta.6] - 2026-10-25
 

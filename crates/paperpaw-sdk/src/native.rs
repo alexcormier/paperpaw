@@ -250,8 +250,8 @@ pub enum Author {
     Known,
     /// No key is remembered for the plugin yet: its first install.
     New,
-    /// Another key than the one remembered: an update of it is installed
-    /// only when the reader says so, after a clear warning.
+    /// Another key than the one remembered: the store and the updates
+    /// refuse it (trust on first install).
     Other,
 }
 
@@ -726,8 +726,7 @@ impl NotInstalled {
 #[non_exhaustive]
 pub enum NotInstalledReason {
     /// Its code is signed by another author than the version installed
-    /// before ([`Author::Other`]): installed only when the reader says so,
-    /// where they are warned (the store).
+    /// before ([`Author::Other`]): not installed.
     OtherAuthor,
     /// Its code is damaged, or no plugin file this PaperPaw reads.
     Damaged,

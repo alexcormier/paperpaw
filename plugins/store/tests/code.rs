@@ -1,8 +1,9 @@
 //! Code plugins in the store with the real kernel on an X4: listed where a
 //! build fits this PaperPaw, said once what they are before the first,
 //! installed with their code checked whole and signed by their author
-//! (remembered from then on), starting after a restart; an update signed
-//! by another author waits for the reader's word; code that is damaged,
+//! (remembered from then on, also after a removal), starting after a
+//! restart; an update or a new install signed by another key is refused;
+//! code that is damaged,
 //! unsigned, made for another build or not by the author the library
 //! names is not installed.
 
@@ -192,7 +193,7 @@ fn a_code_plugin_is_installed_and_starts_after_a_restart() {
 }
 
 #[test]
-fn an_update_by_another_author_waits_for_the_readers_word() {
+fn an_update_by_another_key_is_refused() {
     let mut shopping = store("1.0.0");
     first_install(&mut shopping, "1.0.0", &ppn(BUILD, Some(&AUTHOR)));
     // A newer version, its code signed by someone else.
@@ -202,7 +203,6 @@ fn an_update_by_another_author_waits_for_the_readers_word() {
     shopping.run(OPEN);
     shopping.serve(LIST, list("1.1.0").as_bytes());
     open_clock(&mut shopping, "1.1.0", &other);
-    // *Restart now*, *Update*: told once, no notice before the update.
     let shown = shopping.shown();
     assert!(
         shown.contains("Restart now | Update, 1.1.0 | Remove"),
@@ -211,32 +211,50 @@ fn an_update_by_another_author_waits_for_the_readers_word() {
     shopping.run(actions::DOWN);
     shopping.run(actions::CONFIRM);
     download(&mut shopping, "1.1.0", &other);
+    // Refused at once, with a short warning: no way to install it anyway.
     assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
-    shopping.check("code-other-author");
-    let shown = shopping.shown();
+    let shown = shopping.shown().replace(" | ", " ");
     assert!(
-        shown.contains("signed by someone other than the author"),
+        shown.contains("signed by another key than before"),
         "{shown}"
     );
-    // *Not now* first: the safe choice where the focus is.
-    assert!(shown.contains("Not now | Install anyway"), "{shown}");
-    shopping.run(actions::CONFIRM);
-    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+    assert!(!shown.contains("anyway"), "{shown}");
     assert!(!shopping.storage.exists("plugins/.clock.part/code.ppn"));
     let storage = &shopping.storage;
     assert_eq!(known_author(storage, "clock"), Some(public_key(&AUTHOR)));
+}
 
-    // Again, and *Install anyway*: the other author is the one from now
-    // on.
-    shopping.run(actions::DOWN);
+#[test]
+fn a_new_install_after_a_removal_keeps_the_first_key() {
+    // A device that had the clock, signed by its author, and removed it:
+    // the key stays known.
+    let storage = Shared::default();
+    assert!(paperpaw_sdk::native::remember_author(
+        &storage,
+        "clock",
+        &public_key(&AUTHOR)
+    ));
+    // The library now names someone else's key for it.
+    let theirs = list("1.0.0").replace(&hex(&public_key(&AUTHOR)), &hex(&public_key(&OTHER)));
+    let mut shopping = Shopping::with(Some("x4"), Some(native()), &theirs, storage);
+    let code = ppn(BUILD, Some(&OTHER));
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    let page = page("1.0.0", &code).replace(&hex(&public_key(&AUTHOR)), &hex(&public_key(&OTHER)));
+    shopping.serve(PAGE, page.as_bytes());
     shopping.run(actions::CONFIRM);
-    download(&mut shopping, "1.1.0", &other);
-    shopping.run(actions::DOWN);
     shopping.run(actions::CONFIRM);
-    assert_eq!(installed(&shopping), Some(Version::new(1, 1, 0)));
-    let storage = &shopping.storage;
-    assert_eq!(known_author(storage, "clock"), Some(public_key(&OTHER)));
-    assert_eq!(installed_code(storage, "clock"), Some(digest(&other)));
+    download(&mut shopping, "1.0.0", &code);
+    assert_eq!(installed(&shopping), None);
+    let shown = shopping.shown().replace(" | ", " ");
+    assert!(
+        shown.contains("signed by another key than before"),
+        "{shown}"
+    );
+    assert_eq!(
+        known_author(&shopping.storage, "clock"),
+        Some(public_key(&AUTHOR))
+    );
 }
 
 /// The SHA-256 a plugin file's header carries.
@@ -410,4 +428,67 @@ fn paperpaws_own_plugins_say_so() {
     let shown = shopping.shown();
     assert!(shown.contains("By Someone"), "{shown}");
     assert!(!shown.contains("By PaperPaw"), "{shown}");
+}
+
+/// `text` (the list or a page) as the library gives a community plugin,
+/// which nobody reviewed.
+fn unreviewed(text: &str) -> String {
+    text.replace(
+        r#""author": "Someone","#,
+        r#""author": "Someone", "unreviewed": true,
+           "repository": "https://github.com/someone/clock","#,
+    )
+}
+
+#[test]
+fn a_community_plugin_is_marked_and_its_key_may_not_change() {
+    let mut shopping = Shopping::on(Some("x4"), Some(native()), &unreviewed(&list("1.0.0")));
+    shopping.choose("Reading");
+    let shown = shopping.shown();
+    assert!(shown.contains("Unreviewed · A clock"), "{shown}");
+    let code = ppn(BUILD, Some(&AUTHOR));
+    shopping.choose("Clock");
+    shopping.serve(PAGE, unreviewed(&page("1.0.0", &code)).as_bytes());
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("Unreviewed, from github.com/someone/clock"),
+        "{shown}"
+    );
+    // Its key, which its updates must have too.
+    let key = hex(&public_key(&AUTHOR));
+    let short = format!(
+        "Key {} {} {} {}",
+        &key[..4],
+        &key[4..8],
+        &key[8..12],
+        &key[12..16]
+    );
+    assert!(shown.contains(&short), "{shown}");
+    shopping.run(actions::CONFIRM);
+    shopping.run(actions::CONFIRM);
+    download(&mut shopping, "1.0.0", &code);
+    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+
+    // An update signed by someone else: refused.
+    let other = ppn(BUILD, Some(&OTHER));
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    shopping.serve(LIST, unreviewed(&list("1.1.0")).as_bytes());
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    shopping.serve(PAGE, unreviewed(&page("1.1.0", &other)).as_bytes());
+    shopping.run(actions::DOWN);
+    shopping.run(actions::CONFIRM);
+    download(&mut shopping, "1.1.0", &other);
+    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+    let shown = shopping.shown().replace(" | ", " ");
+    assert!(
+        shown.contains("signed by another key than before"),
+        "{shown}"
+    );
+    assert!(!shown.contains("anyway"), "{shown}");
+    let storage = &shopping.storage;
+    assert_eq!(known_author(storage, "clock"), Some(public_key(&AUTHOR)));
+    assert!(!storage.exists("plugins/.clock.part/code.ppn"));
 }

@@ -187,7 +187,14 @@ pub(crate) fn interrupted(env: &Env<'_>) {
 /// The address of plugin `id`'s page at the library.
 fn page_url(env: &Env<'_>, device: &Device<'_>, id: &str) -> String {
     let list = env.settings().read(&CATALOG);
-    catalog::plugin_url(list.trim(), device.name, env.i18n().language(), id)
+    let community = crate::community(env);
+    catalog::plugin_url(
+        list.trim(),
+        device.name,
+        env.i18n().language(),
+        id,
+        community,
+    )
 }
 
 /// Gives the next plugin its turn (asks for its page), if nothing is

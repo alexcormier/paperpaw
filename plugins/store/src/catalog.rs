@@ -17,6 +17,12 @@
 //! `author_key` its author signs with; it is listed where a build fits
 //! this device and PaperPaw.
 //!
+//! With the setting *Community plugins* on, the store asks for them too
+//! (`community=1`): plugins published by their authors from GitHub, which
+//! nobody reviewed, each marked `"unreviewed": true` with its
+//! `repository`. The store says so wherever it shows one, and refuses an
+//! update of one signed by another key (`trust`).
+//!
 //! `"official": true` marks PaperPaw's own plugins. It is taken only from
 //! PaperPaw's own library ([`OFFICIAL_LIST`], over HTTPS), and for a code
 //! plugin only where its `author_key` is PaperPaw's ([`FIRST_PARTY_KEY`]):
@@ -158,6 +164,8 @@ pub(crate) struct Entry {
     /// One of PaperPaw's own: the library says so, and its author's key
     /// is PaperPaw's.
     pub official: bool,
+    /// A community plugin, which nobody reviewed: the library says so.
+    pub unreviewed: bool,
     /// Bytes to download, its code with them.
     pub size: u64,
     /// When it was first published and when its newest version, as
@@ -182,7 +190,7 @@ impl Entry {
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             self.group,
             self.size,
-            u8::from(self.code) | (u8::from(self.official) << 1),
+            u8::from(self.code) | (u8::from(self.official) << 1) | (u8::from(self.unreviewed) << 2),
             self.added,
             self.updated,
             clean(&self.id),
@@ -205,6 +213,7 @@ impl Entry {
             size,
             code: flags & 1 != 0,
             official: flags & 2 != 0,
+            unreviewed: flags & 4 != 0,
             added: f.next()?.parse().ok()?,
             updated: f.next()?.parse().ok()?,
             id: f.next()?.to_string(),
@@ -276,6 +285,11 @@ const MAX_SHOT_SIDE: u32 = 2560;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct More {
     pub source: String,
+    /// A community plugin: the repository it comes from.
+    pub repository: String,
+    /// A code plugin: its author's key, as the library names it, in
+    /// hexadecimal.
+    pub author_key: String,
     /// `yyyymmdd`, 0 where not said.
     pub author_since: u32,
     pub author_plugins: u32,
@@ -349,6 +363,10 @@ impl Item {
                 "kind" => self.kind = cut(value, MAX_NAME),
                 "built_in" => self.built_in = value == "true",
                 "official" => self.official = value == "true",
+                "unreviewed" => entry.unreviewed = value == "true",
+                "repository" if value.starts_with("https://") => {
+                    self.more.repository = cut(value, 200);
+                }
                 "author_key" => self.author_key = cut(value, MAX_NAME),
                 "added" => entry.added = date(value),
                 // Its home; `latest.source.url` (that version's source)
@@ -483,6 +501,8 @@ impl Item {
         // key, as the library names it, which the install checks).
         let signed = !self.entry.code || key(&self.author_key) == Some(FIRST_PARTY_KEY);
         self.entry.official = self.official && device.official && signed;
+        // PaperPaw's own are reviewed, whatever else is said.
+        self.entry.unreviewed &= !self.entry.official;
         self.entry
     }
 }
@@ -606,6 +626,9 @@ fn read_plugin(
     let author_key = key(&item.author_key);
     let code = item.code.is_some();
     let mut more = core::mem::take(&mut item.more);
+    if author_key.is_some() {
+        more.author_key = item.author_key.trim().to_lowercase();
+    }
     for shot in &mut more.shots {
         shot.url = join_url(base, &shot.url);
     }
@@ -657,11 +680,13 @@ fn hits_path() -> String {
 /// plugins of one group (`group:count`), in order.
 const HEADER: &str = "store-index 4";
 
-/// The address of the list at `list` for `device` in `language`.
-pub(crate) fn list_url(list: &str, device: &str, language: &str) -> String {
+/// The address of the list at `list` for `device` in `language`, with
+/// the community plugins where `community`.
+pub(crate) fn list_url(list: &str, device: &str, language: &str, community: bool) -> String {
     let join = if list.contains('?') { '&' } else { '?' };
+    let community = if community { "&community=1" } else { "" };
     format!(
-        "{list}{join}device={}&lang={}",
+        "{list}{join}device={}&lang={}{community}",
         encode(device),
         encode(language)
     )
@@ -669,8 +694,15 @@ pub(crate) fn list_url(list: &str, device: &str, language: &str) -> String {
 
 /// The address of plugin `id`'s page, beside the list at `list` (the
 /// setting's, without the device and the language) and with its query
-/// (a library may want a key there), for `device` in `language`.
-pub(crate) fn plugin_url(list: &str, device: &str, language: &str, id: &str) -> String {
+/// (a library may want a key there), for `device` in `language`, a
+/// community plugin too where `community`.
+pub(crate) fn plugin_url(
+    list: &str,
+    device: &str,
+    language: &str,
+    id: &str,
+    community: bool,
+) -> String {
     let list = list.split('#').next().unwrap_or(list);
     let (address, query) = list.split_once('?').unwrap_or((list, ""));
     let mut page = join_url(address, &format!("plugins/{}.json", encode(id)));
@@ -678,7 +710,7 @@ pub(crate) fn plugin_url(list: &str, device: &str, language: &str, id: &str) -> 
         page.push('?');
         page.push_str(query);
     }
-    list_url(&page, device, language)
+    list_url(&page, device, language, community)
 }
 
 /// Writes the index of the list at `json` (`index`, `offsets`, `head` on
