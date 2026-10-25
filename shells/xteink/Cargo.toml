@@ -67,6 +67,9 @@ remote = [
     # The diagnostics screen, for bringing up devices.
     "paperpaw-app/diagnostics",
 ]
+# The frame test built in (`samples/frame-test`, ADR 0030), for measuring
+# frames a second, blits and the heap on the device: test builds only.
+frame-test = ["dep:paperpaw-sample-frame-test"]
 # Bluetooth Low Energy on the X4 Pro (`src/bluetooth.rs`, ADR 0027):
 # trouble-host on esp-radio's controller, beside Wi-Fi. Off by default
 # until its current is measured; the controller's code takes internal
@@ -84,6 +87,9 @@ bluetooth = [
 
 [dependencies]
 paperpaw-app = { path = "../../crates/paperpaw-app", default-features = false, features = ["packs"] }
+# The sample that runs in real time (ADR 0030), built in for measuring:
+# feature `frame-test`, never in released firmware.
+paperpaw-sample-frame-test = { path = "../../samples/frame-test", optional = true }
 paperpaw-core = { path = "../../crates/paperpaw-core" }
 paperpaw-sdk = { path = "../../crates/paperpaw-sdk", features = ["kernel"] }
 paperpaw-platform = { path = "../../crates/paperpaw-platform" }

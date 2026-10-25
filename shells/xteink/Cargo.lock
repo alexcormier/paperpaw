@@ -2413,7 +2413,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-diagnostics"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2603,6 +2603,13 @@ name = "paperpaw-qr"
 version = "0.5.0-beta.6"
 
 [[package]]
+name = "paperpaw-sample-frame-test"
+version = "0.5.0-beta.6"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
 name = "paperpaw-sdk"
 version = "0.5.0-beta.6"
 dependencies = [
@@ -2694,6 +2701,7 @@ dependencies = [
  "paperpaw-native",
  "paperpaw-platform",
  "paperpaw-plugin-wifi",
+ "paperpaw-sample-frame-test",
  "paperpaw-sdk",
  "paperpaw-update",
  "paperpaw-x4",
