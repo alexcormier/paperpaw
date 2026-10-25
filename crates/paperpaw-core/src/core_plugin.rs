@@ -1031,7 +1031,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         ),
         (groups::MARKS, "core.group.marks", 17, "highlight"),
         (groups::DISPLAY, "core.group.display", 60, "contrast"),
-        (groups::CONTROLS, "core.group.controls", 70, "hand-finger"),
+        (groups::CONTROLS, "core.group.controls", 70, "adjustments"),
         (groups::SYSTEM, "core.group.system", 90, "device-tablet"),
         (groups::LOOK, "core.group.look", 210, "palette"),
         (groups::OTHER, "core.group.other", 100, "dots"),

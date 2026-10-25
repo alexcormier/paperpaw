@@ -93,7 +93,7 @@ fn search(app: &mut App, words: &str) {
     app.will_type(words);
     if !titles(app)
         .iter()
-        .any(|t| t == "Search the settings" || t == "Einstellungen suchen")
+        .any(|t| t == "Search" || t == "Suchen")
     {
         // On another page: the main page anew, from its top.
         app.run(actions::BACK);
@@ -101,7 +101,7 @@ fn search(app: &mut App, words: &str) {
     }
     let title = titles(app)
         .into_iter()
-        .find(|t| t == "Search the settings" || t == "Einstellungen suchen")
+        .find(|t| t == "Search" || t == "Suchen")
         .unwrap_or_else(|| panic!("no search:\n{}", app.described()));
     choose(app, &title);
 }
@@ -201,7 +201,7 @@ fn advanced_settings_are_found_only_once_shown() {
         search(&mut app, "server");
         let before = titles(&mut app);
         app.run(actions::BACK);
-        choose(&mut app, "Show advanced settings");
+        choose(&mut app, "Advanced settings");
         assert!(app.kernel.settings().bool("settings.advanced"));
         search(&mut app, "server");
         let after = titles(&mut app);
@@ -215,7 +215,7 @@ fn a_choice_of_more_than_two_opens_its_list_and_the_value_is_kept() {
         let storage = Shared::memory("", &[]);
         let mut app = App::new(device, storage.clone());
         app.run(actions::SETTINGS);
-        search(&mut app, "first day week");
+        search(&mut app, "week starts");
         let hit = titles(&mut app).remove(0);
         choose(&mut app, &hit);
         assert_eq!(app.screen(), GROUP);
@@ -315,7 +315,7 @@ address = 192.168.1.5
         search(&mut app, "calibre address");
         let hit = rows(&mut app)
             .into_iter()
-            .find(|r| r.starts_with("Calibre's address"))
+            .find(|r| r.starts_with("Address"))
             .unwrap_or_else(|| panic!("{}", app.described()));
         let hit = hit.split(", ").next().unwrap().to_string();
         choose(&mut app, &hit);
@@ -376,7 +376,7 @@ fn everything_reset_keeps_the_language() {
         let storage = Shared::memory(config, &[]);
         let mut app = App::new(device, storage.clone());
         app.run(actions::SETTINGS);
-        choose(&mut app, "Alle Einstellungen zurücksetzen");
+        choose(&mut app, "Alles zurücksetzen");
         assert!(app.shows("Passwörter bleiben."), "{}", app.described());
         choose(&mut app, "Ja, zurücksetzen");
         let settings = app.kernel.settings();
@@ -465,7 +465,7 @@ library-folder = Books/Mine
 ",
         );
         app.run(actions::SETTINGS);
-        choose(&mut app, "Reset all settings");
+        choose(&mut app, "Reset all");
         assert!(app.shows("passwords stay"), "{}", app.described());
         choose(&mut app, "Yes, reset");
         let settings = app.kernel.settings();
@@ -482,11 +482,11 @@ library-folder = Books/Mine
 fn restart_now_asks_then_restarts() {
     for device in DEVICES {
         let mut app = settings(device, "");
-        choose(&mut app, "Restart now");
+        choose(&mut app, "Restart");
         assert!(app.shows("Restart PaperPaw now?"), "{}", app.described());
         choose(&mut app, "Cancel");
         assert!(!app.restarted);
-        choose(&mut app, "Restart now");
+        choose(&mut app, "Restart");
         choose(&mut app, "Restart");
         assert!(app.restarted, "{}", app.described());
     }
@@ -497,12 +497,12 @@ fn restart_now_asks_then_restarts() {
     for _ in 0..200 {
         app.run(actions::DOWN);
         let focused = app.focused();
-        if focused.as_deref() == Some("Search the settings") && last.is_some() {
+        if focused.as_deref() == Some("Search") && last.is_some() {
             break;
         }
         last = focused;
     }
-    assert_eq!(last.as_deref(), Some("Restart now"));
+    assert_eq!(last.as_deref(), Some("Restart"));
 }
 
 #[test]

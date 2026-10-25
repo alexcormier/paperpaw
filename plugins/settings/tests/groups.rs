@@ -86,7 +86,7 @@ fn groups_without_an_order_come_last_among_those_for_customising() {
         // Not at the top of the books' section.
         assert!(at("Duck") > at("Reading"), "{rows:?}");
         assert!(at("Duck") > at("Appearance"), "{rows:?}");
-        assert!(at("Duck") < at("Show advanced settings"), "{rows:?}");
+        assert!(at("Duck") < at("Advanced settings"), "{rows:?}");
         // By name among themselves.
         assert_eq!(at("Ant hill") + 1, at("Duck"), "{rows:?}");
         // One that names an order is where it says.

@@ -2,4 +2,4 @@ Die Einstellungen zeigen alles, was sich an PaperPaw und seinen Plugins einstell
 
 Öffne sie mit Einstellungen im Menü. Eine Gruppe antippen öffnet sie, eine Einstellung antippen schaltet oder wählt; Zahlen haben − und +. Mit Tasten gehst du zur Einstellung und drückst Wählen: Links und rechts ändern eine Zahl, Wählen behält sie, Zurück stellt den früheren Wert wieder her.
 
-Änderungen gelten sofort. Einstellungen suchen findet nach Wörtern, Experteneinstellungen zeigen blendet seltene ein. Auf Standard zurücksetzen und Alle Einstellungen zurücksetzen fragen vorher.
+Änderungen gelten sofort. Suchen findet nach Wörtern, Expertenoptionen blendet seltene ein. Auf Standard zurücksetzen und Alles zurücksetzen fragen vorher.

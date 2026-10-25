@@ -2,4 +2,4 @@ The file manager shows every folder and file on the device's storage, not only y
 
 Open Files from the Tools menu. Tap a folder to go into it; Back goes to the folder above. Tap a file, or hold any entry (with buttons, hold Select), to see what can be done with it. Move and Copy pick the entry: go to the folder it belongs in and choose Paste here in the bar at the bottom. With buttons, press Down from the last entry to reach the bar.
 
-Files and folders starting with a dot, such as PaperPaw's own data, are hidden. To see them, switch on Show hidden files in Settings, under System.
+Files and folders starting with a dot, such as PaperPaw's own data, are hidden. To see them, switch on Hidden files in Settings, under Library.
