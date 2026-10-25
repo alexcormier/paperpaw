@@ -91,10 +91,7 @@ fn settings(device: DeviceInfo, config: &str) -> App {
 /// first row of the main page, in either language.
 fn search(app: &mut App, words: &str) {
     app.will_type(words);
-    if !titles(app)
-        .iter()
-        .any(|t| t == "Search" || t == "Suchen")
-    {
+    if !titles(app).iter().any(|t| t == "Search" || t == "Suchen") {
         // On another page: the main page anew, from its top.
         app.run(actions::BACK);
         app.run(actions::SETTINGS);
