@@ -230,6 +230,14 @@ constructor (rule 1), errors are typed (rule 2), and builders take
   - Light sleep with the radio on is a requirement for the default
     "while reading" policy; until it works, the policy's default is off,
     and the current is measured with a real remote before it changes.
+  - trouble-host is used as `patches/trouble-host` (0.7.0, "Modified for
+    PaperPaw"): it stopped the whole host where the controller refused
+    to switch address resolution on again after syncing its resolving
+    list, because a scan or connection had begun meanwhile. The copy
+    tries the sync again later. Once a trouble-host release retries or
+    ignores that refusal itself, the copy and its `[patch.crates-io]`
+    in the firmware go, and so may the firmware's short waits before it
+    scans again (after giving the host its bonds, after a connection).
 - **The emulator** pretends, for the X4 Pro profile and on request for
   others, with made-up devices so authors and the Workshop can try
   plugins without hardware: a page-turner (an HID keyboard sending right

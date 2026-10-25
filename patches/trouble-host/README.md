@@ -1,5 +1,11 @@
 # trouble
 
+> Modified for PaperPaw: trouble-host 0.7.0 as published, with one
+> change in `src/host.rs` (`sync_resolving_list`): where the controller
+> refuses to switch address resolution on again, the sync is tried again
+> later instead of stopping the host. Licensed as the original
+> (`LICENSE-APACHE`, `LICENSE-MIT`).
+
 [![CI](https://github.com/embassy-rs/trouble/actions/workflows/ci.yaml/badge.svg)](https://github.com/embassy-rs/trouble/actions/workflows/ci.yaml)
 
 TrouBLE is a Bluetooth Low Energy (BLE) Host implementation for embedded devices written in Rust, with a future goal of qualification. The initial implementation was based on [`bleps`](https://github.com/bjoernQ/bleps) but has been adapted to work with types and traits from [`bt-hci`](https://github.com/embassy-rs/bt-hci) and adding support for more of the BLE specification such as L2CAP connection oriented channels.  The current implementation also takes strong inspiration from the [`nrf-softdevice`](https://github.com/embassy-rs/nrf-softdevice) project.
