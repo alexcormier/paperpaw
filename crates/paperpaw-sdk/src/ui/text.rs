@@ -98,6 +98,32 @@ pub fn draw_icon_at(
     true
 }
 
+/// Draws icon `name` `size` pixels high from `x` with its ink centred
+/// on the line at `twice_middle` / 2 (twice the y, so that a centre
+/// between two pixels is said exactly): to the pixel where the ink's
+/// height and the line allow, else half a pixel lower. Its width, 0
+/// where it has no drawing.
+pub(crate) fn draw_icon_centred(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    name: &str,
+    size: f32,
+    x: f32,
+    twice_middle: i32,
+    color: Color,
+) -> f32 {
+    let Some((font, ch)) = icon(env, name) else {
+        return 0.0;
+    };
+    let mut text = [0u8; 4];
+    let text = ch.encode_utf8(&mut text);
+    let Some((top, bottom)) = font.ink(size, text) else {
+        return font.advance(size, ch);
+    };
+    let baseline = (twice_middle - top - bottom + 1).div_euclid(2);
+    font.draw(canvas, size, x, baseline, text, color)
+}
+
 /// The height of a section's heading in a list (see [`Rows`]): small
 /// text with a little room above it.
 pub fn heading_height(env: &Env<'_>, style: &UiStyle) -> u16 {

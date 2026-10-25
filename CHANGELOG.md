@@ -112,6 +112,10 @@ change the plugin SDK.
 
 ### Fixed
 
+- Status lines stand every item on one line: the battery, icons and bars
+  centred on the figures of the time, the page and the percentage, and
+  those in the middle of the line, to the pixel. The battery stood a
+  pixel higher than its percentage.
 - Customise menus names the menus of the font choosers (their way to
   more fonts) as the settings are named, e.g. *Status lines › Font*,
   instead of showing `core.status-font` and `core.reading-font`. A test
