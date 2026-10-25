@@ -1603,8 +1603,8 @@ chip, segments, checksum and hash, and CrossPoint's board tag).
 PaperPaw's code guidelines ([CONTRIBUTING.md](../CONTRIBUTING.md#code-guidelines)) hold for plugins too: length limits, errors on user data, memory, comments.
 
 The smallest device, the Xteink X4, has 256 KiB of heap for everything.
-PaperPaw's standard app holds some 168 KiB of it once it has started
-with the sample books, 201 KiB at its peak (the emulator, `--profile
+PaperPaw's standard app holds some 90 KiB of it once it has started
+with the sample books, 130 KiB at its peak (the emulator, `--profile
 xteink-x4 --headless --script wait:500`). A plugin that should run
 there:
 
