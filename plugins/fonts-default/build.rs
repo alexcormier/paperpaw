@@ -56,7 +56,10 @@ fn main() {
         let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
         let font = paperpaw_text::OutlineFont::new(data, &[("wght", weight)])
             .unwrap_or_else(|e| panic!("{path}: {e}"));
-        let chars = paperpaw_text::charset::chars(paperpaw_text::charset::LATIN);
+        // Latin, and the ligatures where the font has them.
+        let charset = paperpaw_text::charset::chars;
+        let ligatures = charset(paperpaw_text::charset::LIGATURES).filter(|ch| font.has_char(*ch));
+        let chars = charset(paperpaw_text::charset::LATIN).chain(ligatures);
         let pack = if name == UI {
             with_display(&font, &sizes, chars)
         } else {
@@ -74,13 +77,14 @@ fn main() {
 }
 
 /// The pack of the UI font: `chars` at `sizes`, and [`DISPLAY_CHARS`] at
-/// [`DISPLAY_SIZES`] too.
+/// [`DISPLAY_SIZES`] too, with the font's kerning of `chars`.
 fn with_display(
     font: &paperpaw_text::OutlineFont,
     sizes: &[f32],
     chars: impl Iterator<Item = char> + Clone,
 ) -> Vec<u8> {
     let mut builder = paperpaw_text::PackBuilder::new();
+    builder.kerning(&font.kerning_pairs(&chars.clone().collect::<Vec<char>>()));
     let strikes = sizes
         .iter()
         .map(|&size| (size, chars.clone().collect::<Vec<char>>()))

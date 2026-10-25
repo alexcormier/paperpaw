@@ -33,6 +33,22 @@ change the plugin SDK.
 - Letter spacing, and the size of indents and of the space between
   paragraphs, as settings (`core.letter-spacing`, `core.indent-size`,
   `core.paragraph-space`); their defaults keep pages as they were.
+- Kerning and ligatures: pairs such as *AV* and *To* are set as the
+  font kerns them (its GPOS `kern` feature, else its legacy `kern`
+  table), in books and menus, and *fi* and *fl* (*ff*, *ffi* and *ffl*
+  where they take the room of their letters) are drawn as ligatures in
+  books where the font has them. Settings *Kerning* and *Ligatures*
+  (advanced, per book, on: `core.kerning`, `core.ligatures`); books are
+  laid out again once. Font packs keep a kerning table of classes, read
+  in place (still version 1: older firmware ignores it, older packs read
+  without kerning); the default packs grow by about 134 KB of flash, no
+  memory. SDK: `Font::kern`, `BitmapFont::kern`, `OutlineFont::kern` and
+  `kerning_pairs`, `PackBuilder::kerning`, `charset::LIGATURES`,
+  `FontHandle::kern`, `unkerned` and `ligatures`,
+  `layout::Typesetter::kern`, `text::wrap_lines_kerned` and
+  `wrap_lines_balanced_kerned`, `PageType::kerning` and `ligatures`,
+  `settings::KERNING` and `LIGATURES`; `text::measure`, `draw_text` and
+  `FontHandle::measure` and its drawing kern the text they get.
 - Hyphenation for more languages, as store plugins of their own: French,
   Spanish, Italian, Dutch, Portuguese, Swedish, Danish, Norwegian
   (Bokmål), Finnish, Polish, Russian and Ukrainian. The firmware keeps

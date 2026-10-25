@@ -131,6 +131,22 @@ impl Font {
         }
     }
 
+    /// How much the pair `left`, `right` moves the second character, in
+    /// pixels at `size` (negative: closer): the font's kerning, of the
+    /// characters drawn for them ([`Font::shown`]). 0 for a pack read a
+    /// glyph at a time ([`StoredPack`]): looking pairs up on the storage
+    /// would cost too much time for every character, and keeping them in
+    /// memory too much memory on small devices.
+    pub fn kern(&self, left: char, right: char, size: f32) -> f32 {
+        let (left, right) = (self.shown(left), self.shown(right));
+        match self {
+            Font::Bitmap(font) => font.kern(left, right, size),
+            Font::Stored(_) => 0.0,
+            #[cfg(feature = "outline")]
+            Font::Outline(font) => font.kern(left, right, size),
+        }
+    }
+
     pub fn has_char(&self, ch: char) -> bool {
         match self {
             Font::Bitmap(font) => font.has_char(ch),

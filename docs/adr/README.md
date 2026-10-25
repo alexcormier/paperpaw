@@ -14,7 +14,7 @@ is a new record that links back.
 | [0005](0005-raw-input-and-layered-keymaps.md) | Raw input and layered key maps in the kernel | Accepted |
 | [0006](0006-one-text-config-format.md) | One human-editable text format for configuration and data | Accepted |
 | [0007](0007-content-based-locators.md) | Content-based reading positions | Accepted |
-| [0008](0008-fonts-outlines-and-bitmap-packs.md) | Fonts: runtime outlines and bitmap packs | Accepted; the UI font is now Source Sans 3 |
+| [0008](0008-fonts-outlines-and-bitmap-packs.md) | Fonts: runtime outlines and bitmap packs | Accepted; the UI font is now Source Sans 3; kerning and ligatures came ([0029](0029-kerning-and-ligatures.md)) |
 | [0009](0009-documents-formats-and-storage.md) | Documents, formats and local storage | Accepted |
 | [0010](0010-overlays-menus-and-settings-ui.md) | Overlays, menus and the generated settings UI | Accepted |
 | [0011](0011-epub-streaming-conversion.md) | EPUB: streaming conversion into a block cache | Accepted |
@@ -34,6 +34,7 @@ is a new record that links back.
 | [0025](0025-power-saving.md) | Power saving: efficient by default, declared work, power modes | Accepted, partly implemented |
 | [0026](0026-plugin-interface-version.md) | Code plugins bound to a plugin interface version, built without build scripts | Accepted |
 | [0027](0027-bluetooth.md) | Bluetooth Low Energy | Accepted |
+| [0029](0029-kerning-and-ligatures.md) | Kerning and ligatures | Accepted |
 
 ## Template
 

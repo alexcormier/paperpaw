@@ -225,7 +225,7 @@ pub mod layout {
     };
     /// Lines broken as the layout breaks them (see `paperpaw-text`): for
     /// laying out text of one's own the way pages are, e.g. a note.
-    pub use paperpaw_text::{Line, wrap_lines, wrap_lines_hyphenated};
+    pub use paperpaw_text::{Line, wrap_lines, wrap_lines_hyphenated, wrap_lines_kerned};
 }
 
 /// Streaming XML/XHTML tokenizer (see `paperpaw-xml`) for format plugins.

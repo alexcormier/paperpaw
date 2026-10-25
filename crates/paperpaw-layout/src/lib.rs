@@ -8,8 +8,10 @@
 //!
 //! The engine knows nothing about fonts or drawing: a [`Typesetter`]
 //! measures characters in each [`Face`] (character style, body text or
-//! heading level), and the engine returns positioned lines with their runs
-//! of faces.
+//! heading level) and kerns pairs of them, and the engine returns
+//! positioned lines with their runs of faces. Pairs are kerned within a
+//! word and a face only: a line's width is that of its words drawn one by
+//! one, each run of a face at once.
 
 #![no_std]
 
@@ -23,7 +25,7 @@ pub use paperpaw_document::ImageRef;
 pub use paperpaw_document::TextStyle;
 use paperpaw_document::{Align, Block, BlockKind, Document, DocumentError, Locator, Storage};
 pub use paperpaw_text::Hyphenate;
-use paperpaw_text::{Line, wrap_lines_balanced, wrap_lines_hyphenated};
+use paperpaw_text::{Line, wrap_lines_balanced_kerned, wrap_lines_kerned};
 
 /// Largest extra space per word gap for justification, relative to the
 /// line height.
@@ -55,6 +57,15 @@ pub const VERSION: u32 = 7;
 pub trait Typesetter {
     /// Advance width of `c` in `face`.
     fn advance(&self, face: Face, c: char) -> f32;
+
+    /// How much `right` moves when it follows `left` in `face`, in
+    /// pixels (negative: closer): the font's kerning, as drawing text of
+    /// that face applies it. Asked only for two characters of one word
+    /// and one face (also for a hyphen after a letter); 0 by default.
+    fn kern(&self, face: Face, left: char, right: char) -> f32 {
+        let _ = (face, left, right);
+        0.0
+    }
 
     /// Lines in `face`: `(ascent, line height)`, i.e. the distance from
     /// the top of a line box to its baseline and between baselines.
@@ -396,10 +407,26 @@ fn block_lines(
         cx.typesetter
             .advance(face_at(block, base, i, style.book), c)
     };
+    // A pair in one face: the character before `i` and `right`, the text's
+    // own there or a hyphen set like the character before it.
+    let kern = |i: usize, left: char, right: char| {
+        let face = face_at(block, base, i - left.len_utf8(), style.book);
+        let own = block.text[i..].starts_with(right);
+        if own && face_at(block, base, i, style.book) != face {
+            return 0.0;
+        }
+        cx.typesetter.kern(face, left, right)
+    };
     let hyphenate = cx.hyphenate.filter(|_| heading == 0);
     if style.balanced {
         let measure = Measure::of(block, style, width, indent);
-        let lines = wrap_lines_balanced(&block.text, |n| measure.line(n).1, advance, hyphenate);
+        let lines = wrap_lines_balanced_kerned(
+            &block.text,
+            |n| measure.line(n).1,
+            advance,
+            kern,
+            hyphenate,
+        );
         return lines
             .into_iter()
             .enumerate()
@@ -416,10 +443,11 @@ fn block_lines(
             Measure { first: rest, rest }
         }
     };
-    let lines = wrap_lines_hyphenated(
+    let lines = wrap_lines_kerned(
         &block.text[from..],
         |n| measure.line(n).1,
         |i, c| advance(from + i, c),
+        |i, left, right| kern(from + i, left, right),
         hyphenate,
     );
     lines
