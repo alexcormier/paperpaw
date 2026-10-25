@@ -535,6 +535,7 @@ impl Guide {
     }
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
+        let before = self.focus;
         if !self.shown {
             self.shown = true;
         } else {
@@ -542,7 +543,19 @@ impl Guide {
             let at = targets.iter().position(|t| *t == self.focus).unwrap_or(0);
             self.focus = targets[ui::step_focus(at, delta, targets.len())];
         }
-        self.redraw(cx, RefreshMode::Fast);
+        // What the focus left and came to.
+        ui::ListChange::focus(self.area_of(before), self.area_of(self.focus)).request(cx);
+    }
+
+    /// What a focus on `target` draws over: the answer's card, or a
+    /// button and its frame.
+    fn area_of(&self, target: Target) -> Rect {
+        let l = &self.layout;
+        match target {
+            Target::Card => l.card.unwrap_or(l.next),
+            Target::Next => ui::button_reach(&self.style, l.next),
+            Target::Other => ui::button_reach(&self.style, l.other),
+        }
     }
 
     fn draw_dots(&self, canvas: &mut Canvas<'_>) {

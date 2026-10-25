@@ -19,7 +19,7 @@ use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::choice;
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen, SettingKind,
@@ -279,9 +279,7 @@ impl RulesScreen {
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.rows().len();
-        if self.list.move_focus(delta, len) != ListChange::None {
-            self.redraw(cx);
-        }
+        self.list.move_focus(delta, len).request(cx);
     }
 }
 

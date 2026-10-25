@@ -165,6 +165,7 @@ impl Screen for FootnoteScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        let before = self.focus;
         if [
             actions::LEFT,
             actions::UP,
@@ -192,8 +193,21 @@ impl Screen for FootnoteScreen {
         } else {
             return Handled::No;
         }
-        cx.request_redraw();
-        cx.request_refresh(paperpaw_sdk::RefreshMode::Fast);
+        // The buttons the focus left and came to.
+        let reach = |focus: Option<usize>| {
+            let slot = self.buttons.get(focus?)?;
+            Some(ui::button_reach(
+                &self.style,
+                ui::button_in_slot(&self.style, *slot),
+            ))
+        };
+        match (reach(before.or(self.focus)), reach(self.focus)) {
+            (Some(left), Some(reached)) => ui::ListChange::focus(left, reached).request(cx),
+            _ => {
+                cx.request_redraw();
+                cx.request_refresh(paperpaw_sdk::RefreshMode::Fast);
+            }
+        }
         Handled::Yes
     }
 

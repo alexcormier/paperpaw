@@ -179,6 +179,18 @@ impl OfferScreen {
         ))
     }
 
+    /// The focus went from the last row to the button below, or back:
+    /// the two drawn again.
+    fn button_left(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
+        let row = self.list.row_rect(self.list.focus() % self.list.rows());
+        match self.button(env) {
+            Some(button) => {
+                ui::ListChange::focus(row, ui::button_reach(&self.style, button)).request(cx);
+            }
+            None => Self::redraw(cx),
+        }
+    }
+
     fn redraw(cx: &mut Cx<'_, '_>) {
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
@@ -304,7 +316,7 @@ impl Screen for OfferScreen {
                 self.done(cx);
             } else if back {
                 self.on_button = false;
-                Self::redraw(cx);
+                self.button_left(&env, cx);
             } else if !forward {
                 return Handled::No;
             }
@@ -312,7 +324,7 @@ impl Screen for OfferScreen {
         }
         if forward && self.list.focus() + 1 >= len && self.button(&env).is_some() {
             self.on_button = true;
-            Self::redraw(cx);
+            self.button_left(&env, cx);
             return Handled::Yes;
         }
         let delta = if back {

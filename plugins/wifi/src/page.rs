@@ -8,7 +8,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params};
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::wifi::{self, WifiCommand, WifiNetwork, WifiState};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Rect,
@@ -379,9 +379,7 @@ impl Screen for WifiPage {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, len) != ListChange::None {
-            Self::changed(cx);
-        }
+        self.list.move_focus(delta, len).request(cx);
         Handled::Yes
     }
 

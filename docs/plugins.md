@@ -181,7 +181,15 @@ Some rules every screen should follow:
   standard app.
 - **Ask for redraws.** After a change, `cx.request_redraw()` (or a part
   of the screen) and `cx.request_refresh(mode)`: `Fast` for a moving
-  focus, `Partial` for new content, `Full` to clear ghosting.
+  focus, `Partial` for new content, `Full` to clear ghosting. A focus
+  that moves asks for the two items it left and came to, never the
+  whole screen: on the X4 a step then takes a fraction of a frame. The
+  lists do it themselves (`ListChange::request` after `ListView`,
+  `Rows` or `Sections` moved it); a focus of a screen's own asks with
+  `ListChange::focus(left, reached)` (for buttons with
+  `ui::button_reach`, as a focus frame goes round them). Where the focus
+  changes more, such as a line about the focused item, ask for that
+  part too.
 - **Overlays** are screens with a `region`. One that takes the reader's
   attention (a menu, a question) washes out what lies below it
   (`dims_below`); one looked through (a keyboard over the field it

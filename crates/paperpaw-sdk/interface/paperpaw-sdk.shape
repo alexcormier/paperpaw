@@ -676,7 +676,7 @@ enum paperpaw_sdk::status::StatusValue { Text(0: alloc::string::String), Level {
 enum paperpaw_sdk::time::Day { Weekday { month: u8, week: u8, weekday: u8 }, Julian(0: u16), Ordinal(0: u16) }
 enum paperpaw_sdk::ui::label::Paint { Ink(0: paperpaw_sdk::ui::style::Ink), Color(0: paperpaw_platform::pixel::Color) }
 enum paperpaw_sdk::ui::label::Size { Role(0: paperpaw_sdk::ui::style::TextRole), Px(0: f32) }
-enum paperpaw_sdk::ui::list::ListChange { None, Focus, Page }
+enum paperpaw_sdk::ui::list::ListChange { None, Focus { left: paperpaw_platform::geometry::Rect, reached: paperpaw_platform::geometry::Rect }, Page }
 enum paperpaw_sdk::ui::offline::Offer { Online, NotNow }
 enum paperpaw_sdk::ui::picker::DateOrder { DayMonthYear, MonthDayYear, YearMonthDay }
 enum paperpaw_sdk::ui::picker::PickerPart { Plus(0: usize), Minus(0: usize), Value(0: usize) }

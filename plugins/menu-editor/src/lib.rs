@@ -24,7 +24,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, menus};
 use paperpaw_sdk::ui::reorder::Reorder;
 use paperpaw_sdk::ui::reorder::ReorderStep;
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
     Manifest, MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar,
@@ -754,10 +754,7 @@ impl Screen for EntryScreen {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, OPTIONS.len()) != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, OPTIONS.len()).request(cx);
         Handled::Yes
     }
 

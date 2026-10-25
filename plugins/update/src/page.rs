@@ -738,12 +738,20 @@ impl UpdatePage {
         if count == 0 {
             return;
         }
+        let before = self.focus;
         if !self.shown {
             self.shown = true;
         } else {
             self.focus = ui::step_focus(self.focus, delta, count);
         }
-        self.redraw(cx, RefreshMode::Fast);
+        // The buttons the focus left and came to.
+        let env = *cx.env();
+        let rects = self.button_rects(&env, &self.buttons(&env));
+        let reach = |i: usize| rects.get(i).map(|r| ui::button_reach(&self.style, *r));
+        match (reach(before), reach(self.focus)) {
+            (Some(left), Some(reached)) => ui::ListChange::focus(left, reached).request(cx),
+            _ => self.redraw(cx, RefreshMode::Fast),
+        }
     }
 
     fn draw_progress(&self, ui: &mut ui::Ui<'_>, area: Rect, done: u64, total: u64) {

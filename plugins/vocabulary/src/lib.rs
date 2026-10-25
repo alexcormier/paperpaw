@@ -501,19 +501,11 @@ impl WordsScreen {
     }
 
     fn changed(&mut self, change: ListChange, cx: &mut Cx<'_, '_>) {
-        if change == ListChange::None {
-            return;
-        }
         if change == ListChange::Page {
             let env = *cx.env();
             self.load_page(&env);
         }
-        cx.request_redraw();
-        cx.request_refresh(if change == ListChange::Page {
-            RefreshMode::Partial
-        } else {
-            RefreshMode::Fast
-        });
+        change.request(cx);
     }
 }
 

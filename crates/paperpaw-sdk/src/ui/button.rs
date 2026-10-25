@@ -56,6 +56,13 @@ pub fn button_border(style: &UiStyle) -> u32 {
     style.line.max(2)
 }
 
+/// Where a button at `rect` draws: a focus goes round it, a little
+/// outside. A screen moving a focus between buttons asks for these drawn
+/// again (see [`ListChange::focus`](super::ListChange::focus)).
+pub fn button_reach(style: &UiStyle, rect: Rect) -> Rect {
+    rect.grow((button_border(style) * 3) as u16)
+}
+
 /// A button: outlined, or filled when `on`; `focused` (chosen with
 /// buttons) draws a frame around it. Labels of one character (e.g. `+`)
 /// are set larger.

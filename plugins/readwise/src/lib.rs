@@ -214,7 +214,7 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Readwise {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Readwise", paperpaw_sdk::package_version!())
+        Manifest::new(PLUGIN, "Readwise export", paperpaw_sdk::package_version!())
             .description("Sends the highlights of exported notes to Readwise.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)

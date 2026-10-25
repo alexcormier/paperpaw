@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, menus, params, slots};
 use paperpaw_sdk::library::{self, catalog};
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
@@ -366,10 +366,7 @@ impl Screen for BookSheet {
             } else {
                 return Handled::No;
             };
-            if answers.move_focus(delta, ANSWERS.len()) != ListChange::None {
-                cx.request_redraw_area(answers.area());
-                cx.request_refresh(RefreshMode::Fast);
-            }
+            answers.move_focus(delta, ANSWERS.len()).request(cx);
             return Handled::Yes;
         }
         let delta = if [
@@ -396,10 +393,7 @@ impl Screen for BookSheet {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, self.actions.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area());
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, self.actions.len()).request(cx);
         Handled::Yes
     }
 
@@ -424,7 +418,7 @@ impl Screen for BookSheet {
                 page.saturating_sub(1) * rows
             };
             let change = self.list.set_focus(to);
-            self.list.request(change, cx);
+            change.request(cx);
             return Handled::Yes;
         }
         if let Some(index) = self.list.hit(gesture.start, len) {

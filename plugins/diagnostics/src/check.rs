@@ -503,13 +503,31 @@ impl Check {
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let count = self.layout.controls.len();
+        let before = self.focus;
         if !self.shown {
             self.shown = true;
         } else if count > 0 {
             self.focus = ui::step_focus(self.focus, delta, count);
         }
-        cx.request_redraw();
-        cx.request_refresh(RefreshMode::Fast);
+        // The controls the focus left and came to: buttons, and *Help*
+        // as a row widened by the margin.
+        let reach = |i: usize| {
+            let rect = self.layout.controls.get(i)?.1;
+            let wide = rect.grow(self.style.margin());
+            Some(ui::button_reach(&self.style, rect).union(&Rect::new(
+                wide.x,
+                rect.y,
+                wide.width,
+                rect.height,
+            )))
+        };
+        match (reach(before), reach(self.focus)) {
+            (Some(left), Some(reached)) => ui::ListChange::focus(left, reached).request(cx),
+            _ => {
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Fast);
+            }
+        }
     }
 
     /// A tap on a touch target of the touch page.

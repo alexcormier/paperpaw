@@ -554,6 +554,15 @@ impl PanelScreen {
             .reduce(|a, b| a.union(&b))
     }
 
+    /// Where the row holding control `index` (in reading order) is.
+    fn row_area(&self, index: usize) -> Option<Rect> {
+        let mut count = 0;
+        self.rows.iter().find_map(|row| {
+            count += row.controls.len();
+            (index < count).then_some(row.area)
+        })
+    }
+
     fn controls(&self) -> impl Iterator<Item = &(Control, Rect)> {
         self.rows.iter().flat_map(|row| row.controls.iter())
     }
@@ -936,9 +945,20 @@ impl Screen for PanelScreen {
             {
                 focus = step(current);
             }
+            let (before, page) = (self.focus, self.page);
             self.focus = Some(focus);
             self.page = self.page_of(focus);
-            self.redraw(cx);
+            match before.and_then(|b| self.row_area(b)) {
+                // On the same page, the rows the focus left and came to.
+                Some(left) if self.page == page => {
+                    cx.request_redraw_area(left);
+                    if let Some(reached) = self.row_area(focus) {
+                        cx.request_redraw_area(reached);
+                    }
+                    cx.request_refresh(RefreshMode::Fast);
+                }
+                _ => self.redraw(cx),
+            }
         }
         Handled::Yes
     }

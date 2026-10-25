@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::bluetooth::{self, Bonded, DeviceId, DeviceKind};
 use paperpaw_sdk::builtin::{actions, events};
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Rect,
     RefreshMode, Screen, Uses,
@@ -266,9 +266,7 @@ impl Screen for BluetoothPage {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, len) != ListChange::None {
-            Self::changed(cx);
-        }
+        self.list.move_focus(delta, len).request(cx);
         Handled::Yes
     }
 

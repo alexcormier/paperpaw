@@ -29,7 +29,7 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, HttpReply, Typed};
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Params, Rect, RefreshMode, Screen,
@@ -733,10 +733,7 @@ impl Screen for SyncScreen {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, self.rows.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area());
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, self.rows.len()).request(cx);
         Handled::Yes
     }
 

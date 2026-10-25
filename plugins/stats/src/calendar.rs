@@ -242,6 +242,7 @@ impl Calendar {
             return;
         }
         let whole = month_of(day) != month_of(self.day);
+        let left = self.day;
         self.day = day;
         let env = *cx.env();
         self.load_day(&env);
@@ -249,12 +250,11 @@ impl Calendar {
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Partial);
         } else {
-            cx.request_redraw_area(Rect::new(
-                0,
-                self.grid.y,
-                self.grid.width + self.grid.x * 2,
-                self.detail.y + self.detail.height - self.grid.y,
-            ));
+            // The day left, the day chosen and what is said of it.
+            let first = self.first_shown(&env);
+            cx.request_redraw_area(self.cell(left - first));
+            cx.request_redraw_area(self.cell(day - first));
+            cx.request_redraw_area(self.detail);
             cx.request_refresh(RefreshMode::Fast);
         }
     }
