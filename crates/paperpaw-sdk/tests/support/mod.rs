@@ -251,6 +251,7 @@ impl Harness {
             look: paperpaw_sdk::ui::look::Look::none(),
             caps: Capabilities::default(),
             wifi: None,
+            bluetooth: None,
             firmware: None,
             native: None,
             power: paperpaw_sdk::power::Power::normal(),

@@ -25,6 +25,56 @@ change the plugin SDK.
   new install after a removal signed by another key is refused with a
   short warning, from any library; there is no *Install anyway* any
   more.
+- Firmware is installed only with the battery at 20 % or more, or on
+  USB: below it the kernel refuses any install (the update, another
+  firmware), checked as the writing would begin, and *Update* says
+  "Charge to 20 % or plug in to install." Downloading goes on. SDK:
+  `InstallFailure::LowBattery`, `firmware::INSTALL_BATTERY`,
+  `firmware::battery_allows_install`.
+- No surprise restart after an update: while the new firmware runs on
+  trial, without its code plugins, the X4 shows "Finishing the
+  update…" with a bar that fills, takes no input meanwhile, and starts
+  again from there once the update is kept, with its code plugins. SDK:
+  `builtin::screens::FINISHING_UPDATE`.
+- Devices are counted without being known: the update search says
+  whether the reader asked (`trigger`: `auto` or `manual`) and of which
+  periods it is the device's first search (`first`: `day`, `week`,
+  `month`, in UTC; left out while the clock is not set). No id and no
+  request of its own; the device keeps only the date of its last search.
+- Back to CrossPoint without a computer: *Update* installs another
+  firmware's image from the card (not signed, only as chosen, with a
+  warning), checked whole for this device first. SDK:
+  `FirmwareCommand::InstallForeign`, `firmware::ForeignImage` and
+  `firmware::ForeignCheck`.
+- Bluetooth Low Energy for plugins (ADR 0027): `paperpaw_sdk::bluetooth`
+  scans, connects and reads, writes and subscribes to a device's
+  characteristics, pairs (always confirmed by the reader in the kernel's
+  own question), advertises and serves GATT services, for plugins that
+  declare `Uses::BLUETOOTH`. The kernel owns the radio, shares it
+  between plugins, lets each see only the devices it found or was given,
+  keeps bonds with the passwords and keys and switches the radio off
+  when nothing needs it. Cheap by default: scans and advertising end
+  after a while, passive and seldom unless asked, links at long
+  intervals, the radio at the cheapest power that serves every plugin,
+  and its time on counted (`Usage::bluetooth_ms`). A bonded remote's or keyboard's keys are
+  buttons of the key maps (`button.hid.right`, `button.hid.page-down` …,
+  pages turned by default). The emulator has made-up devices for the X4
+  Pro's profile: a page-turner (`ble-key:right` in scripts) and a
+  heart-rate belt.
+- Bluetooth page (Settings, where there is Bluetooth): the devices bonded
+  with the reader, Add a device (a search, then pairing confirmed on the
+  reader), forgetting one (the menu button or a long press), which
+  plugins may use a sensor, and Remotes: when a remote's or a keyboard's
+  keys work (when switched on, while reading, or always). A remote that
+  falls asleep connects again by itself when it wakes, as long as its
+  keys are wanted.
+- **Code plugins must be built again.** The plugin interface is now 3
+  (`Command`, `Env`, `Capabilities`, `MenuNeed`, `Usage`, `Work` and
+  `FirmwareCommand` changed, for Bluetooth and another firmware): a code
+  plugin built for an earlier release does not run on this one until it
+  is built again with this release's SDK, and the plugin manager says
+  so. PaperPaw's own store plugins come as updates. `Work`'s `network`
+  and `charging` became `needs` (`Needs::NETWORK | Needs::CHARGING`).
 
 ## [0.5.0-beta.6] - 2026-10-25
 

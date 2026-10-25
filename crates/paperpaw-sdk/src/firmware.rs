@@ -26,14 +26,35 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
-use paperpaw_platform::Storage;
+use paperpaw_platform::{Storage, SystemStatus};
 pub use paperpaw_update::{
     APP_HEAD_LEN, AppInfo, CHIP_ESP32_C3, CHIP_ESP32_S3, Check, PLUGINS_AT, PLUGINS_HEAD_LEN,
     PluginCrate, Plugins, Problem, TRAILER_LEN, Trailer, fingerprint, key_hex, parse_key,
 };
 
+#[cfg(any(test, feature = "kernel"))]
+mod foreign;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use foreign::{ForeignCheck, ForeignImage};
+
 /// The folder on the card where update files are looked for.
 pub const UPDATE_DIR: &str = "updates";
+
+/// The battery's charge in percent below which firmware is not installed
+/// unless the device is charging: a battery run flat half way would leave
+/// it to the firmware before (it comes back), but the reader without one.
+pub const INSTALL_BATTERY: u8 = 20;
+
+/// Whether the battery lets firmware be installed now: charged to
+/// [`INSTALL_BATTERY`] or more, charging (on USB), or not measured (no
+/// battery reading: the emulator, Android). The kernel refuses an install
+/// otherwise ([`InstallFailure::LowBattery`]).
+pub fn battery_allows_install(status: &SystemStatus) -> bool {
+    status
+        .battery
+        .is_none_or(|b| b.charging || b.percent >= INSTALL_BATTERY)
+}
 
 /// What the shell is told to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +79,14 @@ pub enum FirmwareCommand {
     /// Restarts the device, e.g. into the new firmware once
     /// [`FirmwareState::Installed`]. What plugins keep is saved first.
     Restart,
+    /// Installs another firmware's app image at this storage path (the
+    /// way back to CrossPoint, say), which is not signed: checked as the
+    /// bootloader would start it (`ForeignImage`, `ForeignCheck`),
+    /// written beside the running firmware and made the one to start
+    /// next. Sent only for a file the reader chose as such, told that it
+    /// is not PaperPaw. Asked for by `FirmwareCommand::install_foreign`.
+    #[non_exhaustive]
+    InstallForeign { path: String },
 }
 
 impl FirmwareCommand {
@@ -72,6 +101,14 @@ impl FirmwareCommand {
             key,
             older,
         }
+    }
+
+    /// Installs another firmware's image at `path`, which the reader chose
+    /// as such.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn install_foreign(path: impl Into<String>) -> Self {
+        FirmwareCommand::InstallForeign { path: path.into() }
     }
 }
 
@@ -114,6 +151,9 @@ pub enum InstallFailure {
     Damaged,
     /// Writing it failed.
     Write,
+    /// The battery is below [`INSTALL_BATTERY`] percent and the device is
+    /// not charging: charged, or plugged in, it may be installed.
+    LowBattery,
 }
 
 impl From<Problem> for InstallFailure {

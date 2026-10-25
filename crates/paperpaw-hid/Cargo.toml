@@ -1,0 +1,17 @@
+[package]
+name = "paperpaw-hid"
+description = "Decodes HID input reports of Bluetooth keyboards and remotes (HID over GATT) into key presses and releases (no_std, no I/O)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std", "parsing"]
+keywords = ["hid", "bluetooth", "keyboard", "no-std"]
+
+[dependencies]
+
+[lints]
+workspace = true

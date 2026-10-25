@@ -24,6 +24,15 @@
 //! if it tried that partition. An update installed and not started yet
 //! is given up before another is written, which would otherwise go into
 //! the partition chosen to start.
+//!
+//! Another firmware's app image (the way back to CrossPoint) installs
+//! the same way, only when the reader chose it as such
+//! (`FirmwareCommand::InstallForeign`): unsigned, it is checked as the
+//! bootloader would start it (`ForeignCheck`: its segments, checksum and
+//! hash, the chip, CrossPoint's board tag) and chosen only if that holds.
+//! It fits whatever partitions it finds: their places and sizes come from
+//! the flash's table, also another firmware's (CrossPoint's), which
+//! PaperPaw never writes.
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -34,7 +43,9 @@ use esp_bootloader_esp_idf::partitions::{
 };
 use log::{info, warn};
 use paperpaw_platform::Storage;
-use paperpaw_sdk::firmware::{Check, Firmware, FirmwareState, InstallFailure, Plugins, Update};
+use paperpaw_sdk::firmware::{
+    Check, Firmware, FirmwareState, ForeignCheck, ForeignImage, InstallFailure, Plugins, Update,
+};
 use paperpaw_x4::ota::{self, FlashError, Image, OtaData, State};
 
 // The plugin crates built in (`PLUGINS`), written by `build.rs`.
@@ -66,6 +77,14 @@ pub const PROJECT: &str = "paperpaw-xteink-x3";
 pub const PROJECT: &str = "paperpaw-xteink-pro";
 #[cfg(feature = "x4-classic")]
 pub const PROJECT: &str = "paperpaw-xteink-classic";
+/// This device in CrossPoint's board tag (its `FirmwareBoardTag`): the
+/// X4's and the X3's one image is `x4`.
+#[cfg(not(feature = "esp32s3"))]
+const BOARD_TAG: &str = "x4";
+#[cfg(feature = "x4-pro")]
+const BOARD_TAG: &str = "x4pro";
+#[cfg(feature = "x4-classic")]
+const BOARD_TAG: &str = "x4c";
 /// Read from the card and written a piece at a time.
 const PIECE: usize = 4096;
 /// Written per [`Ota::step`]: the main loop goes on in between.
@@ -82,10 +101,39 @@ struct Install {
     offset: u32,
     /// The partition it goes to.
     slot: u32,
-    check: Check,
+    check: Checking,
     buf: Box<[u8; PIECE]>,
     /// The last twentieth of the image said to be written.
     said: u32,
+}
+
+/// How the image is checked as it is written: one at a time, in the
+/// install under way.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "one at a time; the signature's state stays where it was"
+)]
+enum Checking {
+    /// PaperPaw's update: its signature.
+    Signed(Check),
+    /// Another firmware's image: whole, for this device.
+    Foreign(ForeignCheck),
+}
+
+impl Checking {
+    fn absorb(&mut self, piece: &[u8]) {
+        match self {
+            Checking::Signed(check) => check.absorb(piece),
+            Checking::Foreign(check) => check.absorb(piece),
+        }
+    }
+
+    fn finish(self) -> Result<(), InstallFailure> {
+        match self {
+            Checking::Signed(check) => check.finish().map_err(InstallFailure::from),
+            Checking::Foreign(check) => check.finish(),
+        }
+    }
 }
 
 /// The running firmware on trial.
@@ -236,6 +284,13 @@ impl Ota {
         self.trial.is_some()
     }
 
+    /// How long the running firmware is still on trial, at `now` (ms
+    /// since the start); `None` where it is not.
+    pub fn trial_left(&self, now: u64) -> Option<u64> {
+        let trial = self.trial.as_ref()?;
+        Some(TRIAL_MS.saturating_sub(trial.before + now.saturating_sub(trial.since)))
+    }
+
     /// The running firmware on trial ran long enough, at `now` (ms since
     /// the start): it is marked as good. Whether it was, just now.
     pub fn check_trial(&mut self, now: u64) -> bool {
@@ -320,7 +375,24 @@ impl Ota {
         key: Option<&[u8; 32]>,
         older: bool,
     ) -> FirmwareState {
-        match self.prepare(storage, path, key, older) {
+        let prepared = self.prepare(storage, path, key, older);
+        self.start_install(path, prepared)
+    }
+
+    /// Starts installing another firmware's image at `path`, which the
+    /// reader chose as such (see `FirmwareCommand::InstallForeign`): its
+    /// head is checked first, the whole image as it is written.
+    pub fn begin_foreign(&mut self, storage: &dyn Storage, path: &str) -> FirmwareState {
+        let prepared = self.prepare_foreign(storage, path);
+        self.start_install(path, prepared)
+    }
+
+    fn start_install(
+        &mut self,
+        path: &str,
+        prepared: Result<Install, InstallFailure>,
+    ) -> FirmwareState {
+        match prepared {
             Ok(install) => {
                 info!(
                     "OTA: installing {path} ({} bytes) at {:#x}",
@@ -347,7 +419,34 @@ impl Ota {
     ) -> Result<Install, InstallFailure> {
         let update = Update::read(storage, path)?;
         update.may_install(&self.firmware(), key, older)?;
-        let check = Check::new(&update.trailer)?;
+        let check = Checking::Signed(Check::new(&update.trailer)?);
+        self.install_into_other(path, update.trailer.image_len, check)
+    }
+
+    fn prepare_foreign(
+        &mut self,
+        storage: &dyn Storage,
+        path: &str,
+    ) -> Result<Install, InstallFailure> {
+        let image = ForeignImage::read(storage, path)?;
+        image.fits(&self.firmware())?;
+        let len = u32::try_from(image.len).map_err(|_| InstallFailure::TooLarge)?;
+        info!(
+            "OTA: {path} is another firmware ({} {}), not signed",
+            image.info.project, image.info.version
+        );
+        let check = Checking::Foreign(ForeignCheck::new(CHIP, BOARD_TAG, image.len));
+        self.install_into_other(path, len, check)
+    }
+
+    /// An install of `len` bytes into the partition not running, checked
+    /// so.
+    fn install_into_other(
+        &mut self,
+        path: &str,
+        len: u32,
+        check: Checking,
+    ) -> Result<Install, InstallFailure> {
         let mut flash = self.flash.borrow_mut();
         let partition = &mut Partition {
             flash: &mut flash,
@@ -358,7 +457,7 @@ impl Ota {
             .map_err(|_| InstallFailure::Write)?;
         Ok(Install {
             path: String::from(path),
-            image: Image::new(update.trailer.image_len),
+            image: Image::new(len),
             offset: self.apps[slot as usize].0,
             slot,
             check,
@@ -422,8 +521,8 @@ impl Ota {
     /// signature holds.
     fn finish(&mut self, mut install: Install) -> FirmwareState {
         if let Err(e) = install.check.finish() {
-            warn!("OTA: {}: {e}", install.path);
-            return FirmwareState::Failed(e.into());
+            warn!("OTA: {}: {e:?}", install.path);
+            return FirmwareState::Failed(e);
         }
         let mut flash = self.flash.borrow_mut();
         let made_whole = install.image.finish(
@@ -463,6 +562,33 @@ struct Partitions {
     running: u32,
 }
 
+/// Where in the flash the code running is, on the ESP32-S3: its
+/// bootloader maps only the last of the image's DROM segments, so the
+/// MMU's first entry, which `booted_partition` reads, is not the app's
+/// there. The entry that maps this function's page is.
+#[cfg(feature = "esp32s3")]
+fn running_from() -> Option<u32> {
+    /// The MMU's table: one entry for each 64 KB page of the 32 MB the
+    /// caches map (instructions and data alike).
+    const MMU_TABLE: usize = 0x600C_5000;
+    const INVALID: u32 = 1 << 14;
+    const PSRAM: u32 = 1 << 15;
+    let here = running_from as *const () as usize;
+    let entry = (here & 0x1FF_FFFF) >> 16;
+    // SAFETY: a read of the MMU table, within its 512 entries.
+    let value = unsafe { ((MMU_TABLE + entry * 4) as *const u32).read_volatile() };
+    if value & (INVALID | PSRAM) != 0 {
+        return None;
+    }
+    Some(((value & 0x3FFF) << 16) | (here as u32 & 0xFFFF))
+}
+
+/// Elsewhere the MMU's first entry tells.
+#[cfg(not(feature = "esp32s3"))]
+fn running_from() -> Option<u32> {
+    None
+}
+
 /// The partitions updates use; `None` without two app partitions (and
 /// only two) or when which runs cannot be told.
 fn partitions_of(flash: &mut FlashStorage<'static>) -> Option<Partitions> {
@@ -482,10 +608,21 @@ fn partitions_of(flash: &mut FlashStorage<'static>) -> Option<Partitions> {
     if find(PartitionType::App(AppPartitionSubType::Ota2)).is_some() {
         return None;
     }
-    let running = match pt.booted_partition().ok()??.partition_type() {
-        PartitionType::App(AppPartitionSubType::Ota0) => 0,
-        PartitionType::App(AppPartitionSubType::Ota1) => 1,
-        _ => return None,
+    let running = match pt.booted_partition().ok().flatten() {
+        Some(booted) => match booted.partition_type() {
+            PartitionType::App(AppPartitionSubType::Ota0) => 0,
+            PartitionType::App(AppPartitionSubType::Ota1) => 1,
+            _ => return None,
+        },
+        // Not told by the MMU's first entry: by where this code is.
+        None => {
+            let here = running_from()?;
+            u32::try_from(
+                apps.iter()
+                    .position(|&(at, len)| (at..at + len).contains(&here))?,
+            )
+            .ok()?
+        }
     };
     Some(Partitions {
         data,

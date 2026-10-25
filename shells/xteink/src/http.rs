@@ -559,7 +559,7 @@ impl Call {
 }
 
 /// The heap's free bytes by region (internal RAM, PSRAM), for the log.
-fn heap() -> String {
+pub(crate) fn heap() -> String {
     let stats = esp_alloc::HEAP.stats();
     let mut text = String::new();
     for region in stats.region_stats.iter().flatten() {

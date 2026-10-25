@@ -96,35 +96,35 @@ version = "0.5.0-beta.6"
 
 [[package]]
 name = "paperpaw-plugin-aids"
-version = "1.0.0"
-dependencies = [
- "paperpaw-sdk",
-]
-
-[[package]]
-name = "paperpaw-plugin-battery"
-version = "1.0.0"
-dependencies = [
- "paperpaw-sdk",
-]
-
-[[package]]
-name = "paperpaw-plugin-browser"
-version = "1.0.0"
-dependencies = [
- "paperpaw-sdk",
-]
-
-[[package]]
-name = "paperpaw-plugin-calibre"
 version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
-name = "paperpaw-plugin-diagnostics"
+name = "paperpaw-plugin-battery"
+version = "1.0.1"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-browser"
+version = "1.0.1"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-calibre"
 version = "1.0.2"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-diagnostics"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -160,14 +160,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-fonts-browser"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-joplin"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
  "paperpaw-xml",
@@ -175,70 +175,70 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-keys"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-koreader"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-kosync"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-menu-editor"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-news"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-profiles"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-reading-goal"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-readwise"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-rules"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-stats"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
  "paperpaw-sqlite",
@@ -246,35 +246,35 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-translate"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-vocabulary"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-wallabag"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-weather"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-widgets"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-sdk",
 ]

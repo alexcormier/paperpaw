@@ -785,6 +785,9 @@ pub enum Command {
     /// Keeps or removes a password or key (see
     /// [`secrets`](crate::secrets)), saved at once.
     SetSecret(alloc::boxed::Box<crate::secrets::SecretChange>),
+    /// Bluetooth, for plugins declaring [`Uses::BLUETOOTH`](crate::Uses):
+    /// written with the functions of [`bluetooth`](crate::bluetooth).
+    Bluetooth(alloc::boxed::Box<crate::bluetooth::BtRequest>),
     /// Tells the radio what to do, where PaperPaw manages Wi-Fi
     /// ([`Env::wifi`](crate::Env)); see [`wifi`](crate::wifi). Ignored
     /// elsewhere.

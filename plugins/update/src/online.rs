@@ -13,14 +13,16 @@
 //! {"project": "paperpaw-xteink", "chip": 5, "version": "0.4.0",
 //!  "plugins": ["paperpaw-plugin-stats 0.4.0", "..."],
 //!  "abi": "f1f6cd5dd377bb4d", "compiler": "6a1f03c2",
-//!  "code": ["hello 0.1.0", "..."]}
+//!  "code": ["hello 0.1.0", "..."], "trigger": "manual",
+//!  "first": ["day", "week"]}
 //! ```
 //!
 //! `abi` is the fingerprint native code plugins must have to run here
 //! (ADR 0024), `compiler` the compiler they must name (ADR 0026), `code`
 //! the code plugins installed with their versions, so
 //! the server can say which have builds for an update; both are left out
-//! where the firmware loads no code plugins.
+//! where the firmware loads no code plugins. `trigger` and `first` count
+//! devices without knowing them (module `count`).
 //!
 //! The answer names the newest update for it, or none (`version`
 //! empty, or no newer than the one running):
@@ -65,6 +67,7 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{Arg, Command, Commands, Env, HttpRequest, Params, PluginKind, Storage, files};
 
+use crate::count::{self, Trigger};
 use crate::fetch::{self, Build};
 use crate::{OFFERED, PAGE, file, read_pair, waiting, write_pair};
 
@@ -331,6 +334,7 @@ fn question(
     native: Option<&Native>,
     code: &[(&str, String)],
     betas: bool,
+    counting: &str,
 ) -> String {
     let plugins: Vec<String> = firmware
         .plugins
@@ -361,13 +365,14 @@ fn question(
     if betas {
         body.push_str(",\"betas\":true");
     }
+    body.push_str(counting);
     body.push('}');
     body
 }
 
 /// Asks the server for an update; `quiet` from the action, which offers
 /// what it finds by opening the page and says nothing otherwise.
-pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
+pub(crate) fn check(env: &Env<'_>, quiet: bool, trigger: Trigger, out: &mut Commands) {
     let Some(firmware) = env.firmware() else {
         return;
     };
@@ -383,9 +388,11 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
         .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))
         .collect();
     let betas = env.settings().read(&BETAS);
-    let mut request = request.body(question(firmware, env.native(), &code, betas));
+    let unix = paperpaw_sdk::time::unix_seconds(env);
+    let counting = count::members(env.storage(), trigger, unix);
+    let mut request = request.body(question(firmware, env.native(), &code, betas, &counting));
     // Asked: an update waiting is asked for again not before a day.
-    waiting::tried(env.storage(), paperpaw_sdk::time::unix_seconds(env));
+    waiting::tried(env.storage(), unix);
     if quiet {
         request = request.param(QUIET, "1");
     }
@@ -536,7 +543,7 @@ mod tests {
     #[test]
     fn the_question_says_what_runs() {
         assert_eq!(
-            question(&firmware(), None, &[], false),
+            question(&firmware(), None, &[], false, ""),
             "{\"project\":\"paperpaw-xteink\",\"chip\":5,\"version\":\"0.4.0\",\
              \"plugins\":[\"paperpaw-plugin-stats 0.4.0\",\"paperpaw-plugin-chess 1.0.0\"]}"
         );
@@ -546,7 +553,7 @@ mod tests {
         native.compiler = 0x6a1f_03c2;
         let code = [("hello", String::from("0.1.0"))];
         assert_eq!(
-            question(&firmware(), Some(&native), &code, false),
+            question(&firmware(), Some(&native), &code, false, ""),
             "{\"project\":\"paperpaw-xteink\",\"chip\":5,\"version\":\"0.4.0\",\
              \"plugins\":[\"paperpaw-plugin-stats 0.4.0\",\"paperpaw-plugin-chess 1.0.0\"],\
              \"abi\":\"f1f6cd5dd377bb4d\",\"compiler\":\"6a1f03c2\",\"code\":[\"hello 0.1.0\"]}"
@@ -569,8 +576,8 @@ mod tests {
     /// newer, by beta number, and never one back.
     #[test]
     fn betas_are_asked_for_and_offered_only_newer() {
-        assert!(question(&firmware(), None, &[], true).ends_with(",\"betas\":true}"));
-        assert!(!question(&firmware(), None, &[], false).contains("betas"));
+        assert!(question(&firmware(), None, &[], true, "").ends_with(",\"betas\":true}"));
+        assert!(!question(&firmware(), None, &[], false, "").contains("betas"));
         let on = |version: &str| {
             let mut firmware = firmware();
             firmware.version = version.into();

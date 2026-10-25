@@ -1,0 +1,7 @@
+Bluetooth pairs remotes, keyboards and sensors with the reader, where it has Bluetooth (the X4 Pro).
+
+Add a device searches for what is in reach; put the device in pairing mode first. Choose it, and confirm on the reader (compare the number where one shows). A remote's or a keyboard's keys then turn pages and move through menus; change what each key does under Controls.
+
+Remotes says when their keys work: when switched on here, while reading (connected while a book is open, saving battery), or always. The menu button or a long press on a device forgets it.
+
+A sensor is for plugins: switch on which plugin may use it. Bluetooth is off whenever nothing uses it.

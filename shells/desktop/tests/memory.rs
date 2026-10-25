@@ -28,6 +28,8 @@ use std::process::{Command, Output};
 
 /// The share of the budget, in percent, the peak may reach at most.
 const MARGIN_PERCENT: f64 = 85.0;
+/// What a connected remote may add to the peak of reading, at most.
+const BLUETOOTH_KIB: f64 = 8.0;
 
 /// The repository: two folders above this crate.
 fn root() -> PathBuf {
@@ -74,7 +76,23 @@ fn library(name: &str, book: Option<&str>) -> PathBuf {
 
 /// Runs the emulator headless on `profile` in a fresh library.
 fn emulator(name: &str, profile: &str, book: Option<&str>, args: &[&str]) -> Output {
+    emulator_with(name, profile, book, &[], args)
+}
+
+/// [`emulator`] with `files` (path in the library, content) written first.
+fn emulator_with(
+    name: &str,
+    profile: &str,
+    book: Option<&str>,
+    files: &[(&str, String)],
+    args: &[&str],
+) -> Output {
     let library = library(name, book);
+    for (path, content) in files {
+        let path = library.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
     let mut command = run_in(&library, profile, args);
     if book.is_none() {
         command.args(["--set", "reader.open-last=false"]);
@@ -152,17 +170,30 @@ fn reading_flow() -> String {
     .join(",")
 }
 
-/// Runs `flow` with `book` on `profile` under its budget and without one,
-/// and checks the peak.
+/// Runs the reading flow with `book` on `profile` under its budget and
+/// without one, and checks the peak.
 fn stays_within_budget(name: &str, profile: &str, book: &str) -> Heap {
-    let flow = reading_flow();
-    let budgeted = heap(&emulator(name, profile, Some(book), &["--script", &flow]));
-    let free = heap(&emulator(
-        name,
-        profile,
-        Some(book),
-        &["--heap-budget", "none", "--script", &flow],
-    ));
+    flow_stays_within_budget(name, profile, book, &reading_flow(), &[], &[])
+}
+
+/// Runs `flow` with `book` on `profile` (with `files` in the library and
+/// `args`) under its budget and without one, and checks the peak.
+fn flow_stays_within_budget(
+    name: &str,
+    profile: &str,
+    book: &str,
+    flow: &str,
+    files: &[(&str, String)],
+    args: &[&str],
+) -> Heap {
+    let with = |extra: &[&str]| {
+        let mut all: Vec<&str> = args.to_vec();
+        all.extend_from_slice(extra);
+        all.extend_from_slice(&["--script", flow]);
+        heap(&emulator_with(name, profile, Some(book), files, &all))
+    };
+    let budgeted = with(&[]);
+    let free = with(&["--heap-budget", "none"]);
     let limit = budgeted.limit.expect("the profile has a budget");
     assert_eq!(free.limit, None);
     assert_eq!(budgeted.screen, "home.dashboard", "the flow went home");
@@ -221,6 +252,50 @@ fn reading_a_txt_stays_within_the_x4_budget() {
 #[test]
 fn reading_an_epub_stays_within_the_x4_pro_budget() {
     stays_within_budget("x4-pro-epub", "xteink-x4-pro", "books/die-verwandlung.epub");
+}
+
+/// Bluetooth on the X4 Pro: the emulator's remote bonded before and
+/// connected while a book is open, turning pages with its keys, then
+/// the Bluetooth page and the rest of the reading flow. The kernel's
+/// radio state (the link, the remote's report decoding) fits beside
+/// reading.
+#[test]
+fn bluetooth_stays_within_the_x4_pro_budget() {
+    let mut secrets = paperpaw_core::sdk::secrets::Secrets::default();
+    secrets.apply(paperpaw_core::sdk::secrets::SecretChange::keep(
+        "core.bluetooth.1",
+        "PaperPaw Remote",
+        "fa:ke:00:00:00:01	PaperPaw Remote	remote	0		keys",
+    ));
+    let secrets = (paperpaw_core::sdk::secrets::FILE, secrets.encode());
+    let flow = [
+        "wait:1000".into(),
+        times("ble-key:right", 20),
+        times("ble-key:left", 20),
+        "run:bluetooth.open,wait:300,run:core.back".into(),
+        reading_flow(),
+    ]
+    .join(",");
+    let book = "books/die-verwandlung.epub";
+    let with = flow_stays_within_budget(
+        "x4-pro-bluetooth",
+        "xteink-x4-pro",
+        book,
+        &flow,
+        &[secrets],
+        &["--set", "bluetooth.remotes=bluetooth.remotes.reading"],
+    );
+    let without = stays_within_budget("x4-pro-no-bluetooth", "xteink-x4-pro", book);
+    eprintln!(
+        "x4-pro: peak {} KiB with a remote, {} KiB without",
+        with.peak, without.peak
+    );
+    assert!(
+        with.peak <= without.peak + BLUETOOTH_KIB,
+        "Bluetooth: peak {} KiB, {} KiB without, over {BLUETOOTH_KIB} KiB more",
+        with.peak,
+        without.peak
+    );
 }
 
 /// An EPUB whose package document is large (400 chapters): inflating it

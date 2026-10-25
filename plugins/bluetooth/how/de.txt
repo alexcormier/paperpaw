@@ -1,0 +1,7 @@
+Bluetooth koppelt Fernbedienungen, Tastaturen und Sensoren mit dem Reader, wo er Bluetooth hat (der X4 Pro).
+
+Gerät hinzufügen sucht, was in der Nähe ist; das Gerät vorher in den Koppelmodus bringen. Auswählen und am Reader bestätigen (wo eine Zahl erscheint, vergleichen). Die Tasten einer Fernbedienung oder Tastatur blättern dann und bewegen durch Menüs; was jede Taste tut, unter Bedienung ändern.
+
+Fernbedienungen sagt, wann ihre Tasten gehen: wenn hier eingeschaltet, beim Lesen (verbunden, solange ein Buch offen ist, spart Akku) oder immer. Die Menütaste oder langes Drücken auf ein Gerät vergisst es.
+
+Ein Sensor ist für Plugins: einschalten, welches Plugin ihn nutzen darf. Bluetooth ist aus, solange nichts es nutzt.

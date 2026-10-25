@@ -5,6 +5,7 @@
 //! Each part keeps its own state; the shell takes all of it at once as
 //! [`Io`] (`Kernel::take_io`).
 
+pub(crate) mod bluetooth;
 pub(crate) mod cable;
 pub(crate) mod clipboard;
 pub(crate) mod http;
@@ -18,6 +19,9 @@ use alloc::vec::Vec;
 use paperpaw_sdk::firmware::FirmwareCommand;
 use paperpaw_sdk::wifi::{JoinFailure, WifiCommand, WifiNetwork, WifiState};
 
+pub use bluetooth::{
+    Advert, Bond, BtCall, BtReport, Found, PairQuestion, ServedCharacteristic, ServedService,
+};
 pub use http::{HttpCall, HttpResponse, MAX_FILE, MAX_RESPONSE};
 pub use servers::{ServedFile, ServerCall, ServerEvent};
 pub use sockets::{SOCKET_PART, SocketCall, SocketEvent};
@@ -51,6 +55,9 @@ pub enum Io {
     /// For the radio, where PaperPaw manages Wi-Fi; report with
     /// `Kernel::wifi_event`.
     Wifi(WifiCommand),
+    /// For the Bluetooth radio, where the kernel uses one
+    /// (`KernelBuilder::bluetooth`); report with `Kernel::bluetooth_event`.
+    Bluetooth(BtCall),
     /// For the firmware, where PaperPaw is it; report with
     /// `Kernel::firmware_state`.
     Firmware(FirmwareCommand),

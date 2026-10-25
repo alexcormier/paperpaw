@@ -189,11 +189,14 @@ impl InputKey {
             return Some(InputKey::Tap2);
         }
         let (kind, name) = key.split_once('.')?;
+        // A Bluetooth remote's keys have a dot in their names (`hid.right`).
         let button = |name: &str| {
             let valid = !name.is_empty()
-                && name
-                    .bytes()
-                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+                && !name.starts_with('.')
+                && !name.ends_with('.')
+                && name.bytes().all(|b| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.'
+                });
             valid.then(|| Cow::Owned(name.to_string()))
         };
         match kind {

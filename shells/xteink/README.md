@@ -101,6 +101,16 @@ python tools/x4-remote.py --script "run:update.open,until:Search online,expect:W
 python tools/x4-remote.py --push my-fonts .paperpaw/fonts --info
 ```
 
+## Back to another firmware
+
+Put the other firmware's file (`.bin`, CrossPoint's for example) at the
+top of the card or in `updates` and open *Update*. PaperPaw shows it as
+another firmware, not signed, and installs it only when chosen
+(*Install anyway*). It checks that the file is a whole app image for
+this device (its chip, segments, checksum and hash, and CrossPoint's
+board tag where it has one), writes it into the other app slot and
+starts it; the running firmware is not touched until then.
+
 ## What works, what is to come
 
 - The screen (black and white, fast and full refreshes), the seven
@@ -150,6 +160,16 @@ the SD card (SDMMC), the battery from its fuel gauge, the clock chip,
 the front light (brightness and warmth, in the quick panel), sleep, the
 network as on the X4, the UC8279 of other X4 Pros. To come: battery life
 measured.
+
+Bluetooth (ADR 0027) is built with the feature `bluetooth`, not yet by
+default: scanning, connecting, GATT reads, writes and notifications,
+pairing confirmed on the reader, and a remote's keys. Advertising and
+the GATT server come later.
+
+```sh
+cargo +esp x4pro-bt       # build
+cargo +esp x4pro-bt-run   # flash and show the log
+```
 
 ## The X4 Classic
 

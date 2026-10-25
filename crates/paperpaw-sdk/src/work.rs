@@ -105,9 +105,11 @@ impl Moments {
     pub const CHARGING: Moments = Moments(1 << 5);
     /// No input for a while, the screen still on.
     pub const IDLE: Moments = Moments(1 << 6);
-    pub const ALL: Moments = Moments(0x7f);
+    /// Bluetooth is on anyway (something else uses it).
+    pub const BLUETOOTH_ON: Moments = Moments(1 << 7);
+    pub const ALL: Moments = Moments(0xff);
 
-    const NAMES: [(Moments, &'static str); 7] = [
+    const NAMES: [(Moments, &'static str); 8] = [
         (Moments::WAKE, "wake"),
         (Moments::BOOK_OPENED, "book-opened"),
         (Moments::BOOK_CLOSED, "book-closed"),
@@ -115,6 +117,7 @@ impl Moments {
         (Moments::ONLINE, "online"),
         (Moments::CHARGING, "charging"),
         (Moments::IDLE, "idle"),
+        (Moments::BLUETOOTH_ON, "bluetooth-on"),
     ];
 
     /// Whether every moment of `other` is among these.
@@ -200,10 +203,8 @@ pub struct Work {
     pub key: String,
     /// Passed with the event.
     pub params: Params,
-    /// It needs the network.
-    pub network: bool,
-    /// It runs only while the device charges.
-    pub charging: bool,
+    /// What it needs: the network, Bluetooth, the device charging.
+    pub needs: Needs,
     pub importance: Importance,
     /// An exact time: a timer, run then whatever else holds.
     pub at: Option<Instant>,
@@ -226,8 +227,7 @@ impl Work {
             id: id.into(),
             key: String::new(),
             params: Params::new(),
-            network: false,
-            charging: false,
+            needs: Needs::NOTHING,
             importance: Importance::Expected,
             at: None,
             after: None,
@@ -240,7 +240,17 @@ impl Work {
     /// Work needing the network.
     pub fn network(id: impl Into<Id>) -> Self {
         Self {
-            network: true,
+            needs: Needs::NETWORK,
+            ..Self::new(id)
+        }
+    }
+
+    /// Work needing Bluetooth (reading a sensor now and then): it runs
+    /// at the moments the network's would, and its commands may switch
+    /// the radio on.
+    pub fn bluetooth(id: impl Into<Id>) -> Self {
+        Self {
+            needs: Needs::BLUETOOTH,
             ..Self::new(id)
         }
     }
@@ -288,7 +298,7 @@ impl Work {
 
     /// Only while the device charges (e.g. a large download).
     pub fn charging(mut self) -> Self {
-        self.charging = true;
+        self.needs = self.needs | Needs::CHARGING;
         self
     }
 
@@ -352,6 +362,8 @@ pub enum Reason {
     Saving,
     /// No known network, or joining it failed.
     NoNetwork,
+    /// The reader switched Bluetooth off, or there is none.
+    BluetoothOff,
     /// The device switched off before it was done.
     Sleeping,
     /// The plugin asked again before it was told it might.
@@ -365,12 +377,13 @@ pub enum Reason {
 }
 
 impl Reason {
-    const NAMES: [(Reason, &'static str); 8] = [
+    const NAMES: [(Reason, &'static str); 9] = [
         (Reason::Offline, "offline"),
         (Reason::NetworkOff, "network-off"),
         (Reason::NotDeclared, "not-declared"),
         (Reason::Saving, "saving"),
         (Reason::NoNetwork, "no-network"),
+        (Reason::BluetoothOff, "bluetooth-off"),
         (Reason::Sleeping, "sleeping"),
         (Reason::TooOften, "too-often"),
         (Reason::Cancelled, "cancelled"),
@@ -428,6 +441,38 @@ impl Retry {
             "never" => Some(Retry::Never),
             _ => None,
         }
+    }
+}
+
+/// What declared work needs ([`Work::needs`]): a set, so that what is
+/// needed later (another radio) is a new constant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Needs(u8);
+
+impl Needs {
+    pub const NOTHING: Needs = Needs(0);
+    /// The network: it runs when the radio is on anyway, or switches it
+    /// on when due.
+    pub const NETWORK: Needs = Needs(1);
+    /// Bluetooth ([`bluetooth`](crate::bluetooth)).
+    pub const BLUETOOTH: Needs = Needs(2);
+    /// The device charging: it runs only then.
+    pub const CHARGING: Needs = Needs(4);
+
+    pub const fn contains(self, other: Needs) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+}
+
+impl core::ops::BitOr for Needs {
+    type Output = Needs;
+
+    fn bitor(self, other: Needs) -> Needs {
+        Needs(self.0 | other.0)
     }
 }
 
@@ -732,7 +777,7 @@ mod tests {
             .within(Duration::from_secs(60))
             .every(Duration::from_secs(3600))
             .at_moments(Moments::SLEEP);
-        assert!(w.network && !w.charging);
+        assert!(w.needs.contains(Needs::NETWORK) && !w.needs.contains(Needs::CHARGING));
         assert_eq!(w.importance, Importance::Optional);
         assert_eq!(w.within, Some(Duration::from_secs(60)));
         assert_eq!(w.every, Some(Duration::from_secs(3600)));
@@ -740,7 +785,7 @@ mod tests {
         let timer = Work::at(Id::new_static("rules.time"), Instant(5000)).key("rule-3");
         assert_eq!(timer.at, Some(Instant(5000)));
         assert_eq!(timer.key, "rule-3");
-        assert!(!timer.network);
+        assert!(!timer.needs.contains(Needs::NETWORK));
         assert_eq!(timer.moments, Moments::NONE);
     }
 

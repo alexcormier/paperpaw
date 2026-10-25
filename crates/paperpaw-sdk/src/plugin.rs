@@ -79,6 +79,10 @@ impl Uses {
     /// ([`Reason::NotDeclared`](crate::work::Reason::NotDeclared)), and
     /// with it the reader can switch the plugin's network off.
     pub const NETWORK: Uses = Uses(1);
+    /// Bluetooth ([`bluetooth`](crate::bluetooth)): scanning, links,
+    /// pairing, being seen. Without it its commands fail
+    /// ([`BtError::NotAllowed`](crate::bluetooth::BtError)).
+    pub const BLUETOOTH: Uses = Uses(2);
 
     /// Whether everything in `other` is declared.
     pub const fn contains(self, other: Uses) -> bool {
@@ -90,7 +94,7 @@ impl Uses {
     }
 
     pub const fn from_bits(bits: u8) -> Uses {
-        Uses(bits & Uses::NETWORK.0)
+        Uses(bits & (Uses::NETWORK.0 | Uses::BLUETOOTH.0))
     }
 }
 

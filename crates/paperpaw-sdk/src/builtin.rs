@@ -137,6 +137,10 @@ pub mod slots {
     /// The reader opens links out of a book this way, if a browser is
     /// bound here ([`Env::has_slot`](crate::Env::has_slot)).
     pub const BROWSER: Id = Id::new_static("core.browser");
+    /// The Bluetooth page: the plugin whose screen is bound here is the
+    /// Bluetooth manager, which sees every bond and decides when remotes
+    /// connect (see [`bluetooth`](crate::bluetooth)).
+    pub const BLUETOOTH: Id = Id::new_static("core.bluetooth");
     /// Chooses a folder, browsing the device's folders (with a way to make
     /// a new one). Parameters: [`ID`](super::params::ID), a setting the
     /// folder is written to, or [`REPLY`](super::params::REPLY), an event
@@ -411,6 +415,11 @@ pub mod screens {
     /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
     /// plugin fills it: name it as a text setting's editor.
     pub const FOLDER_EDITOR: Id = Id::new_static("core.folder-editor");
+    /// Says that an update is being finished while the firmware just
+    /// installed runs on trial, until the device starts again to load its
+    /// code plugins; takes no input. The shell opens it with params
+    /// `from` and `until`, the trial's start and end in milliseconds.
+    pub const FINISHING_UPDATE: Id = Id::new_static("core.finishing-update");
 }
 
 /// Global settings.

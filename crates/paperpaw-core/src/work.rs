@@ -17,6 +17,7 @@ use paperpaw_platform::Instant;
 use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::power::{self, Power, PowerLevel, Wear};
+use paperpaw_sdk::work::Needs;
 use paperpaw_sdk::work::{
     Importance, Moments, Progress, Reason, Refusal, Retry, Step, Why, Work, WorkRefused, WorkSpec,
     WorkState,
@@ -95,7 +96,7 @@ impl Entry {
 
     /// Held back by the power level.
     fn held(&self, power: &Power) -> bool {
-        self.work.network && power.level == PowerLevel::Offline
+        self.work.needs.contains(Needs::NETWORK) && power.level == PowerLevel::Offline
     }
 }
 
@@ -369,9 +370,9 @@ impl Queue {
                 None => {
                     // Only what can run then wakes the device: no work that
                     // waits for charging or for the radio to be on anyway.
-                    let waits = (entry.work.charging && !self.charging)
+                    let waits = (entry.work.needs.contains(Needs::CHARGING) && !self.charging)
                         || (entry.work.importance == Importance::Optional
-                            && entry.work.network
+                            && entry.work.needs.contains(Needs::NETWORK)
                             && !self.online);
                     if let Some(at) = entry.work.at {
                         earliest(at);
@@ -446,11 +447,13 @@ impl Queue {
         if let Some(at) = entry.work.at {
             return (self.ticking && at <= env.now()).then_some(Why::Time);
         }
-        if entry.after() > env.now() || (entry.work.charging && !self.charging) {
+        if entry.after() > env.now()
+            || (entry.work.needs.contains(Needs::CHARGING) && !self.charging)
+        {
             return None;
         }
         // Work only nice to have never brings the radio on.
-        let cheap = !entry.work.network || self.online;
+        let cheap = !entry.work.needs.contains(Needs::NETWORK) || self.online;
         let mut hit = Moments::from_bits(moments.bits() & entry.work.moments.bits());
         if entry.work.importance == Importance::Optional && !cheap {
             hit = Moments::NONE;
@@ -710,7 +713,7 @@ impl Kernel {
         let mut index = 0;
         while index < self.works.entries.len() {
             let entry = &self.works.entries[index];
-            if entry.work.network && self.works.network_off(&entry.owner) {
+            if entry.work.needs.contains(Needs::NETWORK) && self.works.network_off(&entry.owner) {
                 let entry = self.works.entries.remove(index);
                 self.works.changed = true;
                 let refused = WorkRefused::new(

@@ -37,6 +37,7 @@
 
 extern crate alloc;
 
+mod bluetooth;
 mod builder;
 mod chrome;
 mod code_plugin;
@@ -96,7 +97,8 @@ use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
 pub use crate::io::cable::PREFIX as CABLE_PREFIX;
 pub use crate::io::{
-    HttpCall, HttpResponse, Io, MAX_FILE, MAX_RESPONSE, SOCKET_PART, ServedFile, ServerCall,
+    Advert, Bond, BtCall, BtReport, Found, HttpCall, HttpResponse, Io, MAX_FILE, MAX_RESPONSE,
+    PairQuestion, SOCKET_PART, ServedCharacteristic, ServedFile, ServedService, ServerCall,
     ServerEvent, SocketCall, SocketEvent, SpeechCall, WifiEvent,
 };
 use crate::keymap::{InputKey, Keymap, Origin, Zone};
@@ -424,6 +426,8 @@ pub struct Kernel {
     /// The file of passwords and keys is there but could not be read at
     /// start: it is not written over.
     secrets_unreadable: bool,
+    /// The number a pairing question's answer must bring back.
+    pairing_nonce: Option<u64>,
     /// A screen was opened or closed since the last call ended; then the
     /// frame drawn for it is not shown yet (see [`Kernel::shown`]).
     screens_changed: bool,
@@ -524,6 +528,11 @@ impl Kernel {
         self.last_activity = now;
         self.output.commands.push(Command::open_slot(slots::HOME));
         self.output.commands.push(events::STARTED.emit(()));
+        if let Some(radio) = &mut self.io.bluetooth {
+            radio.start();
+        }
+        // The bonds read with the secrets, for every plugin to see.
+        self.sync_bluetooth();
         if mem::take(&mut self.config_unreadable) {
             let text = self.config_notice();
             self.output.commands.push(Command::Notify(text));
@@ -921,6 +930,9 @@ impl Kernel {
         if self.network_deadline().is_some_and(|at| at <= now) {
             self.fail_waiting_network();
         }
+        if self.bluetooth_deadline().is_some_and(|at| at <= now) {
+            self.bluetooth_tick();
+        }
         let thresholds = self.thresholds();
         for recognized in self.input.recognizer.tick(now, &thresholds) {
             // A press held long enough: the reader's input too.
@@ -1240,6 +1252,7 @@ impl Kernel {
         self.now = now;
         self.shared.usage.sleeps = self.shared.usage.sleeps.saturating_add(1);
         self.output.commands.push(events::SUSPEND.emit(()));
+        self.bluetooth_suspend();
         let effects = self.finish();
         // What plugins saved, and what storage kept back, written.
         let _ = self.shared.storage.sync();
@@ -1347,6 +1360,9 @@ struct Shared {
     caps: Capabilities,
     /// Wi-Fi, where PaperPaw manages it (see [`KernelBuilder::wifi`]).
     wifi: Option<paperpaw_sdk::wifi::Wifi>,
+    /// Bluetooth, where the kernel uses a radio (see
+    /// [`KernelBuilder::bluetooth`]).
+    bluetooth: Option<paperpaw_sdk::bluetooth::Bluetooth>,
     /// Firmware updates, where PaperPaw is the firmware (see
     /// [`KernelBuilder::firmware`]).
     firmware: Option<Firmware>,
@@ -1444,6 +1460,7 @@ impl Shared {
             book_badges: &self.book_badges,
             caps: self.caps,
             wifi: self.wifi.as_ref(),
+            bluetooth: self.bluetooth.as_ref(),
             firmware: self.firmware.as_ref(),
             native: self.native.as_ref(),
             power: &self.power,

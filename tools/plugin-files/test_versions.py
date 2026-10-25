@@ -38,6 +38,16 @@ class Versions(unittest.TestCase):
         # Never older than the release's.
         self.assertIsNotNone(versions.problem("vocabulary", "1.0.1", "1.0.0", []))
 
+    def test_a_raised_plugin_interface_needs_a_newer_version_unchanged_or_not(self):
+        self.assertIsNotNone(versions.problem("weather", "1.0.0", "1.0.0", [], raised=3))
+        self.assertIsNone(versions.problem("weather", "1.0.0", "1.0.1", [], raised=3))
+        quiet = "chore: a rename\n\nPlugin-unchanged: weather"
+        self.assertIsNotNone(versions.problem("weather", "1.0.0", "1.0.0", [quiet], raised=3))
+
+    def test_the_interface_is_read_from_native_rs(self):
+        self.assertEqual(versions.interface_at("pub const INTERFACE: u16 = 3;\n"), 3)
+        self.assertIsNone(versions.interface_at("nothing here"))
+
     def test_a_change_no_reader_sees_keeps_it(self):
         quiet = "test(stats): one more case\n\nPlugin-unchanged: stats, widgets"
         everything = "chore: rustfmt\n\nplugin-unchanged: all"

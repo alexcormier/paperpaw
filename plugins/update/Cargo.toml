@@ -16,6 +16,7 @@ paperpaw-sdk = { workspace = true, features = ["kernel"] }
 
 [dev-dependencies]
 paperpaw-core.workspace = true
+paperpaw-digest.workspace = true
 paperpaw-i18n.workspace = true
 paperpaw-platform.workspace = true
 paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }

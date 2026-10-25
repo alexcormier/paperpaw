@@ -137,6 +137,7 @@ impl Kit {
             look: crate::ui::look::Look::none(),
             caps: crate::Capabilities::default(),
             wifi: None,
+            bluetooth: None,
             firmware: None,
             native: None,
             power: crate::power::Power::normal(),

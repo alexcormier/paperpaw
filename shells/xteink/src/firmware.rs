@@ -134,11 +134,34 @@ impl Firmware {
         }
         let effects = self.kernel.start(now());
         self.apply(effects);
+        self.finishing_update();
         // Its first frame is shown: its code plugins started cleanly.
         crate::safe_mode::started();
         loop {
             self.step();
         }
+    }
+
+    /// An update on trial with code plugins to load once it is kept: it
+    /// starts again then, and says so meanwhile, on a screen that takes no
+    /// input (nothing begun is cut off).
+    fn finishing_update(&mut self) {
+        let start = now();
+        let Some(left) = self.ota.as_ref().and_then(|ota| ota.trial_left(start.0)) else {
+            return;
+        };
+        if !paperpaw_core::code_to_load(self.kernel.storage(), &crate::native::this_firmware()) {
+            return;
+        }
+        let params = paperpaw_sdk::Params::new()
+            .with("from", alloc::format!("{}", start.0))
+            .with("until", alloc::format!("{}", start.0 + left));
+        let effects = self.kernel.open_screen(
+            start,
+            paperpaw_sdk::builtin::screens::FINISHING_UPDATE,
+            params,
+        );
+        self.apply(effects);
     }
 
     /// The X4 ends cleanly (sleeps or restarts): an update on trial goes
@@ -279,6 +302,12 @@ impl Firmware {
                     let effects = self.kernel.speech_done(now(), id, false);
                     self.apply(effects);
                 }
+                #[cfg(feature = "bluetooth")]
+                Io::Bluetooth(call) => self.network.bluetooth(call),
+                // Without the X4 Pro's `bluetooth` feature (ADR 0027) no
+                // radio is offered, so none is asked for.
+                #[cfg(not(feature = "bluetooth"))]
+                Io::Bluetooth(_) => {}
                 Io::Speech(SpeechCall::Stop) | Io::Copy(_) => {}
                 Io::ReadClipboard => {
                     let effects = self.kernel.clipboard_text(now(), None);
@@ -297,6 +326,14 @@ impl Firmware {
             } => {
                 let state = match &mut self.ota {
                     Some(ota) => ota.begin(self.kernel.storage(), &path, key.as_ref(), older),
+                    None => FirmwareState::Failed(InstallFailure::Write),
+                };
+                let effects = self.kernel.firmware_state(now(), state);
+                self.apply(effects);
+            }
+            FirmwareCommand::InstallForeign { path, .. } => {
+                let state = match &mut self.ota {
+                    Some(ota) => ota.begin_foreign(self.kernel.storage(), &path),
                     None => FirmwareState::Failed(InstallFailure::Write),
                 };
                 let effects = self.kernel.firmware_state(now(), state);
@@ -553,6 +590,12 @@ impl Firmware {
         self.pause_trial();
         let effects = self.kernel.suspend(now());
         self.apply(effects);
+        // Bluetooth down now, asleep on USB too (the kernel asked for it,
+        // but the main loop does not come by while asleep; on battery the
+        // power goes anyway).
+        #[cfg(feature = "bluetooth")]
+        self.network
+            .bluetooth(paperpaw_core::BtCall::Radio { on: false });
         if !self.finish_work() {
             // A press meanwhile: awake after all.
             info!("sleep: a press, awake");

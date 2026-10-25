@@ -27,6 +27,8 @@ pub struct Capabilities {
     pub network: bool,
     /// PaperPaw manages Wi-Fi itself ([`Env::wifi`]).
     pub wifi: bool,
+    /// A Bluetooth Low Energy radio the kernel uses ([`Env::bluetooth`]).
+    pub bluetooth: bool,
     /// PaperPaw is the device's firmware and updates it
     /// ([`Env::firmware`]).
     pub firmware: bool,
@@ -133,6 +135,9 @@ pub struct Env<'a> {
     /// Wi-Fi, where PaperPaw manages it itself (see
     /// [`wifi`](crate::wifi)); `None` where the system does.
     pub(crate) wifi: Option<&'a crate::wifi::Wifi>,
+    /// Bluetooth, where the kernel uses a radio (see
+    /// [`bluetooth`](crate::bluetooth)).
+    pub(crate) bluetooth: Option<crate::bluetooth::BluetoothView<'a>>,
     /// Firmware updates, where PaperPaw is the device's firmware (see
     /// [`firmware`](crate::firmware)); `None` where it is an app.
     pub(crate) firmware: Option<&'a crate::firmware::Firmware>,
@@ -377,6 +382,12 @@ impl<'a> Env<'a> {
         self.wifi
     }
 
+    /// Bluetooth, where the kernel uses a radio (see
+    /// [`bluetooth`](crate::bluetooth)); `None` elsewhere.
+    pub fn bluetooth(&self) -> Option<crate::bluetooth::BluetoothView<'a>> {
+        self.bluetooth
+    }
+
     /// Firmware updates, where PaperPaw is the device's firmware (see
     /// [`firmware`](crate::firmware)); `None` where it is an app.
     pub fn firmware(&self) -> Option<&'a crate::firmware::Firmware> {
@@ -585,6 +596,9 @@ pub struct EnvParts<'a> {
     /// Wi-Fi, where PaperPaw manages it itself (see
     /// [`wifi`](crate::wifi)); `None` where the system does.
     pub wifi: Option<&'a crate::wifi::Wifi>,
+    /// Bluetooth, where the kernel uses a radio (see
+    /// [`bluetooth`](crate::bluetooth)).
+    pub bluetooth: Option<&'a crate::bluetooth::Bluetooth>,
     /// Firmware updates, where PaperPaw is the device's firmware (see
     /// [`firmware`](crate::firmware)); `None` where it is an app.
     pub firmware: Option<&'a crate::firmware::Firmware>,
@@ -693,6 +707,9 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             look: p.look,
             caps: p.caps,
             wifi: p.wifi,
+            bluetooth: p
+                .bluetooth
+                .map(|all| crate::bluetooth::BluetoothView::new(all, p.running)),
             firmware: p.firmware,
             native: p.native,
             power: p.power,

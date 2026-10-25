@@ -8,6 +8,7 @@
 //! Linking it puts its allocator in charge ([`budget::BudgetAllocator`]),
 //! so that the kernel's heap is counted against the device's budget.
 
+pub mod bluetooth;
 pub mod budget;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cable;

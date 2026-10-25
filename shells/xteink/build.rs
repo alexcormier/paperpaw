@@ -38,15 +38,36 @@ fn main() {
     println!("cargo::rerun-if-changed=memory-x4.x");
     plugins();
     compiler();
+    let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR"));
     if std::env::var_os("CARGO_FEATURE_ESP32S3").is_some() {
         println!("cargo::rustc-link-arg=-nostartfiles");
         println!("cargo::rustc-link-arg=-Wl,-Tlinkall.x");
+        stack_floor(&out);
         return;
     }
-    let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR"));
     std::fs::copy("memory-x4.x", out.join("memory.x")).expect("memory-x4.x");
     println!("cargo::rustc-link-search={}", out.display());
     println!("cargo::rustc-link-arg=-Tlinkall.x");
+}
+
+/// The least main stack the ESP32-S3 devices are linked with. Their IRAM
+/// and DRAM are one SRAM and the stack gets what is left, so code moved
+/// to IRAM (Bluetooth's controller takes 21 KB) shrinks it unseen, and
+/// the firmware then overruns it at start. The deepest use measured is
+/// some 32 KB (a book's first opening, ADR 0017); the X4 Pro has 41.3 KB,
+/// with Bluetooth too (its heap is smaller by as much as Bluetooth takes).
+const STACK_FLOOR: u32 = 40 * 1024;
+
+/// Fails the link where the main stack is below [`STACK_FLOOR`]: a
+/// linker script of its own, read beside esp-hal's.
+fn stack_floor(out: &std::path::Path) {
+    let script = out.join("stack-floor.x");
+    let text = format!(
+        "ASSERT(_stack_start - _stack_end >= {STACK_FLOOR}, \"the main stack is below \
+         {STACK_FLOOR} bytes: give the heap less (HEAP_SIZE)\");\n"
+    );
+    std::fs::write(&script, text).expect("stack-floor.x");
+    println!("cargo::rustc-link-arg={}", script.display());
 }
 
 /// Gives the firmware the release of the compiler that builds it, as

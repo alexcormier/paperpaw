@@ -24,6 +24,11 @@
 
 extern crate alloc;
 
+#[cfg(all(feature = "bluetooth", not(feature = "x4-pro")))]
+compile_error!("Bluetooth is built for the X4 Pro alone (ADR 0027)");
+
+#[cfg(feature = "bluetooth")]
+mod bluetooth;
 #[cfg(feature = "x4")]
 mod board;
 #[cfg(feature = "x3")]
@@ -126,8 +131,14 @@ esp_bootloader_esp_idf::esp_app_desc!(
     esp_bootloader_esp_idf::SECURE_VERSION
 );
 
-/// Heap for PaperPaw: what the emulator's X4 profile allows.
-const HEAP_SIZE: usize = 192 * 1024;
+/// Heap for PaperPaw: what the emulator's X4 profile allows, less what
+/// Bluetooth takes of the same memory for good.
+const HEAP_SIZE: usize = (192 - BLUETOOTH_KB) * 1024;
+/// Bluetooth's fixed share of the internal RAM, in KB, as measured: its
+/// controller's code in IRAM (20.6 KB) and statics (4.4 KB). The stack,
+/// after them, would lose it: the heap gives it back (`build.rs` checks
+/// the stack's size).
+const BLUETOOTH_KB: usize = if cfg!(feature = "bluetooth") { 26 } else { 0 };
 /// More heap in the memory the bootloader used (65 KB are free after it):
 /// room for the frame kept for the panel (see `paperpaw_x4::sent`).
 const RECLAIMED_SIZE: usize = 64 * 1024;
@@ -658,6 +669,8 @@ fn kernel(
         // network joined before, for transfers and for trying things.
         .wifi(true)
         .setting_default(&paperpaw_plugin_wifi::WHILE_CHARGING, true);
+    #[cfg(feature = "bluetooth")]
+    let builder = builder.bluetooth(bluetooth::LINKS as u8);
     let builder = match firmware {
         Some(firmware) => builder.firmware(firmware),
         None => builder,

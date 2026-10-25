@@ -99,6 +99,8 @@ pub struct Network {
     /// A try to set the clock failed since the radio came online: secure
     /// requests no longer wait for it.
     sync_failed: bool,
+    #[cfg(feature = "bluetooth")]
+    bluetooth: crate::bluetooth::Bluetooth,
 }
 
 impl Network {
@@ -115,12 +117,26 @@ impl Network {
             sync: Sync::Idle { not_before: 0 },
             synced: None,
             sync_failed: false,
+            #[cfg(feature = "bluetooth")]
+            bluetooth: crate::bluetooth::Bluetooth::new(),
         }
     }
 
-    /// The radio is on: its tasks need the processor (no light sleep).
+    /// A radio is on: its tasks need the processor (no light sleep).
     pub fn radio_on(&self) -> bool {
+        #[cfg(feature = "bluetooth")]
+        if self.bluetooth.is_on() {
+            return true;
+        }
         self.radio.is_on()
+    }
+
+    /// What the kernel asks of Bluetooth (`Io::Bluetooth`), on the
+    /// scheduler Wi-Fi shares.
+    #[cfg(feature = "bluetooth")]
+    pub fn bluetooth(&mut self, call: paperpaw_core::BtCall) {
+        let radio = &mut self.radio;
+        self.bluetooth.apply(call, || radio.start_scheduler());
     }
 
     /// The host name the router lists the device by, from the next time
@@ -151,11 +167,23 @@ impl Network {
         // is open (Calibre): asleep, it missed parts of what came in a
         // burst, and the connection stalled until the other side gave up.
         let busy = self.moving() || kernel.serving() || kernel.sockets_open();
+        // Beside Bluetooth the radio is shared: Wi-Fi never keeps it to
+        // itself (its modem sleeps between beacons, Bluetooth's links run
+        // meanwhile).
+        #[cfg(feature = "bluetooth")]
+        let busy = busy && !self.bluetooth.is_on();
         self.radio.save_power(!busy);
         for event in self.radio.poll() {
             #[cfg(feature = "remote")]
             self.answer_asked(kernel, &event);
             effects.push(kernel.wifi_event(now, event));
+        }
+        #[cfg(feature = "bluetooth")]
+        self.bluetooth
+            .set_wifi_busy(self.radio.busy() || self.moving());
+        #[cfg(feature = "bluetooth")]
+        for report in self.bluetooth.poll() {
+            effects.push(kernel.bluetooth_event(now, report));
         }
         self.serve(kernel, now, &mut effects);
         self.sync_clock(now);

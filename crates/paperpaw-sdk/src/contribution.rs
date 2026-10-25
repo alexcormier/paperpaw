@@ -660,6 +660,16 @@ impl Registrar {
         self.add_checked(Contribution::InputFilter(filter))
     }
 
+    /// Adds a service to the device's own GATT server, whose centrals'
+    /// reads, writes and subscriptions come as the spec's events (see
+    /// [`bluetooth`](crate::bluetooth)).
+    pub fn add_gatt_service(
+        &mut self,
+        service: crate::bluetooth::ServiceSpec,
+    ) -> Result<(), RegisterError> {
+        self.add_checked(Contribution::GattService(Box::new(service)))
+    }
+
     /// Adds a filter of how the panel is refreshed (see
     /// [`filters`](crate::filters)).
     pub fn add_refresh_filter(&mut self, filter: RefreshFilterSpec) -> Result<(), RegisterError> {

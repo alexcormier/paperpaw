@@ -43,7 +43,7 @@ ICONS = sorted({
     "sun", "sun-low", "moon", "temperature", "brightness", "contrast",
     "refresh",
     # Tools
-    "chart-bar", "calendar", "clock", "wifi", "world", "cloud",
+    "chart-bar", "calendar", "clock", "wifi", "bluetooth", "world", "cloud",
     "cloud-download", "download", "upload", "rss", "qrcode", "keyboard",
     "plug", "puzzle", "vocabulary", "transfer", "apps", "camera",
     "book-download", "article", "devices", "device-desktop", "stack-2",

@@ -608,6 +608,9 @@ pub const BATTERY_MEASURED: Event<()> = Event::new("core.battery-measured");
 /// The Wi-Fi state changed ([`Env::wifi`](crate::Env), see
 /// [`wifi`](crate::wifi)).
 pub const WIFI_CHANGED: Event<()> = Event::new("core.wifi-changed");
+/// Bluetooth changed: the radio, a bonded device, a link
+/// ([`Env::bluetooth`](crate::Env::bluetooth)).
+pub const BLUETOOTH_CHANGED: Event<()> = Event::new("core.bluetooth-changed");
 /// Networks were found ([`Wifi::networks`](crate::wifi::Wifi)).
 pub const WIFI_SCANNED: Event<()> = Event::new("core.wifi-scanned");
 /// Joining a network failed ([`WifiFailed`]).
