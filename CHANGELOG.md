@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- Wi-Fi joins the saved network picked last on the Wi-Fi page first,
+  when it is in reach, instead of the strongest: after a restart the
+  reader stays in the network one chose. *Join first* (Last picked,
+  Strongest) sets it.
+
 ### Added
 
 - The keyboard locks capitals with *Shift* pressed twice in a row (the

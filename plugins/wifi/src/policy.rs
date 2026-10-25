@@ -2,9 +2,11 @@
 //! apart from the page so they can be tried without a device.
 //!
 //! - The radio comes on when a plugin wants the network and the user
-//!   lets it ([`ON_DEMAND`](crate::ON_DEMAND)); then the strongest secured
-//!   network joined before is joined, the next one if that fails (open
-//!   networks only when chosen, see [`best_known`]).
+//!   lets it ([`ON_DEMAND`](crate::ON_DEMAND)); then a secured network
+//!   joined before is joined: the one the user picked last, if it is in
+//!   reach and *Join first* says so ([`JOIN_FIRST`](crate::JOIN_FIRST)),
+//!   else the strongest; the next one if that fails (open networks only
+//!   when chosen, see [`best_known`]).
 //! - A scan that finds no network joined before is made again, up to
 //!   [`SCANS`] times, before none counts as in reach.
 //! - A round that joins nothing is tried again a little later while the
@@ -66,26 +68,35 @@ pub struct Policy {
     /// The setup with a phone is under way: it says what the radio does,
     /// nothing is joined by itself meanwhile.
     pub phone: bool,
+    /// The network to join first when in reach: the one the user picked
+    /// last ([`JOIN_FIRST`](crate::JOIN_FIRST)); none for the strongest.
+    pub first: Option<String>,
 }
 
-/// The strongest of `networks` joined before (`known`) and not tried yet,
-/// to join without asking. Only secured networks with their password:
-/// anyone can set up an open network by any name, so an open one (or an
-/// open twin of a secured one) is joined only when chosen on the page.
+/// Of `networks` joined before (`known`) and not tried yet, the one to
+/// join without asking: `first` if it is among them, else the strongest.
+/// Only secured networks with their password: anyone can set up an open
+/// network by any name, so an open one (or an open twin of a secured one)
+/// is joined only when chosen on the page.
 pub fn best_known<'a>(
     networks: &[WifiNetwork],
     known: &'a [(String, String)],
     tried: &[String],
+    first: Option<&str>,
 ) -> Option<&'a (String, String)> {
+    let joinable = |n: &&WifiNetwork| n.secured && !tried.contains(&n.ssid);
+    let known_as = |n: &WifiNetwork| {
+        known
+            .iter()
+            .find(|(ssid, password)| *ssid == n.ssid && !password.is_empty())
+    };
     // Networks come strongest first.
     networks
         .iter()
-        .filter(|n| n.secured && !tried.contains(&n.ssid))
-        .find_map(|n| {
-            known
-                .iter()
-                .find(|(ssid, password)| *ssid == n.ssid && !password.is_empty())
-        })
+        .filter(joinable)
+        .filter(|n| Some(n.ssid.as_str()) == first)
+        .find_map(known_as)
+        .or_else(|| networks.iter().filter(joinable).find_map(known_as))
 }
 
 impl Policy {
@@ -185,7 +196,7 @@ impl Policy {
         if self.goal != Goal::Known {
             return Some(Vec::new());
         }
-        let (ssid, password) = best_known(networks, known, &self.tried)?;
+        let (ssid, password) = best_known(networks, known, &self.tried, self.first.as_deref())?;
         self.tried.push(ssid.clone());
         Some(alloc::vec![WifiCommand::Join {
             ssid: ssid.clone(),
@@ -235,6 +246,49 @@ impl Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The network picked last comes first when in reach, though weaker;
+    /// the strongest when it is not, or when it failed.
+    #[test]
+    fn the_network_picked_last_comes_first() {
+        let known = alloc::vec![
+            (String::from("Hannes"), String::from("a")),
+            (String::from("FRITZ!Box"), String::from("b")),
+        ];
+        let networks = [net("Hannes", -45), net("FRITZ!Box", -62)];
+        let mut policy = Policy {
+            first: Some(String::from("FRITZ!Box")),
+            ..Policy::default()
+        };
+        policy.start_round(Goal::Known);
+        let join = |ssid: &str, password: &str| WifiCommand::Join {
+            ssid: String::from(ssid),
+            password: String::from(password),
+        };
+        assert_eq!(
+            policy.scanned(&networks, &known).unwrap(),
+            [join("FRITZ!Box", "b")]
+        );
+        assert_eq!(
+            policy
+                .failed("FRITZ!Box", JoinFailure::Timeout, &networks, &known)
+                .unwrap(),
+            [join("Hannes", "a")]
+        );
+        // Out of reach: the strongest.
+        policy.start_round(Goal::Known);
+        assert_eq!(
+            policy.scanned(&networks[..1], &known).unwrap(),
+            [join("Hannes", "a")]
+        );
+        // The strongest first, as set.
+        policy.first = None;
+        policy.start_round(Goal::Known);
+        assert_eq!(
+            policy.scanned(&networks, &known).unwrap(),
+            [join("Hannes", "a")]
+        );
+    }
 
     fn net(ssid: &str, signal: i8) -> WifiNetwork {
         WifiNetwork::new(String::from(ssid), signal, true)
