@@ -138,7 +138,8 @@ static SETTINGS: [SettingSpec; 2] = [
         ENABLED.static_str(),
         "battery.setting.enabled",
         true,
-        groups::SYSTEM,
+        // With the power settings (Settings, Device, Power).
+        Id::new_static("power.group"),
     )
     .description("battery.setting.enabled.help"),
     SettingSpec::switch(

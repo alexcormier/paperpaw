@@ -102,6 +102,12 @@ Ask the user for each, and suggest values from the plugin where you can
   code (`clock.open`). It must be free: not a plugin of the site's
   own, not another author's, not one taken down (look at
   `https://paperpaw.org/api/v1/plugins.json`). It cannot change later.
+- The **name** says what the plugin does. It is never only another
+  product's, project's or service's name, which would suggest the
+  plugin is theirs: "KOReader highlights", not "KOReader"; "Wikipedia
+  lookup", not "Wikipedia". Naming the other product to say what the
+  plugin works with is fine. Use no other's logo as the icon. The
+  store's review reports such names.
 - **name** (at most 60), **summary** (one sentence, at most 160),
   **description** (at most 2000): *How it works*, a few sentences on
   what the plugin does, where it is found and how it is used, shown on
@@ -292,8 +298,8 @@ library crate, tested on a computer and tried in the emulator.
 ### The key (once per author)
 
 ```sh
-# paperpaw-sign of the release built for (its tag, here v0.5.0-beta.6):
-cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.6 paperpaw-sign
+# paperpaw-sign of the release built for (its tag, here v0.5.0-beta.7):
+cargo install --locked --git https://github.com/hthoene/paperpaw --tag v0.5.0-beta.7 paperpaw-sign
 mkdir -p ~/.paperpaw
 paperpaw-sign key ~/.paperpaw/author.key
 ```
@@ -335,7 +341,7 @@ files with its own. *About* on the reader shows its fingerprint and
 compiler; each PaperPaw release lists the fingerprints in its files
 `paperpaw-<reader>-<version>-abi.txt`.
 
-- Name the SDK of the release in `Cargo.toml` (`paperpaw-sdk = "0.5.0-beta.6"`),
+- Name the SDK of the release in `Cargo.toml` (`paperpaw-sdk = "0.5.0-beta.7"`),
   never a path or a development version.
 - Build for the readers without the SDK's `outline` feature: it is in the
   fingerprint, and the readers' firmware has none. Give it to the

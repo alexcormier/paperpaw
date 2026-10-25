@@ -2,4 +2,4 @@ Settings shows everything that can be set in PaperPaw and its plugins, in pages.
 
 Open it with Settings in the menu. Tap a group to open it, then a setting to switch or choose it; numbers have − and + buttons. With buttons, move to a setting and press Select: left and right change a number, Select keeps it, Back returns to the earlier value.
 
-Changes apply at once. Search the settings finds a setting by words and Show advanced settings adds the rarely needed ones. Reset to defaults and Reset all settings ask first.
+Changes apply at once. Search finds a setting by words and Advanced settings adds the rarely needed ones. Reset to defaults and Reset all ask first.

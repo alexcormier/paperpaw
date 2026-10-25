@@ -5,8 +5,9 @@
 //! passwords and keys, the same for any plugin.
 //!
 //! By default the radio is off and comes on only when a plugin wants the
-//! network (a catalog, a sync, a transfer), joins the strongest network
-//! joined before, and goes off again a minute after nothing uses it, or
+//! network (a catalog, a sync, a transfer), joins the network joined
+//! before that the user picked last, or the strongest ([`JOIN_FIRST`]),
+//! and goes off again a minute after nothing uses it, or
 //! at once when home or a book shows: it costs battery and memory.
 
 #![no_std]
@@ -62,6 +63,14 @@ pub const ON_DEMAND: Setting<bool> = Setting::new("wifi.on-demand");
 pub const IDLE_OFF: Setting<Text> = Setting::new("wifi.idle-off");
 /// The radio stays on (in the network joined before) while charging.
 pub const WHILE_CHARGING: Setting<bool> = Setting::new("wifi.while-charging");
+/// Which network joined before is joined first: the one picked last on
+/// the page (the default), or the strongest.
+pub const JOIN_FIRST: Setting<Text> = Setting::new("wifi.join-first");
+pub const FIRST_PICKED: &str = "wifi.join-first.picked";
+pub const FIRST_STRONGEST: &str = "wifi.join-first.strongest";
+/// The network the user picked last on the page, its name in a line of
+/// its own (in the plugin's folder, see [`Env::plugin_dir`]).
+const PICKED_FILE: &str = "picked.txt";
 /// The keyboard's answer: a network's password.
 pub(crate) const PASSWORD_ENTERED: Event<Typed> = Event::new("wifi.password-entered");
 /// The timer to switch the radio off.
@@ -226,7 +235,7 @@ const IDLE_OFF_IDS: [&str; IDLE_OFF_CHOICES.len()] = {
 };
 
 /// When the radio is on.
-static SETTINGS: [SettingSpec; 3] = [
+static SETTINGS: [SettingSpec; 4] = [
     SettingSpec::switch(
         ON_DEMAND.static_str(),
         "wifi.setting.on-demand",
@@ -249,7 +258,37 @@ static SETTINGS: [SettingSpec; 3] = [
         GROUP,
     )
     .description("wifi.setting.while-charging.help"),
+    SettingSpec::choice(
+        JOIN_FIRST.static_str(),
+        "wifi.setting.join-first",
+        &[FIRST_PICKED, FIRST_STRONGEST],
+        FIRST_PICKED,
+        GROUP,
+    )
+    .description("wifi.setting.join-first.help"),
 ];
+
+/// Where the network picked last is kept.
+fn picked_path() -> String {
+    alloc::format!("{}/{PICKED_FILE}", Env::plugin_dir(PLUGIN.as_str()))
+}
+
+/// The network to join first, as *Join first* says: the one picked last
+/// (if one was), or none for the strongest.
+fn join_first(env: &Env<'_>) -> Option<String> {
+    if env.settings().read(&JOIN_FIRST) == FIRST_STRONGEST {
+        return None;
+    }
+    picked(env)
+}
+
+/// The network the user picked last on the page, if one was.
+fn picked(env: &Env<'_>) -> Option<String> {
+    let bytes = paperpaw_sdk::read_file(env.storage(), &picked_path(), 256).ok()?;
+    let name = String::from_utf8(bytes).ok()?;
+    let name = name.trim_end_matches(['\r', '\n']);
+    (!name.is_empty()).then(|| String::from(name))
+}
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -398,6 +437,16 @@ impl Plugin for Wifi {
                 return;
             };
             let mut policy = p.borrow_mut();
+            // A network the user picked on the page and joined: first
+            // next time (see [`JOIN_FIRST`]).
+            if let WifiState::Online { ssid, .. } = &wifi.state
+                && matches!(&policy.goal, Goal::Chosen { ssid: chosen, .. } if chosen == ssid)
+                && picked(env).as_deref() != Some(ssid.as_str())
+            {
+                let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+                let line = alloc::format!("{ssid}\n");
+                let _ = env.storage().write(&picked_path(), line.as_bytes());
+            }
             if let WifiState::Online { ssid, .. } = &wifi.state
                 && let Some((pending, password)) = policy.pending.take()
             {
@@ -439,6 +488,7 @@ impl Plugin for Wifi {
             if policy.phone {
                 return;
             }
+            policy.first = join_first(env);
             match policy.scanned(&wifi.networks, &known) {
                 Some(commands) => wifi_commands(out, commands),
                 None => {
@@ -477,6 +527,7 @@ impl Plugin for Wifi {
                 return;
             }
             let chosen = matches!(policy.goal, Goal::Chosen { .. });
+            policy.first = join_first(env);
             match policy.failed(ssid, reason, &wifi.networks, &known) {
                 Some(commands) if !commands.is_empty() => wifi_commands(out, commands),
                 // The last try (or the user's choice): say why.

@@ -1,6 +1,6 @@
 The screen lock asks for a PIN, a pattern or a password when PaperPaw starts and when the device wakes up. It is off at first. It keeps others from casual use, not someone who takes the files.
 
-Set it in the settings, under System, as Screen lock: enter the code in use if there is one, choose the kind, then the new code twice. A pattern is offered on touch screens only.
+Set it in the settings, under Device, Screen lock: enter the code in use if there is one, choose the kind, then the new code twice. A pattern is offered on touch screens only.
 
 After five wrong tries the next one waits half a minute. Lock now locks at once and can be put on a button, a gesture or a rule. Lock when waking up can be switched off, except where every wake is a start, as on the X4 on battery.
 

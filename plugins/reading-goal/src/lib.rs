@@ -42,7 +42,7 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 
-use paperpaw_sdk::builtin::{events, groups, slots};
+use paperpaw_sdk::builtin::{events, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::choice::Picked;
@@ -63,6 +63,8 @@ const GOAL_DEFAULT: &str = "stats.goal.20";
 pub const DEFAULT_GOAL: u32 = 20;
 /// The reading statistics' plugin.
 const STATS: Id = Id::new_static("stats");
+/// The reading statistics' settings, where the goal the cat follows is set.
+const STATS_GROUP: Id = Id::new_static("stats.group");
 /// The store's action that opens it.
 const STORE: Id = Id::new_static("store.open");
 /// The answer to the offer of the statistics.
@@ -97,7 +99,7 @@ static SETTINGS: [SettingSpec; 3] = [
         5,
         95,
         50,
-        groups::READING,
+        STATS_GROUP,
     )
     .advanced()
     .with_extra(&PERCENT)
@@ -108,7 +110,7 @@ static SETTINGS: [SettingSpec; 3] = [
         50,
         200,
         100,
-        groups::READING,
+        STATS_GROUP,
     )
     .advanced()
     .with_extra(&PERCENT)
@@ -117,7 +119,7 @@ static SETTINGS: [SettingSpec; 3] = [
         PICTURES.static_str(),
         "reading-goal.setting.pictures",
         "",
-        groups::READING,
+        STATS_GROUP,
     )
     .advanced()
     .with_extra(&FOLDER)

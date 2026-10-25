@@ -247,6 +247,9 @@ impl Plugin for Files {
             ],
         )?;
         r.add_settings(&SETTINGS)?;
+        // Gray covers or black and white only where the panel is black and
+        // white; a gray one shows them in grays as fast.
+        r.set_menu_need(COVERS.id().clone(), paperpaw_sdk::MenuNeed::BlackAndWhite)?;
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
             if !text.is_empty() {

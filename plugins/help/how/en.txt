@@ -2,4 +2,4 @@ The first time a screen opens, a short note over it says what its controls do: t
 
 A tap or any button closes the note, and it does not come again for that screen. No more hints switches all of them off.
 
-In the settings, under System, Hints for new screens switches them on or off, and Show hints again has every screen's note shown once more.
+In the settings, under System, Hints switches them on or off, and Show hints again has every screen's note shown once more.

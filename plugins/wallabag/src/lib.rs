@@ -814,10 +814,10 @@ impl SetupScreen {
         let question = paperpaw_sdk::ask::text(env.i18n().tr(row.title()), &ENTERED)
             .initial(text)
             .with(FIELD, row.field());
-        let question = if password {
-            question.password()
-        } else {
-            question
+        let question = match row {
+            _ if password => question.password(),
+            Row::Server => question.url(),
+            _ => question,
         };
         cx.command(question.command());
     }

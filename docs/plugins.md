@@ -624,10 +624,10 @@ plugin and the app share one:
 
 ```toml
 [dev-dependencies]
-paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.6" }
+paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.7" }
 
 [patch.crates-io]
-paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.6" }
+paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.7" }
 ```
 
 `examples/paperpaw-dev.rs` adds the plugin to the app:
@@ -971,7 +971,7 @@ its documentation (for example one line per entry); others add to it
 with `r.contribute(point, text)`, and the plugin reads
 `env.services().contributions(point)`, each with the plugin it came from.
 
-### Marks in the text
+### Marks (decorations)
 
 A plugin marks words on book pages with a decorator (ADR 0021): it gets
 the words of a page with their places in the book and gives back ranges,
@@ -983,7 +983,7 @@ use paperpaw_sdk::decorations::{self, Decorated, Decoration, DecoratorSpec, Line
 
 const LEARNING: Id = Id::new_static("vocabulary.learning");
 
-// The role: its look is settings (Settings, Marks in the text), the
+// The role: its look is settings (Settings, Marks), the
 // plugin gives the default; themes and users change it.
 decorations::add_role(r, &LEARNING, "vocabulary.role.learning",
     Decoration::NONE.line(LineKind::Dotted))?;
@@ -1308,7 +1308,9 @@ Plugins keep passwords, API keys and tokens with
 with `env.secrets().get(id)`. They are all listed in *Settings, Passwords
 and keys*, where the user changes or removes them. Ask for one on the
 keyboard in password mode (`ask::text(…).password()`); the keyboard
-offers to type it on a phone. They are kept apart from the settings and
+offers to type it on a phone. Ask for web and e-mail addresses with
+`.url()` and `.email()`: the keyboard types them as they are, without
+capitals of its own. They are kept apart from the settings and
 not readable at a glance, but not encrypted: the devices have no safe
 place for a key. A plugin sees its own alone: name them in its
 namespace (`myplugin.token`); `env.secrets().get` gives another plugin's
@@ -1692,11 +1694,11 @@ below) takes it. One manifest gives each its own, by target:
 
 ```toml
 [dependencies]
-paperpaw-sdk = "0.5.0-beta.6"
+paperpaw-sdk = "0.5.0-beta.7"
 
 # Outline fonts for the emulator's build only: the X4s draw font packs.
 [target.'cfg(not(target_os = "none"))'.dependencies]
-paperpaw-sdk = { version = "0.5.0-beta.6", features = ["outline"] }
+paperpaw-sdk = { version = "0.5.0-beta.7", features = ["outline"] }
 ```
 
 A build for a device that asks for `outline` stops and says so.
@@ -2164,7 +2166,7 @@ installs as authors do (see [The crate](#the-crate)). So:
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
   `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`), its SDK
-  (`paperpaw-sdk = "0.5.0-beta.6"`) and, for the X4 Pro, its core libraries
+  (`paperpaw-sdk = "0.5.0-beta.7"`) and, for the X4 Pro, its core libraries
   installed, and build again for every release until 1.0 (see
   [Which build fits](#which-build-fits));
 - never set `RUSTFLAGS`, which would replace the flags that link the

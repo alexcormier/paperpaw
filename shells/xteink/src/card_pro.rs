@@ -1,4 +1,4 @@
-﻿//! The microSD card of the X4 Pro and the X4 Classic, on the ESP32-S3's
+//! The microSD card of the X4 Pro and the X4 Classic, on the ESP32-S3's
 //! SD host (SDMMC, one data line), for PaperPaw's FAT storage: started as
 //! the SD specification says, then read and written block by block
 //! through a buffer in the chip's own RAM (its DMA does not reach the
@@ -30,7 +30,11 @@ const AT_ONCE: usize = 16;
 const WRITE_MS: u64 = 1000;
 /// Times a write is tried, the card ready again between: one the host
 /// gave up on while the card was still busy goes through the next time.
-const WRITE_TRIES: u32 = 3;
+/// The host waits for a busy card a number of polls, not a time (esp-hal's
+/// `POLL_LIMIT`), some tens of milliseconds, less than a card may take; a
+/// card that tidies up while the radio is busy can outlast it a few times
+/// over.
+const WRITE_TRIES: u32 = 6;
 /// Between polls of a card that is still writing, in microseconds.
 const POLL_US: u32 = 20;
 /// Times the card is started: the X4 Classic's up to four, its power off
@@ -197,6 +201,15 @@ impl Card {
         }
     }
 
+    /// The card's state (its status, bits 12..9), if it answers.
+    fn state(&mut self) -> Option<u32> {
+        let r = self
+            .slot
+            .command_blocking(13, self.rca, ResponseLen::Short, true, NONE)
+            .ok()?;
+        Some((r[0] >> 9) & 0xF)
+    }
+
     /// Waits until the card is ready for the next transfer (after a write).
     fn ready(&mut self) -> Result<(), DiskError> {
         let since = Instant::now();
@@ -279,6 +292,7 @@ impl Blocks for Card {
             let address = self.address(at);
             let mut tries = 0;
             loop {
+                let began = Instant::now();
                 let written = {
                     let mut aligned = self.buffer.get_mut();
                     aligned[..chunk.len()].copy_from_slice(chunk);
@@ -292,9 +306,9 @@ impl Blocks for Card {
                         count as u32,
                     )
                 };
-                // Cut short in the middle of blocks: the card is told
-                // the transfer ended.
-                if written.is_err() && count > 1 {
+                // Cut short: the card is told the transfer ended, where it
+                // still waits for blocks (receiving, 6) or sends (data, 5).
+                if written.is_err() && (count > 1 || matches!(self.state(), Some(5 | 6))) {
                     let busy = CommandFlags { busy: true, ..NONE };
                     let _ = self
                         .slot
@@ -304,12 +318,17 @@ impl Blocks for Card {
                 // (some take longer than the host waits for them), and
                 // takes nothing new until it is done.
                 let ready = self.ready();
+                let ms = began.elapsed().as_millis();
+                tries += 1;
                 match written {
                     Ok(_) if ready.is_ok() => break,
-                    Ok(_) => warn!("card: not ready after writing {count} blocks at {at}"),
-                    Err(e) => warn!("card: writing {count} blocks at {at}: {e:?}"),
+                    Ok(_) => warn!(
+                        "card: not ready {ms} ms after writing {count} blocks at {at}, try {tries}"
+                    ),
+                    Err(e) => warn!(
+                        "card: writing {count} blocks at {at}: {e:?} after {ms} ms, try {tries}"
+                    ),
                 }
-                tries += 1;
                 if tries == WRITE_TRIES {
                     return Err(DiskError);
                 }

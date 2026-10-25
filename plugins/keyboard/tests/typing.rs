@@ -461,11 +461,54 @@ fn shift_makes_one_capital() {
     typing.tap("H");
     // Only the next letter.
     typing.tap("i");
+    // Pressed, then again a while later: none.
     typing.tap("Shift");
+    typing.now += 2000;
     typing.tap("Shift");
     typing.tap("x");
     typing.tap("OK");
     assert_eq!(typing.answer(), "Hix");
+}
+
+/// *Shift* twice in a row locks capitals until it is pressed again.
+#[test]
+fn shift_twice_locks_capitals() {
+    let mut typing = Typing::new(BUTTONS);
+    typing.open(&[]);
+    typing.press_by_buttons("Shift");
+    typing.run(actions::CONFIRM);
+    for c in ["O", "K", "A", "Y"] {
+        typing.press_by_buttons(c);
+    }
+    typing.press_by_buttons("Shift");
+    typing.press_by_buttons("s");
+    typing.press_by_buttons("OK");
+    assert_eq!(typing.answer(), "OKAYs");
+}
+
+/// With *Automatic capitals*, a text and each sentence start with one;
+/// not where it is off (the default), nor in an address.
+#[test]
+fn automatic_capitals_start_sentences() {
+    let mut typing = Typing::with_config(TOUCH, "[keyboard]\nauto-capitals = true\n");
+    typing.open(&[]);
+    for key in ["H", "i", ".", "Space", "H", "o"] {
+        typing.tap(key);
+    }
+    typing.tap("OK");
+    assert_eq!(typing.answer(), "Hi. Ho");
+
+    let mut address = Typing::with_config(TOUCH, "[keyboard]\nauto-capitals = true\n");
+    address.open(&[(params::MODE, "url")]);
+    address.tap("w");
+    address.tap("OK");
+    assert_eq!(address.answer(), "w");
+
+    let mut off = Typing::new(TOUCH);
+    off.open(&[]);
+    off.tap("h");
+    off.tap("OK");
+    assert_eq!(off.answer(), "h");
 }
 
 #[test]
@@ -582,6 +625,9 @@ fn variants_by_touch_and_by_buttons() {
     }
     assert_eq!(buttons.focused().as_deref(), Some("e"));
     buttons.hold_button("confirm");
+    // The capital first, then the variants.
+    assert_eq!(buttons.focused().as_deref(), Some("E"));
+    buttons.run(actions::RIGHT);
     assert_eq!(buttons.focused().as_deref(), Some("è"));
     buttons.run(actions::RIGHT);
     assert_eq!(buttons.focused().as_deref(), Some("é"));
@@ -591,7 +637,7 @@ fn variants_by_touch_and_by_buttons() {
     // Holding again opens them, and once more closes them; Back closes
     // the variants only.
     buttons.hold_button("confirm");
-    assert_eq!(buttons.focused().as_deref(), Some("è"));
+    assert_eq!(buttons.focused().as_deref(), Some("E"));
     buttons.hold_button("confirm");
     assert_eq!(buttons.focused().as_deref(), Some("e"));
     buttons.hold_button("confirm");
@@ -621,18 +667,70 @@ fn holding_a_letter_at_the_edge_shows_its_variants() {
     assert_eq!(typing.answer(), "ä…");
 }
 
+/// With buttons, Back held finishes and keeps the text, wherever the
+/// focus is (on a letter too, where a held Select shows its capital, and
+/// with the capital shown); Back alone cancels.
 #[test]
-fn a_long_press_on_confirm_without_variants_finishes() {
+fn back_held_finishes_and_keeps_the_text() {
     let mut typing = Typing::new(BUTTONS);
     typing.open(&[(params::TEXT, "abc")]);
-    // On `q`, which has no variants.
-    assert_eq!(typing.focused().as_deref(), Some("q"));
+    typing.focus_by_buttons("q");
+    typing.hold_button("back");
+    assert_eq!(typing.answer(), "abc");
+
+    let mut shown = Typing::new(BUTTONS);
+    shown.open(&[(params::TEXT, "xy")]);
+    shown.focus_by_buttons("e");
+    shown.hold_button("confirm");
+    assert_eq!(shown.focused().as_deref(), Some("E"));
+    shown.hold_button("back");
+    assert_eq!(shown.answer(), "xy");
+
+    let mut password = Typing::new(BUTTONS);
+    password.open(&[(params::MODE, "password"), (params::TEXT, "pw")]);
+    password.hold_button("back");
+    // Done: the keyboard is gone (a password goes to the one who asked).
+    assert_ne!(
+        password.kernel.active_screen().map(Id::as_str),
+        Some("keyboard.screen")
+    );
+}
+
+#[test]
+fn a_long_press_on_confirm_off_a_letter_finishes() {
+    let mut typing = Typing::new(BUTTONS);
+    typing.open(&[(params::TEXT, "abc")]);
+    typing.focus_by_buttons("Space");
     typing.hold_button("confirm");
     assert_eq!(typing.answer(), "abc");
 }
 
+/// A long press on a letter shows its capital first, chosen: a long press
+/// and Select type it, without going to *Shift*.
+#[test]
+fn a_long_press_on_a_letter_offers_its_capital_first() {
+    let mut typing = Typing::new(BUTTONS);
+    typing.open(&[]);
+    assert_eq!(typing.focused().as_deref(), Some("q"));
+    typing.hold_button("confirm");
+    assert_eq!(typing.focused().as_deref(), Some("Q"));
+    typing.run(actions::CONFIRM);
+    typing.press_by_buttons("u");
+    typing.press_by_buttons("OK");
+    assert_eq!(typing.answer(), "Qu");
+
+    let mut touch = Typing::new(TOUCH);
+    touch.open(&[]);
+    touch.hold("e");
+    assert!(touch.part("E").is_some());
+    touch.tap("E");
+    touch.tap("OK");
+    assert_eq!(touch.answer(), "E");
+}
+
 /// Typing a password (as for Wi-Fi on the X4), holding Select still
-/// shows a letter's variants and, without any, ends the entry.
+/// shows a letter's capital and variants and, off a letter, ends the
+/// entry.
 #[test]
 fn holding_select_works_while_typing_a_password() {
     let mut typing = Typing::new(BUTTONS);
@@ -642,11 +740,11 @@ fn holding_select_works_while_typing_a_password() {
     }
     assert_eq!(typing.focused().as_deref(), Some("e"));
     typing.hold_button("confirm");
+    assert_eq!(typing.focused().as_deref(), Some("E"));
+    typing.run(actions::RIGHT);
     assert_eq!(typing.focused().as_deref(), Some("è"));
     typing.run(actions::CONFIRM);
-    typing.run(actions::LEFT);
-    typing.run(actions::LEFT);
-    assert_eq!(typing.focused().as_deref(), Some("q"));
+    typing.focus_by_buttons("OK");
     typing.hold_button("confirm");
     // Done: the keyboard is gone (a password goes to the one who asked).
     assert_ne!(
@@ -692,19 +790,18 @@ fn the_answer_carries_the_question_context() {
 fn buttons_move_round_the_rows() {
     let mut typing = Typing::new(BUTTONS);
     typing.open(&[]);
-    // On this narrow screen chosen with buttons the rows are split
-    // ("qwert" above "yuiop"). Left from the first key wraps to the end
-    // of the row.
+    // The rows a computer keyboard's, also on this narrow screen. Left
+    // from the first key wraps to the end of the row.
     typing.run(actions::LEFT);
-    assert_eq!(typing.focused().as_deref(), Some("t"));
+    assert_eq!(typing.focused().as_deref(), Some("p"));
     typing.run(actions::RIGHT);
     assert_eq!(typing.focused().as_deref(), Some("q"));
     // Down to the row below, near the same place.
     typing.run(actions::DOWN);
-    assert_eq!(typing.focused().as_deref(), Some("y"));
+    assert_eq!(typing.focused().as_deref(), Some("a"));
     // Previous from the first key of a row: the end of the row above.
     typing.run(actions::PREVIOUS);
-    assert_eq!(typing.focused().as_deref(), Some("t"));
+    assert_eq!(typing.focused().as_deref(), Some("p"));
     // Up from the first row: the bottom row, below (no buttons in the
     // field without a clipboard or network).
     typing.run(actions::UP);
@@ -721,6 +818,19 @@ fn buttons_move_round_the_rows() {
     assert_eq!(typing.focused().as_deref(), Some("OK"));
     typing.run(actions::NEXT);
     assert_eq!(typing.focused().as_deref(), Some("q"));
+}
+
+/// Up and down keep to the column the focus came along, rows of other
+/// widths between: down twice and up twice come back to the same key.
+#[test]
+fn up_and_down_keep_the_column() {
+    let mut typing = Typing::new(BUTTONS);
+    typing.open(&[]);
+    typing.focus_by_buttons("o");
+    for action in [actions::DOWN, actions::DOWN, actions::UP, actions::UP] {
+        typing.run(action);
+    }
+    assert_eq!(typing.focused().as_deref(), Some("o"));
 }
 
 /// Two layouts chosen: English and German.
@@ -761,15 +871,18 @@ fn the_layout_key_by_buttons() {
     typing.open(&[]);
     typing.press_by_buttons("EN");
     // On the `o` the field says what holding Select types; it comes
-    // first there.
+    // after the capital there.
     typing.focus_by_buttons("o");
-    assert!(typing.says("Hold for ö"));
+    assert!(typing.says("Hold: ö"));
     typing.hold_button("confirm");
+    // After the capital.
+    assert_eq!(typing.focused().as_deref(), Some("O"));
+    typing.run(actions::RIGHT);
     assert_eq!(typing.focused().as_deref(), Some("ö"));
     typing.run(actions::CONFIRM);
     // Not on a letter without.
     typing.press_by_buttons("y");
-    assert!(!typing.says("Hold for ö"));
+    assert!(!typing.says("Hold: ö"));
     typing.press_by_buttons("OK");
     assert_eq!(typing.answer(), "öy");
 }
@@ -796,7 +909,7 @@ layouts = keyboard.layout.de
     typing.open(&[]);
     typing.run(actions::DOWN);
     typing.focus_by_buttons("a");
-    assert!(typing.says("Hold for ä"));
+    assert!(typing.says("Hold: ä"));
     let field = typing
         .parts()
         .into_iter()
@@ -813,7 +926,7 @@ layouts = keyboard.layout.de
             .any(|(top, bottom)| *top <= field.y && field.y < *bottom),
         "{rows:?} {field:?}"
     );
-    assert!(!typing.says("Hold for ä"));
+    assert!(!typing.says("Hold: ä"));
 }
 
 /// German with *Umlaut keys*: ä, ö, ü and ß have keys of their own.
@@ -990,7 +1103,7 @@ fn paste_by_buttons_from_above_the_first_row() {
     typing.run(actions::CONFIRM);
     // Down again to the key below it, at the right of the first row.
     typing.run(actions::DOWN);
-    assert_eq!(typing.focused().as_deref(), Some("t"));
+    assert_eq!(typing.focused().as_deref(), Some("o"));
     typing.press_by_buttons("OK");
     assert_eq!(typing.answer(), "pasted line end");
 }

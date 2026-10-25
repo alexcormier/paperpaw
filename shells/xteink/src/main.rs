@@ -118,6 +118,15 @@ use paperpaw_x4::display;
 use paperpaw_x4::uc8179 as display;
 
 use crate::board::Board;
+
+/// The keyboard's size by default: large keys to tap with a finger on the
+/// X4 Pro's 4.3" screen; small ones, chosen with the buttons, on the
+/// others, leaving more of the page in view (the rows stay a computer
+/// keyboard's whatever the size).
+#[cfg(feature = "x4-pro")]
+const KEYBOARD_SIZE: &str = "keyboard.size.large";
+#[cfg(not(feature = "x4-pro"))]
+const KEYBOARD_SIZE: &str = "keyboard.size.small";
 use crate::firmware::{Firmware, State};
 
 // PaperPaw's version and which firmware this is, read from updates.
@@ -671,10 +680,9 @@ fn kernel(
         .setting_default(&settings::FLASH_SCREENS, false)
         .setting_default(&settings::UI_SIZE, 9)
         .setting_default(&settings::FONT_SIZE, 9)
-        // Large keys, unless the reader chose another size: tapped with a
-        // finger on the X4 Pro's 4.3" screen, chosen with the buttons in
-        // short rows, few presses along each, on the others.
-        .setting_default_text("keyboard.size", "keyboard.size.large");
+        // The keyboard's size, unless the reader chose another (see
+        // `KEYBOARD_SIZE`).
+        .setting_default_text("keyboard.size", KEYBOARD_SIZE);
     // A small screen: calm status lines, the time and the page while
     // reading (and the mark of reading aloud while it reads), the time
     // and the battery elsewhere. Every item stays to be chosen.

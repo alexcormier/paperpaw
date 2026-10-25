@@ -178,6 +178,7 @@ impl EditScreen {
         let question = match field {
             Field::Password => question.password(),
             Field::Folder => question.initial(self.catalog.sync_folder(&env)),
+            Field::Address | Field::WebDav => question.url().initial(self.value(&env, field)),
             _ => question.initial(self.value(&env, field)),
         };
         cx.command(question.command());

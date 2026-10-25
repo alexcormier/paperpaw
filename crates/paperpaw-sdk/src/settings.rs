@@ -176,7 +176,7 @@ pub struct SettingSpec {
     /// presets or commands ([`SettingSpec::guarded`]).
     pub guarded: bool,
     /// The reader's own, not a matter of taste: an account, a folder, a
-    /// list typed in. "Reset to defaults" and "Reset all settings" leave
+    /// list typed in. "Reset to defaults" and "Reset all" leave
     /// it as it is, as they leave every secret
     /// ([`SettingSpec::kept_on_reset`], [`SettingSpec::is_kept_on_reset`]).
     pub kept_on_reset: bool,

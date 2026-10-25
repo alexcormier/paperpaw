@@ -202,7 +202,11 @@ impl BrowserScreen {
     /// Asks for an address or words to search for.
     fn ask(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        cx.command(ask::text(env.i18n().tr("browser.address"), &ADDRESS).command());
+        cx.command(
+            ask::text(env.i18n().tr("browser.address"), &ADDRESS)
+                .url()
+                .command(),
+        );
     }
 
     /// Loads `url`; what it is decides where it goes once it is there.

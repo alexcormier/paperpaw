@@ -38,7 +38,7 @@ use alloc::rc::Rc;
 use alloc::string::String;
 use core::cell::Cell;
 
-use paperpaw_sdk::builtin::{events, groups};
+use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
     ActionSpec, Command, Commands, Env, Id, Instant, Manifest, Params, Plugin, RegisterError,
@@ -46,6 +46,8 @@ use paperpaw_sdk::{
 };
 
 pub const PLUGIN: Id = Id::new_static("lock");
+/// Its settings' group (Settings, Device, Screen lock).
+pub const GROUP: Id = Id::new_static("lock.group");
 /// Locks at once.
 pub const NOW: Id = Id::new_static("lock.now");
 /// The kind of lock: `lock.kind.off`, `…pin`, `…pattern` or `…password`
@@ -133,20 +135,15 @@ static SETTINGS: [SettingSpec; 2] = [
         "lock.setting.kind",
         &KIND_VALUES,
         KIND_VALUES[0],
-        groups::SYSTEM,
+        GROUP,
     )
     .description("lock.setting.kind.help")
     .guarded()
     .with_extra(&ON_PAGE),
-    SettingSpec::switch(
-        ON_WAKE.static_str(),
-        "lock.setting.on-wake",
-        true,
-        groups::SYSTEM,
-    )
-    .advanced()
-    .description("lock.setting.on-wake.help")
-    .guarded(),
+    SettingSpec::switch(ON_WAKE.static_str(), "lock.setting.on-wake", true, GROUP)
+        .advanced()
+        .description("lock.setting.on-wake.help")
+        .guarded(),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -177,6 +174,13 @@ impl Plugin for Lock {
                 Box::new(screen::LockScreen::new(env, params, shared.clone()))
             }),
         ))?;
+        // Its settings on a page of their own (Settings, Device).
+        r.add_setting_group({
+            static SPEC: paperpaw_sdk::SettingGroupSpec =
+                paperpaw_sdk::SettingGroupSpec::new(GROUP, "lock.plugin.name").order(92);
+            &SPEC
+        })?;
+        r.add_icon(GROUP, Cow::Borrowed("lock"))?;
         r.add_settings(&SETTINGS)?;
         touch::register(r, state.clone())?;
         let now = state.clone();

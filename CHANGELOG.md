@@ -6,8 +6,49 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- Wi-Fi joins the saved network picked last on the Wi-Fi page first,
+  when it is in reach, instead of the strongest: after a restart the
+  reader stays in the network one chose. *Join first* (Last picked,
+  Strongest) sets it.
+- **Code plugins must be built again for beta.8.** The plugin interface
+  is now 4 (`Block`, `TextStyle`, `Typesetter`, `layout::Style`,
+  `FontHandle` and `SettingGroupSpec` changed, for a book's formatting,
+  kerning and the settings' pages). PaperPaw's own store plugins come as
+  updates.
+- Moving through the settings with the buttons is quicker: a step draws
+  only the row left and the row reached, no longer the whole screen (on
+  the X4 a sixth to a third of it), in every list of the settings.
+- The firmware is leaner, so updates keep room: German hyphenation is a
+  plugin of the store (`hyphenation-de`), as the other languages are,
+  and the built-in one keeps English; Literata Bold Italic is no longer
+  built into the firmware (bold stands in for it; the emulator and the
+  app keep it), and its faces go up to 32 px there (about 10 pt). A data
+  plugin may bring faces of a family without its regular one, and a pack
+  that extends a face with larger sizes draws text that large (the font
+  size goes as far), so the font library brings both back
+  (`tools/literata-packs.py`). At the largest size, its help says where
+  larger ones are found.
+- The release keeps room for the updates to come: `paperpaw-sign
+  check-image` prints the margin an image leaves in the smallest app
+  slot (its own or CrossPoint's), warns below 512 KB and fails below
+  256 KB.
+
 ### Added
 
+- With buttons alone, holding Back finishes typing and keeps the text,
+  wherever the focus is (Back alone cancels); the field says so. Holding
+  Select still finishes on any key that is no letter.
+- The keyboard locks capitals with *Shift* pressed twice in a row (the
+  key filled until pressed again), and a long press on a letter offers
+  its capital first, chosen: with buttons a long press and Select type
+  it. *Automatic capitals* (off by default) starts a text and each
+  sentence with one, not in passwords, numbers and addresses.
+- SDK: `ask::TextQuestion::url()` and `email()` ask for a web or e-mail
+  address (modes `url` and `email`), typed as it is. The browser,
+  catalogs, news, KOReader sync, Joplin, Wallabag and the statistics'
+  sync ask for their addresses so.
 - Plugins can run in real time: games, emulators, animations
   ([ADR 0030](docs/adr/0030-real-time-screens.md)). A screen says how
   it runs in one place (`Screen::mode`, `realtime::ScreenMode`): full
@@ -125,6 +166,38 @@ change the plugin SDK.
   `settings::HYPHEN_MIN_LEFT`, `HYPHEN_MIN_RIGHT`,
   `PageType::hyphen_minimums` and `patterns`,
   `hyphen::Patterns::with_minimums`.
+- *Text contrast* (Settings, Reading): book text lighter, normal, darker
+  or darkest, its letters' edges on a contrast curve, finer than *Font
+  weight* and together with it. Normal draws as before; each book may
+  have its own.
+- *Smooth text* works on every screen now: off draws book text in black
+  and white, without gray edges, also where the screen has grays (the
+  Boox), on at first there. On the X4s it stays off at first, and off,
+  pages of text turn without the slower refresh in grays. It is a
+  setting of the kernel now (`core.smooth-text`, was
+  `reader.smooth-text`, taken over), each book may have its own. SDK:
+  `settings::SMOOTH_TEXT`, `settings::TEXT_CONTRAST`, `text::ToneCurve`,
+  `FontHandle::draw_toned`, `Canvas::mono_coverage`.
+
+### Changed
+
+- With buttons alone (the X4) the keyboard keeps a computer keyboard's
+  rows at every size (qwertyuiop above asdfghjkl); the size makes keys
+  higher and their letters larger, and a row is split only where its
+  letters would not fit. Up and down keep to the column one came along.
+  Typing takes about as many presses as before (627 against 633 for the
+  sample texts in `plugins/keyboard/tests/presses.rs`), capitals fewer.
+- Its keys are wider with buttons alone: the focus fills a key instead
+  of framing it, so two pixels between keys do (on the X4 a letter's key
+  is 39 pixels wide, was 25). On touch screens the room between keys
+  follows the screen's size (0.6 mm). The plain X4s start with the
+  keyboard at Small, the X4 Pro at Large; a size chosen stays. "Hold: ö"
+  in place of "Hold for ö" leaves the field's title whole.
+
+## [0.5.0-beta.7] - 2026-10-25
+
+### Added
+
 - The notices of everything PaperPaw ships: the crates of the firmware
   and of the apps, each under its licence with its copyright lines and
   each licence's text once, and Mbed TLS, ESP-IDF's radio libraries and
@@ -135,6 +208,8 @@ change the plugin SDK.
   handbook and core library archives carry LICENSE and NOTICE.
 - Weather names Open-Meteo, Wikipedia names each article below its
   summary, with their licences.
+- The emulator starts online with `--wifi online` (over `--stdio`,
+  `"wifi": "online"` in `start`): the X4s on USB, their radio on and in
 - The emulator starts online with `--wifi online` (also given before
   `--stdio`, for the devices it starts; or `"wifi": "online"` in
   `start`): the X4s on USB, their radio on and in
@@ -158,26 +233,21 @@ change the plugin SDK.
   published on GitHub, which nobody reviewed. They are marked
   *Unreviewed*, with the repository they come from; a code plugin's page
   shows the key it is signed with.
-- *Text contrast* (Settings, Reading): book text lighter, normal, darker
-  or darkest, its letters' edges on a contrast curve, finer than *Font
-  weight* and together with it. Normal draws as before; each book may
-  have its own.
-- *Smooth text* works on every screen now: off draws book text in black
-  and white, without gray edges, also where the screen has grays (the
-  Boox), on at first there. On the X4s it stays off at first, and off,
-  pages of text turn without the slower refresh in grays. It is a
-  setting of the kernel now (`core.smooth-text`, was
-  `reader.smooth-text`, taken over), each book may have its own. SDK:
-  `settings::SMOOTH_TEXT`, `settings::TEXT_CONTRAST`, `text::ToneCurve`,
-  `FontHandle::draw_toned`, `Canvas::mono_coverage`.
 
 ### Changed
 
-- **Code plugins must be built again for beta.8.** The plugin interface
-  is now 4 (`Block`, `TextStyle`, `Typesetter`, `layout::Style`,
-  `FontHandle` and `SettingGroupSpec` changed, for a book's formatting,
-  kerning and the settings' pages). PaperPaw's own store plugins come as
-  updates.
+- Settings sorted where readers look for them (their ids kept, so what
+  was set stays): pages of their own for the Keyboard (layouts, umlaut
+  keys, size, shape of keys), the Screen lock (with Lock touch), Updates,
+  the Sleep screen (from Display) and the Home screen (from Appearance);
+  Record battery use with Power, Show hidden files with the Library,
+  Number of test pages with Developer, the reading cat's settings with
+  Reading statistics; Calibre and News in parts of their own in the
+  Library. Hidden where they do nothing: the shape of keys on readers
+  with buttons alone, the choice of gray covers on gray screens. Clearer
+  names: Lines at the top and at the bottom (the status lines), Covers in
+  the library and in catalogs, Selected row, Line thickness, List
+  sections, the vocabulary's two switches; percentages with their unit.
 - Keyboard size works on readers with buttons alone too: Large splits
   the rows into short ones (few presses along each, as before and the
   X4s' default), Medium splits the longest, Small keeps them whole as on
@@ -245,26 +315,15 @@ change the plugin SDK.
   is built again with this release's SDK, and the plugin manager says
   so. PaperPaw's own store plugins come as updates. `Work`'s `network`
   and `charging` became `needs` (`Needs::NETWORK | Needs::CHARGING`).
-- Moving through the settings with the buttons is quicker: a step draws
-  only the row left and the row reached, no longer the whole screen (on
-  the X4 a sixth to a third of it), in every list of the settings.
-- The firmware is leaner, so updates keep room: German hyphenation is a
-  plugin of the store (`hyphenation-de`), as the other languages are,
-  and the built-in one keeps English; Literata Bold Italic is no longer
-  built into the firmware (bold stands in for it; the emulator and the
-  app keep it), and its faces go up to 32 px there (about 10 pt). A data
-  plugin may bring faces of a family without its regular one, and a pack
-  that extends a face with larger sizes draws text that large (the font
-  size goes as far), so the font library brings both back
-  (`tools/literata-packs.py`). At the largest size, its help says where
-  larger ones are found.
-- The release keeps room for the updates to come: `paperpaw-sign
-  check-image` prints the margin an image leaves in the smallest app
-  slot (its own or CrossPoint's), warns below 512 KB and fails below
-  256 KB.
 
 ### Fixed
 
+- Uploads over Wi-Fi no longer stall when the card fails to take a part:
+  the X4s answer at once, while the file still comes (*500* where the
+  card failed, *507* where it is full), instead of holding the upload
+  until it timed out. The X4 Pro tries a write to a card still busy
+  writing more often before it gives up, as some cards are while the
+  radio sends.
 - Status lines stand every item on one line: the battery, icons and bars
   centred on the figures of the time, the page and the percentage, and
   those in the middle of the line, to the pixel. The battery stood a

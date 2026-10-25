@@ -430,7 +430,7 @@ fn the_row_above_the_books_chooses_what_shows_and_the_title_opens_the_menu() {
     app.run(actions::UP);
     app.run(actions::MENU);
     assert_eq!(app.screen(), "menu.list");
-    assert!(app.shows("Order of books"), "{}", app.described());
+    assert!(app.shows("Sort by"), "{}", app.described());
 
     let mut app = library(TOUCH, "", &many(3));
     app.tap_on("Library");

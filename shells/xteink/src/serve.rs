@@ -132,9 +132,15 @@ impl Servers {
                 body,
                 file,
             } => {
-                let slot = self.servers.iter_mut().flat_map(|s| &mut s.slots).find(
-                    |slot| matches!(slot.phase, Phase::Answer { request: r } if r == request),
-                )?;
+                // Also while the body still comes: an upload refused on the
+                // way (the card full or failing) is answered at once, the
+                // rest of it let go (see `drop_received`).
+                let slot = self.servers.iter_mut().flat_map(|s| &mut s.slots).find(|slot| {
+                    matches!(
+                        slot.phase,
+                        Phase::Answer { request: r } | Phase::Body { request: r, .. } if r == request
+                    )
+                })?;
                 let length = file.as_ref().map_or(body.len() as u64, |f| f.size);
                 let mut out = http::response_head(status, &content_type, &headers, length);
                 out.extend_from_slice(&body);
@@ -465,6 +471,7 @@ impl Slot {
     /// once all went.
     fn send(&mut self, port: u16, net: &mut Net, kernel: &Kernel, ms: u64) {
         let socket = net.socket(self.socket);
+        drop_received(socket);
         let Phase::Sending {
             out,
             sent,
@@ -513,6 +520,7 @@ impl Slot {
     /// up on, a while after it has everything).
     fn close(&mut self, port: u16, net: &mut Net, ms: u64) {
         let socket = net.socket(self.socket);
+        drop_received(socket);
         if socket.send_queue() > 0 {
             // Still going out: progress keeps it waiting.
             if ms > self.since + STALL_MS {
@@ -524,6 +532,17 @@ impl Slot {
             || ms > self.since + CLOSE_MS
         {
             self.again(net, port);
+        }
+    }
+}
+
+/// Lets go of what the client still sends once it is answered (a body
+/// refused on the way): its window stays open, so it is not held up
+/// before it reads the answer.
+fn drop_received(socket: &mut tcp::Socket<'_>) {
+    while socket.can_recv() {
+        if !matches!(socket.recv(|data| (data.len(), data.len())), Ok(n) if n > 0) {
+            break;
         }
     }
 }

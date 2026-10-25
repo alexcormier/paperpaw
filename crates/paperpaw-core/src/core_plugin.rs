@@ -896,7 +896,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         (groups::READING, "book"),
         (groups::LIBRARY, "books"),
         (groups::DISPLAY, "contrast"),
-        (groups::CONTROLS, "hand-finger"),
+        (groups::CONTROLS, "adjustments"),
         (groups::SYSTEM, "device-tablet"),
         (groups::LOOK, "palette"),
         (groups::OTHER, "dots"),

@@ -626,10 +626,13 @@ impl SyncScreen {
 
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        // The address typed as it is, the password as dots.
         let keyboard = |title: &str, text: String, reply: &Event<Typed>, password: bool| {
             let question = paperpaw_sdk::ask::text(env.i18n().tr(title), reply).initial(text);
             if password {
                 question.password().command()
+            } else if title == "stats.sync.folder" {
+                question.url().command()
             } else {
                 question.command()
             }
