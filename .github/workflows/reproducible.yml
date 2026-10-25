@@ -20,6 +20,7 @@ on:
       - "samples/hello-native/**"
       - "samples/hello-plugin/**"
       - "tools/reproducible-plugin.py"
+      - "tools/test_reproducible_plugin.py"
 
 permissions:
   contents: read
@@ -68,6 +69,7 @@ jobs:
         shell: bash
         run: |
           py="$(command -v python3 || command -v python)"
+          "$py" -m unittest discover -s tools -p "test_reproducible_plugin.py"
           "$py" tools/reproducible-plugin.py "$RUNNER_TEMP/plugin"
       - uses: actions/upload-artifact@v7
         with:
