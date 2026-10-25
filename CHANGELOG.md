@@ -248,9 +248,11 @@ change the plugin SDK.
   file): it fails only once no byte came for a minute, so a large update
   on a slow network goes through. SDK: `HttpOptions::timeout` means that
   for them.
-- The network picked last (*Join first*) gets a second try when joining
-  it fails, before another network joined before is joined: one of its
-  access points, weak or far, refuses a join now and then.
+- The network picked last (*Join first*) is looked for again when a scan
+  misses it, and gets a second try when joining it fails, before another
+  network joined before is joined: the first scans after the radio came
+  on often miss a weaker network, and one of its access points, weak or
+  far, refuses a join now and then.
 
 ## [0.5.0-beta.7] - 2026-10-25
 

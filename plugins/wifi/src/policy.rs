@@ -9,7 +9,8 @@
 //!   after a second try (open networks only when chosen, see
 //!   [`best_known`]).
 //! - A scan that finds no network joined before is made again, up to
-//!   [`SCANS`] times, before none counts as in reach.
+//!   [`SCANS`] times, before none counts as in reach; so is one that
+//!   misses the network to join first, before another one is joined.
 //! - A round that joins nothing is tried again a little later while the
 //!   network is still wanted or charging keeps the radio on (e.g. while a
 //!   router starts, or once a first try had no answer). The network is
@@ -200,6 +201,21 @@ impl Policy {
         if self.goal != Goal::Known {
             return Some(Vec::new());
         }
+        // The network to join first not heard: the first scans after the
+        // radio came on often miss a weaker one (seen on the X4 after
+        // its restart for a stalled connection), so it is looked for
+        // again before another one is joined.
+        if let Some(first) = &self.first
+            && self.scans + 1 < SCANS
+            && !self.tried.contains(first)
+            && known
+                .iter()
+                .any(|(ssid, password)| ssid == first && !password.is_empty())
+            && !networks.iter().any(|n| n.ssid == *first)
+        {
+            self.scans += 1;
+            return Some(alloc::vec![WifiCommand::Scan]);
+        }
         let (ssid, password) = best_known(networks, known, &self.tried, self.first.as_deref())?;
         self.tried.push(ssid.clone());
         Some(alloc::vec![WifiCommand::Join {
@@ -303,11 +319,27 @@ mod tests {
                 .unwrap(),
             [join("Hannes", "a")]
         );
-        // Out of reach: the strongest.
+        // Not heard: looked for again, then the strongest.
         policy.start_round(Goal::Known);
+        for _ in 1..SCANS {
+            assert_eq!(
+                policy.scanned(&networks[..1], &known).unwrap(),
+                [WifiCommand::Scan]
+            );
+        }
         assert_eq!(
             policy.scanned(&networks[..1], &known).unwrap(),
             [join("Hannes", "a")]
+        );
+        // Heard on the next scan: joined.
+        policy.start_round(Goal::Known);
+        assert_eq!(
+            policy.scanned(&networks[..1], &known).unwrap(),
+            [WifiCommand::Scan]
+        );
+        assert_eq!(
+            policy.scanned(&networks, &known).unwrap(),
+            [join("FRITZ!Box", "b")]
         );
         // The strongest first, as set.
         policy.first = None;
