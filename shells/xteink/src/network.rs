@@ -167,12 +167,20 @@ impl Network {
         // is open (Calibre): asleep, it missed parts of what came in a
         // burst, and the connection stalled until the other side gave up.
         let busy = self.moving() || kernel.serving() || kernel.sockets_open();
+        // Beside Bluetooth the radio is shared: Wi-Fi never keeps it to
+        // itself (its modem sleeps between beacons, Bluetooth's links run
+        // meanwhile).
+        #[cfg(feature = "bluetooth")]
+        let busy = busy && !self.bluetooth.is_on();
         self.radio.save_power(!busy);
         for event in self.radio.poll() {
             #[cfg(feature = "remote")]
             self.answer_asked(kernel, &event);
             effects.push(kernel.wifi_event(now, event));
         }
+        #[cfg(feature = "bluetooth")]
+        self.bluetooth
+            .set_wifi_busy(self.radio.busy() || self.moving());
         #[cfg(feature = "bluetooth")]
         for report in self.bluetooth.poll() {
             effects.push(kernel.bluetooth_event(now, report));

@@ -223,6 +223,12 @@ impl Radio {
         self.on.is_some()
     }
 
+    /// A task of the radio's goes on: joining, a scan, hosting.
+    #[cfg(feature = "bluetooth")]
+    pub fn busy(&self) -> bool {
+        matches!(self.on.as_ref().map(|on| &on.work), Some(Work::Busy(_)))
+    }
+
     /// The network while the radio is on, with an address or without one
     /// (not yet, or no longer), so that what was opened on it can be let
     /// go once the address is gone.

@@ -32,9 +32,9 @@ use core::task::{Context, Poll, Waker};
 
 use bt_hci::param::FilterDuplicates;
 use embassy_futures::join::{join, join3};
-use embassy_futures::select::{Either, Either3, select, select3};
+use embassy_futures::select::{Either, select};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_time::{Duration, Timer, with_timeout};
+use embassy_time::{Duration, Instant, Timer, with_timeout};
 use esp_radio::ble::controller::BleConnector;
 use paperpaw_core::sdk::bluetooth::{
     AttError, BtError, BtOp, GattCharacteristic, GattDescriptor, GattService, Handle, LinkPower,
@@ -44,6 +44,14 @@ use paperpaw_core::{Bond, BtCall, BtReport, Found, PairQuestion};
 use trouble_host::advertise::AdStructure;
 use trouble_host::prelude::*;
 
+/// Watching for bonded devices to come back: a short look every 1.28 s
+/// (2.3 % of the time), enough for a remote advertising after a key.
+const WATCH_INTERVAL: Duration = Duration::from_millis(1_280);
+const WATCH_WINDOW: Duration = Duration::from_millis(30);
+/// How long the scan waits after a connection came up.
+const SCAN_RESUME: Duration = Duration::from_millis(500);
+/// How soon a link's power is tried again while the controller is busy.
+const POWER_RETRY: Duration = Duration::from_secs(2);
 /// The links kept at once: a remote and one more (the kernel is built
 /// with as many).
 pub const LINKS: usize = 2;
@@ -160,6 +168,24 @@ struct Shared {
     /// them yet.
     bonds: RefCell<Vec<Bond>>,
     bonds_new: Cell<bool>,
+    /// What each remote's HID service is, as found once.
+    hid: RefCell<Vec<HidCache>>,
+    /// Wi-Fi joins or moves data: the links run slowly meanwhile, so that
+    /// the shared radio leaves it time.
+    wifi_busy: Cell<bool>,
+}
+
+/// A remote's HID service as discovered, kept while the device runs so
+/// that it is not discovered again on each connection (slow at an MTU of
+/// 23, and keys typed meanwhile were lost): its address, its input
+/// reports (value handle, report id), their configuration descriptors,
+/// its report map. A few hundred bytes per remote.
+#[derive(Debug, Clone)]
+struct HidCache {
+    address: String,
+    inputs: Vec<(u16, u8)>,
+    configured: Vec<(u16, u16, Properties)>,
+    map: Vec<u8>,
 }
 
 impl Shared {
@@ -185,6 +211,8 @@ pub struct Bluetooth {
     on: Option<On>,
     /// What was reported as the radio went down, for the next poll.
     reports: Vec<BtReport>,
+    /// The remotes' HID services, kept while the radio is off.
+    hid: Vec<HidCache>,
 }
 
 /// The radio up: what the main loop shares with the host, and the host.
@@ -199,6 +227,7 @@ impl Bluetooth {
             bonds: Vec::new(),
             on: None,
             reports: Vec::new(),
+            hid: Vec::new(),
         }
     }
 
@@ -216,9 +245,10 @@ impl Bluetooth {
                 start_scheduler();
                 self.start();
             }
-            (BtCall::Radio { on: false }, Some(_)) => {
+            (BtCall::Radio { on: false }, Some(on)) => {
                 // Dropped: the host, the links and the controller go down,
                 // and everything they had on the heap.
+                self.hid = on.shared.hid.take();
                 self.on = None;
                 log::info!("bluetooth: off, heap {}", crate::http::heap());
                 self.reports.push(BtReport::Radio { on: false });
@@ -233,7 +263,8 @@ impl Bluetooth {
             (call, Some(on)) => on.shared.calls.borrow_mut().push_back(call),
             // A bond forgotten comes with the bonds left; the GATT server
             // comes with step 4 of the ADR.
-            (BtCall::Radio { .. } | BtCall::Forget { .. } | BtCall::Server(_), None) => {}
+            (BtCall::Forget { address }, None) => self.hid.retain(|h| h.address != address),
+            (BtCall::Radio { .. } | BtCall::Server(_) | BtCall::Watch { .. }, None) => {}
             (call, None) => log::warn!("bluetooth: off, dropped {call:?}"),
         }
     }
@@ -249,6 +280,7 @@ impl Bluetooth {
                 let shared = Rc::new(Shared::default());
                 shared.bonds.borrow_mut().clone_from(&self.bonds);
                 shared.bonds_new.set(true);
+                *shared.hid.borrow_mut() = core::mem::take(&mut self.hid);
                 shared.report(BtReport::Radio { on: true });
                 let session = Box::pin(session(shared.clone(), connector));
                 log::info!(
@@ -264,6 +296,13 @@ impl Bluetooth {
         }
     }
 
+    /// Whether Wi-Fi joins or moves data now (see [`Shared::wifi_busy`]).
+    pub fn set_wifi_busy(&mut self, busy: bool) {
+        if let Some(on) = &self.on {
+            on.shared.wifi_busy.set(busy);
+        }
+    }
+
     /// Moves the host on; what it reports.
     // A frame of its own: the host's futures are deep.
     #[inline(never)]
@@ -275,6 +314,7 @@ impl Bluetooth {
             reports.append(&mut on.shared.reports.borrow_mut());
             if stopped {
                 log::warn!("bluetooth: the host stopped");
+                self.hid = on.shared.hid.take();
                 self.on = None;
                 reports.push(BtReport::Radio { on: false });
             }
@@ -300,6 +340,15 @@ struct Slot {
 #[derive(Default)]
 struct ScanWanted {
     wanted: Cell<Option<(ScanPower, bool)>>,
+    /// The bonded devices watched for while no scan is wanted (their
+    /// addresses as the kernel keeps them).
+    watch: RefCell<Vec<String>>,
+    /// While only watching: the addresses whose advertisements are told,
+    /// none else (the kernel would keep every device passing by).
+    only: RefCell<Option<Vec<String>>>,
+    /// Connections being made: the scan stops meanwhile (connecting sets
+    /// the controller's accept list, which a scan using it forbids).
+    connecting: Cell<u8>,
     changed: Cell<bool>,
 }
 
@@ -310,9 +359,13 @@ async fn session(shared: Rc<Shared>, connector: BleConnector<'static>) {
         .set_io_capabilities(IoCapabilities::DisplayYesNo)
         .build();
     let mut runner = stack.runner();
-    let handler = Advertised { shared: &shared };
+
     let slots: [RefCell<Slot>; LINKS] = Default::default();
     let scan = ScanWanted::default();
+    let handler = Advertised {
+        shared: &shared,
+        scan: &scan,
+    };
     let mut table: AttributeTable<'_, NoopRawMutex, ATTRIBUTES> = AttributeTable::new();
     let mut gap = table.add_service(Service::new(service::GAP));
     gap.add_characteristic_ro(characteristic::DEVICE_NAME, NAME);
@@ -324,8 +377,8 @@ async fn session(shared: Rc<Shared>, connector: BleConnector<'static>) {
         dispatch(&stack, &shared, &slots, &scan),
         scanning(&stack, &scan),
         join(
-            link(&stack, &server, &slots[0], &shared),
-            link(&stack, &server, &slots[1], &shared),
+            link(&stack, &server, &scan, &slots[0], &shared),
+            link(&stack, &server, &scan, &slots[1], &shared),
         ),
     );
     if let Either::First(Err(e)) = select(runner.run_with_handler(&handler), work).await {
@@ -343,6 +396,11 @@ async fn dispatch(
     loop {
         if shared.bonds_new.take() {
             keep_bonds(stack, &shared.bonds.borrow());
+            // The host brings its address resolution up to date with the
+            // bonds once nothing scans or connects: a moment for it first
+            // (a scan begun meanwhile made the controller refuse, and the
+            // host stopped).
+            Timer::after(SCAN_RESUME).await;
         }
         let call = poll_fn(|_| {
             if shared.bonds_new.get() {
@@ -359,6 +417,11 @@ async fn dispatch(
         match call {
             BtCall::Scan { on, power, active } => {
                 scan.wanted.set(on.then_some((power, active)));
+                scan.changed.set(true);
+            }
+            BtCall::Watch { addresses } => {
+                log::info!("bluetooth: watching for {addresses:?}");
+                *scan.watch.borrow_mut() = addresses;
                 scan.changed.set(true);
             }
             BtCall::Connect {
@@ -382,6 +445,7 @@ async fn dispatch(
                 }
             }
             BtCall::Forget { address } => {
+                shared.hid.borrow_mut().retain(|h| h.address != address);
                 if let Some(address) = address_of(&address) {
                     let _ = stack.remove_bond_information(Identity::from(address));
                 }
@@ -447,16 +511,40 @@ async fn scanning(stack: &Host<'_>, scan: &ScanWanted) {
             }
         })
         .await;
-        let Some((power, active)) = scan.wanted.get() else {
+        let watch: Vec<String> = scan.watch.borrow().clone();
+        *scan.only.borrow_mut() = None;
+        if scan.connecting.get() > 0 {
             continue;
-        };
-        let (interval, window) = scan_timing(power);
-        let config = ScanConfig {
-            active,
-            interval,
-            window,
-            filter_duplicates: FilterDuplicates::Enabled,
-            ..ScanConfig::default()
+        }
+        let config = match scan.wanted.get() {
+            Some((power, active)) => {
+                let (interval, window) = scan_timing(power);
+                ScanConfig {
+                    active,
+                    interval,
+                    window,
+                    filter_duplicates: FilterDuplicates::Enabled,
+                    ..ScanConfig::default()
+                }
+            }
+            // Only the bonded devices, passively and seldom; each
+            // advertisement told (one that slept and woke is new).
+            // Passively and seldom, all advertisements heard but only the
+            // bonded devices' told; each one (one that slept and woke is
+            // new). Not with the controller's accept list: connecting sets
+            // it too, and clearing it while a scan ends crashed the
+            // controller.
+            None if !watch.is_empty() => {
+                *scan.only.borrow_mut() = Some(watch.clone());
+                ScanConfig {
+                    active: false,
+                    interval: WATCH_INTERVAL,
+                    window: WATCH_WINDOW,
+                    filter_duplicates: FilterDuplicates::Disabled,
+                    ..ScanConfig::default()
+                }
+            }
+            None => continue,
         };
         match scanner.scan(&config).await {
             // On until what is wanted changes; dropped, the scan ends.
@@ -492,9 +580,11 @@ fn scan_timing(power: ScanPower) -> (Duration, Duration) {
 /// latency by default; the central (this device) wakes at each interval.
 fn link_timing(power: LinkPower) -> RequestedConnParams {
     let (min, max, latency, timeout) = match power {
-        LinkPower::Low => (100, 150, 2, 4_000),
-        LinkPower::Responsive => (30, 50, 4, 4_000),
-        _ => (8, 15, 0, 2_000),
+        // Long supervision timeouts: beside Wi-Fi the radio is shared, and
+        // a link must not drop for a few connection events missed.
+        LinkPower::Low => (100, 150, 2, 8_000),
+        LinkPower::Responsive => (30, 50, 4, 8_000),
+        _ => (8, 15, 0, 4_000),
     };
     RequestedConnParams {
         min_connection_interval: Duration::from_millis(min),
@@ -509,6 +599,7 @@ fn link_timing(power: LinkPower) -> RequestedConnParams {
 /// Turns advertising reports into devices found.
 struct Advertised<'a> {
     shared: &'a Shared,
+    scan: &'a ScanWanted,
 }
 
 impl EventHandler for Advertised<'_> {
@@ -519,6 +610,12 @@ impl EventHandler for Advertised<'_> {
                 signal: (report.rssi != 127).then_some(report.rssi),
                 ..Found::default()
             };
+            if let Some(only) = &*self.scan.only.borrow() {
+                if !only.contains(&found.address) {
+                    continue;
+                }
+                log::info!("bluetooth: {} is back", found.address);
+            }
             read_advertised(report.data, &mut found);
             self.shared.report(BtReport::Found(found));
         }
@@ -582,7 +679,13 @@ fn read_advertised(data: &[u8], found: &mut Found) {
 
 /// A slot's link, again and again: connected when asked, served while
 /// up, reported when gone.
-async fn link(stack: &Host<'_>, server: &Server<'_>, slot: &RefCell<Slot>, shared: &Shared) {
+async fn link(
+    stack: &Host<'_>,
+    server: &Server<'_>,
+    scan: &ScanWanted,
+    slot: &RefCell<Slot>,
+    shared: &Shared,
+) {
     loop {
         let (number, address, power) = poll_fn(|_| {
             let mut slot = slot.borrow_mut();
@@ -592,7 +695,20 @@ async fn link(stack: &Host<'_>, server: &Server<'_>, slot: &RefCell<Slot>, share
             }
         })
         .await;
-        let reason = match connect(stack, slot, &address, power).await {
+        // The scan stops while connecting, and goes on after.
+        scan.connecting.set(scan.connecting.get() + 1);
+        scan.changed.set(true);
+        let connected = connect(stack, slot, &address, power).await;
+        if matches!(connected, Ok(Some(_))) {
+            // The host updates its address resolution once nothing scans
+            // or connects: a moment for it before the scan goes on (a scan
+            // begun meanwhile made the controller refuse, and the host
+            // stopped).
+            Timer::after(SCAN_RESUME).await;
+        }
+        scan.connecting.set(scan.connecting.get() - 1);
+        scan.changed.set(true);
+        let reason = match connected {
             Ok(Some(connection)) => {
                 let (mtu, security) = (connection.att_mtu(), security_of(&connection));
                 log::info!("bluetooth: link {number} up, heap {}", crate::http::heap());
@@ -601,7 +717,16 @@ async fn link(stack: &Host<'_>, server: &Server<'_>, slot: &RefCell<Slot>, share
                     mtu,
                     security,
                 });
-                let reason = serve(stack, server, &connection, number, power, slot, shared).await;
+                let reason = serve(
+                    stack,
+                    server,
+                    &connection,
+                    (number, &address),
+                    power,
+                    slot,
+                    shared,
+                )
+                .await;
                 log::info!("bluetooth: link {number} down: {reason:?}");
                 shared.report(BtReport::Disconnected {
                     link: number,
@@ -686,6 +811,16 @@ struct Known {
     pairing: Pairing,
     /// The power the kernel asked for the link (pairing runs faster).
     power: LinkPower,
+    /// The power last tried, when it is tried again, and how often; the
+    /// power the link has now.
+    target: LinkPower,
+    retry: Option<Instant>,
+    tries: u8,
+    applied: Option<LinkPower>,
+    /// The link runs slowly while Wi-Fi is busy.
+    slowed: bool,
+    /// The device's address, its HID service kept under it.
+    address: String,
 }
 
 /// Serves an established link until it goes; why it went.
@@ -693,7 +828,7 @@ async fn serve(
     stack: &Host<'_>,
     server: &Server<'_>,
     connection: &Connection<'_, Pool>,
-    number: u32,
+    (number, address): (u32, &str),
     power: LinkPower,
     slot: &RefCell<Slot>,
     shared: &Shared,
@@ -718,29 +853,73 @@ async fn serve(
     };
     let known = RefCell::new(Known {
         power,
+        applied: Some(power),
+        address: String::from(address),
         ..Known::default()
     });
-    let work = async {
+    // A remote met before: its reports are told as such from the first,
+    // with no discovery (keys typed at once are not lost).
+    if let Some(cache) = shared.hid.borrow().iter().find(|h| h.address == address) {
+        let mut known = known.borrow_mut();
+        known.hid.clone_from(&cache.inputs);
+        known.configured.clone_from(&cache.configured);
+        shared.report(BtReport::HidMap {
+            link: number,
+            map: cache.map.clone(),
+        });
+    }
+    // What the device sends (events, its requests, notifications) is
+    // taken at once, also while a call waits for the device's answers:
+    // two loops side by side.
+    let events = async {
         loop {
-            let next_call = poll_fn(|_| match slot.borrow_mut().calls.pop_front() {
-                Some(call) => Poll::Ready(call),
-                None => Poll::Pending,
-            });
-            match select3(gatt.next(), listener.next(), next_call).await {
-                Either3::First(event) => {
+            match select(gatt.next(), listener.next()).await {
+                Either::First(event) => {
                     if let Some(reason) =
                         on_event(stack, connection, number, event, &known, shared).await
                     {
                         return reason;
                     }
                 }
-                Either3::Second(notification) => {
+                Either::Second(notification) => {
                     on_notification(&client, number, &notification, &known, shared).await;
                 }
-                Either3::Third(call) => {
+            }
+        }
+    };
+    let calls = async {
+        loop {
+            let next_call = poll_fn(|_| match slot.borrow_mut().calls.pop_front() {
+                Some(call) => Poll::Ready(call),
+                None => Poll::Pending,
+            });
+            // The link's power is due again: tried again, or Wi-Fi came or
+            // went.
+            let retry = poll_fn(|_| {
+                let known = known.borrow();
+                let due = known.retry.is_some_and(|at| Instant::now() >= at);
+                if due || known.slowed != shared.wifi_busy.get() {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            });
+            match select(next_call, retry).await {
+                Either::First(call) => {
                     on_call(stack, connection, &client, number, call, &known, shared).await;
                 }
+                Either::Second(()) => {
+                    known.borrow_mut().slowed = shared.wifi_busy.get();
+                    let target = wanted_power(&known.borrow());
+                    try_power(stack, connection, &known, target).await;
+                }
             }
+        }
+    };
+    let work = async {
+        match select(events, calls).await {
+            Either::First(reason) => reason,
+            Either::Second(()) => None,
         }
     };
     match select(client.task(), work).await {
@@ -749,20 +928,53 @@ async fn serve(
     }
 }
 
-/// The link's intervals for `power`, tried again a few times while the
-/// controller is busy with another procedure (encryption, an update).
-async fn set_power(stack: &Host<'_>, connection: &Connection<'_, Pool>, power: LinkPower) {
-    for _ in 0..4 {
-        match connection
-            .update_connection_params(stack, &link_timing(power))
-            .await
-        {
-            Ok(()) => return,
-            Err(e) => {
-                log::info!("bluetooth: power {power:?}: {e:?}");
-                Timer::after(Duration::from_secs(2)).await;
+/// The link's intervals for `power`; where the controller is busy with
+/// another procedure (encryption, an update), tried again a little later
+/// without holding up the link meanwhile.
+async fn try_power(
+    stack: &Host<'_>,
+    connection: &Connection<'_, Pool>,
+    known: &RefCell<Known>,
+    power: LinkPower,
+) {
+    {
+        let mut known = known.borrow_mut();
+        if known.applied == Some(power) {
+            known.retry = None;
+            return;
+        }
+        known.target = power;
+        known.retry = None;
+        known.tries += 1;
+    }
+    match connection
+        .update_connection_params(stack, &link_timing(power))
+        .await
+    {
+        Ok(()) => {
+            let mut known = known.borrow_mut();
+            known.tries = 0;
+            known.applied = Some(power);
+        }
+        Err(e) => {
+            log::info!("bluetooth: power {power:?}: {e:?}");
+            let mut known = known.borrow_mut();
+            if known.tries < 6 {
+                known.retry = Some(Instant::now() + POWER_RETRY);
             }
         }
+    }
+}
+
+/// The power a link is to run at: the fastest while pairing, slow while
+/// Wi-Fi is busy, else what the kernel asked.
+fn wanted_power(known: &Known) -> LinkPower {
+    if known.pairing != Pairing::No {
+        LinkPower::Burst
+    } else if known.slowed {
+        LinkPower::Low
+    } else {
+        known.power
     }
 }
 
@@ -846,8 +1058,8 @@ async fn on_event(
                 return None;
             }
             known.borrow_mut().pairing = Pairing::No;
-            let power = known.borrow().power;
-            set_power(stack, connection, power).await;
+            let power = wanted_power(&known.borrow());
+            try_power(stack, connection, known, power).await;
             match bond {
                 Some(bond) => shared.report(BtReport::Paired {
                     link: number,
@@ -860,8 +1072,8 @@ async fn on_event(
             log::info!("bluetooth: link {number}: pairing failed: {e:?}");
             let asked = known.borrow().pairing != Pairing::No;
             known.borrow_mut().pairing = Pairing::No;
-            let power = known.borrow().power;
-            set_power(stack, connection, power).await;
+            let power = wanted_power(&known.borrow());
+            try_power(stack, connection, known, power).await;
             if asked {
                 shared.fail(number, BtOp::Pair, None, BtError::Declined);
             }
@@ -928,11 +1140,8 @@ async fn on_call(
         BtCall::Disconnect { .. } => connection.disconnect(),
         BtCall::LinkPower { power, .. } => {
             known.borrow_mut().power = power;
-            if known.borrow().pairing != Pairing::No {
-                // Fast until pairing is over.
-                return;
-            }
-            set_power(stack, connection, power).await;
+            let target = wanted_power(&known.borrow());
+            try_power(stack, connection, known, target).await;
         }
         BtCall::Discover { services, .. } => match discover(client, &services, known).await {
             Ok(services) => shared.report(BtReport::Discovered {
@@ -997,7 +1206,7 @@ async fn on_call(
                     known.borrow_mut().pairing = Pairing::Running;
                     // Pairing takes some 80 messages each way and the
                     // device's patience: the shortest intervals meanwhile.
-                    set_power(stack, connection, LinkPower::Burst).await;
+                    try_power(stack, connection, known, LinkPower::Burst).await;
                     let started = connection
                         .set_bondable(true)
                         .and_then(|()| connection.request_security());
@@ -1120,6 +1329,22 @@ async fn hid(
     known: &RefCell<Known>,
     shared: &Shared,
 ) -> Result<(), BtError> {
+    // Met before: only its reports switched on again.
+    let cached: Vec<u16> = known.borrow().hid.iter().map(|(h, _)| *h).collect();
+    if !cached.is_empty() {
+        let mut all = true;
+        for handle in &cached {
+            all &= subscribe(client, *handle, true, known).await.is_ok();
+        }
+        if all {
+            log::info!("bluetooth: link {number}: HID as before");
+            return Ok(());
+        }
+        log::info!("bluetooth: link {number}: HID changed, found anew");
+        let address = known.borrow().address.clone();
+        shared.hid.borrow_mut().retain(|h| h.address != address);
+        known.borrow_mut().hid.clear();
+    }
     let service = client
         .services_by_uuid(&Uuid::new_short(HID))
         .await
@@ -1132,6 +1357,7 @@ async fn hid(
         .await
         .map_err(|e| error_of(&e))?;
     let mut map_len = 0;
+    let mut kept_map = Vec::new();
     if let Some(map) = characteristics
         .iter()
         .find(|c| c.uuid == Uuid::new_short(REPORT_MAP))
@@ -1143,6 +1369,7 @@ async fn hid(
             .map_err(|e| error_of(&e))?;
         buffer.truncate(n);
         map_len = n;
+        kept_map.clone_from(&buffer);
         shared.report(BtReport::HidMap {
             link: number,
             map: buffer,
@@ -1190,6 +1417,17 @@ async fn hid(
         "bluetooth: link {number}: HID reports {inputs:?}, map {} bytes",
         map_len
     );
+    let address = known.borrow().address.clone();
+    let configured = known.borrow().configured.clone();
+    let mut cache = shared.hid.borrow_mut();
+    cache.retain(|h| h.address != address);
+    cache.push(HidCache {
+        address,
+        inputs: inputs.clone(),
+        configured,
+        map: kept_map,
+    });
+    drop(cache);
     known.borrow_mut().hid = inputs;
     Ok(())
 }
