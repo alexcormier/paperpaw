@@ -346,7 +346,7 @@ static TYPE: [SettingSpec; 13] = [
         settings::KERNING.static_str(),
         "core.setting.kerning",
         true,
-        groups::READING,
+        groups::READING_TEXT,
     )
     .with_extra(&FONT_PAIRS)
     .advanced()
@@ -356,7 +356,7 @@ static TYPE: [SettingSpec; 13] = [
         settings::LIGATURES.static_str(),
         "core.setting.ligatures",
         true,
-        groups::READING,
+        groups::READING_TEXT,
     )
     .with_extra(&FONT_PAIRS)
     .advanced()

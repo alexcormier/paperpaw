@@ -82,7 +82,6 @@ members = [
     "plugins/hyphenation",
     "plugins/hyphenation-da",
     "plugins/hyphenation-es",
-    "plugins/hyphenation-fi",
     "plugins/hyphenation-fr",
     "plugins/hyphenation-it",
     "plugins/hyphenation-nb",
@@ -182,7 +181,6 @@ paperpaw-plugin-plugin-manager = { path = "plugins/plugin-manager", version = "1
 paperpaw-plugin-hyphenation = { path = "plugins/hyphenation", version = "1.0.0" }
 paperpaw-plugin-hyphenation-da = { path = "plugins/hyphenation-da", version = "1.0.0" }
 paperpaw-plugin-hyphenation-es = { path = "plugins/hyphenation-es", version = "1.0.0" }
-paperpaw-plugin-hyphenation-fi = { path = "plugins/hyphenation-fi", version = "1.0.0" }
 paperpaw-plugin-hyphenation-fr = { path = "plugins/hyphenation-fr", version = "1.0.0" }
 paperpaw-plugin-hyphenation-it = { path = "plugins/hyphenation-it", version = "1.0.0" }
 paperpaw-plugin-hyphenation-nb = { path = "plugins/hyphenation-nb", version = "1.0.0" }

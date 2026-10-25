@@ -51,7 +51,7 @@ change the plugin SDK.
   `FontHandle::measure` and its drawing kern the text they get.
 - Hyphenation for more languages, as store plugins of their own: French,
   Spanish, Italian, Dutch, Portuguese, Swedish, Danish, Norwegian
-  (Bokmål), Finnish, Polish, Russian and Ukrainian. The firmware keeps
+  (Bokmål), Polish, Russian and Ukrainian. The firmware keeps
   German and English; each language takes flash, almost no memory.
 - Settings *Letters before a hyphen* and *Letters after a hyphen*
   (advanced, 0 to 5; 0: the language's own): how short a piece of a word

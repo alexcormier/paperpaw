@@ -76,7 +76,7 @@ impl core::fmt::Debug for StorePlugins<'_> {
 
 /// The ids of the plugins the store offers as files too: built in only
 /// with the feature `store-plugins`.
-pub const STORE_PLUGINS: [&str; 33] = [
+pub const STORE_PLUGINS: [&str; 32] = [
     "aids",
     "battery",
     "browser",
@@ -84,7 +84,6 @@ pub const STORE_PLUGINS: [&str; 33] = [
     "fonts-browser",
     "hyphenation-da",
     "hyphenation-es",
-    "hyphenation-fi",
     "hyphenation-fr",
     "hyphenation-it",
     "hyphenation-nb",
@@ -272,7 +271,6 @@ pub fn install_with(
 fn offer_hyphenation(mut b: KernelBuilder, store: StorePlugins<'_>) -> KernelBuilder {
     b = offered(b, store, paperpaw_plugin_hyphenation_da::Danish);
     b = offered(b, store, paperpaw_plugin_hyphenation_es::Spanish);
-    b = offered(b, store, paperpaw_plugin_hyphenation_fi::Finnish);
     b = offered(b, store, paperpaw_plugin_hyphenation_fr::French);
     b = offered(b, store, paperpaw_plugin_hyphenation_it::Italian);
     b = offered(b, store, paperpaw_plugin_hyphenation_nb::Norwegian);

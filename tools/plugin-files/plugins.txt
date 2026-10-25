@@ -10,7 +10,6 @@ diagnostics system
 fonts-browser look
 hyphenation-da reading
 hyphenation-es reading
-hyphenation-fi reading
 hyphenation-fr reading
 hyphenation-it reading
 hyphenation-nb reading

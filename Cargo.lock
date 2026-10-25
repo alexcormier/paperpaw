@@ -1318,7 +1318,6 @@ dependencies = [
  "paperpaw-plugin-hyphenation",
  "paperpaw-plugin-hyphenation-da",
  "paperpaw-plugin-hyphenation-es",
- "paperpaw-plugin-hyphenation-fi",
  "paperpaw-plugin-hyphenation-fr",
  "paperpaw-plugin-hyphenation-it",
  "paperpaw-plugin-hyphenation-nb",
@@ -1764,14 +1763,6 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-es"
-version = "1.0.0"
-dependencies = [
- "paperpaw-hyphen",
- "paperpaw-sdk",
-]
-
-[[package]]
-name = "paperpaw-plugin-hyphenation-fi"
 version = "1.0.0"
 dependencies = [
  "paperpaw-hyphen",

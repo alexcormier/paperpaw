@@ -155,12 +155,6 @@ test = false
 bench = false
 
 [[bin]]
-name = "hyphenation-fi"
-path = "src/bin/hyphenation-fi.rs"
-test = false
-bench = false
-
-[[bin]]
 name = "hyphenation-fr"
 path = "src/bin/hyphenation-fr.rs"
 test = false
@@ -240,7 +234,6 @@ paperpaw-plugin-weather = { path = "../../plugins/weather" }
 paperpaw-plugin-widgets = { path = "../../plugins/widgets" }
 paperpaw-plugin-hyphenation-da = { path = "../../plugins/hyphenation-da" }
 paperpaw-plugin-hyphenation-es = { path = "../../plugins/hyphenation-es" }
-paperpaw-plugin-hyphenation-fi = { path = "../../plugins/hyphenation-fi" }
 paperpaw-plugin-hyphenation-fr = { path = "../../plugins/hyphenation-fr" }
 paperpaw-plugin-hyphenation-it = { path = "../../plugins/hyphenation-it" }
 paperpaw-plugin-hyphenation-nb = { path = "../../plugins/hyphenation-nb" }

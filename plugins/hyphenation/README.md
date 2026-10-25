@@ -6,7 +6,7 @@ spelling) and American English. Its patterns are in
 
 Every other language is a plugin of its own in `plugins/hyphenation-<code>`
 (French, Spanish, Italian, Dutch, Portuguese, Swedish, Danish, Norwegian,
-Finnish, Polish, Russian, Ukrainian). Each is a store plugin
+Polish, Russian, Ukrainian). Each is a store plugin
 ([`tools/plugin-files`](../../tools/plugin-files/README.md)) with a version
 of its own, one language (Norwegian: Bokmål and the tag `no`) and the same
 few lines of code. A language is added by copying one of them, changing
@@ -22,7 +22,7 @@ X4 (the plugin is mapped into flash and read through the cache, so it costs
 no heap). A data plugin would keep the table on the card, and there the
 same lookups would cost either RAM or many small reads:
 
-- Loaded into RAM, a table takes its whole size: 2 KB (Finnish, Italian)
+- Loaded into RAM, a table takes its whole size: 2 KB (Italian)
   to 109 KB (Dutch) and 252 KB (Norwegian), against a heap of 256 KB.
   Only the smallest would fit a few KB.
 - Read from the card as needed, a word takes on the order of a thousand
@@ -39,7 +39,6 @@ files built for the X4 (`tools/plugin-files`, `paperpaw-sign pack`, measured):
 
 | | Table | Plugin file |
 |---|---|---|
-| Finnish | 1.9 KB | 22 KB |
 | Italian | 2.3 KB | 22 KB |
 | Portuguese | 2.7 KB | 23 KB |
 | Danish | 7.9 KB | 28 KB |
