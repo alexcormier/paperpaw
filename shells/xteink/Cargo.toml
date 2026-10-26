@@ -41,7 +41,7 @@ esp32c3 = [
     "esp-radio/esp32c3",
     "esp-rtos/esp32c3",
 ]
-x4-pro = ["esp32s3"]
+x4-pro = ["esp32s3", "bluetooth"]
 x4-classic = ["esp32s3"]
 # What both ESP32-S3 devices build with; chosen by `x4-pro` or
 # `x4-classic`, not by hand.
@@ -70,9 +70,10 @@ remote = [
 # The frame test built in (`samples/frame-test`, ADR 0030), for measuring
 # frames a second, blits and the heap on the device: test builds only.
 frame-test = ["dep:paperpaw-sample-frame-test"]
-# Bluetooth Low Energy on the X4 Pro (`src/bluetooth.rs`, ADR 0027):
-# trouble-host on esp-radio's controller, beside Wi-Fi. Off by default
-# until its current is measured; the controller's code takes internal
+# Bluetooth Low Energy, included by x4-pro (`src/bluetooth.rs`, ADR 0027):
+# trouble-host on esp-radio's controller, beside Wi-Fi. The radio stays
+# off until requested; remotes remain manual by default while connected
+# idle power is being measured. The controller's code takes internal
 # RAM from the heap (`HEAP_SIZE`).
 bluetooth = [
     "esp-radio/ble",

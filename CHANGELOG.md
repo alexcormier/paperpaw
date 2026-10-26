@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- X4 Pro firmware includes Bluetooth LE for HID page-turners and
+  keyboards, pairing on the reader, and plugin GATT clients. Remotes
+  remain manual by default; active Bluetooth prevents processor light
+  sleep, and device sleep shuts the radio down. Other readers are
+  unchanged. Advertising and plugin GATT servers remain unavailable.
+
 ## [0.5.0-beta.10] - 2026-10-26
 
 ### Fixed
