@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- Xteink readers enter hardware sleep even when USB or charging is
+  detected, instead of keeping the processor awake behind the sleep
+  screen. Press the physical power button to wake them.
+- A sleep request survives redrawing the screen after a grayscale image.
+- X4 light-sleep transitions cannot overlap the button ADC interrupt's
+  access to the internal analog bus.
+- The X4 Pro holds battery power before memory, diagnostics and OTA
+  startup work, so a short power press need not span that work.
+- Screens that hide button hints, including the sleep screen, cannot
+  retain a temporary hint row from the previous screen.
+
 ## [0.5.0-beta.9] - 2026-10-26
 
 ### Fixed

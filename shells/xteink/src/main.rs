@@ -424,6 +424,9 @@ struct Ready {
 #[inline(never)]
 fn prepare() -> Ready {
     let p = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::max()));
+    // The Pro must keep its power before allocating memory or checking OTA.
+    #[cfg(feature = "x4-pro")]
+    let power_latch = Board::hold_power();
     // `init` stopped the watchdogs: a start that hangs begins again.
     power::watch_start(START_WATCHDOG_S);
     // The PSRAM of the ESP32-S3 devices first, so PaperPaw's memory comes
@@ -463,8 +466,10 @@ fn prepare() -> Ready {
     if let Some(message) = &panicked {
         warn!("the last run panicked: {message}");
     }
-    #[cfg(not(feature = "x4-classic"))]
+    #[cfg(not(any(feature = "x4-classic", feature = "x4-pro")))]
     let board = Board::take(p);
+    #[cfg(feature = "x4-pro")]
+    let board = Board::take(p, power_latch);
     // The X4 Classic's panel as the factory wrote it down, as its stock
     // firmware reads it.
     #[cfg(feature = "x4-classic")]

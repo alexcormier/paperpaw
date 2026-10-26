@@ -459,17 +459,6 @@ pub fn power_down() -> bool {
     POWER_DOWN.load(Ordering::Relaxed)
 }
 
-/// After the power button woke the X4 from its light sleep: that press
-/// does not count, and what waits from before is dropped.
-pub fn rearm() {
-    critical_section::with(|cs| {
-        if let Some(s) = SAMPLER.borrow_ref_mut(cs).as_mut() {
-            s.power_armed = false;
-            s.queue.clear();
-        }
-    });
-}
-
 /// Stops reading and gives back the power button, e.g. to wake the X4
 /// from its deep sleep.
 pub fn stop() -> Option<Input<'static>> {

@@ -138,8 +138,8 @@ impl Checking {
 struct Trial {
     /// How long it ran in starts before this one.
     before: u64,
-    /// Since when it runs now (ms since the start; anew after a sleep on
-    /// USB).
+    /// Since when it runs now (ms since the start; anew after pending
+    /// work cancelled sleep).
     since: u64,
 }
 
@@ -306,7 +306,7 @@ impl Ota {
         }
     }
 
-    /// Awake again at `now` without a new start (asleep on USB power): on
+    /// Awake again at `now` after pending work cancelled sleep: on
     /// trial again.
     pub fn resume_trial(&mut self, now: u64) {
         let Some(trial) = &mut self.trial else {

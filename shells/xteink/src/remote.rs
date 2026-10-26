@@ -82,6 +82,7 @@ impl Remote {
             Command::Boot => {
                 let (place, naps, reason) = crate::power::last_run();
                 println!("PP:BOOT {reason:?} {place} {naps}");
+                println!("PP:NAPS {}", crate::power::naps());
                 if let Some(message) = critical_section::with(|cs| PANIC.borrow_ref(cs).clone()) {
                     println!("PP:PANIC {message}");
                 }

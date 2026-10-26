@@ -200,20 +200,26 @@ pub struct Board {
 }
 
 impl Board {
-    /// Takes the chip's parts apart. The battery's power is held at once:
-    /// it stays on only while the power button is down otherwise.
+    /// Keeps the battery's power on before memory and OTA are initialized.
+    /// A short power press can end while that work is still running.
+    pub fn hold_power() -> Output<'static> {
+        // SAFETY: called once after HAL initialization. The GPIO1 in the
+        // Peripherals passed to take is never used; this is its only driver.
+        let pin = unsafe { esp_hal::peripherals::GPIO1::steal() };
+        let mut power_latch = Output::new(pin, Level::High, OutputConfig::default());
+        // Held through resets so flashing and OTA rollback keep their power.
+        power_latch.set_pad_hold(true);
+        power_latch
+    }
+
+    /// Takes the chip's parts apart, keeping the output made by hold_power.
     #[expect(
         clippy::expect_used,
         reason = "without its buses the X4 Pro can do nothing; a panic shows why"
     )]
     // A frame of its own, off the stack before the kernel is built.
     #[inline(never)]
-    pub fn take(mut p: Peripherals) -> Self {
-        let mut power_latch = Output::new(p.GPIO1, Level::High, OutputConfig::default());
-        // Held through resets: flashing restarts the chip into its boot
-        // loader, which would let the power go; held, the X4 Pro stays on
-        // and needs no button held while it is flashed.
-        power_latch.set_pad_hold(true);
+    pub fn take(mut p: Peripherals, power_latch: Output<'static>) -> Self {
         let delay = Delay::new();
 
         // Which controller the panel has, asked on its lines before the

@@ -303,6 +303,8 @@ class X4:
         print(self.ask("boot", "BOOT")[-1])
         deadline = time.monotonic() + 0.5
         while (line := self.line(deadline)) is not None:
+            if line.startswith("PP:NAPS"):
+                print(line[3:])
             if line.startswith("PP:PANIC"):
                 print(line[3:])
                 for name in calls(line):

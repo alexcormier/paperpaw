@@ -88,6 +88,13 @@ fn count_nap() {
     }
 }
 
+/// Completed light sleeps in this run, for hardware diagnostics.
+#[cfg(feature = "remote")]
+pub fn naps() -> u32 {
+    // SAFETY: only the main loop writes NAPS, and calls this function.
+    unsafe { core::ptr::addr_of!(NAPS).read_volatile() }
+}
+
 /// Light sleeps are allowed (on battery).
 static ALLOWED: AtomicBool = AtomicBool::new(false);
 
@@ -133,6 +140,13 @@ fn sleep_until(deadline: Instant) -> bool {
         return false;
     };
     low_power.set_wakeup_deadline(deadline);
+    // The X4's ADC interrupt and sleep entry both use the internal
+    // analog bus. Keep the sampler out until the HAL has restored the
+    // clocks and regulators. The RTC alarm wakes the hardware without
+    // a CPU interrupt; sample_now reads the buttons after waking.
+    #[cfg(feature = "x4")]
+    critical_section::with(|_| low_power.sleep_light(RtcSleepConfig::default()));
+    #[cfg(not(feature = "x4"))]
     low_power.sleep_light(RtcSleepConfig::default());
     critical_section::with(|cs| LOW_POWER.replace(cs, Some(low_power)));
     mark(at::WOKEN);

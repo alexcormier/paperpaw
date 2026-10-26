@@ -95,6 +95,13 @@ by their MD5, `ls`, `rm`, `mv`), changes the log's level, restarts the X4
 or makes it panic and waits until it is back. `--help` lists it all; the
 protocol is in `paperpaw_x4::remote`.
 
+Sleep enters hardware sleep even with USB connected, in release and
+test builds. The USB link stops until the physical power button wakes
+the device; remote commands cannot wake a sleeping processor. Finish
+captures before requesting sleep, then reconnect after the button press.
+Idle light-sleep tests (`idle sleep`) remain time-bounded and restart
+the device after the requested interval.
+
 ```sh
 python tools/x4-remote.py --script "page-forward,right,describe" --screenshot out/x4.png
 python tools/x4-remote.py --script "run:update.open,until:Search online,expect:Wi-Fi transfer"

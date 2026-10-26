@@ -604,9 +604,9 @@ impl Firmware {
     }
 
     /// Plugins save what is pending, the screen stays as it is, and the X4
-    /// sleeps: on battery its power is cut, and the power button starts it
-    /// again where it was; on USB power it stays in reach of a computer
-    /// (its log, remote control) until the power button wakes it.
+    /// sleeps: its power is cut where possible, otherwise the processor
+    /// enters deep sleep. The power button starts it again where it was.
+    /// USB or a charging indication must not keep a sleeping reader awake.
     #[expect(
         clippy::expect_used,
         reason = "the power button is taken back only here; without it the X4 could not wake"
@@ -620,9 +620,8 @@ impl Firmware {
         self.pause_trial();
         let effects = self.kernel.suspend(now());
         self.apply(effects);
-        // Bluetooth down now, asleep on USB too (the kernel asked for it,
-        // but the main loop does not come by while asleep; on battery the
-        // power goes anyway).
+        // Bluetooth down now: the main loop does not come by once the
+        // pending work is finished and the processor sleeps.
         #[cfg(feature = "bluetooth")]
         self.network
             .bluetooth(paperpaw_core::BtCall::Radio { on: false });
@@ -641,12 +640,12 @@ impl Firmware {
         if let Some(light) = self.light.as_mut() {
             light.off();
         }
-        info!("sleeping");
+        info!(
+            "sleeping: hardware shutdown (USB {})",
+            self.usb_power.is_high()
+        );
         // Released first: held, the button would wake it at once.
         self.wait_for_power_release();
-        if self.usb_power.is_high() && self.sleep_on_usb() {
-            return;
-        }
         // The power goes, the radio's with it: the network left first.
         self.network.leave();
         let mut power = input::stop().expect("the power button");
@@ -697,40 +696,6 @@ impl Firmware {
         }
     }
 
-    /// Asleep on USB power: the sleep screen shows until the power button,
-    /// or `press power` over USB, wakes it (`true`), or until the USB
-    /// power is gone (`false`): then it sleeps as on battery.
-    fn sleep_on_usb(&mut self) -> bool {
-        loop {
-            self.delay.delay_millis(POLL_MS as u32);
-            power::feed();
-            if input::power_down() {
-                break;
-            }
-            #[cfg(feature = "remote")]
-            if self.remote_while_asleep() {
-                break;
-            }
-            if self.usb_power.is_low() {
-                info!("off USB: sleeping as on battery");
-                return false;
-            }
-        }
-        self.wait_for_power_release();
-        input::rearm();
-        if let Err(e) = self.panel.init() {
-            warn!("display: {e:?}");
-        }
-        info!("awake");
-        self.state.sleep = false;
-        if let Some(ota) = &mut self.ota {
-            ota.resume_trial(now().0);
-        }
-        let effects = self.kernel.resume(now());
-        self.apply(effects);
-        true
-    }
-
     /// Carries out what the kernel asks: shows what changed, notes when to
     /// wake it, restarts, notes whether to sleep.
     pub fn apply(&mut self, mut effects: Effects) {
@@ -742,6 +707,9 @@ impl Firmware {
         self.light();
         self.state.pace = effects.pace();
         loop {
+            // A redraw or deferred work can replace these effects. Keep
+            // the one-shot sleep request before taking either path.
+            self.state.sleep |= effects.sleep();
             // Anything but a paced frame waits for the one on its way.
             let paced = effects.refresh().is_some_and(|(_, mode)| self.paced(mode))
                 && !effects.restart()
@@ -758,7 +726,6 @@ impl Firmware {
             // turned size and drawn whole, instead of what was asked.
             let rotation = self.kernel.rotation();
             if rotation != self.panel.rotation() {
-                self.state.sleep |= effects.sleep();
                 self.panel.set_rotation(rotation);
                 let (width, height) = self.panel.size();
                 info!("turned {rotation:?}: {width}x{height}");
@@ -807,7 +774,6 @@ impl Firmware {
                 warn!("{warning}");
             }
             self.state.wake_at = effects.wake_at();
-            self.state.sleep |= effects.sleep();
             // The cable transfer's answers, as soon as they are there.
             while let Some(line) = self.kernel.next_cable_line() {
                 esp_println::println!("{line}");
@@ -1285,29 +1251,6 @@ impl Firmware {
             }
             // Only asking: answered by `remote`.
             _ => {}
-        }
-    }
-
-    /// A command while asleep on USB: what only asks is answered, and
-    /// `press power` wakes the X4 (`true`).
-    fn remote_while_asleep(&mut self) -> bool {
-        use paperpaw_x4::remote::Command;
-        let Some(line) = self.usb.next_line() else {
-            return false;
-        };
-        let Some(command) = self.remote.command(line) else {
-            return false;
-        };
-        match self.remote.answer(&mut self.kernel, &mut self.usb, command) {
-            None => false,
-            Some(Command::Press { button, .. }) => {
-                crate::remote::ok();
-                button == paperpaw_platform::buttons::POWER
-            }
-            Some(_) => {
-                crate::remote::error("asleep");
-                false
-            }
         }
     }
 }

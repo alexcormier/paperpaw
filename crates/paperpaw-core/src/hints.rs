@@ -46,6 +46,15 @@ impl Kernel {
     /// The row of hints, while it shows: below a screen that keeps it, or
     /// over the bottom of one that has it on a press, for a while.
     pub(crate) fn hint_row(&self) -> Option<Rect> {
+        // A recent press on another screen must not put hints over a
+        // screen that hides them, including the final frame before sleep.
+        if self
+            .stack
+            .last()
+            .is_some_and(|top| self.hints_of(top) == HintVisibility::Hidden)
+        {
+            return None;
+        }
         let panel = self.framebuffer.bounds();
         let height = self.hint.height.min(panel.height / 2);
         let below = self.stack.last().is_some_and(|top| top.hinted);
