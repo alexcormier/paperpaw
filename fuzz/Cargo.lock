@@ -142,18 +142,18 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "paperpaw-config"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-digest"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-document"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
@@ -182,29 +182,29 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-graphics"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-http"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-hyphen"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-i18n"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-config",
 ]
 
 [[package]]
 name = "paperpaw-image"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",
@@ -212,14 +212,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-json"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-layout"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-document",
  "paperpaw-text",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-native"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "ed25519-compact",
  "paperpaw-digest",
@@ -235,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-platform"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-plugin-format-epub"
@@ -268,11 +268,11 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-qr"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-sdk"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-config",
  "paperpaw-digest",
@@ -294,14 +294,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-sqlite"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-stardict"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",
@@ -309,7 +309,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-text"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "font-types",
  "paperpaw-graphics",
@@ -320,18 +320,18 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-update"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "ed25519-compact",
 ]
 
 [[package]]
 name = "paperpaw-xml"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-zip"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",
