@@ -110,6 +110,88 @@ impl Airy for Shopping {
 }
 
 #[test]
+fn the_first_list_shows_loading_before_the_network_answers() {
+    let mut kernel = Kernel::builder(common::DEVICE)
+        .network(true)
+        .catalog_device("x4")
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Store)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), OPEN);
+    kernel.render(&mut |_, _| {});
+    assert!(
+        kernel
+            .describe()
+            .iter()
+            .any(|p| p.label.contains("Loading plugins"))
+    );
+    assert!(
+        kernel
+            .take_io()
+            .iter()
+            .any(|io| matches!(io, paperpaw_core::Io::Http(_)))
+    );
+}
+
+#[test]
+fn refreshing_the_saved_list_shows_loading_until_success_or_failure() {
+    let mut shopping = Shopping::new(&list("1.0.0"));
+    for status in [200, 0, 503] {
+        shopping.run(OPEN);
+        let call = shopping.request(LIST);
+        let shown = shopping.shown();
+        assert!(shown.contains("Loading plugins"), "{shown}");
+        assert!(shown.contains("Reading"), "{shown}");
+        shopping.answer(&call, status, list("1.1.0").as_bytes());
+        let shown = shopping.shown();
+        assert!(!shown.contains("Loading plugins"), "{shown}");
+        assert!(shown.contains("Reading"), "{shown}");
+    }
+}
+
+#[test]
+fn loading_changes_the_visible_header_even_beside_touch_paging() {
+    let groups = [
+        "reading", "formats", "library", "sync", "home", "look", "notes", "learning", "news",
+        "tools", "games", "system",
+    ];
+    let entries: Vec<_> = groups
+        .iter()
+        .enumerate()
+        .map(|(i, group)| {
+            format!(
+                r#"{{"id":"item-{i}","name":"Item {i}","group":"{group}","kind":"data","latest":{{"version":"1.0.0","sdk":"0.4","formats":1}}}}"#
+            )
+        })
+        .collect();
+    let list = format!(r#"{{"format":2,"plugins":[{}]}}"#, entries.join(","));
+    let mut shopping = Shopping::touch(&list);
+    let before = header_pixels(&mut shopping.kernel);
+    shopping.run(OPEN);
+    let call = shopping.requests().pop().unwrap();
+    let loading = header_pixels(&mut shopping.kernel);
+    assert_ne!(
+        before, loading,
+        "paging must not hide the loading indicator"
+    );
+    shopping.answer(&call, 200, list.as_bytes());
+    assert_eq!(before, header_pixels(&mut shopping.kernel));
+}
+
+fn header_pixels(kernel: &mut Kernel) -> Vec<u8> {
+    let mut pixels = Vec::new();
+    kernel.render(&mut |top, frame| {
+        if top < 67 {
+            let rows = frame.height.min(67 - top);
+            pixels.extend_from_slice(&frame.data[..usize::from(rows) * frame.stride]);
+        }
+    });
+    pixels
+}
+
+#[test]
 fn the_list_shows_what_fits_by_group() {
     let mut shopping = Shopping::new(&list("1.0.0"));
     // Search, the newest, then the groups in the list's order with how

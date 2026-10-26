@@ -24,7 +24,9 @@
 
 extern crate alloc;
 
+pub mod flasher;
 mod pebble;
+pub mod startup;
 
 pub use pebble::Pebble;
 

@@ -10,7 +10,7 @@ use crate::document::is_external;
 
 /// What PaperPaw calls itself to servers, with the version of the SDK
 /// this is built with: the `User-Agent` header's value, e.g.
-/// `PaperPaw/0.5.0-beta.8 (e-reader)`. A plugin sends [`user_agent_of`], with
+/// `PaperPaw/0.5.0-beta.9 (e-reader)`. A plugin sends [`user_agent_of`], with
 /// the version of the PaperPaw it runs in.
 pub const USER_AGENT: &str = concat!("PaperPaw/", env!("CARGO_PKG_VERSION"), " (e-reader)");
 

@@ -255,13 +255,12 @@ impl ListScreen {
         let mut request = HttpRequest::new("GET", &url, LOADED);
         request = request.save_to(catalog::list_part());
         cx.command(Command::http(request));
-        if self.index.is_none() {
-            self.trouble = Trouble::Loading;
-            self.redraw(cx);
-        }
+        self.trouble = Trouble::Loading;
+        self.redraw(cx);
     }
 
     fn loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
+        self.trouble = Trouble::None;
         let env = *cx.env();
         let fetched = catalog::list_part();
         let index = catalog::Device::of(&env)
@@ -371,8 +370,13 @@ pub(crate) fn group_name(env: &Env<'_>, group: usize) -> alloc::string::String {
 impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n().tr("store.title");
-        // The room left for plugins, beside the title.
+        // A header note may give way to paging on a narrow screen. The
+        // loading status must remain visible while the saved list serves.
+        let title = if self.trouble == Trouble::Loading && self.index.is_some() {
+            env.i18n().tr("store.loading")
+        } else {
+            env.i18n().tr("store.title")
+        };
         let note = self
             .room
             .as_deref()

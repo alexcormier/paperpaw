@@ -1,5 +1,5 @@
 Die Plugin-Verwaltung zeigt jedes Plugin mit Version und Beschreibung und schaltet Plugins an und aus.
 
-Du findest sie in den Einstellungen als Plugins. Ein Plugin antippen schaltet es um (mit Tasten: wählen). Die Änderung gilt nach einem Neustart; die Leiste unten bietet dann Jetzt neu starten. Ein Plugin lange drücken (mit Tasten: Wählen halten) zeigt, wie es funktioniert.
+Du findest sie in den Einstellungen als Plugins verwalten. Plugin-Einstellungen ist eine eigene Seite, etwa für die Netzwerknutzung der einzelnen Plugins. Ein Plugin antippen schaltet es um (mit Tasten: wählen). Die Änderung gilt nach einem Neustart; die Leiste unten bietet dann Jetzt neu starten. Ein Plugin lange drücken (mit Tasten: Wählen halten) zeigt, wie es funktioniert.
 
 Ein Plugin mit Immer an lässt sich nicht ausschalten, eines mit Benötigt erst, wenn ein anderes seine Aufgabe übernimmt, sonst gäbe es für PaperPaw keinen Weg zurück. Unter Bildschirme wählst du, welches Plugin einen Platz zeigt, den mehrere anbieten.

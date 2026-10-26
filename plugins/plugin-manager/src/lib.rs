@@ -67,7 +67,7 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
-static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "plugin-manager.title")
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "plugin-manager.open")
     .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
 static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::SETTINGS, OPEN).order(220)];
 static ICONS: [(Id, &str); 1] = [(OPEN, "puzzle")];

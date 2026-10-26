@@ -218,22 +218,43 @@ fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
         return;
     }
     let language = paperpaw_sdk::builtin::settings::LANGUAGE;
+    let scope_only = paperpaw_sdk::builtin::settings::SCOPE_ONLY;
+    let mut reset_scope = false;
     for spec in env
         .settings()
         .specs()
-        .filter(|spec| !spec.is_kept_on_reset())
+        .filter(|spec| !spec.is_kept_on_reset() && reset_has_value(env.settings(), &spec.id))
     {
         let chosen = match &group {
             Some(group) => env.settings().group_of(spec) == *group && visible(env, spec),
             None => spec.id != *language.id(),
         };
         if chosen {
-            cx.command(Command::ResetSetting(spec.id.clone()));
+            if spec.id == *scope_only.id() {
+                // Clearing this first would send later scoped resets
+                // to global settings instead of the book's values.
+                reset_scope = true;
+            } else {
+                cx.command(Command::ResetSetting(spec.id.clone()));
+            }
         }
+    }
+    if reset_scope {
+        cx.command(Command::ResetSetting(scope_only.id().clone()));
     }
     cx.command(Command::Notify(
         env.i18n().tr("settings.reset-done").to_string(),
     ));
+}
+
+/// Unset defaults need no disk work, font reload or change event. A
+/// book's reset removes only values kept in the scope it changes.
+fn reset_has_value(settings: &paperpaw_sdk::Settings, id: &Id) -> bool {
+    if settings.goes_to_scope(id.as_str()) {
+        settings.scope().is_some_and(|scope| scope.contains_key(id))
+    } else {
+        settings.is_set(id.as_str())
+    }
 }
 
 fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
@@ -372,6 +393,7 @@ fn paging(rows: &ui::Rows) -> Option<ui::Paging> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use paperpaw_i18n::{Catalog, check};
 
     #[test]
@@ -380,5 +402,46 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn reset_uses_the_value_of_its_target_scope_not_the_global_value() {
+        let id = Id::new_static("test.count");
+        let only = paperpaw_sdk::builtin::settings::SCOPE_ONLY;
+        let mut settings = paperpaw_sdk::Settings::new();
+        settings
+            .define(SettingSpec::number("test.count", "Count", 1, 20, 2, groups::OTHER).scoped())
+            .unwrap();
+        settings
+            .define(
+                SettingSpec::switch(
+                    only.clone().static_str(),
+                    "Only this book",
+                    false,
+                    groups::OTHER,
+                )
+                .scoped(),
+            )
+            .unwrap();
+        assert!(!reset_has_value(&settings, &id));
+        settings.set(id.as_str(), SettingValue::Int(9)).unwrap();
+        assert!(reset_has_value(&settings, &id));
+        let mut scope = paperpaw_sdk::collections::VecMap::new();
+        scope.insert(only.id().clone(), SettingValue::Bool(true));
+        settings.set_scope(Some(scope));
+        assert!(
+            !reset_has_value(&settings, &id),
+            "the global value is outside this reset"
+        );
+        settings
+            .set_in_scope(id.as_str(), SettingValue::Int(2))
+            .unwrap();
+        assert!(
+            reset_has_value(&settings, &id),
+            "an explicitly stored default still resets"
+        );
+        settings.reset(id.as_str()).unwrap();
+        assert!(!reset_has_value(&settings, &id));
+        assert_eq!(settings.int(id.as_str()), 9, "the global value remains");
     }
 }

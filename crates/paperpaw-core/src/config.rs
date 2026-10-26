@@ -125,12 +125,12 @@ impl Kernel {
             return;
         }
         let scoped = self.shared.settings.goes_to_scope(id.as_str());
-        let before = self.scoped_values();
+        let before = scoped.then(|| self.scoped_values());
         let old = self.setting_text_if_heard(id);
         if let Err(error) = self.shared.settings.reset(id.as_str()) {
             return self.warn_runtime(format!("`{id}`: {error}"));
         }
-        if scoped {
+        if let Some(before) = before {
             self.save_scope();
             self.announce_scope_changes(before);
             return;

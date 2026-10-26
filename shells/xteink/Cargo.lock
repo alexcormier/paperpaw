@@ -2264,7 +2264,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-app"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2300,11 +2300,11 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-config"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-core"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-config",
  "paperpaw-graphics",
@@ -2316,21 +2316,21 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-digest"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-document"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-fat"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "fatfs",
  "paperpaw-platform",
@@ -2338,33 +2338,33 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-graphics"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-hid"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-http"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-hyphen"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-i18n"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-config",
 ]
 
 [[package]]
 name = "paperpaw-image"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",
@@ -2372,14 +2372,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-json"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-layout"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-document",
  "paperpaw-text",
@@ -2387,7 +2387,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-native"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "ed25519-compact",
  "paperpaw-digest",
@@ -2395,7 +2395,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-platform"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-plugin-about"
@@ -2502,14 +2502,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-lock"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-menu"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2523,7 +2523,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-plugin-manager"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2544,7 +2544,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-settings"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2565,7 +2565,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-store"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2601,18 +2601,18 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-qr"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-sample-frame-test"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-sdk"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "paperpaw-config",
  "paperpaw-digest",
@@ -2634,7 +2634,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-stardict"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",
@@ -2642,7 +2642,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-text"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "font-types",
  "paperpaw-graphics",
@@ -2653,14 +2653,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-update"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "ed25519-compact",
 ]
 
 [[package]]
 name = "paperpaw-x4"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "embedded-hal 1.0.0",
  "paperpaw-platform",
@@ -2668,7 +2668,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-xml"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 
 [[package]]
 name = "paperpaw-xteink"
@@ -2698,6 +2698,7 @@ dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
  "paperpaw-fat",
+ "paperpaw-graphics",
  "paperpaw-http",
  "paperpaw-native",
  "paperpaw-platform",
@@ -2714,7 +2715,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-zip"
-version = "0.5.0-beta.8"
+version = "0.5.0-beta.9"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",

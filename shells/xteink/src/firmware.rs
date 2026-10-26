@@ -381,6 +381,7 @@ impl Firmware {
     fn restart(&mut self) -> ! {
         info!("restarting");
         self.settle_frame();
+        crate::startup::restarting(&mut self.panel, &self.kernel);
         self.pause_trial();
         let _ = self.kernel.stop(now());
         self.network.leave();

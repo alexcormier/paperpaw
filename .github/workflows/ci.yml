@@ -311,7 +311,9 @@ jobs:
           done
           exit $status
       - name: The store's first-party folders carry How it works
-        run: python3 -m unittest discover -s tools/plugin-files
+        run: |
+          python3 -m unittest discover -s tools/plugin-files
+          python3 -m unittest discover -s tools -p "test_x4_remote.py"
       # Devices update a plugin only to a newer version: one changed since
       # the last release has one (or says no reader sees the change).
       - name: A store plugin that changed has a newer version

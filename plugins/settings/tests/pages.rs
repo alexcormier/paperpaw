@@ -14,6 +14,8 @@
 mod common;
 
 use common::*;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 const LIST: &str = "settings.list";
 const GROUP: &str = "settings.group";
@@ -473,6 +475,167 @@ library-folder = Books/Mine
     }
 }
 
+/// Counts the settings work that blocks a firmware loop while reset is
+/// confirmed. Memory storage is fast; a card pays for every read.
+struct CountConfig {
+    inner: MemoryStorage,
+    reads: Rc<Cell<usize>>,
+    writes: Rc<Cell<usize>>,
+}
+
+impl Storage for CountConfig {
+    fn read_at(&self, path: &str, offset: u64, bytes: &mut [u8]) -> Result<usize, StorageError> {
+        if path == paperpaw_sdk::builtin::CONFIG_FILE && offset == 0 {
+            self.reads.set(self.reads.get() + 1);
+        }
+        self.inner.read_at(path, offset, bytes)
+    }
+
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.inner.size(path)
+    }
+
+    fn write(&self, path: &str, bytes: &[u8]) -> Result<(), StorageError> {
+        if path == paperpaw_sdk::builtin::CONFIG_FILE {
+            self.writes.set(self.writes.get() + 1);
+        }
+        self.inner.write(path, bytes)
+    }
+
+    fn append(&self, path: &str, bytes: &[u8]) -> Result<(), StorageError> {
+        self.inner.append(path, bytes)
+    }
+
+    fn list(&self, path: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.inner.list(path, visit)
+    }
+
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.inner.remove(path)
+    }
+}
+
+struct ResetEvents(Rc<RefCell<Vec<Id>>>);
+
+const TEST_SCOPE: Id = Id::new_static("reset-events.scope");
+static TEST_SCOPE_ACTION: [paperpaw_sdk::FixedAction; 1] =
+    [
+        paperpaw_sdk::FixedAction::new(TEST_SCOPE, "Test scope").handler(|_, _, out| {
+            out.push(paperpaw_sdk::Command::SetScope(Some(
+                "book-settings.ini".into(),
+            )));
+        }),
+    ];
+
+impl paperpaw_sdk::Plugin for ResetEvents {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            Id::new_static("reset-events"),
+            "Reset events",
+            paperpaw_sdk::Version::new(0, 1, 0),
+        )
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        r.add_setting(
+            paperpaw_sdk::SettingSpec::number(
+                "reset-events.count",
+                "Count",
+                1,
+                20,
+                2,
+                paperpaw_sdk::builtin::groups::OTHER,
+            )
+            .scoped(),
+        )?;
+        r.add_actions(&TEST_SCOPE_ACTION)?;
+        let events = self.0.clone();
+        r.on(
+            paperpaw_sdk::builtin::events::SETTING_CHANGED,
+            move |_, changed, _| {
+                events.borrow_mut().push(changed.id.clone());
+            },
+        )
+    }
+}
+
+#[test]
+fn resetting_a_books_values_does_not_fall_through_to_global_values() {
+    for device in DEVICES {
+        let storage = Shared::memory(
+            "[reset-events]\ncount = 9\n",
+            &[(
+                "book-settings.ini",
+                b"[core]\nscope-only = on\n[reset-events]\ncount = 2\n",
+            )],
+        );
+        let mut app = App::with_plugin(device, storage, ResetEvents(Rc::default()));
+        app.run(actions::SETTINGS);
+        app.run(TEST_SCOPE);
+        assert_eq!(app.kernel.settings().int("reset-events.count"), 2);
+        choose(&mut app, "Reset all");
+        choose(&mut app, "Yes, reset");
+        assert_eq!(app.kernel.settings().int("reset-events.count"), 9);
+        assert!(app.storage.config().contains("count = 9"));
+        assert!(!app.kernel.settings().bool("core.scope-only"));
+    }
+}
+
+#[test]
+fn reset_all_does_not_reload_unchanged_defaults_or_reread_the_card_for_them() {
+    for device in DEVICES {
+        let reads = Rc::new(Cell::new(0));
+        let writes = Rc::new(Cell::new(0));
+        let changed = Rc::new(RefCell::new(Vec::new()));
+        let storage = Shared(Rc::new(CountConfig {
+            inner: MemoryStorage::new(),
+            reads: reads.clone(),
+            writes: writes.clone(),
+        }));
+        storage.set_config("[core]\nnight-mode = on\n");
+        storage.write(SETUP_DONE, b"").unwrap();
+        let mut app = App::with_plugin(device, storage, ResetEvents(changed.clone()));
+        app.run(actions::SETTINGS);
+        choose(&mut app, "Reset all");
+        reads.set(0);
+        writes.set(0);
+        changed.borrow_mut().clear();
+        let started = std::time::Instant::now();
+        choose(&mut app, "Yes, reset");
+        let elapsed = started.elapsed();
+        let changed = changed.borrow();
+        println!(
+            "{} reset: {} events, {} config reads, {} config writes, {elapsed:?}",
+            device.id,
+            changed.len(),
+            reads.get(),
+            writes.get()
+        );
+        for unchanged in [
+            "core.reading-font",
+            "core.status-font",
+            "core.keymap-preset",
+        ] {
+            assert!(
+                !changed.iter().any(|id| id.as_str() == unchanged),
+                "an unset default was reapplied: {unchanged}"
+            );
+        }
+        assert!(changed.iter().any(|id| id.as_str() == "core.night-mode"));
+        assert!(!app.kernel.settings().bool("core.night-mode"));
+        assert!(
+            reads.get() <= changed.len() + 1,
+            "unneeded settings-file reads"
+        );
+        assert!(
+            changed.len() < 10,
+            "a small saved configuration caused {} resets",
+            changed.len()
+        );
+    }
+}
+
 /// *Restart now*, last in the settings, asks first: *Cancel* leaves
 /// things as they are, *Restart* restarts.
 #[test]
@@ -514,6 +677,63 @@ fn the_settings_open_on_a_setting_focused() {
         "{}",
         app.described()
     );
+}
+
+/// The installed-plugin manager and the group of plugin preferences are
+/// different destinations, so their settings rows must say which opens.
+#[test]
+fn plugin_management_and_plugin_settings_have_distinct_names_and_destinations() {
+    for device in DEVICES {
+        for (language, manager, preferences, screens, network) in [
+            (
+                "en",
+                "Manage plugins",
+                "Plugin settings",
+                "Screens",
+                "Network per plugin",
+            ),
+            (
+                "de",
+                "Plugins verwalten",
+                "Plugin-Einstellungen",
+                "Bildschirme",
+                "Netz je Plugin",
+            ),
+        ] {
+            let mut app = settings(device, &format!("[core]\nlanguage = {language}\n"));
+            let mut pages = Vec::new();
+            let mut all_rows = Vec::new();
+            for _ in 0..12 {
+                let page = titles(&mut app);
+                if pages.contains(&page) {
+                    break;
+                }
+                pages.push(page.clone());
+                all_rows.extend(page);
+                if touch(&app) {
+                    app.tap_next_page();
+                } else {
+                    app.run(actions::NEXT_PAGE);
+                }
+            }
+            for title in [manager, preferences] {
+                assert_eq!(
+                    all_rows.iter().filter(|row| row.as_str() == title).count(),
+                    1,
+                    "{language} on {}: {all_rows:?}",
+                    device.id
+                );
+            }
+            assert!(!all_rows.iter().any(|row| row == "Plugins"), "{all_rows:?}");
+            choose(&mut app, manager);
+            assert_eq!(app.screen(), "plugin-manager.list");
+            assert!(app.shows(screens), "{}", app.described());
+            app.run(actions::BACK);
+            choose(&mut app, preferences);
+            assert_eq!(app.screen(), GROUP);
+            assert!(app.shows(network), "{}", app.described());
+        }
+    }
 }
 
 /// A data plugin with two themes: presets of the kind `core.theme`.

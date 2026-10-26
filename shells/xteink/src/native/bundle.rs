@@ -7,9 +7,8 @@
 //! each file checked by its SHA-256 as it is copied and a plugin's code by
 //! its author's signature, for the kernel to install before it loads
 //! plugins (`KernelBuilder::install_plugin`), so they run at this start.
-//! The author's key is remembered at a plugin's first install
-//! (`native::remember_author`), and the code installed by its digest
-//! (`native::remember_code`: only that file runs); code signed by another
+//! Its origin, author's key and code digest are staged with the files
+//! (`install::marks`) and kept only once installed; code signed by another
 //! author than the version installed before is not installed, and the plugin manager says
 //! so (`Native::not_installed`): the reader decides in the store, warned.
 //! Behind the image, the bundle's first sector is erased once they are
@@ -40,7 +39,7 @@ use paperpaw_native::index::SECTOR;
 use paperpaw_platform::Storage;
 use paperpaw_sdk::Id;
 use paperpaw_sdk::builtin::PLUGIN_DIR;
-use paperpaw_sdk::native::{self, Author, NotInstalled, NotInstalledReason};
+use paperpaw_sdk::native::{NotInstalled, NotInstalledReason};
 
 use super::partition::{behind_image, other_app};
 use crate::ota::Flash;
@@ -75,6 +74,7 @@ struct InFlash<'a> {
 
 impl Source for InFlash<'_> {
     fn read(&mut self, at: u32, buf: &mut [u8]) -> bool {
+        crate::power::feed();
         self.flash.read(self.at + at, buf).is_ok()
     }
 }
@@ -89,6 +89,22 @@ pub struct Staged {
     pub other_slot: Option<u32>,
 }
 
+/// Work before the kernel has a screen of its own.
+#[derive(Debug)]
+pub enum Progress<'a> {
+    Checking,
+    Copying {
+        plugin: &'a str,
+        index: usize,
+        total: usize,
+        done: u32,
+        bytes: u32,
+    },
+    Starting,
+    Damaged,
+    Failed,
+}
+
 /// The bundle at `at`, in the other app partition, installed: erased.
 pub fn forget(flash: &Flash, at: u32) {
     erase(&mut flash.borrow_mut(), at);
@@ -99,11 +115,17 @@ pub fn forget(flash: &Flash, at: u32) {
 /// there is one, and erases it (see the [module documentation](self)).
 // A frame of its own, off the stack before the kernel is built.
 #[inline(never)]
-pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
+pub fn stage(
+    flash: &Flash,
+    storage: &dyn Storage,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Option<Staged> {
     let mut flash = flash.borrow_mut();
     let behind = behind_image(&mut flash).ok()?;
     let (start, end) = found(&mut flash, (behind.start, behind.end))?;
     info!("bundle: at {start:#x}");
+    progress(Progress::Checking);
+    let checking = crate::micros();
     let mut source = InFlash {
         flash: &mut flash,
         at: start,
@@ -112,62 +134,22 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
         Ok(bundle) => bundle,
         Err(why) => {
             warn!("bundle: {why}: erased, nothing installed");
+            progress(Progress::Damaged);
             erase(&mut flash, start);
             return None;
         }
     };
+    info!(
+        "bundle: checked {} bytes in {} ms",
+        bundle.len,
+        (crate::micros() - checking) / 1000
+    );
     let started = crate::micros();
-    let mut buf = Vec::new();
-    buf.try_reserve_exact(PIECE).ok()?;
-    buf.resize(PIECE, 0);
     let mut source = InFlash {
         flash: &mut flash,
         at: start,
     };
-    let mut staged = Staged::default();
-    // The authors' keys and the code of the plugins installed, kept once
-    // all are.
-    let mut authors: Vec<(&str, [u8; 32])> = Vec::new();
-    let mut codes: Vec<(&str, [u8; 32])> = Vec::new();
-    for plugin in &bundle.plugins {
-        // The bundle's names are those of plugins (`Bundle::read`).
-        let Ok(id) = Id::parse(&plugin.id) else {
-            continue;
-        };
-        let folder = format!("{PLUGIN_DIR}/.{}.part", plugin.id);
-        if let Err(why) = copy(&mut source, storage, plugin, &folder, &mut buf) {
-            // The card, most likely: tried again at the next start.
-            warn!("bundle: {}: {why}; kept for the next start", plugin.id);
-            for (_, folder) in &staged.installs {
-                let _ = storage.remove_dir_all(folder);
-            }
-            let _ = storage.remove_dir_all(&folder);
-            return None;
-        }
-        match check(storage, &plugin.id, &folder) {
-            Ok(checked) => {
-                let name = plugin.id.as_str();
-                authors.extend(checked.author.map(|key| (name, key)));
-                codes.extend(checked.sha256.map(|sha256| (name, sha256)));
-                staged.installs.push((id, folder));
-            }
-            Err(reason) => {
-                warn!("bundle: {}: {reason:?}; not installed", plugin.id);
-                let _ = storage.remove_dir_all(&folder);
-                staged.not_installed.push(NotInstalled::new(id, reason));
-            }
-        }
-    }
-    for (plugin, key) in authors {
-        if !native::remember_author(storage, plugin, &key) {
-            warn!("bundle: {plugin}: its author's key not kept");
-        }
-    }
-    for (plugin, sha256) in codes {
-        if !native::remember_code(storage, plugin, &sha256) {
-            warn!("bundle: {plugin}: its code not named as installed");
-        }
-    }
+    let mut staged = copy_all(&mut source, storage, &bundle, progress)?;
     if start == behind.start {
         erase(&mut flash, start);
     } else {
@@ -179,6 +161,79 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
         (crate::micros() - started) / 1000,
         staged.not_installed.len()
     );
+    progress(Progress::Starting);
+    Some(staged)
+}
+
+/// Copies and prepares the checked bundle, without changing installed plugins.
+fn copy_all(
+    source: &mut InFlash<'_>,
+    storage: &dyn Storage,
+    bundle: &Bundle,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Option<Staged> {
+    let mut buf = Vec::new();
+    if buf.try_reserve_exact(PIECE).is_err() {
+        warn!("bundle: no copy buffer; kept for the next start");
+        progress(Progress::Failed);
+        return None;
+    }
+    buf.resize(PIECE, 0);
+    let mut staged = Staged::default();
+    for (index, plugin) in bundle.plugins.iter().enumerate() {
+        // The bundle's names are those of plugins (`Bundle::read`).
+        let Ok(id) = Id::parse(&plugin.id) else {
+            continue;
+        };
+        let folder = format!("{PLUGIN_DIR}/.{}.part", plugin.id);
+        let copied = crate::micros();
+        let mut report = |done, bytes| {
+            progress(Progress::Copying {
+                plugin: &plugin.id,
+                index: index + 1,
+                total: bundle.plugins.len(),
+                done,
+                bytes,
+            })
+        };
+        if let Err(why) = copy(source, storage, plugin, &folder, &mut buf, &mut report) {
+            // The card, most likely: tried again at the next start.
+            warn!("bundle: {}: {why}; kept for the next start", plugin.id);
+            for (_, folder) in &staged.installs {
+                let _ = storage.remove_dir_all(folder);
+            }
+            let _ = storage.remove_dir_all(&folder);
+            progress(Progress::Failed);
+            return None;
+        }
+        match paperpaw_app::flasher::prepare(storage, &plugin.id, &folder, &plugin.version) {
+            Ok(()) => {
+                info!(
+                    "bundle: {} prepared in {} ms",
+                    plugin.id,
+                    (crate::micros() - copied) / 1000
+                );
+                staged.installs.push((id, folder));
+            }
+            Err(paperpaw_app::flasher::Problem::Storage) => {
+                warn!(
+                    "bundle: {}: installation marks not kept; retry next start",
+                    plugin.id
+                );
+                progress(Progress::Failed);
+                return None;
+            }
+            Err(reason) => {
+                warn!("bundle: {}: {reason:?}; not installed", plugin.id);
+                let _ = storage.remove_dir_all(&folder);
+                let reason = match reason {
+                    paperpaw_app::flasher::Problem::OtherAuthor => NotInstalledReason::OtherAuthor,
+                    _ => NotInstalledReason::Damaged,
+                };
+                staged.not_installed.push(NotInstalled::new(id, reason));
+            }
+        }
+    }
     Some(staged)
 }
 
@@ -189,10 +244,14 @@ fn copy(
     plugin: &BundlePlugin,
     folder: &str,
     buf: &mut [u8],
+    progress: &mut dyn FnMut(u32, u32),
 ) -> Result<(), &'static str> {
     let _ = storage.remove_dir_all(folder);
     let _ = storage.create_dir(PLUGIN_DIR);
     storage.create_dir(folder).map_err(|_| "no folder for it")?;
+    let total = plugin.files.iter().map(|file| file.size).sum();
+    let mut done = 0;
+    progress(0, total);
     for file in &plugin.files {
         crate::power::feed();
         let path = format!("{folder}/{}", file.path);
@@ -202,7 +261,10 @@ fn copy(
             at += 1 + slash;
             let _ = storage.create_dir(&path[..at]);
         }
-        copy_file(source, storage, file, &path, buf)?;
+        copy_file(source, storage, file, &path, buf, &mut |bytes| {
+            progress(done + bytes, total)
+        })?;
+        done += file.size;
     }
     Ok(())
 }
@@ -213,6 +275,7 @@ fn copy_file(
     file: &BundleFile,
     path: &str,
     buf: &mut [u8],
+    progress: &mut dyn FnMut(u32),
 ) -> Result<(), &'static str> {
     storage.write(path, &[]).map_err(|_| "not written")?;
     let mut sha = Sha256::new();
@@ -227,57 +290,12 @@ fn copy_file(
             .append(path, &buf[..len])
             .map_err(|_| "not written")?;
         done += len as u32;
+        progress(done);
     }
     if sha.finish() != file.sha256 {
         return Err("a file does not hold");
     }
     Ok(())
-}
-
-/// What a plugin checked to install brings to remember: its author's key
-/// at its first install, and its code's digest.
-#[derive(Default)]
-struct Checked {
-    author: Option<[u8; 32]>,
-    sha256: Option<[u8; 32]>,
-}
-
-/// Whether `plugin`, copied into `folder`, is installed: a data plugin
-/// is; a code plugin when its code is a plugin file whose author's
-/// signature holds, by the author of the version installed before if
-/// there was one.
-fn check(storage: &dyn Storage, plugin: &str, folder: &str) -> Result<Checked, NotInstalledReason> {
-    let code = format!("{folder}/code.ppn");
-    if !storage.exists(&code) {
-        return Ok(Checked::default());
-    }
-    let (header, signature) = native::check_file(storage, &code).map_err(|problem| {
-        warn!("bundle: {plugin}: {problem}");
-        NotInstalledReason::Damaged
-    })?;
-    let sha256 = Some(header.sha256);
-    let Some(signature) = signature else {
-        // Not signed: one's own build, unless a signed one was installed.
-        return match native::known_author(storage, plugin) {
-            Some(_) => Err(NotInstalledReason::OtherAuthor),
-            None => Ok(Checked {
-                author: None,
-                sha256,
-            }),
-        };
-    };
-    match native::author(storage, plugin, &signature.key) {
-        Author::Known => Ok(Checked {
-            author: None,
-            sha256,
-        }),
-        Author::New => Ok(Checked {
-            author: Some(signature.key),
-            sha256,
-        }),
-        // Another author, and verdicts to come: not trusted.
-        _ => Err(NotInstalledReason::OtherAuthor),
-    }
 }
 
 /// Erases the bundle's first sector: what is behind it is no bundle.

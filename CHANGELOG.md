@@ -6,7 +6,28 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.9] - 2026-10-26
+
 ### Fixed
+
+- Every restart shows a translated restart notice before saving state
+  and resetting the reader, whichever menu requested it.
+- The USB development helper reads current format 3 plugin digests when
+  trusting a local build, while still accepting format 2 files.
+- Plugins selected in the web flasher keep their Store origin after
+  installation, so the plugin store can update them automatically.
+  Manually installed plugins keep their local origin.
+- First startup shows plugin checking, installation progress and startup
+  preparation while the web flasher's bundle is copied to the SD card.
+- Settings distinguish *Manage plugins* from *Plugin settings*, rather
+  than showing two entries named *Plugins*.
+
+- Resetting settings changes only explicitly stored values, avoiding
+  repeated font and layout reloads for defaults that were never changed.
+  Book-specific resets leave global values intact.
+
+- The plugin store shows when it refreshes a saved plugin list, while
+  keeping that list available until the request finishes.
 
 - Crates.io releases use new versions for changed built-in plugins, so packaged applications compile against the matching plugin sources.
 

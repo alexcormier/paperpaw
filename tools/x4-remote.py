@@ -143,6 +143,19 @@ def open_port(name):
     return port
 
 
+def plugin_digest(data):
+    """The stored digest in a supported native plugin header (formats 2/3)."""
+    if len(data) < 6 or data[:4] != b"PPNP":
+        raise ValueError("not a plugin file")
+    format_version = int.from_bytes(data[4:6], "little")
+    digest_at = {2: 48, 3: 60}.get(format_version)
+    if digest_at is None:
+        raise ValueError(f"unsupported plugin format {format_version}")
+    if len(data) < digest_at + 32:
+        raise ValueError("truncated plugin header")
+    return data[digest_at:digest_at + 32]
+
+
 class X4:
     def __init__(self, port):
         self.port = port
@@ -224,9 +237,10 @@ class X4:
         code installed, and this is for one's own build copied there by
         hand. Its header's SHA-256 is what is kept, by the plugin's id (its
         plugin.ini's, else the folder's name)."""
-        head = self.read(f"plugins/{folder}/code.ppn")[:80]
-        if len(head) < 80 or head[:4] != b"PPNP":
-            sys.exit(f"plugins/{folder}/code.ppn: not a plugin file")
+        try:
+            digest = plugin_digest(self.read(f"plugins/{folder}/code.ppn"))
+        except ValueError as error:
+            sys.exit(f"plugins/{folder}/code.ppn: {error}")
         ini = self.read(f"plugins/{folder}/plugin.ini").decode("utf-8", "replace")
         ids = re.findall(r"(?m)^\s*id\s*=\s*(\S+)", ini)
         plugin = ids[0] if ids else folder
@@ -235,9 +249,9 @@ class X4:
         if self.ask(f"stat {path}", "STAT")[-1].split()[1] == "f":
             kept = self.read(path).decode()
         lines = [line for line in kept.splitlines() if line.split("\t")[0] != plugin]
-        lines.append(f"{plugin}\t{head[48:80].hex()}")
+        lines.append(f"{plugin}\t{digest.hex()}")
         self.write(path, "".join(f"{line}\n" for line in lines).encode())
-        print(f"plugins/{folder}/code.ppn: named as installed for {plugin} ({head[48:56].hex()}...)")
+        print(f"plugins/{folder}/code.ppn: named as installed for {plugin} ({digest[:8].hex()}...)")
 
     def write(self, path, data):
         """Writes `data` to `path` on the X4's card, checked by its MD5."""
