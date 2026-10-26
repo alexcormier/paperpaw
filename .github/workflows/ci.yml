@@ -456,3 +456,5 @@ jobs:
           tool: cargo-deny
       - name: The X4 firmware's dependencies too
         run: cargo deny --manifest-path shells/xteink/Cargo.toml --all-features check
+      - name: Bluetooth host-test dependencies too
+        run: cargo deny --manifest-path tools/bluetooth-tests/Cargo.toml --all-features check
