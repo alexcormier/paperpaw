@@ -166,11 +166,12 @@ Pro's. A port to a board like one PaperPaw knows is mostly a board file.
   1600 too high and two buttons were lost. A fuel gauge needs its
   battery profile, which the stock firmware writes; after the battery
   was cut off, it reads zero without one.
-- **Keep the USB link reachable.** Never cut the power latch or the USB
-  connection without a bounded timeout, or the device can only be
-  recovered by hand. The log goes over the chip's own USB serial
-  (esp-println's auto mode lost line ends on the ESP32-S3), and light
-  sleep waits while a computer sends USB frames.
+- **USB and sleep.** While awake, idle light sleep waits for the USB
+  link to be unused. Explicit sleep still enters hardware sleep on USB:
+  a charging indication must not leave the processor or radio running
+  behind a sleep image. Check power-button wake and USB enumeration
+  again, with and without a cable. The log uses the chip's USB serial;
+  esp-println's auto mode lost line ends on the ESP32-S3.
 - **The stock firmware.** Save it before the first flash
   (`shells/xteink/README.md`), so the device can always go back. A first
   flash over it may need the power button held, as its boot loader does
