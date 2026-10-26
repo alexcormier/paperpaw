@@ -249,7 +249,7 @@ fn changes(crate_: &str, kept: (&str, &str), now: (&str, &str)) -> Changes {
     for (path, line) in &kept_types {
         match now_types.get(path) {
             None => out.breaking.push(format!("{crate_}: gone: {line}")),
-            Some(now) if now != line => {
+            Some(now) if now != line && !user_agent_release_only(path, line, now) => {
                 out.breaking
                     .push(format!("{crate_}: changed: {line}\n  now: {now}"));
             }
@@ -276,6 +276,67 @@ fn changes(crate_: &str, kept: (&str, &str), now: (&str, &str)) -> Changes {
         }
     }
     out
+}
+
+/// The SDK release in an HTTP header is metadata, not a crossing layout.
+/// Every other part of this constant, and every other constant, stays guarded.
+fn user_agent_release_only(path: &str, before: &str, after: &str) -> bool {
+    let release = |line: &str| {
+        let Some(version) = line
+            .strip_prefix("const paperpaw_sdk::web::USER_AGENT: &str = \"PaperPaw/")
+            .and_then(|v| v.strip_suffix(" (e-reader)\""))
+        else {
+            return false;
+        };
+        let core = version.split(['-', '+']).next().unwrap_or_default();
+        let numbers: Vec<&str> = core.split('.').collect();
+        let valid_core = numbers.len() == 3
+            && numbers.iter().all(|n| {
+                !n.is_empty()
+                    && n.bytes().all(|b| b.is_ascii_digit())
+                    && (n.len() == 1 || !n.starts_with('0'))
+            });
+        let metadata = version.split_once('+').map(|(_, text)| text);
+        let valid_metadata = metadata.is_none_or(|text| {
+            text.split('.').all(|part| {
+                !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            })
+        });
+        valid_core
+            && valid_metadata
+            && version.trim() == version
+            && paperpaw_sdk::Version::parse(version).is_some()
+    };
+    path == "const paperpaw_sdk::web::USER_AGENT" && release(before) && release(after)
+}
+
+#[test]
+fn only_the_user_agent_s_release_is_interface_metadata() {
+    let before =
+        "const paperpaw_sdk::web::USER_AGENT: &str = \"PaperPaw/0.5.0-beta.8 (e-reader)\"\n";
+    let changed = |line: &str| changes("paperpaw-sdk", ("", before.trim()), ("", line));
+    for version in ["0.5.0-beta.9", "0.5.0", "0.5.0+build.1"] {
+        let after = before.replace("0.5.0-beta.8", version);
+        assert!(changed(after.trim()).breaking.is_empty(), "{after}");
+    }
+    for after in [
+        before.replace("PaperPaw/", "OtherPaw/"),
+        before.replace("(e-reader)", "(browser)"),
+        before.replace("&str", "String"),
+        before.replace("0.5.0-beta.8", "0.5"),
+        before.replace("0.5.0-beta.8", "00.5.0"),
+        before.replace("0.5.0-beta.8", "0.5.0+build..1"),
+        before.replace("0.5.0-beta.8", "0.5.0-beta.9 "),
+    ] {
+        assert!(!changed(after.trim()).breaking.is_empty(), "{after}");
+    }
+    let other = before.replace("web::USER_AGENT", "web::OTHER_AGENT");
+    let after = other.replace("0.5.0-beta.8", "0.5.0-beta.9");
+    assert!(
+        !changes("paperpaw-sdk", ("", other.trim()), ("", after.trim()))
+            .breaking
+            .is_empty()
+    );
 }
 
 #[test]

@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.9] - 2026-10-26
+
 ### Fixed
 
 - Plugins selected in the web flasher keep their Store origin after
