@@ -173,6 +173,16 @@ impl Kernel {
             loader.finish(storage.as_ref());
             return;
         }
+        // Discovery settled pending install marks before this snapshot.
+        // A failed read grants no code permission, as an individual lookup did.
+        let installed = paperpaw_sdk::native::InstalledCodes::load(
+            storage.as_ref(),
+            found
+                .iter()
+                .map(|plugin| plugin.manifest().id)
+                .filter(|id| !disabled.iter().any(|off| off == id.as_str())),
+        )
+        .unwrap_or_default();
         for plugin in found {
             let manifest = plugin.manifest();
             let id = manifest.id.clone();
@@ -183,8 +193,7 @@ impl Kernel {
             }
             let path = native.path(plugin.folder());
             // Only code installed runs: not a file put there otherwise.
-            let Some(sha256) = paperpaw_sdk::native::installed_code(storage.as_ref(), id.as_str())
-            else {
+            let Some(sha256) = installed.get(id.as_str()) else {
                 let message = format!("{path}: never installed; not loaded");
                 self.warn(WarningSource::Plugin(id.clone()), None, message);
                 let problem = PluginProblem::NotInstalled;
@@ -228,6 +237,7 @@ impl Kernel {
                 }
             }
         }
+        drop(installed);
         loader.finish(storage.as_ref());
         self.shared.native = Some(native);
     }
@@ -751,6 +761,37 @@ version = 2.0.0
         assert!(!storage.exists("plugins/.hello.old/code.ppn"));
     }
 
+    #[test]
+    fn pending_install_marks_settle_before_the_startup_snapshot() {
+        use paperpaw_sdk::install::marks::{self, From, Marks};
+        let storage = storage();
+        let native = Native::new("code.ppn");
+        assert!(paperpaw_sdk::native::remember_code(
+            &storage, "hello", &[9; 32]
+        ));
+        storage
+            .write(
+                "plugins/hello/code.ppn",
+                &code_file(native.fingerprint.0, installed("hello")),
+            )
+            .unwrap();
+        marks::write(
+            &storage,
+            "plugins/hello",
+            &Marks::new(From::Store(Version::new(1, 0, 0))).code(installed("hello")),
+        )
+        .unwrap();
+        let loader = loader();
+        let kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .code_plugins(native, Box::new(loader.clone()))
+            .build()
+            .unwrap();
+        assert_eq!(info(&kernel, "hello").state, PluginState::Running);
+        assert_eq!(loader.asked.borrow().len(), 2);
+        assert!(!kernel.storage().exists("plugins/hello/.install-marks"));
+    }
+
     /// The file of a code plugin with `fingerprint`, whose header's
     /// SHA-256 is `sha256` (the test loader checks only that).
     fn code_file(fingerprint: u64, sha256: [u8; 32]) -> alloc::vec::Vec<u8> {
@@ -925,3 +966,7 @@ version = 2.0.0
         assert!(!super::code_to_load(&aside, &native));
     }
 }
+
+#[cfg(test)]
+#[path = "code_plugin_startup_tests.rs"]
+mod startup_tests;

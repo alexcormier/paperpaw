@@ -19,6 +19,12 @@ change the plugin SDK.
 - Screens that hide button hints, including the sleep screen, cannot
   retain a temporary hint row from the previous screen.
 
+### Changed
+
+- Kernel startup reads installed native-plugin digests once for the plugins
+  it will load, after recovering pending installs. The bounded snapshot is
+  discarded after loading; the plugin interface is unchanged.
+
 ## [0.5.0-beta.9] - 2026-10-26
 
 ### Fixed
