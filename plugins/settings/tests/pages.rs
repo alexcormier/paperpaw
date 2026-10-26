@@ -679,6 +679,63 @@ fn the_settings_open_on_a_setting_focused() {
     );
 }
 
+/// The installed-plugin manager and the group of plugin preferences are
+/// different destinations, so their settings rows must say which opens.
+#[test]
+fn plugin_management_and_plugin_settings_have_distinct_names_and_destinations() {
+    for device in DEVICES {
+        for (language, manager, preferences, screens, network) in [
+            (
+                "en",
+                "Manage plugins",
+                "Plugin settings",
+                "Screens",
+                "Network per plugin",
+            ),
+            (
+                "de",
+                "Plugins verwalten",
+                "Plugin-Einstellungen",
+                "Bildschirme",
+                "Netz je Plugin",
+            ),
+        ] {
+            let mut app = settings(device, &format!("[core]\nlanguage = {language}\n"));
+            let mut pages = Vec::new();
+            let mut all_rows = Vec::new();
+            for _ in 0..12 {
+                let page = titles(&mut app);
+                if pages.contains(&page) {
+                    break;
+                }
+                pages.push(page.clone());
+                all_rows.extend(page);
+                if touch(&app) {
+                    app.tap_next_page();
+                } else {
+                    app.run(actions::NEXT_PAGE);
+                }
+            }
+            for title in [manager, preferences] {
+                assert_eq!(
+                    all_rows.iter().filter(|row| row.as_str() == title).count(),
+                    1,
+                    "{language} on {}: {all_rows:?}",
+                    device.id
+                );
+            }
+            assert!(!all_rows.iter().any(|row| row == "Plugins"), "{all_rows:?}");
+            choose(&mut app, manager);
+            assert_eq!(app.screen(), "plugin-manager.list");
+            assert!(app.shows(screens), "{}", app.described());
+            app.run(actions::BACK);
+            choose(&mut app, preferences);
+            assert_eq!(app.screen(), GROUP);
+            assert!(app.shows(network), "{}", app.described());
+        }
+    }
+}
+
 /// A data plugin with two themes: presets of the kind `core.theme`.
 const THEMES: &[(&str, &[u8])] = &[
     (
