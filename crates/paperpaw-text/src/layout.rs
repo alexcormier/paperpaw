@@ -218,6 +218,8 @@ struct Break {
     /// The least cost of lines up to here, and the break before.
     cost: f32,
     prev: u16,
+    /// Spaces before `end`, counted once for the whole paragraph.
+    spaces: u16,
 }
 
 /// Line breaking over whole paragraphs: of the ways to break each, the
@@ -253,6 +255,28 @@ pub fn wrap_lines_balanced_kerned(
     kern: impl Fn(usize, char, char) -> f32,
     hyphenate: Option<Hyphenate<'_>>,
 ) -> Vec<Line> {
+    wrap_lines_balanced_kerned_with_cost(text, width, advance, kern, hyphenate, |_, _| 0.0)
+}
+
+/// Like [`wrap_lines_balanced_kerned`], with an additional cost for each
+/// non-final line. `extra_cost` receives its unused width and the number
+/// of spaces inside it, excluding spaces at the break. It can account
+/// for how those spaces will be stretched when the line is drawn.
+///
+/// The ordinary raggedness and hyphen costs still apply. Negative or NaN
+/// additions count as zero. An infinite cost rules out that candidate;
+/// if no complete layout remains, the paragraph is broken greedily.
+/// The callback must return the same cost for the same arguments. It is
+/// not called for final lines. Returning zero preserves the ordinary
+/// balanced layout.
+pub fn wrap_lines_balanced_kerned_with_cost(
+    text: &str,
+    width: impl Fn(usize) -> f32,
+    advance: impl Fn(usize, char) -> f32,
+    kern: impl Fn(usize, char, char) -> f32,
+    hyphenate: Option<Hyphenate<'_>>,
+    extra_cost: impl Fn(f32, usize) -> f32,
+) -> Vec<Line> {
     let mut lines = Vec::new();
     let mut start = 0;
     loop {
@@ -262,7 +286,8 @@ pub fn wrap_lines_balanced_kerned(
             advance: &advance,
             kern: &kern,
         };
-        let balanced = balanced_paragraph(text, start..end, widths, &measures, hyphenate);
+        let balanced =
+            balanced_paragraph(text, start..end, widths, &measures, hyphenate, &extra_cost);
         match balanced {
             Some(mut paragraph) => lines.append(&mut paragraph),
             None => {
@@ -325,6 +350,7 @@ fn balanced_paragraph(
     (first, rest): (f32, f32),
     measures: &Measures<'_>,
     hyphenate: Option<Hyphenate<'_>>,
+    extra_cost: &dyn Fn(f32, usize) -> f32,
 ) -> Option<Vec<Line>> {
     if text.len() >= usize::from(u16::MAX) {
         return None;
@@ -341,6 +367,7 @@ fn balanced_paragraph(
         hyphen,
         cost: f32::INFINITY,
         prev: 0,
+        spaces: 0,
     };
     breaks.push(Break {
         cost: 0.0,
@@ -399,7 +426,8 @@ fn balanced_paragraph(
     if breaks.len() > MAX_BREAKS {
         return None;
     }
-    cheapest(&mut breaks, (first, rest));
+    count_spaces(text, start, &mut breaks);
+    cheapest(&mut breaks, (first, rest), extra_cost);
     if breaks[last].cost.is_infinite() {
         return None;
     }
@@ -427,11 +455,32 @@ fn balanced_paragraph(
     Some(lines)
 }
 
+/// Prefix counts fit in the padding of each break. Counting once keeps
+/// candidate scoring independent of the length of its text.
+fn count_spaces(text: &str, start: usize, breaks: &mut [Break]) {
+    let mut at = start;
+    let mut spaces = 0u16;
+    for point in breaks {
+        let end = usize::from(point.end);
+        spaces += text[at..end].bytes().filter(|&b| b == b' ').count() as u16;
+        point.spaces = spaces;
+        at = end;
+    }
+}
+
+#[cfg(test)]
+#[path = "layout/cost_tests.rs"]
+mod cost_tests;
+
 /// The least cost of lines up to each of `breaks` (the last ends the
 /// paragraph, free of cost), and the break before it on that way,
 /// looking back no further than a line goes; `widths` of the first line
 /// and of the others.
-fn cheapest(breaks: &mut [Break], (first, rest): (f32, f32)) {
+fn cheapest(
+    breaks: &mut [Break],
+    (first, rest): (f32, f32),
+    extra_cost: &dyn Fn(f32, usize) -> f32,
+) {
     let last = breaks.len() - 1;
     let hyphen_cost = (rest * 0.1) * (rest * 0.1);
     for j in 1..breaks.len() {
@@ -454,10 +503,15 @@ fn cheapest(breaks: &mut [Break], (first, rest): (f32, f32)) {
                 continue;
             }
             let left = available - line;
+            let spaces = usize::from(e.spaces - b.spaces - (b.next - b.end));
             let cost = b.cost
                 + match j == last {
                     true => 0.0,
-                    false => left * left + if e.hyphen > 0.0 { hyphen_cost } else { 0.0 },
+                    false => {
+                        left * left
+                            + if e.hyphen > 0.0 { hyphen_cost } else { 0.0 }
+                            + extra_cost(left, spaces).max(0.0)
+                    }
                 };
             if cost < best.0 {
                 best = (cost, i);

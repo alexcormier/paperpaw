@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- Justified text keeps bounded word spacing when font size or word
+  spacing changes, without abruptly switching whole lines to tight
+  spaces. Balanced line breaking considers the gaps it can distribute.
+  The settings preview and book pages use the same behavior.
+
+### Added
+
+- Text layout callers can add a cost for the unused width and internal
+  spaces of a candidate balanced line with
+  `wrap_lines_balanced_kerned_with_cost`. Existing calls keep their layout.
+
 ## [0.5.0-beta.9] - 2026-10-26
 
 ### Fixed
