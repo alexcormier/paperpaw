@@ -45,6 +45,8 @@ use trouble_host::prelude::*;
 
 mod gatt;
 mod identity;
+#[cfg(feature = "remote")]
+mod timing;
 use gatt::{discover, hid, subscribe};
 use identity::{address_of, bond_of, connection_address, keys_text, reported_address};
 
@@ -550,9 +552,20 @@ async fn scanning(stack: &Host<'_>, scan: &ScanWanted) {
             }
             None => continue,
         };
+        #[cfg(feature = "remote")]
+        let stage = timing::Stage::start(0, "scan");
         match scanner.scan(&config).await {
             // On until what is wanted changes; dropped, the scan ends.
             Ok(_session) => {
+                #[cfg(feature = "remote")]
+                {
+                    stage.finish("started");
+                    log::info!(
+                        "bluetooth timing: scan active={} watched={}",
+                        config.active,
+                        watch.len()
+                    );
+                }
                 poll_fn(|_| {
                     if scan.changed.get() {
                         Poll::Ready(())
@@ -562,7 +575,11 @@ async fn scanning(stack: &Host<'_>, scan: &ScanWanted) {
                 })
                 .await;
             }
-            Err(e) => log::warn!("bluetooth: scan: {e:?}"),
+            Err(e) => {
+                #[cfg(feature = "remote")]
+                stage.finish("failed");
+                log::warn!("bluetooth: scan: {e:?}");
+            }
         }
     }
 }
@@ -708,11 +725,20 @@ async fn link(
         // The scan stops while connecting, and goes on after.
         scan.connecting.set(scan.connecting.get() + 1);
         scan.changed.set(true);
+        #[cfg(feature = "remote")]
+        let stage = timing::Stage::start(number, "connect");
         let peer = connection_address(&address, &shared.bonds.borrow());
         let connected = match peer {
             Some(peer) => connect(stack, slot, peer, power).await,
             None => Err(BtError::NotFound),
         };
+        #[cfg(feature = "remote")]
+        stage.finish(match &connected {
+            Ok(Some(_)) => "connected",
+            Ok(None) => "cancelled",
+            Err(BtError::Timeout) => "timeout",
+            Err(_) => "failed",
+        });
         if matches!(connected, Ok(Some(_))) {
             // The host updates its address resolution once nothing scans
             // or connects: a moment for it before the scan goes on (a scan
@@ -834,6 +860,8 @@ struct Known {
     slowed: bool,
     /// The device's address, its HID service kept under it.
     address: String,
+    #[cfg(feature = "remote")]
+    first_hid_reported: bool,
 }
 
 /// Serves an established link until it goes; why it went.
@@ -847,14 +875,34 @@ async fn serve(
     shared: &Shared,
 ) -> Option<BtError> {
     // The MTU agreed, and a bonded device's link encrypted.
+    #[cfg(feature = "remote")]
+    let stage = {
+        log::info!(
+            "bluetooth timing: link {number} gatt before mtu={} security={:?}",
+            connection.att_mtu(),
+            security_of(connection)
+        );
+        timing::Stage::start(number, "gatt-init")
+    };
     let client: Client<'_> = match Client::new(stack, connection).await {
         Ok(client) => client,
         Err(e) => {
+            #[cfg(feature = "remote")]
+            stage.finish("failed");
             log::warn!("bluetooth: link {number}: {e:?}");
             connection.disconnect();
             return gone(connection).await;
         }
     };
+    #[cfg(feature = "remote")]
+    {
+        stage.finish("ready");
+        log::info!(
+            "bluetooth timing: link {number} gatt mtu={} security={:?}",
+            connection.att_mtu(),
+            security_of(connection)
+        );
+    }
     let Ok(mut listener) = client.listen_all() else {
         connection.disconnect();
         return gone(connection).await;
@@ -1113,6 +1161,14 @@ async fn on_notification(
         .iter()
         .find(|(h, _)| *h == handle)
         .map(|(_, id)| *id);
+    #[cfg(feature = "remote")]
+    if report.is_some() && !known.borrow().first_hid_reported {
+        known.borrow_mut().first_hid_reported = true;
+        log::info!(
+            "bluetooth timing: link {number} first-hid at_ms={}",
+            Instant::now().as_millis()
+        );
+    }
     log::debug!("bluetooth: link {number}: {handle} {bytes:02x?}");
     match report {
         Some(id) => shared.report(BtReport::HidReport {
@@ -1246,7 +1302,18 @@ async fn on_call(
         }
         BtCall::Hid { on, .. } => {
             if on {
-                if let Err(error) = hid(client, number, known, shared).await {
+                #[cfg(feature = "remote")]
+                let stage = {
+                    log::info!(
+                        "bluetooth timing: link {number} hid cached={}",
+                        !known.borrow().hid.is_empty()
+                    );
+                    timing::Stage::start(number, "hid-init")
+                };
+                let result = hid(client, number, known, shared).await;
+                #[cfg(feature = "remote")]
+                stage.finish(if result.is_ok() { "ready" } else { "failed" });
+                if let Err(error) = result {
                     log::info!("bluetooth: link {number}: HID: {error:?}");
                     shared.fail(number, BtOp::HidReports, None, error);
                 }
