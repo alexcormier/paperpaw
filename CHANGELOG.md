@@ -8,6 +8,8 @@ change the plugin SDK.
 
 ### Fixed
 
+- X4 plugin-cache indexes are read with the current entry size, so a
+  restart reuses verified cached code instead of rewriting every plugin.
 - Xteink readers enter hardware sleep even when USB or charging is
   detected, instead of keeping the processor awake behind the sleep
   screen. Press the physical power button to wake them.
@@ -21,6 +23,11 @@ change the plugin SDK.
 
 ### Changed
 
+- Xteink readers show a startup message before loading plugins on normal
+  starts too. Its panel refresh overlaps plugin loading.
+- X4 Pro and X4 Classic verify native plugin digests with the chip's
+  SHA-256 engine. The same header, image and relocation bytes are checked
+  before any plugin code runs.
 - Kernel startup reads installed native-plugin digests once for the plugins
   it will load, after recovering pending installs. The bounded snapshot is
   discarded after loading; the plugin interface is unchanged.

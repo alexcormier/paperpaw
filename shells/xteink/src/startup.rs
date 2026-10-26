@@ -1,5 +1,5 @@
-//! Progress before the kernel's first frame. The web bundle is verified
-//! and copied before plugins load, so its work must have a screen already.
+//! Progress before the kernel's first frame, on ordinary starts too.
+//! The panel can show the starting message while plugins are loaded.
 
 use alloc::format;
 
@@ -33,6 +33,14 @@ impl<'a> Startup<'a> {
             attempted: false,
             last: None,
             copying: false,
+        }
+    }
+
+    /// A normal start has no bundle progress, but still loads plugins.
+    /// Keep a bundle's final message if it already showed one.
+    pub fn starting_if_needed(&mut self) {
+        if !self.attempted {
+            self.update(Progress::Starting);
         }
     }
 
@@ -86,7 +94,12 @@ impl<'a> Startup<'a> {
             ),
         };
         if let Some(screen) = &self.screen {
-            match draw(self.panel, self.last.is_none(), |canvas, rect| {
+            let finish = if matches!(progress, Progress::Starting) {
+                Finish::Later
+            } else {
+                Finish::Wait
+            };
+            match draw(self.panel, self.last.is_none(), finish, |canvas, rect| {
                 screen.draw(canvas, rect, phase, &detail, done, total);
             }) {
                 Ok(()) => self.last = Some(crate::now()),
@@ -99,6 +112,13 @@ impl<'a> Startup<'a> {
     }
 }
 
+/// The starting waveform may still be running when the kernel is ready.
+pub fn finish(panel: &mut Panel) {
+    if let Err(error) = panel.wait() {
+        warn!("startup display: {error:?}; continuing startup");
+    }
+}
+
 /// Show feedback before the running kernel flushes its state and resets.
 /// Reuse its font registry; only a small, fallible display band is needed.
 pub fn restarting(panel: &mut Panel, kernel: &paperpaw_core::Kernel) {
@@ -108,7 +128,7 @@ pub fn restarting(panel: &mut Panel, kernel: &paperpaw_core::Kernel) {
         tr.tr("core.restarting.text"),
         tr.tr("core.restarting.keep-on"),
     ];
-    match draw(panel, true, |canvas, rect| {
+    match draw(panel, true, Finish::Wait, |canvas, rect| {
         paperpaw_app::startup::restarting(kernel.fonts(), canvas, rect, labels);
     }) {
         Ok(()) => info!("restart display: shown"),
@@ -137,11 +157,18 @@ impl From<Error> for Problem {
     }
 }
 
+enum Finish {
+    Wait,
+    Later,
+}
+
 fn draw(
     panel: &mut Panel,
     first: bool,
+    finish: Finish,
     paint: impl Fn(&mut Canvas<'_>, Rect),
 ) -> Result<(), Problem> {
+    panel.wait()?;
     let (width, height) = panel.size();
     let mut frame = Framebuffer::banded(width, height, ROWS, PixelFormat::Mono1)
         .map_err(|_| Problem::Memory)?;
@@ -157,7 +184,13 @@ fn draw(
         Ok(())
     };
     send(if first { Planes::BOTH } else { Planes::NEW })?;
-    panel.refresh(if first { Refresh::Half } else { Refresh::Fast }, true)?;
+    panel.start_refresh(if first { Refresh::Half } else { Refresh::Fast }, true)?;
+    if matches!(finish, Finish::Later) {
+        // Firmware drives the first kernel frame whole and rewrites both
+        // planes. Only its display work waits for this waveform.
+        return Ok(());
+    }
+    panel.wait()?;
     // The old and new memories must agree after a fast refresh, as when
     // the kernel draws. Replay the small bands, rather than keep a frame.
     let mut top = 0;

@@ -246,13 +246,14 @@ impl Header {
     /// The header's bytes.
     pub fn to_bytes(&self) -> [u8; HEADER_LEN] {
         let mut bytes = [0; HEADER_LEN];
-        bytes[..DIGESTED_LEN].copy_from_slice(&self.digested());
+        bytes[..DIGESTED_LEN].copy_from_slice(&self.digest_prefix());
         bytes[DIGESTED_LEN..].copy_from_slice(&self.sha256);
         bytes
     }
 
-    /// The header's bytes its digest covers.
-    fn digested(&self) -> [u8; DIGESTED_LEN] {
+    /// The header's bytes its digest covers, before the image and words.
+    /// Hardware loaders can feed these to their chip's SHA-256 engine.
+    pub fn digest_prefix(&self) -> [u8; DIGESTED_LEN] {
         let mut bytes = [0; DIGESTED_LEN];
         bytes[..4].copy_from_slice(&MAGIC);
         bytes[4..6].copy_from_slice(&FORMAT.to_le_bytes());
@@ -284,7 +285,7 @@ impl Header {
     /// [`Header::holds`]).
     pub fn digest(&self) -> Sha256 {
         let mut sha = Sha256::new();
-        sha.update(&self.digested());
+        sha.update(&self.digest_prefix());
         sha
     }
 
@@ -576,6 +577,26 @@ pub(crate) mod tests {
         let image = &file[HEADER_LEN..HEADER_LEN + 96];
         let unordered = seal(header, image, &[24, 20]);
         assert_eq!(Header::check_file(&unordered), Err(Problem::Relocation));
+    }
+
+    #[test]
+    fn hardware_digest_prefix_covers_the_same_file_bytes() {
+        let file = file();
+        let header = Header::read(&file).unwrap();
+        let prefix = header.digest_prefix();
+        assert_eq!(prefix.as_slice(), &file[..HEADER_LEN - 32]);
+        let mut sha = Sha256::new();
+        sha.update(&prefix);
+        sha.update(&file[HEADER_LEN..]);
+        assert_eq!(sha.finish(), header.sha256);
+        for at in [0, 8, 16, 44, 48, 56] {
+            let mut changed = prefix;
+            changed[at] ^= 1;
+            let mut sha = Sha256::new();
+            sha.update(&changed);
+            sha.update(&file[HEADER_LEN..]);
+            assert_ne!(sha.finish(), header.sha256, "header byte {at}");
+        }
     }
 
     #[test]

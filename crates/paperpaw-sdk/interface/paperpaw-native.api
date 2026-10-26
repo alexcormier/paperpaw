@@ -49,6 +49,7 @@ pub struct paperpaw_native::index::Index
 pub paperpaw_native::index::Index::firmware: [u8; 32]
 pub paperpaw_native::index::Index::placed: alloc::vec::Vec<paperpaw_native::index::Placed>
 impl paperpaw_native::index::Index
+pub fn paperpaw_native::index::Index::byte_len(&[u8]) -> core::option::Option<usize>
 pub fn paperpaw_native::index::Index::read(&[u8]) -> core::option::Option<paperpaw_native::index::Index>
 pub fn paperpaw_native::index::Index::to_bytes(&self) -> alloc::vec::Vec<u8>
 pub struct paperpaw_native::index::Layout
@@ -172,6 +173,7 @@ pub paperpaw_native::Header::sha256: [u8; 32]
 impl paperpaw_native::Header
 pub fn paperpaw_native::Header::check_file(&[u8]) -> core::result::Result<(paperpaw_native::Header, core::option::Option<paperpaw_native::signature::Signature>), paperpaw_native::Problem>
 pub fn paperpaw_native::Header::digest(&self) -> paperpaw_digest::sha256::Sha256
+pub fn paperpaw_native::Header::digest_prefix(&self) -> [u8; 60]
 pub fn paperpaw_native::Header::file_len(&self) -> u64
 pub fn paperpaw_native::Header::holds(&self, paperpaw_digest::sha256::Sha256) -> bool
 pub fn paperpaw_native::Header::in_hot(&self, u32) -> bool
