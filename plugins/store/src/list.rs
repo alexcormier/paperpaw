@@ -370,15 +370,17 @@ pub(crate) fn group_name(env: &Env<'_>, group: usize) -> alloc::string::String {
 impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let title = env.i18n().tr("store.title");
-        // Keep the saved list usable while its replacement is fetched.
-        let note = if self.trouble == Trouble::Loading && self.index.is_some() {
-            Some(env.i18n().tr("store.loading"))
+        // A header note may give way to paging on a narrow screen. The
+        // loading status must remain visible while the saved list serves.
+        let title = if self.trouble == Trouble::Loading && self.index.is_some() {
+            env.i18n().tr("store.loading")
         } else {
-            self.room
-                .as_deref()
-                .filter(|_| self.index.is_some() && self.paging().is_none())
+            env.i18n().tr("store.title")
         };
+        let note = self
+            .room
+            .as_deref()
+            .filter(|_| self.index.is_some() && self.paging().is_none());
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, note, self.paging());
         if self.offering(env) {

@@ -152,6 +152,46 @@ fn refreshing_the_saved_list_shows_loading_until_success_or_failure() {
 }
 
 #[test]
+fn loading_changes_the_visible_header_even_beside_touch_paging() {
+    let groups = [
+        "reading", "formats", "library", "sync", "home", "look", "notes", "learning", "news",
+        "tools", "games", "system",
+    ];
+    let entries: Vec<_> = groups
+        .iter()
+        .enumerate()
+        .map(|(i, group)| {
+            format!(
+                r#"{{"id":"item-{i}","name":"Item {i}","group":"{group}","kind":"data","latest":{{"version":"1.0.0","sdk":"0.4","formats":1}}}}"#
+            )
+        })
+        .collect();
+    let list = format!(r#"{{"format":2,"plugins":[{}]}}"#, entries.join(","));
+    let mut shopping = Shopping::touch(&list);
+    let before = header_pixels(&mut shopping.kernel);
+    shopping.run(OPEN);
+    let call = shopping.requests().pop().unwrap();
+    let loading = header_pixels(&mut shopping.kernel);
+    assert_ne!(
+        before, loading,
+        "paging must not hide the loading indicator"
+    );
+    shopping.answer(&call, 200, list.as_bytes());
+    assert_eq!(before, header_pixels(&mut shopping.kernel));
+}
+
+fn header_pixels(kernel: &mut Kernel) -> Vec<u8> {
+    let mut pixels = Vec::new();
+    kernel.render(&mut |top, frame| {
+        if top < 67 {
+            let rows = frame.height.min(67 - top);
+            pixels.extend_from_slice(&frame.data[..usize::from(rows) * frame.stride]);
+        }
+    });
+    pixels
+}
+
+#[test]
 fn the_list_shows_what_fits_by_group() {
     let mut shopping = Shopping::new(&list("1.0.0"));
     // Search, the newest, then the groups in the list's order with how
