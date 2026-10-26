@@ -18,6 +18,8 @@ change the plugin SDK.
 
 ### Fixed
 
+- Bluetooth applies the requested remote connection parameters before HID
+  discovery, so setup no longer blocks that change. Idle power policy is unchanged.
 - Bluetooth reconnects known devices when the controller reports their resolved
   identity or a new private address, while retaining the existing paired entry.
 

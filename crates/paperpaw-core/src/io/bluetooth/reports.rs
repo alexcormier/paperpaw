@@ -238,16 +238,18 @@ impl Radio {
             link.keys.is_some() || !link.raw.is_empty(),
             link.power,
         );
-        if hid {
-            self.calls.push(BtCall::Hid {
-                link: number,
-                on: true,
-            });
-        }
+        // The shell handles calls in order. Apply the link's requested
+        // parameters before HID discovery can wait on many ATT replies.
         if power != LinkPower::Low {
             self.calls.push(BtCall::LinkPower {
                 link: number,
                 power,
+            });
+        }
+        if hid {
+            self.calls.push(BtCall::Hid {
+                link: number,
+                on: true,
             });
         }
     }
