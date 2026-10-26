@@ -20,7 +20,6 @@
 
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
-use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -45,7 +44,9 @@ use trouble_host::advertise::AdStructure;
 use trouble_host::prelude::*;
 
 mod gatt;
+mod identity;
 use gatt::{discover, hid, subscribe};
+use identity::{address_of, bond_of, connection_address, keys_text, reported_address};
 
 /// Watching for bonded devices to come back: a short look every 1.28 s
 /// (2.3 % of the time), enough for a remote advertising after a key.
@@ -608,17 +609,23 @@ struct Advertised<'a> {
 impl EventHandler for Advertised<'_> {
     fn on_adv_reports(&self, reports: LeAdvReportsIter<'_>) {
         for report in reports.flatten() {
+            let only = self.scan.only.borrow();
+            let Some(address) = reported_address(
+                report.addr_kind,
+                report.addr,
+                &self.shared.bonds.borrow(),
+                only.as_deref(),
+            ) else {
+                continue;
+            };
+            if only.is_some() {
+                log::info!("bluetooth: {address} is back");
+            }
             let mut found = Found {
-                address: address_text(report.addr_kind, report.addr),
+                address,
                 signal: (report.rssi != 127).then_some(report.rssi),
                 ..Found::default()
             };
-            if let Some(only) = &*self.scan.only.borrow() {
-                if !only.contains(&found.address) {
-                    continue;
-                }
-                log::info!("bluetooth: {} is back", found.address);
-            }
             read_advertised(report.data, &mut found);
             self.shared.report(BtReport::Found(found));
         }
@@ -701,7 +708,11 @@ async fn link(
         // The scan stops while connecting, and goes on after.
         scan.connecting.set(scan.connecting.get() + 1);
         scan.changed.set(true);
-        let connected = connect(stack, slot, &address, power).await;
+        let peer = connection_address(&address, &shared.bonds.borrow());
+        let connected = match peer {
+            Some(peer) => connect(stack, slot, peer, power).await,
+            None => Err(BtError::NotFound),
+        };
         if matches!(connected, Ok(Some(_))) {
             // The host updates its address resolution once nothing scans
             // or connects: a moment for it before the scan goes on (a scan
@@ -752,10 +763,9 @@ async fn link(
 async fn connect<'s>(
     stack: &'s Host<'_>,
     slot: &RefCell<Slot>,
-    address: &str,
+    address: Address,
     power: LinkPower,
 ) -> Result<Option<Connection<'s, Pool>>, BtError> {
-    let address = address_of(address).ok_or(BtError::NotFound)?;
     let accept = [address];
     let config = ConnectConfig {
         scan_config: ScanConfig {
@@ -1285,77 +1295,4 @@ fn host_uuid(uuid: SdkUuid) -> Uuid {
         Some(short) => Uuid::new_short(short),
         None => Uuid::new_long(uuid.as_u128().to_le_bytes()),
     }
-}
-
-/// An address as the kernel keeps it: most significant byte first, with
-/// `/r` for a random one.
-fn address_text(kind: AddrKind, address: BdAddr) -> String {
-    let b = address.raw();
-    let random = if kind.as_raw() & 1 == 1 { "/r" } else { "" };
-    format!(
-        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}{random}",
-        b[5], b[4], b[3], b[2], b[1], b[0]
-    )
-}
-
-/// The address `text` names ([`address_text`]).
-fn address_of(text: &str) -> Option<Address> {
-    let (bytes, kind) = match text.strip_suffix("/r") {
-        Some(bytes) => (bytes, AddrKind::RANDOM),
-        None => (text, AddrKind::PUBLIC),
-    };
-    let mut address = [0; 6];
-    let mut parts = bytes.split(':');
-    for at in (0..6).rev() {
-        address[at] = u8::from_str_radix(parts.next()?, 16).ok()?;
-    }
-    if parts.next().is_some() {
-        return None;
-    }
-    Some(Address::new(kind, BdAddr::new(address)))
-}
-
-/// A bond's keys as the kernel keeps them: the long term key, the
-/// identity resolving key (`-` for none), the security (0 to 2) and the
-/// identity address, separated by dots.
-fn keys_text(bond: &BondInformation) -> String {
-    let irk = bond
-        .identity
-        .irk
-        .map_or_else(|| String::from("-"), |irk| format!("{:032x}", irk.0.get()));
-    let security = match bond.security_level {
-        SecurityLevel::NoEncryption => 0,
-        SecurityLevel::Encrypted => 1,
-        SecurityLevel::EncryptedAuthenticated => 2,
-    };
-    format!(
-        "{:032x}.{irk}.{security}.{}",
-        bond.ltk.0,
-        address_text(bond.identity.addr.kind, bond.identity.addr.addr)
-    )
-}
-
-/// The bond the kernel keeps, for the host ([`keys_text`]).
-fn bond_of(bond: &Bond) -> Option<BondInformation> {
-    let mut parts = bond.keys.split('.');
-    let ltk = u128::from_str_radix(parts.next()?, 16).ok()?;
-    let irk = match parts.next()? {
-        "-" => None,
-        irk => IdentityResolvingKey::new(u128::from_str_radix(irk, 16).ok()?),
-    };
-    let security_level = match parts.next()? {
-        "2" => SecurityLevel::EncryptedAuthenticated,
-        "1" => SecurityLevel::Encrypted,
-        _ => SecurityLevel::NoEncryption,
-    };
-    let address = parts
-        .next()
-        .and_then(address_of)
-        .or_else(|| address_of(&bond.address))?;
-    Some(BondInformation {
-        ltk: LongTermKey::new(ltk),
-        identity: Identity { addr: address, irk },
-        is_bonded: true,
-        security_level,
-    })
 }

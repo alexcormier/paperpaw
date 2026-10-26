@@ -16,6 +16,11 @@ change the plugin SDK.
   sleep, and device sleep shuts the radio down. Other readers are
   unchanged. Advertising and plugin GATT servers remain unavailable.
 
+### Fixed
+
+- Bluetooth reconnects known devices when the controller reports their resolved
+  identity or a new private address, while retaining the existing paired entry.
+
 ## [0.5.0-beta.10] - 2026-10-26
 
 ### Fixed
