@@ -16,6 +16,8 @@ change the plugin SDK.
   access to the internal analog bus.
 - The X4 Pro holds battery power before memory, diagnostics and OTA
   startup work, so a short power press need not span that work.
+- Screens that hide button hints, including the sleep screen, cannot
+  retain a temporary hint row from the previous screen.
 
 ## [0.5.0-beta.9] - 2026-10-26
 
