@@ -3,7 +3,8 @@
 
 use alloc::format;
 
-use log::warn;
+use log::{info, warn};
+use paperpaw_core::sdk::Canvas;
 use paperpaw_graphics::Framebuffer;
 use paperpaw_platform::{Instant, PixelFormat, Rect};
 use paperpaw_x4::display::{Error, Planes, Refresh};
@@ -85,15 +86,9 @@ impl<'a> Startup<'a> {
             ),
         };
         if let Some(screen) = &self.screen {
-            match draw(
-                self.panel,
-                screen,
-                phase,
-                &detail,
-                done,
-                total,
-                self.last.is_none(),
-            ) {
+            match draw(self.panel, self.last.is_none(), |canvas, rect| {
+                screen.draw(canvas, rect, phase, &detail, done, total);
+            }) {
                 Ok(()) => self.last = Some(crate::now()),
                 Err(error) => {
                     warn!("startup display: {error}");
@@ -101,6 +96,23 @@ impl<'a> Startup<'a> {
                 }
             }
         }
+    }
+}
+
+/// Show feedback before the running kernel flushes its state and resets.
+/// Reuse its font registry; only a small, fallible display band is needed.
+pub fn restarting(panel: &mut Panel, kernel: &paperpaw_core::Kernel) {
+    let tr = kernel.translator();
+    let labels = [
+        tr.tr("core.restarting.title"),
+        tr.tr("core.restarting.text"),
+        tr.tr("core.restarting.keep-on"),
+    ];
+    match draw(panel, true, |canvas, rect| {
+        paperpaw_app::startup::restarting(kernel.fonts(), canvas, rect, labels);
+    }) {
+        Ok(()) => info!("restart display: shown"),
+        Err(error) => warn!("restart display: {error}; continuing restart"),
     }
 }
 
@@ -125,18 +137,10 @@ impl From<Error> for Problem {
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "a startup frame's labels, progress and first refresh"
-)]
 fn draw(
     panel: &mut Panel,
-    screen: &paperpaw_app::startup::Screen,
-    phase: &str,
-    detail: &str,
-    done: u32,
-    total: u32,
     first: bool,
+    paint: impl Fn(&mut Canvas<'_>, Rect),
 ) -> Result<(), Problem> {
     let (width, height) = panel.size();
     let mut frame = Framebuffer::banded(width, height, ROWS, PixelFormat::Mono1)
@@ -146,14 +150,7 @@ fn draw(
         while top < height {
             crate::power::feed();
             frame.set_top(top);
-            screen.draw(
-                &mut frame.canvas(),
-                Rect::from_size(width, height),
-                phase,
-                detail,
-                done,
-                total,
-            );
+            paint(&mut frame.canvas(), Rect::from_size(width, height));
             panel.write_rows(top, frame.view(), planes)?;
             top += ROWS;
         }
@@ -167,14 +164,7 @@ fn draw(
     while top < height {
         crate::power::feed();
         frame.set_top(top);
-        screen.draw(
-            &mut frame.canvas(),
-            Rect::from_size(width, height),
-            phase,
-            detail,
-            done,
-            total,
-        );
+        paint(&mut frame.canvas(), Rect::from_size(width, height));
         panel.write_rows(top, frame.view(), Planes::BOTH)?;
         top += ROWS;
     }
