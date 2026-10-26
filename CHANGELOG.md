@@ -10,6 +10,8 @@ change the plugin SDK.
 
 ### Fixed
 
+- Every restart shows a translated restart notice before saving state
+  and resetting the reader, whichever menu requested it.
 - Plugins selected in the web flasher keep their Store origin after
   installation, so the plugin store can update them automatically.
   Manually installed plugins keep their local origin.
