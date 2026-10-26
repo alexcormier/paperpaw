@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.10] - 2026-10-26
+
 ### Fixed
 
 - Justified text keeps bounded word spacing when font size or word
@@ -42,6 +44,12 @@ change the plugin SDK.
   spaces of a candidate balanced line with
   `wrap_lines_balanced_kerned_with_cost`. Existing calls keep their layout.
 
+
+### Compatibility
+
+- The native plugin interface remains i4, with the same pinned compilers.
+  Existing compatible plugins continue to run. Reader layout caches are
+  rebuilt for the updated justification behavior.
 
 ## [0.5.0-beta.9] - 2026-10-26
 
