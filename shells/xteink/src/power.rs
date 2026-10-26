@@ -55,33 +55,12 @@ pub mod at {
     pub const RADIO_STARTED: u32 = 23;
     pub const RADIO_SCAN: u32 = 24;
     pub const RADIO_CONNECT: u32 = 25;
-    /// The X4's ADC readings, including those in the input interrupt.
-    #[cfg(feature = "x4")]
-    pub const ADC_FRONT: u32 = 30;
-    #[cfg(feature = "x4")]
-    pub const ADC_SIDE: u32 = 31;
-    #[cfg(feature = "x4")]
-    pub const ADC_BATTERY: u32 = 32;
 }
 
 /// Notes being at `place` (one of [`at`]).
 pub fn mark(place: u32) {
     // SAFETY: one core, written only here and read once at start-up.
     unsafe { core::ptr::addr_of_mut!(WHERE).write_volatile(place) };
-}
-
-/// Notes work that may also run in an interrupt. Once it returns, the
-/// interrupted place is visible again. A watchdog reset inside the work
-/// keeps its own place instead, distinguishing an ADC wait from sleep.
-#[cfg(feature = "x4")]
-pub fn during<T>(place: u32, work: impl FnOnce() -> T) -> T {
-    // SAFETY: one core. Callers hold the input lock or own its ADC, so
-    // an interrupt cannot start another ADC reading during this one.
-    let before = unsafe { core::ptr::addr_of!(WHERE).read_volatile() };
-    mark(place);
-    let result = work();
-    mark(before);
-    result
 }
 
 /// Notes how the last run ended; call once at start-up.
