@@ -7,29 +7,6 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Input, Level};
 
-/// Gives the host a new USB connection after the Pro wakes from deep sleep.
-/// Ordinary starts keep their connection, including the flasher's reset.
-#[cfg(feature = "x4-pro")]
-pub fn reconnect_after_deep_sleep() {
-    use esp_hal::peripherals::USB_DEVICE;
-    use esp_hal::rtc_cntl::SocResetReason;
-
-    if esp_hal::system::reset_reason() != Some(SocResetReason::CoreDeepSleep) {
-        return;
-    }
-    let regs = USB_DEVICE::regs();
-    let enabled = regs.conf0().read().usb_pad_enable().bit_is_set();
-    if !enabled {
-        return;
-    }
-    // Only detach the pad. Keep the ROM's PHY and pull-up configuration.
-    // The host needs time to observe the disconnect before the new attach.
-    const DETACH_MS: u32 = 20;
-    regs.conf0().modify(|_, w| w.usb_pad_enable().clear_bit());
-    Delay::new().delay_millis(DETACH_MS);
-    regs.conf0().modify(|_, w| w.usb_pad_enable().bit(enabled));
-}
-
 /// The X3's fuel gauge said the battery charges, at its last reading
 /// (the main loop reads it with the battery).
 static GAUGE_CHARGING: AtomicBool = AtomicBool::new(false);

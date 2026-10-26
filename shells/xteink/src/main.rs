@@ -427,8 +427,6 @@ fn prepare() -> Ready {
     // The Pro must keep its power before allocating memory or checking OTA.
     #[cfg(feature = "x4-pro")]
     let power_latch = Board::hold_power();
-    #[cfg(feature = "x4-pro")]
-    usb_power::reconnect_after_deep_sleep();
     // `init` stopped the watchdogs: a start that hangs begins again.
     power::watch_start(START_WATCHDOG_S);
     // The PSRAM of the ESP32-S3 devices first, so PaperPaw's memory comes
