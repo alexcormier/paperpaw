@@ -8,6 +8,10 @@ change the plugin SDK.
 
 ### Fixed
 
+- Resetting settings changes only explicitly stored values, avoiding
+  repeated font and layout reloads for defaults that were never changed.
+  Book-specific resets leave global values intact.
+
 - The plugin store shows when it refreshes a saved plugin list, while
   keeping that list available until the request finishes.
 
