@@ -1,7 +1,7 @@
 # PaperPaw on the Xteink X4
 
 The firmware for the Xteink X4 and the X4 Pro, in beta with
-0.5.0-beta.10. See
+0.5.0-beta.11. See
 [ADR 0013](../../docs/adr/0013-x4-firmware.md) for how it is built; its
 hardware parts are in [`paperpaw-x4`](../../crates/paperpaw-x4) and
 [`paperpaw-fat`](../../crates/paperpaw-fat), tested on a computer.
@@ -168,15 +168,22 @@ the front light (brightness and warmth, in the quick panel), sleep, the
 network as on the X4, the UC8279 of other X4 Pros. To come: battery life
 measured.
 
-Bluetooth (ADR 0027) is built with the feature `bluetooth`, not yet by
-default: scanning, connecting, GATT reads, writes and notifications,
-pairing confirmed on the reader, and a remote's keys. Advertising and
-the GATT server come later.
+Bluetooth (ADR 0027) is included in X4 Pro builds: scanning, connecting,
+GATT client reads, writes and notifications, pairing confirmed on the
+reader, and HID page-turner or keyboard keys. The X4, X4 Classic and X3
+do not enable it. Advertising and plugin GATT servers are not yet
+implemented on the reader. The plugin interface remains i4.
 
-```sh
-cargo +esp x4pro-bt       # build
-cargo +esp x4pro-bt-run   # flash and show the log
-```
+Remotes default to **By hand**. The radio starts only when requested; a
+remote enabled by hand reconnects after waking until it is switched off.
+While Bluetooth is active, the processor cannot light-sleep, even while
+a bonded remote is absent and being watched for. Switch it off when not
+needed. Device sleep shuts Bluetooth down before hardware sleep; wake
+with the physical power button. Automatic remote policies remain opt-in
+until connected idle power and radio-compatible light sleep are measured.
+
+The usual `cargo +esp x4pro` and `x4pro-run` aliases include Bluetooth.
+The earlier `x4pro-bt` and `x4pro-bt-run` names remain compatibility aliases.
 
 ## The X4 Classic
 

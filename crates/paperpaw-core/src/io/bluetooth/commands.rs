@@ -615,17 +615,20 @@ impl Radio {
         if on {
             let at = self.link_to(device, now)?;
             let link = &mut self.links[at];
-            if link.keys.is_none() {
+            let start_hid = if link.keys.is_none() {
                 link.keys = Some(now);
-                if link.up {
-                    let number = link.number;
-                    self.calls.push(BtCall::Hid {
-                        link: number,
-                        on: true,
-                    });
-                }
-            }
+                link.up.then_some(link.number)
+            } else {
+                None
+            };
+            // As on connection, parameters must precede HID discovery.
             self.power_link(at, now);
+            if let Some(number) = start_hid {
+                self.calls.push(BtCall::Hid {
+                    link: number,
+                    on: true,
+                });
+            }
         } else if let Some(at) = self.links.iter().position(|l| l.device == device) {
             self.links[at].keys = None;
             self.release_keys(at);

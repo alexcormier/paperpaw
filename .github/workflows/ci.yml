@@ -27,6 +27,11 @@ jobs:
       - run: rustfmt --edition 2024 --check shells/xteink/src/main.rs
       - run: cargo clippy --workspace --all-targets
       - run: cargo test --workspace
+      - name: Bluetooth shell host regressions
+        run: |
+          cargo fmt --manifest-path tools/bluetooth-tests/Cargo.toml --check
+          cargo clippy --manifest-path tools/bluetooth-tests/Cargo.toml --locked --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
+          cargo test --manifest-path tools/bluetooth-tests/Cargo.toml --locked --target x86_64-unknown-linux-gnu
       - name: API documentation without broken links
         run: cargo doc --workspace --no-deps
         env:
@@ -65,6 +70,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
       - run: cargo +1.88 check --workspace --all-targets
+      - name: Bluetooth host regressions on oldest Rust
+        run: cargo +1.88 test --manifest-path tools/bluetooth-tests/Cargo.toml --locked --target x86_64-unknown-linux-gnu
 
   sdk:
     name: SDK compatibility
@@ -449,3 +456,5 @@ jobs:
           tool: cargo-deny
       - name: The X4 firmware's dependencies too
         run: cargo deny --manifest-path shells/xteink/Cargo.toml --all-features check
+      - name: Bluetooth host-test dependencies too
+        run: cargo deny --manifest-path tools/bluetooth-tests/Cargo.toml --all-features check

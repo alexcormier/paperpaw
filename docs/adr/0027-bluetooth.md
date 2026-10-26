@@ -206,8 +206,8 @@ constructor (rule 1), errors are typed (rule 2), and builders take
   is left (after a short grace for the next one), limits links to
   `max_links`, and emits `core.bluetooth-changed`. Kernel tests cover
   all of it with made-up shell reports.
-- **The X4 Pro** (feature `bluetooth` of the firmware, later on by
-  default): trouble-host on esp-radio's `BleConnector`, polled by the
+- **The X4 Pro** (feature `bluetooth`, included by `x4-pro`):
+  trouble-host on esp-radio's `BleConnector`, polled by the
   main loop as the radio's futures are. Its memory is a budget, not a
   guess:
   - static: the controller's code in IRAM (20.6 KB measured) and its

@@ -513,11 +513,18 @@ fn a_remotes_reports_become_keys_and_its_link_slows_when_quiet() {
     let link = link_of(&radio.take());
     radio.report(connected(link), Instant(10), &mut out);
     let calls = radio.take();
-    assert!(calls.contains(&BtCall::Hid { link, on: true }));
-    assert!(calls.contains(&BtCall::LinkPower {
-        link,
-        power: LinkPower::Responsive,
-    }));
+    // The shell serves calls in order: slow HID discovery must not hold
+    // the requested connection parameters behind it.
+    assert_eq!(
+        calls,
+        [
+            BtCall::LinkPower {
+                link,
+                power: LinkPower::Responsive
+            },
+            BtCall::Hid { link, on: true },
+        ]
+    );
     // A boot keyboard's report: right arrow down, then up.
     let report = |keys: [u8; 6]| BtReport::HidReport {
         link,
@@ -947,4 +954,50 @@ fn everything_ends_and_the_radio_goes_off_before_sleep() {
     assert!(events.contains(&BtEvent::AdvertisingEnded));
     assert_eq!(radio.deadline(), None);
     assert_eq!(radio.take_on_ms(Instant(9_000)), 500);
+}
+
+#[test]
+fn enabling_keys_on_an_existing_link_sets_power_before_hid_discovery() {
+    let mut radio = radio();
+    radio.load([("core.bluetooth.1", "aa\tRemote\tremote\t0\tpulse\tkeys")].into_iter());
+    let mut out = Vec::new();
+    let device = DeviceId::new(1);
+    run(
+        &mut radio,
+        "pulse",
+        bt::hid_reports(device, &PULSE),
+        asked(0),
+        &mut out,
+    )
+    .unwrap();
+    let link = link_of(&radio.take());
+    radio.report(connected(link), Instant(10), &mut out);
+    // Raw HID alone retains the existing low-power policy.
+    assert_eq!(radio.take(), [BtCall::Hid { link, on: true }]);
+    run(
+        &mut radio,
+        "a",
+        bt::remote_keys(device, &DONE),
+        readers(20),
+        &mut out,
+    )
+    .unwrap();
+    assert_eq!(
+        radio.take(),
+        [
+            BtCall::LinkPower {
+                link,
+                power: LinkPower::Responsive
+            },
+            BtCall::Hid { link, on: true },
+        ]
+    );
+    radio.tick(Instant(20 + KEYS_IDLE_MS), &mut out);
+    assert_eq!(
+        radio.take(),
+        [BtCall::LinkPower {
+            link,
+            power: LinkPower::Low
+        }]
+    );
 }
