@@ -101,6 +101,18 @@ with that before the betas of 0.5:
   call it through the table of a plugin built before, which does not have
   it, and the same holds for the firmware's own trait objects a plugin
   is handed. Either way the files are written anew (`PAPERPAW_BLESS=1`).
+- **Cache revisions can increase without changing the interface.** The
+  exact `paperpaw_layout::VERSION: u32` constant identifies the layout
+  algorithm in page-index keys. Raising it keeps indexes made by the old
+  algorithm apart from those made by the new one. Each plugin's copy of
+  the layout code uses its own revision; a newer revision does not change
+  the shape or interpretation of any value passed between it and the
+  firmware. The gate permits only an increase of this exact constant in
+  `paperpaw-layout`, with both values valid `u32` integers. A decrease,
+  removal, type change or change to another constant remains guarded.
+  The current shape file is updated while the interface baseline stays
+  as it was. This is separate from the existing exception for the SDK
+  release number in its HTTP User-Agent string.
 - **The layouts are checked on each chip by the fingerprint.**
   `native::LAYOUT` is made by the compiler for the chip it builds for,
   so a plugin for the X4 has the X4's layouts in its fingerprint, and the

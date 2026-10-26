@@ -632,10 +632,10 @@ plugin and the app share one:
 
 ```toml
 [dev-dependencies]
-paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.9" }
+paperpaw-dev = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.10" }
 
 [patch.crates-io]
-paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.9" }
+paperpaw-sdk = { git = "https://github.com/hthoene/paperpaw", tag = "v0.5.0-beta.10" }
 ```
 
 `examples/paperpaw-dev.rs` adds the plugin to the app:
@@ -902,6 +902,17 @@ heading along), and
 `layout::wrap_lines_kerned` breaks lines of one's own as pages do, with
 the pairs `Typesetter::kern` gives (`ReadingFaces` kerns as it draws;
 `FontHandle::kern`, `unkerned` and `ligatures` for text of one's own).
+For a custom balanced layout,
+`paperpaw_text::wrap_lines_balanced_kerned_with_cost` takes an
+additional cost callback `(unused_width, spaces) -> f32` for non-final
+candidate lines. For example, `|free, spaces| free * free / (spaces.max(1)
+as f32)` adds a penalty for concentrating spare width in few gaps. The
+ordinary raggedness and hyphen costs still apply; the existing balanced
+functions keep their behavior. Readers using `PageType` and
+`layout_page` already get bounded justification and matching break
+selection. Their page indexes must use the current layout key;
+`layout::VERSION` is a cache revision, separate from the native plugin
+interface.
 `PageType::patterns` gives the patterns of the page's language with the
 letters the reader keeps before and after a hyphen (`HYPHEN_MIN_LEFT`,
 `HYPHEN_MIN_RIGHT`; 0: the table's own, see
@@ -1770,11 +1781,11 @@ below) takes it. One manifest gives each its own, by target:
 
 ```toml
 [dependencies]
-paperpaw-sdk = "0.5.0-beta.9"
+paperpaw-sdk = "0.5.0-beta.10"
 
 # Outline fonts for the emulator's build only: the X4s draw font packs.
 [target.'cfg(not(target_os = "none"))'.dependencies]
-paperpaw-sdk = { version = "0.5.0-beta.9", features = ["outline"] }
+paperpaw-sdk = { version = "0.5.0-beta.10", features = ["outline"] }
 ```
 
 A build for a device that asks for `outline` stops and says so.
@@ -2242,7 +2253,7 @@ installs as authors do (see [The crate](#the-crate)). So:
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
   `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`), its SDK
-  (`paperpaw-sdk = "0.5.0-beta.9"`) and, for the X4 Pro, its core libraries
+  (`paperpaw-sdk = "0.5.0-beta.10"`) and, for the X4 Pro, its core libraries
   installed, and build again for every release until 1.0 (see
   [Which build fits](#which-build-fits));
 - never set `RUSTFLAGS`, which would replace the flags that link the

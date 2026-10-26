@@ -2,7 +2,7 @@
 
 use super::*;
 use alloc::vec;
-use paperpaw_document::{MAX_INSERTED, MAX_INSERTED_TEXT, Metadata, OffsetMap, Run};
+use paperpaw_document::{MAX_INSERTED, MAX_INSERTED_TEXT, Metadata, NoStorage, OffsetMap, Run};
 
 /// Paragraphs separated by single newlines; offsets are bytes. Lines
 /// starting with `#` are headings; `*word*` is bold.
@@ -241,6 +241,69 @@ fn indents_and_justifies() {
         page.lines[1].word_spacing, 0.0,
         "last line is not justified"
     );
+}
+
+#[test]
+fn justification_is_continuous_at_the_gap_limit() {
+    struct Spaced(f32);
+    impl Typesetter for Spaced {
+        fn advance(&self, _: Face, c: char) -> f32 {
+            if c == ' ' { self.0 } else { 1.0 }
+        }
+        fn line(&self, _: Face) -> (f32, f32) {
+            (8.0, 10.0)
+        }
+    }
+    let doc = Text::new("aa bb abcdefghi");
+    for balanced in [false, true] {
+        let style = Style::new(0.0, 0.0, 10.0, true).balanced(balanced);
+        let mut previous = None;
+        for space in [0.5, 0.9, 1.0, 1.1, 1.5] {
+            let face = Spaced(space);
+            let cx = LayoutContext::new(&doc, &NoStorage, 11.0, &style, &face);
+            let page = layout_page(&cx, Locator::START, 100.0).unwrap();
+            assert_eq!(texts(&page), ["aa bb", "abcdefghi"]);
+            let gap = space + page.lines[0].word_spacing;
+            if let Some((before_space, before_gap)) = previous {
+                assert!(gap >= before_gap);
+                assert!(gap - before_gap <= space - before_space + 0.001);
+            }
+            assert!(page.lines[0].word_spacing <= 6.0);
+            assert_eq!(page.lines[1].word_spacing, 0.0);
+            previous = Some((space, gap));
+        }
+    }
+}
+
+#[test]
+fn justified_breaks_share_the_spare_width_between_more_words() {
+    let doc = Text::new("aaa bbbbb c dddddddd eeee ffffff ggggggggg hhh iiiiii");
+    let style = Style::new(0.0, 0.0, 10.0, true).balanced(true);
+    let cx = LayoutContext::new(&doc, &NoStorage, 20.0, &style, &Units);
+    let page = layout_page(&cx, Locator::START, 100.0).unwrap();
+    assert_eq!(
+        texts(&page),
+        [
+            "aaa bbbbb c",
+            "dddddddd eeee ffffff",
+            "ggggggggg hhh iiiiii"
+        ]
+    );
+    assert_eq!(page.lines[0].word_spacing, 4.5);
+    // Page continuations and search must use the same paragraph breaks.
+    for line in &page.lines {
+        let start = Locator::new(0, line.words[0].0);
+        let inside = Locator::new(0, start.offset + 1);
+        assert_eq!(line_start(&cx, inside).unwrap(), start);
+        let continued = layout_page(&cx, start, 10.0).unwrap();
+        assert_eq!(continued.lines[0].text, line.text);
+    }
+    let mut ragged = style;
+    ragged.justify = false;
+    let cx = LayoutContext::new(&doc, &NoStorage, 20.0, &ragged, &Units);
+    let page = layout_page(&cx, Locator::START, 100.0).unwrap();
+    assert_eq!(page.lines[0].text, "aaa bbbbb c dddddddd");
+    assert!(page.lines.iter().all(|line| line.word_spacing == 0.0));
 }
 
 #[test]

@@ -28,7 +28,7 @@ use paperpaw_document::{
     Storage,
 };
 pub use paperpaw_text::Hyphenate;
-use paperpaw_text::{Line, wrap_lines_balanced_kerned, wrap_lines_kerned};
+use paperpaw_text::{Line, wrap_lines_balanced_kerned_with_cost, wrap_lines_kerned};
 
 /// Largest extra space per word gap for justification, relative to the
 /// line height.
@@ -53,7 +53,7 @@ pub struct Face {
 
 /// Changes whenever the same input is laid out differently, so readers
 /// rebuild page indexes they cached.
-pub const VERSION: u32 = 7;
+pub const VERSION: u32 = 8;
 
 /// Measures text for the layout engine; readers implement it with their
 /// fonts.
@@ -433,6 +433,7 @@ fn block_lines(
     cx: &LayoutContext<'_>,
     heading: u8,
     indent: f32,
+    justify_limit: Option<f32>,
 ) -> Vec<(Line, (f32, f32))> {
     let (style, width) = (cx.style, cx.width);
     let advance = |i: usize, c: char| {
@@ -452,12 +453,13 @@ fn block_lines(
     let hyphenate = cx.hyphenate.filter(|_| heading == 0);
     if style.balanced {
         let measure = Measure::of(block, style, width, indent);
-        let lines = wrap_lines_balanced_kerned(
+        let lines = wrap_lines_balanced_kerned_with_cost(
             &block.text,
             |n| measure.line(n).1,
             advance,
             kern,
             hyphenate,
+            |free, spaces| justification_cost(free, spaces, justify_limit),
         );
         return lines
             .into_iter()
@@ -490,6 +492,18 @@ fn block_lines(
             (line, measure.line(n))
         })
         .collect()
+}
+
+/// Prefer gaps that can take the spare width, while retaining the
+/// ordinary paragraph and hyphen costs. Beyond the drawing limit, the
+/// undistributed width also counts: a shorter line should be exceptional.
+fn justification_cost(free: f32, spaces: usize, limit: Option<f32>) -> f32 {
+    let Some(limit) = limit.filter(|_| spaces > 0) else {
+        return 0.0;
+    };
+    let extra = free / spaces as f32;
+    let left = (free - spaces as f32 * limit).max(0.0);
+    extra * extra + left * left
 }
 
 /// How a block's lines are aligned.
@@ -597,8 +611,13 @@ pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, Docume
         return Ok(at);
     }
     let (heading, base) = block_face(&block, style);
-    let indent = first_indent(&block, style, block_align(&block, style, heading));
-    let lines = block_lines(&block, 0, base, cx, heading, indent);
+    let align = block_align(&block, style, heading);
+    let indent = first_indent(&block, style, align);
+    let justify_limit = (align == Align::Justify).then(|| {
+        let em = block_em(&block, style);
+        block_line(&block, style, cx.typesetter.line(base), em).1 * MAX_JUSTIFY_GAP
+    });
+    let lines = block_lines(&block, 0, base, cx, heading, indent, justify_limit);
     let start = lines
         .iter()
         .rev()
@@ -749,7 +768,8 @@ pub fn layout_page(
             true => first_indent(&block, style, align),
             false => indent,
         };
-        let lines = block_lines(&block, from, base, cx, heading, block_indent);
+        let justify_limit = (align == Align::Justify).then_some(letters * MAX_JUSTIFY_GAP);
+        let lines = block_lines(&block, from, base, cx, heading, block_indent, justify_limit);
 
         for (n, (line, (first_x, available))) in lines.iter().enumerate() {
             let (first_x, available) = (*first_x, *available);
@@ -796,14 +816,10 @@ pub fn layout_page(
                 Align::End => (first_x + free, 0.0),
                 Align::Justify if !line.last && line.spaces > 0 => {
                     let extra = free / line.spaces as f32;
-                    // Huge gaps look worse than a ragged line: set those
-                    // lines flush left (e.g. a few words before a very long
-                    // word).
-                    if extra > letters * MAX_JUSTIFY_GAP {
-                        (first_x, 0.0)
-                    } else {
-                        (first_x, extra)
-                    }
+                    // Bound wide gaps continuously. A line that cannot
+                    // reach the edge keeps a ragged end instead of
+                    // suddenly losing all of its justification.
+                    (first_x, extra.min(letters * MAX_JUSTIFY_GAP))
                 }
                 _ => (first_x, 0.0),
             };
@@ -913,7 +929,9 @@ fn inserted_lines(
         let align = block_align(inserted, style, heading);
         y += style.paragraph_spacing;
         let indent = first_indent(inserted, style, align);
-        for (line, (first_x, available)) in block_lines(inserted, 0, base, cx, heading, indent) {
+        for (line, (first_x, available)) in
+            block_lines(inserted, 0, base, cx, heading, indent, None)
+        {
             if y + line_height > height {
                 return (placed, y, false);
             }

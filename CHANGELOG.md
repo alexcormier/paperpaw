@@ -6,8 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.10] - 2026-10-26
+
 ### Fixed
 
+- Justified text keeps bounded word spacing when font size or word
+  spacing changes, without abruptly switching whole lines to tight
+  spaces. Balanced line breaking considers the gaps it can distribute.
+  The settings preview and book pages use the same behavior.
 - X4 plugin-cache indexes are read with the current entry size, so a
   restart reuses verified cached code instead of rewriting every plugin.
 - Xteink readers enter hardware sleep even when USB or charging is
@@ -31,6 +37,19 @@ change the plugin SDK.
 - Kernel startup reads installed native-plugin digests once for the plugins
   it will load, after recovering pending installs. The bounded snapshot is
   discarded after loading; the plugin interface is unchanged.
+
+### Added
+
+- Text layout callers can add a cost for the unused width and internal
+  spaces of a candidate balanced line with
+  `wrap_lines_balanced_kerned_with_cost`. Existing calls keep their layout.
+
+
+### Compatibility
+
+- The native plugin interface remains i4, with the same pinned compilers.
+  Existing compatible plugins continue to run. Reader layout caches are
+  rebuilt for the updated justification behavior.
 
 ## [0.5.0-beta.9] - 2026-10-26
 
