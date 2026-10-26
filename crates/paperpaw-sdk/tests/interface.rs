@@ -322,6 +322,8 @@ fn layout_cache_revision(crate_: &str, path: &str, before: &str, after: &str) ->
     }
     let revision = |line: &str| -> Option<u32> {
         let value = line.strip_prefix("const paperpaw_layout::VERSION: u32 = ")?;
+        // Rustdoc evaluates the constant as a typed literal in shape.txt.
+        let value = value.strip_suffix("u32").unwrap_or(value);
         if value.is_empty()
             || !value.bytes().all(|b| b.is_ascii_digit())
             || (value.len() > 1 && value.starts_with('0'))
@@ -342,6 +344,10 @@ fn layout_cache_revisions_only_increase_as_u32_metadata() {
         ("7", "8"),
         ("7", "42"),
         ("4294967294", "4294967295"),
+        ("7u32", "8u32"),
+        ("7", "8u32"),
+        ("7u32", "8"),
+        ("4294967294u32", "4294967295u32"),
     ] {
         let (before, after) = (shape(before), shape(after));
         assert!(layout_cache_revision(
@@ -377,7 +383,12 @@ fn layout_cache_revisions_only_increase_as_u32_metadata() {
         "-1",
         "+8",
         "8.0",
-        "8u32",
+        "8u64",
+        "8u32u32",
+        "4294967296u32",
+        "6u32",
+        "08u32",
+        "8 u32",
         "08",
         " 8",
         "8 ",
@@ -397,7 +408,7 @@ fn layout_cache_revisions_only_increase_as_u32_metadata() {
             "{after}"
         );
     }
-    for value in ["07", "-1", "+7", "7u32", "4294967296", ""] {
+    for value in ["07", "-1", "+7", "7u64", "7u32u32", "4294967296u32", ""] {
         let (before, after) = (shape(value), shape("8"));
         assert!(!layout_cache_revision(
             "paperpaw-layout",
@@ -411,6 +422,23 @@ fn layout_cache_revisions_only_increase_as_u32_metadata() {
                 .is_empty()
         );
     }
+}
+
+#[test]
+fn layout_cache_revision_accepts_the_generated_shape_literal() {
+    let shape = include_str!("../../paperpaw-layout/shape.txt");
+    let before = shape
+        .lines()
+        .find(|line| line.starts_with("const paperpaw_layout::VERSION: "))
+        .expect("the generated layout cache constant");
+    let (declaration, literal) = before.split_once(" = ").unwrap();
+    let revision: u32 = literal.trim_end_matches("u32").parse().unwrap();
+    let after = format!("{declaration} = {}u32", revision.checked_add(1).unwrap());
+    assert!(
+        changes("paperpaw-layout", ("", before), ("", &after))
+            .breaking
+            .is_empty()
+    );
 }
 
 #[test]
