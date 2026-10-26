@@ -427,6 +427,9 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.last_activity = now;
+        // Replace anything the shell showed before startup, even where
+        // the home screen only draws an overlay.
+        self.invalidate(self.framebuffer.bounds());
         self.output.commands.push(Command::open_slot(slots::HOME));
         self.output.commands.push(events::STARTED.emit(()));
         if let Some(radio) = &mut self.io.bluetooth {

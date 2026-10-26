@@ -7,6 +7,7 @@
 use core::alloc::Layout;
 
 use esp_alloc::MemoryCapability;
+use esp_hal::sha::{Sha, Sha256};
 use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, Relocator};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::PluginProblem;
@@ -26,14 +27,22 @@ unsafe extern "C" {
 }
 
 /// Places images in PSRAM.
-#[derive(Debug, Default)]
 pub struct Psram {
+    sha: Sha<'static>,
     /// Bytes the images placed at this start take, and how many.
     used: u64,
     placed: u32,
 }
 
 impl Psram {
+    pub fn new(sha: esp_hal::peripherals::SHA<'static>) -> Self {
+        Self {
+            sha: Sha::new(sha),
+            used: 0,
+            placed: 0,
+        }
+    }
+
     /// Reads the image of the plugin file at `path` into PSRAM, checked
     /// by its digest and relocated, and makes it runnable; its data
     /// address, and 0: its hot code runs in place (its calls could not
@@ -62,7 +71,7 @@ impl Psram {
         // SAFETY: `len` bytes just allocated, used only here.
         let image = unsafe { core::slice::from_raw_parts_mut(ptr, len) };
         let base = ptr as u32;
-        let placed = fill(storage, path, header, words, image, base);
+        let placed = fill(storage, path, header, words, image, base, &mut self.sha);
         if let Err(problem) = placed {
             // SAFETY: allocated above with this layout, nothing else
             // holds it.
@@ -101,17 +110,38 @@ fn fill(
     words: &[u32],
     image: &mut [u8],
     base: u32,
+    engine: &mut Sha<'static>,
 ) -> Result<(), PluginProblem> {
+    let reading = crate::micros();
     super::read_exact(storage, path, HEADER_LEN as u64, image)
         .map_err(|_| PluginProblem::Damaged)?;
-    let mut sha = header.digest();
-    sha.update(image);
-    super::digest_words(&mut sha, words);
-    if !header.holds(sha) {
+    let hashing = crate::micros();
+    let mut sha = engine.start::<Sha256>();
+    let mut feed = |mut bytes: &[u8]| {
+        while !bytes.is_empty() {
+            bytes = nb::block!(sha.update(bytes)).unwrap_or_else(|never| match never {});
+        }
+    };
+    feed(&header.digest_prefix());
+    feed(image);
+    for word in words {
+        feed(&word.to_le_bytes());
+    }
+    let mut digest = [0; 32];
+    nb::block!(sha.finish(&mut digest)).unwrap_or_else(|never| match never {});
+    if digest != header.sha256 {
         return Err(PluginProblem::Damaged);
     }
+    let relocating = crate::micros();
     let api = &API as *const _ as u32;
     Relocator::new(header, words, base, api)
         .and_then(|relocator| relocator.apply(0, image))
-        .map_err(super::problem)
+        .map_err(super::problem)?;
+    log::debug!(
+        "native phases: {path}: read {} us, hash {} us, relocate {} us",
+        hashing - reading,
+        relocating - hashing,
+        crate::micros() - relocating,
+    );
+    Ok(())
 }

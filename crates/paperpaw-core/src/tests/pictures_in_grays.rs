@@ -112,3 +112,16 @@ fn a_refresh_set_exactly_is_not_turned_into_grays() {
         Some(RefreshMode::Fast)
     );
 }
+
+#[test]
+fn the_initial_picture_frame_keeps_automatic_grays_and_covers_every_row() {
+    let (mut kernel, grays) = comes_up_in_grays(PixelFormat::Mono1, true, "");
+    assert!(grays);
+    let mut next_row = 0;
+    assert!(kernel.render_gray(&mut |top, rows| {
+        assert_eq!(top, next_row);
+        assert_eq!(rows.format, PixelFormat::Gray2);
+        next_row += rows.height;
+    }));
+    assert_eq!(next_row, DEVICE.display.height);
+}

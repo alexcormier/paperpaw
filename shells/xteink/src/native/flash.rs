@@ -365,8 +365,7 @@ fn free_entries() -> (u32, u32) {
 fn read_index(flash: &mut FlashStorage<'static>, start: u32) -> Option<Index> {
     let mut head = [0u8; 8];
     flash.read(start, &mut head).ok()?;
-    let count = usize::from(u16::from_le_bytes([head[6], head[7]]));
-    let len = (72 + count * 48).min(SECTOR as usize).next_multiple_of(4);
+    let len = Index::byte_len(&head)?;
     let mut bytes = Vec::new();
     bytes.try_reserve_exact(len).ok()?;
     bytes.resize(len, 0);

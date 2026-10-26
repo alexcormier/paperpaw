@@ -73,17 +73,22 @@ pub struct Index {
 }
 
 impl Index {
+    /// How many bytes to read, from the first eight bytes of an index.
+    /// Rejects other formats and counts that do not fit one sector.
+    pub fn byte_len(prefix: &[u8]) -> Option<usize> {
+        let prefix = prefix.get(..8)?;
+        if prefix[..4] != MAGIC || u16::from_le_bytes([prefix[4], prefix[5]]) != FORMAT {
+            return None;
+        }
+        let count = usize::from(u16::from_le_bytes([prefix[6], prefix[7]]));
+        (count <= MAX_PLACED).then_some(HEAD_LEN + count * ENTRY_LEN)
+    }
+
     /// The index at the start of `sector`, if one is there whole.
     pub fn read(sector: &[u8]) -> Option<Index> {
+        let len = Self::byte_len(sector)?;
         let head = sector.get(..HEAD_LEN)?;
-        if head[..4] != MAGIC || u16::from_le_bytes([head[4], head[5]]) != FORMAT {
-            return None;
-        }
-        let count = usize::from(u16::from_le_bytes([head[6], head[7]]));
-        if count > MAX_PLACED {
-            return None;
-        }
-        let entries = sector.get(HEAD_LEN..HEAD_LEN + count * ENTRY_LEN)?;
+        let entries = sector.get(HEAD_LEN..len)?;
         if digest(&head[..40], entries) != head[40..72] {
             return None;
         }
@@ -391,6 +396,48 @@ mod tests {
         let (placements, again) = start(index, &headers);
         assert!(placements.iter().all(|p| p.present && !p.erase_index));
         assert_eq!(again, None, "the index stays");
+    }
+
+    #[test]
+    fn a_two_stage_flash_read_keeps_the_whole_current_index() {
+        for count in [0, 1, 5, MAX_PLACED] {
+            let headers: Vec<_> = (0..count).map(|i| header(100, i as u8)).collect();
+            let (_, found) = start(None, &headers);
+            let index = found.unwrap_or(Index {
+                firmware: FIRMWARE,
+                placed: Vec::new(),
+            });
+            let bytes = index.to_bytes();
+            // Firmware reads a short prefix before allocating the index.
+            let len = Index::byte_len(&bytes[..8]).unwrap();
+            assert_eq!(len, bytes.len());
+            assert!(len <= SECTOR as usize && len.is_multiple_of(4));
+            let read = Index::read(&bytes[..len]).unwrap();
+            assert_eq!(read, index);
+            let (placements, _) = start(Some(read), &headers);
+            assert!(placements.iter().all(|p| p.present));
+            if count > 0 {
+                // The old shell used the previous format's 48-byte entries.
+                assert!(Index::read(&bytes[..72 + count * 48]).is_none());
+                let mut damaged = bytes.clone();
+                damaged[len - 1] ^= 1;
+                assert!(Index::read(&damaged).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn index_length_rejects_bad_prefixes_before_allocation() {
+        let mut prefix = [0; 8];
+        assert_eq!(Index::byte_len(&prefix), None);
+        prefix[..4].copy_from_slice(&MAGIC);
+        prefix[4..6].copy_from_slice(&FORMAT.to_le_bytes());
+        assert_eq!(Index::byte_len(&prefix[..7]), None);
+        prefix[6..].copy_from_slice(&((MAX_PLACED + 1) as u16).to_le_bytes());
+        assert_eq!(Index::byte_len(&prefix), None);
+        prefix[6..].copy_from_slice(&1u16.to_le_bytes());
+        prefix[4..6].copy_from_slice(&(FORMAT - 1).to_le_bytes());
+        assert_eq!(Index::byte_len(&prefix), None);
     }
 
     #[test]

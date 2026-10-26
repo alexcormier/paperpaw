@@ -132,8 +132,8 @@ pub struct State {
     /// waiting for it.
     in_flight: Option<paced::InFlight>,
     frames: paperpaw_x4::paced::Frames,
-    /// The panel's memories may differ after a paced frame: the next one
-    /// drives every pixel.
+    /// The panel's memories may differ after startup or a paced frame:
+    /// the next one drives every pixel.
     frame_stale: bool,
 }
 
@@ -149,6 +149,10 @@ fn kind(refresh: Refresh) -> usize {
 impl Firmware {
     /// Starts the kernel, then runs the main loop.
     pub fn run(mut self) -> ! {
+        crate::startup::finish(&mut self.panel);
+        // Startup released its bands before loading the kernel. Drive the
+        // first frame whole instead of comparing its old panel memories.
+        self.state.frame_stale = true;
         // What building the kernel warned of.
         for warning in self.kernel.take_warnings() {
             warn!("{warning}");
@@ -739,7 +743,7 @@ impl Firmware {
             if effects.proceed()
                 && let Some((area, _)) = effects.refresh()
             {
-                effects = if self.state.gray_shown {
+                effects = if self.state.gray_shown || self.state.frame_stale {
                     self.kernel.proceed(now())
                 } else {
                     self.show_busy(area)
@@ -757,6 +761,7 @@ impl Firmware {
                     < u32::from(screen.width) * u32::from(screen.height);
                 if !(self.state.gray_shown && small) {
                     self.show_gray(area);
+                    self.state.frame_stale = false;
                 }
             } else if self.state.gray_shown && effects.refresh().is_some() {
                 // After grays, the whole screen, not only what changed.
@@ -949,7 +954,9 @@ impl Firmware {
     /// Shows the frame changed in `area`.
     fn show(&mut self, area: Rect, mode: RefreshMode) {
         power::mark(power::at::SHOWING);
+        let stale = core::mem::take(&mut self.state.frame_stale);
         let refresh = match mode {
+            _ if stale => Refresh::Half,
             // Every pixel driven with a warm panel's waveform (1.6 s), as
             // the stock firmware cleans the panel every few pages.
             RefreshMode::Full | RefreshMode::Clear => Refresh::Half,

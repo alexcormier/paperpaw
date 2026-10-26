@@ -403,6 +403,7 @@ fn read_exact(
 
 /// The bytes after the header the digest covers once the image is read:
 /// the words after the image as the file has them.
+#[cfg(feature = "esp32c3")]
 fn digest_words(sha: &mut paperpaw_digest::sha256::Sha256, words: &[u32]) {
     for word in words {
         sha.update(&word.to_le_bytes());

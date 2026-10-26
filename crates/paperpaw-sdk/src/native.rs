@@ -291,6 +291,11 @@ pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> b
 /// the Wi-Fi transfer nor plugins' own folders reach.
 const INSTALLED: &str = crate::data_path!("plugin-code.txt");
 
+#[cfg(feature = "kernel")]
+mod installed;
+#[cfg(feature = "kernel")]
+pub use installed::InstalledCodes;
+
 /// The code of `plugin` as installed (`remember_code`): the SHA-256 of
 /// its file's header. The kernel loads a code plugin's file only when its
 /// header says the same, so that a file put into a plugin's folder
@@ -334,7 +339,11 @@ pub fn fetched_code(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
 /// The 32 bytes kept for `plugin` in `file`, a line `<plugin>\t<hex>` each.
 fn entry(storage: &dyn Storage, file: &str, plugin: &str) -> Option<[u8; 32]> {
     let text = crate::read_file(storage, file, 64 * 1024).ok()?;
-    let text = core::str::from_utf8(&text).ok()?;
+    entry_in(core::str::from_utf8(&text).ok()?, plugin)
+}
+
+/// The first matching entry decides, including when its digest is invalid.
+fn entry_in(text: &str, plugin: &str) -> Option<[u8; 32]> {
     let hex = text
         .lines()
         .find_map(|line| line.strip_prefix(plugin)?.strip_prefix('\t'))?;

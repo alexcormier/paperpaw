@@ -259,3 +259,99 @@ fn nothing_counts_what_is_typed_into_a_guard() {
     assert_eq!(seen.get(), before);
     assert_eq!(kernel.shared.usage.inputs, inputs);
 }
+
+/// A valid home screen that draws only an overlay, as a plugin may do.
+struct OverlayHome;
+struct OverlayHomeScreen;
+
+impl Screen for OverlayHomeScreen {
+    fn region(&self, _: &Env<'_>) -> Option<Rect> {
+        Some(Rect::new(0, 45, 90, 45))
+    }
+
+    fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
+        canvas.fill_rect(0, 45, 90, 45, Color::BLACK);
+    }
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+}
+
+impl Plugin for OverlayHome {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("initial"), "Initial", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        const HOME: Id = Id::new_static("initial.home");
+        r.add_screen(ScreenSpec::new(
+            HOME,
+            "Home",
+            Box::new(|_, _| Box::new(OverlayHomeScreen)),
+        ))?;
+        r.bind_slot(slots::HOME, HOME, Priority::DEFAULT)?;
+        r.on(paperpaw_sdk::builtin::events::STARTED, |_, _, out| {
+            out.push(Command::Sleep);
+            out.push(Command::Restart);
+        })
+    }
+}
+
+#[test]
+fn startup_overlay_replaces_every_row_and_preserves_start_effects() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(OverlayHome)
+        .sleep(true)
+        .frame_rows(10)
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    assert!(effects.sleep() && effects.restart());
+    assert_eq!(effects.refresh().unwrap().0, Rect::new(0, 0, 90, 90));
+    let mut next_row = 0;
+    kernel.render(&mut |top, rows| {
+        assert_eq!(top, next_row);
+        for y in 0..rows.height {
+            let expected = if top + y < 45 {
+                Color::WHITE
+            } else {
+                Color::BLACK
+            };
+            assert_eq!(rows.pixel(0, y), expected);
+        }
+        next_row += rows.height;
+    });
+    assert_eq!(next_row, 90);
+}
+
+#[test]
+fn a_full_redraw_keeps_deferred_work_and_its_final_frame() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Opener)
+        .busy_mark(true)
+        .clock(still_clock)
+        .frame_rows(10)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    let deferred = press(&mut kernel, 100, "confirm");
+    assert!(deferred.proceed());
+    assert_eq!(
+        kernel.active_screen().map(Id::as_str),
+        Some("opener.screen")
+    );
+    let effects = deferred.and(kernel.draw_again(Instant(151)));
+    assert!(effects.proceed());
+    // A shell with a stale panel skips the busy frame and proceeds directly.
+    kernel.proceed(Instant(152));
+    assert_eq!(kernel.active_screen(), Some(&screens::PLACEHOLDER));
+    let mut next_row = 0;
+    kernel.render(&mut |top, rows| {
+        assert_eq!(top, next_row);
+        next_row += rows.height;
+    });
+    assert_eq!(next_row, 90);
+}

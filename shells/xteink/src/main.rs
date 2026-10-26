@@ -528,10 +528,12 @@ fn prepare() -> Ready {
     // Plugins the web flasher wrote behind the image, onto the card first.
     let staged = {
         let mut startup = startup::Startup::new(&mut panel);
-        native::bundle::stage(&flash, storage.as_ref(), &mut |progress| {
+        let staged = native::bundle::stage(&flash, storage.as_ref(), &mut |progress| {
             startup.update(progress)
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+        startup.starting_if_needed();
+        staged
     };
     let code = code_plugins(ota.as_ref(), &flash);
     // Light sleeps while idle on battery (allowed only by the main loop),
@@ -632,7 +634,9 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
     #[cfg(feature = "esp32s3")]
     let place = {
         let _ = flash;
-        native::Place::default()
+        // SAFETY: the board does not use SHA; this loader owns it until
+        // all plugins are loaded, before the radio is started.
+        native::Place::new(unsafe { esp_hal::peripherals::SHA::steal() })
     };
     #[cfg(feature = "esp32c3")]
     let place = native::Place::new(flash.clone());
