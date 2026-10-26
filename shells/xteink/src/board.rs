@@ -80,7 +80,10 @@ pub struct Keys {
 impl Keys {
     /// The battery's charge (percent) and voltage (millivolts).
     pub fn battery(&mut self) -> Option<(u8, u16)> {
-        let raw = nb::block!(self.adc.read_oneshot(&mut self.cell)).ok()?;
+        let raw = crate::power::during(crate::power::at::ADC_BATTERY, || {
+            nb::block!(self.adc.read_oneshot(&mut self.cell))
+        })
+        .ok()?;
         let millivolts = paperpaw_x4::battery::millivolts(raw);
         Some((paperpaw_x4::battery::percent(millivolts), millivolts))
     }
@@ -88,8 +91,14 @@ impl Keys {
     /// The buttons down, with the power button's `power_down`, and the
     /// ladders' readings (front, side) to look into.
     pub fn read(&mut self, power_down: bool) -> (State, u32) {
-        let front = nb::block!(self.adc.read_oneshot(&mut self.front)).unwrap_or(4095);
-        let side = nb::block!(self.adc.read_oneshot(&mut self.side)).unwrap_or(4095);
+        let front = crate::power::during(crate::power::at::ADC_FRONT, || {
+            nb::block!(self.adc.read_oneshot(&mut self.front))
+        })
+        .unwrap_or(4095);
+        let side = crate::power::during(crate::power::at::ADC_SIDE, || {
+            nb::block!(self.adc.read_oneshot(&mut self.side))
+        })
+        .unwrap_or(4095);
         (
             State::read(front, side, power_down),
             u32::from(front) << 16 | u32::from(side),
