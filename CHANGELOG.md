@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.11] - 2026-10-26
+
 ### Added
 
 - X4 Pro firmware includes Bluetooth LE for HID page-turners and

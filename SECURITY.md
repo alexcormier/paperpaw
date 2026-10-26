@@ -18,5 +18,5 @@ otherwise.
 
 ## Supported versions
 
-PaperPaw is in beta (0.5.0-beta.10). Until 1.0, only the latest `main` branch
+PaperPaw is in beta (0.5.0-beta.11). Until 1.0, only the latest `main` branch
 receives security fixes.
