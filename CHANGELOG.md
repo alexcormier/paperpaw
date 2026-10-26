@@ -12,6 +12,8 @@ change the plugin SDK.
 
 - Every restart shows a translated restart notice before saving state
   and resetting the reader, whichever menu requested it.
+- The USB development helper reads current format 3 plugin digests when
+  trusting a local build, while still accepting format 2 files.
 - Plugins selected in the web flasher keep their Store origin after
   installation, so the plugin store can update them automatically.
   Manually installed plugins keep their local origin.
