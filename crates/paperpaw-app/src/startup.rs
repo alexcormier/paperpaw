@@ -1,0 +1,98 @@
+//! A small startup display before the kernel can run: the same UI font,
+//! no plugin loading or card access. The shell owns the operation and
+//! draws it in bands; normal plugin screens take over after startup.
+
+use paperpaw_core::sdk as paperpaw_sdk;
+use paperpaw_sdk::{Canvas, Color, Contribution, Fonts, Plugin, Rect, RegisterError, Registrar};
+
+/// Drawing state for startup, released before the kernel is built.
+#[derive(Debug)]
+pub struct Screen {
+    fonts: Fonts,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn startup_uses_the_normal_ui_font_without_a_kernel_or_card() {
+        let screen = Screen::new().unwrap();
+        let font = screen
+            .fonts
+            .get(paperpaw_plugin_fonts_default::SOURCE_SANS.as_str())
+            .unwrap();
+        let width = font.measure(22.0, "Plugins could not be installed");
+        assert!(
+            width > 0.0 && width <= 432.0,
+            "fits the X4's portrait screen: {width}"
+        );
+    }
+}
+
+impl Screen {
+    /// The standard UI font, through its normal plugin registration.
+    pub fn new() -> Result<Self, RegisterError> {
+        let plugin = paperpaw_plugin_fonts_default::DefaultFonts;
+        let mut registrar = Registrar::new(plugin.manifest().id);
+        plugin.register(&mut registrar)?;
+        let mut fonts = Fonts::new(0);
+        for contribution in registrar.into_contributions() {
+            if let Contribution::Font(font) = contribution
+                && font.id == paperpaw_plugin_fonts_default::SOURCE_SANS
+            {
+                fonts.add(*font)?;
+            }
+        }
+        if fonts
+            .get(paperpaw_plugin_fonts_default::SOURCE_SANS.as_str())
+            .is_none()
+        {
+            return Err(RegisterError::Invalid {
+                message: "startup UI font is missing".into(),
+            });
+        }
+        Ok(Self { fonts })
+    }
+
+    /// Draws the startup operation and its progress. `done == total == 0`
+    /// shows a phase without a known total, e.g. verifying a bundle.
+    pub fn draw(
+        &self,
+        canvas: &mut Canvas<'_>,
+        screen: Rect,
+        phase: &str,
+        detail: &str,
+        done: u32,
+        total: u32,
+    ) {
+        canvas.clear(Color::WHITE);
+        let Some(font) = self
+            .fonts
+            .get(paperpaw_plugin_fonts_default::SOURCE_SANS.as_str())
+        else {
+            return;
+        };
+        let width = u32::from(screen.width);
+        let x = i32::from(screen.x) + 24;
+        let y = i32::from(screen.y) + i32::from(screen.height) / 2;
+        font.draw(canvas, 28.0, x as f32, y - 56, "PaperPaw", Color::BLACK);
+        font.draw(canvas, 22.0, x as f32, y - 12, phase, Color::BLACK);
+        font.draw(canvas, 18.0, x as f32, y + 24, detail, Color::BLACK);
+        if total > 0 {
+            let bar = width.saturating_sub(48);
+            canvas.stroke_rect(x, y + 52, bar, 14, 2, Color::BLACK);
+            let filled =
+                u64::from(bar.saturating_sub(8)) * u64::from(done.min(total)) / u64::from(total);
+            canvas.fill_rect(x + 4, y + 56, filled as u32, 6, Color::BLACK);
+        }
+        font.draw(
+            canvas,
+            18.0,
+            x as f32,
+            y + 108,
+            "Please keep the reader on.",
+            Color::BLACK,
+        );
+    }
+}

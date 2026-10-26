@@ -93,6 +93,7 @@ paperpaw-sample-frame-test = { path = "../../samples/frame-test", optional = tru
 paperpaw-core = { path = "../../crates/paperpaw-core" }
 paperpaw-sdk = { path = "../../crates/paperpaw-sdk", features = ["kernel"] }
 paperpaw-platform = { path = "../../crates/paperpaw-platform" }
+paperpaw-graphics = { path = "../../crates/paperpaw-graphics" }
 paperpaw-x4 = { path = "../../crates/paperpaw-x4" }
 paperpaw-fat = { path = "../../crates/paperpaw-fat" }
 paperpaw-http = { path = "../../crates/paperpaw-http" }

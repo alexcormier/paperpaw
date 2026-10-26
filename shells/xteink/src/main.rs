@@ -74,6 +74,7 @@ mod safe_mode;
 mod serve;
 mod sockets;
 mod stack;
+mod startup;
 mod tls;
 #[cfg(feature = "remote")]
 mod traced;
@@ -360,6 +361,8 @@ fn main() -> ! {
 #[inline(never)]
 fn start() -> Firmware {
     let mut ready = prepare();
+    let building = micros();
+    info!("startup: building the kernel");
     let bundle = ready.staged.other_slot.take();
     let flash = ready.flash.clone();
     let firmware = Firmware {
@@ -389,6 +392,10 @@ fn start() -> Firmware {
     if let Some(at) = bundle {
         native::bundle::forget(&flash, at);
     }
+    info!(
+        "startup: kernel ready in {} ms",
+        (micros() - building) / 1000
+    );
     firmware
 }
 
@@ -514,7 +521,13 @@ fn prepare() -> Ready {
         clock::set(now(), unix_ms);
     }
     // Plugins the web flasher wrote behind the image, onto the card first.
-    let staged = native::bundle::stage(&flash, storage.as_ref()).unwrap_or_default();
+    let staged = {
+        let mut startup = startup::Startup::new(&mut panel);
+        native::bundle::stage(&flash, storage.as_ref(), &mut |progress| {
+            startup.update(progress)
+        })
+        .unwrap_or_default()
+    };
     let code = code_plugins(ota.as_ref(), &flash);
     // Light sleeps while idle on battery (allowed only by the main loop),
     // the deep one at the end.
