@@ -1,0 +1,10 @@
+name: Pinned espflash
+description: Reuse the exact cached version or verify the official static release archive.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        binary="$(python3 tools/ci/espflash.py "$ESPFLASH_VERSION" "$RUNNER_TEMP/espflash")"
+        echo "$(dirname "$binary")" >> "$GITHUB_PATH"
+        "$binary" --version
