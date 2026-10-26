@@ -161,6 +161,13 @@ fn sleep_until(deadline: Instant) -> bool {
         return false;
     };
     low_power.set_wakeup_deadline(deadline);
+    // The X4's ADC interrupt and sleep entry both use the internal
+    // analog bus. Keep the sampler out until the HAL has restored the
+    // clocks and regulators. The RTC alarm wakes the hardware without
+    // a CPU interrupt; sample_now reads the buttons after waking.
+    #[cfg(feature = "x4")]
+    critical_section::with(|_| low_power.sleep_light(RtcSleepConfig::default()));
+    #[cfg(not(feature = "x4"))]
     low_power.sleep_light(RtcSleepConfig::default());
     critical_section::with(|cs| LOW_POWER.replace(cs, Some(low_power)));
     mark(at::WOKEN);
