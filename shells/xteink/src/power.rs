@@ -109,6 +109,13 @@ fn count_nap() {
     }
 }
 
+/// Completed light sleeps in this run, for hardware diagnostics.
+#[cfg(feature = "remote")]
+pub fn naps() -> u32 {
+    // SAFETY: only the main loop writes NAPS, and calls this function.
+    unsafe { core::ptr::addr_of!(NAPS).read_volatile() }
+}
+
 /// Light sleeps are allowed (on battery).
 static ALLOWED: AtomicBool = AtomicBool::new(false);
 

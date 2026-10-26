@@ -55,7 +55,8 @@
 //! - `boot`: `PP:BOOT <reason> <place> <naps>`, why the X4 last started,
 //!   where the run before was then and its light sleeps, e.g. after a
 //!   watchdog's reset or an `idle sleep`, and `PP:PANIC <message>` if the
-//!   run before panicked;
+//!   run before panicked. `PP:NAPS <count>` reports completed light sleeps
+//!   in the current run, so a battery test can verify that it really slept;
 //! - `graytone <stock|middle>`: how dark the X4's grays between
 //!   come out from now on, to compare them (`PP:OK`);
 //! - `nap <seconds>`: one light sleep that long (at most a minute), then a
