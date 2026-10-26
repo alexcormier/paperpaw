@@ -249,7 +249,11 @@ fn changes(crate_: &str, kept: (&str, &str), now: (&str, &str)) -> Changes {
     for (path, line) in &kept_types {
         match now_types.get(path) {
             None => out.breaking.push(format!("{crate_}: gone: {line}")),
-            Some(now) if now != line && !user_agent_release_only(path, line, now) => {
+            Some(now)
+                if now != line
+                    && !user_agent_release_only(path, line, now)
+                    && !layout_cache_revision(crate_, path, line, now) =>
+            {
                 out.breaking
                     .push(format!("{crate_}: changed: {line}\n  now: {now}"));
             }
@@ -279,7 +283,7 @@ fn changes(crate_: &str, kept: (&str, &str), now: (&str, &str)) -> Changes {
 }
 
 /// The SDK release in an HTTP header is metadata, not a crossing layout.
-/// Every other part of this constant, and every other constant, stays guarded.
+/// Every other part of this constant stays guarded.
 fn user_agent_release_only(path: &str, before: &str, after: &str) -> bool {
     let release = |line: &str| {
         let Some(version) = line
@@ -308,6 +312,147 @@ fn user_agent_release_only(path: &str, before: &str, after: &str) -> bool {
             && paperpaw_sdk::Version::parse(version).is_some()
     };
     path == "const paperpaw_sdk::web::USER_AGENT" && release(before) && release(after)
+}
+
+/// A newer layout cache key keeps old page indexes apart from new ones.
+/// It changes neither a crossing type nor how its fields are interpreted.
+fn layout_cache_revision(crate_: &str, path: &str, before: &str, after: &str) -> bool {
+    if crate_ != "paperpaw-layout" || path != "const paperpaw_layout::VERSION" {
+        return false;
+    }
+    let revision = |line: &str| -> Option<u32> {
+        let value = line.strip_prefix("const paperpaw_layout::VERSION: u32 = ")?;
+        if value.is_empty()
+            || !value.bytes().all(|b| b.is_ascii_digit())
+            || (value.len() > 1 && value.starts_with('0'))
+        {
+            return None;
+        }
+        value.parse().ok()
+    };
+    matches!((revision(before), revision(after)), (Some(old), Some(new)) if new > old)
+}
+
+#[test]
+fn layout_cache_revisions_only_increase_as_u32_metadata() {
+    let shape = |value: &str| format!("const paperpaw_layout::VERSION: u32 = {value}");
+    let path = "const paperpaw_layout::VERSION";
+    for (before, after) in [
+        ("0", "1"),
+        ("7", "8"),
+        ("7", "42"),
+        ("4294967294", "4294967295"),
+    ] {
+        let (before, after) = (shape(before), shape(after));
+        assert!(layout_cache_revision(
+            "paperpaw-layout",
+            path,
+            &before,
+            &after
+        ));
+        assert!(
+            changes("paperpaw-layout", ("", &before), ("", &after))
+                .breaking
+                .is_empty(),
+            "{before} to {after}"
+        );
+    }
+    let before = shape("7");
+    // An unchanged value is handled by the ordinary equality check.
+    assert!(!layout_cache_revision(
+        "paperpaw-layout",
+        path,
+        &before,
+        &before
+    ));
+    assert!(
+        changes("paperpaw-layout", ("", &before), ("", &before))
+            .breaking
+            .is_empty()
+    );
+    for value in [
+        "6",
+        "0",
+        "4294967296",
+        "-1",
+        "+8",
+        "8.0",
+        "8u32",
+        "08",
+        " 8",
+        "8 ",
+        "",
+    ] {
+        let after = shape(value);
+        assert!(!layout_cache_revision(
+            "paperpaw-layout",
+            path,
+            &before,
+            &after
+        ));
+        assert!(
+            !changes("paperpaw-layout", ("", &before), ("", &after))
+                .breaking
+                .is_empty(),
+            "{after}"
+        );
+    }
+    for value in ["07", "-1", "+7", "7u32", "4294967296", ""] {
+        let (before, after) = (shape(value), shape("8"));
+        assert!(!layout_cache_revision(
+            "paperpaw-layout",
+            path,
+            &before,
+            &after
+        ));
+        assert!(
+            !changes("paperpaw-layout", ("", &before), ("", &after))
+                .breaking
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn layout_cache_revision_keeps_other_interface_changes_guarded() {
+    let before = "const paperpaw_layout::VERSION: u32 = 7";
+    let after = "const paperpaw_layout::VERSION: u32 = 8";
+    for crate_ in ["paperpaw-sdk", "paperpaw-text", "other", ""] {
+        assert!(
+            !changes(crate_, ("", before), ("", after))
+                .breaking
+                .is_empty()
+        );
+    }
+    for (before, after) in [
+        (
+            before.replace("VERSION", "OTHER"),
+            after.replace("VERSION", "OTHER"),
+        ),
+        (
+            before.replace("VERSION", "CACHE::VERSION"),
+            after.replace("VERSION", "CACHE::VERSION"),
+        ),
+        (before.replace("u32", "u64"), after.to_string()),
+        (before.to_string(), after.replace("u32", "u64")),
+        (
+            before.replace("u32", "usize"),
+            after.replace("u32", "usize"),
+        ),
+        (before.to_string(), String::new()),
+    ] {
+        assert!(
+            !changes("paperpaw-layout", ("", &before), ("", &after))
+                .breaking
+                .is_empty(),
+            "{before} to {after}"
+        );
+    }
+    let kept = format!("{before}\nstruct paperpaw_layout::Page {{count: u32}}");
+    let now = format!("{after}\nstruct paperpaw_layout::Page {{count: u64}}");
+    let changed = changes("paperpaw-layout", ("", &kept), ("", &now));
+    assert_eq!(changed.breaking.len(), 1);
+    assert!(changed.breaking[0].contains("struct paperpaw_layout::Page"));
 }
 
 #[test]
