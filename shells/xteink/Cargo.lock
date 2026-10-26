@@ -2698,6 +2698,7 @@ dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
  "paperpaw-fat",
+ "paperpaw-graphics",
  "paperpaw-http",
  "paperpaw-native",
  "paperpaw-platform",

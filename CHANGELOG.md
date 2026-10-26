@@ -8,6 +8,14 @@ change the plugin SDK.
 
 ### Fixed
 
+- Plugins selected in the web flasher keep their Store origin after
+  installation, so the plugin store can update them automatically.
+  Manually installed plugins keep their local origin.
+- First startup shows plugin checking, installation progress and startup
+  preparation while the web flasher's bundle is copied to the SD card.
+- Settings distinguish *Manage plugins* from *Plugin settings*, rather
+  than showing two entries named *Plugins*.
+
 - Resetting settings changes only explicitly stored values, avoiding
   repeated font and layout reloads for defaults that were never changed.
   Book-specific resets leave global values intact.
