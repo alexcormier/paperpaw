@@ -18,7 +18,7 @@ const OPEN_T: Id = Id::new_static("s.open-t");
 
 /// A screen that does what its params say: `name` (logged), `overlay`
 /// (the lower half), `refuse` (to close), `outside` (`ignore`, `pass`),
-/// `pass` (input through), `hints` (`hidden`).
+/// `pass` (input through), `hints` (`hidden`, `on-press`).
 struct Configured {
     log: Log,
     params: Params,
@@ -79,7 +79,11 @@ impl Screen for Configured {
     }
 
     fn hints(&self) -> Option<HintVisibility> {
-        self.says("hints").map(|_| HintVisibility::Hidden)
+        match self.says("hints") {
+            Some("hidden") => Some(HintVisibility::Hidden),
+            Some("on-press") => Some(HintVisibility::OnPress),
+            _ => None,
+        }
     }
 
     fn on_close_request(&mut self, why: CloseCause, _: &mut Cx<'_, '_>) -> Handled {
@@ -433,4 +437,111 @@ fn a_screen_opened_again_waits_for_the_ones_above() {
     kernel.open_screen(Instant(2), SCREEN, named("form").with("refuse", "y"));
     kernel.open_screen(Instant(3), ONE, named("b"));
     assert_eq!(names(&kernel), ["s.home", "s.one", "s.screen"]);
+}
+
+/// Uses the same slot and registered hint policy as a sleep plugin.
+struct HiddenSleepPlugin;
+
+impl Plugin for HiddenSleepPlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("quiet"), "Quiet", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        const SLEEP: Id = Id::new_static("quiet.sleep");
+        r.add_screen(ScreenSpec::new(
+            SLEEP,
+            "Sleep",
+            Box::new(|_, _| {
+                Box::new(Configured {
+                    log: log(),
+                    params: named("sleep"),
+                })
+            }),
+        ))?;
+        r.set_screen_hints(SLEEP, HintVisibility::Hidden)?;
+        r.bind_slot(slots::SLEEP, SLEEP, Priority::DEFAULT)
+    }
+}
+
+fn reader_with_hints() -> Kernel {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(StackPlugin(log()))
+        .plugin(HiddenSleepPlugin)
+        .sleep(true)
+        .button_row(&["back", "confirm", "left", "right"])
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.open_screen(
+        Instant(1),
+        SCREEN,
+        named("reader").with("hints", "on-press"),
+    );
+    render(&mut kernel);
+    assert!(kernel.hint_row().is_none());
+    press(&mut kernel, 10, "confirm");
+    assert!(kernel.hint_row().is_some());
+    assert!(kernel.frame().data.iter().any(|byte| *byte != 0xff));
+    kernel
+}
+
+fn assert_blank_sleep_frame(kernel: &mut Kernel) {
+    render(kernel);
+    assert!(kernel.hint_row().is_none());
+    // The fixture's sleep screen draws nothing. Any ink is stale chrome
+    // or button hints that would stay on the sleeping e-paper panel.
+    assert!(kernel.frame().data.iter().all(|byte| *byte == 0xff));
+}
+
+#[test]
+fn hidden_sleep_screen_removes_recent_reader_hints_before_suspend() {
+    let mut kernel = reader_with_hints();
+    let effects = kernel.run_action(Instant(100), actions::SLEEP);
+    assert!(effects.sleep());
+    assert_eq!(
+        kernel.stack.last().map(|top| &top.id),
+        Some(&Id::new_static("quiet.sleep"))
+    );
+    assert_blank_sleep_frame(&mut kernel);
+
+    // A shell may redraw for its display mode before entering sleep.
+    kernel.draw_again(Instant(101));
+    assert_blank_sleep_frame(&mut kernel);
+    kernel.suspend(Instant(102));
+    kernel.draw_again(Instant(103));
+    assert_blank_sleep_frame(&mut kernel);
+}
+
+#[test]
+fn shown_menu_keeps_its_hints_after_reader_hint_timeout() {
+    let mut kernel = reader_with_hints();
+    kernel.open_screen(Instant(100), SCREEN, named("menu"));
+    render(&mut kernel);
+    assert!(kernel.hint_row().is_some());
+    assert!(kernel.stack.last().unwrap().hinted);
+    kernel.tick(Instant(5000));
+    kernel.draw_again(Instant(5001));
+    render(&mut kernel);
+    assert!(kernel.hint_row().is_some());
+    assert!(kernel.frame().data.iter().any(|byte| *byte != 0xff));
+}
+
+#[test]
+fn hidden_overlay_overrides_the_readers_active_hint_timer() {
+    let mut kernel = reader_with_hints();
+    kernel.open_screen(
+        Instant(100),
+        SCREEN,
+        named("overlay")
+            .with("overlay", "y")
+            .with("hints", "hidden"),
+    );
+    render(&mut kernel);
+    assert_eq!(kernel.base_hints(), HintVisibility::OnPress);
+    assert!(kernel.hint_row().is_none());
+    kernel.draw_again(Instant(101));
+    render(&mut kernel);
+    assert!(kernel.frame().data.iter().all(|byte| *byte == 0xff));
 }
