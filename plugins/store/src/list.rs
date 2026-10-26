@@ -255,13 +255,12 @@ impl ListScreen {
         let mut request = HttpRequest::new("GET", &url, LOADED);
         request = request.save_to(catalog::list_part());
         cx.command(Command::http(request));
-        if self.index.is_none() {
-            self.trouble = Trouble::Loading;
-            self.redraw(cx);
-        }
+        self.trouble = Trouble::Loading;
+        self.redraw(cx);
     }
 
     fn loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
+        self.trouble = Trouble::None;
         let env = *cx.env();
         let fetched = catalog::list_part();
         let index = catalog::Device::of(&env)
@@ -372,11 +371,14 @@ impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n().tr("store.title");
-        // The room left for plugins, beside the title.
-        let note = self
-            .room
-            .as_deref()
-            .filter(|_| self.index.is_some() && self.paging().is_none());
+        // Keep the saved list usable while its replacement is fetched.
+        let note = if self.trouble == Trouble::Loading && self.index.is_some() {
+            Some(env.i18n().tr("store.loading"))
+        } else {
+            self.room
+                .as_deref()
+                .filter(|_| self.index.is_some() && self.paging().is_none())
+        };
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, note, self.paging());
         if self.offering(env) {

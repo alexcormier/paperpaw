@@ -110,6 +110,48 @@ impl Airy for Shopping {
 }
 
 #[test]
+fn the_first_list_shows_loading_before_the_network_answers() {
+    let mut kernel = Kernel::builder(common::DEVICE)
+        .network(true)
+        .catalog_device("x4")
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Store)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), OPEN);
+    kernel.render(&mut |_, _| {});
+    assert!(
+        kernel
+            .describe()
+            .iter()
+            .any(|p| p.label.contains("Loading plugins"))
+    );
+    assert!(
+        kernel
+            .take_io()
+            .iter()
+            .any(|io| matches!(io, paperpaw_core::Io::Http(_)))
+    );
+}
+
+#[test]
+fn refreshing_the_saved_list_shows_loading_until_success_or_failure() {
+    let mut shopping = Shopping::new(&list("1.0.0"));
+    for status in [200, 0, 503] {
+        shopping.run(OPEN);
+        let call = shopping.request(LIST);
+        let shown = shopping.shown();
+        assert!(shown.contains("Loading plugins"), "{shown}");
+        assert!(shown.contains("Reading"), "{shown}");
+        shopping.answer(&call, status, list("1.1.0").as_bytes());
+        let shown = shopping.shown();
+        assert!(!shown.contains("Loading plugins"), "{shown}");
+        assert!(shown.contains("Reading"), "{shown}");
+    }
+}
+
+#[test]
 fn the_list_shows_what_fits_by_group() {
     let mut shopping = Shopping::new(&list("1.0.0"));
     // Search, the newest, then the groups in the list's order with how

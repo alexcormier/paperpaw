@@ -8,6 +8,9 @@ change the plugin SDK.
 
 ### Fixed
 
+- The plugin store shows when it refreshes a saved plugin list, while
+  keeping that list available until the request finishes.
+
 - Crates.io releases use new versions for changed built-in plugins, so packaged applications compile against the matching plugin sources.
 
 - A text shortened to its room (`ui::fit`, rows' titles and values)
