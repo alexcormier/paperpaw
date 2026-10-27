@@ -41,6 +41,7 @@ pub mod generation;
 pub mod gt911;
 pub mod nvs;
 pub mod ota;
+pub mod otp;
 pub mod paced;
 pub mod panel;
 pub mod partitions;

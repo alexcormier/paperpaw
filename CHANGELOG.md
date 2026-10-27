@@ -24,6 +24,10 @@ change the plugin SDK.
 
 ### Added
 
+- Developer firmware of the X4 Pro (`x4pro` builds) reads the controller's OTP at start (a
+  UC8179, about 100 ms) and tells the log what its own waveforms are: the
+  temperature ranges, their frame rate, voltages and VCOM, and the states of the
+  ranges 25 and 90 degrees select (`otp:` lines).
 - The waveform lab also runs on the X4 Pro (a UC8179 controller): a direct drive
   made of the controller's waveform registers, with the frames, the kick, the
   frame rate (20 to 100 Hz), the repeat and the levels of white and black to try,

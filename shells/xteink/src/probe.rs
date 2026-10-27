@@ -75,7 +75,33 @@ pub fn ask<'d>(
         reset: Output::new(reset, Level::High, OutputConfig::default()),
         busy: Input::new(busy, InputConfig::default()),
     };
-    probe::probe(&mut lines, &mut delay, reset_ms)
+    let probe = probe::probe(&mut lines, &mut delay, reset_ms);
+    // The waveform lab: what a UC8179's OTP holds, read while the lines are
+    // still ours (a hundred milliseconds more at start, developer builds).
+    #[cfg(feature = "waveform-lab")]
+    if probe.controller() == Some(probe::Controller::Uc8179) {
+        let mut otp = alloc::vec![0u8; paperpaw_x4::otp::READ_LEN];
+        probe::read_otp(&mut lines, &mut delay, &mut otp);
+        critical_section::with(|cs| OTP.borrow_ref_mut(cs).replace(otp));
+    }
+    probe
+}
+
+/// The UC8179's OTP, as far as it was read (see [`ask`]).
+#[cfg(feature = "waveform-lab")]
+static OTP: critical_section::Mutex<core::cell::RefCell<Option<alloc::vec::Vec<u8>>>> =
+    critical_section::Mutex::new(core::cell::RefCell::new(None));
+
+/// Tells the log what the OTP holds, if it was read: the vendor's own
+/// waveforms, to compare with the lab's (see `paperpaw_x4::otp`).
+#[cfg(feature = "waveform-lab")]
+pub fn log_otp() {
+    let otp = critical_section::with(|cs| OTP.borrow_ref_mut(cs).take());
+    if let Some(otp) = otp {
+        for line in paperpaw_x4::otp::describe(&otp) {
+            log::info!("{line}");
+        }
+    }
 }
 
 /// The controller the factory wrote down for the panel, in the factory's
