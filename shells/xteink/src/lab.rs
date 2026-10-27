@@ -1,6 +1,7 @@
-//! The waveform lab: a screen to try, on the device, how the X4's panel is
-//! driven (Tools, *Waveform lab*; the X4 only, and only in the developer
-//! firmware, the feature `remote`).
+//! The waveform lab: a screen to try, on the device, how the panel is
+//! driven (Tools, *Waveform lab*; for panels with an SSD1677 or a UC8179
+//! controller, and only in the developer firmware, the feature
+//! `waveform-lab`, which `remote` builds of the X4 and the X4 Pro have).
 //!
 //! A test picture (stripes, squares, halves or lines) is flipped between
 //! its two states, so that pixels change both ways, and each flip is shown
@@ -15,6 +16,13 @@
 //!   pixel that changes is driven to its new colour for some frames, after
 //!   a kick of the other colour for up to three. The stock voltages; the
 //!   frames and the kick are what is tried.
+//!
+//! On a UC8179 (the X4 Pro) the direct drive has more: the frame rate
+//! (the controller's `PLL` register, 20 to 100 Hz, its own 50), the group's
+//! repeat (0 or 1: the datasheet says "0: 0 time", so if nothing changes
+//! at 0, try 1), and the levels of white and black, assumed from the stock
+//! gray waveform and turned round with *Polarity* if the picture comes
+//! out the wrong way. The voltages are the controller's own; none is set.
 //!
 //! Up and down choose a row, left and right change its value, *Select*
 //! flips the picture (or does the row: *Flip on its own*, *Clean up*).
@@ -38,7 +46,9 @@ use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Handled, Id, Instances, MenuEntry,
     Params, Rect, RefreshMode, Screen,
 };
-use paperpaw_x4::display::{Experiment, TEMPERATURE_RANGE};
+use paperpaw_x4::display::{self, TEMPERATURE_RANGE};
+use paperpaw_x4::panel::Experiment;
+use paperpaw_x4::uc8179::{self, FRAME_RATES, OWN_RATE};
 use paperpaw_x4::waveform::{Direct, MAX_FRAMES, MAX_KICK};
 
 pub const SCREEN: Id = Id::new_static("x4.waveform-lab");
@@ -49,18 +59,55 @@ pub const OPEN: Id = Id::new_static("x4.open-waveform-lab");
 const CLEAN_AFTER: u32 = 20;
 const AUTO_STOPS_AFTER: u32 = 60;
 
-/// What the panel can do: only the SSD1677's waveforms can be tried.
-static SUPPORTED: AtomicBool = AtomicBool::new(false);
+/// What the panel can do: only the waveforms of the SSD1677 (the X4, some
+/// X4 Pros) and of the UC8179 (the X4 Pro) can be tried.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Support {
+    None,
+    Ssd1677,
+    Uc8179,
+}
+
+static SUPPORT: AtomicU8 = AtomicU8::new(0);
 /// What is chosen: the kind of waveform (0 the panel's own, 1 the panel's
-/// at a temperature, 2 direct) and its numbers.
+/// at a temperature, SSD1677 only, 2 direct) and its numbers.
 static KIND: AtomicU8 = AtomicU8::new(0);
 static TEMPERATURE: AtomicU8 = AtomicU8::new(25);
 static FRAMES: AtomicU8 = AtomicU8::new(8);
 static KICK: AtomicU8 = AtomicU8::new(0);
+/// The UC8179's: times to repeat, frame rate (an index of `FRAME_RATES`),
+/// and whether the levels of white and black are turned round.
+static REPEAT: AtomicU8 = AtomicU8::new(0);
+static RATE: AtomicU8 = AtomicU8::new(OWN_RATE as u8);
+static SWAPPED: AtomicBool = AtomicBool::new(false);
 
-/// The firmware says whether this panel takes experiments.
-pub fn set_supported(yes: bool) {
-    SUPPORTED.store(yes, Ordering::Relaxed);
+/// The firmware says what this panel takes (at start).
+pub fn set_support(support: Support) {
+    SUPPORT.store(
+        match support {
+            Support::None => 0,
+            Support::Ssd1677 => 1,
+            Support::Uc8179 => 2,
+        },
+        Ordering::Relaxed,
+    );
+}
+
+fn support() -> Support {
+    match SUPPORT.load(Ordering::Relaxed) {
+        1 => Support::Ssd1677,
+        2 => Support::Uc8179,
+        _ => Support::None,
+    }
+}
+
+/// The kinds of waveform the panel offers, the panel's own first.
+fn kinds() -> &'static [u8] {
+    match support() {
+        Support::Ssd1677 => &[0, 1, 2],
+        Support::Uc8179 => &[0, 2],
+        Support::None => &[0],
+    }
 }
 
 /// Whether the lab is the screen shown (`active` is the screen on top).
@@ -71,17 +118,21 @@ pub fn is_open(active: Option<&Id>) -> bool {
 /// How a fast refresh is driven while the lab is open: as the lab says,
 /// or (`None`) the panel's own.
 pub fn experiment(active: Option<&Id>) -> Option<Experiment> {
-    if !is_open(active) || !SUPPORTED.load(Ordering::Relaxed) {
+    if !is_open(active) {
         return None;
     }
-    match KIND.load(Ordering::Relaxed) {
-        1 => Some(Experiment::Temperature(
-            TEMPERATURE.load(Ordering::Relaxed) as i8
-        )),
-        2 => Some(Experiment::Direct(Direct::new(
-            FRAMES.load(Ordering::Relaxed),
-            KICK.load(Ordering::Relaxed),
+    let drive = || Direct::new(FRAMES.load(Ordering::Relaxed), KICK.load(Ordering::Relaxed));
+    match (support(), KIND.load(Ordering::Relaxed)) {
+        (Support::Ssd1677, 1) => Some(Experiment::Ssd1677(display::Experiment::Temperature(
+            TEMPERATURE.load(Ordering::Relaxed) as i8,
         ))),
+        (Support::Ssd1677, 2) => Some(Experiment::Ssd1677(display::Experiment::Direct(drive()))),
+        (Support::Uc8179, 2) => Some(Experiment::Uc8179(uc8179::Experiment {
+            drive: drive(),
+            swapped: SWAPPED.load(Ordering::Relaxed),
+            repeat: REPEAT.load(Ordering::Relaxed),
+            rate: usize::from(RATE.load(Ordering::Relaxed)),
+        })),
         _ => None,
     }
 }
@@ -104,17 +155,23 @@ enum Control {
     Temperature,
     Frames,
     Kick,
+    Repeat,
+    Rate,
+    Polarity,
     Picture,
     Auto,
     Clean,
 }
 
-/// The rows, by the kind of waveform chosen.
+/// The rows, by the kind of waveform chosen and what the panel takes.
 fn controls(kind: u8) -> &'static [Control] {
     use Control::*;
-    match kind {
-        1 => &[Waveform, Temperature, Picture, Auto, Clean],
-        2 => &[Waveform, Frames, Kick, Picture, Auto, Clean],
+    match (support(), kind) {
+        (Support::Ssd1677, 1) => &[Waveform, Temperature, Picture, Auto, Clean],
+        (Support::Ssd1677, 2) => &[Waveform, Frames, Kick, Picture, Auto, Clean],
+        (Support::Uc8179, 2) => &[
+            Waveform, Frames, Kick, Rate, Repeat, Polarity, Picture, Auto, Clean,
+        ],
         _ => &[Waveform, Picture, Auto, Clean],
     }
 }
@@ -189,6 +246,9 @@ impl Lab {
             Control::Temperature => "x4.lab.temperature",
             Control::Frames => "x4.lab.frames",
             Control::Kick => "x4.lab.kick",
+            Control::Repeat => "x4.lab.repeat",
+            Control::Rate => "x4.lab.rate",
+            Control::Polarity => "x4.lab.polarity",
             Control::Picture => "x4.lab.picture",
             Control::Auto => "x4.lab.auto",
             Control::Clean => "x4.lab.clean",
@@ -207,6 +267,16 @@ impl Lab {
             Control::Temperature => format!("{} °C", TEMPERATURE.load(Ordering::Relaxed)),
             Control::Frames => format!("{}", FRAMES.load(Ordering::Relaxed)),
             Control::Kick => format!("{}", KICK.load(Ordering::Relaxed)),
+            Control::Repeat => format!("{}", REPEAT.load(Ordering::Relaxed)),
+            Control::Rate => {
+                let rate = usize::from(RATE.load(Ordering::Relaxed)).min(FRAME_RATES.len() - 1);
+                format!("{} Hz", FRAME_RATES[rate].1)
+            }
+            Control::Polarity => tr(if SWAPPED.load(Ordering::Relaxed) {
+                "x4.lab.polarity.swapped"
+            } else {
+                "x4.lab.polarity.normal"
+            }),
             Control::Picture => tr(match self.pattern {
                 0 => "x4.lab.picture.stripes",
                 1 => "x4.lab.picture.squares",
@@ -269,8 +339,10 @@ impl Lab {
         };
         match control {
             Control::Waveform => {
-                let kind = (i16::from(Self::kind()) + 3 + step) % 3;
-                KIND.store(kind as u8, Ordering::Relaxed);
+                let kinds = kinds();
+                let at = kinds.iter().position(|&k| k == Self::kind()).unwrap_or(0);
+                let next = (at as i16 + kinds.len() as i16 + step) % kinds.len() as i16;
+                KIND.store(kinds[next as usize], Ordering::Relaxed);
                 self.list.set_len(Self::controls().len());
             }
             Control::Temperature => bump(
@@ -281,6 +353,9 @@ impl Lab {
             ),
             Control::Frames => bump(&FRAMES, step, 1, i16::from(MAX_FRAMES)),
             Control::Kick => bump(&KICK, step, 0, i16::from(MAX_KICK)),
+            Control::Repeat => bump(&REPEAT, step, 0, 1),
+            Control::Rate => bump(&RATE, step, 0, FRAME_RATES.len() as i16 - 1),
+            Control::Polarity => SWAPPED.store(!SWAPPED.load(Ordering::Relaxed), Ordering::Relaxed),
             Control::Picture => {
                 self.pattern = ((i16::from(self.pattern) + i16::from(PICTURES) + step)
                     % i16::from(PICTURES)) as u8;
@@ -301,9 +376,14 @@ impl Screen for Lab {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        self.header
-            .draw(&mut ui, env.i18n().tr("x4.lab.title"), None, None);
-        if !SUPPORTED.load(Ordering::Relaxed) {
+        let len = Self::controls().len();
+        self.header.draw(
+            &mut ui,
+            env.i18n().tr("x4.lab.title"),
+            None,
+            self.list.paging(len),
+        );
+        if support() == Support::None {
             let area = Rect::new(0, self.picture.y, self.picture.width, self.picture.height);
             ui.message(area, env.i18n().tr("x4.lab.unsupported"));
             return;
@@ -346,7 +426,7 @@ impl Screen for Lab {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        if !SUPPORTED.load(Ordering::Relaxed) {
+        if support() == Support::None {
             return Handled::No;
         }
         let len = Self::controls().len();

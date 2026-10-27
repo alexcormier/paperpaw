@@ -217,7 +217,7 @@ impl Plugin for X4 {
         }
         #[cfg(feature = "x4-pro")]
         register_light(r)?;
-        #[cfg(all(feature = "x4", feature = "waveform-lab"))]
+        #[cfg(feature = "waveform-lab")]
         {
             r.add_screens(&crate::lab::SCREENS)?;
             r.add_actions(&crate::lab::ACTIONS)?;

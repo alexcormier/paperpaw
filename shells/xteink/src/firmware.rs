@@ -985,18 +985,14 @@ impl Firmware {
         });
         let drawn = now();
         self.kernel.showing(drawn);
-        #[cfg(feature = "x4")]
+        #[cfg(any(feature = "x4", feature = "waveform-lab"))]
         {
             let experiment = if refresh == Refresh::Fast {
                 fast_waveform(mode, self.kernel.settings(), self.kernel.active_screen())
             } else {
                 None
             };
-            let supported = self.panel.set_experiment(experiment);
-            #[cfg(feature = "waveform-lab")]
-            crate::lab::set_supported(supported);
-            #[cfg(not(feature = "waveform-lab"))]
-            let _ = supported;
+            let _supported = self.panel.set_experiment(experiment);
         }
         if let Err(e) = self.refresh(refresh) {
             failed = Some(e);
@@ -1066,18 +1062,28 @@ impl Firmware {
 /// ghosts that the next full refresh clears. Partial refreshes (pages) keep
 /// the panel's own. The numbers are kept in the order the modes have
 /// (`waveform::ordered`).
-#[cfg(feature = "x4")]
+#[cfg(any(feature = "x4", feature = "waveform-lab"))]
 fn fast_waveform(
     mode: RefreshMode,
     settings: &paperpaw_sdk::Settings,
     active: Option<&paperpaw_sdk::Id>,
-) -> Option<paperpaw_x4::display::Experiment> {
-    use paperpaw_x4::waveform::{Direct, ordered};
+) -> Option<paperpaw_x4::panel::Experiment> {
     #[cfg(feature = "waveform-lab")]
     if crate::lab::is_open(active) {
         return crate::lab::experiment(active);
     }
     let _ = active;
+    menu_waveform(mode, settings)
+}
+
+/// The menus' and the games' waveforms are the SSD1677's (the UC8179's only
+/// in the lab, for now).
+#[cfg(all(feature = "x4", any(feature = "x4", feature = "waveform-lab")))]
+fn menu_waveform(
+    mode: RefreshMode,
+    settings: &paperpaw_sdk::Settings,
+) -> Option<paperpaw_x4::panel::Experiment> {
+    use paperpaw_x4::waveform::{Direct, ordered};
     if !matches!(mode, RefreshMode::Fast | RefreshMode::Mono) {
         return None;
     }
@@ -1101,7 +1107,17 @@ fn fast_waveform(
     } else {
         fast
     };
-    drive.map(paperpaw_x4::display::Experiment::Direct)
+    drive.map(|drive| {
+        paperpaw_x4::panel::Experiment::Ssd1677(paperpaw_x4::display::Experiment::Direct(drive))
+    })
+}
+
+#[cfg(all(not(feature = "x4"), feature = "waveform-lab"))]
+fn menu_waveform(
+    _mode: RefreshMode,
+    _settings: &paperpaw_sdk::Settings,
+) -> Option<paperpaw_x4::panel::Experiment> {
+    None
 }
 
 /// Frames a fast refresh drives a changed pixel, no kick (tried in the waveform

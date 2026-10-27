@@ -55,7 +55,7 @@ mod firmware;
 mod gray_test;
 mod http;
 mod input;
-#[cfg(all(feature = "x4", feature = "waveform-lab"))]
+#[cfg(feature = "waveform-lab")]
 mod lab;
 #[cfg(feature = "x4-pro")]
 mod light;
@@ -505,6 +505,13 @@ fn prepare() -> Ready {
     // Only an SSD1677's waveforms can be tried or set (`device`, `lab`).
     #[cfg(feature = "x4")]
     device::set_ssd1677(panel.controller() == paperpaw_x4::probe::Controller::Ssd1677);
+    // The waveform lab tries those of the SSD1677 and the UC8179.
+    #[cfg(feature = "waveform-lab")]
+    lab::set_support(match panel.controller() {
+        paperpaw_x4::probe::Controller::Ssd1677 => lab::Support::Ssd1677,
+        paperpaw_x4::probe::Controller::Uc8179 => lab::Support::Uc8179,
+        _ => lab::Support::None,
+    });
     if let Err(e) = panel.init() {
         warn!("display: {e:?}");
     }

@@ -24,6 +24,10 @@ change the plugin SDK.
 
 ### Added
 
+- The waveform lab also runs on the X4 Pro (a UC8179 controller): a direct drive
+  made of the controller's waveform registers, with the frames, the kick, the
+  frame rate (20 to 100 Hz), the repeat and the levels of white and black to try,
+  at the controller's own voltages. Developer firmware (`x4pro` builds).
 - `tools/flash-x4.py` builds the checked-out source and flashes it to an X4,
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.

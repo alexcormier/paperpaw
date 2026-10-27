@@ -31,6 +31,14 @@ pub enum Device {
     X3,
 }
 
+/// A way to show fast refreshes other than the panel's own, for the
+/// waveform lab, by the controller it is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Experiment {
+    Ssd1677(display::Experiment),
+    Uc8179(uc8179::Experiment),
+}
+
 /// A panel, its controller's driver.
 #[derive(Debug)]
 pub enum Panel<SPI, DC, RST, BUSY, D> {
@@ -171,17 +179,24 @@ where
         }
     }
 
-    /// Shows fast refreshes as `experiment` says (see
-    /// [`display::Experiment`]); `false` where this controller cannot (only
-    /// the SSD1677's waveforms can be tried), which then shows them its own
-    /// way as before.
-    pub fn set_experiment(&mut self, experiment: Option<display::Experiment>) -> bool {
+    /// Shows fast refreshes as `experiment` says; `false` where this
+    /// controller cannot (only the SSD1677's and the UC8179's waveforms can
+    /// be tried), or where `experiment` is for the other, which then show
+    /// them their own way as before.
+    pub fn set_experiment(&mut self, experiment: Option<Experiment>) -> bool {
         match self {
             Panel::Ssd1677 { display, .. } => {
-                display.set_experiment(experiment);
+                display.set_experiment(match experiment {
+                    Some(Experiment::Ssd1677(experiment)) => Some(experiment),
+                    _ => None,
+                });
                 true
             }
-            Panel::UltraChip(_) | Panel::Uc8253(_) => false,
+            Panel::UltraChip(display) => display.set_experiment(match experiment {
+                Some(Experiment::Uc8179(experiment)) => Some(experiment),
+                _ => None,
+            }),
+            Panel::Uc8253(_) => false,
         }
     }
 

@@ -55,6 +55,7 @@ use paperpaw_platform::{FrameView, PixelFormat, Rotation};
 use crate::bands::{self, Window};
 use crate::display::BUSY_TIMEOUT_MS;
 pub use crate::display::{Error, PANEL_HEIGHT, PANEL_WIDTH, Planes, Refresh};
+use crate::waveform::Direct;
 
 /// The screen PaperPaw draws upright (see [`Display::size`] for it
 /// turned).
@@ -95,6 +96,42 @@ mod cmd {
 pub enum Chip {
     Uc8179,
     Uc8279,
+}
+
+/// The frame rates a trial may ask the controller for (the `PLL` register's
+/// codes and what they are in Hz; the datasheet has more, up to 200 Hz, none
+/// is taken above 100 here), the controller's own 50 Hz fourth.
+pub const FRAME_RATES: [(u8, u16); 9] = [
+    (0x03, 20),
+    (0x04, 30),
+    (0x05, 40),
+    (0x06, 50),
+    (0x07, 60),
+    (0x08, 70),
+    (0x09, 80),
+    (0x0A, 90),
+    (0x0B, 100),
+];
+/// The index of the controller's own frame rate in [`FRAME_RATES`].
+pub const OWN_RATE: usize = 3;
+
+/// A way to show fast refreshes other than the panel's own, for trying
+/// waveforms on a device (the waveform lab, `shells/xteink/src/lab.rs`);
+/// UC8179 only. Set with [`Display::set_experiment`]; only fast refreshes
+/// take it (not the first after [`Display::init`] or after grays, which
+/// drive every pixel), so a half or full refresh cleans up after it. The
+/// voltages are the controller's own (the registers' defaults), which are
+/// not set here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Experiment {
+    /// What a pixel that changes is driven with ([`Direct::uc8179_luts`]).
+    pub drive: Direct,
+    /// Which level gives white is turned round ([`Direct::uc8179_luts`]).
+    pub swapped: bool,
+    /// The group's times to repeat, 0 or 1.
+    pub repeat: u8,
+    /// The frame rate, an index of [`FRAME_RATES`].
+    pub rate: usize,
 }
 
 /// Where the frame is kept between refreshes.
@@ -207,6 +244,8 @@ struct Pending {
     /// Leave the partial mode a fast refresh entered.
     partial: bool,
     power_off: bool,
+    /// A trial set another frame rate: the controller's own again.
+    restore_rate: bool,
 }
 
 /// The display, on its SPI device (which selects the chip) and pins.
@@ -238,6 +277,8 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     pending: Option<Pending>,
     /// A band's bytes on their way, without a frame kept.
     buffer: Vec<u8>,
+    /// What fast refreshes are shown with, if not the panel's own.
+    experiment: Option<Experiment>,
 }
 
 impl<SPI, DC, RST, BUSY, D> Display<SPI, DC, RST, BUSY, D>
@@ -277,7 +318,19 @@ where
             rotation: Rotation::Deg0,
             pending: None,
             buffer: Vec::new(),
+            experiment: None,
         }
+    }
+
+    /// Shows fast refreshes as `experiment` says (or the panel's own where
+    /// `None`); `false`, and nothing set, where the controller is not a
+    /// UC8179.
+    pub fn set_experiment(&mut self, experiment: Option<Experiment>) -> bool {
+        if self.chip != Chip::Uc8179 {
+            return false;
+        }
+        self.experiment = experiment;
+        true
     }
 
     /// Keeps the frame rate the controller has from the factory: the X4
@@ -561,6 +614,9 @@ where
             Refresh::Half => {}
             _ => self.fill(cmd::OLD, 0xFF)?,
         }
+        let trial = self
+            .experiment
+            .filter(|_| fast && self.chip == Chip::Uc8179);
         let interval = if fast {
             s.interval_fast
         } else {
@@ -570,7 +626,11 @@ where
         self.command(cmd::CASCADE, &[0x02])?;
         self.command(cmd::TEMPERATURE, &[if fast { 0x5A } else { 0x1E }])?;
         if !s.panel_after_power_on {
-            self.command(cmd::PANEL_SETTING, &s.panel_otp)?;
+            match trial {
+                // Its own waveforms, from the registers (as the grays).
+                Some(trial) => self.load_trial(&trial)?,
+                None => self.command(cmd::PANEL_SETTING, &s.panel_otp)?,
+            }
         }
         if fast {
             self.command(cmd::POWER_OFF_SEQUENCE, &[0x20])?;
@@ -594,7 +654,21 @@ where
         self.pending = Some(Pending {
             partial: fast,
             power_off,
+            restore_rate: trial.is_some_and(|trial| trial.rate != OWN_RATE),
         });
+        Ok(())
+    }
+
+    /// Sets the panel to take its waveforms from the registers, loads
+    /// those of `trial` and its frame rate.
+    fn load_trial(&mut self, trial: &Experiment) -> Result<(), Error> {
+        let s = self.sequences();
+        self.command(cmd::PANEL_SETTING, &s.panel)?;
+        self.load_luts(&trial.drive.uc8179_luts(trial.swapped, trial.repeat))?;
+        let rate = FRAME_RATES[trial.rate.min(FRAME_RATES.len() - 1)].0;
+        if trial.rate != OWN_RATE {
+            self.command(cmd::PLL, &[rate])?;
+        }
         Ok(())
     }
 
@@ -678,6 +752,9 @@ where
         let done = self.wait_ready();
         if pending.partial {
             self.command(cmd::PARTIAL_OUT, &[])?;
+        }
+        if pending.restore_rate {
+            self.command(cmd::PLL, &[FRAME_RATES[OWN_RATE].0])?;
         }
         self.idle_interval()?;
         if let Err(e) = done {
@@ -1082,6 +1159,96 @@ mod tests {
         assert_eq!(c.temperatures, [0x1E, 0x5A]);
         assert!(c.commands.contains(&cmd::PARTIAL_IN));
         assert!(c.commands.contains(&cmd::PARTIAL_OUT));
+    }
+
+    #[test]
+    fn a_trial_loads_its_waveforms_for_a_fast_refresh_and_only_for_that() {
+        let (mut d, c) = display();
+        let band = band_with(0, 0);
+        d.write_rows(0, view(&band, 8), Planes::NEW).unwrap();
+        // The first refresh drives every pixel: no trial.
+        d.set_experiment(Some(Experiment {
+            drive: Direct::new(2, 1),
+            swapped: false,
+            repeat: 0,
+            rate: 4,
+        }));
+        d.refresh(Refresh::Fast, false).unwrap();
+        assert!(c.borrow().last(0x22).is_none());
+        d.refresh(Refresh::Fast, false).unwrap();
+        {
+            let c = c.borrow();
+            // The panel takes its waveforms from the registers, loads the
+            // five, and asks the frame rate (60 Hz, code 7).
+            assert_eq!(c.last(cmd::PANEL_SETTING), Some(&UC8179.panel[..]));
+            for register in [0x20, 0x21, 0x22, 0x23, 0x24] {
+                assert_eq!(c.last(register).map(<[u8]>::len), Some(LUT_LEN));
+            }
+            assert_eq!(
+                c.last(0x22).map(|d| d[..6].to_vec()),
+                Some(vec![0b01_10_00_00, 1, 2, 0, 0, 0])
+            );
+            // Asked, and the controller's own (50 Hz, code 6) given back
+            // once the refresh ended.
+            let rates: Vec<u8> = c
+                .log
+                .iter()
+                .filter(|(command, _)| *command == cmd::PLL)
+                .map(|(_, data)| data[0])
+                .collect();
+            assert_eq!(rates, [0x07, 0x06]);
+        }
+        // A half refresh after it is the panel's own again.
+        let before = c.borrow().log.len();
+        d.refresh(Refresh::Half, false).unwrap();
+        let c = c.borrow();
+        let after: Vec<&(u8, Vec<u8>)> = c.log[before..].iter().collect();
+        assert!(
+            after
+                .iter()
+                .all(|(command, _)| !(0x20..=0x24).contains(command))
+        );
+        assert!(
+            after
+                .iter()
+                .any(|(command, data)| *command == cmd::PANEL_SETTING && data == &UC8179.panel_otp)
+        );
+    }
+
+    #[test]
+    fn the_own_frame_rate_is_not_asked_and_other_rates_are_given_back() {
+        let (mut d, c) = display();
+        let band = band_with(0, 0);
+        d.write_rows(0, view(&band, 8), Planes::NEW).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        let trial = |rate| Experiment {
+            drive: Direct::new(1, 0),
+            swapped: false,
+            repeat: 0,
+            rate,
+        };
+        d.set_experiment(Some(trial(OWN_RATE)));
+        d.refresh(Refresh::Fast, false).unwrap();
+        let plls = |c: &Controller| {
+            c.log
+                .iter()
+                .filter(|(command, _)| *command == cmd::PLL)
+                .count()
+        };
+        let at_start = plls(&c.borrow());
+        d.set_experiment(Some(trial(8)));
+        d.refresh(Refresh::Fast, false).unwrap();
+        // Asked, then given back: the controller's own again.
+        assert_eq!(plls(&c.borrow()), at_start + 2);
+        assert_eq!(c.borrow().last(cmd::PLL), Some(&[0x06][..]));
+    }
+
+    #[test]
+    fn only_a_uc8179_takes_a_trial() {
+        let (mut d, _) = display_of(Chip::Uc8279, Frame::Kept);
+        assert!(!d.set_experiment(None));
+        let (mut d, _) = display();
+        assert!(d.set_experiment(None));
     }
 
     /// A gray band of the upright screen, white but for its first four

@@ -62,6 +62,15 @@ pub const fn ordered(fast: Option<Direct>, mono: Direct) -> (Option<Direct>, Dir
     (fast, mono)
 }
 
+/// The UC8179's waveform registers: VCOM, then white to white, black to
+/// white, white to black and black to black (UC8179c datasheet, R20H to
+/// R24H).
+const UC8179_REGISTERS: [u8; 5] = [0x20, 0x21, 0x22, 0x23, 0x24];
+/// The UC8179's levels for a source in a phase: ground, VDH, VDL.
+const GND: u8 = 0b00;
+const VDH: u8 = 0b01;
+const VDL: u8 = 0b10;
+
 /// What a phase does to a pixel.
 const BLACK: u8 = 0b01;
 const WHITE: u8 = 0b10;
@@ -131,6 +140,52 @@ impl Direct {
         self.frames + self.kick
     }
 
+    /// The drive as the UC8179's waveform registers take it (black and white
+    /// mode, `uc8179::Display`): rows of a register's number and 12 bytes,
+    /// two groups of six (levels of the four phases, the frames of each,
+    /// times to repeat), as `uc8179::GRAY_LUTS` has them; the rest of a
+    /// register is zero. Only the first group has a drive: for a pixel
+    /// that changes, `kick` frames of the other level then `frames`
+    /// frames of its new one; the VCOM stays at its DC value for as many
+    /// frames; white to white and black to black are not driven.
+    ///
+    /// Which of VDH and VDL gives white is the one thing not read in the
+    /// datasheet: the stock gray waveform lightens with VDL, so
+    /// black to white is driven with VDL, white to black with VDH;
+    /// `swapped` turns that round, should the picture come out the wrong
+    /// way. `repeat` is the group's times to repeat (0 or 1; the
+    /// datasheet says "0: 0 time").
+    pub fn uc8179_luts(&self, swapped: bool, repeat: u8) -> [[u8; 13]; 5] {
+        let repeat = if repeat > 1 { 1 } else { repeat };
+        let (to_white, to_black) = if swapped { (VDH, VDL) } else { (VDL, VDH) };
+        let drive = |new: u8, other: u8| {
+            let kick = if self.kick > 0 { other } else { GND };
+            (kick << 6) | (new << 4)
+        };
+        let group = |level: u8| {
+            let mut row = [0u8; 12];
+            row[0] = level;
+            row[1] = self.kick;
+            row[2] = self.frames;
+            row[5] = repeat;
+            row
+        };
+        let none = [0u8; 12];
+        let rows = [
+            group(0x00),
+            none,
+            group(drive(to_white, to_black)),
+            group(drive(to_black, to_white)),
+            none,
+        ];
+        let mut luts = [[0u8; 13]; 5];
+        for (lut, (register, row)) in luts.iter_mut().zip(UC8179_REGISTERS.into_iter().zip(rows)) {
+            lut[0] = register;
+            lut[1..].copy_from_slice(&row);
+        }
+        luts
+    }
+
     /// The waveform table: the stock gray waveform's, with everything but
     /// the changing pixels' first phase group cleared.
     pub fn lut(&self) -> [u8; LUT_LEN] {
@@ -191,6 +246,40 @@ mod tests {
         assert_eq!(mono.total_frames(), FAST_MOST_FRAMES);
         let (_, mono) = ordered(None, Direct::new(1, 0));
         assert_eq!((mono.frames(), mono.kick()), (1, 0));
+    }
+
+    #[test]
+    fn the_uc8179_gets_a_group_for_each_change_and_the_vcom() {
+        let luts = Direct::new(4, 1).uc8179_luts(false, 0);
+        let registers = luts.map(|lut| lut[0]);
+        assert_eq!(registers, [0x20, 0x21, 0x22, 0x23, 0x24]);
+        // VCOM at its DC value for as many frames as the drive.
+        assert_eq!(luts[0][1..7], [0x00, 1, 4, 0, 0, 0]);
+        // Black to white: a kick of VDH, then VDL; white to black the other
+        // way; the pixels that stay are not driven.
+        assert_eq!(luts[2][1..7], [0b01_10_00_00, 1, 4, 0, 0, 0]);
+        assert_eq!(luts[3][1..7], [0b10_01_00_00, 1, 4, 0, 0, 0]);
+        assert!(luts[1][1..].iter().all(|&b| b == 0), "white stays white");
+        assert!(luts[4][1..].iter().all(|&b| b == 0), "black stays black");
+        // The second group has nothing in it.
+        assert!(luts.iter().all(|lut| lut[7..].iter().all(|&b| b == 0)));
+    }
+
+    #[test]
+    fn the_uc8179_without_a_kick_drives_the_new_colour_alone() {
+        let luts = Direct::new(1, 0).uc8179_luts(false, 0);
+        assert_eq!(luts[2][1..7], [0b00_10_00_00, 0, 1, 0, 0, 0]);
+        assert_eq!(luts[3][1..7], [0b00_01_00_00, 0, 1, 0, 0, 0]);
+    }
+
+    #[test]
+    fn swapping_turns_the_levels_round_and_repeat_is_one_at_most() {
+        let normal = Direct::new(3, 0).uc8179_luts(false, 0);
+        let swapped = Direct::new(3, 0).uc8179_luts(true, 5);
+        assert_eq!(swapped[2][1], normal[3][1]);
+        assert_eq!(swapped[3][1], normal[2][1]);
+        assert_eq!(swapped[2][6], 1);
+        assert_eq!(normal[2][6], 0);
     }
 
     #[test]
