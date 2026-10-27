@@ -48,6 +48,14 @@ change the plugin SDK.
   for the next or previous chapter is now off by default and can be
   switched on in the settings under Controls ("Hold for next chapter",
   an advanced setting).
+### Changed
+
+- Rules: the list to choose an action, a switch or a number from comes by
+  plugin where it is longer than a page (some six pages of actions on the
+  X4): first the plugins, with how many each brings, then its own, and
+  back goes out of a plugin again. Every action stays on offer, also those
+  that work on the screen shown.
+
 ### Fixed
 
 - On the X4 and X4 Pro, what plugins do on waking now happens: *When the
