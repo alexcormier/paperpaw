@@ -25,6 +25,9 @@ pub(super) struct InFlight {
     /// When it began to be drawn, and when its refresh started.
     started: Instant,
     drawn: Instant,
+    /// Whether what was sent goes again into both memories once it is
+    /// shown: not where the panel's driver keeps the frame.
+    send_again: bool,
     /// What was sent, for both memories once it is shown.
     sent: Sent,
     written: Check,
@@ -54,6 +57,8 @@ impl Firmware {
         let refresh = if stale { Refresh::Half } else { Refresh::Fast };
         let planes = if stale { Planes::BOTH } else { Planes::NEW };
         let started = now();
+        // A driver that keeps the frame needs nothing sent again.
+        let send_again = !self.panel.keeps_frame();
         let mut sent = Sent::new(heap_free);
         let mut written = Check::default();
         let mut failed = None;
@@ -62,8 +67,10 @@ impl Firmware {
             if let Err(e) = panel.write_rows(top, rows, planes) {
                 failed = Some(e);
             }
-            written.add(top, &rows);
-            sent.keep(top, &rows);
+            if send_again {
+                written.add(top, &rows);
+                sent.keep(top, &rows);
+            }
         });
         let drawn = now();
         self.kernel.showing(drawn);
@@ -79,6 +86,7 @@ impl Firmware {
             refresh,
             started,
             drawn,
+            send_again,
             sent,
             written,
         });
@@ -139,8 +147,22 @@ impl Firmware {
             ms(took),
             shown,
         );
-        // As after every refresh: both memories hold the frame shown,
-        // sent again as kept, or drawn anew where nothing changed since.
+        if frame.send_again {
+            self.send_again(&mut frame);
+        }
+        debug!(
+            "paced frame {},{} {}x{}: drawn in {} ms, shown in {took} ms",
+            frame.area.x,
+            frame.area.y,
+            frame.area.width,
+            frame.area.height,
+            frame.drawn.since(frame.started)
+        );
+    }
+
+    /// As after every refresh: both memories hold the frame shown, sent
+    /// again as kept, or drawn anew where nothing changed since.
+    fn send_again(&mut self, frame: &mut InFlight) {
         let mut again_written = Check::default();
         let panel = &mut self.panel;
         let mut again = |top: u16, rows: FrameView<'_>| {
@@ -158,13 +180,5 @@ impl Firmware {
             self.state.frame_stale = true;
             warn!("paced frame not kept: the next one is shown whole");
         }
-        debug!(
-            "paced frame {},{} {}x{}: drawn in {} ms, shown in {took} ms",
-            frame.area.x,
-            frame.area.y,
-            frame.area.width,
-            frame.area.height,
-            frame.drawn.since(frame.started)
-        );
     }
 }

@@ -12,6 +12,12 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- Page turns finish sooner: the X4 Pro and X4 Classic no longer send each
+  frame a second time after its refresh, and released firmware no longer
+  checks every frame it sends.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added
