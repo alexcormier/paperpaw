@@ -264,15 +264,21 @@ pub(crate) fn draw_row_icon(
     icon: Option<&str>,
     ink: Color,
 ) -> Rect {
-    if let Some(icon) = icon.filter(|_| room > 0) {
+    // Looked up once, for its ink and its drawing.
+    if let Some((font, ch)) = icon
+        .filter(|_| room > 0)
+        .and_then(|name| self::icon(env, name))
+    {
         let size = style.text * ICON_SCALE;
+        let mut text = [0u8; 4];
+        let text = ch.encode_utf8(&mut text);
         // Centred by its ink in a column as wide as the icons are high:
         // icons drawn with more room on one side line up with the others.
         let column = f32::from(rect.x) + style.margin as f32;
-        let x = icon_ink(env, icon, size).map_or(column, |(left, right)| {
+        let x = font.ink_across(size, text).map_or(column, |(left, right)| {
             column + (size - (right - left) as f32) / 2.0 - left as f32
         });
-        draw_icon(canvas, env, icon, size, x, rect, ink);
+        draw_text(canvas, &font, size, x, rect, text, ink);
     }
     Rect::new(
         rect.x + room,
