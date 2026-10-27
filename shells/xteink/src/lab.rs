@@ -19,8 +19,9 @@
 //!
 //! On a UC8179 (the X4 Pro) the direct drive has more: the frame rate
 //! (the controller's `PLL` register, 20 to 100 Hz, its own 50), the group's
-//! repeat (0 or 1: the datasheet says "0: 0 time", so if nothing changes
-//! at 0, try 1), and the levels of white and black, assumed from the stock
+//! repeat (0 or 1; the datasheet says "0: 0 time", which may mean that the
+//! group does not run at all, and then nothing is driven and the ghosts
+//! pile up; the stock gray waveforms use 1, which the lab starts at), and the levels of white and black, assumed from the stock
 //! gray waveform and turned round if the picture comes out the wrong way.
 //!
 //! The rows are the ordinary ones: a setting each (developer group, so they
@@ -106,7 +107,7 @@ pub static SETTINGS: [SettingSpec; 7] = [
         0,
         groups::DEVELOPER,
     ),
-    SettingSpec::number(REPEAT, "x4.lab.repeat", 0, 1, 0, groups::DEVELOPER),
+    SettingSpec::number(REPEAT, "x4.lab.repeat", 0, 1, 1, groups::DEVELOPER),
     SettingSpec::number(
         RATE,
         "x4.lab.rate",
