@@ -358,7 +358,10 @@ fn balanced_paragraph(
     // Spaces at the start are dropped, as a line's are.
     let paragraph = &text[range.clone()];
     let start = range.start + (paragraph.len() - paragraph.trim_start_matches(' ').len());
-    let mut breaks: Vec<Break> = Vec::new();
+    // A break after each run of spaces, the first and the last: room for
+    // most, without growing the list step by step.
+    let spaces = paragraph.bytes().filter(|&b| b == b' ').count();
+    let mut breaks: Vec<Break> = Vec::with_capacity(spaces.min(MAX_BREAKS) + 2);
     let at = |end: usize, next: usize, to_end: f32, to_next: f32, hyphen: f32| Break {
         end: end as u16,
         next: next as u16,
@@ -420,7 +423,11 @@ fn balanced_paragraph(
         points(&mut breaks, word..range.end, x_word);
     }
     // Hyphenation points came after the word's start; keep the order.
-    breaks.sort_by_key(|b| (b.end, b.next));
+    // No two breaks share `(end, next)`: a hyphenation point is between
+    // two letters, a dash's break after the dash, and a space's break
+    // ends before its spaces and goes on after them. A point given twice
+    // makes two equal breaks. So sorting in place gives the same order.
+    breaks.sort_unstable_by_key(|b| (b.end, b.next));
     let last = breaks.len();
     breaks.push(at(range.end, range.end, x, x, 0.0));
     if breaks.len() > MAX_BREAKS {
