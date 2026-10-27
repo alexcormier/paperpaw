@@ -110,17 +110,17 @@ fn hash(name: &[u8]) -> u32 {
     })
 }
 
-/// The CRC-32 of ZIP entries, over `data` continuing `crc`. Half a byte
-/// at a time: its table takes 64 bytes, a quarter of the work of going
-/// bit by bit.
+/// The CRC-32 of ZIP entries, over `data` continuing `crc`. A byte at a
+/// time: its table takes 1 KiB of flash, made when compiling, for half
+/// the work of going half a byte at a time.
 fn crc32(crc: u32, data: &[u8]) -> u32 {
-    const TABLE: [u32; 16] = {
-        let mut table = [0; 16];
+    const TABLE: [u32; 256] = {
+        let mut table = [0; 256];
         let mut i = 0;
-        while i < 16 {
+        while i < 256 {
             let mut crc = i as u32;
             let mut bit = 0;
-            while bit < 4 {
+            while bit < 8 {
                 crc = if crc & 1 == 1 {
                     (crc >> 1) ^ 0xedb8_8320
                 } else {
@@ -135,9 +135,7 @@ fn crc32(crc: u32, data: &[u8]) -> u32 {
     };
     let mut crc = !crc;
     for &byte in data {
-        crc ^= u32::from(byte);
-        crc = (crc >> 4) ^ TABLE[(crc & 0x0f) as usize];
-        crc = (crc >> 4) ^ TABLE[(crc & 0x0f) as usize];
+        crc = (crc >> 8) ^ TABLE[((crc ^ u32::from(byte)) & 0xff) as usize];
     }
     !crc
 }
@@ -1002,6 +1000,25 @@ mod tests {
     fn crc32_matches_zip() {
         assert_eq!(crc32(0, b"123456789"), 0xcbf4_3926);
         assert_eq!(crc32(crc32(0, b"1234"), b"56789"), 0xcbf4_3926);
+        assert_eq!(crc32(0, b""), 0);
+        assert_eq!(
+            crc32(0, b"The quick brown fox jumps over the lazy dog"),
+            0x414f_a339
+        );
+        // As going bit by bit, over every byte value.
+        let data: Vec<u8> = (0..=255u8).cycle().take(1000).collect();
+        let mut bitwise = !0u32;
+        for &byte in &data {
+            bitwise ^= u32::from(byte);
+            for _ in 0..8 {
+                bitwise = if bitwise & 1 == 1 {
+                    (bitwise >> 1) ^ 0xedb8_8320
+                } else {
+                    bitwise >> 1
+                };
+            }
+        }
+        assert_eq!(crc32(0, &data), !bitwise);
     }
 
     #[test]
