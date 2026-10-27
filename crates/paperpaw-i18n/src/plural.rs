@@ -74,7 +74,12 @@ impl PluralRule {
     pub fn category(self, count: i64) -> PluralCategory {
         use PluralCategory::{Few, Many, One, Other};
         let n = count.unsigned_abs();
-        let (mod10, mod100) = (n % 10, n % 100);
+        // Only the rules that need them divide: a division of 64 bits is
+        // a call on small devices.
+        let few = || {
+            let (mod10, mod100) = (n % 10, n % 100);
+            (2..=4).contains(&mod10) && !(12..=14).contains(&mod100)
+        };
         match self {
             PluralRule::Other => Other,
             PluralRule::OneOther => {
@@ -92,9 +97,9 @@ impl PluralRule {
                 }
             }
             PluralRule::EastSlavic => {
-                if mod10 == 1 && mod100 != 11 {
+                if n % 10 == 1 && n % 100 != 11 {
                     One
-                } else if (2..=4).contains(&mod10) && !(12..=14).contains(&mod100) {
+                } else if few() {
                     Few
                 } else {
                     Many
@@ -103,7 +108,7 @@ impl PluralRule {
             PluralRule::Polish => {
                 if n == 1 {
                     One
-                } else if (2..=4).contains(&mod10) && !(12..=14).contains(&mod100) {
+                } else if few() {
                     Few
                 } else {
                     Many
