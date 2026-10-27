@@ -14,7 +14,12 @@ change the plugin SDK.
   which leave more ghosting that the next full refresh clears. It is
   *Quicker, some ghosting* (6 frames) by default; page turns are as before.
   Black-and-white refreshes (screens that ask for `fastest`, such as games)
-  take about 100 ms, with 1 frame.
+  take about 100 ms, with 1 frame. The frames and the kick of both are
+  settings of the developer group (`x4.fast-frames`, `x4.fast-kick`,
+  `x4.mono-frames`, `x4.mono-kick`; the fast ones where *Fast changes* is
+  *Own values*), so a plugin without code can set them in its `settings.ini`
+  or by an action; the firmware keeps them in the order of the modes (fast
+  at most 20 frames, black and white no more than fast).
 
 ### Added
 
