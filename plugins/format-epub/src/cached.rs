@@ -27,8 +27,33 @@ pub(crate) fn u32_at(storage: &dyn Storage, path: &str, offset: u64) -> Result<u
     Ok(u32::from_le_bytes(buf))
 }
 
+/// An index entry as stored.
+type Entry = [u8; INDEX as usize];
+
+/// Index entry `i` of a chapter and the start of the next one, if there
+/// is one, read at once as they lie side by side; `None` where fewer
+/// bytes came back (then they are read one by one, as that tells).
+fn entry_and_next(
+    storage: &dyn Storage,
+    paths: &CachePaths,
+    blocks: u32,
+    i: u32,
+) -> Result<Option<(Entry, Option<u32>)>, StorageError> {
+    let mut both = [0u8; INDEX as usize + 4];
+    let has_next = i + 1 < blocks;
+    let want = if has_next { both.len() } else { INDEX as usize };
+    let read = storage.read_at(&paths.index, u64::from(i * INDEX), &mut both[..want])?;
+    if read < want {
+        return Ok(None);
+    }
+    let mut entry: Entry = [0; INDEX as usize];
+    entry.copy_from_slice(&both[..INDEX as usize]);
+    let next = has_next.then(|| u32::from_le_bytes([both[16], both[17], both[18], both[19]]));
+    Ok(Some((entry, next)))
+}
+
 /// Reads block `i` of a chapter.
-pub(crate) fn read_block(
+fn read_block(
     storage: &dyn Storage,
     paths: &CachePaths,
     length: u32,
@@ -36,14 +61,31 @@ pub(crate) fn read_block(
     i: u32,
     color: bool,
 ) -> Result<Block, DocumentError> {
-    let mut entry = [0u8; INDEX as usize];
-    storage.read_at(&paths.index, u64::from(i * INDEX), &mut entry)?;
-    let start = u32::from_le_bytes([entry[0], entry[1], entry[2], entry[3]]);
-    let end = if i + 1 < blocks {
-        u32_at(storage, &paths.index, u64::from((i + 1) * INDEX))?
-    } else {
-        length
+    let (entry, end) = match entry_and_next(storage, paths, blocks, i)? {
+        Some((entry, next)) => (entry, next.unwrap_or(length)),
+        None => {
+            let mut entry = [0u8; INDEX as usize];
+            storage.read_at(&paths.index, u64::from(i * INDEX), &mut entry)?;
+            let end = if i + 1 < blocks {
+                u32_at(storage, &paths.index, u64::from((i + 1) * INDEX))?
+            } else {
+                length
+            };
+            (entry, end)
+        }
     };
+    read_entry(storage, paths, entry, end, color)
+}
+
+/// Reads the block of index entry `entry`, ending at `end`.
+fn read_entry(
+    storage: &dyn Storage,
+    paths: &CachePaths,
+    entry: Entry,
+    end: u32,
+    color: bool,
+) -> Result<Block, DocumentError> {
+    let start = u32::from_le_bytes([entry[0], entry[1], entry[2], entry[3]]);
     let mut header = [0u8; HEADER as usize];
     let at =
         start
@@ -60,9 +102,11 @@ pub(crate) fn read_block(
             "cache record",
         )));
     }
-    let mut text = alloc::vec![0u8; len];
+    // The text and its runs after it, read at once.
+    let runs_len = run_count * convert::RUN;
+    let mut text = alloc::vec![0u8; len + runs_len];
     let mut filled = 0;
-    while filled < len {
+    while filled < text.len() {
         let n = storage.read_at(
             &paths.text,
             u64::from(start) + filled as u64,
@@ -73,24 +117,24 @@ pub(crate) fn read_block(
         }
         filled += n;
     }
-    text.truncate(filled);
-    let mut runs = Vec::new();
-    if run_count > 0 {
-        let mut data = alloc::vec![0u8; run_count * convert::RUN];
-        let read = storage.read_at(&paths.text, u64::from(start) + len as u64, &mut data)?;
-        runs = data[..read]
-            .as_chunks::<{ convert::RUN }>()
-            .0
-            .iter()
-            .map(|r| Run {
-                start: u32::from(u16::from_le_bytes([r[0], r[1]])),
-                end: u32::from(u16::from_le_bytes([r[2], r[3]])),
-                style: TextStyle::from_bits(u16::from_le_bytes([r[4], r[5]])),
-            })
-            .collect();
-    }
+    let runs = text
+        .get(len..filled)
+        .unwrap_or_default()
+        .as_chunks::<{ convert::RUN }>()
+        .0
+        .iter()
+        .map(|r| Run {
+            start: u32::from(u16::from_le_bytes([r[0], r[1]])),
+            end: u32::from(u16::from_le_bytes([r[2], r[3]])),
+            style: TextStyle::from_bits(u16::from_le_bytes([r[4], r[5]])),
+        })
+        .collect();
+    text.truncate(filled.min(len));
+    // The block keeps its text, not the room the runs took.
+    text.shrink_to_fit();
     let mut kind = convert::decode_kind(header[0], header[1]);
-    let mut text = String::from_utf8_lossy(&text).into_owned();
+    let mut text = String::from_utf8(text)
+        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned());
     let mut image = None;
     if kind == BlockKind::Image {
         // `cache name<TAB>alternative text`, the picture in either kind,
@@ -142,11 +186,22 @@ pub(crate) fn block_at(
         }
         Ok(u32_at(storage, &paths.index, u64::from(block * INDEX))?)
     };
-    // The block after the last one, or the last one again.
+    // The block after the last one, or the last one again: its entry and
+    // the next start read at once, and kept for reading the block.
     let mut found = None;
     if let Some(before) = *last {
         for block in [before + 1, before] {
-            if block < blocks && start(block)? <= offset && offset < start(block + 1)? {
+            if block >= blocks {
+                continue;
+            }
+            if let Some((entry, next)) = entry_and_next(storage, paths, blocks, block)? {
+                let from = u32::from_le_bytes([entry[0], entry[1], entry[2], entry[3]]);
+                if from <= offset && offset < next.unwrap_or(u32::MAX) {
+                    *last = Some(block);
+                    return read_entry(storage, paths, entry, next.unwrap_or(length), color)
+                        .map(Some);
+                }
+            } else if start(block)? <= offset && offset < start(block + 1)? {
                 found = Some(block);
                 break;
             }
