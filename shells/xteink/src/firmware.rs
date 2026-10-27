@@ -988,8 +988,7 @@ impl Firmware {
         #[cfg(feature = "x4")]
         {
             let experiment = if refresh == Refresh::Fast {
-                let chosen = self.kernel.settings().read(&device::FAST_REFRESH);
-                fast_waveform(mode, chosen, self.kernel.active_screen())
+                fast_waveform(mode, self.kernel.settings(), self.kernel.active_screen())
             } else {
                 None
             };
@@ -1060,47 +1059,60 @@ impl Firmware {
 /// The waveform of a fast refresh on the X4: the waveform lab's own while
 /// it is open, else a direct drive of a few frames for the modes that ask
 /// for speed: `RefreshMode::Fast` (menus, focus moved, small changes; the
-/// setting says how many frames, 4 in about 160 ms, or the panel's own), `RefreshMode::Mono` (what a screen with
-/// `ScreenMode::fastest` gets: games, pen strokes) in about 100 ms, where
-/// the panel's own fast waveform takes 500 ms. They leave ghosts that the
-/// next full refresh clears. Partial refreshes (pages) keep the panel's own.
+/// setting *Fast changes* says how, 4 to 8 frames in about 160 to 240 ms, or
+/// the panel's own, about 500 ms) and `RefreshMode::Mono` (what a screen with
+/// `ScreenMode::fastest` gets: games, pen strokes; 1 frame in about 100 ms by
+/// default), where the panel's own fast waveform takes 500 ms. They leave
+/// ghosts that the next full refresh clears. Partial refreshes (pages) keep
+/// the panel's own. The numbers are kept in the order the modes have
+/// (`waveform::ordered`).
 #[cfg(feature = "x4")]
 fn fast_waveform(
     mode: RefreshMode,
-    chosen: &str,
+    settings: &paperpaw_sdk::Settings,
     active: Option<&paperpaw_sdk::Id>,
 ) -> Option<paperpaw_x4::display::Experiment> {
+    use paperpaw_x4::waveform::{Direct, ordered};
     #[cfg(feature = "waveform-lab")]
     if crate::lab::is_open(active) {
         return crate::lab::experiment(active);
     }
     let _ = active;
-    let frames = match mode {
-        RefreshMode::Mono => MONO_FRAMES,
-        RefreshMode::Fast => match chosen {
-            device::FAST_CLEAN => CLEAN_FRAMES,
-            device::FAST_BALANCED => BALANCED_FRAMES,
-            device::FAST_QUICK => QUICK_FRAMES,
-            _ => return None,
-        },
-        _ => return None,
+    if !matches!(mode, RefreshMode::Fast | RefreshMode::Mono) {
+        return None;
+    }
+    let number = |setting: &paperpaw_sdk::setting::Setting<i64>| {
+        u8::try_from(settings.read(setting).clamp(0, 255)).unwrap_or(u8::MAX)
     };
-    Some(paperpaw_x4::display::Experiment::Direct(
-        paperpaw_x4::waveform::Direct::new(frames, 0),
-    ))
+    let fast = match settings.read(&device::FAST_REFRESH) {
+        device::FAST_CLEAN => Some(Direct::new(CLEAN_FRAMES, 0)),
+        device::FAST_BALANCED => Some(Direct::new(BALANCED_FRAMES, 0)),
+        device::FAST_QUICK => Some(Direct::new(QUICK_FRAMES, 0)),
+        device::FAST_CUSTOM => Some(Direct::new(
+            number(&device::FAST_FRAMES),
+            number(&device::FAST_KICK),
+        )),
+        _ => None,
+    };
+    let mono = Direct::new(number(&device::MONO_FRAMES), number(&device::MONO_KICK));
+    let (fast, mono) = ordered(fast, mono);
+    let drive = if mode == RefreshMode::Mono {
+        Some(mono)
+    } else {
+        fast
+    };
+    drive.map(paperpaw_x4::display::Experiment::Direct)
 }
 
-/// Frames a refresh drives a changed pixel, no kick (tried in the waveform
-/// lab): in fast ones, by the setting `x4.fast-refresh` (more frames leave
-/// less ghosting), and in black and white ones.
+/// Frames a fast refresh drives a changed pixel, no kick (tried in the waveform
+/// lab), by the steps of the setting `x4.fast-refresh`: more frames leave
+/// less ghosting.
 #[cfg(feature = "x4")]
 const CLEAN_FRAMES: u8 = 8;
 #[cfg(feature = "x4")]
 const BALANCED_FRAMES: u8 = 6;
 #[cfg(feature = "x4")]
 const QUICK_FRAMES: u8 = 4;
-#[cfg(feature = "x4")]
-const MONO_FRAMES: u8 = 1;
 
 /// The heap's free bytes, for keeping what was sent.
 fn heap_free() -> usize {

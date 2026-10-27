@@ -25,6 +25,19 @@ pub const RESPONSE_FASTER: &str = "x4.button-response.faster";
 /// waveform, or a quicker one with more or less ghosting (see `firmware`).
 #[cfg(feature = "x4")]
 pub const FAST_REFRESH: Setting<paperpaw_sdk::setting::Text> = Setting::new("x4.fast-refresh");
+/// The frames and the kick of a fast refresh, used where [`FAST_REFRESH`] is
+/// [`FAST_CUSTOM`]; and of a black-and-white refresh, the one screens get that
+/// ask for the fastest (games), always. A data plugin sets them in its
+/// `settings.ini` or by an action (see `waveform::ordered` for how they are
+/// kept in order).
+#[cfg(feature = "x4")]
+pub const FAST_FRAMES: Setting<i64> = Setting::new("x4.fast-frames");
+#[cfg(feature = "x4")]
+pub const FAST_KICK: Setting<i64> = Setting::new("x4.fast-kick");
+#[cfg(feature = "x4")]
+pub const MONO_FRAMES: Setting<i64> = Setting::new("x4.mono-frames");
+#[cfg(feature = "x4")]
+pub const MONO_KICK: Setting<i64> = Setting::new("x4.mono-kick");
 /// The choices of [`FAST_REFRESH`], the slowest and cleanest first.
 #[cfg(feature = "x4")]
 pub const FAST_PANEL: &str = "x4.fast-refresh.panel";
@@ -34,6 +47,9 @@ pub const FAST_CLEAN: &str = "x4.fast-refresh.clean";
 pub const FAST_BALANCED: &str = "x4.fast-refresh.balanced";
 #[cfg(feature = "x4")]
 pub const FAST_QUICK: &str = "x4.fast-refresh.quick";
+/// The frames and the kick of [`FAST_FRAMES`] and [`FAST_KICK`].
+#[cfg(feature = "x4")]
+pub const FAST_CUSTOM: &str = "x4.fast-refresh.custom";
 /// The X4 Pro's front light: how bright, in percent (0 off).
 #[cfg_attr(
     not(feature = "x4-pro"),
@@ -72,14 +88,52 @@ static SETTINGS: [SettingSpec; 2] = [
 
 /// How fast changes are shown.
 #[cfg(feature = "x4")]
-static FAST_SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
-    FAST_REFRESH.static_str(),
-    "x4.fast-refresh",
-    &[FAST_PANEL, FAST_CLEAN, FAST_BALANCED, FAST_QUICK],
-    FAST_BALANCED,
-    groups::DISPLAY,
-)
-.description("x4.fast-refresh.help")];
+static FAST_SETTINGS: [SettingSpec; 5] = [
+    SettingSpec::choice(
+        FAST_REFRESH.static_str(),
+        "x4.fast-refresh",
+        &[FAST_PANEL, FAST_CLEAN, FAST_BALANCED, FAST_QUICK, FAST_CUSTOM],
+        FAST_BALANCED,
+        groups::DISPLAY,
+    )
+    .description("x4.fast-refresh.help"),
+    SettingSpec::number(
+        FAST_FRAMES.static_str(),
+        "x4.fast-frames",
+        1,
+        30,
+        6,
+        groups::DEVELOPER,
+    )
+    .description("x4.fast-frames.help"),
+    SettingSpec::number(
+        FAST_KICK.static_str(),
+        "x4.fast-kick",
+        0,
+        3,
+        0,
+        groups::DEVELOPER,
+    )
+    .description("x4.fast-kick.help"),
+    SettingSpec::number(
+        MONO_FRAMES.static_str(),
+        "x4.mono-frames",
+        1,
+        30,
+        1,
+        groups::DEVELOPER,
+    )
+    .description("x4.mono-frames.help"),
+    SettingSpec::number(
+        MONO_KICK.static_str(),
+        "x4.mono-kick",
+        0,
+        3,
+        0,
+        groups::DEVELOPER,
+    )
+    .description("x4.mono-kick.help"),
+];
 
 /// The X4 Pro's front light, set with sliders: how bright in single
 /// percents, so that `−` and `+` set the dim end finely (see `light`), its

@@ -37,6 +37,31 @@ pub const MAX_FRAMES: u8 = 30;
 /// The most frames of the opposite colour a kick drives first.
 pub const MAX_KICK: u8 = 3;
 
+/// The most frames, the kick's too, a fast refresh may drive when it is a
+/// direct drive: about as long as the panel's own fast refresh (about 500
+/// ms), so that fast stays faster than the partial refresh of a page. An
+/// estimate, from about 80 ms and 20 ms a frame in the owner's two
+/// readings (1 frame 100 ms, 4 frames 160 ms), not a measurement of this
+/// many frames.
+pub const FAST_MOST_FRAMES: u8 = 20;
+
+/// The direct drives of the fast and of the black-and-white refreshes
+/// (`fast` is `None` where the panel's own waveform shows fast changes),
+/// brought into the order the modes have, slowest and cleanest to fastest
+/// and dirtiest: fast no longer than [`FAST_MOST_FRAMES`], black and white
+/// no longer than fast.
+pub const fn ordered(fast: Option<Direct>, mono: Direct) -> (Option<Direct>, Direct) {
+    let fast = match fast {
+        Some(drive) => Some(drive.within(FAST_MOST_FRAMES)),
+        None => None,
+    };
+    let mono = match fast {
+        Some(fast) => mono.within(fast.total_frames()),
+        None => mono.within(FAST_MOST_FRAMES),
+    };
+    (fast, mono)
+}
+
 /// What a phase does to a pixel.
 const BLACK: u8 = 0b01;
 const WHITE: u8 = 0b10;
@@ -83,6 +108,24 @@ impl Direct {
         self.kick
     }
 
+    /// The drive cut to `most` frames in all (at least 1), the kick's
+    /// too: the kick first, if it takes more than all but one.
+    pub const fn within(&self, most: u8) -> Self {
+        let most = if most < 1 { 1 } else { most };
+        let kick = if self.kick > most - 1 {
+            most - 1
+        } else {
+            self.kick
+        };
+        let room = most - kick;
+        let frames = if self.frames > room {
+            room
+        } else {
+            self.frames
+        };
+        Self { frames, kick }
+    }
+
     /// Frames the drive lasts in all, the kick's too.
     pub const fn total_frames(&self) -> u8 {
         self.frames + self.kick
@@ -119,6 +162,35 @@ mod tests {
     /// The drive of phase `phase` (0 is A) of waveform `lut` in group 0.
     fn drive(table: &[u8; LUT_LEN], lut: usize, phase: usize) -> u8 {
         (table[VS + lut * 10] >> (6 - 2 * phase)) & 0b11
+    }
+
+    #[test]
+    fn a_drive_is_cut_to_its_most_frames_the_kick_first() {
+        let cut = Direct::new(10, 3).within(6);
+        assert_eq!((cut.frames(), cut.kick()), (3, 3));
+        let cut = Direct::new(10, 3).within(2);
+        assert_eq!((cut.frames(), cut.kick()), (1, 1));
+        let cut = Direct::new(10, 0).within(0);
+        assert_eq!((cut.frames(), cut.kick()), (1, 0));
+        let same = Direct::new(4, 1).within(8);
+        assert_eq!((same.frames(), same.kick()), (4, 1));
+    }
+
+    #[test]
+    fn modes_keep_their_order() {
+        // Fast is cut; black and white never takes longer than fast.
+        let (fast, mono) = ordered(Some(Direct::new(30, 3)), Direct::new(30, 0));
+        assert_eq!(fast.unwrap().total_frames(), FAST_MOST_FRAMES);
+        assert_eq!(mono.total_frames(), FAST_MOST_FRAMES);
+        let (fast, mono) = ordered(Some(Direct::new(2, 0)), Direct::new(5, 1));
+        assert_eq!(fast.unwrap().total_frames(), 2);
+        assert_eq!(mono.total_frames(), 2);
+        // The panel's own for fast: black and white still stays short.
+        let (fast, mono) = ordered(None, Direct::new(30, 3));
+        assert!(fast.is_none());
+        assert_eq!(mono.total_frames(), FAST_MOST_FRAMES);
+        let (_, mono) = ordered(None, Direct::new(1, 0));
+        assert_eq!((mono.frames(), mono.kick()), (1, 0));
     }
 
     #[test]
