@@ -654,6 +654,10 @@ impl<'a> StatusLine<'a> {
         font: &FontHandle<'_>,
         context: &Params,
     ) {
+        // Outside the band drawn now: drawn in its own.
+        if !crate::ui::shows(canvas, self.area) {
+            return;
+        }
         let middle = Middle::of(font, self.area, self.size);
         // Nothing past the line's area, whatever its items.
         let mut canvas = canvas.clipped(self.area);

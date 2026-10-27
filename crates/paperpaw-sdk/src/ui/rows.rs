@@ -171,6 +171,10 @@ impl Rows {
             );
         }
         for (n, &(index, rect)) in visible.iter().enumerate() {
+            // Outside the band drawn now: drawn in its own.
+            if !super::shows(ui.canvas(), rect) {
+                continue;
+            }
             let focused = focus && index == self.focus && !self.is_heading(index);
             if !self.is_heading(index) {
                 ui.canvas()
@@ -475,6 +479,30 @@ mod tests {
         let visible: Vec<usize> = rows.visible().into_iter().map(|(i, _)| i).collect();
         assert_eq!(visible, [0, 3, 4], "the heading first");
         assert_eq!(rows.focus, 3);
+    }
+
+    #[test]
+    fn rows_outside_the_band_are_left_out_but_still_told() {
+        use paperpaw_platform::PixelFormat;
+        let style = crate::ui::tests::STYLE;
+        let kit = crate::test_kit::Kit::new(false);
+        let env = kit.env();
+        let area = Rect::new(0, 0, 100, 80);
+        let rows = Rows::new(area, alloc::vec![20; 4], alloc::vec![false; 4]);
+        let mut frame = paperpaw_graphics::Framebuffer::new(100, 80, PixelFormat::Mono1).unwrap();
+        // A band from the second row into the third.
+        let drawn = |canvas: &mut Canvas<'_>| {
+            let mut band = canvas.clipped(Rect::new(0, 25, 100, 20));
+            let mut drawn = Vec::new();
+            let mut ui = crate::ui::Ui::new(&mut band, &env, &style);
+            rows.draw(&mut ui, false, |_, index, _, _| drawn.push(index));
+            drawn
+        };
+        assert_eq!(drawn(&mut frame.canvas()), [1, 2]);
+        let mut described = Vec::new();
+        let all = drawn(&mut frame.canvas().describing(&mut described));
+        assert_eq!(all, [0, 1, 2, 3], "a screen reader hears every row");
+        assert_eq!(described.len(), 4);
     }
 
     #[test]

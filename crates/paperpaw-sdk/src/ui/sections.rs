@@ -251,6 +251,10 @@ impl Sections {
             );
         }
         for (n, &(item, rect)) in visible.iter().enumerate() {
+            // Outside the band drawn now: drawn in its own.
+            if !super::shows(ui.canvas(), rect) {
+                continue;
+            }
             let focused = focus && item == Item::Entry(self.focus);
             if let Item::Entry(_) = item {
                 ui.canvas()

@@ -12,6 +12,12 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- Lists, menus and settings pages draw faster on readers that draw the
+  screen in bands, such as the X4: rows, headers and status lines outside
+  the band being drawn are skipped instead of laid out again for each band.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added

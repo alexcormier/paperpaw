@@ -264,6 +264,12 @@ impl<'t> Label<'t> {
                 area.width,
                 line as u16,
             );
+            // A line before the last outside the band drawn now (a line
+            // more round it, for letters that reach past theirs): only
+            // the last says where the label ends.
+            if n + 1 < count && !super::shows(canvas, row.grow(line as u16)) {
+                continue;
+            }
             let at = baseline(font, size, row);
             if cut && n + 1 == count {
                 let rest = self.text[range.start..].trim_end();

@@ -332,6 +332,10 @@ impl ListView {
         let first = self.page() * self.rows();
         for (slot, index) in (first..len).take(self.rows()).enumerate() {
             let rect = self.row_rect(slot);
+            // Outside the band drawn now: drawn in its own.
+            if !super::shows(ui.canvas(), rect) {
+                continue;
+            }
             let focused = self.active && self.shown && index == self.focus;
             ui.canvas().describe(Role::Row, "", rect).focused(focused);
             if focused {

@@ -141,6 +141,10 @@ impl Chips {
             if cell.width == 0 {
                 break;
             }
+            // Outside the band drawn now, its focus too: drawn in its own.
+            if !super::shows(canvas, super::button_reach(style, *cell)) {
+                continue;
+            }
             super::draw_button(
                 canvas,
                 env,
