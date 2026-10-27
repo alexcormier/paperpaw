@@ -1,7 +1,7 @@
 use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 
 use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{
@@ -191,26 +191,49 @@ fn book_cache(path: &str) -> String {
 /// The cache of a book's chapters converted with its styles or not, and
 /// one's own stylesheets: chapters converted with them go into a cache of
 /// their own, so a changed stylesheet applies at once.
-fn chapters_cache(
-    storage: &dyn Storage,
-    path: &str,
-    cache: &str,
-    styles: bool,
-    plugin_css: &str,
-) -> (String, String) {
-    let user_css = if styles {
-        user_css(storage, path, plugin_css)
-    } else {
-        String::new()
-    };
-    let chapters = if !styles {
+fn chapters_cache(cache: &str, styles: bool, user_css: &str) -> String {
+    if !styles {
         plain_cache(cache)
     } else if user_css.is_empty() {
         String::from(cache)
     } else {
-        alloc::format!("{cache}/css-{:016x}", fnv1a64(&user_css))
-    };
-    (chapters, user_css)
+        alloc::format!("{cache}/css-{:016x}", fnv1a64(user_css))
+    }
+}
+
+/// One's own stylesheets for the book at `path` (see [`user_css`]), none
+/// without the book's `styles`.
+fn styles_css(storage: &dyn Storage, path: &str, styles: bool, plugin_css: &str) -> String {
+    if styles {
+        user_css(storage, path, plugin_css)
+    } else {
+        String::new()
+    }
+}
+
+/// One's own stylesheets as [`EpubDocument::prepared_keeping`] read them,
+/// for the opening of the book that follows at once: so their files are
+/// looked for once per opening, not twice.
+#[derive(Debug, Default)]
+pub(crate) struct PreparedCss(RefCell<Option<KeptCss>>);
+
+/// The book, the options' stylesheets and one's own for them.
+#[derive(Debug)]
+struct KeptCss {
+    path: String,
+    styles: bool,
+    plugin_css: String,
+    user_css: String,
+}
+
+impl PreparedCss {
+    /// One's own stylesheets if kept for this opening; forgotten either
+    /// way, so they are never older than one opening.
+    fn take(&self, path: &str, styles: bool, plugin_css: &str) -> Option<String> {
+        let kept = self.0.borrow_mut().take()?;
+        (kept.path == path && kept.styles == styles && kept.plugin_css == plugin_css)
+            .then_some(kept.user_css)
+    }
 }
 
 /// Removes the folders of chapters converted with stylesheets of one's
@@ -248,7 +271,7 @@ impl EpubDocument {
             storage,
             path,
             styles,
-            "",
+            styles_css(storage, path, styles, ""),
             false,
             (convert::IMAGE_FIT, paperpaw_sdk::COVER_FIT),
         )
@@ -261,11 +284,26 @@ impl EpubDocument {
         path: &str,
         options: &paperpaw_sdk::OpenOptions,
     ) -> Result<Self, DocumentError> {
+        Self::open_prepared(storage, path, options, &PreparedCss::default())
+    }
+
+    /// As [`EpubDocument::open_options`], with one's own stylesheets as
+    /// `prepared` kept them for this book, if it did.
+    pub(crate) fn open_prepared(
+        storage: &dyn Storage,
+        path: &str,
+        options: &paperpaw_sdk::OpenOptions,
+        prepared: &PreparedCss,
+    ) -> Result<Self, DocumentError> {
+        let styles = options.publisher_styles;
+        let user_css = prepared
+            .take(path, styles, &options.css)
+            .unwrap_or_else(|| styles_css(storage, path, styles, &options.css));
         Self::open_styled(
             storage,
             path,
-            options.publisher_styles,
-            &options.css,
+            styles,
+            user_css,
             options.color,
             (options.image_fit, options.cover_fit),
         )
@@ -279,22 +317,35 @@ impl EpubDocument {
         path: &str,
         options: &paperpaw_sdk::OpenOptions,
     ) -> bool {
-        let cache = book_cache(path);
-        let (chapters, _) = chapters_cache(
-            storage,
-            path,
-            &cache,
-            options.publisher_styles,
-            &options.css,
-        );
-        storage.exists(&paths(&chapters, 0).end)
+        Self::prepared_keeping(storage, path, options, &PreparedCss::default())
+    }
+
+    /// As [`EpubDocument::prepared`]; where the book opens at once, one's
+    /// own stylesheets are kept in `kept` for that opening.
+    pub(crate) fn prepared_keeping(
+        storage: &dyn Storage,
+        path: &str,
+        options: &paperpaw_sdk::OpenOptions,
+        kept: &PreparedCss,
+    ) -> bool {
+        let styles = options.publisher_styles;
+        let user_css = styles_css(storage, path, styles, &options.css);
+        let chapters = chapters_cache(&book_cache(path), styles, &user_css);
+        let prepared = storage.exists(&paths(&chapters, 0).end);
+        *kept.0.borrow_mut() = prepared.then(|| KeptCss {
+            path: String::from(path),
+            styles,
+            plugin_css: options.css.clone(),
+            user_css,
+        });
+        prepared
     }
 
     fn open_styled(
         storage: &dyn Storage,
         path: &str,
         styles: bool,
-        plugin_css: &str,
+        user_css: String,
         color: bool,
         (image_fit, cover_fit): (Fit, Fit),
     ) -> Result<Self, DocumentError> {
@@ -311,7 +362,7 @@ impl EpubDocument {
                 package::build(storage, &archive, &cache, &book)?
             }
         };
-        let (chapters, user_css) = chapters_cache(storage, path, &cache, styles, plugin_css);
+        let chapters = chapters_cache(&cache, styles, &user_css);
         if chapters.contains("/css-") && !storage.exists(&paths(&chapters, 0).end) {
             // Stylesheets of one's own changed: the chapters converted
             // with those before go.

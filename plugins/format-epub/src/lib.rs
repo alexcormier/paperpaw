@@ -39,6 +39,7 @@ mod woff;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::vec;
 
 use paperpaw_sdk::document::Document;
@@ -121,17 +122,23 @@ impl Plugin for EpubFormat {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
         r.add_book_cache(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "")?;
+        // One's own stylesheets as found to tell whether a book opens at
+        // once, for opening it.
+        let kept = Rc::new(document::PreparedCss::default());
+        let prepared = Rc::clone(&kept);
         r.add_format(
             FormatSpec::new(
                 FORMAT,
                 "format-epub.title",
                 vec![Cow::Borrowed("epub")],
-                Box::new(|storage, path, options| {
-                    EpubDocument::open_options(storage, path, options)
+                Box::new(move |storage, path, options| {
+                    EpubDocument::open_prepared(storage, path, options, &kept)
                         .map(|d| Box::new(d) as Box<dyn Document>)
                 }),
             )
-            .prepared(Box::new(EpubDocument::prepared))
+            .prepared(Box::new(move |storage, path, options| {
+                EpubDocument::prepared_keeping(storage, path, options, &prepared)
+            }))
             .sniff(is_epub),
         )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
@@ -1066,6 +1073,65 @@ mod tests {
         let plain = themed.clone().publisher_styles(false);
         assert_eq!(align(&storage, &plain), Align::Auto);
         assert_eq!(align(&storage, &OpenOptions::default()), Align::Center);
+    }
+
+    #[test]
+    fn stylesheets_found_when_prepared_serve_one_opening() {
+        let ch2 = String::from(
+            "<html><head><style>p.c { text-align: center }</style></head><body>\
+             <p class=\"c\">Mitte</p></body></html>",
+        );
+        let storage = epub(ch2);
+        use crate::document::PreparedCss;
+        use paperpaw_sdk::{OpenOptions, Storage};
+        let kept = PreparedCss::default();
+        let align = |storage: &MemoryStorage, options: &OpenOptions| {
+            let doc =
+                EpubDocument::open_prepared(storage, "books/test.epub", options, &kept).unwrap();
+            // The first chapter converted, the book opens at once.
+            doc.block_at(storage, Locator::new(0, 0)).unwrap();
+            doc.block_at(storage, Locator::new(1, 0))
+                .unwrap()
+                .unwrap()
+                .align
+        };
+        let options = OpenOptions::default();
+        storage
+            .write("books/styles.css", b"p.c { text-align: left }")
+            .unwrap();
+        // Not converted yet: nothing is kept.
+        assert!(!EpubDocument::prepared_keeping(
+            &storage,
+            "books/test.epub",
+            &options,
+            &kept
+        ));
+        assert_eq!(align(&storage, &options), Align::Start);
+        assert!(EpubDocument::prepared_keeping(
+            &storage,
+            "books/test.epub",
+            &options,
+            &kept
+        ));
+        assert_eq!(align(&storage, &options), Align::Start);
+        // Each opening after that looks again.
+        storage.remove("books/styles.css").unwrap();
+        assert_eq!(align(&storage, &options), Align::Center);
+        // Kept for other options, they are not used.
+        storage
+            .write("books/styles.css", b"p.c { text-align: left }")
+            .unwrap();
+        assert!(EpubDocument::prepared_keeping(
+            &storage,
+            "books/test.epub",
+            &options,
+            &kept
+        ));
+        storage
+            .write("books/styles.css", b"p.c { text-align: right }")
+            .unwrap();
+        let themed = OpenOptions::default().css(String::from("p { font-weight: bold }"));
+        assert_eq!(align(&storage, &themed), Align::End);
     }
 
     #[test]
