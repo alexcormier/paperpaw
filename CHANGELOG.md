@@ -12,6 +12,11 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- Folders on the SD card are read faster, and reading a large file at
+  scattered places no longer walks its clusters from the start each time.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added
