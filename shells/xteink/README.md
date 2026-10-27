@@ -125,7 +125,10 @@ changed pixel is driven, and a kick of the other colour before), at the
 stock voltages. The time the panel took is shown for each frame. *Clean up*
 shows the screen with the stock refresh that drives every pixel; do it
 every few dozen flips, as the experiments let ghosts build up. Nothing is
-kept: leaving the screen is the stock firmware again.
+kept: leaving the screen is the stock firmware again. It is for panels with an
+SSD1677 controller; Xteink ships the X4 with an UltraChip one in some batches,
+where the lab says so and the settings of the waveforms (`x4.ssd1677.*`) are not
+offered.
 
 ## Back to another firmware
 

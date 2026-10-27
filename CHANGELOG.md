@@ -8,15 +8,16 @@ change the plugin SDK.
 
 ### Changed
 
-- X4: a setting, *Fast changes* (Display), says how menus and a moved focus
+- X4 (with an SSD1677 panel, as most have): a setting, *Fast changes* (Display), says how menus and a moved focus
   are shown: the panel's own waveform (500 ms, the cleanest) or a quicker
   one of 8, 6 or 4 frames (found in the waveform lab; about 160 ms with 4),
   which leave more ghosting that the next full refresh clears. It is
   *Quicker, some ghosting* (6 frames) by default; page turns are as before.
   Black-and-white refreshes (screens that ask for `fastest`, such as games)
   take about 100 ms, with 1 frame. The frames and the kick of both are
-  settings of the developer group (`x4.fast-frames`, `x4.fast-kick`,
-  `x4.mono-frames`, `x4.mono-kick`; the fast ones where *Fast changes* is
+  settings of the developer group (`x4.ssd1677.fast-frames`, `x4.ssd1677.fast-kick`,
+  `x4.ssd1677.mono-frames`, `x4.ssd1677.mono-kick`, offered only where the panel's
+  controller is an SSD1677; the fast ones where *Fast changes* is
   *Own values*), so a plugin without code can set them in its `settings.ini`
   or by an action; the firmware keeps them in the order of the modes (fast
   at most 20 frames, black and white no more than fast).

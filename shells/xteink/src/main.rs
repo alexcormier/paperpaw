@@ -502,6 +502,9 @@ fn prepare() -> Ready {
         board.display,
         panel.controller()
     );
+    // Only an SSD1677's waveforms can be tried or set (`device`, `lab`).
+    #[cfg(feature = "x4")]
+    device::set_ssd1677(panel.controller() == paperpaw_x4::probe::Controller::Ssd1677);
     if let Err(e) = panel.init() {
         warn!("display: {e:?}");
     }
