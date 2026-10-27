@@ -555,7 +555,36 @@ pub(crate) struct Rules {
     own: Vec<(Selector, Props)>,
     /// A rule or font was dropped as the heap had no room for it.
     pub out_of_memory: bool,
+    /// The last elements' properties (see [`Rules::props_remembered`]).
+    memo: Vec<Remembered>,
+    /// The entry of `memo` replaced next once it is full.
+    memo_next: usize,
 }
+
+/// What [`Rules::props`] found for an element: its tag and class
+/// attribute side by side in `key`, the first `tag` bytes the tag.
+#[derive(Debug)]
+struct Remembered {
+    key: [u8; MEMO_KEY],
+    tag: u8,
+    len: u8,
+    props: Props,
+}
+
+impl Remembered {
+    fn is(&self, tag: &str, classes: &str) -> bool {
+        let (tag_len, len) = (usize::from(self.tag), usize::from(self.len));
+        tag_len == tag.len()
+            && len == tag.len() + classes.len()
+            && self.key[..tag_len] == *tag.as_bytes()
+            && self.key[tag_len..len] == *classes.as_bytes()
+    }
+}
+
+/// Elements remembered at most: a chapter has few distinct ones.
+const MEMO: usize = 8;
+/// Longest tag and class attribute together that are remembered.
+const MEMO_KEY: usize = 48;
 
 /// A font embedded with `@font-face`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -590,6 +619,41 @@ impl Rules {
         props
     }
 
+    /// As [`Rules::props`], remembered for the last few elements: in a
+    /// chapter the same tags and classes come again and again. Adding
+    /// rules forgets them.
+    pub fn props_remembered(&mut self, tag: &str, classes: &str) -> Props {
+        if let Some(known) = self.memo.iter().find(|m| m.is(tag, classes)) {
+            return known.props;
+        }
+        let props = self.props(tag, classes);
+        let len = tag.len() + classes.len();
+        let (Ok(tag_len), Ok(len_byte)) = (u8::try_from(tag.len()), u8::try_from(len)) else {
+            return props;
+        };
+        if len > MEMO_KEY {
+            return props;
+        }
+        let mut key = [0; MEMO_KEY];
+        key[..tag.len()].copy_from_slice(tag.as_bytes());
+        key[tag.len()..len].copy_from_slice(classes.as_bytes());
+        let entry = Remembered {
+            key,
+            tag: tag_len,
+            len: len_byte,
+            props,
+        };
+        if self.memo.len() < MEMO {
+            if self.memo.try_reserve_exact(MEMO - self.memo.len()).is_ok() {
+                self.memo.push(entry);
+            }
+        } else if let Some(slot) = self.memo.get_mut(self.memo_next) {
+            *slot = entry;
+            self.memo_next = (self.memo_next + 1) % MEMO;
+        }
+        props
+    }
+
     /// Adds one's own stylesheet `css`: its rules apply after all of the
     /// book's, also those it adds later (`<style>` in a chapter).
     pub fn add_own(&mut self, css: &str) {
@@ -597,6 +661,7 @@ impl Rules {
         Parser::new("").feed(css, self);
         let own = self.rules.split_off(start);
         self.own.extend(own);
+        self.memo.clear();
     }
 
     /// Parses a `style` attribute.
@@ -670,6 +735,7 @@ impl Rules {
                 break;
             }
             self.rules.push((selector, props));
+            self.memo.clear();
         }
     }
 
@@ -952,6 +1018,38 @@ mod tests {
         // Descendant selectors and @media blocks are skipped.
         assert_eq!(r.props("p", "").italic, None);
         assert_eq!(r.props("p", "").hidden, None);
+    }
+
+    #[test]
+    fn remembered_props_are_the_props() {
+        let mut r = rules("p { text-align: right } .a { font-weight: bold } p.b { display: none }");
+        let long = "x ".repeat(40);
+        let elements = [
+            ("p", ""),
+            ("p", "a"),
+            ("pa", ""),
+            ("p", "b"),
+            ("p", "a b"),
+            ("span", "a"),
+            ("p", long.as_str()),
+            ("div", ""),
+            ("h1", "a"),
+            ("em", ""),
+            ("i", ""),
+        ];
+        for _ in 0..3 {
+            for (tag, classes) in elements {
+                assert_eq!(r.props_remembered(tag, classes), r.props(tag, classes));
+            }
+        }
+        // Rules added later, the book's and one's own, apply at once.
+        Parser::new("").feed("p { text-align: center }", &mut r);
+        assert_eq!(r.props_remembered("p", "").align, Some(Align::Center));
+        r.add_own(".a { font-weight: normal }");
+        assert_eq!(r.props_remembered("p", "a").bold, Some(false));
+        for (tag, classes) in elements {
+            assert_eq!(r.props_remembered(tag, classes), r.props(tag, classes));
+        }
     }
 
     #[test]

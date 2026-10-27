@@ -58,7 +58,7 @@ pub(super) fn element_props(
         _ => {}
     }
     let classes = attrs.get("class").unwrap_or_default();
-    props.apply(&rules.props(tag, &classes));
+    props.apply(&rules.props_remembered(tag, &classes));
     if let Some(value) = attrs.get("align") {
         props.align = parse_align(&value).or(props.align);
     }
