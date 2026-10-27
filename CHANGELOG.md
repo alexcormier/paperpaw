@@ -12,6 +12,12 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- Book pages draw faster: lines outside the part of the screen being drawn
+  are skipped instead of measured word by word. Searching a book needs less
+  memory.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added
