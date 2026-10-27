@@ -117,6 +117,12 @@ impl Plugin for X4 {
         r.add_settings(&SETTINGS)?;
         #[cfg(feature = "x4-pro")]
         register_light(r)?;
+        #[cfg(all(feature = "x4", feature = "waveform-lab"))]
+        {
+            r.add_screens(&crate::lab::SCREENS)?;
+            r.add_actions(&crate::lab::ACTIONS)?;
+            r.add_menu_entries(&crate::lab::ENTRIES)?;
+        }
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

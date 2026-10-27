@@ -171,6 +171,20 @@ where
         }
     }
 
+    /// Shows fast refreshes as `experiment` says (see
+    /// [`display::Experiment`]); `false` where this controller cannot (only
+    /// the SSD1677's waveforms can be tried), which then shows them its own
+    /// way as before.
+    pub fn set_experiment(&mut self, experiment: Option<display::Experiment>) -> bool {
+        match self {
+            Panel::Ssd1677 { display, .. } => {
+                display.set_experiment(experiment);
+                true
+            }
+            Panel::UltraChip(_) | Panel::Uc8253(_) => false,
+        }
+    }
+
     pub fn refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
         each!(self, d => d.refresh(refresh, power_off))
     }

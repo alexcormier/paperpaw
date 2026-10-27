@@ -11,6 +11,9 @@ change the plugin SDK.
 - `tools/flash-x4.py` builds the checked-out source and flashes it to an X4,
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
+- The developer firmware of the X4 has a *Waveform lab* under Tools, for
+  trying how the panel is driven: its own tables at a temperature, or a
+  direct drive with the frames and the kick chosen on the screen.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

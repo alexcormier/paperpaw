@@ -985,6 +985,16 @@ impl Firmware {
         });
         let drawn = now();
         self.kernel.showing(drawn);
+        #[cfg(all(feature = "x4", feature = "waveform-lab"))]
+        {
+            // The waveform lab drives fast refreshes its own way.
+            let experiment = if refresh == Refresh::Fast {
+                crate::lab::experiment(self.kernel.active_screen())
+            } else {
+                None
+            };
+            crate::lab::set_supported(self.panel.set_experiment(experiment));
+        }
         if let Err(e) = self.refresh(refresh) {
             failed = Some(e);
         }

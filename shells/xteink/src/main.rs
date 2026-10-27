@@ -55,6 +55,8 @@ mod firmware;
 mod gray_test;
 mod http;
 mod input;
+#[cfg(all(feature = "x4", feature = "waveform-lab"))]
+mod lab;
 #[cfg(feature = "x4-pro")]
 mod light;
 mod link;

@@ -114,6 +114,19 @@ python tools/x4-remote.py --script "run:update.open,until:Search online,expect:W
 python tools/x4-remote.py --push my-fonts .paperpaw/fonts --info
 ```
 
+## Waveform lab
+
+The developer firmware of the plain X4 has *Waveform lab* under Tools
+(feature `waveform-lab`, on by default with `remote`; `src/lab.rs`). It
+flips a test picture and shows each flip with a waveform chosen on the
+screen instead of the panel's fast one: the panel's own tables at a
+temperature (0 to 90 degrees), or a direct drive made here (the frames a
+changed pixel is driven, and a kick of the other colour before), at the
+stock voltages. The time the panel took is shown for each frame. *Clean up*
+shows the screen with the stock refresh that drives every pixel; do it
+every few dozen flips, as the experiments let ghosts build up. Nothing is
+kept: leaving the screen is the stock firmware again.
+
 ## Back to another firmware
 
 Put the other firmware's file (`.bin`, CrossPoint's for example) at the

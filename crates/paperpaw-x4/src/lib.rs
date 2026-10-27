@@ -52,3 +52,4 @@ pub mod sntp;
 pub mod stall;
 pub mod uc8179;
 pub mod uc8253;
+pub mod waveform;
