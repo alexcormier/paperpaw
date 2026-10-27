@@ -1057,11 +1057,12 @@ impl Firmware {
 }
 
 /// The waveform of a fast refresh on the X4: the waveform lab's own while
-/// it is open, else for `RefreshMode::Fast` (menus, focus moved, small
-/// changes) a direct drive of a few frames, which shows in about 160 ms
-/// where the panel's own fast waveform takes 500 ms, and leaves ghosts that
-/// the next full refresh clears. Partial refreshes (pages) keep the
-/// panel's own.
+/// it is open, else a direct drive of a few frames for the modes that ask
+/// for speed: `RefreshMode::Fast` (menus, focus moved, small changes) in
+/// about 160 ms, `RefreshMode::Mono` (what a screen with
+/// `ScreenMode::fastest` gets: games, pen strokes) in about 100 ms, where
+/// the panel's own fast waveform takes 500 ms. They leave ghosts that the
+/// next full refresh clears. Partial refreshes (pages) keep the panel's own.
 #[cfg(feature = "x4")]
 fn fast_waveform(
     mode: RefreshMode,
@@ -1072,15 +1073,22 @@ fn fast_waveform(
         return crate::lab::experiment(active);
     }
     let _ = active;
-    (mode == RefreshMode::Fast).then_some(paperpaw_x4::display::Experiment::Direct(
-        paperpaw_x4::waveform::Direct::new(MENU_FRAMES, 0),
+    let frames = match mode {
+        RefreshMode::Mono => MONO_FRAMES,
+        RefreshMode::Fast => FAST_FRAMES,
+        _ => return None,
+    };
+    Some(paperpaw_x4::display::Experiment::Direct(
+        paperpaw_x4::waveform::Direct::new(frames, 0),
     ))
 }
 
-/// Frames a fast refresh drives a changed pixel (tried in the waveform
-/// lab: 4 frames, no kick).
+/// Frames a refresh drives a changed pixel, no kick (tried in the waveform
+/// lab): in fast ones, in black and white ones.
 #[cfg(feature = "x4")]
-const MENU_FRAMES: u8 = 4;
+const FAST_FRAMES: u8 = 4;
+#[cfg(feature = "x4")]
+const MONO_FRAMES: u8 = 1;
 
 /// The heap's free bytes, for keeping what was sent.
 fn heap_free() -> usize {

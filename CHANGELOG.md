@@ -11,7 +11,9 @@ change the plugin SDK.
 - X4: changes shown with the fast refresh (menus, a focus moved) take about
   160 ms instead of 500 ms, by driving the changed pixels for 4 frames
   (found in the waveform lab). They leave more ghosting, which the next
-  full refresh clears; page turns are as before.
+  full refresh clears; page turns are as before. Black-and-white refreshes
+  (screens that ask for `fastest`, such as games) take about 100 ms, with 1
+  frame.
 
 ### Added
 
