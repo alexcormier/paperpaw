@@ -31,8 +31,10 @@
 //! that drives every pixel, which clears what the experiments left behind.
 //! The time the panel took for the last frame is told above the rows.
 //!
-//! The waveform chosen counts only while the lab is the screen shown;
-//! leaving it, or a restart, is the stock firmware again.
+//! The waveform chosen counts only while the lab is the screen shown, and
+//! only for the picture's flips (the fast refreshes): the rows are shown
+//! the panel's own way, so the lab stays readable whatever is tried. Leaving
+//! it, or a restart, is the stock firmware again.
 
 use alloc::boxed::Box;
 use alloc::format;
@@ -96,7 +98,7 @@ pub static SETTINGS: [SettingSpec; 7] = [
         "x4.lab.frames",
         1,
         MAX_FRAMES as i64,
-        4,
+        10,
         groups::DEVELOPER,
     ),
     SettingSpec::number(
@@ -400,7 +402,10 @@ impl Lab {
             (self.help.bottom() as u16).saturating_sub(top),
         );
         cx.request_redraw_area(below);
-        cx.request_refresh(RefreshMode::Fast);
+        // The rows are shown the panel's own way (a partial refresh, not
+        // the fast one the experiments take): a waveform that does not
+        // develop would otherwise leave the lab itself unreadable.
+        cx.request_refresh(RefreshMode::Partial);
     }
 
     /// Flips the picture: its black pixels white and the other way, with
@@ -520,9 +525,24 @@ impl Screen for Lab {
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
                 let (control, title, value) = &rows[index];
-                self.row(env, *control, title, value)
-                    .focused(focused)
-                    .draw(ui, rect);
+                if control.is_number() && focused {
+                    // As the settings page draws a number on the focus: the
+                    // row on black, its − and + as buttons.
+                    ui::draw_stepper_lines(
+                        ui.canvas(),
+                        env,
+                        &style,
+                        ui::RowLines::one(rect),
+                        title,
+                        value,
+                        ROOM,
+                        false,
+                    );
+                } else {
+                    self.row(env, *control, title, value)
+                        .focused(focused)
+                        .draw(ui, rect);
+                }
             });
         let note = tr(if self.flips >= CLEAN_AFTER {
             "x4.lab.clean-soon"
