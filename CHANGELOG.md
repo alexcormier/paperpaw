@@ -12,6 +12,12 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- Pages are laid out faster: hyphenation stops looking for patterns that
+  cannot match, and characters are found in font packs with fewer lookups.
+  Lines break exactly as before.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added
