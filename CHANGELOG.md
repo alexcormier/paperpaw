@@ -8,12 +8,13 @@ change the plugin SDK.
 
 ### Changed
 
-- X4: changes shown with the fast refresh (menus, a focus moved) take about
-  160 ms instead of 500 ms, by driving the changed pixels for 4 frames
-  (found in the waveform lab). They leave more ghosting, which the next
-  full refresh clears; page turns are as before. Black-and-white refreshes
-  (screens that ask for `fastest`, such as games) take about 100 ms, with 1
-  frame.
+- X4: a setting, *Fast changes* (Display), says how menus and a moved focus
+  are shown: the panel's own waveform (500 ms, the cleanest) or a quicker
+  one of 8, 6 or 4 frames (found in the waveform lab; about 160 ms with 4),
+  which leave more ghosting that the next full refresh clears. It is
+  *Quicker, some ghosting* (6 frames) by default; page turns are as before.
+  Black-and-white refreshes (screens that ask for `fastest`, such as games)
+  take about 100 ms, with 1 frame.
 
 ### Added
 

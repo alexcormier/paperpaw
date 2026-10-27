@@ -21,6 +21,19 @@ pub const BUTTON_RESPONSE: Setting<paperpaw_sdk::setting::Text> =
 /// The choices of [`BUTTON_RESPONSE`].
 pub const RESPONSE_NORMAL: &str = "x4.button-response.normal";
 pub const RESPONSE_FASTER: &str = "x4.button-response.faster";
+/// How the X4 shows fast changes (menus, a focus moved): the panel's own
+/// waveform, or a quicker one with more or less ghosting (see `firmware`).
+#[cfg(feature = "x4")]
+pub const FAST_REFRESH: Setting<paperpaw_sdk::setting::Text> = Setting::new("x4.fast-refresh");
+/// The choices of [`FAST_REFRESH`], the slowest and cleanest first.
+#[cfg(feature = "x4")]
+pub const FAST_PANEL: &str = "x4.fast-refresh.panel";
+#[cfg(feature = "x4")]
+pub const FAST_CLEAN: &str = "x4.fast-refresh.clean";
+#[cfg(feature = "x4")]
+pub const FAST_BALANCED: &str = "x4.fast-refresh.balanced";
+#[cfg(feature = "x4")]
+pub const FAST_QUICK: &str = "x4.fast-refresh.quick";
 /// The X4 Pro's front light: how bright, in percent (0 off).
 #[cfg_attr(
     not(feature = "x4-pro"),
@@ -56,6 +69,17 @@ static SETTINGS: [SettingSpec; 2] = [
     )
     .description("x4.light-sleep.help"),
 ];
+
+/// How fast changes are shown.
+#[cfg(feature = "x4")]
+static FAST_SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
+    FAST_REFRESH.static_str(),
+    "x4.fast-refresh",
+    &[FAST_PANEL, FAST_CLEAN, FAST_BALANCED, FAST_QUICK],
+    FAST_BALANCED,
+    groups::DISPLAY,
+)
+.description("x4.fast-refresh.help")];
 
 /// The X4 Pro's front light, set with sliders: how bright in single
 /// percents, so that `−` and `+` set the dim end finely (see `light`), its
@@ -115,6 +139,8 @@ impl Plugin for X4 {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
+        #[cfg(feature = "x4")]
+        r.add_settings(&FAST_SETTINGS)?;
         #[cfg(feature = "x4-pro")]
         register_light(r)?;
         #[cfg(all(feature = "x4", feature = "waveform-lab"))]

@@ -988,7 +988,8 @@ impl Firmware {
         #[cfg(feature = "x4")]
         {
             let experiment = if refresh == Refresh::Fast {
-                fast_waveform(mode, self.kernel.active_screen())
+                let chosen = self.kernel.settings().read(&device::FAST_REFRESH);
+                fast_waveform(mode, chosen, self.kernel.active_screen())
             } else {
                 None
             };
@@ -1058,14 +1059,15 @@ impl Firmware {
 
 /// The waveform of a fast refresh on the X4: the waveform lab's own while
 /// it is open, else a direct drive of a few frames for the modes that ask
-/// for speed: `RefreshMode::Fast` (menus, focus moved, small changes) in
-/// about 160 ms, `RefreshMode::Mono` (what a screen with
+/// for speed: `RefreshMode::Fast` (menus, focus moved, small changes; the
+/// setting says how many frames, 4 in about 160 ms, or the panel's own), `RefreshMode::Mono` (what a screen with
 /// `ScreenMode::fastest` gets: games, pen strokes) in about 100 ms, where
 /// the panel's own fast waveform takes 500 ms. They leave ghosts that the
 /// next full refresh clears. Partial refreshes (pages) keep the panel's own.
 #[cfg(feature = "x4")]
 fn fast_waveform(
     mode: RefreshMode,
+    chosen: &str,
     active: Option<&paperpaw_sdk::Id>,
 ) -> Option<paperpaw_x4::display::Experiment> {
     #[cfg(feature = "waveform-lab")]
@@ -1075,7 +1077,12 @@ fn fast_waveform(
     let _ = active;
     let frames = match mode {
         RefreshMode::Mono => MONO_FRAMES,
-        RefreshMode::Fast => FAST_FRAMES,
+        RefreshMode::Fast => match chosen {
+            device::FAST_CLEAN => CLEAN_FRAMES,
+            device::FAST_BALANCED => BALANCED_FRAMES,
+            device::FAST_QUICK => QUICK_FRAMES,
+            _ => return None,
+        },
         _ => return None,
     };
     Some(paperpaw_x4::display::Experiment::Direct(
@@ -1084,9 +1091,14 @@ fn fast_waveform(
 }
 
 /// Frames a refresh drives a changed pixel, no kick (tried in the waveform
-/// lab): in fast ones, in black and white ones.
+/// lab): in fast ones, by the setting `x4.fast-refresh` (more frames leave
+/// less ghosting), and in black and white ones.
 #[cfg(feature = "x4")]
-const FAST_FRAMES: u8 = 4;
+const CLEAN_FRAMES: u8 = 8;
+#[cfg(feature = "x4")]
+const BALANCED_FRAMES: u8 = 6;
+#[cfg(feature = "x4")]
+const QUICK_FRAMES: u8 = 4;
 #[cfg(feature = "x4")]
 const MONO_FRAMES: u8 = 1;
 
