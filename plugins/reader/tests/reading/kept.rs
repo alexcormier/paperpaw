@@ -172,3 +172,19 @@ fn positions_and_annotations_say_which_book_they_are_of() {
         );
     }
 }
+
+/// A page turned is not kept while it turns: a moment later, once the
+/// pages rest, without the book being closed.
+#[test]
+fn the_place_is_kept_once_the_pages_rest() {
+    let storage = Shared::default();
+    let mut reading = Reading::new(storage);
+    reading.open();
+    let before = reading.written();
+    reading.run(core_actions::NEXT_PAGE);
+    assert_eq!(reading.written(), before, "written while the page turned");
+    reading.now += 2_000;
+    let effects = reading.kernel.tick(Instant(reading.now));
+    reading.settle(effects);
+    assert!(reading.written() > before, "not written at rest");
+}

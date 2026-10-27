@@ -12,6 +12,13 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- Turning a page waits less for the card: the reading position and
+  today's reading are written once the pages rest for a moment, the book
+  closes or the device sleeps, and the book's details are read only when
+  its shown percentage changes.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added
