@@ -113,6 +113,8 @@ pub(crate) struct ShelfScreen {
     /// The version of the library's books the entries' keys are of
     /// ([`library::Library::version`]).
     version: Option<u64>,
+    /// The catalog's stamp when its books were found ([`stamp`]).
+    stamp: Option<u64>,
     fresh: bool,
 }
 
@@ -132,6 +134,7 @@ impl ShelfScreen {
         );
         let top = summary.y + summary.height;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let stamp = stamp(env);
         let mut screen = Self {
             grays: crate::covers_in_grays(env),
             list: ListView::new(area, u32::from(sizes.row)).focus_on_keys(env),
@@ -143,6 +146,7 @@ impl ShelfScreen {
             loaded: Vec::new(),
             loaded_page: None,
             version: library::service(env).version(env),
+            stamp,
             fresh: true,
             kind,
             name,
@@ -266,6 +270,7 @@ impl ShelfScreen {
     fn find_again(&mut self, env: &Env<'_>) {
         let focus = self.list.focus();
         self.version = library::service(env).version(env);
+        self.stamp = stamp(env);
         self.entries = find(env, self.kind, &self.name);
         self.mark_next();
         self.list
@@ -280,6 +285,16 @@ impl ShelfScreen {
             let path = book.path.clone();
             super::read(&path, cx);
         }
+    }
+}
+
+/// The catalog's stamp, which changes with it and with what was noted
+/// beside it (how far books are read, favourites): `None` while there is
+/// none.
+fn stamp(env: &Env<'_>) -> Option<u64> {
+    match library::service(env).catalog_state(env) {
+        catalog::State::Ready { stamp } => Some(stamp),
+        _ => None,
     }
 }
 
@@ -403,9 +418,15 @@ impl Screen for ShelfScreen {
             return;
         }
         // Back from a book or its actions: states and the next may have
-        // changed.
+        // changed. Where nothing was noted since, the books found hold
+        // and only the page's are read again (they went while hidden).
         let env = *cx.env();
-        self.find_again(&env);
+        let same = library::service(&env).version(&env) == self.version;
+        if same && self.stamp.is_some() && stamp(&env) == self.stamp {
+            self.load_page(&env);
+        } else {
+            self.find_again(&env);
+        }
         cx.request_redraw();
     }
 
