@@ -246,12 +246,17 @@ fn digest(hex: &str) -> Option<[u8; 32]> {
 /// The plugins installed, as JSON.
 pub(crate) fn listing(env: &Env<'_>) -> String {
     let mut json = String::from("{\"plugins\":[");
+    // Read once for all of them, where one is not built in.
+    let origins = core::cell::OnceCell::new();
     for (i, info) in env.plugins().iter().enumerate() {
         let version = info.update.unwrap_or(info.manifest.version);
         let id = info.manifest.id.as_str();
         let origin = match info.kind {
             PluginKind::BuiltIn => "built-in",
-            _ => match install::origin(env.storage(), id, version) {
+            _ => match origins
+                .get_or_init(|| install::Origins::read(env.storage()))
+                .of(id, version)
+            {
                 Origin::Store => "store",
                 _ => "local",
             },

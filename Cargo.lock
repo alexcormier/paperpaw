@@ -2059,7 +2059,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-plugin-manager"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2209,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-transfer"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
@@ -2237,7 +2237,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-update"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
