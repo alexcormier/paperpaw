@@ -503,6 +503,9 @@ pub struct Fb2Document {
     /// Size of the file: the length until it is converted.
     size: u32,
     length: Cell<u32>,
+    /// Its text length and number of blocks once converted: the cache
+    /// is not looked at again while it is open.
+    known: Cell<Option<(u32, u32)>>,
 }
 
 impl Fb2Document {
@@ -587,12 +590,16 @@ impl Fb2Document {
             cover_fit,
             size: u32::try_from(size).unwrap_or(u32::MAX - 1),
             length: Cell::new(UNKNOWN),
+            known: Cell::new(None),
         })
     }
 
     /// Converts the book if needed; returns its text length and number of
     /// blocks.
     fn converted(&self, storage: &dyn Storage) -> Result<(u32, u32), DocumentError> {
+        if let Some(known) = self.known.get() {
+            return Ok(known);
+        }
         let length = match cached::converted_length(storage, &self.paths) {
             Some(length) => length,
             None if self.length.get() == FAILED => {
@@ -620,6 +627,7 @@ impl Fb2Document {
         };
         self.length.set(length);
         let blocks = (storage.size(&self.paths.index)? / u64::from(INDEX)) as u32;
+        self.known.set(Some((length, blocks)));
         Ok((length, blocks))
     }
 }
