@@ -37,6 +37,21 @@ impl GlyphRef<'_> {
         }
     }
 
+    /// [`GlyphRef::level`] of every pixel, the length of a row worked out
+    /// once rather than for each pixel.
+    #[inline]
+    pub(crate) fn levels(&self) -> impl Fn(u32, u32) -> u8 + '_ {
+        let stride = usize::from(self.width).div_ceil(2);
+        move |x, y| {
+            let at = (y as usize) * stride + (x as usize) / 2;
+            match self.data.get(at) {
+                Some(&byte) if x % 2 == 0 => byte >> 4,
+                Some(&byte) => byte & 0x0f,
+                None => 0,
+            }
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.width == 0 || self.height == 0
     }
@@ -151,6 +166,35 @@ mod tests {
         let read: Vec<u8> = (0..5).map(|x| r.coverage(x, 0)).collect();
         assert_eq!(read, coverage);
         assert_eq!(r.coverage(9, 9), 0);
+    }
+
+    #[test]
+    fn levels_read_as_each_level() {
+        // Odd widths, and data cut short: read as empty.
+        for (width, height, len) in [(5, 3, 9), (4, 2, 4), (7, 4, 11), (1, 3, 2)] {
+            let data: Vec<u8> = (0..len)
+                .map(|i| (i as u8).wrapping_mul(97) ^ 0xa5)
+                .collect();
+            let glyph = GlyphRef {
+                left: 0,
+                top: 0,
+                width,
+                height,
+                advance: 0.0,
+                data: &data,
+            };
+            let levels = glyph.levels();
+            for y in 0..height + 1 {
+                for x in 0..width + 1 {
+                    let (wide_x, wide_y) = (u32::from(x), u32::from(y));
+                    assert_eq!(
+                        levels(wide_x, wide_y),
+                        glyph.level(x, y),
+                        "{width} ({x}, {y})"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

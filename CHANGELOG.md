@@ -12,6 +12,11 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- Text, light separator lines and shaded highlights draw faster in black and
+  white and in grays, with the same pixels as before.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added

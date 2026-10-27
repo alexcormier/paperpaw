@@ -397,20 +397,9 @@ impl<'a> Canvas<'a> {
         if self.framebuffer.format().gray_levels() != Some(2) || color.luma() < 128 {
             return self.fill(area, color);
         }
-        let Some(rect) = self.clip_signed(
-            i32::from(area.x),
-            i32::from(area.y),
-            u32::from(area.width),
-            u32::from(area.height),
-        ) else {
-            return;
-        };
-        for y in rect.y..rect.y + rect.height {
-            let first = rect.x + (rect.x + y) % 2;
-            for x in (first..rect.x + rect.width).step_by(2) {
-                self.framebuffer
-                    .fill_clipped(Rect::new(x, y, 1, 1), Color::BLACK);
-            }
+        let (x, y, width, height) = signed(area);
+        if let Some(rect) = self.clip_signed(x, y, width, height) {
+            self.framebuffer.tint_clipped(rect);
         }
     }
 
@@ -841,7 +830,18 @@ impl<'a> Canvas<'a> {
         color: Color,
         coverage: impl Fn(u32, u32) -> u8,
     ) {
+        let Some(rect) = self.clip_signed(x, y, width, height) else {
+            return;
+        };
         // The offsets lie inside the area, so they fit.
+        let from = (
+            (i64::from(rect.x) - i64::from(x) - i64::from(self.origin.0)) as u32,
+            (i64::from(rect.y) - i64::from(y) - i64::from(self.origin.1)) as u32,
+        );
+        // A row at a time where the format allows (most panels).
+        if self.framebuffer.blend_mask(rect, from, color, &coverage) {
+            return self.framebuffer.mark_dirty(rect);
+        }
         let coverage = |dx: i64, dy: i64| coverage(dx as u32, dy as u32);
         self.mask_wide(
             x.into(),
@@ -853,8 +853,8 @@ impl<'a> Canvas<'a> {
         );
     }
 
-    /// [`draw_mask`](Self::draw_mask) in wide coordinates.
-    fn mask_wide(
+    /// [`draw_mask`](Self::draw_mask) in wide coordinates, pixel by pixel.
+    pub(crate) fn mask_wide(
         &mut self,
         x: i64,
         y: i64,

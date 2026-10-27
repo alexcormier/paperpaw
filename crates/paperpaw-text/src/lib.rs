@@ -205,13 +205,14 @@ pub fn draw_text(
         let gy = baseline.saturating_add(i32::from(glyph.top));
         if !glyph.is_empty() && extra == 0 {
             // The usual weight: each pixel's own coverage, on its curve.
+            let level = glyph.levels();
             canvas.draw_mask(
                 gx,
                 gy,
                 u32::from(glyph.width),
                 u32::from(glyph.height),
                 color,
-                |px, py| tone.alpha(glyph.level(px as u16, py as u16)),
+                |px, py| tone.alpha(level(px, py)),
             );
         } else if !glyph.is_empty() {
             let width = u32::from(glyph.width);

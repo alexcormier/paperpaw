@@ -13,6 +13,7 @@ mod blit;
 mod canvas;
 pub mod diffuse;
 mod framebuffer;
+mod mask;
 pub mod round;
 
 pub use blit::{Bitmap, BitmapError, BitmapFormat, Blit, Dither};
