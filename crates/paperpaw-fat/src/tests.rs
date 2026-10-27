@@ -1154,6 +1154,32 @@ fn many_blocks_and_files_by_turns() {
 }
 
 #[test]
+fn read_on_and_back_across_clusters() {
+    // In clusters of 512 bytes, laid by turns with those of another file:
+    // a cluster taken wrongly on a seek reads the other file.
+    let s = fat32().storage();
+    let data: Vec<u8> = (0..40 * 512u32).map(|i| (i * 7 % 251) as u8).collect();
+    for part in data.chunks(512) {
+        s.append("a.bin", part).unwrap();
+        s.append("b.bin", &[1; 512]).unwrap();
+    }
+    let mut buf = [0u8; 600];
+    let ats = [
+        0, 511, 512, 513, 2560, 2559, 9000, 10_240, 1536, 19_968, 19_880, 1024, 20_479,
+    ];
+    for at in ats {
+        let n = s.read_at("a.bin", at, &mut buf).unwrap();
+        let at = at as usize;
+        assert_eq!(&buf[..n], &data[at..data.len().min(at + 600)], "at {at}");
+    }
+    // Grown from its end, read on past where it ended.
+    s.append("a.bin", &[9; 700]).unwrap();
+    assert_eq!(s.read_at("a.bin", 20_380, &mut buf), Ok(600));
+    assert_eq!(&buf[..100], &data[20_380..]);
+    assert!(buf[100..].iter().all(|&b| b == 9));
+}
+
+#[test]
 fn appended_by_turns_and_written_back() {
     let s = storage();
     s.write("book.epub", &[7u8; 5000]).unwrap();
