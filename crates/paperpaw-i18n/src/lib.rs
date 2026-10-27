@@ -430,6 +430,36 @@ mod tests {
         assert_eq!(tags, ["en", "de", "de-AT"]);
     }
 
+    /// A catalog finds none of the keys before its first or after its
+    /// last, but its first and last; later catalogs still win.
+    #[test]
+    fn keys_outside_a_catalog_are_found_elsewhere() {
+        const HOME: &str = "[meta]\nlanguage = en\n[messages]\n\
+            home.a = Home A\nhome.z = \"Home Z\"\nhome.books.one = {count} book\n";
+        const CORE: &str = "[meta]\nlanguage = en\n[messages]\n\
+            font-folder.x = Fonts\ncore.on = On\nhome.m = Core M\n";
+        const LATER: &str = "[meta]\nlanguage = en\n[messages]\n\
+            home.m = Later M\ncore.on = Yes\nhome.books.other = {count} books\n";
+        let home = Catalog::parse(HOME).unwrap();
+        assert_eq!(home.get("home.a"), Some("Home A"));
+        assert_eq!(home.get("home.z"), Some("Home Z"));
+        for outside in ["", "a", "home", "home.", "home.zz", "home.z.x", "z"] {
+            assert_eq!(home.get(outside), None, "{outside}");
+        }
+        let mut t = Translator::new();
+        for source in [CORE, HOME, LATER] {
+            t.add(Catalog::parse(source).unwrap());
+        }
+        assert_eq!(t.tr("core.on"), "Yes");
+        assert_eq!(t.tr("home.m"), "Later M");
+        assert_eq!(t.tr("font-folder.x"), "Fonts");
+        assert_eq!(t.tr("home.a"), "Home A");
+        assert_eq!(t.tr("home.z"), "Home Z");
+        assert_eq!(t.tr("home.b"), "home.b");
+        assert_eq!(t.plural("home.books", 1, &[]), "1 books");
+        assert_eq!(t.plural("home.books", 2, &[]), "2 books");
+    }
+
     #[test]
     fn missing_plural_returns_key() {
         assert_eq!(translator("de").plural("nothing", 3, &[]), "nothing");

@@ -2,6 +2,7 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 use core::fmt;
 
 use paperpaw_config::ParseError;
@@ -180,36 +181,48 @@ impl Index {
     }
 }
 
-/// The key of the message line starting at `start`: its characters (see
-/// [`plain`]). Only the key is read, as looking a message up compares
-/// many keys and reads one value: the catalog may lie in flash, where
-/// every byte read costs.
+/// A character of a key on a plain message line: a letter, a digit, `_`,
+/// `-` or `.`. A message line is plain when the parser reads it as these
+/// do: the key's characters, `=`, then the rest of the line, trimmed and
+/// not quoted. The index keeps any other message in `others`.
+fn is_key_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.')
+}
+
+/// The key of the plain message line starting at `start`. Only the key
+/// is read, as looking a message up compares many keys and reads one
+/// value: the catalog may lie in flash, where every byte read costs.
 fn plain_key(source: &str, start: u32) -> &str {
     let line = source.get(start as usize..).unwrap_or_default();
     let len = line
         .bytes()
-        .position(|b| !(b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.')))
+        .position(|b| !is_key_byte(b))
         .unwrap_or(line.len());
     &line[..len]
 }
 
-/// The value of the message line starting at `start` (see [`plain`]).
+/// How the key of the plain message line starting at `start` compares
+/// with `key`, as `plain_key(source, start).cmp(key)` does. It reads the
+/// line only up to where the two differ.
+fn cmp_plain_key(source: &str, start: u32, key: &str) -> Ordering {
+    let line = source.get(start as usize..).unwrap_or_default();
+    let mut theirs = line.bytes().take_while(|b| is_key_byte(*b));
+    let mut ours = key.bytes();
+    loop {
+        match (theirs.next(), ours.next()) {
+            (Some(a), Some(b)) if a == b => {}
+            (a, b) => return a.cmp(&b),
+        }
+    }
+}
+
+/// The value of the plain message line starting at `start`.
 fn plain_value(source: &str, start: u32) -> Option<&str> {
     let after = start as usize + plain_key(source, start).len();
     let rest = source.get(after..)?;
     let rest = &rest[..rest.find('\n').unwrap_or(rest.len())];
     let value = rest.trim_start().strip_prefix('=')?.trim();
     (!value.starts_with('"')).then_some(value)
-}
-
-/// The key and value of the message line starting at `start`, as the
-/// parser reads them when the value is plain: the key's characters, `=`,
-/// then the rest of the line, trimmed. `None` for anything else (a quoted
-/// value), which the index keeps in `others`.
-fn plain(source: &str, start: u32) -> Option<(&str, &str)> {
-    let key = plain_key(source, start);
-    let value = plain_value(source, start)?;
-    (!key.is_empty()).then_some((key, value))
 }
 
 /// Why a catalog could not be loaded.
@@ -328,13 +341,19 @@ impl Catalog {
                 ("meta", _) => {}
                 ("messages", key) => {
                     let value = entry.value.as_str();
-                    // Plainly on its line, as the parser read it: only
-                    // where the line starts.
+                    // Plainly on its line: only where the line starts. The
+                    // parser gives a key of key characters or `@`, a quoted
+                    // value right after its `"` and a plain one after `=`
+                    // or a space.
                     let start = (key.as_ptr() as usize - base) as u32;
-                    let read = plain(source, start);
-                    let same = |a: &str, b: &str| a.as_ptr() == b.as_ptr() && a.len() == b.len();
-                    match (&value, read) {
-                        (Cow::Borrowed(v), Some((k, w))) if same(k, key) && same(w, v) => {
+                    let unquoted = |v: &str| {
+                        (v.as_ptr() as usize - base)
+                            .checked_sub(1)
+                            .and_then(|before| source.as_bytes().get(before))
+                            .is_some_and(|b| *b != b'"')
+                    };
+                    match &value {
+                        Cow::Borrowed(v) if key.bytes().all(is_key_byte) && unquoted(v) => {
                             index.push(start);
                         }
                         _ => {
@@ -360,18 +379,29 @@ impl Catalog {
                 .max()
                 .unwrap_or(0);
         }
-        // Stable sort keeps file order for duplicates; the last one wins.
-        // By cached keys: its scratch lies on the heap, where `sort_by`
-        // takes 4 KiB of stack (too much on the X4).
-        let key = |at: u32| key_of(source, &escaped, &others, at);
-        index.sort_by_cached_key(|at| key(*at));
-        index.dedup_by(|later, earlier| {
-            let duplicate = key(*later) == key(*earlier);
-            if duplicate {
-                *earlier = *later;
+        // Sorted by key, each read once, then by where its line is, so
+        // that of equal keys the last in the file wins. Unstable: a stable
+        // sort takes 4 KiB of stack (too much on the X4). Every key's line
+        // is in the source, a quoted one's as its key's span says.
+        let line = |at: u32| match at & OTHER {
+            0 => at,
+            _ => others
+                .get((at & !OTHER) as usize)
+                .map_or(0, |(key, _)| key.start),
+        };
+        let mut keyed: Vec<(&str, u32)> = index
+            .iter()
+            .map(|&at| (key_of(source, &escaped, &others, at), at))
+            .collect();
+        keyed.sort_unstable_by(|a, b| a.0.cmp(b.0).then_with(|| line(a.1).cmp(&line(b.1))));
+        index.clear();
+        let mut sorted = keyed.iter().peekable();
+        while let Some(&(key, at)) = sorted.next() {
+            if sorted.peek().is_none_or(|next| next.0 != key) {
+                index.push(at);
             }
-            duplicate
-        });
+        }
+        drop(keyed);
         self.escaped = escaped.into_boxed_str();
         // Boxed: they no longer change, and a box is smaller than a
         // vector (one of each per catalog, of every plugin).
@@ -424,19 +454,37 @@ impl Catalog {
         key_of(&self.source, &self.escaped, &self.others, at)
     }
 
+    /// How the key of index entry `at` compares with `key`.
+    fn cmp_key(&self, at: u32, key: &str) -> Ordering {
+        if at & OTHER != 0 {
+            self.key(at).cmp(key)
+        } else {
+            cmp_plain_key(&self.source, at, key)
+        }
+    }
+
     /// The message for `key`, if this catalog has one and is loaded.
     pub fn get(&self, key: &str) -> Option<&str> {
-        let (mut low, mut high) = (0, self.index.len(self.wide));
+        let len = self.index.len(self.wide);
+        // A key before the first or after the last is not here. A catalog
+        // mostly holds one plugin's keys, so a translator looking through
+        // all of them stops at this in most.
+        let last = self.index.at(len.checked_sub(1)?, self.wide);
+        let first = self.index.at(0, self.wide);
+        if self.cmp_key(first, key).is_gt() || self.cmp_key(last, key).is_lt() {
+            return None;
+        }
+        let (mut low, mut high) = (0, len);
         let at = loop {
             if low >= high {
                 return None;
             }
             let middle = low + (high - low) / 2;
             let at = self.index.at(middle, self.wide);
-            match self.key(at).cmp(key) {
-                core::cmp::Ordering::Less => low = middle + 1,
-                core::cmp::Ordering::Greater => high = middle,
-                core::cmp::Ordering::Equal => break at,
+            match self.cmp_key(at, key) {
+                Ordering::Less => low = middle + 1,
+                Ordering::Greater => high = middle,
+                Ordering::Equal => break at,
             }
         };
         if at & OTHER != 0 {
@@ -619,6 +667,14 @@ a = "two\nlines"
             Catalog::parse("[meta]\nlanguage = en\n[messages]\na = first\na = second\n").unwrap();
         assert_eq!(catalog.len(), 1);
         assert_eq!(catalog.get("a"), Some("second"));
+        // Also where one of them is quoted, before or after.
+        let catalog = Catalog::parse(
+            "[meta]\nlanguage = en\n[messages]\nb = \"one\"\na = first\nb = two\na = \"second\"\n",
+        )
+        .unwrap();
+        assert_eq!(catalog.len(), 2);
+        assert_eq!(catalog.get("a"), Some("second"));
+        assert_eq!(catalog.get("b"), Some("two"));
     }
 
     #[test]
