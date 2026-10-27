@@ -200,6 +200,15 @@ where
         }
     }
 
+    /// The voltages the UC8179's waveforms from the registers run at (those
+    /// of the OTP's own waveform, see `uc8179::Power`); no other
+    /// controller has them.
+    pub fn set_trial_power(&mut self, power: Option<uc8179::Power>) {
+        if let Panel::UltraChip(display) = self {
+            display.set_trial_power(power);
+        }
+    }
+
     pub fn refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
         each!(self, d => d.refresh(refresh, power_off))
     }

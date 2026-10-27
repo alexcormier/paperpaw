@@ -8,10 +8,12 @@
 //! with the waveform chosen here instead of the panel's own fast one:
 //!
 //! - *Panel's own*: the stock fast refresh, to compare with.
-//! - *Panel's, at a temperature* (SSD1677): the panel's own tables, made by
-//!   the vendor, as the controller takes them for a panel at that
-//!   temperature (0 to 90 degrees; the stock half refresh asks for 90). The
-//!   warmer the faster, and the less complete at a cool panel.
+//! - *Panel's, at a temperature*: the panel's own tables, made by the
+//!   vendor, as the controller takes them for a panel at that temperature
+//!   (an SSD1677: 0 to 90 degrees, the stock half refresh asks for 90; a
+//!   UC8179: up to 120, its fast refresh asks for 90, which is the range
+//!   of 80 to 90 degrees, and the ranges above are others). The warmer the
+//!   faster, and the less complete at a cool panel.
 //! - *Direct drive*: a waveform made here (`paperpaw_x4::waveform`): a
 //!   pixel that changes is driven to its new colour for some frames, after
 //!   a kick of the other colour for up to three. The panel's own voltages;
@@ -88,7 +90,9 @@ pub static SETTINGS: [SettingSpec; 7] = [
         TEMPERATURE,
         "x4.lab.temperature",
         TEMPERATURE_RANGE.0 as i64,
-        TEMPERATURE_RANGE.1 as i64,
+        // The SSD1677 takes up to 90 (`TEMPERATURE_RANGE`); a UC8179's
+        // ranges reach 127 degrees (the vendor's go to 127).
+        120,
         25,
         groups::DEVELOPER,
     )
@@ -162,7 +166,7 @@ fn support() -> Support {
 fn waveforms() -> &'static [&'static str] {
     match support() {
         Support::Ssd1677 => &[OWN, BY_TEMPERATURE, DIRECT],
-        Support::Uc8179 => &[OWN, DIRECT],
+        Support::Uc8179 => &[OWN, BY_TEMPERATURE, DIRECT],
         Support::None => &[OWN],
     }
 }
@@ -187,6 +191,13 @@ pub fn experiment(active: Option<&Id>, settings: &Settings) -> Option<Experiment
         (Support::Ssd1677, DIRECT) => {
             Some(Experiment::Ssd1677(display::Experiment::Direct(drive())))
         }
+        (Support::Uc8179, BY_TEMPERATURE) => Some(Experiment::Uc8179(uc8179::Experiment {
+            drive: drive(),
+            swapped: false,
+            repeat: 1,
+            rate: uc8179::OWN_RATE,
+            own_at: Some(settings.int(TEMPERATURE).clamp(-25, 127) as i8),
+        })),
         (Support::Uc8179, DIRECT) => {
             let hz = settings.int(RATE);
             let rate = FRAME_RATES
@@ -198,6 +209,7 @@ pub fn experiment(active: Option<&Id>, settings: &Settings) -> Option<Experiment
                 swapped: settings.bool(SWAPPED),
                 repeat: number(REPEAT).min(1),
                 rate,
+                own_at: None,
             }))
         }
         _ => None,
@@ -278,7 +290,9 @@ impl Control {
 fn controls(waveform: &str) -> &'static [Control] {
     use Control::*;
     match (support(), waveform) {
-        (Support::Ssd1677, BY_TEMPERATURE) => &[Waveform, Temperature, Picture, Auto, Clean],
+        (_, BY_TEMPERATURE) if support() != Support::None => {
+            &[Waveform, Temperature, Picture, Auto, Clean]
+        }
         (Support::Ssd1677, DIRECT) => &[Waveform, Frames, Kick, Picture, Auto, Clean],
         (Support::Uc8179, DIRECT) => &[
             Waveform, Frames, Kick, Rate, Repeat, Polarity, Picture, Auto, Clean,

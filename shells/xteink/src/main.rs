@@ -505,6 +505,8 @@ fn prepare() -> Ready {
     // What a UC8179's OTP holds, if it was read (developer builds).
     #[cfg(feature = "waveform-lab")]
     probe::log_otp();
+    #[cfg(feature = "waveform-lab")]
+    panel.set_trial_power(probe::otp_power());
     // Only an SSD1677's waveforms can be tried or set (`device`, `lab`).
     #[cfg(feature = "x4")]
     device::set_ssd1677(panel.controller() == paperpaw_x4::probe::Controller::Ssd1677);

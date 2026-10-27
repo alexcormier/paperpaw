@@ -52,6 +52,24 @@ const RATES: [u16; 16] = [
 /// The gate voltages (`VG_LVL`).
 const GATES: [u8; 8] = [9, 10, 11, 12, 17, 18, 19, 20];
 
+/// The voltages the range `celsius` degrees selects runs its waveform at,
+/// as the codes of the registers that set them (see
+/// [`uc8179::Power`](crate::uc8179::Power)); `None` where bank 0 is not
+/// valid or too short.
+pub fn power(otp: &[u8], celsius: i32) -> Option<crate::uc8179::Power> {
+    if otp.first() != Some(&CHECK) {
+        return None;
+    }
+    let range = tr(otp, select(otp, celsius))?;
+    Some(crate::uc8179::Power {
+        gate: range[0] & 7,
+        vdh: range[1] & 0x3F,
+        vdl: range[2] & 0x3F,
+        vdhr: range[3] & 0x3F,
+        vcom: range[5] & 0x7F,
+    })
+}
+
 /// The temperature range a temperature of `celsius` degrees selects in
 /// bank 0.
 pub fn select(otp: &[u8], celsius: i32) -> usize {
@@ -167,6 +185,8 @@ pub fn describe(otp: &[u8]) -> Vec<String> {
             lines.push(format!("otp: TR{index}: {}", header(range)));
         }
     }
+    // The ranges the boundaries can select, to the one that ends them.
+    let last = (0..11).find(|&i| otp[TB + i] == 0x7F).unwrap_or(11);
     let mut shown = Vec::new();
     for celsius in TEMPERATURES {
         let index = select(otp, celsius);
@@ -194,6 +214,26 @@ pub fn describe(otp: &[u8]) -> Vec<String> {
                 row * 48,
                 hex(chunk)
             ));
+        }
+    }
+    // The other ranges that can be selected: the states of what turns a
+    // pixel (K2W and W2K), to see how they differ.
+    for index in (0..=last).filter(|i| !shown.contains(i)) {
+        let Some(range) = tr(otp, index) else {
+            continue;
+        };
+        for (n, (name, _)) in LUTS
+            .into_iter()
+            .enumerate()
+            .filter(|(n, _)| (2..4).contains(n))
+        {
+            let start = HEADER + n * LUT;
+            for s in 0..STATES {
+                let bytes = &range[start + s * STATE..start + (s + 1) * STATE];
+                if let Some(text) = state(bytes, false) {
+                    lines.push(format!("otp: TR{index} {name} s{s} {text}"));
+                }
+            }
         }
     }
     lines
@@ -260,6 +300,33 @@ mod tests {
         // Only states that drive are told.
         assert_eq!(all.matches("TR2 LUTKW s").count(), 1, "{all}");
         assert!(all.contains("otp: TR2 raw 000: 67"), "{all}");
+    }
+
+    #[test]
+    fn the_voltages_of_the_range_are_given_as_register_codes() {
+        let power = power(&otp(), 25).unwrap();
+        assert_eq!(
+            (power.gate, power.vdh, power.vdl, power.vcom),
+            (7, 63, 58, 38)
+        );
+        assert!(super::power(&[0; 10], 25).is_none());
+    }
+
+    #[test]
+    fn the_other_ranges_that_can_be_selected_are_told_too() {
+        let mut otp = otp();
+        // TR3 turns a pixel one way for 4 frames.
+        let three = TR0 + 3 * TR_LEN;
+        for byte in &mut otp[three + HEADER..three + HEADER + 5 * LUT] {
+            *byte = 0;
+        }
+        let wk = three + HEADER + 3 * LUT;
+        otp[wk..wk + STATE].copy_from_slice(&[0b01_01_01_01, 4, 0, 0, 0, 0]);
+        let all = describe(&otp).join("\n");
+        assert!(
+            all.contains("otp: TR3 LUTWK s0 [VDH VDH VDH VDH]x[4 0 0 0]r0"),
+            "{all}"
+        );
     }
 
     #[test]

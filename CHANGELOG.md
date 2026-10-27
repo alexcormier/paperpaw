@@ -24,6 +24,11 @@ change the plugin SDK.
 
 ### Added
 
+- The waveform lab's direct drive on the X4 Pro runs at the voltages and VCOM of the
+  controller's own waveform (read from its OTP at start), not the reset values
+  of its registers (VDH and VDL 14.0 V, VCOM_DC next to nothing); and the lab can
+  show the panel's own waveform at a temperature (up to 120 degrees) on a UC8179
+  too.
 - Developer firmware of the X4 Pro (`x4pro` builds) reads the controller's OTP at start (a
   UC8179, about 100 ms) and tells the log what its own waveforms are: the
   temperature ranges, their frame rate, voltages and VCOM, and the states of the

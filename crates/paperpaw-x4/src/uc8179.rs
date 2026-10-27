@@ -70,6 +70,7 @@ const LINE: usize = PANEL_WIDTH as usize / 8;
 /// The controller's commands used here.
 mod cmd {
     pub const PANEL_SETTING: u8 = 0x00;
+    pub const POWER_SETTING: u8 = 0x01;
     pub const POWER_OFF: u8 = 0x02;
     pub const POWER_OFF_SEQUENCE: u8 = 0x03;
     pub const POWER_ON: u8 = 0x04;
@@ -82,6 +83,7 @@ mod cmd {
     pub const VCOM_DATA_INTERVAL: u8 = 0x50;
     pub const RESOLUTION: u8 = 0x61;
     pub const GATE_SOURCE_START: u8 = 0x65;
+    pub const VCOM_DC: u8 = 0x82;
     pub const PARTIAL_WINDOW: u8 = 0x90;
     pub const PARTIAL_IN: u8 = 0x91;
     pub const PARTIAL_OUT: u8 = 0x92;
@@ -115,6 +117,21 @@ pub const FRAME_RATES: [(u8, u16); 9] = [
 /// The index of the controller's own frame rate in [`FRAME_RATES`].
 pub const OWN_RATE: usize = 3;
 
+/// The voltages a waveform from the registers runs at: those the OTP's own
+/// waveform uses (its range's header, [`otp::power`](crate::otp::power)),
+/// which the registers hold only as the reset left them (VDH and VDL
+/// 14.0 V, VCOM_DC next to nothing). As the codes of the registers: the gate
+/// level (`VG_LVL`, 3 bits), `VDH_LVL`, `VDL_LVL` and `VDHR_LVL` (6 bits),
+/// `VDCS` (7 bits).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Power {
+    pub gate: u8,
+    pub vdh: u8,
+    pub vdl: u8,
+    pub vdhr: u8,
+    pub vcom: u8,
+}
+
 /// A way to show fast refreshes other than the panel's own, for trying
 /// waveforms on a device (the waveform lab, `shells/xteink/src/lab.rs`);
 /// UC8179 only. Set with [`Display::set_experiment`]; only fast refreshes
@@ -132,6 +149,10 @@ pub struct Experiment {
     pub repeat: u8,
     /// The frame rate, an index of [`FRAME_RATES`].
     pub rate: usize,
+    /// The panel's own waveform, the OTP's, at this temperature in degrees
+    /// (what the controller takes for the temperature it is told, `TSSET`):
+    /// then nothing above is used.
+    pub own_at: Option<i8>,
 }
 
 /// Where the frame is kept between refreshes.
@@ -279,6 +300,8 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     buffer: Vec<u8>,
     /// What fast refreshes are shown with, if not the panel's own.
     experiment: Option<Experiment>,
+    /// The voltages of a waveform from the registers, if known.
+    trial_power: Option<Power>,
 }
 
 impl<SPI, DC, RST, BUSY, D> Display<SPI, DC, RST, BUSY, D>
@@ -319,7 +342,14 @@ where
             pending: None,
             buffer: Vec::new(),
             experiment: None,
+            trial_power: None,
         }
+    }
+
+    /// The voltages a waveform from the registers runs at (see [`Power`]);
+    /// without, the controller's reset values.
+    pub fn set_trial_power(&mut self, power: Option<Power>) {
+        self.trial_power = power;
     }
 
     /// Shows fast refreshes as `experiment` says (or the panel's own where
@@ -624,12 +654,17 @@ where
         };
         self.command(cmd::VCOM_DATA_INTERVAL, interval)?;
         self.command(cmd::CASCADE, &[0x02])?;
-        self.command(cmd::TEMPERATURE, &[if fast { 0x5A } else { 0x1E }])?;
+        let temperature = match trial.and_then(|trial| trial.own_at) {
+            Some(own) if fast => own as u8,
+            _ if fast => 0x5A,
+            _ => 0x1E,
+        };
+        self.command(cmd::TEMPERATURE, &[temperature])?;
         if !s.panel_after_power_on {
             match trial {
                 // Its own waveforms, from the registers (as the grays).
-                Some(trial) => self.load_trial(&trial)?,
-                None => self.command(cmd::PANEL_SETTING, &s.panel_otp)?,
+                Some(trial) if trial.own_at.is_none() => self.load_trial(&trial)?,
+                _ => self.command(cmd::PANEL_SETTING, &s.panel_otp)?,
             }
         }
         if fast {
@@ -654,7 +689,8 @@ where
         self.pending = Some(Pending {
             partial: fast,
             power_off,
-            restore_rate: trial.is_some_and(|trial| trial.rate != OWN_RATE),
+            restore_rate: trial
+                .is_some_and(|trial| trial.own_at.is_none() && trial.rate != OWN_RATE),
         });
         Ok(())
     }
@@ -664,6 +700,14 @@ where
     fn load_trial(&mut self, trial: &Experiment) -> Result<(), Error> {
         let s = self.sequences();
         self.command(cmd::PANEL_SETTING, &s.panel)?;
+        if let Some(power) = self.trial_power {
+            // The voltages of the OTP's own waveform, not the reset's.
+            self.command(
+                cmd::POWER_SETTING,
+                &[0x07, 0x10 | power.gate, power.vdh, power.vdl, power.vdhr],
+            )?;
+            self.command(cmd::VCOM_DC, &[power.vcom])?;
+        }
         self.load_luts(&trial.drive.uc8179_luts(trial.swapped, trial.repeat))?;
         let rate = FRAME_RATES[trial.rate.min(FRAME_RATES.len() - 1)].0;
         if trial.rate != OWN_RATE {
@@ -1172,6 +1216,7 @@ mod tests {
             swapped: false,
             repeat: 0,
             rate: 4,
+            own_at: None,
         }));
         d.refresh(Refresh::Fast, false).unwrap();
         assert!(c.borrow().last(0x22).is_none());
@@ -1226,6 +1271,7 @@ mod tests {
             swapped: false,
             repeat: 0,
             rate,
+            own_at: None,
         };
         d.set_experiment(Some(trial(OWN_RATE)));
         d.refresh(Refresh::Fast, false).unwrap();
@@ -1241,6 +1287,58 @@ mod tests {
         // Asked, then given back: the controller's own again.
         assert_eq!(plls(&c.borrow()), at_start + 2);
         assert_eq!(c.borrow().last(cmd::PLL), Some(&[0x06][..]));
+    }
+
+    #[test]
+    fn a_trial_runs_at_the_otps_voltages_when_they_are_known() {
+        let (mut d, c) = display();
+        let band = band_with(0, 0);
+        d.write_rows(0, view(&band, 8), Planes::NEW).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        d.set_trial_power(Some(Power {
+            gate: 7,
+            vdh: 0x3F,
+            vdl: 0x3F,
+            vdhr: 0x0D,
+            vcom: 0x1A,
+        }));
+        d.set_experiment(Some(Experiment {
+            drive: Direct::new(3, 0),
+            swapped: false,
+            repeat: 1,
+            rate: OWN_RATE,
+            own_at: None,
+        }));
+        d.refresh(Refresh::Fast, false).unwrap();
+        let c = c.borrow();
+        assert_eq!(
+            c.last(cmd::POWER_SETTING),
+            Some(&[0x07, 0x17, 0x3F, 0x3F, 0x0D][..])
+        );
+        assert_eq!(c.last(cmd::VCOM_DC), Some(&[0x1A][..]));
+    }
+
+    #[test]
+    fn the_panels_own_waveform_at_a_temperature_keeps_the_otp_and_forces_it() {
+        let (mut d, c) = display();
+        let band = band_with(0, 0);
+        d.write_rows(0, view(&band, 8), Planes::NEW).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        d.set_experiment(Some(Experiment {
+            drive: Direct::new(3, 0),
+            swapped: false,
+            repeat: 1,
+            rate: 8,
+            own_at: Some(95),
+        }));
+        d.refresh(Refresh::Fast, false).unwrap();
+        let c = c.borrow();
+        // The OTP's waveform (REG = 0), the temperature as told, no
+        // registers loaded, no frame rate asked.
+        assert_eq!(c.last(cmd::PANEL_SETTING), Some(&UC8179.panel_otp[..]));
+        assert_eq!(c.temperatures.last(), Some(&95));
+        assert!(c.last(0x22).is_none());
+        assert!(c.last(cmd::PLL).is_none() || c.last(cmd::PLL) == Some(&[0x06][..]));
     }
 
     #[test]

@@ -185,12 +185,17 @@ fn tapping_the_waveform_row_chooses_the_direct_drive_and_it_stays() {
     kernel.open_screen(Instant(100), lab::SCREEN, Params::new());
     kernel.render(&mut |_, _| {});
     // The first row, "Waveform": shown the panel's own way (partial), not
-    // with what is tried.
+    // with what is tried. The panel's own, at a temperature, then direct.
     let effects = tap(&mut kernel, 1_000, 240, 406);
     assert_eq!(
         effects.refresh().map(|(_, mode)| mode),
         Some(paperpaw_platform::RefreshMode::Partial)
     );
+    assert_eq!(
+        kernel.settings().text("x4.lab.waveform"),
+        "x4.lab.waveform.temperature"
+    );
+    tap(&mut kernel, 1_500, 240, 406);
     eprintln!(
         "after one tap: {:?}",
         kernel.settings().text("x4.lab.waveform")
@@ -231,6 +236,7 @@ fn a_tap_on_the_picture_flips_it_with_a_fast_refresh() {
     let mut kernel = kernel(PRO);
     kernel.open_screen(Instant(100), lab::SCREEN, Params::new());
     kernel.render(&mut |_, _| {});
+    tap(&mut kernel, 900, 240, 406);
     tap(&mut kernel, 1_000, 240, 406);
     // The first stripe of the picture is black; flipped it is white.
     assert!(!white(&mut kernel, 5, 200));
@@ -249,6 +255,7 @@ fn the_rows_of_a_direct_drive_on_a_uc8179_fit_and_page() {
     let mut kernel = kernel(PRO);
     kernel.open_screen(Instant(100), lab::SCREEN, Params::new());
     kernel.render(&mut |_, _| {});
+    tap(&mut kernel, 900, 240, 406);
     tap(&mut kernel, 1_000, 240, 406);
     shot(&mut kernel, "lab-4-direct");
     // Frames: the second row; its + is at the right.
