@@ -188,7 +188,14 @@ pub struct Deleted {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Kept;
 
-impl Library for Kept {}
+impl Library for Kept {
+    // Its books are the catalog's: read once, not counted first.
+    fn index(&self, env: &Env<'_>, cap: usize, archive: &str) -> Index {
+        let opened = super::index::opened(env.storage());
+        let version = self.version(env);
+        Index::of_catalog(env.storage(), cap, archive, &opened, version)
+    }
+}
 
 static KEPT: Kept = Kept;
 

@@ -45,7 +45,7 @@ const HEADER: &str = "\tcatalog\t2";
 /// with it, 16 bytes a book.
 pub const MAX_LOG: usize = 256;
 
-fn catalog_path() -> String {
+pub(super) fn catalog_path() -> String {
     format!("{DIR}/catalog.txt")
 }
 
@@ -446,7 +446,7 @@ fn lines_from(
 
 /// How many lines the file at `path` has (none where it is not there),
 /// counted a piece at a time.
-fn count_lines(storage: &dyn Storage, path: &str) -> Result<usize, StorageError> {
+pub(super) fn count_lines(storage: &dyn Storage, path: &str) -> Result<usize, StorageError> {
     let mut buf = [0u8; 512];
     let (mut offset, mut count, mut last) = (0u64, 0, b'\n');
     loop {
