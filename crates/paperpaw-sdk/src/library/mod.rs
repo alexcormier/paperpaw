@@ -759,49 +759,58 @@ fn write_book(storage: &dyn Storage, path: &str, book: &Book) -> bool {
 
 fn write_details(storage: &dyn Storage, path: &str, book: &Book) -> Result<(), crate::data::Error> {
     let before = crate::data::Format::FIRST.load(storage, &book_file(path), MAX_DETAILS)?;
-    let mut ini = String::new();
-    let mut set = |key: &str, value: &str| ini = config::set(&ini, "book", key, fit(value));
-    set("size", &book.size.to_string());
-    set("indexed", if book.indexed { "on" } else { "off" });
-    set("version", &DETAILS.to_string());
-    if let Some(title) = &book.title {
-        set("title", title);
-    }
-    if let Some(author) = &book.author {
-        set("author", author);
-    }
-    if let Some(series) = &book.series {
-        set("series", series);
-    }
-    if let Some(index) = &book.series_index {
-        set("series-index", index);
-    }
-    for (i, tag) in book.tags.iter().take(MAX_TAGS).enumerate() {
-        set(&format!("tag.{}", i + 1), tag);
-    }
-    if let Some(cover) = &book.cover {
-        set("cover", &cover.path);
-        set("cover-width", &cover.width.to_string());
-        set("cover-height", &cover.height.to_string());
-    }
-    if let Some(progress) = book.progress {
-        set("progress", &progress.to_string());
-    }
-    if let Some(added) = book.added {
-        set("added", &added.to_string());
-    }
-    for (id, value) in &book.fields {
-        ini = config::set(&ini, "field", id, fit(value));
-    }
-    for entry in config::parse(before.as_deref().unwrap_or_default()).filter_map(Result::ok) {
-        if !known_detail(entry.section, entry.key) {
-            ini = config::set(&ini, entry.section, entry.key, &entry.value.as_str());
-        }
-    }
+    let ini = details_text(book, before.as_deref().unwrap_or_default());
     if ini.len() > MAX_DETAILS {
         return Err(StorageError::TooLarge.into());
     }
     Ok(storage.write(&book_file(path), ini.as_bytes())?)
+}
+
+/// The text of the details of `book`, with what `before` holds that the
+/// library does not know kept: in one pass, as [`config::set`] would
+/// write it key by key.
+fn details_text<'a>(book: &'a Book, before: &'a str) -> String {
+    let mut entries: Vec<(&'a str, Cow<'a, str>, Cow<'a, str>)> = Vec::new();
+    let mut set = |key: Cow<'a, str>, value: Cow<'a, str>| entries.push(("book", key, value));
+    set("size".into(), book.size.to_string().into());
+    set(
+        "indexed".into(),
+        (if book.indexed { "on" } else { "off" }).into(),
+    );
+    set("version".into(), DETAILS.to_string().into());
+    for (key, value) in [
+        ("title", &book.title),
+        ("author", &book.author),
+        ("series", &book.series),
+        ("series-index", &book.series_index),
+    ] {
+        if let Some(value) = value {
+            set(key.into(), fit(value).into());
+        }
+    }
+    for (i, tag) in book.tags.iter().take(MAX_TAGS).enumerate() {
+        set(format!("tag.{}", i + 1).into(), fit(tag).into());
+    }
+    if let Some(cover) = &book.cover {
+        set("cover".into(), fit(&cover.path).into());
+        set("cover-width".into(), cover.width.to_string().into());
+        set("cover-height".into(), cover.height.to_string().into());
+    }
+    if let Some(progress) = book.progress {
+        set("progress".into(), progress.to_string().into());
+    }
+    if let Some(added) = book.added {
+        set("added".into(), added.to_string().into());
+    }
+    for (id, value) in &book.fields {
+        entries.push(("field", id.as_str().into(), fit(value).into()));
+    }
+    for entry in config::parse(before).filter_map(Result::ok) {
+        if !known_detail(entry.section, entry.key) {
+            entries.push((entry.section, entry.key.into(), entry.value.as_str()));
+        }
+    }
+    config::set_all("", entries)
 }
 
 /// Reads title, author, series, tags and cover from the book itself and
