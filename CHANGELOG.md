@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- `tools/flash-x4.py` builds the checked-out source and flashes it to an X4,
+  X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
+  backup of the reader's flash and a dry run.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added
