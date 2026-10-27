@@ -1015,24 +1015,16 @@ impl Book {
                 Some(self.locator_at(fraction))
             }
             "chapter" => {
-                // Where the entries begin, exactly (their anchors): the
-                // chapters the status lines name, also those in parts.
                 let storage = env.storage();
-                let mut starts: Vec<Locator> = (0..self.document.toc_len(storage).min(2000))
-                    .filter_map(|i| self.document.toc_target(storage, i))
-                    .collect();
-                starts.sort_unstable();
-                starts.dedup();
-                let here = self.page.start;
-                if value > 0 {
-                    // On: the first chapter that begins on a later page.
-                    return starts.into_iter().find(|&s| s >= self.page.end);
-                }
-                // Back: to the start of this chapter, or the one before.
-                let current = starts.iter().rposition(|&s| s <= here)?;
-                match starts[current] < here {
-                    true => Some(starts[current]),
-                    false => current.checked_sub(1).map(|i| starts[i]),
+                let entries = self.document.toc_len(storage).min(2000);
+                // With several sections, exact starts are found only where
+                // the start of an entry's section does not settle it: an
+                // exact start (an anchor) may need its chapter converted.
+                let (document, page) = (&*self.document, (self.page.start, self.page.end));
+                match (document.sections() > 1, value > 0) {
+                    (true, true) => next_chapter(document, storage, entries, page.1),
+                    (true, false) => previous_chapter(document, storage, entries, page.0),
+                    (false, on) => chapter_by_starts(document, storage, entries, page, on),
                 }
             }
             _ => None,
@@ -1107,8 +1099,119 @@ impl Book {
     }
 }
 
+/// The chapter after the page or the one it is in (or before), `on` or
+/// back, by the exact starts of the first `entries` entries; the page
+/// from `page.0` to `page.1`.
+fn chapter_by_starts(
+    document: &dyn Document,
+    storage: &dyn paperpaw_sdk::Storage,
+    entries: u32,
+    (here, end): (Locator, Locator),
+    on: bool,
+) -> Option<Locator> {
+    // Where the entries begin, exactly (their anchors): the chapters the
+    // status lines name, also those in parts.
+    let mut starts: Vec<Locator> = (0..entries)
+        .filter_map(|i| document.toc_target(storage, i))
+        .collect();
+    starts.sort_unstable();
+    starts.dedup();
+    if on {
+        // On: the first chapter that begins on a later page.
+        return starts.into_iter().find(|&s| s >= end);
+    }
+    // Back: to the start of this chapter, or the one before.
+    let current = starts.iter().rposition(|&s| s <= here)?;
+    match starts[current] < here {
+        true => Some(starts[current]),
+        false => current.checked_sub(1).map(|i| starts[i]),
+    }
+}
+
+/// As [`chapter_by_starts`] on: the first exact start at or after the
+/// page's `end`. An entry's locator is in the section of its exact start
+/// and not after it, so entries of earlier sections, and those not
+/// before the start found, need not be looked at closer.
+fn next_chapter(
+    document: &dyn Document,
+    storage: &dyn paperpaw_sdk::Storage,
+    entries: u32,
+    end: Locator,
+) -> Option<Locator> {
+    let mut found: Option<Locator> = None;
+    for i in 0..entries {
+        if let Some(entry) = document.toc_entry(storage, i)
+            && (entry.at.section < end.section || found.is_some_and(|f| entry.at >= f))
+        {
+            continue;
+        }
+        if let Some(start) = document.toc_target(storage, i)
+            && start >= end
+            && found.is_none_or(|f| start < f)
+        {
+            found = Some(start);
+        }
+    }
+    found
+}
+
+/// As [`chapter_by_starts`] back: the last exact start before the page
+/// at `here`. Only the entries of the page's section are looked at
+/// closer, then those of the last section before it, where the chapter
+/// before begins if not in this one.
+fn previous_chapter(
+    document: &dyn Document,
+    storage: &dyn paperpaw_sdk::Storage,
+    entries: u32,
+    here: Locator,
+) -> Option<Locator> {
+    // Entries that may begin in the page's section before it, or whose
+    // locator is unknown.
+    let mut near = Vec::new();
+    // The last section before the page's that has entries, and those.
+    let mut earlier = None;
+    let mut last = Vec::new();
+    for i in 0..entries {
+        let Some(entry) = document.toc_entry(storage, i) else {
+            near.push(i);
+            continue;
+        };
+        let at = entry.at;
+        if at >= here {
+            continue;
+        }
+        if at.section == here.section {
+            near.push(i);
+        } else if earlier.is_none_or(|section| at.section >= section) {
+            if earlier != Some(at.section) {
+                last.clear();
+                earlier = Some(at.section);
+            }
+            last.push(i);
+        }
+    }
+    let exact = |list: &[u32]| {
+        list.iter()
+            .filter_map(|&i| document.toc_target(storage, i))
+            .filter(|&start| start < here)
+            .max()
+    };
+    let found = exact(&near);
+    if earlier.is_none() || found.is_some_and(|f| f.section == here.section) {
+        return found;
+    }
+    match exact(&last) {
+        Some(start) => found.max(Some(start)),
+        // None of these has a start: those of sections before it count.
+        None => chapter_by_starts(document, storage, entries, (here, here), false),
+    }
+}
+
 /// Whether the text filters do something else now than when the pages
 /// were laid out.
 pub(super) fn env_filters_changed(env: &Env<'_>, book: &Book) -> bool {
     book.typography.filters != env.text_filters().signature(env)
 }
+
+#[cfg(test)]
+mod chapter_tests;
