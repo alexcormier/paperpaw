@@ -985,15 +985,18 @@ impl Firmware {
         });
         let drawn = now();
         self.kernel.showing(drawn);
-        #[cfg(all(feature = "x4", feature = "waveform-lab"))]
+        #[cfg(feature = "x4")]
         {
-            // The waveform lab drives fast refreshes its own way.
             let experiment = if refresh == Refresh::Fast {
-                crate::lab::experiment(self.kernel.active_screen())
+                fast_waveform(mode, self.kernel.active_screen())
             } else {
                 None
             };
-            crate::lab::set_supported(self.panel.set_experiment(experiment));
+            let supported = self.panel.set_experiment(experiment);
+            #[cfg(feature = "waveform-lab")]
+            crate::lab::set_supported(supported);
+            #[cfg(not(feature = "waveform-lab"))]
+            let _ = supported;
         }
         if let Err(e) = self.refresh(refresh) {
             failed = Some(e);
@@ -1052,6 +1055,32 @@ impl Firmware {
         );
     }
 }
+
+/// The waveform of a fast refresh on the X4: the waveform lab's own while
+/// it is open, else for `RefreshMode::Fast` (menus, focus moved, small
+/// changes) a direct drive of a few frames, which shows in about 160 ms
+/// where the panel's own fast waveform takes 500 ms, and leaves ghosts that
+/// the next full refresh clears. Partial refreshes (pages) keep the
+/// panel's own.
+#[cfg(feature = "x4")]
+fn fast_waveform(
+    mode: RefreshMode,
+    active: Option<&paperpaw_sdk::Id>,
+) -> Option<paperpaw_x4::display::Experiment> {
+    #[cfg(feature = "waveform-lab")]
+    if crate::lab::is_open(active) {
+        return crate::lab::experiment(active);
+    }
+    let _ = active;
+    (mode == RefreshMode::Fast).then_some(paperpaw_x4::display::Experiment::Direct(
+        paperpaw_x4::waveform::Direct::new(MENU_FRAMES, 0),
+    ))
+}
+
+/// Frames a fast refresh drives a changed pixel (tried in the waveform
+/// lab: 4 frames, no kick).
+#[cfg(feature = "x4")]
+const MENU_FRAMES: u8 = 4;
 
 /// The heap's free bytes, for keeping what was sent.
 fn heap_free() -> usize {

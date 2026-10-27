@@ -63,10 +63,15 @@ pub fn set_supported(yes: bool) {
     SUPPORTED.store(yes, Ordering::Relaxed);
 }
 
-/// How a fast refresh is driven now: as the lab says while it is the
-/// screen shown (`active` is the screen on top), else as the panel does.
+/// Whether the lab is the screen shown (`active` is the screen on top).
+pub fn is_open(active: Option<&Id>) -> bool {
+    active == Some(&SCREEN)
+}
+
+/// How a fast refresh is driven while the lab is open: as the lab says,
+/// or (`None`) the panel's own.
 pub fn experiment(active: Option<&Id>) -> Option<Experiment> {
-    if active != Some(&SCREEN) || !SUPPORTED.load(Ordering::Relaxed) {
+    if !is_open(active) || !SUPPORTED.load(Ordering::Relaxed) {
         return None;
     }
     match KIND.load(Ordering::Relaxed) {

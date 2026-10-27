@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- X4: changes shown with the fast refresh (menus, a focus moved) take about
+  160 ms instead of 500 ms, by driving the changed pixels for 4 frames
+  (found in the waveform lab). They leave more ghosting, which the next
+  full refresh clears; page turns are as before.
+
 ### Added
 
 - `tools/flash-x4.py` builds the checked-out source and flashes it to an X4,
