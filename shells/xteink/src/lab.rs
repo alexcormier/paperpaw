@@ -1,58 +1,123 @@
 //! The waveform lab: a screen to try, on the device, how the panel is
 //! driven (Tools, *Waveform lab*; for panels with an SSD1677 or a UC8179
 //! controller, and only in the developer firmware, the feature
-//! `waveform-lab`, which `remote` builds of the X4 and the X4 Pro have).
+//! `waveform-lab`, which the `x4` and `x4pro` builds have).
 //!
 //! A test picture (stripes, squares, halves or lines) is flipped between
 //! its two states, so that pixels change both ways, and each flip is shown
 //! with the waveform chosen here instead of the panel's own fast one:
 //!
 //! - *Panel's own*: the stock fast refresh, to compare with.
-//! - *Panel's, at a temperature*: the panel's own tables, made by the
-//!   vendor, as the controller takes them for a panel at that temperature
-//!   (0 to 90 degrees; the stock half refresh asks for 90). The warmer the
-//!   faster, and the less complete at a cool panel.
+//! - *Panel's, at a temperature* (SSD1677): the panel's own tables, made by
+//!   the vendor, as the controller takes them for a panel at that
+//!   temperature (0 to 90 degrees; the stock half refresh asks for 90). The
+//!   warmer the faster, and the less complete at a cool panel.
 //! - *Direct drive*: a waveform made here (`paperpaw_x4::waveform`): a
 //!   pixel that changes is driven to its new colour for some frames, after
-//!   a kick of the other colour for up to three. The stock voltages; the
-//!   frames and the kick are what is tried.
+//!   a kick of the other colour for up to three. The panel's own voltages;
+//!   the frames and the kick are what is tried.
 //!
 //! On a UC8179 (the X4 Pro) the direct drive has more: the frame rate
 //! (the controller's `PLL` register, 20 to 100 Hz, its own 50), the group's
 //! repeat (0 or 1: the datasheet says "0: 0 time", so if nothing changes
 //! at 0, try 1), and the levels of white and black, assumed from the stock
-//! gray waveform and turned round with *Polarity* if the picture comes
-//! out the wrong way. The voltages are the controller's own; none is set.
+//! gray waveform and turned round if the picture comes out the wrong way.
 //!
-//! Up and down choose a row, left and right change its value, *Select*
-//! flips the picture (or does the row: *Flip on its own*, *Clean up*).
-//! *Clean up* shows everything with the stock refresh that drives every
-//! pixel, which clears what the experiments left behind. The time the
-//! panel took for the last frame is told above the rows.
+//! The rows are the ordinary ones: a setting each (developer group, so they
+//! are kept and are in the settings too), with `−` and `+` where there is
+//! a touch screen, left and right on the buttons; *Select* or a tap on the
+//! picture flips it. *Clean up* shows everything with the stock refresh
+//! that drives every pixel, which clears what the experiments left behind.
+//! The time the panel took for the last frame is told above the rows.
 //!
-//! Nothing is kept: leaving the screen, or a restart, is the stock
-//! firmware again.
+//! The waveform chosen counts only while the lab is the screen shown;
+//! leaving it, or a restart, is the stock firmware again.
 
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicU8, Ordering};
 
-use paperpaw_sdk::builtin::{actions, menus};
+use paperpaw_sdk::builtin::{actions, groups, menus};
 use paperpaw_sdk::realtime::ScreenMode;
-use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListView, RowPart, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Handled, Id, Instances, MenuEntry,
-    Params, Rect, RefreshMode, Screen,
+    Canvas, Color, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
+    Instances, MenuEntry, Params, Rect, RefreshMode, Screen, SettingExtra, SettingSpec,
+    SettingValue, Settings,
 };
 use paperpaw_x4::display::{self, TEMPERATURE_RANGE};
 use paperpaw_x4::panel::Experiment;
-use paperpaw_x4::uc8179::{self, FRAME_RATES, OWN_RATE};
+use paperpaw_x4::uc8179::{self, FRAME_RATES};
 use paperpaw_x4::waveform::{Direct, MAX_FRAMES, MAX_KICK};
 
 pub const SCREEN: Id = Id::new_static("x4.waveform-lab");
 pub const OPEN: Id = Id::new_static("x4.open-waveform-lab");
+
+/// The lab's settings: the waveform and its numbers.
+const WAVEFORM: &str = "x4.lab.waveform";
+const TEMPERATURE: &str = "x4.lab.temperature";
+const FRAMES: &str = "x4.lab.frames";
+const KICK: &str = "x4.lab.kick";
+const REPEAT: &str = "x4.lab.repeat";
+const RATE: &str = "x4.lab.rate";
+const SWAPPED: &str = "x4.lab.swapped";
+
+/// The choices of the waveform.
+const OWN: &str = "x4.lab.waveform.panel";
+const BY_TEMPERATURE: &str = "x4.lab.waveform.temperature";
+const DIRECT: &str = "x4.lab.waveform.direct";
+
+static BY_FIVE: SettingExtra = SettingExtra::new().step(5);
+static BY_TEN: SettingExtra = SettingExtra::new().step(10);
+
+/// The settings the lab keeps (registered by `device`).
+pub static SETTINGS: [SettingSpec; 7] = [
+    SettingSpec::choice(
+        WAVEFORM,
+        "x4.lab.waveform",
+        &[OWN, BY_TEMPERATURE, DIRECT],
+        OWN,
+        groups::DEVELOPER,
+    ),
+    SettingSpec::number(
+        TEMPERATURE,
+        "x4.lab.temperature",
+        TEMPERATURE_RANGE.0 as i64,
+        TEMPERATURE_RANGE.1 as i64,
+        25,
+        groups::DEVELOPER,
+    )
+    .with_extra(&BY_FIVE),
+    SettingSpec::number(
+        FRAMES,
+        "x4.lab.frames",
+        1,
+        MAX_FRAMES as i64,
+        4,
+        groups::DEVELOPER,
+    ),
+    SettingSpec::number(
+        KICK,
+        "x4.lab.kick",
+        0,
+        MAX_KICK as i64,
+        0,
+        groups::DEVELOPER,
+    ),
+    SettingSpec::number(REPEAT, "x4.lab.repeat", 0, 1, 0, groups::DEVELOPER),
+    SettingSpec::number(
+        RATE,
+        "x4.lab.rate",
+        FRAME_RATES[0].1 as i64,
+        FRAME_RATES[FRAME_RATES.len() - 1].1 as i64,
+        FRAME_RATES[uc8179::OWN_RATE].1 as i64,
+        groups::DEVELOPER,
+    )
+    .with_extra(&BY_TEN),
+    SettingSpec::switch(SWAPPED, "x4.lab.polarity", false, groups::DEVELOPER),
+];
 
 /// After this many flips without a clean-up the lab says to clean up, and
 /// a picture that flips on its own stops after the second number.
@@ -69,17 +134,6 @@ pub enum Support {
 }
 
 static SUPPORT: AtomicU8 = AtomicU8::new(0);
-/// What is chosen: the kind of waveform (0 the panel's own, 1 the panel's
-/// at a temperature, SSD1677 only, 2 direct) and its numbers.
-static KIND: AtomicU8 = AtomicU8::new(0);
-static TEMPERATURE: AtomicU8 = AtomicU8::new(25);
-static FRAMES: AtomicU8 = AtomicU8::new(8);
-static KICK: AtomicU8 = AtomicU8::new(0);
-/// The UC8179's: times to repeat, frame rate (an index of `FRAME_RATES`),
-/// and whether the levels of white and black are turned round.
-static REPEAT: AtomicU8 = AtomicU8::new(0);
-static RATE: AtomicU8 = AtomicU8::new(OWN_RATE as u8);
-static SWAPPED: AtomicBool = AtomicBool::new(false);
 
 /// The firmware says what this panel takes (at start).
 pub fn set_support(support: Support) {
@@ -101,12 +155,12 @@ fn support() -> Support {
     }
 }
 
-/// The kinds of waveform the panel offers, the panel's own first.
-fn kinds() -> &'static [u8] {
+/// The waveforms the panel offers, the panel's own first.
+fn waveforms() -> &'static [&'static str] {
     match support() {
-        Support::Ssd1677 => &[0, 1, 2],
-        Support::Uc8179 => &[0, 2],
-        Support::None => &[0],
+        Support::Ssd1677 => &[OWN, BY_TEMPERATURE, DIRECT],
+        Support::Uc8179 => &[OWN, DIRECT],
+        Support::None => &[OWN],
     }
 }
 
@@ -115,24 +169,34 @@ pub fn is_open(active: Option<&Id>) -> bool {
     active == Some(&SCREEN)
 }
 
-/// How a fast refresh is driven while the lab is open: as the lab says,
+/// How a fast refresh is driven while the lab is open: as its settings say,
 /// or (`None`) the panel's own.
-pub fn experiment(active: Option<&Id>) -> Option<Experiment> {
+pub fn experiment(active: Option<&Id>, settings: &Settings) -> Option<Experiment> {
     if !is_open(active) {
         return None;
     }
-    let drive = || Direct::new(FRAMES.load(Ordering::Relaxed), KICK.load(Ordering::Relaxed));
-    match (support(), KIND.load(Ordering::Relaxed)) {
-        (Support::Ssd1677, 1) => Some(Experiment::Ssd1677(display::Experiment::Temperature(
-            TEMPERATURE.load(Ordering::Relaxed) as i8,
-        ))),
-        (Support::Ssd1677, 2) => Some(Experiment::Ssd1677(display::Experiment::Direct(drive()))),
-        (Support::Uc8179, 2) => Some(Experiment::Uc8179(uc8179::Experiment {
-            drive: drive(),
-            swapped: SWAPPED.load(Ordering::Relaxed),
-            repeat: REPEAT.load(Ordering::Relaxed),
-            rate: usize::from(RATE.load(Ordering::Relaxed)),
-        })),
+    let number = |id: &str| u8::try_from(settings.int(id).clamp(0, 255)).unwrap_or(u8::MAX);
+    let drive = || Direct::new(number(FRAMES), number(KICK));
+    match (support(), settings.text(WAVEFORM)) {
+        (Support::Ssd1677, BY_TEMPERATURE) => Some(Experiment::Ssd1677(
+            display::Experiment::Temperature(settings.int(TEMPERATURE).clamp(0, 127) as i8),
+        )),
+        (Support::Ssd1677, DIRECT) => {
+            Some(Experiment::Ssd1677(display::Experiment::Direct(drive())))
+        }
+        (Support::Uc8179, DIRECT) => {
+            let hz = settings.int(RATE);
+            let rate = FRAME_RATES
+                .iter()
+                .position(|&(_, rate)| i64::from(rate) >= hz)
+                .unwrap_or(FRAME_RATES.len() - 1);
+            Some(Experiment::Uc8179(uc8179::Experiment {
+                drive: drive(),
+                swapped: settings.bool(SWAPPED),
+                repeat: number(REPEAT).min(1),
+                rate,
+            }))
+        }
         _ => None,
     }
 }
@@ -163,13 +227,57 @@ enum Control {
     Clean,
 }
 
-/// The rows, by the kind of waveform chosen and what the panel takes.
-fn controls(kind: u8) -> &'static [Control] {
+impl Control {
+    /// The setting that keeps its value, if it has one.
+    fn setting(self) -> Option<&'static SettingSpec> {
+        let index = match self {
+            Control::Waveform => 0,
+            Control::Temperature => 1,
+            Control::Frames => 2,
+            Control::Kick => 3,
+            Control::Repeat => 4,
+            Control::Rate => 5,
+            Control::Polarity => 6,
+            Control::Picture | Control::Auto | Control::Clean => return None,
+        };
+        Some(&SETTINGS[index])
+    }
+
+    /// Whether it is a number between `−` and `+`.
+    fn is_number(self) -> bool {
+        matches!(
+            self,
+            Control::Temperature
+                | Control::Frames
+                | Control::Kick
+                | Control::Repeat
+                | Control::Rate
+        )
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Control::Waveform => "x4.lab.waveform",
+            Control::Temperature => "x4.lab.temperature",
+            Control::Frames => "x4.lab.frames",
+            Control::Kick => "x4.lab.kick",
+            Control::Repeat => "x4.lab.repeat",
+            Control::Rate => "x4.lab.rate",
+            Control::Polarity => "x4.lab.polarity",
+            Control::Picture => "x4.lab.picture",
+            Control::Auto => "x4.lab.auto",
+            Control::Clean => "x4.lab.clean",
+        }
+    }
+}
+
+/// The rows, by the waveform chosen and what the panel takes.
+fn controls(waveform: &str) -> &'static [Control] {
     use Control::*;
-    match (support(), kind) {
-        (Support::Ssd1677, 1) => &[Waveform, Temperature, Picture, Auto, Clean],
-        (Support::Ssd1677, 2) => &[Waveform, Frames, Kick, Picture, Auto, Clean],
-        (Support::Uc8179, 2) => &[
+    match (support(), waveform) {
+        (Support::Ssd1677, BY_TEMPERATURE) => &[Waveform, Temperature, Picture, Auto, Clean],
+        (Support::Ssd1677, DIRECT) => &[Waveform, Frames, Kick, Picture, Auto, Clean],
+        (Support::Uc8179, DIRECT) => &[
             Waveform, Frames, Kick, Rate, Repeat, Polarity, Picture, Auto, Clean,
         ],
         _ => &[Waveform, Picture, Auto, Clean],
@@ -177,8 +285,10 @@ fn controls(kind: u8) -> &'static [Control] {
 }
 
 const PICTURES: u8 = 4;
-/// The most rows there are.
+/// The most rows that show at a time.
 const MOST_ROWS: u16 = 6;
+/// The widest a number is, for the room of its `−` and `+`.
+const ROOM: &str = "000 Hz";
 
 struct Lab {
     style: UiStyle,
@@ -227,64 +337,55 @@ impl Lab {
         }
     }
 
-    fn kind() -> u8 {
-        KIND.load(Ordering::Relaxed)
+    fn controls(env: &Env<'_>) -> &'static [Control] {
+        controls(env.settings().text(WAVEFORM))
     }
 
-    fn controls() -> &'static [Control] {
-        controls(Self::kind())
-    }
-
-    fn focused(&self) -> Control {
-        let controls = Self::controls();
+    fn focused(&self, env: &Env<'_>) -> Control {
+        let controls = Self::controls(env);
         controls[self.list.focus().min(controls.len() - 1)]
     }
 
-    fn title(env: &Env<'_>, control: Control) -> String {
-        String::from(env.i18n().tr(match control {
-            Control::Waveform => "x4.lab.waveform",
-            Control::Temperature => "x4.lab.temperature",
-            Control::Frames => "x4.lab.frames",
-            Control::Kick => "x4.lab.kick",
-            Control::Repeat => "x4.lab.repeat",
-            Control::Rate => "x4.lab.rate",
-            Control::Polarity => "x4.lab.polarity",
-            Control::Picture => "x4.lab.picture",
-            Control::Auto => "x4.lab.auto",
-            Control::Clean => "x4.lab.clean",
-        }))
-    }
-
-    /// The value shown on a row.
+    /// The value of a row, as a setting shows it.
     fn value(&self, env: &Env<'_>, control: Control) -> String {
+        let settings = env.settings();
         let tr = |key: &str| String::from(env.i18n().tr(key));
         match control {
-            Control::Waveform => tr(match Self::kind() {
-                1 => "x4.lab.waveform.temperature",
-                2 => "x4.lab.waveform.direct",
-                _ => "x4.lab.waveform.panel",
-            }),
-            Control::Temperature => format!("{} °C", TEMPERATURE.load(Ordering::Relaxed)),
-            Control::Frames => format!("{}", FRAMES.load(Ordering::Relaxed)),
-            Control::Kick => format!("{}", KICK.load(Ordering::Relaxed)),
-            Control::Repeat => format!("{}", REPEAT.load(Ordering::Relaxed)),
-            Control::Rate => {
-                let rate = usize::from(RATE.load(Ordering::Relaxed)).min(FRAME_RATES.len() - 1);
-                format!("{} Hz", FRAME_RATES[rate].1)
-            }
-            Control::Polarity => tr(if SWAPPED.load(Ordering::Relaxed) {
-                "x4.lab.polarity.swapped"
-            } else {
-                "x4.lab.polarity.normal"
-            }),
+            Control::Waveform => tr(settings.text(WAVEFORM)),
+            Control::Temperature => format!("{} °C", settings.int(TEMPERATURE)),
+            Control::Frames => format!("{}", settings.int(FRAMES)),
+            Control::Kick => format!("{}", settings.int(KICK)),
+            Control::Repeat => format!("{}", settings.int(REPEAT)),
+            Control::Rate => format!("{} Hz", settings.int(RATE)),
+            Control::Polarity => String::new(),
             Control::Picture => tr(match self.pattern {
                 0 => "x4.lab.picture.stripes",
                 1 => "x4.lab.picture.squares",
                 2 => "x4.lab.picture.halves",
                 _ => "x4.lab.picture.lines",
             }),
-            Control::Auto => tr(if self.auto { "core.on" } else { "core.off" }),
+            Control::Auto => String::new(),
             Control::Clean => String::new(),
+        }
+    }
+
+    /// The row as the standard rows draw it.
+    fn row<'r>(
+        &self,
+        env: &Env<'_>,
+        control: Control,
+        title: &'r str,
+        value: &'r str,
+    ) -> ui::Row<'r> {
+        let settings = env.settings();
+        if control.is_number() {
+            ui::Row::number(title, value, ROOM)
+        } else if control == Control::Polarity {
+            ui::Row::switch(title, settings.bool(SWAPPED))
+        } else if control == Control::Auto {
+            ui::Row::switch(title, self.auto)
+        } else {
+            ui::Row::value(title, value)
         }
     }
 
@@ -332,33 +433,29 @@ impl Lab {
         cx.request_refresh(RefreshMode::Full);
     }
 
-    fn change(&mut self, control: Control, step: i16, cx: &mut Cx<'_, '_>) {
-        let bump = |value: &AtomicU8, step: i16, low: i16, high: i16| {
-            let next = (i16::from(value.load(Ordering::Relaxed)) + step).clamp(low, high);
-            value.store(next as u8, Ordering::Relaxed);
-        };
+    /// Changes a row by `step`: a setting as the settings page changes it,
+    /// the picture, the flipping on its own.
+    fn change(&mut self, control: Control, step: i64, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
         match control {
             Control::Waveform => {
-                let kinds = kinds();
-                let at = kinds.iter().position(|&k| k == Self::kind()).unwrap_or(0);
-                let next = (at as i16 + kinds.len() as i16 + step) % kinds.len() as i16;
-                KIND.store(kinds[next as usize], Ordering::Relaxed);
-                self.list.set_len(Self::controls().len());
+                let waveforms = waveforms();
+                let at = waveforms
+                    .iter()
+                    .position(|&w| w == env.settings().text(WAVEFORM))
+                    .unwrap_or(0) as i64;
+                let next = waveforms[(at + waveforms.len() as i64 + step.signum())
+                    .rem_euclid(waveforms.len() as i64)
+                    as usize];
+                cx.command(Command::SetSetting(
+                    Id::new_static(WAVEFORM),
+                    SettingValue::Text(next.into()),
+                ));
+                self.list.set_len(controls(next).len());
             }
-            Control::Temperature => bump(
-                &TEMPERATURE,
-                5 * step,
-                i16::from(TEMPERATURE_RANGE.0),
-                i16::from(TEMPERATURE_RANGE.1),
-            ),
-            Control::Frames => bump(&FRAMES, step, 1, i16::from(MAX_FRAMES)),
-            Control::Kick => bump(&KICK, step, 0, i16::from(MAX_KICK)),
-            Control::Repeat => bump(&REPEAT, step, 0, 1),
-            Control::Rate => bump(&RATE, step, 0, FRAME_RATES.len() as i16 - 1),
-            Control::Polarity => SWAPPED.store(!SWAPPED.load(Ordering::Relaxed), Ordering::Relaxed),
             Control::Picture => {
-                self.pattern = ((i16::from(self.pattern) + i16::from(PICTURES) + step)
-                    % i16::from(PICTURES)) as u8;
+                self.pattern = (i64::from(self.pattern) + i64::from(PICTURES) + step.signum())
+                    .rem_euclid(i64::from(PICTURES)) as u8;
             }
             Control::Auto => {
                 self.auto = !self.auto;
@@ -367,6 +464,14 @@ impl Lab {
                 }
             }
             Control::Clean => {}
+            _ => {
+                let Some(spec) = control.setting() else {
+                    return;
+                };
+                if let Some(value) = ui::next_value(&env, spec, step.signum()) {
+                    cx.command(Command::SetSetting(spec.id.clone(), value));
+                }
+            }
         }
         self.redraw(cx);
     }
@@ -376,12 +481,12 @@ impl Screen for Lab {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let len = Self::controls().len();
+        let controls = Self::controls(env);
         self.header.draw(
             &mut ui,
             env.i18n().tr("x4.lab.title"),
             None,
-            self.list.paging(len),
+            self.list.paging(controls.len()),
         );
         if support() == Support::None {
             let area = Rect::new(0, self.picture.y, self.picture.width, self.picture.height);
@@ -401,18 +506,27 @@ impl Screen for Lab {
             None => tr("x4.lab.none"),
         };
         ui.note_line(self.info, &took);
-        let controls = Self::controls();
-        let rows: Vec<(String, String)> = controls
+        let rows: Vec<(Control, String, String)> = controls
             .iter()
-            .map(|&control| (Self::title(env, control), self.value(env, control)))
+            .map(|&control| {
+                (
+                    control,
+                    String::from(env.i18n().tr(control.title())),
+                    self.value(env, control),
+                )
+            })
             .collect();
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
-                let (title, value) = &rows[index];
-                ui::Row::value(title, value).focused(focused).draw(ui, rect);
+                let (control, title, value) = &rows[index];
+                self.row(env, *control, title, value)
+                    .focused(focused)
+                    .draw(ui, rect);
             });
         let note = tr(if self.flips >= CLEAN_AFTER {
             "x4.lab.clean-soon"
+        } else if env.device().input.touch {
+            "x4.lab.help.touch"
         } else {
             "x4.lab.help"
         });
@@ -429,25 +543,77 @@ impl Screen for Lab {
         if support() == Support::None {
             return Handled::No;
         }
-        let len = Self::controls().len();
+        let env = *cx.env();
+        let len = Self::controls(&env).len();
         if *action == actions::LEFT {
-            let control = self.focused();
+            let control = self.focused(&env);
             self.change(control, -1, cx);
         } else if *action == actions::RIGHT {
-            let control = self.focused();
+            let control = self.focused(&env);
             self.change(control, 1, cx);
         } else if *action == actions::CONFIRM {
-            match self.focused() {
+            match self.focused(&env) {
                 Control::Auto => self.change(Control::Auto, 1, cx),
                 Control::Clean => self.clean(cx),
                 _ => self.flip(cx),
             }
-        } else if *action == actions::UP || *action == actions::PREV_PAGE {
+        } else if *action == actions::UP {
             self.list.move_focus(-1, len).request(cx);
-        } else if *action == actions::DOWN || *action == actions::NEXT_PAGE {
+        } else if *action == actions::DOWN {
             self.list.move_focus(1, len).request(cx);
+        } else if *action == actions::PREV_PAGE {
+            self.list
+                .move_focus(-(self.list.rows() as isize), len)
+                .request(cx);
+        } else if *action == actions::NEXT_PAGE {
+            self.list
+                .move_focus(self.list.rows() as isize, len)
+                .request(cx);
         } else {
             return Handled::No;
+        }
+        Handled::Yes
+    }
+
+    /// By touch, as the settings are: the header's arrows and back; a tap
+    /// on the picture flips it; on a row's `−` or `+` changes its number, on
+    /// a switch or a choice changes it, on *Clean up* cleans.
+    fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        if gesture.kind != GestureKind::Tap {
+            return Handled::No;
+        }
+        let env = *cx.env();
+        let controls = Self::controls(&env);
+        let paging = self.list.paging(controls.len());
+        if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
+            cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if support() == Support::None {
+            return Handled::No;
+        }
+        if self.picture.contains(gesture.start) {
+            self.flip(cx);
+            return Handled::Yes;
+        }
+        let Some(index) = self.list.hit(gesture.start, controls.len()) else {
+            return Handled::No;
+        };
+        self.list.set_shown(true);
+        self.list.set_focus(index);
+        let control = controls[index];
+        let rect = self.list.row_rect(index % self.list.rows());
+        let title = String::from(env.i18n().tr(control.title()));
+        let value = self.value(&env, control);
+        let part =
+            self.row(&env, control, &title, &value)
+                .hit(&env, &self.style, rect, gesture.start);
+        match (control, part) {
+            (Control::Clean, _) => self.clean(cx),
+            (_, Some(RowPart::Minus)) => self.change(control, -1, cx),
+            (_, Some(RowPart::Plus)) => self.change(control, 1, cx),
+            (c, _) if c.is_number() => self.redraw(cx),
+            _ => self.change(control, 1, cx),
         }
         Handled::Yes
     }

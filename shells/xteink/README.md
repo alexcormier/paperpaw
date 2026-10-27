@@ -125,8 +125,11 @@ temperature (0 to 90 degrees), or a direct drive made here (the frames a
 changed pixel is driven, and a kick of the other colour before), at the
 stock voltages. The time the panel took is shown for each frame. *Clean up*
 shows the screen with the stock refresh that drives every pixel; do it
-every few dozen flips, as the experiments let ghosts build up. Nothing is
-kept: leaving the screen is the stock firmware again.
+every few dozen flips, as the experiments let ghosts build up. The
+rows are settings of the developer group (`x4.lab.*`), set with the ordinary
+controls (`−` and `+` on a touch screen, left and right on buttons) and kept,
+but they count only while the lab is the screen shown: leaving it is the stock
+firmware again. On a touch screen a tap on the picture flips it.
 
 It tries the waveforms of an **SSD1677** (the X4, some X4 Pros) and of a
 **UC8179** (the X4 Pro, the log says which: `display: UC8179 … driven as

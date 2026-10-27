@@ -219,6 +219,7 @@ impl Plugin for X4 {
         register_light(r)?;
         #[cfg(feature = "waveform-lab")]
         {
+            r.add_settings(&crate::lab::SETTINGS)?;
             r.add_screens(&crate::lab::SCREENS)?;
             r.add_actions(&crate::lab::ACTIONS)?;
             r.add_menu_entries(&crate::lab::ENTRIES)?;

@@ -1070,7 +1070,7 @@ fn fast_waveform(
 ) -> Option<paperpaw_x4::panel::Experiment> {
     #[cfg(feature = "waveform-lab")]
     if crate::lab::is_open(active) {
-        return crate::lab::experiment(active);
+        return crate::lab::experiment(active, settings);
     }
     let _ = active;
     menu_waveform(mode, settings)
