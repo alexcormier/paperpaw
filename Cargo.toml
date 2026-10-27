@@ -152,7 +152,7 @@ paperpaw-plugin-calibre = { path = "plugins/calibre", version = "1.0.3" }
 paperpaw-plugin-stats = { path = "plugins/stats", version = "1.0.3" }
 paperpaw-plugin-battery = { path = "plugins/battery", version = "1.0.2" }
 paperpaw-plugin-help = { path = "plugins/help", version = "1.0.1" }
-paperpaw-plugin-reading-goal = { path = "plugins/reading-goal", version = "1.0.2" }
+paperpaw-plugin-reading-goal = { path = "plugins/reading-goal", version = "1.0.3" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "1.0.1" }
 paperpaw-plugin-bluetooth = { path = "plugins/bluetooth", version = "1.0.1" }
 paperpaw-plugin-power = { path = "plugins/power", version = "1.0.1" }

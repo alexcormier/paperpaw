@@ -10,7 +10,7 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{Canvas, Color, Cx, Env, Handled, Id, Rect, Screen};
 
-use crate::{Today, pictures, widget};
+use crate::{Kept, Today, pictures, widget};
 
 pub(crate) struct GoalSleep {
     image: Option<ImageRef>,
@@ -20,8 +20,8 @@ pub(crate) struct GoalSleep {
 }
 
 impl GoalSleep {
-    pub(crate) fn new(env: &Env<'_>) -> Self {
-        let today = Today::now(env);
+    pub(crate) fn new(env: &Env<'_>, kept: &Kept) -> Self {
+        let today = Today::now(env, kept);
         Self {
             image: pictures::of(env, today.mood),
             text: widget::progress(env, &today),

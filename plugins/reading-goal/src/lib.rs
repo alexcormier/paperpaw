@@ -23,7 +23,9 @@
 //!
 //! Today's reading comes from the reading statistics (the `stats`
 //! plugin), which tell it as they record it ([`events::READ_TODAY`]);
-//! it is kept in `today.txt` (`<day> <seconds>`, version 1). Without
+//! it is kept in `today.txt` (`<day> <seconds>`, version 1), while a book
+//! is open in memory only, written when it closes or the device sleeps or
+//! stops: not at every page turned. Without
 //! them, nothing is counted, and the widget says so. Without a goal (set
 //! to none), the cat goes by [`DEFAULT_GOAL`] minutes and only the
 //! minutes read show.
@@ -40,14 +42,16 @@ mod widget;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::String;
+use core::cell::Cell;
 
 use paperpaw_sdk::builtin::{events, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
-    Command, Env, FixedScreen, Id, Manifest, Plugin, RegisterError, Registrar, SettingExtra,
+    Command, Env, Id, Manifest, Plugin, RegisterError, Registrar, ScreenSpec, SettingExtra,
     SettingSpec, Storage,
 };
 
@@ -153,7 +157,7 @@ pub(crate) struct Today {
 
 impl Today {
     /// Today as the statistics told it last, with the settings.
-    pub(crate) fn now(env: &Env<'_>) -> Today {
+    pub(crate) fn now(env: &Env<'_>, kept: &Kept) -> Today {
         // `stats.goal.30`: 30; `stats.goal.off`: none.
         let goal = env
             .settings()
@@ -162,7 +166,7 @@ impl Today {
             .next()
             .and_then(|m| m.parse::<u32>().ok())
             .filter(|&m| m > 0);
-        let seconds = match (told(env.storage()), today(env)) {
+        let seconds = match (kept.told(env.storage()), today(env)) {
             (Some((day, seconds)), Some(today)) if day == today => seconds,
             _ => 0,
         };
@@ -197,6 +201,32 @@ fn told(storage: &dyn Storage) -> Option<(i32, u32)> {
     Some((day.parse().ok()?, seconds.parse().ok()?))
 }
 
+/// What the statistics told last of today, and whether a book is open:
+/// then it is kept here and written to `today.txt` only later.
+#[derive(Debug, Default)]
+pub(crate) struct Kept {
+    /// `None` until they told something since the start.
+    told: Cell<Option<(i32, u32)>>,
+    reading: Cell<bool>,
+}
+
+impl Kept {
+    /// What the statistics told last: kept here, else in `today.txt`.
+    pub(crate) fn told(&self, storage: &dyn Storage) -> Option<(i32, u32)> {
+        self.told.get().or_else(|| told(storage))
+    }
+
+    /// Writes what was told, where `today.txt` holds something else.
+    fn write(&self, storage: &dyn Storage) {
+        if let Some((day, seconds)) = self.told.get()
+            && told(storage) != Some((day, seconds))
+        {
+            let text = format!("{day} {seconds}\n");
+            let _ = storage.write(&data("today.txt"), text.as_bytes());
+        }
+    }
+}
+
 /// The reading goal plugin.
 #[derive(Debug, Default)]
 pub struct ReadingGoal;
@@ -206,12 +236,6 @@ static HOW: [(&str, &str); 2] = [
     ("en", include_str!("../how/en.txt")),
     ("de", include_str!("../how/de.txt")),
 ];
-
-static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
-    SLEEP_SCREEN,
-    "reading-goal.sleep",
-    |env, _| Box::new(sleep::GoalSleep::new(env)),
-)];
 
 impl Plugin for ReadingGoal {
     fn manifest(&self) -> Manifest {
@@ -236,15 +260,40 @@ impl Plugin for ReadingGoal {
             "store" => out.push(Command::run(STORE)),
             _ => {}
         })?;
-        r.on(events::READ_TODAY, |env, read, _| {
-            // Only when it changed: a write a page turn at most.
-            if told(env.storage()) != Some((read.day, read.seconds)) {
-                let text = format!("{} {}\n", read.day, read.seconds);
-                let _ = env.storage().write(&data("today.txt"), text.as_bytes());
-            }
-        })?;
-        widget::register(r)?;
-        r.add_screens(&SCREENS)?;
+        let kept = Rc::new(Kept::default());
+        {
+            let kept = Rc::clone(&kept);
+            r.on(events::READ_TODAY, move |env, read, _| {
+                kept.told.set(Some((read.day, read.seconds)));
+                // Not while pages turn: the card is slow to write to.
+                if !kept.reading.get() {
+                    kept.write(env.storage());
+                }
+            })?;
+        }
+        {
+            let kept = Rc::clone(&kept);
+            r.on(events::BOOK_OPENED, move |_, _, _| kept.reading.set(true))?;
+        }
+        {
+            let kept = Rc::clone(&kept);
+            r.on(events::BOOK_CLOSED, move |env, _, _| {
+                kept.reading.set(false);
+                kept.write(env.storage());
+            })?;
+        }
+        // Asleep or restarting the device may lose its power.
+        for event in [events::SUSPEND, events::STOPPING] {
+            let kept = Rc::clone(&kept);
+            r.on(event, move |env, _, _| kept.write(env.storage()))?;
+        }
+        widget::register(r, &kept)?;
+        let screen = ScreenSpec::new(
+            SLEEP_SCREEN,
+            "reading-goal.sleep",
+            Box::new(move |env, _| Box::new(sleep::GoalSleep::new(env, &kept))),
+        );
+        r.add_screen(screen)?;
         r.add_choice(SLEEP_SHOW, SLEEP_NAME)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
