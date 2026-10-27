@@ -12,6 +12,12 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- Menus, settings pages and the home screen spend less time on their texts
+  and settings, and a start reads the translations faster: a message is
+  looked for only in the catalogs that can hold it.
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added
