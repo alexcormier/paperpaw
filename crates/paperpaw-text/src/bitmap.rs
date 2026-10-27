@@ -139,11 +139,38 @@ impl BitmapFont {
     /// pack keeps sizes (quarter pixels): asked for every character drawn
     /// or measured, on chips that reckon in floats slowly.
     fn nearest_index(&self, size: f32) -> Option<usize> {
-        let wanted = (size * 4.0) as i32;
+        self.nearest_quarters((size * 4.0) as i32)
+    }
+
+    /// The index of the strike closest to `wanted` quarter pixels; the
+    /// first of those as close.
+    fn nearest_quarters(&self, wanted: i32) -> Option<usize> {
         (0..usize::from(self.strikes))
             .filter_map(|i| Some((i, i32::from(u16_at(&self.data, HEADER + i * STRIKE)?))))
             .min_by_key(|&(_, quarters)| quarters.abs_diff(wanted))
             .map(|(i, _)| i)
+    }
+
+    /// The strike closest to `wanted` quarter pixels (as
+    /// [`BitmapFont::nearest_quarters`]), its number of glyphs and the
+    /// largest number any strike has, in one pass over the strikes.
+    fn nearest_and_full(&self, wanted: i32) -> Option<(usize, usize, usize)> {
+        let mut nearest: Option<(usize, u32, usize)> = None;
+        let mut full = 0;
+        for i in 0..usize::from(self.strikes) {
+            let base = HEADER + i * STRIKE;
+            // `new` read every strike's header: only the count is needed.
+            let glyphs = u32_at(&self.data, base + 16).map_or(0, |n| n as usize);
+            full = full.max(glyphs);
+            let Some(quarters) = u16_at(&self.data, base) else {
+                continue;
+            };
+            let distance = i32::from(quarters).abs_diff(wanted);
+            if nearest.is_none_or(|(_, closest, _)| distance < closest) {
+                nearest = Some((i, distance, glyphs));
+            }
+        }
+        nearest.map(|(i, _, glyphs)| (i, glyphs, full))
     }
 
     /// The strike closest to `size`.
@@ -169,8 +196,20 @@ impl BitmapFont {
     }
 
     fn record(&self, strike: &Tables, ch: char) -> Option<usize> {
-        let (mut low, mut high) = (0usize, strike.glyphs);
         let target = ch as u32;
+        // Most packs start with the printable ASCII characters, one after
+        // the other: where the record at the character's place is its own,
+        // it is the one the search finds, as codes are sorted and unique.
+        if let Some(index) = target.checked_sub(0x20)
+            && target < 0x7f
+            && (index as usize) < strike.glyphs
+        {
+            let offset = strike.glyph_table + index as usize * RECORD;
+            if u32_at(&self.data, offset) == Some(target) {
+                return Some(offset);
+            }
+        }
+        let (mut low, mut high) = (0usize, strike.glyphs);
         while low < high {
             let mid = (low + high) / 2;
             let offset = strike.glyph_table + mid * RECORD;
@@ -185,7 +224,7 @@ impl BitmapFont {
     }
 
     pub fn has_char(&self, ch: char) -> bool {
-        self.nearest_index(0.0)
+        self.nearest_quarters(0)
             .and_then(|i| self.tables(i))
             .is_some_and(|strike| self.record(&strike, ch).is_some())
     }
@@ -196,15 +235,15 @@ impl BitmapFont {
     /// also at a large strike made for a few characters where it has all
     /// of `text`'s: the nearest of those, one size for the whole text.
     pub fn size_for(&self, size: f32, text: &str, display: bool) -> f32 {
-        let Some(nearest) = self.nearest_index(size) else {
+        let wanted = (size * 4.0) as i32;
+        let Some((nearest, glyphs, full)) = self.nearest_and_full(wanted) else {
             return size;
         };
-        let count = |i: usize| self.tables(i).map_or(0, |t| t.glyphs);
-        let full = (0..usize::from(self.strikes)).map(count).max().unwrap_or(0);
         // Most strikes have every character: nothing to look up.
-        if count(nearest) >= full {
+        if glyphs >= full {
             return size;
         }
+        let count = |i: usize| self.tables(i).map_or(0, |t| t.glyphs);
         let has_all = |i: usize| {
             display
                 && self.tables(i).is_some_and(|tables| {
@@ -215,7 +254,6 @@ impl BitmapFont {
         if has_all(nearest) {
             return size;
         }
-        let wanted = (size * 4.0) as i32;
         (0..usize::from(self.strikes))
             .filter(|&i| has_all(i) || count(i) >= full)
             .filter_map(|i| Some((i, i32::from(u16_at(&self.data, HEADER + i * STRIKE)?))))
@@ -525,6 +563,32 @@ mod tests {
         assert_eq!(font.glyph('a', 18.0).width, 5);
         assert_eq!(font.line_metrics(10.0).line_height, 12.5);
         assert!(font.has_char('b'));
+    }
+
+    #[test]
+    fn records_are_found_with_and_without_all_of_ascii() {
+        let mut builder = PackBuilder::new();
+        let metrics = LineMetrics::fallback(10.0);
+        let strike = |chars: &mut dyn Iterator<Item = char>| {
+            chars.map(|c| (c, glyph(1, 255, 1.0))).collect::<Vec<_>>()
+        };
+        // All of printable ASCII, the same with gaps, and a few letters.
+        builder.add_strike(10.0, metrics, strike(&mut (' '..='~').chain(['é', 'Ж'])));
+        let gaps = ('!'..='~').filter(|c| !('A'..='F').contains(c));
+        builder.add_strike(20.0, metrics, strike(&mut gaps.chain(['é'])));
+        builder.add_strike(30.0, metrics, strike(&mut "xyz".chars()));
+        let font = BitmapFont::new(builder.build()).unwrap();
+        for i in 0..3 {
+            let tables = font.tables(i).unwrap();
+            let scanned = |ch: char| {
+                (0..tables.glyphs)
+                    .map(|n| tables.glyph_table + n * RECORD)
+                    .find(|&at| u32_at(&font.data, at) == Some(ch as u32))
+            };
+            for ch in ('\0'..='\u{17f}').chain(['Ж', char::MAX]) {
+                assert_eq!(font.record(&tables, ch), scanned(ch), "{i} {ch:?}");
+            }
+        }
     }
 
     #[test]
