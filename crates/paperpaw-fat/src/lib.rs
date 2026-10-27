@@ -910,9 +910,10 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         // is open once.
         let kept = {
             let open = self.open.borrow();
+            // From the latest: it is the one used again most often.
             open.iter()
-                .position(|o| o.path == path)
-                .or_else(|| open.iter().position(|o| same_path(&o.path, path)))
+                .rposition(|o| o.path == path)
+                .or_else(|| open.iter().rposition(|o| same_path(&o.path, path)))
         };
         match kept {
             // The latest last.
