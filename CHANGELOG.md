@@ -12,7 +12,7 @@ change the plugin SDK.
   are shown: the panel's own waveform (500 ms, the cleanest) or a quicker
   one of 8, 6 or 4 frames (found in the waveform lab; about 160 ms with 4),
   which leave more ghosting that the next full refresh clears. It is
-  *Quicker, some ghosting* (6 frames) by default; page turns are as before.
+  *The panel's own* (the slowest, the cleanest) by default; page turns are as before.
   Black-and-white refreshes (screens that ask for `fastest`, such as games)
   take about 100 ms, with 1 frame. The frames and the kick of both are
   settings of the developer group (`x4.ssd1677.fast-frames`, `x4.ssd1677.fast-kick`,
@@ -44,7 +44,7 @@ change the plugin SDK.
 - X4 Pro (a UC8179 controller): *Fast changes* (Display) says how menus and a moved
   focus are shown, as on the X4: the panel's own waveform (625 ms) or a quicker
   one of the controller's registers, run at the voltages of the panel's own
-  waveform (read from its OTP at start, about 65 ms more): 6, 7 (the default) or 10
+  waveform (read from its OTP at start, about 65 ms more): 6, 7 or 10 (the panel's own is the default)
   frames with 3 held (about 360, 380 and 440 ms), or own values in the developer
   settings (`x4.uc8179.*`). Found with the waveform lab on a device.
 - The waveform lab's direct drive on the X4 Pro can hold the pixels that stay (0 to 3
