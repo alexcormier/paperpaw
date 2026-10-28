@@ -88,8 +88,8 @@ fn menu_waveform(
 /// The UC8179's: the step of the setting *Fast changes* (or the numbers of
 /// *Own values*) for fast changes, the numbers of `x4.uc8179.mono-*` (12
 /// frames at 200 Hz, no hold: a guess, to be tuned) for the fastest refresh. The panel's
-/// own waveform is 19 frames at 50 Hz; these are the frames the owner judged
-/// on the X4 Pro, at the voltages of that waveform (the OTP's: set at start).
+/// own waveform is 19 frames at 50 Hz; these are the frames judged right
+/// on an X4 Pro, at the voltages of that waveform (the OTP's: set at start).
 /// A hold of 3 frames keeps the ghosts of the pixels that stay down.
 #[cfg_attr(
     feature = "x4",

@@ -40,8 +40,8 @@ pub const MAX_KICK: u8 = 3;
 /// The most frames, the kick's too, a fast refresh may drive when it is a
 /// direct drive: about as long as the panel's own fast refresh (about 500
 /// ms), so that fast stays faster than the partial refresh of a page. An
-/// estimate, from about 80 ms and 20 ms a frame in the owner's two
-/// readings (1 frame 100 ms, 4 frames 160 ms), not a measurement of this
+/// estimate, from about 80 ms and 20 ms a frame in two readings on a
+/// device (1 frame 100 ms, 4 frames 160 ms), not a measurement of this
 /// many frames.
 pub const FAST_MOST_FRAMES: u8 = 20;
 
