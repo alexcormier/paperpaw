@@ -388,7 +388,7 @@ fn lookup_with<IO: ReadWriteSeek + 'static>(
         } else if other {
             found.others = true;
         }
-        let Some(temps) = temps.filter(|_| entry.is_file()) else {
+        let Some(temps) = temps.filter(|_| entry.is_file() && may_be_temp(&entry)) else {
             continue;
         };
         // By its short name too: a temporary's long name, if lost, was
@@ -590,6 +590,17 @@ fn shares<IO: ReadWriteSeek + 'static>(a: &FatEntry<IO>, b: &FatEntry<IO>) -> bo
 fn holds_same<IO: ReadWriteSeek + 'static>(a: &FatEntry<IO>, b: &FatEntry<IO>) -> bool {
     let empty = |e: &FatEntry<IO>| e.is_file() && e.first_cluster().is_none() && e.len() == 0;
     a.is_dir() == b.is_dir() && (shares(a, b) || (empty(a) && empty(b)))
+}
+
+/// Whether `entry` may be a temporary file, of [`Temps`] or of an
+/// earlier version (see [`is_old_temp`]): their names, long and short,
+/// start with `~`. Quick: the names of other files are not compared.
+fn may_be_temp<IO: ReadWriteSeek + 'static>(entry: &FatEntry<IO>) -> bool {
+    let tilde = u16::from(b'~');
+    entry.short_file_name_as_bytes().first() == Some(&b'~')
+        || entry
+            .long_file_name_as_ucs2_units()
+            .is_some_and(|units| units.first() == Some(&tilde))
 }
 
 /// Whether `entry` is a temporary file of an earlier version: named
@@ -899,9 +910,10 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         // is open once.
         let kept = {
             let open = self.open.borrow();
+            // From the latest: it is the one used again most often.
             open.iter()
-                .position(|o| o.path == path)
-                .or_else(|| open.iter().position(|o| same_path(&o.path, path)))
+                .rposition(|o| o.path == path)
+                .or_else(|| open.iter().rposition(|o| same_path(&o.path, path)))
         };
         match kept {
             // The latest last.

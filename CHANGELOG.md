@@ -17,6 +17,8 @@ change the plugin SDK.
 - EPUB chapters convert and pages read faster, books open with fewer file
   lookups, and skimming to the next or previous chapter no longer converts
   every chapter of the book first.
+- Folders on the SD card are read faster, and reading a large file at
+  scattered places no longer walks its clusters from the start each time.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

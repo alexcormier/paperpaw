@@ -2,7 +2,6 @@
 use alloc::string::String;
 use bitflags::bitflags;
 use core::char;
-use core::convert::TryInto;
 use core::fmt;
 #[cfg(not(feature = "unicode"))]
 use core::iter;
@@ -13,7 +12,7 @@ use crate::dir::{Dir, DirRawStream};
 use crate::error::{Error, IoError};
 use crate::file::File;
 use crate::fs::{FatType, FileSystem, OemCpConverter, ReadWriteSeek};
-use crate::io::{self, Read, ReadLeExt, Write, WriteLeExt};
+use crate::io::{self, Read, Write};
 use crate::time::{Date, DateTime};
 
 bitflags! {
@@ -286,19 +285,27 @@ impl DirFileEntryData {
     }
 
     pub(crate) fn serialize<W: Write>(&self, wrt: &mut W) -> Result<(), W::Error> {
-        wrt.write_all(&self.name)?;
-        wrt.write_u8(self.attrs.bits())?;
-        wrt.write_u8(self.reserved_0)?;
-        wrt.write_u8(self.create_time_0)?;
-        wrt.write_u16_le(self.create_time_1)?;
-        wrt.write_u16_le(self.create_date)?;
-        wrt.write_u16_le(self.access_date)?;
-        wrt.write_u16_le(self.first_cluster_hi)?;
-        wrt.write_u16_le(self.modify_time)?;
-        wrt.write_u16_le(self.modify_date)?;
-        wrt.write_u16_le(self.first_cluster_lo)?;
-        wrt.write_u32_le(self.size)?;
-        Ok(())
+        // Modified for PaperPaw: written whole, in one write, not field by field (see
+        // `DirEntryData::deserialize`).
+        let mut raw = [0u8; DIR_ENTRY_SIZE as usize];
+        raw[..SFN_SIZE].copy_from_slice(&self.name);
+        raw[11] = self.attrs.bits();
+        raw[12] = self.reserved_0;
+        raw[13] = self.create_time_0;
+        let words = [
+            self.create_time_1,
+            self.create_date,
+            self.access_date,
+            self.first_cluster_hi,
+            self.modify_time,
+            self.modify_date,
+            self.first_cluster_lo,
+        ];
+        for (dst, word) in raw[14..28].chunks_exact_mut(2).zip(words) {
+            dst.copy_from_slice(&word.to_le_bytes());
+        }
+        raw[28..].copy_from_slice(&self.size.to_le_bytes());
+        wrt.write_all(&raw)
     }
 
     pub(crate) fn is_deleted(&self) -> bool {
@@ -355,21 +362,25 @@ impl DirLfnEntryData {
     }
 
     pub(crate) fn serialize<W: Write>(&self, wrt: &mut W) -> Result<(), W::Error> {
-        wrt.write_u8(self.order)?;
-        for ch in &self.name_0 {
-            wrt.write_u16_le(*ch)?;
+        // Modified for PaperPaw: written whole, in one write, not field by field (see
+        // `DirEntryData::deserialize`).
+        let mut raw = [0u8; DIR_ENTRY_SIZE as usize];
+        raw[0] = self.order;
+        raw[11] = self.attrs.bits();
+        raw[12] = self.entry_type;
+        raw[13] = self.checksum;
+        let parts: [(usize, &[u16]); 4] = [
+            (1, &self.name_0),
+            (14, &self.name_1),
+            (26, core::slice::from_ref(&self.reserved_0)),
+            (28, &self.name_2),
+        ];
+        for (at, units) in parts {
+            for (dst, unit) in raw[at..at + 2 * units.len()].chunks_exact_mut(2).zip(units) {
+                dst.copy_from_slice(&unit.to_le_bytes());
+            }
         }
-        wrt.write_u8(self.attrs.bits())?;
-        wrt.write_u8(self.entry_type)?;
-        wrt.write_u8(self.checksum)?;
-        for ch in &self.name_1 {
-            wrt.write_u16_le(*ch)?;
-        }
-        wrt.write_u16_le(self.reserved_0)?;
-        for ch in &self.name_2 {
-            wrt.write_u16_le(*ch)?;
-        }
-        Ok(())
+        wrt.write_all(&raw)
     }
 
     pub(crate) fn order(&self) -> u8 {
@@ -410,19 +421,32 @@ impl DirEntryData {
 
     pub(crate) fn deserialize<E: IoError, R: Read<Error = Error<E>>>(rdr: &mut R) -> Result<Self, Error<E>> {
         trace!("DirEntryData::deserialize");
-        let mut name = [0; SFN_SIZE];
-        match rdr.read_exact(&mut name) {
-            Err(Error::UnexpectedEof) => {
-                // entries can occupy all clusters of directory so there is no zero entry at the end
-                // handle it here by returning non-existing empty entry
-                return Ok(DirEntryData::File(DirFileEntryData::default()));
+        // Modified for PaperPaw: the entry is read whole, in one read where it can be, not field
+        // by field: each read goes through the file, the file system and the disk. Its end comes
+        // as before: before the name is whole, it is the end of the directory; after, an error.
+        let mut raw = [0u8; DIR_ENTRY_SIZE as usize];
+        let mut filled = 0;
+        while filled < raw.len() {
+            match rdr.read(&mut raw[filled..]) {
+                Ok(0) => break,
+                Ok(n) => filled += n,
+                Err(ref err) if err.is_interrupted() => {}
+                Err(Error::UnexpectedEof) if filled < SFN_SIZE => break,
+                Err(err) => return Err(err),
             }
-            Err(err) => {
-                return Err(err);
-            }
-            Ok(()) => {}
         }
-        let attrs = FileAttributes::from_bits_truncate(rdr.read_u8()?);
+        if filled < SFN_SIZE {
+            // entries can occupy all clusters of directory so there is no zero entry at the end
+            // handle it here by returning non-existing empty entry
+            return Ok(DirEntryData::File(DirFileEntryData::default()));
+        }
+        if filled < raw.len() {
+            return Err(Error::UnexpectedEof);
+        }
+        let u16_at = |at: usize| u16::from_le_bytes([raw[at], raw[at + 1]]);
+        let mut name = [0; SFN_SIZE];
+        name.copy_from_slice(&raw[..SFN_SIZE]);
+        let attrs = FileAttributes::from_bits_truncate(raw[11]);
         if attrs & FileAttributes::LFN == FileAttributes::LFN {
             // read long name entry
             let mut data = DirLfnEntryData {
@@ -431,19 +455,17 @@ impl DirEntryData {
             };
             // divide the name into order and LFN name_0
             data.order = name[0];
-            for (dst, src) in data.name_0.iter_mut().zip(name[1..].chunks_exact(2)) {
-                // unwrap cannot panic because src has exactly 2 values
-                *dst = u16::from_le_bytes(src.try_into().unwrap());
+            for (i, x) in data.name_0.iter_mut().enumerate() {
+                *x = u16_at(1 + 2 * i);
             }
-
-            data.entry_type = rdr.read_u8()?;
-            data.checksum = rdr.read_u8()?;
-            for x in &mut data.name_1 {
-                *x = rdr.read_u16_le()?;
+            data.entry_type = raw[12];
+            data.checksum = raw[13];
+            for (i, x) in data.name_1.iter_mut().enumerate() {
+                *x = u16_at(14 + 2 * i);
             }
-            data.reserved_0 = rdr.read_u16_le()?;
-            for x in &mut data.name_2 {
-                *x = rdr.read_u16_le()?;
+            data.reserved_0 = u16_at(26);
+            for (i, x) in data.name_2.iter_mut().enumerate() {
+                *x = u16_at(28 + 2 * i);
             }
             Ok(DirEntryData::Lfn(data))
         } else {
@@ -451,16 +473,16 @@ impl DirEntryData {
             let data = DirFileEntryData {
                 name,
                 attrs,
-                reserved_0: rdr.read_u8()?,
-                create_time_0: rdr.read_u8()?,
-                create_time_1: rdr.read_u16_le()?,
-                create_date: rdr.read_u16_le()?,
-                access_date: rdr.read_u16_le()?,
-                first_cluster_hi: rdr.read_u16_le()?,
-                modify_time: rdr.read_u16_le()?,
-                modify_date: rdr.read_u16_le()?,
-                first_cluster_lo: rdr.read_u16_le()?,
-                size: rdr.read_u32_le()?,
+                reserved_0: raw[12],
+                create_time_0: raw[13],
+                create_time_1: u16_at(14),
+                create_date: u16_at(16),
+                access_date: u16_at(18),
+                first_cluster_hi: u16_at(20),
+                modify_time: u16_at(22),
+                modify_date: u16_at(24),
+                first_cluster_lo: u16_at(26),
+                size: u32::from_le_bytes([raw[28], raw[29], raw[30], raw[31]]),
             };
             Ok(DirEntryData::File(data))
         }
@@ -844,5 +866,85 @@ mod tests {
         assert_eq!(raw_entry.lowercase_name().to_string(&oem_cp_conv), "FOO.rs");
         raw_entry.reserved_0 = 0;
         assert_eq!(raw_entry.lowercase_name().to_string(&oem_cp_conv), "FOO.RS");
+    }
+
+    // Modified for PaperPaw: added.
+    /// Bytes read a few at a time, as a directory's stream may give them.
+    struct Bytes<'a>(&'a [u8]);
+
+    impl io::IoBase for Bytes<'_> {
+        type Error = Error<()>;
+    }
+
+    impl Read for Bytes<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+            let n = buf.len().min(self.0.len()).min(3);
+            buf[..n].copy_from_slice(&self.0[..n]);
+            self.0 = &self.0[n..];
+            Ok(n)
+        }
+    }
+
+    impl Write for Vec<u8> {
+        fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            self.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    impl io::IoBase for Vec<u8> {
+        type Error = Error<()>;
+    }
+
+    /// Entry `raw` as read and written again.
+    fn reread(raw: &[u8]) -> Result<Vec<u8>, Error<()>> {
+        let mut written = Vec::new();
+        DirEntryData::deserialize(&mut Bytes(raw))?.serialize(&mut written)?;
+        Ok(written)
+    }
+
+    // Modified for PaperPaw: added.
+    #[test]
+    fn entries_are_read_and_written_whole() {
+        let mut short = b"FOO     BAR\x20".to_vec();
+        short.extend_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+        let Ok(DirEntryData::File(file)) = DirEntryData::deserialize(&mut Bytes(&short)) else {
+            panic!("not a file's entry");
+        };
+        assert_eq!(&file.name, b"FOO     BAR");
+        assert_eq!(file.attrs, FileAttributes::ARCHIVE);
+        assert_eq!(
+            (file.reserved_0, file.create_time_0, file.create_time_1),
+            (1, 2, 0x0403)
+        );
+        assert_eq!((file.create_date, file.access_date), (0x0605, 0x0807));
+        assert_eq!((file.first_cluster_hi, file.first_cluster_lo), (0x0a09, 0x100f));
+        assert_eq!((file.modify_time, file.modify_date), (0x0c0b, 0x0e0d));
+        assert_eq!(file.size, 0x1413_1211);
+        assert_eq!(reread(&short).unwrap(), short);
+
+        let long: Vec<u8> = (0..32u8).map(|i| if i == 11 { 0x0f } else { i + 0x41 }).collect();
+        let Ok(DirEntryData::Lfn(lfn)) = DirEntryData::deserialize(&mut Bytes(&long)) else {
+            panic!("not a long name's entry");
+        };
+        assert_eq!((lfn.order, lfn.entry_type, lfn.checksum), (0x41, 0x4d, 0x4e));
+        assert_eq!(lfn.name_0, [0x4342, 0x4544, 0x4746, 0x4948, 0x4b4a]);
+        assert_eq!(lfn.name_1[0], 0x504f);
+        assert_eq!((lfn.reserved_0, lfn.name_2[1]), (0x5c5b, 0x605f));
+        assert_eq!(reread(&long).unwrap(), long);
+
+        // Before its name is whole, the end of the directory; after, an error.
+        for len in [0, 5, 10] {
+            let entry = DirEntryData::deserialize(&mut Bytes(&short[..len])).unwrap();
+            assert!(entry.is_end());
+        }
+        for len in [11, 12, 31] {
+            let entry = DirEntryData::deserialize(&mut Bytes(&short[..len]));
+            assert!(matches!(entry, Err(Error::UnexpectedEof)));
+        }
     }
 }

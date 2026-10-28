@@ -476,15 +476,24 @@ impl<IO: ReadWriteSeek, TP, OCC> Seek for File<'_, IO, TP, OCC> {
             // return the previous cluster if the offset points to the cluster boundary
             // Note: new_offset_in_clusters cannot be 0 here because new_offset is not 0
             debug_assert!(new_offset_in_clusters > 0);
-            let clusters_to_skip = new_offset_in_clusters - 1;
-            let mut cluster = first_cluster;
-            let mut iter = self.fs.cluster_iter(first_cluster);
+            // Modified for PaperPaw: forward, the chain is walked on from the current cluster (the
+            // `old_offset_in_clusters`th, counted from 1), as reading on would walk it, not from the
+            // first one again.
+            let (start_cluster, start_in_clusters) = match self.current_cluster {
+                Some(n) if old_offset_in_clusters > 0 && new_offset_in_clusters > old_offset_in_clusters => {
+                    (n, old_offset_in_clusters)
+                }
+                _ => (first_cluster, 1),
+            };
+            let clusters_to_skip = new_offset_in_clusters - start_in_clusters;
+            let mut cluster = start_cluster;
+            let mut iter = self.fs.cluster_iter(start_cluster);
             for i in 0..clusters_to_skip {
                 cluster = if let Some(r) = iter.next() {
                     r?
                 } else {
                     // cluster chain ends before the new position - seek to the end of the last cluster
-                    new_offset = self.fs.bytes_from_clusters(i + 1) as u32;
+                    new_offset = self.fs.bytes_from_clusters(start_in_clusters + i) as u32;
                     break;
                 };
             }
