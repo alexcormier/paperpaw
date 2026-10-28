@@ -779,7 +779,7 @@ impl Firmware {
                 let small = u32::from(area.width) * u32::from(area.height) * 4
                     < u32::from(screen.width) * u32::from(screen.height);
                 if !(self.state.gray_shown && small) {
-                    self.show_gray(area, mode.cleans());
+                    self.show_gray(area, mode.cleans() && self.on_sleep_screen());
                     self.state.frame_stale = false;
                 }
             } else if self.state.gray_shown && effects.refresh().is_some() {
@@ -941,6 +941,15 @@ impl Firmware {
     /// Shows the whole screen in four grays, its pictures best so (see
     /// `Effects::grays`); the next change draws it whole again. Where
     /// there is no memory for it, as a full refresh of `area`.
+    /// Whether the sleep screen is on top: the one picture screen that is
+    /// shown to be cleaned (a page of a book with pictures is not: its
+    /// periodic full refresh keeps the quicker first stage).
+    fn on_sleep_screen(&self) -> bool {
+        self.kernel
+            .active_screen()
+            .is_some_and(|id| id.as_str() == "sleep.screen")
+    }
+
     fn show_gray(&mut self, area: Rect, clean: bool) {
         power::mark(power::at::SHOWING);
         let started = now();
@@ -957,8 +966,8 @@ impl Firmware {
         }
         let written = now();
         self.kernel.showing(written);
-        // A screen that cleans (the sleep screen) gets every pixel driven
-        // first, where the panel needs it (the X4 Pro); else a fast refresh.
+        // The sleep screen gets every pixel driven first, where the panel
+        // needs it (the X4 Pro); else a fast refresh.
         let refreshed = if clean {
             self.panel.refresh_gray_clean()
         } else {

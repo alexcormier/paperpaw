@@ -131,8 +131,9 @@ change the plugin SDK.
 
 ### Fixed
 
-- X4 Pro: a sleep screen with a cover or a picture (shown in grays) is made after a
-  refresh of every pixel, as the others are; before, the grays were put over a fast
+- X4 Pro: the sleep screen with a cover, a picture or the cat (shown in grays) is made
+  after a refresh of every pixel, as the others are (a page with pictures is not: it
+  keeps the quicker first stage, also at its periodic full refresh); before, the grays were put over a fast
   refresh, which leaves a little ghosting of the screen shown before it. The fast
   refresh before any grays also no longer takes a quicker waveform that a game or
   a menu left set.
