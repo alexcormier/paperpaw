@@ -520,11 +520,14 @@ impl Fonts {
     }
 
     fn proposed(&self, role: &str) -> Option<FontHandle<'_>> {
+        // The loaded proposals' entries, so the handle is made once, for
+        // the one chosen.
         self.candidates
             .iter()
-            .filter(|(r, font, _)| r.as_str() == role && self.get(font.as_str()).is_some())
-            .max_by_key(|(_, _, priority)| *priority)
-            .and_then(|(_, font, _)| self.get(font.as_str()))
+            .filter(|(r, _, _)| r.as_str() == role)
+            .filter_map(|(_, font, priority)| Some((self.index_of(font.as_str())?, *priority)))
+            .max_by_key(|(_, priority)| *priority)
+            .map(|(index, _)| self.handle(index))
     }
 
     /// The font bound to `role`: the user's choice, else the chosen
@@ -584,18 +587,23 @@ impl Fonts {
                 *slot = Some((font, i as u16));
             }
         };
+        let mut extended = false;
         for i in self.extensions_of(index) {
+            extended = true;
             add(i);
         }
         // The extension with the largest sizes beyond this pack's own, if
-        // one has any.
+        // one has any. Sizes are only read where there are extensions.
         let largest = |f: &Font| f.largest_size().unwrap_or(0.0);
-        let own = entry.font.as_ref().map_or(0.0, largest);
-        let larger = self
-            .extensions_of(index)
-            .filter_map(|i| self.entries[i].font.as_ref().map(|f| (f, i as u16)))
-            .filter(|(f, _)| own > 0.0 && largest(f) > own)
-            .max_by(|a, b| largest(a.0).total_cmp(&largest(b.0)));
+        let larger = extended
+            .then(|| {
+                let own = entry.font.as_ref().map_or(0.0, largest);
+                self.extensions_of(index)
+                    .filter_map(|i| self.entries[i].font.as_ref().map(|f| (f, i as u16)))
+                    .filter(|(f, _)| own > 0.0 && largest(f) > own)
+                    .max_by(|a, b| largest(a.0).total_cmp(&largest(b.0)))
+            })
+            .flatten();
         if let Some(fallback) = self.fallback_index() {
             add(fallback);
             for i in self.extensions_of(fallback) {

@@ -296,6 +296,10 @@ impl Header {
     ) {
         let (env, style) = (ui.env(), ui.style());
         let canvas = ui.canvas();
+        // Outside the band drawn now: drawn in its own.
+        if !super::shows(canvas, self.area) {
+            return;
+        }
         // Without arrows to page with, the page number gives way where the
         // title is not whole beside it.
         let page = page.filter(|_| self.arrows || self.title_whole(env, style, title, page));
@@ -489,6 +493,10 @@ impl Pager {
         let (env, style) = (ui.env(), ui.style());
         let canvas = ui.canvas();
         let a = self.area;
+        // Outside the band drawn now: drawn in its own.
+        if !super::shows(canvas, a) {
+            return;
+        }
         canvas.fill(a, Color::WHITE);
         if style.separators != Separators::None {
             canvas.fill_rect(
