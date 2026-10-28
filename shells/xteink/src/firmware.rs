@@ -837,6 +837,9 @@ impl Firmware {
         let kind = kind(refresh);
         let started = now();
         self.panel.start_refresh(refresh, false)?;
+        // What the start took: the setup and the new frame sent (the rest
+        // of the time is the waveform and the old frame sent after it).
+        let start_ms = now().since(started);
         // A little early: the rest is watched. In naps no longer than the
         // idle ones, the buttons read after each: the readings stop in a
         // light sleep, and a click within a refresh would be missed, a
@@ -849,6 +852,7 @@ impl Firmware {
         let woke = now();
         let waited = self.panel.wait();
         let took = now().since(started);
+        info!("refresh {refresh:?}: started in {start_ms} ms, took {took} ms in all");
         let slot = &mut self.state.refresh_ms[kind];
         if now().since(woke) > 1 || expected == 0 {
             // Still busy after the nap: what it took is its time. The
