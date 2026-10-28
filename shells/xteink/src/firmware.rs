@@ -836,7 +836,9 @@ impl Firmware {
     fn refresh(&mut self, refresh: Refresh) -> Result<(), paperpaw_x4::display::Error> {
         let kind = kind(refresh);
         let started = now();
+        self.panel.take_busy_ms();
         self.panel.start_refresh(refresh, false)?;
+        let start_busy = self.panel.take_busy_ms();
         // What the start took: the setup and the new frame sent (the rest
         // of the time is the waveform and the old frame sent after it).
         let start_ms = now().since(started);
@@ -852,7 +854,10 @@ impl Firmware {
         let woke = now();
         let waited = self.panel.wait();
         let took = now().since(started);
-        info!("refresh {refresh:?}: started in {start_ms} ms, took {took} ms in all");
+        let busy = self.panel.take_busy_ms();
+        info!(
+            "refresh {refresh:?}: started in {start_ms} ms (waited {start_busy}), took {took} ms in all (waited {busy} more)"
+        );
         let slot = &mut self.state.refresh_ms[kind];
         if now().since(woke) > 1 || expected == 0 {
             // Still busy after the nap: what it took is its time. The
@@ -1119,8 +1124,8 @@ fn menu_waveform(
 }
 
 /// The UC8179's: the step of the setting *Fast changes* (or the numbers of
-/// *Own values*) for fast changes, the numbers of `x4.uc8179.mono-*` (3
-/// frames at 100 Hz, no hold: a guess, to be tuned) for the fastest refresh. The panel's
+/// *Own values*) for fast changes, the numbers of `x4.uc8179.mono-*` (12
+/// frames at 200 Hz, no hold: a guess, to be tuned) for the fastest refresh. The panel's
 /// own waveform is 19 frames at 50 Hz; these are the frames the owner judged
 /// on the X4 Pro, at the voltages of that waveform (the OTP's: set at start).
 /// A hold of 3 frames keeps the ghosts of the pixels that stay down.

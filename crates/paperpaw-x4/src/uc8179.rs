@@ -103,7 +103,7 @@ pub enum Chip {
 /// The frame rates a trial may ask the controller for (the `PLL` register's
 /// codes and what they are in Hz; the datasheet has more, up to 200 Hz, none
 /// is taken above 100 here), the controller's own 50 Hz fourth.
-pub const FRAME_RATES: [(u8, u16); 9] = [
+pub const FRAME_RATES: [(u8, u16); 13] = [
     (0x03, 20),
     (0x04, 30),
     (0x05, 40),
@@ -113,6 +113,10 @@ pub const FRAME_RATES: [(u8, u16); 9] = [
     (0x09, 80),
     (0x0A, 90),
     (0x0B, 100),
+    (0x0C, 110),
+    (0x0D, 130),
+    (0x0E, 150),
+    (0x0F, 200),
 ];
 /// The index of the controller's own frame rate in [`FRAME_RATES`].
 pub const OWN_RATE: usize = 3;
@@ -340,6 +344,9 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     /// What was written to the frame since it went to the controller.
     dirty: Option<Area>,
     transfer: Transfer,
+    /// Milliseconds spent waiting for the busy pin since
+    /// [`Display::take_busy_ms`].
+    busy_ms: u32,
     powered: bool,
     rotation: Rotation,
     pending: Option<Pending>,
@@ -387,6 +394,7 @@ where
             synced: false,
             dirty: None,
             transfer: Transfer::Whole,
+            busy_ms: 0,
             powered: false,
             rotation: Rotation::Deg0,
             pending: None,
@@ -400,6 +408,13 @@ where
     /// without, the controller's reset values.
     pub fn set_trial_power(&mut self, power: Option<Power>) {
         self.trial_power = power;
+    }
+
+    /// The milliseconds spent waiting for the controller since the last
+    /// call: after [`Display::start_refresh`] what the setup waited for,
+    /// after [`Display::wait`] mostly the waveform.
+    pub fn take_busy_ms(&mut self) -> u32 {
+        core::mem::take(&mut self.busy_ms)
     }
 
     /// Sets how much of the frame fast refreshes send (see [`Transfer`]).
@@ -925,6 +940,7 @@ where
                 return Ok(());
             }
             self.delay.delay_ms(1);
+            self.busy_ms += 1;
         }
         Err(Error::Timeout)
     }

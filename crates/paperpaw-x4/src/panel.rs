@@ -217,6 +217,15 @@ where
         }
     }
 
+    /// The milliseconds the UC8179 waited for its busy pin since the last
+    /// call (0 for the others).
+    pub fn take_busy_ms(&mut self) -> u32 {
+        match self {
+            Panel::UltraChip(display) => display.take_busy_ms(),
+            _ => 0,
+        }
+    }
+
     pub fn refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
         each!(self, d => d.refresh(refresh, power_off))
     }

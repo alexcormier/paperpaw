@@ -239,7 +239,7 @@ static UC_SETTINGS: [SettingSpec; 9] = {
             UC_RATE.static_str(),
             "x4.uc8179.fast-rate",
             20,
-            100,
+            200,
             50,
             groups::DEVELOPER,
         )
@@ -258,7 +258,7 @@ static UC_SETTINGS: [SettingSpec; 9] = {
             "x4.uc8179.mono-frames",
             1,
             30,
-            3,
+            12,
             groups::DEVELOPER,
         )
         .description("x4.uc8179.mono-frames.help"),
@@ -275,8 +275,8 @@ static UC_SETTINGS: [SettingSpec; 9] = {
             UC_MONO_RATE.static_str(),
             "x4.uc8179.mono-rate",
             20,
-            100,
-            100,
+            200,
+            200,
             groups::DEVELOPER,
         )
         .with_extra(&BY_TEN)

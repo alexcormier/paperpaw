@@ -26,8 +26,11 @@ change the plugin SDK.
 
 - X4 Pro (a UC8179 controller): the fastest refresh (screens that ask for `fastest`,
   such as games) has numbers of its own, the developer settings `x4.uc8179.mono-frames`
-  (3), `x4.uc8179.mono-hold` (0) and `x4.uc8179.mono-rate` (100 Hz): about 170 ms
-  by the formula, with ghosts. It took the step of *Fast changes* (7 frames, hold 3,
+  (12), `x4.uc8179.mono-hold` (0) and `x4.uc8179.mono-rate` (200 Hz): about 175 ms
+  by the formula (3 frames at 100 Hz were far too grey, 6 nearly clean: the drive
+  needs about 60 ms, whatever the rate). The frame rates go up to 200 Hz (110, 130,
+  150, 200 added); the log says how long the setup and the refresh waited for the
+  controller. It took the step of *Fast changes* (7 frames, hold 3,
   about 330 ms, no ghosts) before. The numbers are a guess, to tune on a device.
 - X4 Pro (a UC8179 controller): a developer setting, `x4.uc8179.transfer`, says how much
   of the picture goes to the controller for a fast change: the whole (what the

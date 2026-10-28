@@ -20,7 +20,7 @@
 //!   the frames and the kick are what is tried.
 //!
 //! On a UC8179 (the X4 Pro) the direct drive has more: the frame rate
-//! (the controller's `PLL` register, 20 to 100 Hz, its own 50), the group's
+//! (the controller's `PLL` register, 20 to 200 Hz, its own 50), the group's
 //! repeat (0 or 1; the datasheet says "0: 0 time", which may mean that the
 //! group does not run at all, and then nothing is driven and the ghosts
 //! pile up; the stock gray waveforms use 1, which the lab starts at), and the levels of white and black, assumed from the stock
