@@ -24,6 +24,9 @@ change the plugin SDK.
   checks every frame it sends.
 - Text, light separator lines and shaded highlights draw faster in black and
   white and in grays, with the same pixels as before.
+- Menus, settings pages and the home screen spend less time on their texts
+  and settings, and a start reads the translations faster: a message is
+  looked for only in the catalogs that can hold it.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

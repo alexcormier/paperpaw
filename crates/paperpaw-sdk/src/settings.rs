@@ -1261,18 +1261,27 @@ impl Settings {
         self.scoped_value(id)
             .or_else(|| self.values.get(id))
             .or_else(|| {
-                let other = self.follows(id)?;
-                self.scoped_value(other)
-                    .or_else(|| self.values.get(other))
-                    .or_else(|| self.specs.get(other).map(|spec| &spec.default))
+                self.followed_or_default(id, |other| {
+                    self.scoped_value(other).or_else(|| self.values.get(other))
+                })
             })
-            .or_else(|| self.specs.get(id).map(|spec| &spec.default))
     }
 
-    /// The setting `id` follows until it is set
-    /// ([`SettingExtra::follows`]), if any.
-    fn follows(&self, id: &str) -> Option<&str> {
-        self.specs.get(id)?.extra().follows.as_ref().map(Id::as_str)
+    /// The value of `id` where none is set: that of the setting it
+    /// follows until it is set ([`SettingExtra::follows`]), as `set`
+    /// finds it or by default, else its own default. Its spec is looked
+    /// up once.
+    fn followed_or_default<'s>(
+        &'s self,
+        id: &str,
+        set: impl FnOnce(&str) -> Option<&'s SettingValue>,
+    ) -> Option<&'s SettingValue> {
+        let spec = self.specs.get(id)?;
+        let followed = spec.extra().follows.as_ref().and_then(|other| {
+            let other = other.as_str();
+            set(other).or_else(|| self.specs.get(other).map(|spec| &spec.default))
+        });
+        followed.or(Some(&spec.default))
     }
 
     /// The value outside any scope, or the default if none was set; for a
@@ -1283,13 +1292,7 @@ impl Settings {
         }
         self.values
             .get(id)
-            .or_else(|| {
-                let other = self.follows(id)?;
-                self.values
-                    .get(other)
-                    .or_else(|| self.specs.get(other).map(|spec| &spec.default))
-            })
-            .or_else(|| self.specs.get(id).map(|spec| &spec.default))
+            .or_else(|| self.followed_or_default(id, |other| self.values.get(other)))
     }
 
     /// The active scope's value of `id`, if it applies: the setting is
@@ -1301,8 +1304,9 @@ impl Settings {
         if id != only.as_str() && scope.get(only.as_str()) != Some(&SettingValue::Bool(true)) {
             return None;
         }
+        let value = scope.get(id)?;
         self.specs.get(id).filter(|spec| spec.scoped)?;
-        scope.get(id)
+        Some(value)
     }
 
     /// The values of the active scope, e.g. of the book being read: scoped
