@@ -25,43 +25,43 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-config"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 
 [[package]]
 name = "paperpaw-digest"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-document"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-graphics"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-hyphen"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 
 [[package]]
 name = "paperpaw-i18n"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-config",
 ]
 
 [[package]]
 name = "paperpaw-image"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",
@@ -69,14 +69,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-json"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-layout"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-document",
  "paperpaw-text",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-native"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "ed25519-compact",
  "paperpaw-digest",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-platform"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 
 [[package]]
 name = "paperpaw-plugin-aids"
@@ -103,21 +103,21 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-battery"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-browser"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-calibre"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -290,7 +290,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-koreader"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-news"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -325,7 +325,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-reading-goal"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -339,14 +339,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-rules"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-stats"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-sdk",
  "paperpaw-sqlite",
@@ -361,7 +361,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-vocabulary"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -382,18 +382,18 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-widgets"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-qr"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 
 [[package]]
 name = "paperpaw-sdk"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-config",
  "paperpaw-digest",
@@ -415,14 +415,14 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-sqlite"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-text"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-graphics",
  "paperpaw-platform",
@@ -430,18 +430,18 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-update"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "ed25519-compact",
 ]
 
 [[package]]
 name = "paperpaw-xml"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 
 [[package]]
 name = "paperpaw-zip"
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",

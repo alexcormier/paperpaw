@@ -2,8 +2,26 @@
 //! how much of the picture the X4 Pro sends for them: from the settings.
 
 use paperpaw_platform::RefreshMode;
+use paperpaw_x4::display::Refresh;
 
+use super::Firmware;
 use crate::device;
+
+impl Firmware {
+    /// Sets how the next refresh is shown: the waveform and the transfer
+    /// of a fast refresh in `mode`. Both stay on the panel until set again,
+    /// so every frame sets them, also the paced ones (`paced.rs`), which
+    /// would else show with what the last frame to wait for the panel left.
+    pub(super) fn set_waveform(&mut self, refresh: Refresh, mode: RefreshMode) {
+        let experiment = if refresh == Refresh::Fast {
+            fast_waveform(mode, self.kernel.settings(), self.kernel.active_screen())
+        } else {
+            None
+        };
+        let _supported = self.panel.set_experiment(experiment);
+        self.panel.set_transfer(transfer(self.kernel.settings()));
+    }
+}
 
 /// The waveform of a fast refresh on the X4: the waveform lab's own while
 /// it is open, else a direct drive of a few frames for the modes that ask
@@ -15,7 +33,7 @@ use crate::device;
 /// ghosts that the next full refresh clears. Partial refreshes (pages) keep
 /// the panel's own. The numbers are kept in the order the modes have
 /// (`waveform::ordered`).
-pub(super) fn fast_waveform(
+fn fast_waveform(
     mode: RefreshMode,
     settings: &paperpaw_sdk::Settings,
     active: Option<&paperpaw_sdk::Id>,
@@ -35,7 +53,7 @@ pub(super) fn fast_waveform(
 
 /// How much of the picture the X4 Pro sends for a fast refresh (the other
 /// controllers send what they must).
-pub(super) fn transfer(settings: &paperpaw_sdk::Settings) -> paperpaw_x4::uc8179::Transfer {
+fn transfer(settings: &paperpaw_sdk::Settings) -> paperpaw_x4::uc8179::Transfer {
     use paperpaw_x4::uc8179::Transfer;
     match settings.read(&device::UC_TRANSFER) {
         device::UC_TRANSFER_CHANGED => Transfer::Changed,
@@ -70,8 +88,8 @@ fn menu_waveform(
 /// The UC8179's: the step of the setting *Fast changes* (or the numbers of
 /// *Own values*) for fast changes, the numbers of `x4.uc8179.mono-*` (12
 /// frames at 200 Hz, no hold: a guess, to be tuned) for the fastest refresh. The panel's
-/// own waveform is 19 frames at 50 Hz; these are the frames the owner judged
-/// on the X4 Pro, at the voltages of that waveform (the OTP's: set at start).
+/// own waveform is 19 frames at 50 Hz; these are the frames judged right
+/// on an X4 Pro, at the voltages of that waveform (the OTP's: set at start).
 /// A hold of 3 frames keeps the ghosts of the pixels that stay down.
 #[cfg_attr(
     feature = "x4",

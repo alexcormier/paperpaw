@@ -75,8 +75,7 @@ pub const UC_MONO_FRAMES: Setting<i64> = Setting::new("x4.uc8179.mono-frames");
 pub const UC_MONO_HOLD: Setting<i64> = Setting::new("x4.uc8179.mono-hold");
 pub const UC_MONO_RATE: Setting<i64> = Setting::new("x4.uc8179.mono-rate");
 /// How much of the picture goes to the controller for a fast refresh.
-pub const UC_TRANSFER: Setting<paperpaw_sdk::setting::Text> =
-    Setting::new("x4.uc8179.transfer");
+pub const UC_TRANSFER: Setting<paperpaw_sdk::setting::Text> = Setting::new("x4.uc8179.transfer");
 pub const UC_TRANSFER_WHOLE: &str = "x4.uc8179.transfer.whole";
 pub const UC_TRANSFER_CHANGED: &str = "x4.uc8179.transfer.changed";
 pub const UC_TRANSFER_COPIED: &str = "x4.uc8179.transfer.copied";

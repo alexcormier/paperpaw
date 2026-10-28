@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.12] - 2026-10-28
+
 ### Changed
 
 - X4 (with an SSD1677 panel, as most have): a setting, *Fast changes* (Display), says how menus and a moved focus
@@ -131,6 +133,12 @@ change the plugin SDK.
 
 ### Fixed
 
+- X4 and X4 Pro: a screen that runs at a pace (`ScreenMode::frame_every`) showed its
+  frames with the waveform the last frame before it had left on the panel, not that of
+  its own refresh mode. A game with `ScreenMode::fastest` and `grays(2)` kept the panel's
+  own waveform (500 ms) until a frame that did not wait for the panel (a game-over
+  card, say) set the quick one, and so seemed to be fast only after the first restart.
+  Paced frames now set the waveform and the transfer as every other frame does.
 - X4 Pro: the sleep screen with a cover, a picture or the cat (shown in grays) is made
   after a refresh of every pixel, as the others are (a page with pictures is not: it
   keeps the quicker first stage, also at its periodic full refresh); before, the grays were put over a fast
