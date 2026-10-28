@@ -27,6 +27,10 @@ change the plugin SDK.
 - Menus, settings pages and the home screen spend less time on their texts
   and settings, and a start reads the translations faster: a message is
   looked for only in the catalogs that can hold it.
+- Large libraries open faster: the library's shelves and its index read
+  the catalog once, a shelf shown again after a book or its actions is not
+  read anew when nothing changed, home keeps its covers made small, and
+  the vocabulary list reads only the words of the page shown.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

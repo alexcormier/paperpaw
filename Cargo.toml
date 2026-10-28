@@ -168,7 +168,7 @@ paperpaw-plugin-profiles = { path = "plugins/profiles", version = "1.0.4" }
 paperpaw-plugin-keys = { path = "plugins/keys", version = "1.0.3" }
 paperpaw-plugin-wikipedia = { path = "plugins/wikipedia", version = "1.0.1" }
 paperpaw-plugin-aids = { path = "plugins/aids", version = "1.0.2" }
-paperpaw-plugin-vocabulary = { path = "plugins/vocabulary", version = "1.0.4" }
+paperpaw-plugin-vocabulary = { path = "plugins/vocabulary", version = "1.0.5" }
 paperpaw-plugin-sleep = { path = "plugins/sleep", version = "1.0.1" }
 paperpaw-plugin-translate = { path = "plugins/translate", version = "1.0.2" }
 paperpaw-plugin-readwise = { path = "plugins/readwise", version = "1.0.2" }
@@ -196,9 +196,9 @@ paperpaw-plugin-hyphenation-pt = { path = "plugins/hyphenation-pt", version = "1
 paperpaw-plugin-hyphenation-ru = { path = "plugins/hyphenation-ru", version = "1.0.0" }
 paperpaw-plugin-hyphenation-sv = { path = "plugins/hyphenation-sv", version = "1.0.0" }
 paperpaw-plugin-hyphenation-uk = { path = "plugins/hyphenation-uk", version = "1.0.0" }
-paperpaw-plugin-home = { path = "plugins/home", version = "1.0.1" }
+paperpaw-plugin-home = { path = "plugins/home", version = "1.0.2" }
 paperpaw-plugin-settings = { path = "plugins/settings", version = "1.0.2" }
-paperpaw-plugin-files = { path = "plugins/files", version = "1.0.1" }
+paperpaw-plugin-files = { path = "plugins/files", version = "1.0.2" }
 paperpaw-plugin-reader = { path = "plugins/reader", version = "1.0.2" }
 paperpaw-plugin-format-epub = { path = "plugins/format-epub", version = "1.0.2" }
 paperpaw-plugin-format-txt = { path = "plugins/format-txt", version = "1.0.0" }

@@ -18,6 +18,9 @@ pub(crate) struct Recent {
     pub indexed: bool,
     /// Its cover, where it has one and the library read it.
     pub cover: Option<ImageRef>,
+    /// The file's size its details are of: its cover made small is kept
+    /// for that file ([`library::cover_variant`]).
+    pub size: u64,
 }
 
 /// The `limit` books read last that are still there, most recent first.
@@ -39,6 +42,7 @@ pub(crate) fn load(storage: &dyn Storage, limit: usize) -> Vec<Recent> {
                 progress: f32::from(book.progress.unwrap_or(0)),
                 indexed: book.indexed,
                 cover: book.cover,
+                size: book.size,
                 path,
             })
         })

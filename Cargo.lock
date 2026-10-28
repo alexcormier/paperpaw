@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-files"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -1809,7 +1809,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-home"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2250,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-vocabulary"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",

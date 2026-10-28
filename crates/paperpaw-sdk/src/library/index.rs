@@ -10,7 +10,7 @@
 //! again ([`Index::load`]).
 
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::catalog::{self, Books, Record, Show};
@@ -128,6 +128,29 @@ pub fn number(text: &str) -> u16 {
     }
 }
 
+/// The number of `name` in `series`, added where it is not there yet and
+/// there is room (else [`NO_SERIES`]). `by_hash` holds the hash and the
+/// number of each, sorted by hash; names of the same hash are compared.
+fn series_of(series: &mut Vec<String>, by_hash: &mut Vec<(u32, u16)>, name: &str) -> u16 {
+    let key = hash(name);
+    let mut at = by_hash.partition_point(|&(other, _)| other < key);
+    while let Some(&(other, number)) = by_hash.get(at) {
+        if other != key {
+            break;
+        }
+        if series.get(usize::from(number)).is_some_and(|s| s == name) {
+            return number;
+        }
+        at += 1;
+    }
+    if series.len() >= MAX_SERIES {
+        return NO_SERIES;
+    }
+    by_hash.insert(at, (key, series.len() as u16));
+    series.push(name.to_string());
+    (series.len() - 1) as u16
+}
+
 /// A hash of `path`, to find a book of the index by its path: the low
 /// bits of the one the catalog's log keys changes by
 /// ([`catalog::changes`]).
@@ -231,13 +254,29 @@ impl Index {
     /// Makes the index from the catalog: at most `cap` books, those in the
     /// folder `archive` left out (counted).
     pub fn build(storage: &dyn Storage, cap: usize, archive: &str) -> Index {
-        Index::collect(
+        Index::of_catalog(
+            storage,
             cap,
             archive,
             &opened(storage),
             catalog_version(storage),
-            &mut |f| catalog::each_at(storage, f),
         )
+    }
+
+    /// [`Index::collect`] of the catalog's books, read once: there are no
+    /// more books than the catalog has lines, which are counted without
+    /// reading the books.
+    pub(crate) fn of_catalog(
+        storage: &dyn Storage,
+        cap: usize,
+        archive: &str,
+        opened: &[u32],
+        version: Option<u64>,
+    ) -> Index {
+        let lines = catalog::count_lines(storage, &catalog::catalog_path()).ok();
+        Index::collect_at_most(cap, archive, opened, version, lines, &mut |f| {
+            catalog::each_at(storage, f);
+        })
     }
 
     /// Makes the index from `books` (any library's, read twice: counted,
@@ -251,6 +290,19 @@ impl Index {
         version: Option<u64>,
         books: Books<'_>,
     ) -> Index {
+        Index::collect_at_most(cap, archive, opened, version, None, books)
+    }
+
+    /// [`Index::collect`], `books` read once where it is known that there
+    /// are at most `most` (where not, they are counted first).
+    fn collect_at_most(
+        cap: usize,
+        archive: &str,
+        opened: &[u32],
+        version: Option<u64>,
+        most: Option<usize>,
+        books: Books<'_>,
+    ) -> Index {
         let archive = if archive.is_empty() {
             String::new()
         } else {
@@ -259,10 +311,16 @@ impl Index {
         let in_archive = |path: &str| !archive.is_empty() && path.starts_with(&archive);
         // As many as there are books: a list grown by doubling would hold
         // twice that for a moment.
-        let mut count = 0;
-        books(&mut |_, record| count += usize::from(!in_archive(&record.path)));
+        let count = most.unwrap_or_else(|| {
+            let mut count = 0;
+            books(&mut |_, record| count += usize::from(!in_archive(&record.path)));
+            count
+        });
         let mut items = Vec::with_capacity(count.min(cap));
         let mut series: Vec<String> = Vec::new();
+        // The series' hashes and numbers, sorted by hash: found without
+        // comparing a book's series with every one before it.
+        let mut by_hash: Vec<(u32, u16)> = Vec::new();
         let (mut archived, mut total) = (0, 0);
         books(&mut |key, record| {
             if in_archive(&record.path) {
@@ -278,13 +336,8 @@ impl Index {
             }
             let of = if record.series.is_empty() {
                 NO_SERIES
-            } else if let Some(at) = series.iter().position(|s| *s == record.series) {
-                at as u16
-            } else if series.len() < MAX_SERIES {
-                series.push(record.series.clone());
-                (series.len() - 1) as u16
             } else {
-                NO_SERIES
+                series_of(&mut series, &mut by_hash, &record.series)
             };
             let recent = rank(opened, hash(&record.path));
             items.push(Item::new(key, &record, of, recent));

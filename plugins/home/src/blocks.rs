@@ -34,7 +34,7 @@ use paperpaw_sdk::widgets::{
 };
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
-    SettingExtra, SettingKind, SettingSpec, SettingValue, time,
+    SettingExtra, SettingKind, SettingSpec, SettingValue, library, time,
 };
 
 use crate::pages::{CONTINUE, DATE, RECENT, STATUS};
@@ -655,11 +655,30 @@ fn fitted(image: &ImageRef, place: Rect, x: f32, y: f32) -> Rect {
     Rect::new(place.x + left as u16, place.y + top as u16, w, h)
 }
 
-/// `image` made small to `at`, as the panel shows it: read once, then
-/// drawn from memory.
-fn small_cover(env: &Env<'_>, image: &ImageRef, at: Rect) -> Option<Thumbnail> {
+/// `book`'s cover `image` made small to fit `place` (as [`fitted`] puts
+/// it there), as the panel shows it: kept beside the book as `variant`,
+/// so it is made once, not again each time home is shown; read once,
+/// then drawn from memory.
+fn small_cover(
+    env: &Env<'_>,
+    book: &Book,
+    image: &ImageRef,
+    place: Rect,
+    variant: &str,
+) -> Option<Thumbnail> {
     let format = env.device().display.format;
-    Thumbnail::new(env.storage(), image, at.width, at.height, format)
+    let mut known = library::Book::default().cover(image.clone());
+    known.size = book.book.size;
+    let (w, h) = (place.width, place.height);
+    library::cover_variant(
+        env.storage(),
+        &book.book.path,
+        &known,
+        w,
+        h,
+        format,
+        variant,
+    )
 }
 
 /// Draws `image` at `at`: from `small` where it was made for that size,
@@ -698,6 +717,8 @@ struct Card {
 struct CardParts {
     /// Where the cover goes, if it shows.
     cover: Option<Rect>,
+    /// The place it was fitted into there.
+    cover_place: Rect,
     /// The column of text; none where the cover alone fits.
     text: Option<Rect>,
     /// "Continue reading" above the title.
@@ -735,10 +756,12 @@ impl CardParts {
             let beside = r.width.saturating_sub(at.width + gap);
             if beside >= least {
                 parts.cover = Some(at);
+                parts.cover_place = place;
                 text = Rect::new(r.x + at.width + gap, r.y, beside, r.height);
             } else if r.width < least {
                 // No room for text: the cover alone, in the middle.
                 parts.cover = Some(fitted(image, r, 0.5, 0.5));
+                parts.cover_place = r;
                 return parts;
             }
         }
@@ -795,11 +818,13 @@ impl Card {
         };
         self.cover = match (self.parts.cover, &self.book) {
             (
-                Some(at),
-                Some(Book {
-                    cover: Some(image), ..
-                }),
-            ) => small_cover(env, image, at),
+                Some(_),
+                Some(
+                    book @ Book {
+                        cover: Some(image), ..
+                    },
+                ),
+            ) => small_cover(env, book, image, self.parts.cover_place, "home-card"),
             _ => None,
         };
     }
@@ -1035,7 +1060,7 @@ impl Shelf {
             .clone()
             .map(|((place, _), book)| {
                 let image = book.cover.as_ref().filter(|_| place.height > 0)?;
-                small_cover(env, image, fitted(image, *place, 0.5, 1.0))
+                small_cover(env, book, image, *place, "home-shelf")
             })
             .collect();
         self.names = shown

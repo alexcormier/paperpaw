@@ -98,6 +98,20 @@ impl Word {
         })
     }
 
+    /// The language and the book's path of `line` where it is a word
+    /// ([`Word::parse`] reads it), told without making one.
+    fn kinds(line: &str) -> Option<(&str, &str)> {
+        let mut f = line.splitn(7, '\t');
+        let number = |f: Option<&str>| f?.parse::<u32>().ok();
+        f.next()?;
+        let language = f.next()?;
+        number(f.next())?;
+        number(f.next())?;
+        let path = f.next()?;
+        f.next()?;
+        Some((language, path))
+    }
+
     /// The same word in the same language, whatever its case: what tells
     /// the words of the list apart.
     pub(crate) fn same(&self, word: &str, language: &str) -> bool {
@@ -151,7 +165,9 @@ pub(crate) fn recover(storage: &dyn Storage) {
 /// How many words there are.
 pub(crate) fn count(storage: &dyn Storage) -> usize {
     let mut n = 0;
-    let _ = each_word(storage, |_| n += 1);
+    let _ = each_line(storage, &file(), |l| {
+        n += usize::from(Word::kinds(l).is_some());
+    });
     n
 }
 
@@ -173,15 +189,24 @@ pub(crate) fn summary(storage: &dyn Storage) -> Summary {
     let mut summary = Summary::default();
     let mut books: Vec<String> = Vec::new();
     let mut languages: Vec<String> = Vec::new();
-    let _ = each_word(storage, |word| {
+    // The newest word's line, made a word once all are read.
+    let mut newest = String::new();
+    let _ = each_line(storage, &file(), |l| {
+        let Some((language, path)) = Word::kinds(l) else {
+            return;
+        };
         summary.count += 1;
-        for (seen, kind) in [(&mut books, &word.path), (&mut languages, &word.language)] {
-            if !kind.is_empty() && seen.len() < MOST_KINDS && !seen.contains(kind) {
-                seen.push(kind.clone());
+        for (seen, kind) in [(&mut books, path), (&mut languages, language)] {
+            if !kind.is_empty() && seen.len() < MOST_KINDS && !seen.iter().any(|s| s == kind) {
+                seen.push(kind.to_string());
             }
         }
-        summary.newest = Some(word);
+        newest.clear();
+        newest.push_str(l);
     });
+    if summary.count > 0 {
+        summary.newest = Word::parse(&newest);
+    }
     summary.books = books.len();
     summary.languages = languages.len();
     summary
@@ -191,12 +216,21 @@ pub(crate) fn summary(storage: &dyn Storage) -> Summary {
 pub(crate) fn range(storage: &dyn Storage, from: usize, to: usize) -> Vec<(usize, Word)> {
     let mut words = Vec::new();
     let mut n = 0;
-    let _ = each_word(storage, |word| {
-        if (from..to).contains(&n) {
-            words.push((n, word));
+    // Only the words asked for are made; the others only counted, and
+    // those after them not read.
+    let mut visit = |l: &str| {
+        if n >= to {
+            return ControlFlow::Break(());
         }
-        n += 1;
-    });
+        if n < from {
+            n += usize::from(Word::kinds(l).is_some());
+        } else if let Some(word) = Word::parse(l) {
+            words.push((n, word));
+            n += 1;
+        }
+        ControlFlow::Continue(())
+    };
+    let _ = files::for_each_line(storage, &file(), &mut visit);
     words
 }
 
@@ -575,6 +609,40 @@ mod tests {
         assert_eq!(words(&storage), ["first", "second"]);
         remove(&storage, &word("second")).unwrap();
         assert_eq!(words(&storage), ["first"]);
+    }
+
+    /// Counting and paging tell words from other lines as reading them
+    /// does: a page numbers its words without the lines that are none.
+    #[test]
+    fn words_are_told_without_reading_them() {
+        let lines = [
+            "w\ten\t1\t2\tbooks/a.txt\tA\tsentence",
+            "w\ten\t1\t2\tbooks/a.txt\tA",
+            "w\ten\t1\t2\tbooks/a.txt",
+            "w\ten\tx\t2\tbooks/a.txt\tA",
+            "w\ten\t1\t-2\tbooks/a.txt\tA",
+            "w\ten\t+1\t2\t\t\t",
+            "",
+            "cut\ten\t1",
+        ];
+        for line in lines {
+            assert_eq!(
+                Word::kinds(line).is_some(),
+                Word::parse(line).is_some(),
+                "{line}"
+            );
+        }
+        let list = format!("{}cut\ten\t1\n{}", many(3), many(2));
+        let storage = MemoryStorage::new().with(&file(), list);
+        assert_eq!(count(&storage), 5);
+        let page = range(&storage, 2, 4);
+        let numbered: Vec<(usize, &str)> =
+            page.iter().map(|(n, w)| (*n, w.word.as_str())).collect();
+        assert_eq!(numbered, [(2, "w2"), (3, "w0")]);
+        assert_eq!(
+            summary(&storage).newest.map(|w| w.word),
+            Some("w1".to_string())
+        );
     }
 
     /// Deleting goes by the word, not by its number: the list may have

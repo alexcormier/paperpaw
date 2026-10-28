@@ -229,6 +229,36 @@ impl ShelfRow {
     }
 }
 
+/// The names met in a pass over the catalog, found by their hashes
+/// sorted: a library of many authors would else compare each book's
+/// with all those met before. Names of the same hash are compared too.
+#[derive(Default)]
+struct Seen {
+    /// The hash of each name met and its number (the order met), sorted
+    /// by hash.
+    keys: Vec<(u32, u32)>,
+}
+
+impl Seen {
+    /// The number of `name` if it was met, else marks it met and gives
+    /// `None`. `named` gives the name of a number.
+    fn find<'a>(&mut self, name: &str, named: impl Fn(usize) -> &'a str) -> Option<usize> {
+        let hash = hash(name);
+        let mut at = self.keys.partition_point(|&(key, _)| key < hash);
+        while let Some(&(key, number)) = self.keys.get(at) {
+            if key != hash {
+                break;
+            }
+            if named(number as usize) == name {
+                return Some(number as usize);
+            }
+            at += 1;
+        }
+        self.keys.insert(at, (hash, self.keys.len() as u32));
+        None
+    }
+}
+
 /// Where things go on the screen: made anew when a setting changes (the
 /// view, the size of the interface).
 struct Layout {
@@ -507,7 +537,10 @@ impl ListScreen {
     /// it has (and how many are finished), from one pass over the catalog.
     fn make_shelves(&self, env: &Env<'_>) -> Vec<ShelfRow> {
         let favourites = library::favourites(env.storage()).len();
-        let mut authors: Vec<String> = Vec::new();
+        // The authors met, one after the other, and where each begins.
+        let mut authors = String::new();
+        let mut starts: Vec<u32> = Vec::new();
+        let mut seen = [Seen::default(), Seen::default(), Seen::default()];
         let mut series: Vec<ShelfRow> = Vec::new();
         let mut folders: Vec<ShelfRow> = Vec::new();
         let prefix = if self.root.is_empty() {
@@ -517,26 +550,33 @@ impl ListScreen {
         };
         library::service(env).each(env, &mut |_, line| {
             let finished = line.reading() == library::catalog::Reading::Finished;
-            if !authors.contains(&line.author) {
-                authors.push(line.author.clone());
+            let [by_author, by_series, by_folder] = &mut seen;
+            let named = |n: usize| {
+                let start = starts.get(n).map_or(0, |&start| start as usize);
+                let end = starts.get(n + 1).map_or(authors.len(), |&end| end as usize);
+                authors.get(start..end).unwrap_or_default()
+            };
+            if by_author.find(&line.author, named).is_none() {
+                starts.push(authors.len() as u32);
+                authors.push_str(&line.author);
             }
-            let count = |rows: &mut Vec<ShelfRow>, kind, name: &str| match rows
-                .iter_mut()
-                .find(|r| r.name == name)
-            {
-                Some(row) => {
-                    row.count += 1;
-                    row.finished += usize::from(finished);
+            let count = |rows: &mut Vec<ShelfRow>, seen: &mut Seen, kind, name: &str| {
+                let named = |n: usize| rows.get(n).map_or("", |row: &ShelfRow| row.name.as_str());
+                match seen.find(name, named).and_then(|n| rows.get_mut(n)) {
+                    Some(row) => {
+                        row.count += 1;
+                        row.finished += usize::from(finished);
+                    }
+                    None => rows.push(ShelfRow::new(false, kind, name, 1, usize::from(finished))),
                 }
-                None => rows.push(ShelfRow::new(false, kind, name, 1, usize::from(finished))),
             };
             if !line.series.is_empty() {
-                count(&mut series, shelf::Kind::Series, &line.series);
+                count(&mut series, by_series, shelf::Kind::Series, &line.series);
             }
             let inner = line.path.strip_prefix(&prefix).unwrap_or(&line.path);
             if let Some((folder, _)) = inner.split_once('/') {
                 let folder = format!("{prefix}{folder}");
-                count(&mut folders, shelf::Kind::Folder, &folder);
+                count(&mut folders, by_folder, shelf::Kind::Folder, &folder);
             }
         });
         series.sort_by_cached_key(|r| r.name.to_lowercase());
@@ -557,7 +597,7 @@ impl ListScreen {
             false,
             shelf::Kind::Authors,
             "",
-            authors.len(),
+            starts.len(),
             0,
         ));
         shelves.extend(series);
@@ -1297,5 +1337,34 @@ impl Screen for ListScreen {
                 cx.wake_at(env.now());
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Names are told apart as by comparing them all, those of the same
+    /// hash too, and numbered in the order met.
+    #[test]
+    fn names_met_are_found_again() {
+        let names = ["b", "a", "B", "b", "", "a", "c", ""];
+        let mut met: Vec<&str> = Vec::new();
+        let mut seen = Seen::default();
+        for name in names {
+            let found = seen.find(name, |n| met[n]);
+            assert_eq!(found, met.iter().position(|m| *m == name), "{name}");
+            if found.is_none() {
+                met.push(name);
+            }
+        }
+        assert_eq!(met, ["b", "a", "B", "", "c"]);
+        // Two names of one hash (as if): both kept, each found again.
+        let mut seen = Seen {
+            keys: alloc::vec![(hash("x"), 0)],
+        };
+        let met = ["y", "x"];
+        assert_eq!(seen.find("x", |n| met[n]), None);
+        assert_eq!(seen.find("x", |n| met[n]), Some(1));
     }
 }
