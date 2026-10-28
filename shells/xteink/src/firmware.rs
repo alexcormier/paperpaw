@@ -17,7 +17,9 @@ use paperpaw_platform::{
     Rect, RefreshMode, SystemStatus,
 };
 use paperpaw_x4::display::{Planes, Refresh};
-use paperpaw_x4::sent::{Check, Sent};
+#[cfg(feature = "remote")]
+use paperpaw_x4::sent::Check;
+use paperpaw_x4::sent::Sent;
 
 use crate::board::Panel;
 use crate::network::{Network, NetworkIo};
@@ -868,13 +870,16 @@ impl Firmware {
     /// panel refreshes; what the work brought.
     fn show_busy(&mut self, area: Rect) -> Effects {
         power::mark(power::at::SHOWING);
+        let send_again = !self.panel.keeps_frame();
         let mut sent = Sent::new(heap_free);
         let panel = &mut self.panel;
         self.kernel.render(&mut |top, rows| {
             if let Err(e) = panel.write_rows(top, rows, Planes::NEW) {
                 warn!("display: {e:?}");
             }
-            sent.keep(top, &rows);
+            if send_again {
+                sent.keep(top, &rows);
+            }
         });
         let started = now();
         let refreshing = self.panel.start_refresh(Refresh::Fast, false).is_ok();
@@ -886,11 +891,12 @@ impl Firmware {
         self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());
         // As after every refresh, both memories hold what is shown.
         let panel = &mut self.panel;
-        let kept = sent.replay(&mut |top, rows| {
-            if let Err(e) = panel.write_rows(top, rows, Planes::BOTH) {
-                warn!("display: {e:?}");
-            }
-        });
+        let kept = !send_again
+            || sent.replay(&mut |top, rows| {
+                if let Err(e) = panel.write_rows(top, rows, Planes::BOTH) {
+                    warn!("display: {e:?}");
+                }
+            });
         if !kept {
             warn!("busy mark not kept");
         }
@@ -970,18 +976,24 @@ impl Firmware {
         };
         let mut failed = None;
         let started = now();
-        // What is sent is kept for sending again after a fast refresh.
+        // What is sent is kept for sending again after the refresh, unless
+        // the panel's driver keeps the frame itself.
+        let send_again = !self.panel.keeps_frame();
         let mut sent = Sent::new(heap_free);
         // What went into each memory of the controller, to check that the
-        // frame shown is the frame sent.
+        // frame shown is the frame sent (test builds).
+        #[cfg(feature = "remote")]
         let (mut written, mut again_written) = (Check::default(), Check::default());
         let panel = &mut self.panel;
         self.kernel.render(&mut |top, rows| {
             if let Err(e) = panel.write_rows(top, rows, planes) {
                 failed = Some(e);
             }
-            written.add(top, &rows);
-            sent.keep(top, &rows);
+            if send_again {
+                #[cfg(feature = "remote")]
+                written.add(top, &rows);
+                sent.keep(top, &rows);
+            }
         });
         let drawn = now();
         self.kernel.showing(drawn);
@@ -1002,23 +1014,28 @@ impl Firmware {
         // After every refresh, both memories again hold the frame now
         // shown, as the stock firmware does: the refresh may leave the
         // memory of the new frame changed, and the next fast refresh
-        // compares the two (sent again as kept, or drawn anew).
-        let panel = &mut self.panel;
-        let mut again = |top: u16, rows: paperpaw_platform::FrameView<'_>| {
-            if let Err(e) = panel.write_rows(top, rows, Planes::BOTH) {
-                failed = Some(e);
+        // compares the two (sent again as kept, or drawn anew). A driver
+        // that keeps the frame sends it again by itself.
+        if send_again {
+            let panel = &mut self.panel;
+            let mut again = |top: u16, rows: paperpaw_platform::FrameView<'_>| {
+                if let Err(e) = panel.write_rows(top, rows, Planes::BOTH) {
+                    failed = Some(e);
+                }
+                #[cfg(feature = "remote")]
+                again_written.add(top, &rows);
+            };
+            let kept = sent.replay(&mut again);
+            if !kept {
+                self.kernel.rerender(&mut again);
             }
-            again_written.add(top, &rows);
-        };
-        let kept = sent.replay(&mut again);
-        if !kept {
-            self.kernel.rerender(&mut again);
-        }
-        if again_written != written {
-            warn!(
-                "frame shown differs from frame sent ({}): {written:?} then {again_written:?}",
-                if kept { "kept" } else { "drawn anew" }
-            );
+            #[cfg(feature = "remote")]
+            if again_written != written {
+                warn!(
+                    "frame shown differs from frame sent ({}): {written:?} then {again_written:?}",
+                    if kept { "kept" } else { "drawn anew" }
+                );
+            }
         }
         if let Some(e) = failed {
             warn!("display: {e:?}");

@@ -19,6 +19,9 @@ change the plugin SDK.
   every chapter of the book first.
 - Folders on the SD card are read faster, and reading a large file at
   scattered places no longer walks its clusters from the start each time.
+- Page turns finish sooner: the X4 Pro and X4 Classic no longer send each
+  frame a second time after its refresh, and released firmware no longer
+  checks every frame it sends.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

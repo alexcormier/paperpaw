@@ -155,6 +155,13 @@ where
         each!(self, d => d.write_rows(top, rows, planes))
     }
 
+    /// Whether the driver keeps the frame and sends it as the one shown
+    /// after every refresh by itself (the X4 Pro's and the X4 Classic's
+    /// UltraChip controllers): what was sent need not go again.
+    pub fn keeps_frame(&self) -> bool {
+        matches!(self, Panel::UltraChip(display) if display.keeps_frame())
+    }
+
     pub fn write_gray_rows(&mut self, top: u16, rows: FrameView<'_>) -> Result<(), Error> {
         each!(self, d => d.write_gray_rows(top, rows))
     }
@@ -277,8 +284,11 @@ mod tests {
                 assert_eq!(panel.controller(), controller);
                 let ultra = matches!(panel, Panel::UltraChip(_));
                 assert_eq!(ultra, controller != Controller::Ssd1677);
+                // Only the X4 Pro's and Classic's UltraChip keep the frame.
+                assert_eq!(panel.keeps_frame(), ultra && device != Device::X4);
             }
         }
+        assert!(!panel(Device::X3, Controller::Uc8253).keeps_frame());
     }
 
     /// An X3 gets its UC8253 driver whatever the probe said, and draws
