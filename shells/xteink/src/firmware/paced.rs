@@ -74,6 +74,10 @@ impl Firmware {
         });
         let drawn = now();
         self.kernel.showing(drawn);
+        // The waveform of the frame's mode, as for any frame: it stays set
+        // from the last one, so a screen at a pace would else show with
+        // whatever a frame before it left (the panel's own, 500 ms).
+        self.set_waveform(refresh, mode);
         if let Err(e) = self.panel.start_refresh(refresh, false) {
             failed = Some(e);
         }
