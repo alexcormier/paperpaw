@@ -306,7 +306,8 @@ const CASES: &[Case] = &[
     // black and white) and on the Boox (touch): the main menu and the
     // tools, the library, the reader's menus, the contents, the
     // bookmarks, settings pages, statistics, the file manager, the
-    // sleep screen, the about page, the keyboard, a book's menu.
+    // sleep screen, the keyboard, a book's menu. (Not the about page: it shows the
+    // version, which would need a new picture at every release.)
     Case {
         name: "x4-main-menu",
         profile: "xteink-x4",
@@ -455,15 +456,6 @@ const CASES: &[Case] = &[
         book: None,
         sets: &[],
         script: "power,wait:500",
-        colour: 0,
-        fixtures: false,
-    },
-    Case {
-        name: "x4-about",
-        profile: "xteink-x4",
-        book: None,
-        sets: &[],
-        script: "run:about.open,wait:500",
         colour: 0,
         fixtures: false,
     },
