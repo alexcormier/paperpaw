@@ -244,8 +244,8 @@ static UC_SETTINGS: [SettingSpec; 6] = {
         SettingSpec::choice(
             UC_TRANSFER.static_str(),
             "x4.uc8179.transfer",
-            &[UC_TRANSFER_WHOLE, UC_TRANSFER_CHANGED, UC_TRANSFER_COPIED],
-            UC_TRANSFER_WHOLE,
+            &[UC_TRANSFER_COPIED, UC_TRANSFER_CHANGED, UC_TRANSFER_WHOLE],
+            UC_TRANSFER_COPIED,
             groups::DEVELOPER,
         )
         .description("x4.uc8179.transfer.help"),

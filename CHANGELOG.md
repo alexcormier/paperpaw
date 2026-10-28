@@ -26,9 +26,10 @@ change the plugin SDK.
 
 - X4 Pro (a UC8179 controller): a developer setting, `x4.uc8179.transfer`, says how much
   of the picture goes to the controller for a fast change: the whole (what the
-  stock firmware sends, 140 ms of a refresh at 7 frames, the default), only the
-  rows and columns that changed (into both memories), or only into the new
-  memory, leaving the controller's own copy to make the old one. The refresh itself
+  stock firmware sends), only the rows and columns that changed (into both
+  memories), or only into the new memory, leaving the controller's own copy to
+  make the old one (the default: about 50 ms less a fast change, 329 instead of
+  379 ms at 7 frames, judged right on a device). The refresh itself
   still covers the whole display, so the hold keeps working. The whole picture
   goes again after a start, a sleep, grays and the slow refreshes.
 
