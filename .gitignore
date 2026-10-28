@@ -1,4 +1,6 @@
 /target/
+# Builds into a target directory of their own (CARGO_TARGET_DIR=target-...).
+/target-*/
 # The X4's firmware builds on its own (see shells/xteink).
 /shells/xteink/target/
 # Native plugins, built in workspaces of their own.
