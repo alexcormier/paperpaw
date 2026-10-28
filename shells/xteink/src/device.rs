@@ -155,7 +155,7 @@ static FAST_SETTINGS: [SettingSpec; 5] = [
             FAST_QUICK,
             FAST_CUSTOM,
         ],
-        FAST_BALANCED,
+        FAST_PANEL,
         groups::DISPLAY,
     )
     .description("x4.fast-refresh.help"),
@@ -206,7 +206,7 @@ static UC_SETTINGS: [SettingSpec; 9] = {
             UC_REFRESH.static_str(),
             "x4.uc8179.fast-refresh",
             &[UC_PANEL, UC_CLEAN, UC_BALANCED, UC_QUICK, UC_CUSTOM],
-            UC_BALANCED,
+            UC_PANEL,
             groups::DISPLAY,
         )
         .description("x4.uc8179.fast-refresh.help"),
