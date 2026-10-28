@@ -18,8 +18,12 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-/// Bytes of bank 0 that are read: up to the LUT version.
+/// Bytes of bank 0 that are read to tell what it holds: up to the LUT
+/// version.
 pub const READ_LEN: usize = 0x0BE3;
+/// Bytes of bank 0 that are read for the voltages alone: the boundaries and
+/// the headers of the ranges the boundaries can reach (TR0 to TR7).
+pub const POWER_LEN: usize = TR0 + 7 * TR_LEN + HEADER;
 
 const CHECK: u8 = 0xA5;
 const TB: usize = 0x001;
@@ -60,7 +64,7 @@ pub fn power(otp: &[u8], celsius: i32) -> Option<crate::uc8179::Power> {
     if otp.first() != Some(&CHECK) {
         return None;
     }
-    let range = tr(otp, select(otp, celsius))?;
+    let range = tr_header(otp, select(otp, celsius))?;
     Some(crate::uc8179::Power {
         gate: range[0] & 7,
         vdh: range[1] & 0x3F,
@@ -85,6 +89,12 @@ pub fn select(otp: &[u8], celsius: i32) -> usize {
 fn tr(otp: &[u8], index: usize) -> Option<&[u8]> {
     let start = TR0 + index * TR_LEN;
     otp.get(start..start + TR_LEN)
+}
+
+/// The header of range `index`, which a read of [`POWER_LEN`] bytes has.
+fn tr_header(otp: &[u8], index: usize) -> Option<&[u8]> {
+    let start = TR0 + index * TR_LEN;
+    otp.get(start..start + HEADER)
 }
 
 /// A voltage in tenths of a volt as `14.0`.
@@ -310,6 +320,16 @@ mod tests {
             (7, 63, 58, 38)
         );
         assert!(super::power(&[0; 10], 25).is_none());
+    }
+
+    #[test]
+    fn the_voltages_need_only_the_headers_of_the_ranges_that_can_be_reached() {
+        let otp = otp();
+        let short = &otp[..POWER_LEN];
+        assert_eq!(power(short, 25), power(&otp, 25));
+        assert!(power(short, 25).is_some());
+        // The read ends in the header of TR7; a range past it is not there.
+        assert!(power(&otp[..TR0 + 3 * TR_LEN], 90).is_none());
     }
 
     #[test]

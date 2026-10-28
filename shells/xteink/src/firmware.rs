@@ -985,7 +985,6 @@ impl Firmware {
         });
         let drawn = now();
         self.kernel.showing(drawn);
-        #[cfg(any(feature = "x4", feature = "waveform-lab"))]
         {
             let experiment = if refresh == Refresh::Fast {
                 fast_waveform(mode, self.kernel.settings(), self.kernel.active_screen())
@@ -1062,7 +1061,6 @@ impl Firmware {
 /// ghosts that the next full refresh clears. Partial refreshes (pages) keep
 /// the panel's own. The numbers are kept in the order the modes have
 /// (`waveform::ordered`).
-#[cfg(any(feature = "x4", feature = "waveform-lab"))]
 fn fast_waveform(
     mode: RefreshMode,
     settings: &paperpaw_sdk::Settings,
@@ -1081,10 +1079,80 @@ fn fast_waveform(
     menu_waveform(mode, settings)
 }
 
-/// The menus' and the games' waveforms are the SSD1677's (the UC8179's only
-/// in the lab, for now).
-#[cfg(all(feature = "x4", any(feature = "x4", feature = "waveform-lab")))]
+/// The waveform of the menus and the games: the SSD1677's on the X4, the
+/// UC8179's of the registers on the X4 Pro (where the controller is one,
+/// `device::uc8179`), else none.
+#[cfg(feature = "x4")]
 fn menu_waveform(
+    mode: RefreshMode,
+    settings: &paperpaw_sdk::Settings,
+) -> Option<paperpaw_x4::panel::Experiment> {
+    menu_ssd1677(mode, settings)
+}
+
+#[cfg(not(feature = "x4"))]
+fn menu_waveform(
+    mode: RefreshMode,
+    settings: &paperpaw_sdk::Settings,
+) -> Option<paperpaw_x4::panel::Experiment> {
+    if device::uc8179() {
+        menu_uc8179(mode, settings)
+    } else {
+        None
+    }
+}
+
+/// The UC8179's: the step of the setting *Fast changes* (or the numbers of
+/// *Own values*) for fast changes and for the fastest refresh alike. The panel's
+/// own waveform is 19 frames at 50 Hz; these are the frames the owner judged
+/// on the X4 Pro, at the voltages of that waveform (the OTP's: set at start).
+/// A hold of 3 frames keeps the ghosts of the pixels that stay down.
+#[cfg_attr(
+    feature = "x4",
+    allow(dead_code, reason = "the X4 Pro's menus; the X4 builds it to check it")
+)]
+fn menu_uc8179(
+    mode: RefreshMode,
+    settings: &paperpaw_sdk::Settings,
+) -> Option<paperpaw_x4::panel::Experiment> {
+    use paperpaw_x4::uc8179::{self, FRAME_RATES, OWN_RATE};
+    use paperpaw_x4::waveform::Direct;
+    if !matches!(mode, RefreshMode::Fast | RefreshMode::Mono) {
+        return None;
+    }
+    let number = |setting: &paperpaw_sdk::setting::Setting<i64>| {
+        u8::try_from(settings.read(setting).clamp(0, 255)).unwrap_or(u8::MAX)
+    };
+    // The frames, the held frames, the kick, the rate in Hz.
+    let (frames, hold, kick, hz) = match settings.read(&device::UC_REFRESH) {
+        device::UC_CLEAN => (UC_CLEAN_FRAMES, UC_HOLD, 0, 50),
+        device::UC_BALANCED => (UC_BALANCED_FRAMES, UC_HOLD, 0, 50),
+        device::UC_QUICK => (UC_QUICK_FRAMES, UC_HOLD, 0, 50),
+        device::UC_CUSTOM => (
+            number(&device::UC_FRAMES),
+            number(&device::UC_HOLD),
+            number(&device::UC_KICK),
+            settings.read(&device::UC_RATE),
+        ),
+        _ => return None,
+    };
+    let rate = FRAME_RATES
+        .iter()
+        .position(|&(_, rate)| i64::from(rate) >= hz)
+        .unwrap_or(OWN_RATE);
+    Some(paperpaw_x4::panel::Experiment::Uc8179(uc8179::Experiment {
+        drive: Direct::new(frames, kick),
+        swapped: false,
+        repeat: 1,
+        hold,
+        rate,
+        own_at: None,
+    }))
+}
+
+/// The SSD1677's (the X4's): see [`menu_waveform`].
+#[cfg(feature = "x4")]
+fn menu_ssd1677(
     mode: RefreshMode,
     settings: &paperpaw_sdk::Settings,
 ) -> Option<paperpaw_x4::panel::Experiment> {
@@ -1117,13 +1185,13 @@ fn menu_waveform(
     })
 }
 
-#[cfg(all(not(feature = "x4"), feature = "waveform-lab"))]
-fn menu_waveform(
-    _mode: RefreshMode,
-    _settings: &paperpaw_sdk::Settings,
-) -> Option<paperpaw_x4::panel::Experiment> {
-    None
-}
+/// Frames the UC8179's fast changes drive a changed pixel by the step of
+/// `x4.uc8179.fast-refresh`, 3 of them held (50 Hz, repeat 1: about 360, 380
+/// and 440 ms; the panel's own 625 ms).
+const UC_QUICK_FRAMES: u8 = 6;
+const UC_BALANCED_FRAMES: u8 = 7;
+const UC_CLEAN_FRAMES: u8 = 10;
+const UC_HOLD: u8 = 3;
 
 /// Frames a fast refresh drives a changed pixel, no kick (tried in the waveform
 /// lab), by the steps of the setting `x4.fast-refresh`: more frames leave

@@ -78,9 +78,17 @@ pub fn ask<'d>(
     let probe = probe::probe(&mut lines, &mut delay, reset_ms);
     // The waveform lab: what a UC8179's OTP holds, read while the lines are
     // still ours (a hundred milliseconds more at start, developer builds).
-    #[cfg(feature = "waveform-lab")]
+    #[cfg(any(feature = "waveform-lab", feature = "x4-pro"))]
     if probe.controller() == Some(probe::Controller::Uc8179) {
-        let mut otp = alloc::vec![0u8; paperpaw_x4::otp::READ_LEN];
+        // All of the bank for the log in developer builds, else the
+        // voltages' part (about 65 ms, a waveform of the registers runs at
+        // them).
+        let len = if cfg!(feature = "waveform-lab") {
+            paperpaw_x4::otp::READ_LEN
+        } else {
+            paperpaw_x4::otp::POWER_LEN
+        };
+        let mut otp = alloc::vec![0u8; len];
         probe::read_otp(&mut lines, &mut delay, &mut otp);
         critical_section::with(|cs| OTP.borrow_ref_mut(cs).replace(otp));
     }
@@ -88,7 +96,7 @@ pub fn ask<'d>(
 }
 
 /// The UC8179's OTP, as far as it was read (see [`ask`]).
-#[cfg(feature = "waveform-lab")]
+#[cfg(any(feature = "waveform-lab", feature = "x4-pro"))]
 static OTP: critical_section::Mutex<core::cell::RefCell<Option<alloc::vec::Vec<u8>>>> =
     critical_section::Mutex::new(core::cell::RefCell::new(None));
 
@@ -106,8 +114,9 @@ pub fn log_otp() {
 
 /// The voltages of the OTP's own fast waveform (the range 90 degrees select,
 /// as the fast refresh asks for), if the OTP was read: what a waveform from
-/// the registers runs at in the lab, not the controller's reset values.
-#[cfg(feature = "waveform-lab")]
+/// the registers runs at (the lab's, the X4 Pro's menus'), not the
+/// controller's reset values.
+#[cfg(any(feature = "waveform-lab", feature = "x4-pro"))]
 pub fn otp_power() -> Option<paperpaw_x4::uc8179::Power> {
     let otp = critical_section::with(|cs| OTP.borrow_ref(cs).clone())?;
     paperpaw_x4::otp::power(&otp, 90)

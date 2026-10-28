@@ -24,6 +24,12 @@ change the plugin SDK.
 
 ### Added
 
+- X4 Pro (a UC8179 controller): *Fast changes* (Display) says how menus and a moved
+  focus are shown, as on the X4: the panel's own waveform (625 ms) or a quicker
+  one of the controller's registers, run at the voltages of the panel's own
+  waveform (read from its OTP at start, about 65 ms more): 6, 7 (the default) or 10
+  frames with 3 held (about 360, 380 and 440 ms), or own values in the developer
+  settings (`x4.uc8179.*`). Found with the waveform lab on a device.
 - The waveform lab's direct drive on the X4 Pro can hold the pixels that stay (0 to 3
   frames driven to their own colour, as the controller's own fast waveform does
   for one frame), which keeps the ghosts of earlier frames down.
