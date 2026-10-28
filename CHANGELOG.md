@@ -31,6 +31,9 @@ change the plugin SDK.
   the catalog once, a shelf shown again after a book or its actions is not
   read anew when nothing changed, home keeps its covers made small, and
   the vocabulary list reads only the words of the page shown.
+- Book pages draw faster: lines outside the part of the screen being drawn
+  are skipped instead of measured word by word. Searching a book needs less
+  memory.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

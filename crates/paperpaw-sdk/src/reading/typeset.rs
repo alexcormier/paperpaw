@@ -15,7 +15,7 @@ use paperpaw_hyphen::Patterns;
 use super::WordBox;
 use crate::builtin::{fonts, settings};
 use crate::document::{Document, DocumentError, Locator};
-use crate::layout::{BookStyles, Face, Page, PageImage, PageLine, Style, Typesetter};
+use crate::layout::{BookStyles, Face, LineRun, Page, PageImage, PageLine, Style, Typesetter};
 use crate::text::ToneCurve;
 use crate::{Canvas, Color, Env, FontHandle, FontSet, Id, Point, Rect};
 
@@ -894,7 +894,7 @@ fn ink(env: &Env<'_>) -> (ToneCurve, bool) {
 /// Draws `lines` laid out with `faces` in `page_type`, their content box
 /// at `origin`, each word in its ink (`inks`, by the words' order as
 /// [`word_boxes`] has them; black where none). Lines outside the part
-/// being drawn (another band) are only measured.
+/// being drawn (another band) are only counted.
 pub fn draw_lines(
     canvas: &mut Canvas<'_>,
     faces: &ReadingFaces<'_>,
@@ -918,6 +918,12 @@ pub fn draw_lines(
         let above = baseline - (2.0 * page_type.line_height) as i32;
         let below = baseline + page_type.line_height as i32;
         let shown = below >= i32::from(clip.y) && above <= clip.bottom() as i32;
+        if !shown {
+            if !line.inserted {
+                ordinal += words_in(&line.text, &line.runs);
+            }
+            continue;
+        }
         let mut x = left + line.x;
         let mut joined = false;
         for run in &line.runs {
@@ -927,7 +933,7 @@ pub fn draw_lines(
                 if i > 0 {
                     // Lines under and through words go on under the space
                     // between them, in the first word's ink.
-                    if shown && !word.is_empty() {
+                    if !word.is_empty() {
                         let ink = ink_of(ordinal.saturating_sub(1));
                         let ink = ink.unwrap_or(Color::BLACK);
                         faces.decorate(canvas, run.face, (x, space), baseline, ink);
@@ -942,10 +948,6 @@ pub fn draw_lines(
                     ordinal += 1;
                 }
                 joined = true;
-                if !shown {
-                    x += faces.measure(run.face, word);
-                    continue;
-                }
                 let ink = ink_of(ordinal.saturating_sub(1));
                 let width = match ink {
                     Some(ink) => faces.draw_in(canvas, run.face, x, baseline, word, ink),
@@ -957,6 +959,28 @@ pub fn draw_lines(
             }
         }
     }
+}
+
+/// How many words `runs` of `text` hold, counted as [`word_boxes`] and
+/// [`draw_lines`] count them: a word that goes on in the next run is one.
+fn words_in(text: &str, runs: &[LineRun]) -> usize {
+    let mut count = 0;
+    let mut joined = false;
+    for run in runs {
+        for (i, word) in text[run.start..run.end].split(' ').enumerate() {
+            if i > 0 {
+                joined = false;
+            }
+            if word.is_empty() {
+                continue;
+            }
+            if !joined {
+                count += 1;
+            }
+            joined = true;
+        }
+    }
+    count
 }
 
 /// Draws a picture of the page at its place in `page_type`'s box; where
@@ -1056,6 +1080,22 @@ mod tests {
             small_caps_parts("straße").collect::<Vec<_>>(),
             [("straße", true)]
         );
+    }
+
+    #[test]
+    fn words_are_counted_across_runs() {
+        let run = |start, end| LineRun {
+            start,
+            end,
+            face: Face::default(),
+        };
+        // "a bo|ld c": "bold" goes on in the next run, one word.
+        assert_eq!(words_in("a bold c", &[run(0, 4), run(4, 8)]), 3);
+        // A run that starts with a space starts a new word.
+        assert_eq!(words_in("a b", &[run(0, 1), run(1, 3)]), 2);
+        // Spaces alone and runs of nothing hold no words.
+        assert_eq!(words_in("  x  ", &[run(0, 0), run(0, 5)]), 1);
+        assert_eq!(words_in("", &[]), 0);
     }
 
     #[test]

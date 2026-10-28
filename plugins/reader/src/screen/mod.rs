@@ -1178,11 +1178,15 @@ impl ReaderScreen {
             cx.wake_at(env.now());
             return;
         }
-        let filters = env_filters_changed(cx.env(), book);
+        // Only a setting changes how the pages are laid out: the filters
+        // are not asked for other events.
+        if changed.is_none() {
+            return;
+        }
         let affects_layout = font_changed
-            || filters
-            || id.starts_with("reader.") && id != crate::settings::OPEN_LAST.as_str();
-        if changed.is_some() && affects_layout {
+            || id.starts_with("reader.") && id != crate::settings::OPEN_LAST.as_str()
+            || env_filters_changed(cx.env(), book);
+        if affects_layout {
             self.selection = None;
             let env = *cx.env();
             book.relayout(&env);

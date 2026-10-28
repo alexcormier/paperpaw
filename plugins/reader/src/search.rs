@@ -196,26 +196,32 @@ fn lower(c: char) -> char {
 /// Byte ranges of `needle` in `text`, ignoring case.
 fn find(text: &str, needle: &[char]) -> Vec<(usize, usize)> {
     let mut found = Vec::new();
-    let Some(&first) = needle.first() else {
+    if needle.is_empty() {
         return found;
-    };
-    let chars: Vec<(usize, char)> = text.char_indices().collect();
-    let mut i = 0;
-    while i + needle.len() <= chars.len() {
-        if lower(chars[i].1) == first
-            && needle
-                .iter()
-                .enumerate()
-                .all(|(k, &n)| lower(chars[i + k].1) == n)
-        {
-            let end = chars.get(i + needle.len()).map_or(text.len(), |c| c.0);
-            found.push((chars[i].0, end));
-            i += needle.len();
+    }
+    // Walked in place: a block's characters are not collected.
+    let mut at = 0;
+    while let Some(c) = text[at..].chars().next() {
+        if let Some(length) = match_at(&text[at..], needle) {
+            found.push((at, at + length));
+            at += length;
         } else {
-            i += 1;
+            at += c.len_utf8();
         }
     }
     found
+}
+
+/// The length in bytes of `needle` at the start of `text`, ignoring case;
+/// `None` where it is not there.
+fn match_at(text: &str, needle: &[char]) -> Option<usize> {
+    let mut chars = text.chars();
+    for &n in needle {
+        if lower(chars.next()?) != n {
+            return None;
+        }
+    }
+    Some(text.len() - chars.as_str().len())
 }
 
 /// The match with some context, on one line.
@@ -413,6 +419,11 @@ mod tests {
         assert_eq!(&text[found[0].0..found[0].1], "Äpfel");
         assert_eq!(&text[found[1].0..found[1].1], "ÄPFEL");
         assert!(find(text, &[]).is_empty());
+        // Hits do not overlap, and one at the very end is found.
+        let needle: Vec<char> = "aa".chars().collect();
+        assert_eq!(find("aaa", &needle), [(0, 2)]);
+        assert_eq!(find("xaA", &needle), [(1, 3)]);
+        assert!(find("a", &needle).is_empty());
     }
 }
 
