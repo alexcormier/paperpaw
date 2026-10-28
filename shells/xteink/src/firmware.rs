@@ -28,7 +28,6 @@ use crate::{clock, device, input, now, power, stack};
 
 mod paced;
 mod waveform;
-use waveform::{fast_waveform, transfer};
 
 /// How long the main loop rests when there is nothing to do.
 const POLL_MS: u64 = 10;
@@ -1046,15 +1045,7 @@ impl Firmware {
         });
         let drawn = now();
         self.kernel.showing(drawn);
-        {
-            let experiment = if refresh == Refresh::Fast {
-                fast_waveform(mode, self.kernel.settings(), self.kernel.active_screen())
-            } else {
-                None
-            };
-            let _supported = self.panel.set_experiment(experiment);
-            self.panel.set_transfer(transfer(self.kernel.settings()));
-        }
+        self.set_waveform(refresh, mode);
         if let Err(e) = self.refresh(refresh) {
             failed = Some(e);
         }
