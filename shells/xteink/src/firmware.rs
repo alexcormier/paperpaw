@@ -773,13 +773,13 @@ impl Firmware {
             // small changes over them (the time, the battery) wait for the
             // next page rather than refresh it all.
             if effects.grays()
-                && let Some((area, _)) = effects.refresh()
+                && let Some((area, mode)) = effects.refresh()
             {
                 let screen = self.kernel.device().display;
                 let small = u32::from(area.width) * u32::from(area.height) * 4
                     < u32::from(screen.width) * u32::from(screen.height);
                 if !(self.state.gray_shown && small) {
-                    self.show_gray(area);
+                    self.show_gray(area, mode.cleans());
                     self.state.frame_stale = false;
                 }
             } else if self.state.gray_shown && effects.refresh().is_some() {
@@ -941,7 +941,7 @@ impl Firmware {
     /// Shows the whole screen in four grays, its pictures best so (see
     /// `Effects::grays`); the next change draws it whole again. Where
     /// there is no memory for it, as a full refresh of `area`.
-    fn show_gray(&mut self, area: Rect) {
+    fn show_gray(&mut self, area: Rect, clean: bool) {
         power::mark(power::at::SHOWING);
         let started = now();
         let panel = &mut self.panel;
@@ -957,7 +957,14 @@ impl Firmware {
         }
         let written = now();
         self.kernel.showing(written);
-        if let Err(e) = self.panel.refresh_gray() {
+        // A screen that cleans (the sleep screen) gets every pixel driven
+        // first, where the panel needs it (the X4 Pro); else a fast refresh.
+        let refreshed = if clean {
+            self.panel.refresh_gray_clean()
+        } else {
+            self.panel.refresh_gray()
+        };
+        if let Err(e) = refreshed {
             failed = Some(e);
         }
         self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());

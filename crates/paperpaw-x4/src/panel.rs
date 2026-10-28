@@ -178,6 +178,17 @@ where
         each!(self, d => d.refresh_gray())
     }
 
+    /// As [`Panel::refresh_gray`], for a screen that cleans (the sleep
+    /// screen): where the controller needs a refresh of every pixel before
+    /// the grays, it makes one (the UC8179); the others show them as they
+    /// do.
+    pub fn refresh_gray_clean(&mut self) -> Result<(), Error> {
+        match self {
+            Panel::UltraChip(display) => display.refresh_gray_clean(),
+            _ => self.refresh_gray(),
+        }
+    }
+
     /// How dark the grays between come out on the X4's controller (the X4
     /// Pro's lightens them from black, as dark as they are).
     pub fn set_gray_tone(&mut self, tone: display::GrayTone) {

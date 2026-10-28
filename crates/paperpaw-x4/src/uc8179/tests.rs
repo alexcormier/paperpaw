@@ -494,6 +494,48 @@ fn grays_are_lightened_from_black() {
     assert_eq!(c.new, shown.1);
 }
 
+/// A display that shows a picture, so that the next fast refresh is one,
+/// with a quick experiment set, then the grays written.
+fn quick_then_grays() -> (Simulated, Rc<RefCell<Controller>>) {
+    let (mut d, c) = display();
+    let band = band_with(5, 3);
+    d.write_rows(0, view(&band, 8), Planes::BOTH).unwrap();
+    d.refresh(Refresh::Full, false).unwrap();
+    d.set_experiment(Some(Experiment {
+        drive: Direct::new(6, 0),
+        swapped: false,
+        repeat: 1,
+        hold: 3,
+        rate: 8,
+        own_at: None,
+    }));
+    let gray = gray_band();
+    d.write_gray_rows(0, gray_view(&gray)).unwrap();
+    (d, c)
+}
+
+#[test]
+fn the_grays_start_from_the_panels_own_fast_refresh_not_an_experiment() {
+    let (mut d, c) = quick_then_grays();
+    d.refresh_gray().unwrap();
+    // The full refresh, the fast one before the grays at the temperature
+    // of the stock fast waveform, no frame rate set for it.
+    assert_eq!(c.borrow().temperatures, [0x1E, 0x5A]);
+    assert!(c.borrow().last(cmd::PLL).is_none());
+    // The experiment is there for the next one.
+    assert!(d.experiment.is_some());
+}
+
+#[test]
+fn a_cleaning_screen_drives_every_pixel_before_the_grays() {
+    let (mut d, c) = quick_then_grays();
+    d.refresh_gray_clean().unwrap();
+    // Both at the temperature of a half refresh.
+    assert_eq!(c.borrow().temperatures, [0x1E, 0x1E]);
+    assert!((0x20..=0x24).all(|r| c.borrow().commands.contains(&r)));
+    assert!(d.experiment.is_some());
+}
+
 #[test]
 fn the_refresh_after_grays_drives_every_pixel() {
     let (mut d, c) = display();

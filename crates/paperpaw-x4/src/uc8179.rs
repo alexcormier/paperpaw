@@ -680,13 +680,31 @@ where
     /// (about a second more). The next fast refresh drives every pixel.
     /// Where grays cannot be shown, a half refresh.
     pub fn refresh_gray(&mut self) -> Result<(), Error> {
+        self.gray_from(Refresh::Fast)
+    }
+
+    /// As [`Display::refresh_gray`], from a half refresh in place of the
+    /// fast one: every pixel driven, the ghosts of what was shown gone
+    /// (about a second and a half more). For a screen that cleans, such as
+    /// the sleep screen.
+    pub fn refresh_gray_clean(&mut self) -> Result<(), Error> {
+        self.gray_from(Refresh::Half)
+    }
+
+    /// Shows the grays after the black and white frame has been shown by
+    /// `first`, with the panel's own waveform (not an experiment's, which
+    /// leaves ghosts that the grays would be put over).
+    fn gray_from(&mut self, first: Refresh) -> Result<(), Error> {
         let Some(luts) = self.sequences().gray.filter(|_| self.grays()) else {
             return self.refresh(Refresh::Half, false);
         };
         if self.old.is_empty() {
             return self.refresh(Refresh::Half, false);
         }
-        self.refresh(Refresh::Fast, false)?;
+        let experiment = self.experiment.take();
+        let first = self.refresh(first, false);
+        self.experiment = experiment;
+        first?;
         self.send(cmd::OLD, Plane::Old, false)?;
         self.send(cmd::NEW, Plane::New, false)?;
         self.command(cmd::PANEL_SETTING, &UC8179.panel)?;

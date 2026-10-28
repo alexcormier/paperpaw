@@ -131,6 +131,11 @@ change the plugin SDK.
 
 ### Fixed
 
+- X4 Pro: a sleep screen with a cover or a picture (shown in grays) is made after a
+  refresh of every pixel, as the others are; before, the grays were put over a fast
+  refresh, which leaves a little ghosting of the screen shown before it. The fast
+  refresh before any grays also no longer takes a quicker waveform that a game or
+  a menu left set.
 - Moving the focus between two items far apart on the home screen (the edit pencil
   and a *Continue reading* widget with a cover) no longer refreshes the whole panel
   in full at every step. The kernel took the rectangle round the two items for a page
