@@ -12,6 +12,13 @@ change the plugin SDK.
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
 
+### Changed
+
+- A page turns as soon as its button goes down: holding a page button
+  for the next or previous chapter is now off by default and can be
+  switched on in the settings under Controls ("Hold for next chapter",
+  an advanced setting).
+
 ## [0.5.0-beta.11] - 2026-10-26
 
 ### Added

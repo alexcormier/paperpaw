@@ -237,7 +237,7 @@ static SETTINGS: [SettingSpec; 8] = [
     SettingSpec::switch(
         settings::HOLD_CHAPTERS.static_str(),
         "reader.setting.hold-chapters",
-        true,
+        false,
         groups::CONTROLS,
     )
     .advanced()
@@ -512,8 +512,9 @@ impl Plugin for Reader {
              long.confirm = reader.toggle-bookmark\n",
         ))?;
         // Holding a page button goes a chapter on or back, while the
-        // switch is on: off, the binding is gone, and a page turns as its
-        // button goes down rather than when it is let go.
+        // switch is on. It is off by default: without the binding a page
+        // turns as its button goes down, not when it is let go, which a
+        // reader feels at every page.
         r.add_keymap_when(
             &settings::HOLD_CHAPTERS,
             Cow::Borrowed(
