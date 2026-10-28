@@ -365,7 +365,7 @@ fn two_small_items_far_apart_are_no_page_and_keep_a_picture_in_place() {
         .unwrap();
     kernel.start(Instant(0));
     render(&mut kernel);
-    let mode = |effects: crate::Effects| effects.refresh().map(|(region, mode)| (region, mode));
+    let mode = |effects: crate::Effects| effects.refresh();
     kernel.apply(Command::Redraw(RefreshMode::Partial));
     kernel.finish();
     render(&mut kernel);
