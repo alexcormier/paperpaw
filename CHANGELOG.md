@@ -115,6 +115,10 @@ change the plugin SDK.
 
 ### Fixed
 
+- The row of hints that comes on a press (in the reader, with the buttons below the
+  screen) is shown and taken away with a normal partial refresh, not a fast one: with
+  the quicker waveforms of *Fast changes* it left ghosts of the page's text at the
+  bottom at every page turned by those buttons.
 - On the X4 and X4 Pro, what plugins do on waking now happens: *When the
   device wakes up* in the rules, *Review on waking* of the flash cards, and
   syncing a position at wake. Their sleep restarts the device, which plugins

@@ -92,7 +92,9 @@ impl Kernel {
         }
         self.hint.until = Some(self.now.add_millis(HINTS_MS));
         self.hint.shown.clear();
-        self.output.request_refresh(RefreshMode::Fast);
+        // The row lies over the page's text, which a quicker waveform
+        // would leave ghosts of at each press.
+        self.output.request_refresh(RefreshMode::Partial);
     }
 
     /// Takes the row away again once its time is over: the screen below
@@ -105,7 +107,8 @@ impl Kernel {
         let panel = self.framebuffer.bounds();
         let height = self.hint.height.min(panel.height / 2);
         self.invalidate(Rect::new(0, panel.height - height, panel.width, height));
-        self.output.request_refresh(RefreshMode::Fast);
+        // The page's text is drawn there again: not quickly, or it ghosts.
+        self.output.request_refresh(RefreshMode::Partial);
     }
 
     /// The height the row of hints takes: 0 where there is no row of
