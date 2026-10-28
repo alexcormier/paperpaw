@@ -22,6 +22,8 @@ change the plugin SDK.
 - Page turns finish sooner: the X4 Pro and X4 Classic no longer send each
   frame a second time after its refresh, and released firmware no longer
   checks every frame it sends.
+- Text, light separator lines and shaded highlights draw faster in black and
+  white and in grays, with the same pixels as before.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

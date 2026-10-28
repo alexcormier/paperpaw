@@ -419,38 +419,7 @@ impl Framebuffer {
         }
         if self.format.gray_levels() == Some(2) {
             let paper = self.encode(Color::WHITE) & 1 != 0;
-            for y in rect.y..rect.bottom() as u16 {
-                let row = usize::from(y - self.top) * self.stride;
-                // Odd places: in a byte (the leftmost pixel its highest
-                // bit), those of odd x on even rows, of even x on odd.
-                let mask: u8 = if y % 2 == 0 { 0x55 } else { 0xAA };
-                let (left, right) = (rect.x, rect.right() as u16);
-                let (first, last) = (left.div_ceil(8) * 8, right / 8 * 8);
-                let paint = |data: &mut [u8], at: usize, mask: u8| {
-                    if paper {
-                        data[at] |= mask;
-                    } else {
-                        data[at] &= !mask;
-                    }
-                };
-                if first < last {
-                    for byte in usize::from(first / 8)..usize::from(last / 8) {
-                        paint(&mut self.data, row + byte, mask);
-                    }
-                }
-                let ends = if first < last {
-                    [(left, first), (last, right)]
-                } else {
-                    [(left, right), (right, right)]
-                };
-                for (from, to) in ends {
-                    for x in from..to {
-                        if (x + y) % 2 == 1 {
-                            paint(&mut self.data, row + usize::from(x / 8), 0x80 >> (x % 8));
-                        }
-                    }
-                }
-            }
+            self.checker(rect, true, paper);
         } else {
             for y in rect.y..rect.bottom() as u16 {
                 for x in rect.x..rect.right() as u16 {
@@ -459,6 +428,75 @@ impl Framebuffer {
             }
         }
         self.mark_dirty(rect);
+    }
+
+    /// Draws every other pixel of `rect` (inside the band) black in black
+    /// and white, those of even x + y, as
+    /// [`Canvas::fill_tint`](crate::Canvas::fill_tint) draws a tint there.
+    /// Only the pixels drawn are marked dirty: a line one pixel wide may
+    /// leave out its ends.
+    pub(crate) fn tint_clipped(&mut self, rect: Rect) {
+        if self.blind || rect.is_empty() {
+            return;
+        }
+        let ink = self.encode(Color::BLACK) & 1 != 0;
+        self.checker(rect, false, ink);
+        let drawn = if rect.width > 1 && rect.height > 1 {
+            rect
+        } else {
+            // A line: from its first pixel drawn to its last.
+            let skip = ((u32::from(rect.x) + u32::from(rect.y)) % 2) as u16;
+            let length = rect.width.max(rect.height);
+            if skip >= length {
+                return;
+            }
+            let span = (length - 1 - skip) / 2 * 2 + 1;
+            if rect.height == 1 {
+                Rect::new(rect.x + skip, rect.y, span, 1)
+            } else {
+                Rect::new(rect.x, rect.y + skip, 1, span)
+            }
+        };
+        self.mark_dirty(drawn);
+    }
+
+    /// Sets every other pixel of `rect` (inside the band, black and white)
+    /// to the bit `on`, in a checker: those of odd x + y where `odd`, of
+    /// even x + y otherwise. Whole bytes at once, the pixels of the bytes
+    /// at either end one by one.
+    fn checker(&mut self, rect: Rect, odd: bool, on: bool) {
+        for y in rect.y..rect.bottom() as u16 {
+            let row = usize::from(y - self.top) * self.stride;
+            // In a byte the leftmost pixel is its highest bit: 0x55 holds
+            // those of odd x, 0xAA those of even x.
+            let mask: u8 = if (y % 2 == 0) == odd { 0x55 } else { 0xAA };
+            let (left, right) = (rect.x, rect.right() as u16);
+            let (first, last) = (left.div_ceil(8) * 8, right / 8 * 8);
+            let paint = |data: &mut [u8], at: usize, mask: u8| {
+                if on {
+                    data[at] |= mask;
+                } else {
+                    data[at] &= !mask;
+                }
+            };
+            if first < last {
+                for byte in usize::from(first / 8)..usize::from(last / 8) {
+                    paint(&mut self.data, row + byte, mask);
+                }
+            }
+            let ends = if first < last {
+                [(left, first), (last, right)]
+            } else {
+                [(left, right), (right, right)]
+            };
+            for (from, to) in ends {
+                for x in from..to {
+                    if (u32::from(x) + u32::from(y)) % 2 == u32::from(odd) {
+                        paint(&mut self.data, row + usize::from(x / 8), 0x80 >> (x % 8));
+                    }
+                }
+            }
+        }
     }
 
     /// Blends `color` with coverage `alpha` (0 to 255) over the pixel at
@@ -666,9 +704,13 @@ impl Framebuffer {
         }
         let luma = color.luma();
         for y in rect.y..rect.bottom() as u16 {
+            // The dither repeats every four pixels: its values for the row
+            // worked out once (a division each).
+            let values: [u32; 4] = core::array::from_fn(|column| {
+                self.encode(Color::gray(self.dithered(column as u16, y, luma)))
+            });
             for x in rect.x..rect.right() as u16 {
-                let value = self.encode(Color::gray(self.dithered(x, y, luma)));
-                self.store(x, y, value);
+                self.store(x, y, values[usize::from(x % 4)]);
             }
         }
         self.mark_dirty(rect);
@@ -795,6 +837,58 @@ mod tests {
                             "{format:?} {x}+{width} at ({px}, {py})"
                         );
                     }
+                }
+            }
+        }
+    }
+
+    /// Tints and shades drawn by whole bytes or rows come out as drawn
+    /// pixel by pixel, the same pixels marked dirty: at every place in a
+    /// byte, lines one pixel wide or high too, inverted or not.
+    #[test]
+    fn tints_and_shades_are_drawn_as_each_pixel() {
+        let places = [(0, 1), (1, 1), (3, 2), (7, 1), (5, 12), (9, 30), (16, 16)];
+        let mut cases = Vec::new();
+        for &(x, width) in &places {
+            for &(y, height) in &[(0, 1), (1, 1), (2, 3), (1, 6)] {
+                cases.push(Rect::new(x, y, width, height));
+            }
+        }
+        for format in [PixelFormat::Mono1, PixelFormat::Gray2, PixelFormat::Gray4] {
+            for inverted in [false, true] {
+                for &rect in &cases {
+                    let mut fast = Framebuffer::new(48, 8, format).unwrap();
+                    fast.set_inverted(inverted);
+                    for (i, byte) in fast.data.iter_mut().enumerate() {
+                        *byte = (i as u8).wrapping_mul(73) ^ 0x5a;
+                    }
+                    let mut each = Framebuffer::new(48, 8, format).unwrap();
+                    each.set_inverted(inverted);
+                    each.data.clone_from(&fast.data);
+                    if format == PixelFormat::Mono1 {
+                        fast.tint_clipped(rect);
+                        for y in rect.y..rect.bottom() as u16 {
+                            for x in rect.x..rect.right() as u16 {
+                                if (x + y) % 2 == 0 {
+                                    each.fill_clipped(Rect::new(x, y, 1, 1), Color::BLACK);
+                                }
+                            }
+                        }
+                        assert_eq!(fast.data, each.data, "tint {inverted} {rect:?}");
+                        assert_eq!(fast.take_dirty(), each.take_dirty(), "tint {rect:?}");
+                    }
+                    let gray = (rect.x * 13 + rect.y * 41 + rect.width * 7) as u8;
+                    let color = Color::gray(gray);
+                    fast.shade_clipped(rect, color);
+                    for y in rect.y..rect.bottom() as u16 {
+                        for x in rect.x..rect.right() as u16 {
+                            let value = each.encode(Color::gray(each.dithered(x, y, color.luma())));
+                            each.store(x, y, value);
+                        }
+                    }
+                    each.mark_dirty(rect);
+                    assert_eq!(fast.data, each.data, "shade {format:?} {inverted} {rect:?}");
+                    assert_eq!(fast.take_dirty(), each.take_dirty(), "shade {rect:?}");
                 }
             }
         }
