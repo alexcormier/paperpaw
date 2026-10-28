@@ -38,6 +38,9 @@ change the plugin SDK.
   today's reading are written once the pages rest for a moment, the book
   closes or the device sleeps, and the book's details are read only when
   its shown percentage changes.
+- Pages are laid out faster: hyphenation stops looking for patterns that
+  cannot match, and characters are found in font packs with fewer lookups.
+  Lines break exactly as before.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

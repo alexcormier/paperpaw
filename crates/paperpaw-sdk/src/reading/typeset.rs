@@ -764,7 +764,13 @@ impl Typesetter for ReadingFaces<'_> {
             }
             return upper + self.letter_spacing;
         }
-        self.font(face).advance(self.size(face), c) + self.letter_spacing
+        let advance = self.font(face).advance(self.size(face), c);
+        // Most books space no letters: no float to add for each one. An
+        // advance is never -0.0, the one value adding 0.0 changes.
+        match self.letter_spacing.to_bits() {
+            0 => advance,
+            _ => advance + self.letter_spacing,
+        }
     }
 
     /// The pair as drawing sets it ([`FontHandle::kern`]): in small

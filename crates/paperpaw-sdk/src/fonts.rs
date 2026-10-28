@@ -864,9 +864,10 @@ impl<'a> FontHandle<'a> {
     }
 
     /// The font that draws `ch` and its number in the cache: this one,
-    /// or the fallback if only that has it.
+    /// or the fallback if only that has it. Without fallbacks, this one
+    /// whatever it has: nothing to look up.
     fn pick(&self, ch: char) -> (&'a Font, u16) {
-        if self.font.has_char(ch) {
+        if self.others[0].is_none() || self.font.has_char(ch) {
             return (self.font, self.index);
         }
         self.others
@@ -891,12 +892,18 @@ impl<'a> FontHandle<'a> {
     /// Horizontal advance of one character in pixels, at the size it is
     /// drawn at alone (see [`FontHandle::size_for`]).
     pub fn advance(&self, size: f32, ch: char) -> f32 {
+        self.advance_by(size, ch, None)
+    }
+
+    /// [`FontHandle::advance`], `font` the one [`FontHandle::pick`] gives
+    /// for `ch` where the caller has it already.
+    fn advance_by(&self, size: f32, ch: char, font: Option<&Font>) -> f32 {
         if let Some(larger) = self.larger_for(size) {
             return larger.advance(size, ch);
         }
         let mut buffer = [0u8; 4];
         let size = self.size_for(size, ch.encode_utf8(&mut buffer));
-        self.pick(ch).0.advance(ch, size)
+        font.unwrap_or_else(|| self.pick(ch).0).advance(ch, size)
     }
 
     /// This font without kerning: each character set after the one
@@ -1016,7 +1023,7 @@ impl<'a> FontHandle<'a> {
             }
             width += match single {
                 true => font.advance(ch, size),
-                false => self.advance(size, ch),
+                false => self.advance_by(size, ch, Some(font)),
             };
             before = Some((ch, index));
         }
@@ -1191,6 +1198,7 @@ impl<'a> FontHandle<'a> {
             let (font, index) = self.pick(first);
             let end = rest
                 .char_indices()
+                .skip(1)
                 .find(|(_, ch)| self.pick(*ch).1 != index)
                 .map_or(rest.len(), |(at, _)| at);
             let style = paperpaw_text::TextStyle::new(font, index, size, color)

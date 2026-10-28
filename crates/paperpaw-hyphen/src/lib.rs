@@ -144,8 +144,17 @@ impl<'a> Patterns<'a> {
         Some((key, points, at + 1 + len + points_len))
     }
 
-    /// The points of the pattern `key`, if there is one.
-    fn lookup(&self, key: &[u8]) -> Option<&'a [u8]> {
+    /// The points of the pattern `key`, if there is one, and whether a
+    /// longer pattern may start with `key`: `false` only where the table
+    /// shows that none does. Patterns are sorted by their bytes, so those
+    /// that start with `key` come right after it; where the first one
+    /// greater than `key` does not, none does.
+    fn lookup(&self, key: &[u8]) -> (Option<&'a [u8]>, bool) {
+        self.find(key).unwrap_or((None, true))
+    }
+
+    /// [`Patterns::lookup`], `None` where the table is damaged.
+    fn find(&self, key: &[u8]) -> Option<(Option<&'a [u8]>, bool)> {
         let block_key = |b: usize| -> Option<&'a [u8]> {
             let at = u32_at(self.data, HEADER + b * 4)?;
             self.entry(at).map(|(k, ..)| k)
@@ -162,15 +171,22 @@ impl<'a> Patterns<'a> {
         }
         let block = low.checked_sub(1)?;
         let mut at = u32_at(self.data, HEADER + block * 4)?;
+        let ended = |at: usize| self.entries().saturating_add(at) >= self.exceptions.0;
         for _ in 0..BLOCK {
             let (k, points, next) = self.entry(at)?;
             match k.cmp(key) {
-                Ordering::Equal => return Some(points),
-                Ordering::Greater => return None,
+                Ordering::Equal => {
+                    let longer = !ended(next)
+                        && self
+                            .entry(next)
+                            .is_none_or(|(after, ..)| after.starts_with(key));
+                    return Some((Some(points), longer));
+                }
+                Ordering::Greater => return Some((None, k.starts_with(key))),
                 Ordering::Less => at = next,
             }
-            if self.entries().saturating_add(at) >= self.exceptions.0 {
-                return None;
+            if ended(at) {
+                return Some((None, false));
             }
         }
         None
@@ -184,34 +200,35 @@ impl<'a> Patterns<'a> {
         if word.len() > 4 * MAX_WORD {
             return;
         }
-        let mut chars: Vec<char> = Vec::with_capacity(word.len() + 2);
-        chars.push('.');
-        for c in word.chars() {
+        // Too short for the minimums or too long: known before lowercasing.
+        let n = word.chars().count();
+        if n < self.left_min + self.right_min || n > MAX_WORD {
+            return;
+        }
+        let mut chars = ['.'; MAX_WORD + 2];
+        // Where each letter starts in `word`, at most `4 * MAX_WORD` bytes in.
+        let mut offsets = [0u8; MAX_WORD];
+        for (i, (at, c)) in word.char_indices().enumerate() {
             let mut lower = c.to_lowercase();
-            match (lower.next(), lower.next()) {
-                (Some(l), None) => chars.push(l),
+            match (lower.next(), lower.next(), u8::try_from(at)) {
+                (Some(l), None, Ok(at)) => (chars[i + 1], offsets[i]) = (l, at),
                 // Characters that change length when lowercased are rare;
                 // such words are left alone.
                 _ => return,
             }
         }
-        chars.push('.');
-        let n = chars.len() - 2;
-        if n < self.left_min + self.right_min || n > MAX_WORD {
-            return;
-        }
-        let offsets: Vec<usize> = word.char_indices().map(|(i, _)| i).collect();
+        let chars = &chars[..n + 2];
         let allowed = self.left_min..=n - self.right_min;
         if let Some(found) = self.exception(&chars[1..=n]) {
             // Exceptions keep the minimums too, as in TeX.
             for p in found.into_iter().filter(|p| allowed.contains(p)) {
-                out(offsets[p]);
+                out(usize::from(offsets[p]));
             }
             return;
         }
 
         // values[k]: the highest point between chars[k - 1] and chars[k].
-        let mut values = alloc::vec![0u8; chars.len() + 1];
+        let mut values = [0u8; MAX_WORD + 3];
         let mut key = [0u8; 4 * 16];
         for start in 0..chars.len() {
             let mut len = 0;
@@ -220,21 +237,25 @@ impl<'a> Patterns<'a> {
                     break;
                 }
                 len += c.encode_utf8(&mut key[len..]).len();
-                let Some(points) = self.lookup(&key[..len]) else {
-                    continue;
-                };
-                for k in 0..=count + 1 {
-                    let byte = points.get(k / 2).copied().unwrap_or(0);
-                    let point = if k % 2 == 0 { byte >> 4 } else { byte & 0x0f };
-                    let slot = &mut values[start + k];
-                    *slot = (*slot).max(point);
+                let (found, longer) = self.lookup(&key[..len]);
+                if let Some(points) = found {
+                    for k in 0..=count + 1 {
+                        let byte = points.get(k / 2).copied().unwrap_or(0);
+                        let point = if k % 2 == 0 { byte >> 4 } else { byte & 0x0f };
+                        let slot = &mut values[start + k];
+                        *slot = (*slot).max(point);
+                    }
+                }
+                // No pattern starts with this key: none with a longer one.
+                if !longer {
+                    break;
                 }
             }
         }
         // A hyphen before letter p (0-based) sits at values[p + 1].
         for p in allowed {
             if values[p + 1] % 2 == 1 {
-                out(offsets[p]);
+                out(usize::from(offsets[p]));
             }
         }
     }
@@ -247,10 +268,8 @@ impl<'a> Patterns<'a> {
             let len = usize::from(*self.data.get(at)?);
             let entry = core::str::from_utf8(self.data.get(at + 1..at + 1 + len)?).ok()?;
             at += 1 + len;
-            let mut letters = entry.chars().filter(|&c| c != '-');
-            if entry.chars().filter(|&c| c != '-').count() != word.len()
-                || !word.iter().all(|&c| letters.next() == Some(c))
-            {
+            // Most differ in the first letter: no need to count them.
+            if !entry.chars().filter(|&c| c != '-').eq(word.iter().copied()) {
                 continue;
             }
             let mut positions = Vec::new();
