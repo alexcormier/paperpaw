@@ -106,7 +106,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.0-beta.11"
+version = "0.5.0-beta.12"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
@@ -115,54 +115,54 @@ homepage = "https://github.com/hthoene/paperpaw"
 authors = ["Hannes Thoene", "The PaperPaw contributors"]
 
 [workspace.dependencies]
-paperpaw-platform = { path = "crates/paperpaw-platform", version = "0.5.0-beta.11" }
-paperpaw-config = { path = "crates/paperpaw-config", version = "0.5.0-beta.11" }
-paperpaw-sqlite = { path = "crates/paperpaw-sqlite", version = "0.5.0-beta.11" }
-paperpaw-serve = { path = "crates/paperpaw-serve", version = "0.5.0-beta.11" }
-paperpaw-i18n = { path = "crates/paperpaw-i18n", version = "0.5.0-beta.11" }
-paperpaw-graphics = { path = "crates/paperpaw-graphics", version = "0.5.0-beta.11" }
-paperpaw-text = { path = "crates/paperpaw-text", version = "0.5.0-beta.11" }
-paperpaw-document = { path = "crates/paperpaw-document", version = "0.5.0-beta.11" }
-paperpaw-zip = { path = "crates/paperpaw-zip", version = "0.5.0-beta.11" }
-paperpaw-http = { path = "crates/paperpaw-http", version = "0.5.0-beta.11" }
-paperpaw-xml = { path = "crates/paperpaw-xml", version = "0.5.0-beta.11" }
-paperpaw-stardict = { path = "crates/paperpaw-stardict", version = "0.5.0-beta.11" }
-paperpaw-layout = { path = "crates/paperpaw-layout", version = "0.5.0-beta.11" }
-paperpaw-x4 = { path = "crates/paperpaw-x4", version = "0.5.0-beta.11" }
+paperpaw-platform = { path = "crates/paperpaw-platform", version = "0.5.0-beta.12" }
+paperpaw-config = { path = "crates/paperpaw-config", version = "0.5.0-beta.12" }
+paperpaw-sqlite = { path = "crates/paperpaw-sqlite", version = "0.5.0-beta.12" }
+paperpaw-serve = { path = "crates/paperpaw-serve", version = "0.5.0-beta.12" }
+paperpaw-i18n = { path = "crates/paperpaw-i18n", version = "0.5.0-beta.12" }
+paperpaw-graphics = { path = "crates/paperpaw-graphics", version = "0.5.0-beta.12" }
+paperpaw-text = { path = "crates/paperpaw-text", version = "0.5.0-beta.12" }
+paperpaw-document = { path = "crates/paperpaw-document", version = "0.5.0-beta.12" }
+paperpaw-zip = { path = "crates/paperpaw-zip", version = "0.5.0-beta.12" }
+paperpaw-http = { path = "crates/paperpaw-http", version = "0.5.0-beta.12" }
+paperpaw-xml = { path = "crates/paperpaw-xml", version = "0.5.0-beta.12" }
+paperpaw-stardict = { path = "crates/paperpaw-stardict", version = "0.5.0-beta.12" }
+paperpaw-layout = { path = "crates/paperpaw-layout", version = "0.5.0-beta.12" }
+paperpaw-x4 = { path = "crates/paperpaw-x4", version = "0.5.0-beta.12" }
 paperpaw-fat = { path = "crates/paperpaw-fat" }
-paperpaw-update = { path = "crates/paperpaw-update", version = "0.5.0-beta.11" }
-paperpaw-digest = { path = "crates/paperpaw-digest", version = "0.5.0-beta.11" }
-paperpaw-native = { path = "crates/paperpaw-native", version = "0.5.0-beta.11" }
+paperpaw-update = { path = "crates/paperpaw-update", version = "0.5.0-beta.12" }
+paperpaw-digest = { path = "crates/paperpaw-digest", version = "0.5.0-beta.12" }
+paperpaw-native = { path = "crates/paperpaw-native", version = "0.5.0-beta.12" }
 paperpaw-publish = { path = "tools/publish" }
-paperpaw-json = { path = "crates/paperpaw-json", version = "0.5.0-beta.11" }
-paperpaw-qr = { path = "crates/paperpaw-qr", version = "0.5.0-beta.11" }
-paperpaw-hid = { path = "crates/paperpaw-hid", version = "0.5.0-beta.11" }
-paperpaw-sdk = { path = "crates/paperpaw-sdk", version = "0.5.0-beta.11" }
-paperpaw-core = { path = "crates/paperpaw-core", version = "0.5.0-beta.11" }
-paperpaw-hyphen = { path = "crates/paperpaw-hyphen", version = "0.5.0-beta.11" }
-paperpaw-image = { path = "crates/paperpaw-image", version = "0.5.0-beta.11" }
-paperpaw-app = { path = "crates/paperpaw-app", version = "0.5.0-beta.11" }
-paperpaw-fs = { path = "crates/paperpaw-fs", version = "0.5.0-beta.11" }
+paperpaw-json = { path = "crates/paperpaw-json", version = "0.5.0-beta.12" }
+paperpaw-qr = { path = "crates/paperpaw-qr", version = "0.5.0-beta.12" }
+paperpaw-hid = { path = "crates/paperpaw-hid", version = "0.5.0-beta.12" }
+paperpaw-sdk = { path = "crates/paperpaw-sdk", version = "0.5.0-beta.12" }
+paperpaw-core = { path = "crates/paperpaw-core", version = "0.5.0-beta.12" }
+paperpaw-hyphen = { path = "crates/paperpaw-hyphen", version = "0.5.0-beta.12" }
+paperpaw-image = { path = "crates/paperpaw-image", version = "0.5.0-beta.12" }
+paperpaw-app = { path = "crates/paperpaw-app", version = "0.5.0-beta.12" }
+paperpaw-fs = { path = "crates/paperpaw-fs", version = "0.5.0-beta.12" }
 paperpaw-plugin-diagnostics = { path = "plugins/diagnostics", version = "1.0.4" }
 paperpaw-plugin-dictionary = { path = "plugins/dictionary", version = "1.0.1" }
 paperpaw-plugin-menu = { path = "plugins/menu", version = "1.0.2" }
 paperpaw-plugin-menu-editor = { path = "plugins/menu-editor", version = "1.0.2" }
 paperpaw-plugin-kosync = { path = "plugins/kosync", version = "1.0.2" }
-paperpaw-plugin-calibre = { path = "plugins/calibre", version = "1.0.3" }
-paperpaw-plugin-stats = { path = "plugins/stats", version = "1.0.3" }
-paperpaw-plugin-battery = { path = "plugins/battery", version = "1.0.2" }
+paperpaw-plugin-calibre = { path = "plugins/calibre", version = "1.0.4" }
+paperpaw-plugin-stats = { path = "plugins/stats", version = "1.0.4" }
+paperpaw-plugin-battery = { path = "plugins/battery", version = "1.0.3" }
 paperpaw-plugin-help = { path = "plugins/help", version = "1.0.1" }
 paperpaw-plugin-reading-goal = { path = "plugins/reading-goal", version = "1.0.3" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "1.0.1" }
 paperpaw-plugin-bluetooth = { path = "plugins/bluetooth", version = "1.0.1" }
 paperpaw-plugin-power = { path = "plugins/power", version = "1.0.1" }
-paperpaw-plugin-file-manager = { path = "plugins/file-manager", version = "1.0.1" }
+paperpaw-plugin-file-manager = { path = "plugins/file-manager", version = "1.0.2" }
 paperpaw-plugin-transfer = { path = "plugins/transfer", version = "1.0.2" }
-paperpaw-plugin-browser = { path = "plugins/browser", version = "1.0.2" }
-paperpaw-plugin-opds = { path = "plugins/opds", version = "1.0.1" }
+paperpaw-plugin-browser = { path = "plugins/browser", version = "1.0.3" }
+paperpaw-plugin-opds = { path = "plugins/opds", version = "1.0.2" }
 paperpaw-plugin-fonts-browser = { path = "plugins/fonts-browser", version = "1.0.2" }
 paperpaw-plugin-store = { path = "plugins/store", version = "1.0.2" }
-paperpaw-plugin-rules = { path = "plugins/rules", version = "1.0.2" }
+paperpaw-plugin-rules = { path = "plugins/rules", version = "1.0.3" }
 paperpaw-plugin-lock = { path = "plugins/lock", version = "1.0.2" }
 paperpaw-plugin-profiles = { path = "plugins/profiles", version = "1.0.4" }
 paperpaw-plugin-keys = { path = "plugins/keys", version = "1.0.3" }
@@ -173,14 +173,14 @@ paperpaw-plugin-sleep = { path = "plugins/sleep", version = "1.0.1" }
 paperpaw-plugin-translate = { path = "plugins/translate", version = "1.0.2" }
 paperpaw-plugin-readwise = { path = "plugins/readwise", version = "1.0.2" }
 paperpaw-plugin-joplin = { path = "plugins/joplin", version = "1.0.2" }
-paperpaw-plugin-koreader = { path = "plugins/koreader", version = "1.0.2" }
+paperpaw-plugin-koreader = { path = "plugins/koreader", version = "1.0.3" }
 paperpaw-plugin-wallabag = { path = "plugins/wallabag", version = "1.0.2" }
 paperpaw-plugin-about = { path = "plugins/about", version = "1.0.1" }
 paperpaw-plugin-setup = { path = "plugins/setup", version = "1.0.1" }
 paperpaw-plugin-update = { path = "plugins/update", version = "1.0.2" }
-paperpaw-plugin-news = { path = "plugins/news", version = "1.0.4" }
+paperpaw-plugin-news = { path = "plugins/news", version = "1.0.5" }
 paperpaw-plugin-weather = { path = "plugins/weather", version = "1.0.2" }
-paperpaw-plugin-widgets = { path = "plugins/widgets", version = "1.0.2" }
+paperpaw-plugin-widgets = { path = "plugins/widgets", version = "1.0.3" }
 paperpaw-plugin-keyboard = { path = "plugins/keyboard", version = "1.0.1" }
 paperpaw-plugin-plugin-manager = { path = "plugins/plugin-manager", version = "1.0.3" }
 paperpaw-plugin-hyphenation = { path = "plugins/hyphenation", version = "1.1.0" }

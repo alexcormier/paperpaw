@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.5.0-beta.12] - 2026-10-28
+
 ### Changed
 
 - X4 (with an SSD1677 panel, as most have): a setting, *Fast changes* (Display), says how menus and a moved focus
