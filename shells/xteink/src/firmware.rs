@@ -1011,10 +1011,15 @@ impl Firmware {
         #[cfg(feature = "remote")]
         let (mut written, mut again_written) = (Check::default(), Check::default());
         let panel = &mut self.panel;
+        // How much of drawing is the bands going into the panel (the rest
+        // is the screens drawing).
+        let mut writing = 0;
         self.kernel.render(&mut |top, rows| {
+            let before = now();
             if let Err(e) = panel.write_rows(top, rows, planes) {
                 failed = Some(e);
             }
+            writing += now().since(before);
             if send_again {
                 #[cfg(feature = "remote")]
                 written.add(top, &rows);
@@ -1076,7 +1081,7 @@ impl Firmware {
             warn!("display: {e:?}");
         }
         info!(
-            "frame {mode:?} {},{} {}x{}: drawn in {} ms, shown in {} ms, sent again in {} ms",
+            "frame {mode:?} {},{} {}x{}: drawn in {} ms (writing {writing} of them), shown in {} ms, sent again in {} ms",
             area.x,
             area.y,
             area.width,
