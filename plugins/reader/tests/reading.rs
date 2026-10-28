@@ -544,6 +544,7 @@ fn held_page_buttons_go_a_chapter_on_and_back() {
     let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
     let mut reading = Reading::with_book(Shared::default(), EPUB, epub);
     reading.open();
+    set(&mut reading, "reader.hold-chapters", "on");
     let chapter = |reading: &Reading| reading.heard.borrow().last().unwrap().1.chapter.clone();
     hold(&mut reading, "page-forward");
     hold(&mut reading, "page-forward");
@@ -693,11 +694,10 @@ fn set(reading: &mut Reading, id: &str, value: &str) {
 }
 
 #[test]
-fn held_page_buttons_turn_one_page_with_the_switch_off() {
+fn held_page_buttons_turn_one_page_by_default() {
     let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
     let mut reading = Reading::with_book(Shared::default(), EPUB, epub);
     reading.open();
-    set(&mut reading, "reader.hold-chapters", "off");
     reading.run(core_actions::NEXT_PAGE);
     let page = |reading: &mut Reading| reading.kept();
     let start = page(&mut reading);

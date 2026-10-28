@@ -44,6 +44,10 @@ change the plugin SDK.
 - Lists, menus and settings pages draw faster on readers that draw the
   screen in bands, such as the X4: rows, headers and status lines outside
   the band being drawn are skipped instead of laid out again for each band.
+- A page turns as soon as its button goes down: holding a page button
+  for the next or previous chapter is now off by default and can be
+  switched on in the settings under Controls ("Hold for next chapter",
+  an advanced setting).
 
 ## [0.5.0-beta.11] - 2026-10-26
 
