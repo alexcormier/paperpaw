@@ -1119,7 +1119,8 @@ fn menu_waveform(
 }
 
 /// The UC8179's: the step of the setting *Fast changes* (or the numbers of
-/// *Own values*) for fast changes and for the fastest refresh alike. The panel's
+/// *Own values*) for fast changes, the numbers of `x4.uc8179.mono-*` (3
+/// frames at 100 Hz, no hold: a guess, to be tuned) for the fastest refresh. The panel's
 /// own waveform is 19 frames at 50 Hz; these are the frames the owner judged
 /// on the X4 Pro, at the voltages of that waveform (the OTP's: set at start).
 /// A hold of 3 frames keeps the ghosts of the pixels that stay down.
@@ -1141,6 +1142,13 @@ fn menu_uc8179(
     };
     // The frames, the held frames, the kick, the rate in Hz.
     let (frames, hold, kick, hz) = match settings.read(&device::UC_REFRESH) {
+        // The fastest refresh has numbers of its own, whatever the menus use.
+        _ if mode == RefreshMode::Mono => (
+            number(&device::UC_MONO_FRAMES),
+            number(&device::UC_MONO_HOLD),
+            0,
+            settings.read(&device::UC_MONO_RATE),
+        ),
         device::UC_CLEAN => (UC_CLEAN_FRAMES, UC_HOLD, 0, 50),
         device::UC_BALANCED => (UC_BALANCED_FRAMES, UC_HOLD, 0, 50),
         device::UC_QUICK => (UC_QUICK_FRAMES, UC_HOLD, 0, 50),

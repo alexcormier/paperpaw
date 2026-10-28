@@ -68,6 +68,10 @@ pub const UC_FRAMES: Setting<i64> = Setting::new("x4.uc8179.fast-frames");
 pub const UC_HOLD: Setting<i64> = Setting::new("x4.uc8179.fast-hold");
 pub const UC_KICK: Setting<i64> = Setting::new("x4.uc8179.fast-kick");
 pub const UC_RATE: Setting<i64> = Setting::new("x4.uc8179.fast-rate");
+/// The same for the fastest refresh (screens that ask for `fastest`, games).
+pub const UC_MONO_FRAMES: Setting<i64> = Setting::new("x4.uc8179.mono-frames");
+pub const UC_MONO_HOLD: Setting<i64> = Setting::new("x4.uc8179.mono-hold");
+pub const UC_MONO_RATE: Setting<i64> = Setting::new("x4.uc8179.mono-rate");
 /// How much of the picture goes to the controller for a fast refresh.
 pub const UC_TRANSFER: Setting<paperpaw_sdk::setting::Text> =
     Setting::new("x4.uc8179.transfer");
@@ -192,7 +196,7 @@ static FAST_SETTINGS: [SettingSpec; 5] = [
 ];
 
 /// How the X4 Pro shows fast changes.
-static UC_SETTINGS: [SettingSpec; 6] = {
+static UC_SETTINGS: [SettingSpec; 9] = {
     use paperpaw_sdk::SettingExtra;
     static BY_TEN: SettingExtra = SettingExtra::new().step(10);
     [
@@ -249,6 +253,34 @@ static UC_SETTINGS: [SettingSpec; 6] = {
             groups::DEVELOPER,
         )
         .description("x4.uc8179.transfer.help"),
+        SettingSpec::number(
+            UC_MONO_FRAMES.static_str(),
+            "x4.uc8179.mono-frames",
+            1,
+            30,
+            3,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.mono-frames.help"),
+        SettingSpec::number(
+            UC_MONO_HOLD.static_str(),
+            "x4.uc8179.mono-hold",
+            0,
+            3,
+            0,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.mono-hold.help"),
+        SettingSpec::number(
+            UC_MONO_RATE.static_str(),
+            "x4.uc8179.mono-rate",
+            20,
+            100,
+            100,
+            groups::DEVELOPER,
+        )
+        .with_extra(&BY_TEN)
+        .description("x4.uc8179.mono-rate.help"),
     ]
 };
 
