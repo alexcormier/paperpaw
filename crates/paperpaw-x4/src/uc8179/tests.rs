@@ -276,42 +276,6 @@ fn a_kept_frame_is_in_both_frames_after_a_refresh() {
     assert!(!alone.keeps_frame());
 }
 
-/// With the frame kept, the bands written as new are shown and then
-/// in both frames after every kind of refresh, waited for or not:
-/// nothing needs to be sent again.
-#[test]
-fn a_kept_frame_is_in_both_frames_after_a_refresh() {
-    let (mut d, c) = display();
-    assert!(d.keeps_frame());
-    let mut before = Vec::new();
-    for (x, refresh) in [Refresh::Full, Refresh::Half, Refresh::Fast, Refresh::Fast]
-        .into_iter()
-        .enumerate()
-    {
-        let band = band_with(x as u16, 0);
-        d.write_rows(8, view(&band, 8), Planes::NEW).unwrap();
-        let kept = d.frame.clone();
-        if x % 2 == 0 {
-            d.refresh(refresh, false).unwrap();
-        } else {
-            d.start_refresh(refresh, false).unwrap();
-            d.wait().unwrap();
-        }
-        let c = c.borrow();
-        let shown = &c.refreshed.last().unwrap().1;
-        assert_ne!(*shown, before);
-        assert_eq!(c.new, *shown);
-        assert_eq!(c.old, *shown);
-        before.clone_from(shown);
-        drop(c);
-        // Sending the band again into both frames changes nothing.
-        d.write_rows(8, view(&band, 8), Planes::BOTH).unwrap();
-        assert_eq!(d.frame, kept);
-    }
-    let (alone, _) = display_of(Chip::Uc8179, Frame::InController);
-    assert!(!alone.keeps_frame());
-}
-
 #[test]
 fn a_fast_refresh_needs_a_frame_shown() {
     let (mut d, c) = display();

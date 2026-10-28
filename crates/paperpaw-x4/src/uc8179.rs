@@ -463,13 +463,6 @@ where
         self.kept()
     }
 
-    /// Whether the driver keeps the frame ([`Frame::Kept`]): every
-    /// refresh then leaves it in both of the controller's frames, with no
-    /// need to send it again.
-    pub fn keeps_frame(&self) -> bool {
-        self.kept()
-    }
-
     /// How the screen PaperPaw draws is turned: [`Rotation::Deg90`] with
     /// the frame kept is the X4 Pro turned anticlockwise (the right side
     /// of the upright screen on top), without it the X4 turned clockwise
