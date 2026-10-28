@@ -255,13 +255,17 @@ pub(crate) fn wanted(env: &Env<'_>, builds: &[Build]) -> Vec<Build> {
     }
     // Those installed before origins were kept: the store's.
     install::adopt(env);
+    // Read once for all of them, where one is not built in.
+    let origins = core::cell::OnceCell::new();
     builds
         .iter()
         .filter(|b| {
             env.plugins().get(&b.package.plugin).is_some_and(|p| {
                 let version = p.update.unwrap_or(p.manifest.version);
                 let local = p.kind != PluginKind::BuiltIn
-                    && install::origin(env.storage(), p.manifest.id.as_str(), version)
+                    && origins
+                        .get_or_init(|| install::Origins::read(env.storage()))
+                        .of(p.manifest.id.as_str(), version)
                         == install::Origin::Local;
                 (p.kind == PluginKind::Code || p.enabled) && !local
             })

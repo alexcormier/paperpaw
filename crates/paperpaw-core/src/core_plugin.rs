@@ -580,6 +580,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     // CATALOG_CHANGED.
     r.on(events::STARTED, |env, _, _| make_library_folder(env))?;
     let catalog = Rc::new(Catalog::default());
+    let recorded = Recorded::default();
     {
         let catalog = Rc::clone(&catalog);
         r.add_work(WorkSpec::new(
@@ -628,30 +629,96 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     }
     {
         let catalog = Rc::clone(&catalog);
+        let recorded = Rc::clone(&recorded);
         r.on(events::BOOK_CHANGED, move |env, changed, out| {
+            recorded.take();
             let kept = env.book_fields().iter().any(|f| f.in_catalog);
             if changed.what & library::what::FIELDS != 0 && kept {
                 catalog.want_catch_up(Some(&changed.path), false, out);
             }
         })?;
     }
+    register_reading(r, &catalog, &recorded)?;
+    // What plugins keep for a book follows it: moved, removed. The catalog
+    // leaves it out at once (noted beside it); a book moved is caught up
+    // where it is now, at once (the book is not where views show it).
+    {
+        let catalog = Rc::clone(&catalog);
+        let recorded = Rc::clone(&recorded);
+        r.on(events::BOOK_MOVED, move |env, moved, out| {
+            recorded.take();
+            library::moved(env.storage(), &moved.from, &moved.path);
+            library::move_data(env.storage(), env.book_data(), &moved.from, &moved.path);
+            let _ = library::catalog::forget(env.storage(), &moved.from);
+            catalog.fresh.borrow_mut().retain(|p| *p != moved.from);
+            catalog.want_catch_up(Some(&moved.path), true, out);
+        })?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        let recorded = Rc::clone(&recorded);
+        r.on(events::BOOK_REMOVED, move |env, removed, out| {
+            recorded.take();
+            library::removed(env.storage(), &removed.path);
+            library::remove_data(env.storage(), env.book_data(), &removed.path);
+            let _ = library::catalog::forget(env.storage(), &removed.path);
+            catalog.fresh.borrow_mut().retain(|p| *p != removed.path);
+            if library::catalog::log_is_long(env.storage()) {
+                catalog.want_catch_up(None, false, out);
+            }
+        })?;
+    }
+    register_clean_up(r)
+}
+
+/// The book and the percentage recorded at the last page turned: the
+/// details are written only when it changes, so a page turned that does
+/// not change it reads nothing. Forgotten when the book opens, closes or
+/// changes.
+type Recorded = alloc::rc::Rc<core::cell::RefCell<Option<(String, u8)>>>;
+
+fn register_reading(
+    r: &mut Registrar,
+    catalog: &alloc::rc::Rc<Catalog>,
+    recorded: &Recorded,
+) -> Result<(), RegisterError> {
+    use alloc::rc::Rc;
+
     // The library service follows the reading, whichever plugins
     // show it: how far a book is read, in its details and, when it is
     // opened, closed or finished, beside the catalog (folded into it at a
     // calm moment once the log is long).
-    r.on(events::BOOK_OPENED, |env, reading, out| {
-        library::record(env, reading, true);
-        out.push(library::changed_book(
-            &reading.path,
-            library::what::PROGRESS,
-        ));
-    })?;
-    r.on(events::PAGE_TURNED, |env, reading, _| {
-        library::record(env, reading, false);
-    })?;
+    {
+        let recorded = Rc::clone(recorded);
+        r.on(events::BOOK_OPENED, move |env, reading, out| {
+            recorded.take();
+            library::record(env, reading, true);
+            out.push(library::changed_book(
+                &reading.path,
+                library::what::PROGRESS,
+            ));
+        })?;
+    }
+    {
+        let recorded = Rc::clone(recorded);
+        r.on(events::PAGE_TURNED, move |env, reading, _| {
+            let percent = (reading.progress + 0.5).clamp(0.0, 100.0) as u8;
+            let mut recorded = recorded.borrow_mut();
+            if recorded
+                .as_ref()
+                .is_some_and(|(path, p)| *p == percent && *path == reading.path)
+            {
+                return;
+            }
+            library::record(env, reading, false);
+            *recorded = Some((reading.path.clone(), percent));
+        })?;
+    }
     for event in [events::BOOK_CLOSED, events::BOOK_FINISHED] {
-        let catalog = Rc::clone(&catalog);
+        let catalog = Rc::clone(catalog);
+        let recorded = Rc::clone(recorded);
         r.on(event, move |env, reading, out| {
+            recorded.take();
             library::record(env, reading, false);
             library::note_status(env.storage(), &reading.path);
             out.push(library::changed_book(
@@ -663,32 +730,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
             }
         })?;
     }
-    // What plugins keep for a book follows it: moved, removed. The catalog
-    // leaves it out at once (noted beside it); a book moved is caught up
-    // where it is now, at once (the book is not where views show it).
-    {
-        let catalog = Rc::clone(&catalog);
-        r.on(events::BOOK_MOVED, move |env, moved, out| {
-            library::moved(env.storage(), &moved.from, &moved.path);
-            library::move_data(env.storage(), env.book_data(), &moved.from, &moved.path);
-            let _ = library::catalog::forget(env.storage(), &moved.from);
-            catalog.fresh.borrow_mut().retain(|p| *p != moved.from);
-            catalog.want_catch_up(Some(&moved.path), true, out);
-        })?;
-    }
-    {
-        let catalog = Rc::clone(&catalog);
-        r.on(events::BOOK_REMOVED, move |env, removed, out| {
-            library::removed(env.storage(), &removed.path);
-            library::remove_data(env.storage(), env.book_data(), &removed.path);
-            let _ = library::catalog::forget(env.storage(), &removed.path);
-            catalog.fresh.borrow_mut().retain(|p| *p != removed.path);
-            if library::catalog::log_is_long(env.storage()) {
-                catalog.want_catch_up(None, false, out);
-            }
-        })?;
-    }
-    register_clean_up(r)
+    Ok(())
 }
 
 /// The work that cleans up the storage by itself.

@@ -645,3 +645,86 @@ fn books_without_an_extension_are_found_by_their_first_bytes() {
     // Not a file with another extension, whatever it holds.
     assert_eq!(found, ["books/a.txt", "books/download"]);
 }
+
+/// The details written in one pass are, byte for byte, what setting
+/// their keys one by one wrote.
+#[test]
+fn details_are_written_as_key_by_key() {
+    fn key_by_key(book: &Book, before: &str) -> String {
+        let mut ini = String::new();
+        let mut set = |key: &str, value: &str| ini = config::set(&ini, "book", key, fit(value));
+        set("size", &book.size.to_string());
+        set("indexed", if book.indexed { "on" } else { "off" });
+        set("version", &DETAILS.to_string());
+        for (key, value) in [
+            ("title", &book.title),
+            ("author", &book.author),
+            ("series", &book.series),
+            ("series-index", &book.series_index),
+        ] {
+            if let Some(value) = value {
+                set(key, value);
+            }
+        }
+        for (i, tag) in book.tags.iter().take(MAX_TAGS).enumerate() {
+            set(&format!("tag.{}", i + 1), tag);
+        }
+        if let Some(cover) = &book.cover {
+            set("cover", &cover.path);
+            set("cover-width", &cover.width.to_string());
+            set("cover-height", &cover.height.to_string());
+        }
+        if let Some(progress) = book.progress {
+            set("progress", &progress.to_string());
+        }
+        if let Some(added) = book.added {
+            set("added", &added.to_string());
+        }
+        for (id, value) in &book.fields {
+            ini = config::set(&ini, "field", id, fit(value));
+        }
+        for entry in config::parse(before).filter_map(Result::ok) {
+            if !known_detail(entry.section, entry.key) {
+                ini = config::set(&ini, entry.section, entry.key, &entry.value.as_str());
+            }
+        }
+        ini
+    }
+    let long = "x".repeat(MAX_VALUE + 10);
+    let full = Book {
+        size: 5,
+        indexed: true,
+        title: Some("A = \"title\"".into()),
+        author: Some(" Ann\nLee ".into()),
+        series: Some(long.clone()),
+        series_index: Some(String::new()),
+        tags: (0..MAX_TAGS + 3).map(|i| format!("tag {i}")).collect(),
+        cover: Some(ImageRef {
+            path: "x.gray".into(),
+            width: 30,
+            height: 40,
+        }),
+        progress: Some(12),
+        added: Some(20_000),
+        fields: alloc::vec![
+            ("stars.rating".into(), "4".into()),
+            ("notes.text".into(), long),
+            ("stars.rating".into(), "5".into()),
+            ("bad key".into(), "1".into()),
+        ],
+    };
+    let befores = [
+        "",
+        "[book]\nsize = 5\nshelf = Garden\ntitle = Alice\n[field]\nstars.rating = 4\n[later]\nx = 1\n",
+        "top = 1\nother = \"a\\nb\"\n[later]\nx = 1\ny = 2\n[book]\nshelf = A\nshelf = B\n[more]\nz = 3\n",
+    ];
+    for book in [Book::default(), full] {
+        for before in befores {
+            assert_eq!(
+                details_text(&book, before),
+                key_by_key(&book, before),
+                "{before}"
+            );
+        }
+    }
+}

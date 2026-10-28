@@ -255,3 +255,26 @@ fn the_statistics_are_offered_where_they_are_off() {
     let config = String::from_utf8(config).unwrap();
     assert!(config.contains("stats = on"), "{config}");
 }
+
+/// While a book is open, today's reading is not written at every page
+/// turned: when the device sleeps (or the book closes).
+#[test]
+fn today_is_written_when_the_device_sleeps() {
+    let mut reader = Reader::new("", true);
+    let file = ".paperpaw/plugins/reading-goal/today.txt";
+    let minutes = |reader: &Reader| {
+        let text = paperpaw_sdk::read_file(reader.kernel.storage(), file, 64).unwrap_or_default();
+        let text = String::from_utf8(text).unwrap();
+        let seconds = text
+            .trim()
+            .split_once(' ')
+            .map(|(_, s)| s.parse::<u32>().unwrap());
+        seconds.unwrap_or(0) / 60
+    };
+    reader.read_for(5);
+    assert_eq!(minutes(&reader), 0, "written while pages turned");
+    reader.now += 100;
+    let effects = reader.kernel.suspend(Instant(reader.now));
+    reader.settle(effects);
+    assert_eq!(minutes(&reader), 5);
+}

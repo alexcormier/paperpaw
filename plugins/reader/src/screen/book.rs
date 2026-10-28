@@ -23,10 +23,11 @@ pub(super) struct Book {
     /// The starts of the pages turned forward to this one, one after
     /// another (none before a jump).
     pub(super) history: Vec<Locator>,
-    /// When the position was written last, and whether the page shown has
-    /// changed since.
-    pub(super) saved_at: Option<paperpaw_sdk::Instant>,
+    /// Whether the page shown has changed since the position was
+    /// written, since when, and when it is written ([`Book::save_due`]).
     pub(super) unsaved: bool,
+    pub(super) unsaved_since: Option<paperpaw_sdk::Instant>,
+    pub(super) save_at: Option<paperpaw_sdk::Instant>,
     /// Whether it could not be written once (and the reader was told).
     pub(super) save_failed: bool,
     /// The position kept is there but could not be read: not written over
@@ -139,6 +140,12 @@ impl Unopened {
 /// Remembers `path` as the book read last (reopened at start-up).
 pub(crate) fn remember_last(storage: &dyn paperpaw_sdk::Storage, path: &str) {
     let state = format!("[reader]\nlast = {}\n", paperpaw_sdk::config::quote(path));
+    // Mostly the same book again: a read is quicker than a write.
+    if paperpaw_sdk::read_file(storage, &state_path(), state.len())
+        .is_ok_and(|kept| kept == state.as_bytes())
+    {
+        return;
+    }
     #[expect(
         clippy::let_underscore_must_use,
         reason = "only which book opens at the start; not kept, the library opens instead"
@@ -225,8 +232,9 @@ impl Book {
             words: core::cell::OnceCell::new(),
             lines: core::cell::OnceCell::new(),
             history: Vec::new(),
-            saved_at: None,
             unsaved: false,
+            unsaved_since: None,
+            save_at: None,
             save_failed: false,
             held: false,
             from_progress: false,
@@ -563,23 +571,23 @@ impl Book {
         self.document.progress(self.page.start) * 100.0
     }
 
-    /// Writes the position now, or soon if it was written a moment ago;
-    /// `true` while it waits ([`Book::save_due`]).
-    pub(super) fn position_changed(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+    /// Notes that the position is to be written, not now: once the pages
+    /// rest a moment, or a while after the first page not written yet
+    /// while they turn on. Returns when ([`Book::save_due`]).
+    pub(super) fn position_changed(&mut self, cx: &mut Cx<'_, '_>) -> paperpaw_sdk::Instant {
         // Read on: the new place is kept, the one that could not be read
         // moved aside first.
         if self.held {
             self.set_aside(cx);
         }
         let now = cx.env().now();
-        let recent = self
-            .saved_at
-            .is_some_and(|at| now.since(at) < SAVE_EVERY_MS);
-        self.unsaved = recent;
-        if !recent {
-            self.save_position(cx, false);
-        }
-        recent
+        let since = *self.unsaved_since.get_or_insert(now);
+        let at = now
+            .add_millis(SAVE_QUIET_MS)
+            .min(since.add_millis(SAVE_EVERY_MS));
+        self.unsaved = true;
+        self.save_at = Some(at);
+        at
     }
 
     /// Moves the position that could not be read aside, to `<file>.bad`
@@ -616,12 +624,15 @@ impl Book {
     /// with its XPointer (the book is closed, the device goes to sleep).
     pub(super) fn save_due(&mut self, cx: &mut Cx<'_, '_>, force: bool) {
         let now = cx.env().now();
-        let due = self
-            .saved_at
-            .is_none_or(|at| now.since(at) >= SAVE_EVERY_MS);
+        let due = self.save_at.is_none_or(|at| at <= now);
         if (self.unsaved || force && !self.pointed) && (force || due) {
             self.unsaved = false;
             self.save_position(cx, force);
+        } else if self.unsaved
+            && let Some(at) = self.save_at
+        {
+            // Pages turned since it was asked for: later.
+            cx.wake_at(at);
         }
     }
 
@@ -630,11 +641,12 @@ impl Book {
     /// refuses, says so once a book (not at every page). A position held
     /// ([`Book::held`]) is not written over.
     pub(super) fn save_position(&mut self, cx: &mut Cx<'_, '_>, pointed: bool) {
+        self.unsaved_since = None;
+        self.save_at = None;
         if self.held {
             return;
         }
         let env = *cx.env();
-        self.saved_at = Some(env.now());
         let start = self.page.start;
         if pointed {
             self.xpointer = self.document.xpointer(env.storage(), start);
@@ -759,9 +771,8 @@ impl Book {
         // Found now, so the status lines read nothing while drawn.
         self.chapter_first(&env);
         self.update_links(&env);
-        if self.position_changed(cx) {
-            cx.wake_at(env.now().add_millis(SAVE_EVERY_MS));
-        }
+        let save_at = self.position_changed(cx);
+        cx.wake_at(save_at);
         if !self.web() {
             cx.command(events::PAGE_TURNED.emit(self.reading(&env)));
             // The last page: the book is read to the end.

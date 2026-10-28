@@ -286,7 +286,11 @@ impl Servers {
                     // None is in use: those there are left from before.
                     remove_bodies(storage, &tmp);
                 }
-                if storage.write(&path, &[]).is_ok() {
+                // Made empty by an append, not a whole write: that takes a
+                // FAT card several looks through the folder. One of that
+                // name still there goes first.
+                let _ = storage.remove(&path);
+                if storage.append(&path, &[]).is_ok() {
                     self.bodies.push((request, path.clone()));
                     self.incoming.push(Incoming {
                         request,
@@ -490,5 +494,32 @@ mod tests {
         // A body still in use stays while another comes.
         servers.event(body(2), &storage, &mut out);
         assert!(storage.exists(&format!("{tmp}/request-1")));
+    }
+
+    /// A request whose number comes again starts with an empty body, not
+    /// after the one of before.
+    #[test]
+    fn a_body_starts_empty() {
+        let storage = MemoryStorage::new();
+        let mut servers = Servers::default();
+        let mut out = Vec::new();
+        servers.serve(SERVER, 8080, EVENTS, true, 1, &mut out);
+        servers.event(body(2), &storage, &mut out);
+        for _ in 0..2 {
+            servers.event(body(1), &storage, &mut out);
+            let data = alloc::vec![7; 10];
+            let last = true;
+            servers.event(
+                ServerEvent::Body {
+                    request: 1,
+                    data,
+                    last,
+                },
+                &storage,
+                &mut out,
+            );
+        }
+        let path = format!("{}/tmp/request-1", paperpaw_sdk::data::DIR);
+        assert_eq!(storage.get(&path), Some(alloc::vec![7; 10]));
     }
 }

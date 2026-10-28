@@ -34,6 +34,10 @@ change the plugin SDK.
 - Book pages draw faster: lines outside the part of the screen being drawn
   are skipped instead of measured word by word. Searching a book needs less
   memory.
+- Turning a page waits less for the card: the reading position and
+  today's reading are written once the pages rest for a moment, the book
+  closes or the device sleeps, and the book's details are read only when
+  its shown percentage changes.
 
 ## [0.5.0-beta.11] - 2026-10-26
 

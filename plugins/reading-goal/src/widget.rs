@@ -5,6 +5,7 @@
 //! while drawing. A tap opens the goal's setting.
 
 use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -16,7 +17,7 @@ use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
 };
 
-use crate::{GOAL, OFFERED, PICTURES, Statistics, Today, pictures};
+use crate::{GOAL, Kept, OFFERED, PICTURES, Statistics, Today, pictures};
 
 pub(crate) const WIDGET: Id = Id::new_static(NAME);
 const NAME: &str = "reading-goal.widget";
@@ -33,17 +34,26 @@ static SETTINGS: [SettingSpec; 3] = [
     ),
 ];
 
-pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+pub(crate) fn register(r: &mut Registrar, kept: &Rc<Kept>) -> Result<(), RegisterError> {
     r.add_setting_group({
         static SPEC: paperpaw_sdk::SettingGroupSpec =
             paperpaw_sdk::SettingGroupSpec::new(WIDGET, "reading-goal.widget");
         &SPEC
     })?;
     r.add_settings(&SETTINGS)?;
+    let kept = Rc::clone(kept);
     r.add_widget(
-        WidgetSpec::new(WIDGET, "reading-goal.widget", |_| Box::new(Cat::default()))
-            .category(widgets::categories::READING)
-            .cells(CellSpan::new(2, 2)),
+        WidgetSpec::new(WIDGET, "reading-goal.widget", move |_| {
+            Box::new(Cat {
+                kept: Rc::clone(&kept),
+                today: None,
+                folder: String::new(),
+                area: None,
+                picture: None,
+            })
+        })
+        .category(widgets::categories::READING)
+        .cells(CellSpan::new(2, 2)),
     )
 }
 
@@ -84,8 +94,9 @@ pub(crate) fn described(env: &Env<'_>, today: &Today) -> String {
     env.i18n().tr(&key).into()
 }
 
-#[derive(Default)]
 struct Cat {
+    /// What the statistics told last.
+    kept: Rc<Kept>,
     today: Option<Today>,
     /// The folder of one's own pictures it was laid out with.
     folder: String,
@@ -135,7 +146,7 @@ impl Cat {
 
 impl Widget for Cat {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let today = Some(Today::now(env));
+        let today = Some(Today::now(env, &self.kept));
         let folder = env.settings().text(PICTURES.as_str());
         if today == self.today && folder == self.folder {
             return false;
@@ -201,7 +212,7 @@ impl Widget for Cat {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let today = self.today.unwrap_or_else(|| Today::now(env));
+        let today = self.today.unwrap_or_else(|| Today::now(env, &self.kept));
         alloc::vec![WidgetTarget::new(area, tapped(env, &today))]
     }
 }

@@ -87,9 +87,14 @@ const STATUS_QUIET_MS: u64 = 2_000;
 /// running flat out for minutes.
 const STEP_DELAY_SMALL_MS: u64 = 500;
 
-/// The position is written at most this often while pages turn; always
-/// when the book is closed or the device sleeps or restarts. A card is slow to write
-/// to, and turning pages quickly should not wait for it.
+/// The position is written this long after the last page turned, never
+/// while a page turns: a card is slow to write to, and a page turned
+/// should not wait for it. Always when the book is closed or the device
+/// sleeps or restarts.
+const SAVE_QUIET_MS: u64 = 2_000;
+
+/// While pages turn on without a rest, the position is written at least
+/// this often all the same.
 const SAVE_EVERY_MS: u64 = 5000;
 
 /// Pages remembered for going back before the index covers them.

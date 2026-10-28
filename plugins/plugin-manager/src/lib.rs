@@ -186,16 +186,16 @@ impl PluginList {
         });
         self.plugins = plugins.iter().map(|p| p.manifest.id.clone()).collect();
         install::adopt(env);
+        // Read once for all of them, where one is not built in.
+        let origins = core::cell::OnceCell::new();
         self.origins = plugins
             .iter()
             .filter(|p| p.kind != PluginKind::BuiltIn)
             .map(|p| {
                 let version = p.update.unwrap_or(p.manifest.version);
                 let id = &p.manifest.id;
-                (
-                    id.clone(),
-                    install::origin(env.storage(), id.as_str(), version),
-                )
+                let origins = origins.get_or_init(|| install::Origins::read(env.storage()));
+                (id.clone(), origins.of(id.as_str(), version))
             })
             .collect();
         // Rows as high as their notes need (the largest text).
