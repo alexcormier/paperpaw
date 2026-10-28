@@ -695,6 +695,21 @@ fn up_and_down_go_to_the_nearest_target_above_and_below() {
 }
 
 #[test]
+fn a_focus_step_sets_its_refresh_exactly() {
+    // Not turned into grays, nor into a full refresh by the kernel because
+    // the rectangle round the two targets is large and a picture lies in it.
+    let h = harness(Device::BUTTONS);
+    let env = h.env();
+    let items = [
+        Item::placed(tool("t.a"), Cells::new(0, 0, 1, 1)),
+        Item::placed(tool("t.b"), Cells::new(3, 2, 1, 1)),
+    ];
+    let mut view = view(&env, &items);
+    let (_, output) = with_cx(&env, |cx| view.on_action(&actions::RIGHT, cx));
+    assert_eq!(output.refresh_set, Some(paperpaw_sdk::RefreshMode::Fast));
+}
+
+#[test]
 fn a_long_press_begins_editing_and_back_ends_it() {
     let h = harness(Device::TOUCH);
     let env = h.env();

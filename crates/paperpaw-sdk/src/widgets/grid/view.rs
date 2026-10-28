@@ -565,7 +565,11 @@ impl GridView {
                 self.tell(item, WidgetInput::Focus(area), cx);
             }
         }
-        cx.request_refresh(RefreshMode::Fast);
+        // Exactly: two targets far apart make a large rectangle, and a
+        // widget with a picture in it, a large one, which the kernel would
+        // show in grays or in full (it takes the rectangle and the picture
+        // for a page); the picture stays as it is.
+        cx.set_refresh(RefreshMode::Fast);
     }
 
     /// `cells` for item `index` as its widget's hint keeps them
@@ -599,7 +603,8 @@ impl GridView {
         let taken = widget.on_input(&env, input, shown.area, &mut out);
         if taken {
             cx.request_redraw_area(shown.area);
-            cx.request_refresh(RefreshMode::Fast);
+            // As a focus step is (see `focus_on`).
+            cx.set_refresh(RefreshMode::Fast);
         }
         for command in out {
             cx.command(command);

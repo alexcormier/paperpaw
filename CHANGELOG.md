@@ -137,7 +137,12 @@ change the plugin SDK.
   (half the screen or more) and, with a large picture on the screen, refreshed it in
   full; it also counted every such step towards the full refresh every few pages. It
   now goes by what was drawn (the areas added up), not by the rectangle round them;
-  a whole screen drawn anew, a page, is as before.
+  a whole screen drawn anew, a page, is as before. A widget of half the screen or
+  more (the *Continue reading* widget with its cover) is a page by itself, and
+  every focus step still showed the screen in four grays (about 1.7 s): a focus step
+  in the widget grid now sets its refresh exactly (fast), as the kernel takes it for
+  a step and not for a page. The first step after a screen was shown in grays still
+  drives every pixel once.
 - The row of hints that comes on a press (in the reader, with the buttons below the
   screen) is shown and taken away with a normal partial refresh, not a fast one: with
   the quicker waveforms of *Fast changes* it left ghosts of the page's text at the
