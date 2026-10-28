@@ -68,6 +68,12 @@ pub const UC_FRAMES: Setting<i64> = Setting::new("x4.uc8179.fast-frames");
 pub const UC_HOLD: Setting<i64> = Setting::new("x4.uc8179.fast-hold");
 pub const UC_KICK: Setting<i64> = Setting::new("x4.uc8179.fast-kick");
 pub const UC_RATE: Setting<i64> = Setting::new("x4.uc8179.fast-rate");
+/// How much of the picture goes to the controller for a fast refresh.
+pub const UC_TRANSFER: Setting<paperpaw_sdk::setting::Text> =
+    Setting::new("x4.uc8179.transfer");
+pub const UC_TRANSFER_WHOLE: &str = "x4.uc8179.transfer.whole";
+pub const UC_TRANSFER_CHANGED: &str = "x4.uc8179.transfer.changed";
+pub const UC_TRANSFER_COPIED: &str = "x4.uc8179.transfer.copied";
 
 /// The frames and the kick of a fast refresh, used where [`FAST_REFRESH`] is
 /// [`FAST_CUSTOM`]; and of a black-and-white refresh, the one screens get that
@@ -186,7 +192,7 @@ static FAST_SETTINGS: [SettingSpec; 5] = [
 ];
 
 /// How the X4 Pro shows fast changes.
-static UC_SETTINGS: [SettingSpec; 5] = {
+static UC_SETTINGS: [SettingSpec; 6] = {
     use paperpaw_sdk::SettingExtra;
     static BY_TEN: SettingExtra = SettingExtra::new().step(10);
     [
@@ -235,6 +241,14 @@ static UC_SETTINGS: [SettingSpec; 5] = {
         )
         .with_extra(&BY_TEN)
         .description("x4.uc8179.fast-rate.help"),
+        SettingSpec::choice(
+            UC_TRANSFER.static_str(),
+            "x4.uc8179.transfer",
+            &[UC_TRANSFER_WHOLE, UC_TRANSFER_CHANGED, UC_TRANSFER_COPIED],
+            UC_TRANSFER_WHOLE,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.transfer.help"),
     ]
 };
 

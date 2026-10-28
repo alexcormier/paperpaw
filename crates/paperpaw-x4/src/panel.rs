@@ -209,6 +209,14 @@ where
         }
     }
 
+    /// How much of the frame the UC8179 sends for a fast refresh (see
+    /// `uc8179::Transfer`); no other controller has a choice.
+    pub fn set_transfer(&mut self, transfer: uc8179::Transfer) {
+        if let Panel::UltraChip(display) = self {
+            display.set_transfer(transfer);
+        }
+    }
+
     pub fn refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
         each!(self, d => d.refresh(refresh, power_off))
     }

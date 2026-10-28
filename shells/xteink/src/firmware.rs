@@ -996,6 +996,7 @@ impl Firmware {
                 None
             };
             let _supported = self.panel.set_experiment(experiment);
+            self.panel.set_transfer(transfer(self.kernel.settings()));
         }
         if let Err(e) = self.refresh(refresh) {
             failed = Some(e);
@@ -1081,6 +1082,17 @@ fn fast_waveform(
     }
     let _ = active;
     menu_waveform(mode, settings)
+}
+
+/// How much of the picture the X4 Pro sends for a fast refresh (the other
+/// controllers send what they must).
+fn transfer(settings: &paperpaw_sdk::Settings) -> paperpaw_x4::uc8179::Transfer {
+    use paperpaw_x4::uc8179::Transfer;
+    match settings.read(&device::UC_TRANSFER) {
+        device::UC_TRANSFER_CHANGED => Transfer::Changed,
+        device::UC_TRANSFER_COPIED => Transfer::Copied,
+        _ => Transfer::Whole,
+    }
 }
 
 /// The waveform of the menus and the games: the SSD1677's on the X4, the
