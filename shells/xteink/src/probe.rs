@@ -112,6 +112,44 @@ pub fn log_otp() {
     }
 }
 
+/// The controller the factory wrote down for the panel, in the factory's
+/// NVS (`hw_calib`, `screenType`; see `paperpaw_x4::nvs`), if it did:
+/// only read. The X4 Classic's partition table keeps that NVS whole.
+#[cfg(feature = "x4-classic")]
+pub fn factory_controller(flash: &crate::ota::Flash) -> Option<probe::Controller> {
+    use alloc::boxed::Box;
+    use esp_bootloader_esp_idf::partitions::{
+        self, DataPartitionSubType, PARTITION_TABLE_MAX_LEN, PartitionType,
+    };
+    use paperpaw_x4::nvs;
+
+    let mut flash = flash.borrow_mut();
+    let mut table = Box::new([0u8; PARTITION_TABLE_MAX_LEN]);
+    let (offset, len) = partitions::read_partition_table(&mut flash, &mut table[..])
+        .ok()?
+        .find_partition(PartitionType::Data(DataPartitionSubType::Nvs))
+        .ok()
+        .flatten()
+        .map(|p| (p.offset(), p.len()))?;
+    let pages = len as usize / nvs::PAGE;
+    let mut page = alloc::vec![0u8; nvs::PAGE];
+    let mut read =
+        |i: usize, page: &mut [u8]| flash.read(offset + (i * nvs::PAGE) as u32, page).is_ok();
+    let index = (0..pages).find_map(|i| {
+        read(i, &mut page)
+            .then(|| nvs::namespace(&page, "hw_calib"))
+            .flatten()
+    })?;
+    let screen_type = (0..pages).find_map(|i| {
+        read(i, &mut page)
+            .then(|| nvs::integer(&page, index, "screenType"))
+            .flatten()
+    })?;
+    let controller = probe::factory_controller(screen_type);
+    log::info!("display: the factory's screen type {screen_type} ({controller:?})");
+    controller
+}
+
 /// The voltages of the OTP's own fast waveform (the range 90 degrees select,
 /// as the fast refresh asks for), if the OTP was read: what a waveform from
 /// the registers runs at (the lab's, the X4 Pro's menus'), not the
