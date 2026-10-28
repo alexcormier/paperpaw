@@ -23,6 +23,89 @@ pub const BUTTON_RESPONSE: Setting<paperpaw_sdk::setting::Text> =
 pub const RESPONSE_NORMAL: &str = "x4.button-response.normal";
 pub const RESPONSE_FASTER: &str = "x4.button-response.faster";
 pub const RESPONSE_SAVING: &str = "x4.button-response.saving";
+/// How the X4 shows fast changes (menus, a focus moved): the panel's own
+/// waveform, or a quicker one with more or less ghosting (see `firmware`).
+#[cfg(feature = "x4")]
+pub const FAST_REFRESH: Setting<paperpaw_sdk::setting::Text> = Setting::new("x4.fast-refresh");
+/// Whether the panel's controller is an SSD1677: only its waveforms can be
+/// made here, so only then the settings of them are offered. Set at start,
+/// once the controller is known (`main`).
+#[cfg(feature = "x4")]
+static SSD1677: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Says whether the panel's controller is an SSD1677.
+#[cfg(feature = "x4")]
+pub fn set_ssd1677(yes: bool) {
+    SSD1677.store(yes, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether the X4 Pro's controller is a UC8179, whose waveforms from the
+/// registers its menus take (see `firmware`): then the settings of them are
+/// offered. Set at start (`main`).
+static UC8179: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Says whether the menus take the UC8179's waveform of the registers.
+pub fn set_uc8179(yes: bool) {
+    UC8179.store(yes, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether the menus take the UC8179's waveform of the registers.
+pub fn uc8179() -> bool {
+    UC8179.load(core::sync::atomic::Ordering::Relaxed)
+}
+
+/// How the X4 Pro shows fast changes (menus, a focus moved): the panel's own
+/// waveform, or a quicker one of the registers: more or less frames and the
+/// pixels that stay held to their colour, which keeps the ghosts down.
+pub const UC_REFRESH: Setting<paperpaw_sdk::setting::Text> = Setting::new("x4.uc8179.fast-refresh");
+/// The choices of [`UC_REFRESH`], the slowest and cleanest first.
+pub const UC_PANEL: &str = "x4.uc8179.fast-refresh.panel";
+pub const UC_CLEAN: &str = "x4.uc8179.fast-refresh.clean";
+pub const UC_BALANCED: &str = "x4.uc8179.fast-refresh.balanced";
+pub const UC_QUICK: &str = "x4.uc8179.fast-refresh.quick";
+/// The frames, the held frames, the kick and the frame rate (Hz) of a fast
+/// refresh, used where [`UC_REFRESH`] is [`UC_CUSTOM`].
+pub const UC_CUSTOM: &str = "x4.uc8179.fast-refresh.custom";
+pub const UC_FRAMES: Setting<i64> = Setting::new("x4.uc8179.fast-frames");
+pub const UC_HOLD: Setting<i64> = Setting::new("x4.uc8179.fast-hold");
+pub const UC_KICK: Setting<i64> = Setting::new("x4.uc8179.fast-kick");
+pub const UC_RATE: Setting<i64> = Setting::new("x4.uc8179.fast-rate");
+/// The same for the fastest refresh (screens that ask for `fastest`, games).
+pub const UC_MONO_FRAMES: Setting<i64> = Setting::new("x4.uc8179.mono-frames");
+pub const UC_MONO_HOLD: Setting<i64> = Setting::new("x4.uc8179.mono-hold");
+pub const UC_MONO_RATE: Setting<i64> = Setting::new("x4.uc8179.mono-rate");
+/// How much of the picture goes to the controller for a fast refresh.
+pub const UC_TRANSFER: Setting<paperpaw_sdk::setting::Text> =
+    Setting::new("x4.uc8179.transfer");
+pub const UC_TRANSFER_WHOLE: &str = "x4.uc8179.transfer.whole";
+pub const UC_TRANSFER_CHANGED: &str = "x4.uc8179.transfer.changed";
+pub const UC_TRANSFER_COPIED: &str = "x4.uc8179.transfer.copied";
+
+/// The frames and the kick of a fast refresh, used where [`FAST_REFRESH`] is
+/// [`FAST_CUSTOM`]; and of a black-and-white refresh, the one screens get that
+/// ask for the fastest (games), always. A data plugin sets them in its
+/// `settings.ini` or by an action (see `waveform::ordered` for how they are
+/// kept in order).
+#[cfg(feature = "x4")]
+pub const FAST_FRAMES: Setting<i64> = Setting::new("x4.ssd1677.fast-frames");
+#[cfg(feature = "x4")]
+pub const FAST_KICK: Setting<i64> = Setting::new("x4.ssd1677.fast-kick");
+#[cfg(feature = "x4")]
+pub const MONO_FRAMES: Setting<i64> = Setting::new("x4.ssd1677.mono-frames");
+#[cfg(feature = "x4")]
+pub const MONO_KICK: Setting<i64> = Setting::new("x4.ssd1677.mono-kick");
+/// The choices of [`FAST_REFRESH`], the slowest and cleanest first.
+#[cfg(feature = "x4")]
+pub const FAST_PANEL: &str = "x4.fast-refresh.panel";
+#[cfg(feature = "x4")]
+pub const FAST_CLEAN: &str = "x4.fast-refresh.clean";
+#[cfg(feature = "x4")]
+pub const FAST_BALANCED: &str = "x4.fast-refresh.balanced";
+#[cfg(feature = "x4")]
+pub const FAST_QUICK: &str = "x4.fast-refresh.quick";
+/// The frames and the kick of [`FAST_FRAMES`] and [`FAST_KICK`].
+#[cfg(feature = "x4")]
+pub const FAST_CUSTOM: &str = "x4.fast-refresh.custom";
 /// The X4 Pro's front light: how bright, in percent (0 off).
 #[cfg_attr(
     not(feature = "x4-pro"),
@@ -58,6 +141,150 @@ static SETTINGS: [SettingSpec; 2] = [
     )
     .description("x4.light-sleep.help"),
 ];
+
+/// How fast changes are shown.
+#[cfg(feature = "x4")]
+static FAST_SETTINGS: [SettingSpec; 5] = [
+    SettingSpec::choice(
+        FAST_REFRESH.static_str(),
+        "x4.fast-refresh",
+        &[
+            FAST_PANEL,
+            FAST_CLEAN,
+            FAST_BALANCED,
+            FAST_QUICK,
+            FAST_CUSTOM,
+        ],
+        FAST_BALANCED,
+        groups::DISPLAY,
+    )
+    .description("x4.fast-refresh.help"),
+    SettingSpec::number(
+        FAST_FRAMES.static_str(),
+        "x4.ssd1677.fast-frames",
+        1,
+        30,
+        6,
+        groups::DEVELOPER,
+    )
+    .description("x4.ssd1677.fast-frames.help"),
+    SettingSpec::number(
+        FAST_KICK.static_str(),
+        "x4.ssd1677.fast-kick",
+        0,
+        3,
+        0,
+        groups::DEVELOPER,
+    )
+    .description("x4.ssd1677.fast-kick.help"),
+    SettingSpec::number(
+        MONO_FRAMES.static_str(),
+        "x4.ssd1677.mono-frames",
+        1,
+        30,
+        1,
+        groups::DEVELOPER,
+    )
+    .description("x4.ssd1677.mono-frames.help"),
+    SettingSpec::number(
+        MONO_KICK.static_str(),
+        "x4.ssd1677.mono-kick",
+        0,
+        3,
+        0,
+        groups::DEVELOPER,
+    )
+    .description("x4.ssd1677.mono-kick.help"),
+];
+
+/// How the X4 Pro shows fast changes.
+static UC_SETTINGS: [SettingSpec; 9] = {
+    use paperpaw_sdk::SettingExtra;
+    static BY_TEN: SettingExtra = SettingExtra::new().step(10);
+    [
+        SettingSpec::choice(
+            UC_REFRESH.static_str(),
+            "x4.uc8179.fast-refresh",
+            &[UC_PANEL, UC_CLEAN, UC_BALANCED, UC_QUICK, UC_CUSTOM],
+            UC_BALANCED,
+            groups::DISPLAY,
+        )
+        .description("x4.uc8179.fast-refresh.help"),
+        SettingSpec::number(
+            UC_FRAMES.static_str(),
+            "x4.uc8179.fast-frames",
+            1,
+            30,
+            7,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.fast-frames.help"),
+        SettingSpec::number(
+            UC_HOLD.static_str(),
+            "x4.uc8179.fast-hold",
+            0,
+            3,
+            3,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.fast-hold.help"),
+        SettingSpec::number(
+            UC_KICK.static_str(),
+            "x4.uc8179.fast-kick",
+            0,
+            3,
+            0,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.fast-kick.help"),
+        SettingSpec::number(
+            UC_RATE.static_str(),
+            "x4.uc8179.fast-rate",
+            20,
+            200,
+            50,
+            groups::DEVELOPER,
+        )
+        .with_extra(&BY_TEN)
+        .description("x4.uc8179.fast-rate.help"),
+        SettingSpec::choice(
+            UC_TRANSFER.static_str(),
+            "x4.uc8179.transfer",
+            &[UC_TRANSFER_COPIED, UC_TRANSFER_CHANGED, UC_TRANSFER_WHOLE],
+            UC_TRANSFER_COPIED,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.transfer.help"),
+        SettingSpec::number(
+            UC_MONO_FRAMES.static_str(),
+            "x4.uc8179.mono-frames",
+            1,
+            30,
+            12,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.mono-frames.help"),
+        SettingSpec::number(
+            UC_MONO_HOLD.static_str(),
+            "x4.uc8179.mono-hold",
+            0,
+            3,
+            0,
+            groups::DEVELOPER,
+        )
+        .description("x4.uc8179.mono-hold.help"),
+        SettingSpec::number(
+            UC_MONO_RATE.static_str(),
+            "x4.uc8179.mono-rate",
+            20,
+            200,
+            200,
+            groups::DEVELOPER,
+        )
+        .with_extra(&BY_TEN)
+        .description("x4.uc8179.mono-rate.help"),
+    ]
+};
 
 /// The X4 Pro's front light, set with sliders: how bright in single
 /// percents, so that `−` and `+` set the dim end finely (see `light`), its
@@ -117,8 +344,22 @@ impl Plugin for X4 {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
+        #[cfg(feature = "x4")]
+        if SSD1677.load(core::sync::atomic::Ordering::Relaxed) {
+            r.add_settings(&FAST_SETTINGS)?;
+        }
+        if uc8179() {
+            r.add_settings(&UC_SETTINGS)?;
+        }
         #[cfg(feature = "x4-pro")]
         register_light(r)?;
+        #[cfg(feature = "waveform-lab")]
+        {
+            r.add_settings(&crate::lab::SETTINGS)?;
+            r.add_screens(&crate::lab::SCREENS)?;
+            r.add_actions(&crate::lab::ACTIONS)?;
+            r.add_menu_entries(&crate::lab::ENTRIES)?;
+        }
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

@@ -62,6 +62,9 @@ const UC8279_PANELS: [u8; 7] = [0x02, 0x03, 0x41, 0x42, 0x67, 0x68, 0x69];
 /// The commands asked.
 const FLG: u8 = 0x71;
 const REV: u8 = 0x70;
+/// Reads the controller's OTP from its first byte on (a UC8179's: see
+/// [`otp`](crate::otp)).
+const ROTP: u8 = 0xA2;
 
 /// How long after the reset the controller is asked.
 const AFTER_RESET_MS: u32 = 30;
@@ -205,6 +208,24 @@ where
         }
     }
     probe
+}
+
+/// Reads `out.len()` bytes of a UC8179's OTP from its start, on the lines as
+/// [`probe`] leaves them (some 4 µs a bit: a 3 KB bank takes about 100 ms).
+/// What comes back is the controller's to say: [`otp::describe`](crate::otp::describe)
+/// tells what it makes of it.
+pub fn read_otp<CLK, SDA, CS, DC, RST, BUSY, D>(
+    lines: &mut Lines<CLK, SDA, CS, DC, RST, BUSY>,
+    delay: &mut D,
+    out: &mut [u8],
+) where
+    CLK: OutputPin,
+    SDA: DataLine,
+    CS: OutputPin,
+    DC: OutputPin,
+    D: DelayNs,
+{
+    read(lines, delay, ROTP, out);
 }
 
 fn ask<CLK, SDA, CS, DC, RST, BUSY, D>(

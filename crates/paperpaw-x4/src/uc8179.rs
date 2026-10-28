@@ -55,6 +55,7 @@ use paperpaw_platform::{FrameView, PixelFormat, Rotation};
 use crate::bands::{self, Window};
 use crate::display::BUSY_TIMEOUT_MS;
 pub use crate::display::{Error, PANEL_HEIGHT, PANEL_WIDTH, Planes, Refresh};
+use crate::waveform::Direct;
 
 /// The screen PaperPaw draws upright (see [`Display::size`] for it
 /// turned).
@@ -69,6 +70,7 @@ const LINE: usize = PANEL_WIDTH as usize / 8;
 /// The controller's commands used here.
 mod cmd {
     pub const PANEL_SETTING: u8 = 0x00;
+    pub const POWER_SETTING: u8 = 0x01;
     pub const POWER_OFF: u8 = 0x02;
     pub const POWER_OFF_SEQUENCE: u8 = 0x03;
     pub const POWER_ON: u8 = 0x04;
@@ -81,6 +83,7 @@ mod cmd {
     pub const VCOM_DATA_INTERVAL: u8 = 0x50;
     pub const RESOLUTION: u8 = 0x61;
     pub const GATE_SOURCE_START: u8 = 0x65;
+    pub const VCOM_DC: u8 = 0x82;
     pub const PARTIAL_WINDOW: u8 = 0x90;
     pub const PARTIAL_IN: u8 = 0x91;
     pub const PARTIAL_OUT: u8 = 0x92;
@@ -95,6 +98,68 @@ mod cmd {
 pub enum Chip {
     Uc8179,
     Uc8279,
+}
+
+/// The frame rates a trial may ask the controller for (the `PLL` register's
+/// codes and what they are in Hz; the datasheet has more, up to 200 Hz, none
+/// is taken above 100 here), the controller's own 50 Hz fourth.
+pub const FRAME_RATES: [(u8, u16); 13] = [
+    (0x03, 20),
+    (0x04, 30),
+    (0x05, 40),
+    (0x06, 50),
+    (0x07, 60),
+    (0x08, 70),
+    (0x09, 80),
+    (0x0A, 90),
+    (0x0B, 100),
+    (0x0C, 110),
+    (0x0D, 130),
+    (0x0E, 150),
+    (0x0F, 200),
+];
+/// The index of the controller's own frame rate in [`FRAME_RATES`].
+pub const OWN_RATE: usize = 3;
+
+/// The voltages a waveform from the registers runs at: those the OTP's own
+/// waveform uses (its range's header, [`otp::power`](crate::otp::power)),
+/// which the registers hold only as the reset left them (VDH and VDL
+/// 14.0 V, VCOM_DC next to nothing). As the codes of the registers: the gate
+/// level (`VG_LVL`, 3 bits), `VDH_LVL`, `VDL_LVL` and `VDHR_LVL` (6 bits),
+/// `VDCS` (7 bits).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Power {
+    pub gate: u8,
+    pub vdh: u8,
+    pub vdl: u8,
+    pub vdhr: u8,
+    pub vcom: u8,
+}
+
+/// A way to show fast refreshes other than the panel's own, for trying
+/// waveforms on a device (the waveform lab, `shells/xteink/src/lab.rs`);
+/// UC8179 only. Set with [`Display::set_experiment`]; only fast refreshes
+/// take it (not the first after [`Display::init`] or after grays, which
+/// drive every pixel), so a half or full refresh cleans up after it. The
+/// voltages are the controller's own (the registers' defaults), which are
+/// not set here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Experiment {
+    /// What a pixel that changes is driven with ([`Direct::uc8179_luts`]).
+    pub drive: Direct,
+    /// Which level gives white is turned round ([`Direct::uc8179_luts`]).
+    pub swapped: bool,
+    /// The group's times to repeat, 0 or 1.
+    pub repeat: u8,
+    /// Frames (0 to 3) a pixel that stays is driven to its own colour
+    /// ([`Direct::uc8179_luts`]).
+    pub hold: u8,
+    /// The frame rate, an index of [`FRAME_RATES`].
+    pub rate: usize,
+    /// The panel's own waveform, the OTP's, at this temperature in degrees
+    /// (what the controller takes for the temperature it is told, `TSSET`):
+    /// then nothing above is used.
+    pub own_at: Option<i8>,
 }
 
 /// Where the frame is kept between refreshes.
@@ -201,12 +266,53 @@ enum Plane {
     New,
 }
 
+/// How much of the frame kept goes to the controller for a fast refresh.
+/// The refresh itself always covers the whole panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Transfer {
+    /// The frame whole into *new* before, and into *old* after: what the
+    /// stock firmware does.
+    #[default]
+    Whole,
+    /// Only the area written since the last refresh, into both.
+    Changed,
+    /// Only that area into *new*; the controller's own copy of *new* into
+    /// *old* after the refresh is left to make *old* the frame shown.
+    Copied,
+}
+
+/// An area of the frame, in bytes of a line and lines (the last ones
+/// included).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Area {
+    first_byte: usize,
+    last_byte: usize,
+    first_line: usize,
+    last_line: usize,
+}
+
+impl Area {
+    fn join(self, other: Self) -> Self {
+        Self {
+            first_byte: self.first_byte.min(other.first_byte),
+            last_byte: self.last_byte.max(other.last_byte),
+            first_line: self.first_line.min(other.first_line),
+            last_line: self.last_line.max(other.last_line),
+        }
+    }
+}
+
 /// What [`Display::wait`] does once the controller is done refreshing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Pending {
+    /// Only this area of the frame went into *new* (none: nothing), and
+    /// goes into *old*; not all of it if `None`.
+    sent: Option<Option<Area>>,
     /// Leave the partial mode a fast refresh entered.
     partial: bool,
     power_off: bool,
+    /// A trial set another frame rate: the controller's own again.
+    restore_rate: bool,
 }
 
 /// The display, on its SPI device (which selects the chip) and pins.
@@ -233,11 +339,23 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     /// The controller's *old* memory holds the frame shown, for a fast
     /// refresh to compare with.
     old_valid: bool,
+    /// Both of the controller's memories hold the frame but for `dirty`.
+    synced: bool,
+    /// What was written to the frame since it went to the controller.
+    dirty: Option<Area>,
+    transfer: Transfer,
+    /// Milliseconds spent waiting for the busy pin since
+    /// [`Display::take_busy_ms`].
+    busy_ms: u32,
     powered: bool,
     rotation: Rotation,
     pending: Option<Pending>,
     /// A band's bytes on their way, without a frame kept.
     buffer: Vec<u8>,
+    /// What fast refreshes are shown with, if not the panel's own.
+    experiment: Option<Experiment>,
+    /// The voltages of a waveform from the registers, if known.
+    trial_power: Option<Power>,
 }
 
 impl<SPI, DC, RST, BUSY, D> Display<SPI, DC, RST, BUSY, D>
@@ -273,11 +391,46 @@ where
             new: Vec::new(),
             gray_shown: false,
             old_valid: false,
+            synced: false,
+            dirty: None,
+            transfer: Transfer::Whole,
+            busy_ms: 0,
             powered: false,
             rotation: Rotation::Deg0,
             pending: None,
             buffer: Vec::new(),
+            experiment: None,
+            trial_power: None,
         }
+    }
+
+    /// The voltages a waveform from the registers runs at (see [`Power`]);
+    /// without, the controller's reset values.
+    pub fn set_trial_power(&mut self, power: Option<Power>) {
+        self.trial_power = power;
+    }
+
+    /// The milliseconds spent waiting for the controller since the last
+    /// call: after [`Display::start_refresh`] what the setup waited for,
+    /// after [`Display::wait`] mostly the waveform.
+    pub fn take_busy_ms(&mut self) -> u32 {
+        core::mem::take(&mut self.busy_ms)
+    }
+
+    /// Sets how much of the frame fast refreshes send (see [`Transfer`]).
+    pub fn set_transfer(&mut self, transfer: Transfer) {
+        self.transfer = transfer;
+    }
+
+    /// Shows fast refreshes as `experiment` says (or the panel's own where
+    /// `None`); `false`, and nothing set, where the controller is not a
+    /// UC8179.
+    pub fn set_experiment(&mut self, experiment: Option<Experiment>) -> bool {
+        if self.chip != Chip::Uc8179 {
+            return false;
+        }
+        self.experiment = experiment;
+        true
     }
 
     /// Keeps the frame rate the controller has from the factory: the X4
@@ -365,6 +518,8 @@ where
             self.fill(cmd::NEW, 0xFF)?;
         }
         self.old_valid = false;
+        self.synced = false;
+        self.dirty = None;
         self.gray_shown = false;
         self.powered = false;
         self.pending = None;
@@ -407,6 +562,24 @@ where
                 put(&mut self.frame, place, light(x, y));
             }
         }
+        let corners = [(0, top), (width - 1, top)]
+            .into_iter()
+            .chain([(0, top + height - 1), (width - 1, top + height - 1)]);
+        let area = corners
+            .map(|(x, y)| {
+                let (at, _) = self.place(x, y);
+                Area {
+                    first_byte: at % LINE,
+                    last_byte: at % LINE,
+                    first_line: at / LINE,
+                    last_line: at / LINE,
+                }
+            })
+            .reduce(Area::join);
+        self.dirty = match (self.dirty, area) {
+            (Some(dirty), Some(area)) => Some(dirty.join(area)),
+            (dirty, area) => dirty.or(area),
+        };
         Ok(())
     }
 
@@ -479,6 +652,8 @@ where
             self.old = vec![0; self.frame.len()];
             self.new = vec![0; self.frame.len()];
         }
+        // The frame changes unseen: the controller gets it whole.
+        self.synced = false;
         let height = rows.height.min(screen_height - top);
         for y in 0..height {
             for x in 0..width {
@@ -530,6 +705,8 @@ where
         self.send(cmd::OLD, Plane::Frame, false)?;
         self.send(cmd::NEW, Plane::Frame, false)?;
         self.old_valid = true;
+        self.synced = true;
+        self.dirty = None;
         self.gray_shown = true;
         Ok(())
     }
@@ -559,8 +736,18 @@ where
         // for a full one. Without, the bands are there; the frame shown
         // is made white for a full refresh.
         let kept = self.kept();
-        if kept {
-            self.send(cmd::NEW, Plane::Frame, false)?;
+        let dirty = self.dirty.take();
+        let synced = core::mem::replace(&mut self.synced, false);
+        // Only what changed goes over, where both memories hold the
+        // frame shown (and the area is in the lines in order the UC8179
+        // takes).
+        let sent = (fast && synced && self.transfer != Transfer::Whole && !s.lines_back && kept)
+            .then_some(dirty);
+        match sent {
+            Some(Some(area)) => self.send_area(cmd::NEW, area)?,
+            Some(None) => {}
+            None if kept => self.send(cmd::NEW, Plane::Frame, false)?,
+            None => {}
         }
         match refresh {
             _ if fast => {}
@@ -568,6 +755,9 @@ where
             Refresh::Half => {}
             _ => self.fill(cmd::OLD, 0xFF)?,
         }
+        let trial = self
+            .experiment
+            .filter(|_| fast && self.chip == Chip::Uc8179);
         let interval = if fast {
             s.interval_fast
         } else {
@@ -575,9 +765,18 @@ where
         };
         self.command(cmd::VCOM_DATA_INTERVAL, interval)?;
         self.command(cmd::CASCADE, &[0x02])?;
-        self.command(cmd::TEMPERATURE, &[if fast { 0x5A } else { 0x1E }])?;
+        let temperature = match trial.and_then(|trial| trial.own_at) {
+            Some(own) if fast => own as u8,
+            _ if fast => 0x5A,
+            _ => 0x1E,
+        };
+        self.command(cmd::TEMPERATURE, &[temperature])?;
         if !s.panel_after_power_on {
-            self.command(cmd::PANEL_SETTING, &s.panel_otp)?;
+            match trial {
+                // Its own waveforms, from the registers (as the grays).
+                Some(trial) if trial.own_at.is_none() => self.load_trial(&trial)?,
+                _ => self.command(cmd::PANEL_SETTING, &s.panel_otp)?,
+            }
         }
         if fast {
             self.command(cmd::POWER_OFF_SEQUENCE, &[0x20])?;
@@ -588,7 +787,7 @@ where
             self.command(cmd::PARTIAL_IN, &[])?;
             // The panel's lines whole: without the frame kept, the window
             // of the last band would be left.
-            if s.fast_in_window || !kept {
+            if s.fast_in_window || !kept || sent.is_some() {
                 let window = partial_window(0, PANEL_WIDTH, s.first_line, PANEL_HEIGHT);
                 self.command(cmd::PARTIAL_WINDOW, &window)?;
                 self.wait_ready()?;
@@ -599,9 +798,37 @@ where
         }
         self.command(cmd::REFRESH, &[])?;
         self.pending = Some(Pending {
+            sent,
             partial: fast,
             power_off,
+            restore_rate: trial
+                .is_some_and(|trial| trial.own_at.is_none() && trial.rate != OWN_RATE),
         });
+        Ok(())
+    }
+
+    /// Sets the panel to take its waveforms from the registers, loads
+    /// those of `trial` and its frame rate.
+    fn load_trial(&mut self, trial: &Experiment) -> Result<(), Error> {
+        let s = self.sequences();
+        self.command(cmd::PANEL_SETTING, &s.panel)?;
+        if let Some(power) = self.trial_power {
+            // The voltages of the OTP's own waveform, not the reset's.
+            self.command(
+                cmd::POWER_SETTING,
+                &[0x07, 0x10 | power.gate, power.vdh, power.vdl, power.vdhr],
+            )?;
+            self.command(cmd::VCOM_DC, &[power.vcom])?;
+        }
+        self.load_luts(
+            &trial
+                .drive
+                .uc8179_luts(trial.swapped, trial.repeat, trial.hold),
+        )?;
+        let rate = FRAME_RATES[trial.rate.min(FRAME_RATES.len() - 1)].0;
+        if trial.rate != OWN_RATE {
+            self.command(cmd::PLL, &[rate])?;
+        }
         Ok(())
     }
 
@@ -660,6 +887,7 @@ where
             self.powered = false;
         }
         self.old_valid = false;
+        self.synced = false;
         self.gray_shown = false;
         self.command(cmd::DEEP_SLEEP, &[0xA5])
     }
@@ -686,15 +914,24 @@ where
         if pending.partial {
             self.command(cmd::PARTIAL_OUT, &[])?;
         }
+        if pending.restore_rate {
+            self.command(cmd::PLL, &[FRAME_RATES[OWN_RATE].0])?;
+        }
         self.idle_interval()?;
         if let Err(e) = done {
             self.old_valid = false;
             return Err(e);
         }
-        if self.kept() {
-            self.send(cmd::OLD, Plane::Frame, false)?;
+        match pending.sent {
+            // The controller's copy of *new* is *old* now.
+            Some(_) if self.transfer == Transfer::Copied => {}
+            Some(Some(area)) => self.send_area(cmd::OLD, area)?,
+            Some(None) => {}
+            None if self.kept() => self.send(cmd::OLD, Plane::Frame, false)?,
+            None => {}
         }
         self.old_valid = true;
+        self.synced = self.kept();
         if pending.power_off {
             self.command(cmd::POWER_OFF, &[])?;
             self.wait_ready()?;
@@ -710,6 +947,7 @@ where
                 return Ok(());
             }
             self.delay.delay_ms(1);
+            self.busy_ms += 1;
         }
         Err(Error::Timeout)
     }
@@ -756,6 +994,42 @@ where
             }
         }
         Ok(())
+    }
+
+    /// Sends the lines and bytes of `area` of the frame into memory
+    /// `command`, through a window of the controller's memory (the
+    /// UC8179's lines last first, as [`Display::send`] has them).
+    fn send_area(&mut self, command: u8, area: Area) -> Result<(), Error> {
+        let width = (area.last_byte - area.first_byte + 1) * 8;
+        let lines = area.last_line - area.first_line + 1;
+        let window = partial_window(
+            (area.first_byte * 8) as u16,
+            width as u16,
+            PANEL_HEIGHT - 1 - area.last_line as u16,
+            lines as u16,
+        );
+        self.command(cmd::PARTIAL_IN, &[])?;
+        self.command(cmd::PARTIAL_WINDOW, &window)?;
+        self.wait_ready()?;
+        self.command(command, &[])?;
+        self.dc.set_high().map_err(|_| Error::Pin)?;
+        let Self {
+            spi, frame, buffer, ..
+        } = self;
+        buffer.clear();
+        for line in (area.first_line..=area.last_line).rev() {
+            let at = line * LINE;
+            buffer.extend_from_slice(&frame[at + area.first_byte..=at + area.last_byte]);
+            if buffer.len() >= bands::CHUNK {
+                spi.write(buffer).map_err(|_| Error::Spi)?;
+                buffer.clear();
+            }
+        }
+        if !buffer.is_empty() {
+            spi.write(buffer).map_err(|_| Error::Spi)?;
+            buffer.clear();
+        }
+        self.command(cmd::PARTIAL_OUT, &[])
     }
 
     /// Fills memory `command` with `value`.
@@ -860,6 +1134,8 @@ mod tests {
         temperatures: Vec<u8>,
         /// The memories at each refresh: *old*, then *new*.
         refreshed: Vec<(Vec<u8>, Vec<u8>)>,
+        /// The memories as addressed at each refresh: *old*, then *new*.
+        rams: Vec<(Vec<u8>, Vec<u8>)>,
         /// Each command with its data, in order.
         log: Vec<(u8, Vec<u8>)>,
         /// The memories as addressed (600 lines of 100 bytes), written in
@@ -881,7 +1157,10 @@ mod tests {
                 match b {
                     cmd::NEW => self.new.clear(),
                     cmd::OLD => self.old.clear(),
-                    cmd::REFRESH => self.refreshed.push((self.old.clone(), self.new.clone())),
+                    cmd::REFRESH => {
+                        self.refreshed.push((self.old.clone(), self.new.clone()));
+                        self.rams.push((self.ram_old.clone(), self.ram_new.clone()));
+                    }
                     cmd::PARTIAL_IN => self.partial = true,
                     cmd::PARTIAL_OUT => self.partial = false,
                     _ => {}
@@ -1125,6 +1404,154 @@ mod tests {
         assert_eq!(c.temperatures, [0x1E, 0x5A]);
         assert!(c.commands.contains(&cmd::PARTIAL_IN));
         assert!(c.commands.contains(&cmd::PARTIAL_OUT));
+    }
+
+    #[test]
+    fn a_trial_loads_its_waveforms_for_a_fast_refresh_and_only_for_that() {
+        let (mut d, c) = display();
+        let band = band_with(0, 0);
+        d.write_rows(0, view(&band, 8), Planes::NEW).unwrap();
+        // The first refresh drives every pixel: no trial.
+        d.set_experiment(Some(Experiment {
+            drive: Direct::new(2, 1),
+            swapped: false,
+            repeat: 0,
+            hold: 0,
+            rate: 4,
+            own_at: None,
+        }));
+        d.refresh(Refresh::Fast, false).unwrap();
+        assert!(c.borrow().last(0x22).is_none());
+        d.refresh(Refresh::Fast, false).unwrap();
+        {
+            let c = c.borrow();
+            // The panel takes its waveforms from the registers, loads the
+            // five, and asks the frame rate (60 Hz, code 7).
+            assert_eq!(c.last(cmd::PANEL_SETTING), Some(&UC8179.panel[..]));
+            for register in [0x20, 0x21, 0x22, 0x23, 0x24] {
+                assert_eq!(c.last(register).map(<[u8]>::len), Some(LUT_LEN));
+            }
+            assert_eq!(
+                c.last(0x22).map(|d| d[..6].to_vec()),
+                Some(vec![0b01_10_10_00, 1, 0, 2, 0, 0])
+            );
+            // Asked, and the controller's own (50 Hz, code 6) given back
+            // once the refresh ended.
+            let rates: Vec<u8> = c
+                .log
+                .iter()
+                .filter(|(command, _)| *command == cmd::PLL)
+                .map(|(_, data)| data[0])
+                .collect();
+            assert_eq!(rates, [0x07, 0x06]);
+        }
+        // A half refresh after it is the panel's own again.
+        let before = c.borrow().log.len();
+        d.refresh(Refresh::Half, false).unwrap();
+        let c = c.borrow();
+        let after: Vec<&(u8, Vec<u8>)> = c.log[before..].iter().collect();
+        assert!(
+            after
+                .iter()
+                .all(|(command, _)| !(0x20..=0x24).contains(command))
+        );
+        assert!(
+            after
+                .iter()
+                .any(|(command, data)| *command == cmd::PANEL_SETTING && data == &UC8179.panel_otp)
+        );
+    }
+
+    #[test]
+    fn the_own_frame_rate_is_not_asked_and_other_rates_are_given_back() {
+        let (mut d, c) = display();
+        let band = band_with(0, 0);
+        d.write_rows(0, view(&band, 8), Planes::NEW).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        let trial = |rate| Experiment {
+            drive: Direct::new(1, 0),
+            swapped: false,
+            repeat: 0,
+            hold: 0,
+            rate,
+            own_at: None,
+        };
+        d.set_experiment(Some(trial(OWN_RATE)));
+        d.refresh(Refresh::Fast, false).unwrap();
+        let plls = |c: &Controller| {
+            c.log
+                .iter()
+                .filter(|(command, _)| *command == cmd::PLL)
+                .count()
+        };
+        let at_start = plls(&c.borrow());
+        d.set_experiment(Some(trial(8)));
+        d.refresh(Refresh::Fast, false).unwrap();
+        // Asked, then given back: the controller's own again.
+        assert_eq!(plls(&c.borrow()), at_start + 2);
+        assert_eq!(c.borrow().last(cmd::PLL), Some(&[0x06][..]));
+    }
+
+    #[test]
+    fn a_trial_runs_at_the_otps_voltages_when_they_are_known() {
+        let (mut d, c) = display();
+        let band = band_with(0, 0);
+        d.write_rows(0, view(&band, 8), Planes::NEW).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        d.set_trial_power(Some(Power {
+            gate: 7,
+            vdh: 0x3F,
+            vdl: 0x3F,
+            vdhr: 0x0D,
+            vcom: 0x1A,
+        }));
+        d.set_experiment(Some(Experiment {
+            drive: Direct::new(3, 0),
+            swapped: false,
+            repeat: 1,
+            hold: 1,
+            rate: OWN_RATE,
+            own_at: None,
+        }));
+        d.refresh(Refresh::Fast, false).unwrap();
+        let c = c.borrow();
+        assert_eq!(
+            c.last(cmd::POWER_SETTING),
+            Some(&[0x07, 0x17, 0x3F, 0x3F, 0x0D][..])
+        );
+        assert_eq!(c.last(cmd::VCOM_DC), Some(&[0x1A][..]));
+    }
+
+    #[test]
+    fn the_panels_own_waveform_at_a_temperature_keeps_the_otp_and_forces_it() {
+        let (mut d, c) = display();
+        let band = band_with(0, 0);
+        d.write_rows(0, view(&band, 8), Planes::NEW).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        d.set_experiment(Some(Experiment {
+            drive: Direct::new(3, 0),
+            swapped: false,
+            repeat: 1,
+            hold: 0,
+            rate: 8,
+            own_at: Some(95),
+        }));
+        d.refresh(Refresh::Fast, false).unwrap();
+        let c = c.borrow();
+        // The OTP's waveform (REG = 0), the temperature as told, no
+        // registers loaded, no frame rate asked.
+        assert_eq!(c.last(cmd::PANEL_SETTING), Some(&UC8179.panel_otp[..]));
+        assert_eq!(c.temperatures.last(), Some(&95));
+        assert!(c.last(0x22).is_none());
+        assert!(c.last(cmd::PLL).is_none() || c.last(cmd::PLL) == Some(&[0x06][..]));
+    }
+
+    #[test]
+    fn only_a_uc8179_takes_a_trial() {
+        let (mut d, _) = display_of(Chip::Uc8279, Frame::Kept);
+        assert!(!d.set_experiment(None));
+        let (mut d, _) = display();
+        assert!(d.set_experiment(None));
     }
 
     /// A gray band of the upright screen, white but for its first four
@@ -1423,6 +1850,132 @@ mod tests {
         );
         let after = c.since(cmd::REFRESH);
         assert!(!after.contains(&cmd::OLD) && !after.contains(&cmd::NEW));
+    }
+
+    /// A display with a picture shown (one pixel white), set to send
+    /// `transfer`, and the controller's counts of bytes since.
+    fn shown_with(transfer: Transfer) -> (Simulated, Rc<RefCell<Controller>>) {
+        let (mut d, c) = display();
+        d.set_transfer(transfer);
+        let band = band_with(5, 3);
+        d.write_rows(0, view(&band, 8), Planes::BOTH).unwrap();
+        d.refresh(Refresh::Full, false).unwrap();
+        (d, c)
+    }
+
+    /// Writes the next picture's band (rows 16 to 24, a pixel white) and
+    /// shows it fast.
+    fn then_fast(d: &mut Simulated) {
+        let band = band_with(40, 3);
+        d.write_rows(16, view(&band, 8), Planes::NEW).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+    }
+
+    #[test]
+    fn changed_rows_leave_the_controller_with_the_same_frames() {
+        let (mut whole, w) = shown_with(Transfer::Whole);
+        then_fast(&mut whole);
+        let (mut changed, c) = shown_with(Transfer::Changed);
+        then_fast(&mut changed);
+        let (w, c) = (w.borrow(), c.borrow());
+        // At the refresh, and after it, both memories as with the whole
+        // frame sent.
+        assert_eq!(c.rams.last(), w.rams.last());
+        assert_eq!(c.ram_old, w.ram_old);
+        assert_eq!(c.ram_new, w.ram_new);
+        // The refresh is over the panel's lines whole, the area only sent:
+        // a band of the upright screen is 8 columns of the 480 lines.
+        assert_eq!(c.new.len(), 480);
+        assert_eq!(c.old.len(), 480);
+        assert_eq!(
+            c.last(cmd::PARTIAL_WINDOW),
+            Some(&[0x00, 0x10, 0x00, 0x17, 0x00, 0x00, 0x01, 0xDF, 0x01][..])
+        );
+        assert_eq!(w.new.len(), LINE * usize::from(ADDRESSED_LINES));
+        let refresh = c.log.iter().rposition(|(c, _)| *c == cmd::REFRESH).unwrap();
+        let window = c.log[..refresh]
+            .iter()
+            .rfind(|(c, _)| *c == cmd::PARTIAL_WINDOW)
+            .map(|(_, d)| &d[..]);
+        assert_eq!(
+            window,
+            Some(&[0x00, 0x00, 0x03, 0x1F, 0x00, 0x00, 0x01, 0xDF, 0x01][..])
+        );
+        // The window of *old* is left again.
+        assert_eq!(c.since(cmd::REFRESH).last(), Some(&cmd::PARTIAL_OUT));
+    }
+
+    #[test]
+    fn a_copied_frame_is_not_sent_again() {
+        let (mut d, c) = shown_with(Transfer::Copied);
+        then_fast(&mut d);
+        let c = c.borrow();
+        assert_eq!(c.new.len(), 480);
+        let after = c.since(cmd::REFRESH);
+        assert!(!after.contains(&cmd::OLD) && !after.contains(&cmd::NEW));
+    }
+
+    #[test]
+    fn a_fast_refresh_of_nothing_sends_nothing() {
+        let (mut d, c) = shown_with(Transfer::Changed);
+        d.refresh(Refresh::Fast, false).unwrap();
+        let c = c.borrow();
+        let after = c.since(cmd::VCOM_DATA_INTERVAL);
+        assert!(!after.contains(&cmd::OLD) && !after.contains(&cmd::NEW));
+    }
+
+    #[test]
+    fn what_is_not_known_to_be_in_the_controller_goes_whole() {
+        let whole = LINE * usize::from(ADDRESSED_LINES);
+        // After a start.
+        let (mut d, c) = display();
+        d.set_transfer(Transfer::Changed);
+        let band = band_with(5, 3);
+        d.write_rows(0, view(&band, 8), Planes::BOTH).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        assert_eq!(c.borrow().old.len(), whole);
+        // After grays.
+        let (mut d, c) = shown_with(Transfer::Changed);
+        let gray = gray_band();
+        d.write_gray_rows(0, gray_view(&gray)).unwrap();
+        d.refresh_gray().unwrap();
+        then_fast(&mut d);
+        assert_eq!(c.borrow().new.len(), whole);
+        // After sleep.
+        let (mut d, c) = shown_with(Transfer::Changed);
+        d.sleep().unwrap();
+        d.init().unwrap();
+        then_fast(&mut d);
+        assert_eq!(c.borrow().new.len(), whole);
+        // Then the area again.
+        then_fast(&mut d);
+        assert_eq!(c.borrow().new.len(), 480);
+    }
+
+    #[test]
+    fn the_rotated_screen_sends_its_rows() {
+        let (mut d, c) = shown_with(Transfer::Changed);
+        d.set_rotation(Rotation::Deg90);
+        let (mut w, wc) = shown_with(Transfer::Whole);
+        w.set_rotation(Rotation::Deg90);
+        for d in [&mut d, &mut w] {
+            let stride = usize::from(HEIGHT / 8);
+            let data = vec![0x0F; stride * 8];
+            let rows = FrameView {
+                width: HEIGHT,
+                height: 8,
+                stride,
+                format: PixelFormat::Mono1,
+                data: &data,
+            };
+            d.write_rows(24, rows, Planes::NEW).unwrap();
+            d.refresh(Refresh::Fast, false).unwrap();
+        }
+        // The turned screen's band is eight of the panel's 800 columns...
+        // across all of them: 8 lines of 100 bytes.
+        assert_eq!(c.borrow().new.len(), 8 * LINE);
+        assert_eq!(c.borrow().ram_old, wc.borrow().ram_old);
+        assert_eq!(c.borrow().ram_new, wc.borrow().ram_new);
     }
 
     #[test]

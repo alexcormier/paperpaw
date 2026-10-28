@@ -41,6 +41,7 @@ use embedded_hal::spi::SpiDevice;
 use paperpaw_platform::{FrameView, PixelFormat, Rotation};
 
 use crate::bands::{self, Window};
+use crate::waveform;
 
 /// The panel, as the controller addresses it.
 pub const PANEL_WIDTH: u16 = 800;
@@ -58,7 +59,7 @@ pub(crate) const BUSY_TIMEOUT_MS: u32 = 10_000;
 /// records it from the OpenX4 community SDK, MIT licence): 105 bytes of
 /// phases, timing and frame rate, then the gate voltage, the three source
 /// voltages and VCOM.
-const GRAY_LUT: [u8; 110] = [
+pub(crate) const GRAY_LUT: [u8; 110] = [
     0x00, 0x4A, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
     0x80, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
     0x88, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
@@ -120,6 +121,27 @@ impl GrayTone {
         lut
     }
 }
+
+/// A way to show fast refreshes other than the panel's own, for trying
+/// waveforms on a device (the waveform lab, `shells/xteink/src/lab.rs`).
+/// Set with [`Display::set_experiment`]; only fast refreshes take it, and
+/// the first after [`Display::init`] or after grays, which drive every
+/// pixel, do not. Everything else (full, half, grays) keeps the stock
+/// waveforms, so a full refresh cleans up after an experiment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Experiment {
+    /// The panel's own fast waveform, as it picks it for a panel at this
+    /// temperature, in degrees (0 to 90: the warm end is what the stock
+    /// half refresh asks for, [`Refresh::Half`]): the controller's own
+    /// tables, which the vendor made, faster the warmer they are meant for.
+    Temperature(i8),
+    /// A waveform made here ([`waveform::Direct`]), at the stock voltages.
+    Direct(waveform::Direct),
+}
+
+/// The coolest and the warmest temperature [`Experiment::Temperature`]
+/// takes.
+pub const TEMPERATURE_RANGE: (i8, i8) = (0, 90);
 
 /// The controller's commands used here.
 mod cmd {
@@ -215,6 +237,9 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     gray: bool,
     /// How dark the grays between come out.
     tone: GrayTone,
+    /// How fast refreshes are shown, in place of the panel's own, while
+    /// an experiment is on ([`Display::set_experiment`]).
+    experiment: Option<Experiment>,
     buffer: Vec<u8>,
 }
 
@@ -238,6 +263,7 @@ where
             rotation: Rotation::Deg0,
             gray: false,
             tone: GrayTone::default(),
+            experiment: None,
             buffer: Vec::new(),
         }
     }
@@ -390,6 +416,17 @@ where
         self.tone = tone;
     }
 
+    /// Shows fast refreshes as `experiment` says from now on, or as the
+    /// panel does with `None` (see [`Experiment`]).
+    pub fn set_experiment(&mut self, experiment: Option<Experiment>) {
+        self.experiment = experiment;
+    }
+
+    /// The experiment on, if any.
+    pub fn experiment(&self) -> Option<Experiment> {
+        self.experiment
+    }
+
     /// Shows the grays written by [`Display::write_gray_rows`], with the stock
     /// firmware's gray waveform (about as long as a full refresh). The next
     /// refresh drives every pixel (a half refresh), as after
@@ -472,7 +509,10 @@ where
                 self.command(cmd::WRITE_TEMPERATURE, &[0x5A])?;
                 0xD7
             }
-            Refresh::Fast => 0xFC,
+            Refresh::Fast => match self.experiment {
+                None => 0xFC,
+                Some(experiment) => self.start_experiment(experiment)?,
+            },
         };
         if power_off {
             sequence |= 0x03;
@@ -482,6 +522,35 @@ where
         // The full and half sequences power down at their end (0x03).
         self.powered = sequence & 0x03 == 0;
         Ok(())
+    }
+
+    /// What an experimental fast refresh sends before it is started, and
+    /// the sequence that starts it (as `0xFC` for the panel's own).
+    ///
+    /// The panel's own waveform at a temperature: that temperature is
+    /// written and not read from the sensor (the sequence without the bit
+    /// that loads it, `0xDC`), so the controller picks the table of that
+    /// range. A waveform of ours: loaded as the gray one is (`0xCC`, the
+    /// loaded waveform and not the panel's own), at the voltages of the
+    /// stock gray waveform, the ones this panel is driven with.
+    fn start_experiment(&mut self, experiment: Experiment) -> Result<u8, Error> {
+        match experiment {
+            Experiment::Temperature(celsius) => {
+                let (coolest, warmest) = TEMPERATURE_RANGE;
+                let celsius = celsius.clamp(coolest, warmest);
+                self.command(cmd::WRITE_TEMPERATURE, &[celsius as u8])?;
+                Ok(0xDC)
+            }
+            Experiment::Direct(direct) => {
+                let lut = direct.lut();
+                let voltages = &GRAY_LUT[waveform::LUT_LEN..];
+                self.command(cmd::WRITE_LUT, &lut)?;
+                self.command(cmd::GATE_VOLTAGE, &voltages[..1])?;
+                self.command(cmd::SOURCE_VOLTAGE, &voltages[1..4])?;
+                self.command(cmd::WRITE_VCOM, &voltages[4..5])?;
+                Ok(0xCC)
+            }
+        }
     }
 
     /// Turns the panel's power off after a refresh that left it on (a
@@ -572,6 +641,9 @@ mod tests {
         /// The first argument each command had last.
         first: [u8; 256],
         refreshes: Vec<(u8, u8)>,
+        /// What was sent as the waveform and as the temperature last.
+        lut: Vec<u8>,
+        temperature: Vec<u8>,
     }
 
     impl Controller {
@@ -590,6 +662,8 @@ mod tests {
                 commands: Vec::new(),
                 first: [0; 256],
                 refreshes: Vec::new(),
+                lut: Vec::new(),
+                temperature: Vec::new(),
             }))
         }
 
@@ -598,6 +672,11 @@ mod tests {
                 self.command = b;
                 self.args.clear();
                 self.commands.push(b);
+                match b {
+                    cmd::WRITE_LUT => self.lut.clear(),
+                    cmd::WRITE_TEMPERATURE => self.temperature.clear(),
+                    _ => {}
+                }
                 if b == cmd::ACTIVATE {
                     let control_1 = self.first[usize::from(cmd::UPDATE_CONTROL_1)];
                     let control_2 = self.first[usize::from(cmd::UPDATE_CONTROL_2)];
@@ -608,6 +687,11 @@ mod tests {
             self.args.push(b);
             if self.args.len() == 1 {
                 self.first[usize::from(self.command)] = b;
+            }
+            match self.command {
+                cmd::WRITE_LUT => self.lut.push(b),
+                cmd::WRITE_TEMPERATURE => self.temperature.push(b),
+                _ => {}
             }
             let word = |a: &[u8], i: usize| u16::from(a[i]) | u16::from(a[i + 1]) << 8;
             match self.command {
@@ -1220,6 +1304,113 @@ mod tests {
             .map(|&(_, two)| two)
             .collect();
         assert_eq!(sequences, [0xD7, 0xFC, 0x03]);
+    }
+
+    type Shown = (Rc<RefCell<Controller>>, Display<Spi, Dc, Pin, Busy, Delay>);
+
+    /// A display that has shown two frames (the first is a half refresh),
+    /// so the next fast refresh is one.
+    fn shown_twice() -> Shown {
+        let controller = Controller::new();
+        let mut display = Display::new(
+            Spi(controller.clone()),
+            Dc(controller.clone()),
+            Pin,
+            Busy,
+            Delay,
+        );
+        display.init().unwrap();
+        display.refresh(Refresh::Fast, false).unwrap();
+        display.refresh(Refresh::Fast, false).unwrap();
+        (controller, display)
+    }
+
+    #[test]
+    fn an_experiment_at_a_temperature_writes_it_and_loads_the_panels_waveform() {
+        let (controller, mut display) = shown_twice();
+        display.set_experiment(Some(Experiment::Temperature(45)));
+        display.refresh(Refresh::Fast, false).unwrap();
+        // The temperature is not read from the sensor (bit 5 of the
+        // sequence), the panel's own table is loaded (bit 4).
+        let c = controller.borrow();
+        assert_eq!(c.temperature, [45]);
+        assert_eq!(c.refreshes.last(), Some(&(0x00, 0xDC)));
+        assert!(!c.commands.ends_with(&[cmd::WRITE_LUT]));
+    }
+
+    #[test]
+    fn an_experiment_keeps_to_the_temperatures_of_the_stock_firmware() {
+        let (controller, mut display) = shown_twice();
+        for (asked, written) in [(-30, 0), (0, 0), (25, 25), (90, 90), (120, 90)] {
+            display.set_experiment(Some(Experiment::Temperature(asked)));
+            display.refresh(Refresh::Fast, false).unwrap();
+            assert_eq!(controller.borrow().temperature, [written as u8], "{asked}");
+        }
+    }
+
+    #[test]
+    fn a_direct_experiment_loads_its_waveform_at_the_stock_voltages() {
+        let (controller, mut display) = shown_twice();
+        let direct = waveform::Direct::new(6, 1);
+        display.set_experiment(Some(Experiment::Direct(direct)));
+        display.refresh(Refresh::Fast, false).unwrap();
+        let c = controller.borrow();
+        assert_eq!(c.lut, direct.lut());
+        // Loaded as the gray waveform is: the loaded one, not the panel's.
+        assert_eq!(c.refreshes.last(), Some(&(0x00, 0xCC)));
+        // The voltages are the stock gray waveform's, not new ones.
+        assert_eq!(c.first[usize::from(cmd::GATE_VOLTAGE)], GRAY_LUT[105]);
+        assert_eq!(c.first[usize::from(cmd::SOURCE_VOLTAGE)], GRAY_LUT[106]);
+        assert_eq!(c.first[usize::from(cmd::WRITE_VCOM)], GRAY_LUT[109]);
+        assert!(display.powered(), "left on, as after a fast refresh");
+    }
+
+    #[test]
+    fn only_fast_refreshes_take_an_experiment() {
+        let (controller, mut display) = shown_twice();
+        display.set_experiment(Some(Experiment::Direct(waveform::Direct::new(4, 0))));
+        display.refresh(Refresh::Half, false).unwrap();
+        display.refresh(Refresh::Full, false).unwrap();
+        display.refresh_gray().unwrap();
+        let sequences: Vec<u8> = controller
+            .borrow()
+            .refreshes
+            .iter()
+            .map(|&(_, two)| two)
+            .collect();
+        // The two fast ones before, then the stock half and full, the grays.
+        assert_eq!(sequences, [0xD7, 0xFC, 0xD7, 0xF7, 0xCC]);
+        // And the stock fast again once the experiment is off.
+        display.set_experiment(None);
+        display.refresh(Refresh::Fast, false).unwrap();
+        display.refresh(Refresh::Fast, false).unwrap();
+        let last: Vec<u8> = controller
+            .borrow()
+            .refreshes
+            .iter()
+            .rev()
+            .take(2)
+            .map(|&(_, two)| two)
+            .collect();
+        assert_eq!(last, [0xFC, 0xD7], "grays are followed by a half refresh");
+    }
+
+    #[test]
+    fn the_first_refresh_is_not_an_experiment() {
+        let controller = Controller::new();
+        let mut display = Display::new(
+            Spi(controller.clone()),
+            Dc(controller.clone()),
+            Pin,
+            Busy,
+            Delay,
+        );
+        display.init().unwrap();
+        display.set_experiment(Some(Experiment::Temperature(60)));
+        display.refresh(Refresh::Fast, false).unwrap();
+        // Nothing is known to be shown yet: every pixel is driven, the
+        // stock way.
+        assert_eq!(controller.borrow().refreshes, [(0x40, 0xD7)]);
     }
 
     #[test]

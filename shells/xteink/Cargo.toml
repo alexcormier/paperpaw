@@ -20,7 +20,7 @@ test = false
 bench = false
 
 [features]
-default = ["x4", "remote"]
+default = ["x4", "remote", "waveform-lab"]
 # Which device: the X4 or the X3 (ESP32-C3, built with the Rust of
 # `rust-toolchain.toml`; the X3 experimental, `cargo x3`), the X4 Pro or
 # the X4 Classic (ESP32-S3, Xtensa: espup's `esp` toolchain of
@@ -67,6 +67,10 @@ remote = [
     # The diagnostics screen, for bringing up devices.
     "paperpaw-app/diagnostics",
 ]
+# The waveform lab (`src/lab.rs`): a screen under Tools to try how the
+# X4's panel is driven, with other waveforms than the stock ones. The X4
+# only; developer builds.
+waveform-lab = []
 # The frame test built in (`samples/frame-test`, ADR 0030), for measuring
 # frames a second, blits and the heap on the device: test builds only.
 frame-test = ["dep:paperpaw-sample-frame-test"]

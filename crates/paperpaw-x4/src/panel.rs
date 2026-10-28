@@ -31,6 +31,14 @@ pub enum Device {
     X3,
 }
 
+/// A way to show fast refreshes other than the panel's own, for the
+/// waveform lab, by the controller it is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Experiment {
+    Ssd1677(display::Experiment),
+    Uc8179(uc8179::Experiment),
+}
+
 /// A panel, its controller's driver.
 #[derive(Debug)]
 pub enum Panel<SPI, DC, RST, BUSY, D> {
@@ -175,6 +183,53 @@ where
     pub fn set_gray_tone(&mut self, tone: display::GrayTone) {
         if let Panel::Ssd1677 { display, .. } = self {
             display.set_gray_tone(tone);
+        }
+    }
+
+    /// Shows fast refreshes as `experiment` says; `false` where this
+    /// controller cannot (only the SSD1677's and the UC8179's waveforms can
+    /// be tried), or where `experiment` is for the other, which then show
+    /// them their own way as before.
+    pub fn set_experiment(&mut self, experiment: Option<Experiment>) -> bool {
+        match self {
+            Panel::Ssd1677 { display, .. } => {
+                display.set_experiment(match experiment {
+                    Some(Experiment::Ssd1677(experiment)) => Some(experiment),
+                    _ => None,
+                });
+                true
+            }
+            Panel::UltraChip(display) => display.set_experiment(match experiment {
+                Some(Experiment::Uc8179(experiment)) => Some(experiment),
+                _ => None,
+            }),
+            Panel::Uc8253(_) => false,
+        }
+    }
+
+    /// The voltages the UC8179's waveforms from the registers run at (those
+    /// of the OTP's own waveform, see `uc8179::Power`); no other
+    /// controller has them.
+    pub fn set_trial_power(&mut self, power: Option<uc8179::Power>) {
+        if let Panel::UltraChip(display) = self {
+            display.set_trial_power(power);
+        }
+    }
+
+    /// How much of the frame the UC8179 sends for a fast refresh (see
+    /// `uc8179::Transfer`); no other controller has a choice.
+    pub fn set_transfer(&mut self, transfer: uc8179::Transfer) {
+        if let Panel::UltraChip(display) = self {
+            display.set_transfer(transfer);
+        }
+    }
+
+    /// The milliseconds the UC8179 waited for its busy pin since the last
+    /// call (0 for the others).
+    pub fn take_busy_ms(&mut self) -> u32 {
+        match self {
+            Panel::UltraChip(display) => display.take_busy_ms(),
+            _ => 0,
         }
     }
 

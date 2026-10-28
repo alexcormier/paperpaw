@@ -2478,7 +2478,9 @@ dependencies = [
  "embedded-hal",
  "paperpaw-app",
  "paperpaw-core",
+ "paperpaw-graphics",
  "paperpaw-platform",
+ "paperpaw-sdk",
  "smoltcp",
 ]
 

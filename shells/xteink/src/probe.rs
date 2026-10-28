@@ -75,43 +75,49 @@ pub fn ask<'d>(
         reset: Output::new(reset, Level::High, OutputConfig::default()),
         busy: Input::new(busy, InputConfig::default()),
     };
-    probe::probe(&mut lines, &mut delay, reset_ms)
+    let probe = probe::probe(&mut lines, &mut delay, reset_ms);
+    // The waveform lab: what a UC8179's OTP holds, read while the lines are
+    // still ours (a hundred milliseconds more at start, developer builds).
+    #[cfg(any(feature = "waveform-lab", feature = "x4-pro"))]
+    if probe.controller() == Some(probe::Controller::Uc8179) {
+        // All of the bank for the log in developer builds, else the
+        // voltages' part (about 65 ms, a waveform of the registers runs at
+        // them).
+        let len = if cfg!(feature = "waveform-lab") {
+            paperpaw_x4::otp::READ_LEN
+        } else {
+            paperpaw_x4::otp::POWER_LEN
+        };
+        let mut otp = alloc::vec![0u8; len];
+        probe::read_otp(&mut lines, &mut delay, &mut otp);
+        critical_section::with(|cs| OTP.borrow_ref_mut(cs).replace(otp));
+    }
+    probe
 }
 
-/// The controller the factory wrote down for the panel, in the factory's
-/// NVS (`hw_calib`, `screenType`; see `paperpaw_x4::nvs`), if it did:
-/// only read. The X4 Classic's partition table keeps that NVS whole.
-#[cfg(feature = "x4-classic")]
-pub fn factory_controller(flash: &crate::ota::Flash) -> Option<probe::Controller> {
-    use alloc::boxed::Box;
-    use esp_bootloader_esp_idf::partitions::{
-        self, DataPartitionSubType, PARTITION_TABLE_MAX_LEN, PartitionType,
-    };
-    use paperpaw_x4::nvs;
+/// The UC8179's OTP, as far as it was read (see [`ask`]).
+#[cfg(any(feature = "waveform-lab", feature = "x4-pro"))]
+static OTP: critical_section::Mutex<core::cell::RefCell<Option<alloc::vec::Vec<u8>>>> =
+    critical_section::Mutex::new(core::cell::RefCell::new(None));
 
-    let mut flash = flash.borrow_mut();
-    let mut table = Box::new([0u8; PARTITION_TABLE_MAX_LEN]);
-    let (offset, len) = partitions::read_partition_table(&mut flash, &mut table[..])
-        .ok()?
-        .find_partition(PartitionType::Data(DataPartitionSubType::Nvs))
-        .ok()
-        .flatten()
-        .map(|p| (p.offset(), p.len()))?;
-    let pages = len as usize / nvs::PAGE;
-    let mut page = alloc::vec![0u8; nvs::PAGE];
-    let mut read =
-        |i: usize, page: &mut [u8]| flash.read(offset + (i * nvs::PAGE) as u32, page).is_ok();
-    let index = (0..pages).find_map(|i| {
-        read(i, &mut page)
-            .then(|| nvs::namespace(&page, "hw_calib"))
-            .flatten()
-    })?;
-    let screen_type = (0..pages).find_map(|i| {
-        read(i, &mut page)
-            .then(|| nvs::integer(&page, index, "screenType"))
-            .flatten()
-    })?;
-    let controller = probe::factory_controller(screen_type);
-    log::info!("display: the factory's screen type {screen_type} ({controller:?})");
-    controller
+/// Tells the log what the OTP holds, if it was read: the vendor's own
+/// waveforms, to compare with the lab's (see `paperpaw_x4::otp`).
+#[cfg(feature = "waveform-lab")]
+pub fn log_otp() {
+    let otp = critical_section::with(|cs| OTP.borrow_ref(cs).clone());
+    if let Some(otp) = otp {
+        for line in paperpaw_x4::otp::describe(&otp) {
+            log::info!("{line}");
+        }
+    }
+}
+
+/// The voltages of the OTP's own fast waveform (the range 90 degrees select,
+/// as the fast refresh asks for), if the OTP was read: what a waveform from
+/// the registers runs at (the lab's, the X4 Pro's menus'), not the
+/// controller's reset values.
+#[cfg(any(feature = "waveform-lab", feature = "x4-pro"))]
+pub fn otp_power() -> Option<paperpaw_x4::uc8179::Power> {
+    let otp = critical_section::with(|cs| OTP.borrow_ref(cs).clone())?;
+    paperpaw_x4::otp::power(&otp, 90)
 }

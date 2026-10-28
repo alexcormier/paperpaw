@@ -6,11 +6,69 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- X4 (with an SSD1677 panel, as most have): a setting, *Fast changes* (Display), says how menus and a moved focus
+  are shown: the panel's own waveform (500 ms, the cleanest) or a quicker
+  one of 8, 6 or 4 frames (found in the waveform lab; about 160 ms with 4),
+  which leave more ghosting that the next full refresh clears. It is
+  *Quicker, some ghosting* (6 frames) by default; page turns are as before.
+  Black-and-white refreshes (screens that ask for `fastest`, such as games)
+  take about 100 ms, with 1 frame. The frames and the kick of both are
+  settings of the developer group (`x4.ssd1677.fast-frames`, `x4.ssd1677.fast-kick`,
+  `x4.ssd1677.mono-frames`, `x4.ssd1677.mono-kick`, offered only where the panel's
+  controller is an SSD1677; the fast ones where *Fast changes* is
+  *Own values*), so a plugin without code can set them in its `settings.ini`
+  or by an action; the firmware keeps them in the order of the modes (fast
+  at most 20 frames, black and white no more than fast).
+
 ### Added
 
+- X4 Pro (a UC8179 controller): the fastest refresh (screens that ask for `fastest`,
+  such as games) has numbers of its own, the developer settings `x4.uc8179.mono-frames`
+  (12), `x4.uc8179.mono-hold` (0) and `x4.uc8179.mono-rate` (200 Hz): about 175 ms
+  by the formula (3 frames at 100 Hz were far too grey, 6 nearly clean: the drive
+  needs about 60 ms, whatever the rate). The frame rates go up to 200 Hz (110, 130,
+  150, 200 added); the log says how long the setup and the refresh waited for the
+  controller. It took the step of *Fast changes* (7 frames, hold 3,
+  about 330 ms, no ghosts) before. The numbers are a guess, to tune on a device.
+- X4 Pro (a UC8179 controller): a developer setting, `x4.uc8179.transfer`, says how much
+  of the picture goes to the controller for a fast change: the whole (what the
+  stock firmware sends), only the rows and columns that changed (into both
+  memories), or only into the new memory, leaving the controller's own copy to
+  make the old one (the default: about 50 ms less a fast change, 329 instead of
+  379 ms at 7 frames, judged right on a device). The refresh itself
+  still covers the whole display, so the hold keeps working. The whole picture
+  goes again after a start, a sleep, grays and the slow refreshes.
+
+- X4 Pro (a UC8179 controller): *Fast changes* (Display) says how menus and a moved
+  focus are shown, as on the X4: the panel's own waveform (625 ms) or a quicker
+  one of the controller's registers, run at the voltages of the panel's own
+  waveform (read from its OTP at start, about 65 ms more): 6, 7 (the default) or 10
+  frames with 3 held (about 360, 380 and 440 ms), or own values in the developer
+  settings (`x4.uc8179.*`). Found with the waveform lab on a device.
+- The waveform lab's direct drive on the X4 Pro can hold the pixels that stay (0 to 3
+  frames driven to their own colour, as the controller's own fast waveform does
+  for one frame), which keeps the ghosts of earlier frames down.
+- The waveform lab's direct drive on the X4 Pro runs at the voltages and VCOM of the
+  controller's own waveform (read from its OTP at start), not the reset values
+  of its registers (VDH and VDL 14.0 V, VCOM_DC next to nothing); and the lab can
+  show the panel's own waveform at a temperature (up to 120 degrees) on a UC8179
+  too.
+- Developer firmware of the X4 Pro (`x4pro` builds) reads the controller's OTP at start (a
+  UC8179, about 100 ms) and tells the log what its own waveforms are: the
+  temperature ranges, their frame rate, voltages and VCOM, and the states of the
+  ranges 25 and 90 degrees select (`otp:` lines).
+- The waveform lab also runs on the X4 Pro (a UC8179 controller): a direct drive
+  made of the controller's waveform registers, with the frames, the kick, the
+  frame rate (20 to 100 Hz), the repeat and the levels of white and black to try,
+  at the controller's own voltages. Developer firmware (`x4pro` builds).
 - `tools/flash-x4.py` builds the checked-out source and flashes it to an X4,
   X4 Pro, X4 Classic or X3 over USB, with a check of the tools, an optional
   backup of the reader's flash and a dry run.
+- The developer firmware of the X4 has a *Waveform lab* under Tools, for
+  trying how the panel is driven: its own tables at a temperature, or a
+  direct drive with the frames and the kick chosen on the screen.
 
 ### Changed
 

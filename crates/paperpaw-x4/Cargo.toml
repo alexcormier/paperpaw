@@ -20,6 +20,9 @@ paperpaw-platform.workspace = true
 smoltcp = { version = "0.12", default-features = false, features = ["medium-ethernet", "proto-ipv4", "socket-udp", "alloc"] }
 paperpaw-core.workspace = true
 paperpaw-app.workspace = true
+# The waveform lab's screen, tried on the host (`tests/waveform_lab.rs`).
+paperpaw-sdk = { workspace = true, features = ["kernel"] }
+paperpaw-graphics.workspace = true
 
 [lints]
 workspace = true
