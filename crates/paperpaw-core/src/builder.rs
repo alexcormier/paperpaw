@@ -579,6 +579,7 @@ impl BuilderParts {
             },
             frame: drawing::FrameState {
                 pending: None,
+                pending_weight: 0,
                 unrendered: None,
                 rendered: None,
                 row_align: self.row_align,

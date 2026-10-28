@@ -14,6 +14,8 @@ use super::*;
 pub(crate) struct FrameState {
     /// The part of the screen to redraw at the end of the current call.
     pub(crate) pending: Option<Rect>,
+    /// The areas of what was asked for in `pending`, added up.
+    pub(crate) pending_weight: u32,
     /// What changed but has not been passed to [`Kernel::render`] yet.
     pub(crate) unrendered: Option<Rect>,
     /// What [`Kernel::render`] passed last, for [`Kernel::rerender`].
@@ -328,6 +330,10 @@ impl Kernel {
             return;
         };
         self.frame.pending = Some(self.frame.pending.map_or(region, |p| p.union(&region)));
+        self.frame.pending_weight = self
+            .frame
+            .pending_weight
+            .saturating_add(u32::from(region.width) * u32::from(region.height));
     }
 
     /// Redraws `region`: the topmost full screen and every overlay above

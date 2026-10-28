@@ -131,6 +131,13 @@ change the plugin SDK.
 
 ### Fixed
 
+- Moving the focus between two items far apart on the home screen (the edit pencil
+  and a *Continue reading* widget with a cover) no longer refreshes the whole panel
+  in full at every step. The kernel took the rectangle round the two items for a page
+  (half the screen or more) and, with a large picture on the screen, refreshed it in
+  full; it also counted every such step towards the full refresh every few pages. It
+  now goes by what was drawn (the areas added up), not by the rectangle round them;
+  a whole screen drawn anew, a page, is as before.
 - The row of hints that comes on a press (in the reader, with the buttons below the
   screen) is shown and taken away with a normal partial refresh, not a fast one: with
   the quicker waveforms of *Fast changes* it left ghosts of the page's text at the

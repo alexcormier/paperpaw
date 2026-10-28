@@ -3007,6 +3007,41 @@ fn leaving_a_large_picture_refreshes_in_full() {
     assert!(!kernel.frame.pictures_shown);
 }
 
+#[test]
+fn two_small_items_far_apart_are_no_page_and_keep_a_picture_in_place() {
+    let shown = Rc::new(RefCell::new(true));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(PicturePlugin(shown.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    let mode = |effects: crate::Effects| effects.refresh().map(|(region, mode)| (region, mode));
+    kernel.apply(Command::Redraw(RefreshMode::Partial));
+    kernel.finish();
+    render(&mut kernel);
+    assert!(kernel.frame.pictures_shown);
+    // The focus moves from an item at the top to one at the bottom: the
+    // rectangle round them is the screen, what is drawn is two items. The
+    // picture stays as it is: no full refresh to clear it, nor one of
+    // the sixth step.
+    let screen = kernel.framebuffer.bounds();
+    for _ in 0..12 {
+        let (w, h) = (screen.width / 5, screen.height / 5);
+        kernel.invalidate(Rect::new(0, 0, w, h));
+        kernel.invalidate(Rect::new(screen.width - w, screen.height - h, w, h));
+        let (region, mode) = mode(kernel.finish()).unwrap();
+        assert_eq!(region, screen);
+        assert_eq!(mode, RefreshMode::Partial);
+        render(&mut kernel);
+    }
+    // A whole screen drawn anew still is a page, and leaving the
+    // picture still refreshes in full.
+    *shown.borrow_mut() = false;
+    kernel.apply(Command::Redraw(RefreshMode::Partial));
+    assert_eq!(mode(kernel.finish()).map(|m| m.1), Some(RefreshMode::Full));
+}
+
 /// Writes down the network's events, and asks for Wi-Fi on when the
 /// network is wanted (as the `wifi` plugin does).
 struct NetPlugin(Log);

@@ -12,9 +12,29 @@ use paperpaw_platform::{Rect, RefreshMode};
 #[derive(Debug, Default)]
 pub(crate) struct RefreshPolicy {
     partials: u32,
+    /// What the areas asked for since the last refresh add up to (they
+    /// may overlap, and the region refreshed is the one rectangle around
+    /// them): two items far apart are a region of most of the screen, but
+    /// no page. `None`: the region is taken as it is.
+    weight: Option<u32>,
 }
 
 impl RefreshPolicy {
+    /// Says what the areas drawn for the refresh that is decided and done
+    /// next add up to (see the field), or `None` for what lies in the
+    /// region.
+    pub(crate) fn weigh(&mut self, weight: Option<u32>) {
+        self.weight = weight;
+    }
+
+    /// Whether `region` is most of `screen` (half or more) as far as what
+    /// was asked for in it goes: a page.
+    fn is_page(&self, region: Rect, screen: Rect) -> bool {
+        let area = |r: Rect| u32::from(r.width) * u32::from(r.height);
+        let drawn = self.weight.map_or(area(region), |w| w.min(area(region)));
+        drawn * 2 >= area(screen)
+    }
+
     /// Returns the mode and region to refresh. `interval == 0` disables the
     /// periodic full refresh.
     pub(crate) fn decide(
@@ -26,7 +46,7 @@ impl RefreshPolicy {
     ) -> (RefreshMode, Rect) {
         match requested {
             RefreshMode::Partial | RefreshMode::Gray
-                if interval > 0 && is_page(dirty, screen) && self.partials + 1 >= interval =>
+                if interval > 0 && self.is_page(dirty, screen) && self.partials + 1 >= interval =>
             {
                 (RefreshMode::Full, screen)
             }
@@ -44,7 +64,7 @@ impl RefreshPolicy {
     pub(crate) fn done(&mut self, mode: RefreshMode, region: Rect, screen: Rect) {
         match mode {
             RefreshMode::Full | RefreshMode::Clear => self.partials = 0,
-            RefreshMode::Partial | RefreshMode::Gray if is_page(region, screen) => {
+            RefreshMode::Partial | RefreshMode::Gray if self.is_page(region, screen) => {
                 self.partials = self.partials.saturating_add(1)
             }
             // Smaller ones, fast and black and white leave ghosting as
@@ -52,12 +72,6 @@ impl RefreshPolicy {
             _ => {}
         }
     }
-}
-
-/// Whether `region` is most of `screen` (half or more): a page.
-fn is_page(region: Rect, screen: Rect) -> bool {
-    let area = |r: Rect| u32::from(r.width) * u32::from(r.height);
-    area(region) * 2 >= area(screen)
 }
 
 #[cfg(test)]

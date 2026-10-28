@@ -93,13 +93,16 @@ impl Kernel {
             ..Effects::default()
         };
         if let Some(dirty) = self.frame.pending.take() {
+            let area = |r: Rect| u32::from(r.width) * u32::from(r.height);
+            let mut weight = mem::take(&mut self.frame.pending_weight);
             self.frame.unrendered = Some(self.frame.unrendered.map_or(dirty, |u| u.union(&dirty)));
             // What a filter deferred goes with this refresh.
-            let dirty = self
-                .frame
-                .deferred
-                .take()
-                .map_or(dirty, |d| d.union(&dirty));
+            let dirty = self.frame.deferred.take().map_or(dirty, |d| {
+                weight = weight.saturating_add(area(d));
+                d.union(&dirty)
+            });
+            // Items far apart make a large region without being much.
+            let weight = weight.min(area(dirty));
             let interval = match mode.does_clean_itself() {
                 // Cleaned when the screen asks, never every few frames.
                 true => 0,
@@ -116,11 +119,10 @@ impl Kernel {
             };
             // Leaving large pictures: a fast refresh would keep their ghost
             // (not where the mode was set exactly).
-            let area = |r: Rect| u32::from(r.width) * u32::from(r.height);
             if set.is_none()
                 && !mode.does_clean_itself()
                 && self.frame.pictures_shown
-                && area(dirty) * 2 >= area(screen)
+                && weight * 2 >= area(screen)
             {
                 requested = RefreshMode::Full;
             }
@@ -134,13 +136,14 @@ impl Kernel {
                     && !mode.does_clean_itself()
                     && pictures
                     && !again
-                    && area(dirty) * 2 >= area(screen)
+                    && weight * 2 >= area(screen)
                     && self.shared.device.display.format.gray_levels() == Some(2)
                     && self
                         .shared
                         .settings
                         .bool(core_settings::PICTURES_IN_GRAYS.as_str())
                     && self.pictures_drawn());
+            self.frame.refresh.weigh(Some(weight));
             let (mode, region) = self
                 .frame
                 .refresh
@@ -178,6 +181,7 @@ impl Kernel {
                     self.frame
                         .refresh
                         .done(refresh.mode, refresh.region, screen);
+                    self.frame.refresh.weigh(None);
                     effects.refresh = Some((refresh.region, refresh.mode));
                     effects.grays = refresh.grays;
                     self.frame_asked();
