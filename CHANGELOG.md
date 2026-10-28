@@ -24,6 +24,9 @@ change the plugin SDK.
 
 ### Added
 
+- The waveform lab's direct drive on the X4 Pro can hold the pixels that stay (0 to 3
+  frames driven to their own colour, as the controller's own fast waveform does
+  for one frame), which keeps the ghosts of earlier frames down.
 - The waveform lab's direct drive on the X4 Pro runs at the voltages and VCOM of the
   controller's own waveform (read from its OTP at start), not the reset values
   of its registers (VDH and VDL 14.0 V, VCOM_DC next to nothing); and the lab can

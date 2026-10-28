@@ -66,6 +66,7 @@ const TEMPERATURE: &str = "x4.lab.temperature";
 const FRAMES: &str = "x4.lab.frames";
 const KICK: &str = "x4.lab.kick";
 const REPEAT: &str = "x4.lab.repeat";
+const HOLD: &str = "x4.lab.hold";
 const RATE: &str = "x4.lab.rate";
 const SWAPPED: &str = "x4.lab.swapped";
 
@@ -78,7 +79,7 @@ static BY_FIVE: SettingExtra = SettingExtra::new().step(5);
 static BY_TEN: SettingExtra = SettingExtra::new().step(10);
 
 /// The settings the lab keeps (registered by `device`).
-pub static SETTINGS: [SettingSpec; 7] = [
+pub static SETTINGS: [SettingSpec; 8] = [
     SettingSpec::choice(
         WAVEFORM,
         "x4.lab.waveform",
@@ -124,6 +125,7 @@ pub static SETTINGS: [SettingSpec; 7] = [
     )
     .with_extra(&BY_TEN),
     SettingSpec::switch(SWAPPED, "x4.lab.polarity", false, groups::DEVELOPER),
+    SettingSpec::number(HOLD, "x4.lab.hold", 0, 3, 1, groups::DEVELOPER),
 ];
 
 /// After this many flips without a clean-up the lab says to clean up, and
@@ -195,6 +197,7 @@ pub fn experiment(active: Option<&Id>, settings: &Settings) -> Option<Experiment
             drive: drive(),
             swapped: false,
             repeat: 1,
+            hold: 0,
             rate: uc8179::OWN_RATE,
             own_at: Some(settings.int(TEMPERATURE).clamp(-25, 127) as i8),
         })),
@@ -208,6 +211,7 @@ pub fn experiment(active: Option<&Id>, settings: &Settings) -> Option<Experiment
                 drive: drive(),
                 swapped: settings.bool(SWAPPED),
                 repeat: number(REPEAT).min(1),
+                hold: number(HOLD).min(3),
                 rate,
                 own_at: None,
             }))
@@ -237,6 +241,7 @@ enum Control {
     Repeat,
     Rate,
     Polarity,
+    Hold,
     Picture,
     Auto,
     Clean,
@@ -253,6 +258,7 @@ impl Control {
             Control::Repeat => 4,
             Control::Rate => 5,
             Control::Polarity => 6,
+            Control::Hold => 7,
             Control::Picture | Control::Auto | Control::Clean => return None,
         };
         Some(&SETTINGS[index])
@@ -267,6 +273,7 @@ impl Control {
                 | Control::Kick
                 | Control::Repeat
                 | Control::Rate
+                | Control::Hold
         )
     }
 
@@ -279,6 +286,7 @@ impl Control {
             Control::Repeat => "x4.lab.repeat",
             Control::Rate => "x4.lab.rate",
             Control::Polarity => "x4.lab.polarity",
+            Control::Hold => "x4.lab.hold",
             Control::Picture => "x4.lab.picture",
             Control::Auto => "x4.lab.auto",
             Control::Clean => "x4.lab.clean",
@@ -295,7 +303,7 @@ fn controls(waveform: &str) -> &'static [Control] {
         }
         (Support::Ssd1677, DIRECT) => &[Waveform, Frames, Kick, Picture, Auto, Clean],
         (Support::Uc8179, DIRECT) => &[
-            Waveform, Frames, Kick, Rate, Repeat, Polarity, Picture, Auto, Clean,
+            Waveform, Frames, Kick, Hold, Rate, Repeat, Polarity, Picture, Auto, Clean,
         ],
         _ => &[Waveform, Picture, Auto, Clean],
     }
@@ -374,6 +382,7 @@ impl Lab {
             Control::Kick => format!("{}", settings.int(KICK)),
             Control::Repeat => format!("{}", settings.int(REPEAT)),
             Control::Rate => format!("{} Hz", settings.int(RATE)),
+            Control::Hold => format!("{}", settings.int(HOLD)),
             Control::Polarity => String::new(),
             Control::Picture => tr(match self.pattern {
                 0 => "x4.lab.picture.stripes",

@@ -147,6 +147,9 @@ pub struct Experiment {
     pub swapped: bool,
     /// The group's times to repeat, 0 or 1.
     pub repeat: u8,
+    /// Frames (0 to 3) a pixel that stays is driven to its own colour
+    /// ([`Direct::uc8179_luts`]).
+    pub hold: u8,
     /// The frame rate, an index of [`FRAME_RATES`].
     pub rate: usize,
     /// The panel's own waveform, the OTP's, at this temperature in degrees
@@ -708,7 +711,11 @@ where
             )?;
             self.command(cmd::VCOM_DC, &[power.vcom])?;
         }
-        self.load_luts(&trial.drive.uc8179_luts(trial.swapped, trial.repeat))?;
+        self.load_luts(
+            &trial
+                .drive
+                .uc8179_luts(trial.swapped, trial.repeat, trial.hold),
+        )?;
         let rate = FRAME_RATES[trial.rate.min(FRAME_RATES.len() - 1)].0;
         if trial.rate != OWN_RATE {
             self.command(cmd::PLL, &[rate])?;
@@ -1215,6 +1222,7 @@ mod tests {
             drive: Direct::new(2, 1),
             swapped: false,
             repeat: 0,
+            hold: 0,
             rate: 4,
             own_at: None,
         }));
@@ -1231,7 +1239,7 @@ mod tests {
             }
             assert_eq!(
                 c.last(0x22).map(|d| d[..6].to_vec()),
-                Some(vec![0b01_10_00_00, 1, 2, 0, 0, 0])
+                Some(vec![0b01_10_10_00, 1, 0, 2, 0, 0])
             );
             // Asked, and the controller's own (50 Hz, code 6) given back
             // once the refresh ended.
@@ -1270,6 +1278,7 @@ mod tests {
             drive: Direct::new(1, 0),
             swapped: false,
             repeat: 0,
+            hold: 0,
             rate,
             own_at: None,
         };
@@ -1306,6 +1315,7 @@ mod tests {
             drive: Direct::new(3, 0),
             swapped: false,
             repeat: 1,
+            hold: 1,
             rate: OWN_RATE,
             own_at: None,
         }));
@@ -1328,6 +1338,7 @@ mod tests {
             drive: Direct::new(3, 0),
             swapped: false,
             repeat: 1,
+            hold: 0,
             rate: 8,
             own_at: Some(95),
         }));
