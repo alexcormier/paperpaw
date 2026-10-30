@@ -628,10 +628,6 @@ impl Firmware {
     /// sleeps: its power is cut where possible, otherwise the processor
     /// enters deep sleep. The power button starts it again where it was.
     /// USB or a charging indication must not keep a sleeping reader awake.
-    #[expect(
-        clippy::expect_used,
-        reason = "the power button is taken back only here; without it the X4 could not wake"
-    )]
     #[inline(never)]
     fn sleep(&mut self) {
         self.settle_frame();
@@ -656,6 +652,23 @@ impl Firmware {
             let effects = self.kernel.resume(now());
             return self.apply(effects);
         }
+        // A real sleep first (the processor lightly asleep, the power button
+        // waking it at once), switched off only after a while (#51).
+        #[cfg(feature = "esp32c3")]
+        if self.sleep_lightly() {
+            return;
+        }
+        self.power_off()
+    }
+
+    /// The power goes: only the power button starts the reader again, and
+    /// that is a start (a light sleep ended by the button is not).
+    #[expect(
+        clippy::expect_used,
+        reason = "the power button is taken back only here; without it the X4 could not wake"
+    )]
+    #[inline(never)]
+    fn power_off(&mut self) -> ! {
         // The next start ends this sleep: the mark says so, for plugins to
         // hear the device wake (`core.resume`).
         paperpaw_x4::slept::mark(self.kernel.storage());
@@ -687,6 +700,53 @@ impl Firmware {
         power.listen(Event::LowLevel);
         let _ = power.apply_wakeup_config(&WakeupConfig::default().with_low_power_path(true));
         power::deep();
+    }
+
+    /// Sleeps lightly until the power button wakes the reader (`true`:
+    /// awake again, where it was), or until it is time to switch it off
+    /// (`false`: the caller does). The panel keeps its picture, the radios
+    /// are checked off, the readings rest and the watchdogs are the sleep's;
+    /// every [`paperpaw_x4::sleeping::CHECK_MS`] it wakes for a moment to
+    /// look at the battery. The order of it is
+    /// [`paperpaw_x4::sleeping::run`], tested on a computer.
+    #[cfg(feature = "esp32c3")]
+    #[inline(never)]
+    fn sleep_lightly(&mut self) -> bool {
+        use paperpaw_x4::sleeping::{Ended, Off};
+        // The developer switch back to how the X4 slept before.
+        if !self.kernel.settings().read(&device::LIGHT_SLEEP) {
+            return false;
+        }
+        let choice = self.kernel.settings().read(&device::POWER_OFF_AFTER);
+        let off = Off::of(choice);
+        info!(
+            "sleeping: light sleep, off {off:?}, USB {}",
+            self.usb_power.is_high()
+        );
+        let started = now().0;
+        let ended = paperpaw_x4::sleeping::run(off, &mut Light { firmware: self });
+        info!(
+            "sleeping: {ended:?} after {} s",
+            now().0.saturating_sub(started) / 1000
+        );
+        if ended == Ended::Woken {
+            self.wake_lightly();
+        }
+        ended == Ended::Woken
+    }
+
+    /// Awake again after a light sleep: plugins hear it (`core.resume`),
+    /// the screen is drawn as it was before the sleep screen.
+    #[cfg(feature = "esp32c3")]
+    fn wake_lightly(&mut self) {
+        self.state.sleep = false;
+        // The clock and the battery shown anew soon.
+        self.state.status_read = None;
+        if let Some(ota) = &mut self.ota {
+            ota.resume_trial(now().0);
+        }
+        let effects = self.kernel.resume(now());
+        self.apply(effects);
     }
 
     /// Before sleeping: requests under way (a position pushed) go on until
@@ -1112,6 +1172,91 @@ impl Firmware {
 /// The heap's free bytes, for keeping what was sent.
 fn heap_free() -> usize {
     esp_alloc::HEAP.free()
+}
+
+/// The board as [`paperpaw_x4::sleeping::run`] sees it: the firmware for
+/// the length of one sleep.
+#[cfg(feature = "esp32c3")]
+struct Light<'a> {
+    firmware: &'a mut Firmware,
+}
+
+#[cfg(feature = "esp32c3")]
+impl paperpaw_x4::sleeping::Board for Light<'_> {
+    fn now_ms(&mut self) -> u64 {
+        now().0
+    }
+
+    fn look(&mut self) -> paperpaw_x4::sleeping::Look {
+        paperpaw_x4::sleeping::Look {
+            now_ms: now().0,
+            usb: self.firmware.usb_power.is_high(),
+            percent: input::percent_now(),
+        }
+    }
+
+    fn panel_down(&mut self) {
+        let _ = self.firmware.panel.power_down();
+    }
+
+    fn button_released(&mut self) -> bool {
+        let until = now().0 + paperpaw_x4::sleeping::HELD_MS;
+        // Released first: held, the button would wake it at once.
+        while input::power_down() {
+            if now().0 > until {
+                return false;
+            }
+            power::feed();
+            self.firmware.delay.delay_millis(10);
+        }
+        true
+    }
+
+    fn leave_radios(&mut self) {
+        self.firmware.network.leave();
+    }
+
+    fn radios_off(&mut self) -> bool {
+        !self.firmware.network.radio_on()
+    }
+
+    fn pause_inputs(&mut self) {
+        input::pause();
+    }
+
+    fn resume_inputs(&mut self) {
+        input::resume();
+    }
+
+    fn watchdog_for_sleep(&mut self) {
+        power::watchdogs_for_sleep(paperpaw_x4::sleeping::SLEEP_WATCHDOG_MS);
+    }
+
+    fn watchdog_awake(&mut self) {
+        power::watchdogs_awake();
+    }
+
+    fn feed(&mut self) {
+        power::feed();
+    }
+
+    fn nap(&mut self, until_ms: u64) -> paperpaw_x4::sleeping::Napped {
+        use paperpaw_x4::sleeping::Napped;
+        if !power::sleep_asleep(until_ms) {
+            return Napped::Ended;
+        }
+        // A press, not a glitch: still down after a moment.
+        self.firmware.delay.delay_millis(20);
+        if input::power_pin_low() {
+            Napped::Pressed
+        } else {
+            Napped::Glitch
+        }
+    }
+
+    fn say(&mut self, what: &str) {
+        info!("sleeping: {what}");
+    }
 }
 
 /// What came over USB.
