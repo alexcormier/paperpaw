@@ -193,6 +193,12 @@ jobs:
         uses: ./.github/actions/install-image
         with:
           out: ${{ runner.temp }}/install.bin
+      # For the update path (job update-path).
+      - uses: actions/upload-artifact@v7
+        with:
+          name: install-image-${{ matrix.device }}
+          path: ${{ runner.temp }}/install.bin
+          retention-days: 1
       - name: The sample code plugin fits the firmware
         id: native
         uses: ./.github/actions/native-sample
@@ -231,6 +237,50 @@ jobs:
       - name: The core libraries out of the cached toolchain
         if: always() && matrix.device != 'x4' && matrix.device != 'x3'
         run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
+
+  # The whole update path on a computer, with the real files
+  # (crates/paperpaw-x4/tests/update_path.rs): for each device, the
+  # update of the release before (its SHA-256 checked) flashed on a flash
+  # with the table PaperPaw ships, this run's firmware (signed with a key
+  # made for the run) installed over it online by the update plugin,
+  # started, its trial run and kept, then once more to a higher version;
+  # and a damaged update, a download cut short, one too large and a trial
+  # that fails, none of which may take the device's firmware. `check`
+  # runs the same test with images made in it.
+  #
+  # What it proves: the release before's image parses and boots as the
+  # running firmware, and this build's installer
+  # (crates/paperpaw-x4/src/updates.rs) accepts and installs this build's
+  # file. What it does not: that the release before's own installer
+  # installs this build's file, as devices in the field will do. From the
+  # first release that contains `paperpaw_x4::updates`, add a step that
+  # checks out the previous tag's `crates/paperpaw-x4` (git worktree) and
+  # runs that tag's installer on this run's file; the harness takes the
+  # run's key as a built-in key, so the old code needs only that hook.
+  # The job fails when the x4's update is missing from the release before
+  # or no device was tested (tools/ci/update-path.sh).
+  update-path:
+    name: Update path (this build's installer, from the release before's image)
+    needs: [firmware]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: update-path
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: install-image-*
+          path: ${{ runner.temp }}/images
+      - name: Built once
+        run: |
+          cargo build -q --release -p paperpaw-sign
+          cargo test -q --release -p paperpaw-x4 --test update_path --no-run
+      - name: Each device, from the release before's image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/ci/update-path.sh "$RUNNER_TEMP/images" "$RUNNER_TEMP/update-path"
 
   native:
     name: Native plugins
