@@ -21,7 +21,7 @@ use paperpaw_sdk::{
 };
 
 use super::index::{letter, sort_key, surname};
-use super::rows::{self, Loaded, Sizes};
+use super::rows::{self, CoverPace, Loaded, Sizes};
 
 /// The parameter naming the series, folder, letter or search words.
 const NAME: &str = "name";
@@ -142,6 +142,8 @@ pub(crate) struct ShelfScreen {
     summary_text: String,
     list: ListView,
     loaded: Vec<Loaded>,
+    /// When the covers not read yet are read.
+    pace: CoverPace,
     loaded_page: Option<usize>,
     /// The version of the library's books the entries' keys are of
     /// ([`library::Library::version`]).
@@ -179,6 +181,7 @@ impl ShelfScreen {
             title_text: String::new(),
             summary_text: String::new(),
             loaded: Vec::new(),
+            pace: CoverPace::default(),
             loaded_page: None,
             version: library::service(env).version(env),
             stamp,
@@ -479,6 +482,7 @@ impl Screen for ShelfScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.pace.heard(cx.env().now());
         self.shown(cx);
         self.wake_for_covers(cx);
     }
@@ -488,15 +492,11 @@ impl Screen for ShelfScreen {
         self.wake_for_covers(cx);
     }
 
-    /// The covers of the page shown not read yet, one a tick, as the
-    /// library's list reads them.
+    /// The covers of the page shown not read yet, one a tick, none while
+    /// input comes, as the library's list reads them.
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        if rows::read_next_cover(&env, &mut self.loaded) {
+        if self.pace.tick(cx, &mut self.loaded) {
             cx.request_redraw();
-        }
-        if rows::covers_unread(&self.loaded) {
-            cx.wake_at(env.now().add_millis(super::COVER_GAP_MS));
         }
     }
 
@@ -506,12 +506,14 @@ impl Screen for ShelfScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        self.pace.heard(cx.env().now());
         let handled = self.act(action, cx);
         self.wake_for_covers(cx);
         handled
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        self.pace.heard(cx.env().now());
         let handled = self.gesture(gesture, cx);
         self.wake_for_covers(cx);
         handled
@@ -615,8 +617,6 @@ impl ShelfScreen {
 
     /// Wakes for the covers of the page shown not read yet.
     fn wake_for_covers(&self, cx: &mut Cx<'_, '_>) {
-        if rows::covers_unread(&self.loaded) {
-            cx.wake_at(cx.env().now());
-        }
+        self.pace.wake(cx, &self.loaded);
     }
 }
