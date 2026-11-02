@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- Devices (#95): PaperPaw beside another firmware (a tool that puts two firmwares on one X4) can be told so, by
+  `dual-boot = on` in a `[firmware]` section of `paperpaw.ini` or by a marker in the tool's bootloader
+  (`paperpaw-dualboot:1`, see `docs/dual-boot.md`). It then never writes the other partition or the OTA data: no
+  updates, no trial, no way back to another firmware; the *Updates* page says why. Not declared, nothing changes. A
+  `[firmware]` section no longer warns as an unknown plugin. No change for plugins.
+
 ## [0.6.0-beta.1] - 2026-11-03
 
 **Plugins of this release must be built from `965d866b` or later** (plugin interface 6, #363; `965d866b` raises the shared interface family `ui` to revision 2, #119: the firmware refuses plugins of revision 1, built before). 0.6.0-beta.1 takes
