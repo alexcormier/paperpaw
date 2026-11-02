@@ -14,7 +14,7 @@ change the plugin SDK.
   updates, no trial, no way back to another firmware; the *Updates* page says why. Not declared, nothing changes. A
   `[firmware]` section no longer warns as an unknown plugin, and `firmware` can no longer be a plugin's id (as
   `plugins`, `fonts`, `menus` and `slots` cannot). The start now reads the card and `paperpaw.ini` before it marks
-  an update as on trial, undone or failed (a hang before that is not rolled back). Without a `dual-boot` entry, each start reads the bootloader's 32 KB once; the time is logged. No change for plugins.
+  an update as on trial, undone or failed (a hang before that is not rolled back). The bootloader's 32 KB and the ini are read only where a start would write the OTA data, after a declared start, or before an install; a normal start reads neither. No change for plugins.
 
 ## [0.6.0-beta.1] - 2026-11-03
 
