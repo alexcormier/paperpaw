@@ -12,7 +12,9 @@ change the plugin SDK.
   `dual-boot = on` in a `[firmware]` section of `paperpaw.ini` or by a marker in the tool's bootloader
   (`paperpaw-dualboot:1`, see `docs/dual-boot.md`). It then never writes the other partition or the OTA data: no
   updates, no trial, no way back to another firmware; the *Updates* page says why. Not declared, nothing changes. A
-  `[firmware]` section no longer warns as an unknown plugin. No change for plugins.
+  `[firmware]` section no longer warns as an unknown plugin, and `firmware` can no longer be a plugin's id (as
+  `plugins`, `fonts`, `menus` and `slots` cannot). The start now reads the card and `paperpaw.ini` before it marks
+  an update as on trial, undone or failed (a hang before that is not rolled back). Without a `dual-boot` entry, each start reads the bootloader's 32 KB once; the time is logged. No change for plugins.
 
 ## [0.6.0-beta.1] - 2026-11-03
 
