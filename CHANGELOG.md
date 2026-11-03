@@ -43,6 +43,10 @@ change the plugin SDK.
 
 ### Changed
 
+- **The update check says how long the device is in use** (#143): next to what started the check, it sends `age`,
+  `new` (under seven days since the first check), `week` (up to thirty days) or `month`, so that the store's
+  statistics can count only devices in use for a while. The device keeps the date of its first check on the card
+  (`first-check.txt`, never sent); without a clock set, no age is sent.
 - **Settings screens skip a pass that counted pictures** (#118). On a black-and-white panel every whole-screen frame
   drew the screen once more, aside, to count its pictures; the settings screens have none, so they now say so
   (`Screen::pictures_in_grays`) and the pass is gone (about 4% of the work of opening a group and going back, on the
@@ -67,6 +71,10 @@ change the plugin SDK.
   that opened quickly before is not marked again; and the mark shows only for work that took as long as the
   refresh showing it (500 ms, `KernelBuilder::busy_mark_after`, 400 before). A damaged or older file holds no
   times. On the X4 a needless mark cost ~330 ms.
+- **The store installs what a plugin requires** (#97): after the store installs a plugin whose `plugin.ini` names
+  `requires` (the Arabic, Persian and Urdu menus need their letters, Korean extra needs Korean), the plugins the
+  device lacks are offered in the store's dialog with their sizes (*Download* or *Not now*). The plugin stays
+  installed either way. A chain asks step by step; what is on the device or not in the library is passed over.
 
 ### Fixed
 
@@ -85,6 +93,8 @@ change the plugin SDK.
   and opening it says the card could not be written, instead of reading another book's chapters as its own.
 - **Device check, first page** (#121): the Screen page opened with the focus on *Pass*, the answer it suggests without measuring anything, so the first arrow went round to *Flip pattern* and a first Select passed the page unseen. It now opens on *Flip pattern*, the first tool, as pages with tools should, and *Pass* stays the answer shown filled. Also, a key on that page took seconds, or showed nothing: the page counted as best in grays, which on the X4 makes every change, a moved focus too, a refresh of all the screen in its four grays, and after it a small change is not shown at all until a bigger one comes. The page now shows its stripes in grays when it opens and after *Full refresh*; moving the focus or flipping the pattern refreshes only what changed, in black and white.
 - **Device check, Buttons page** (#121): the page took every button from the moment it opened, so on a device of buttons alone the arrows, Select and Back did nothing and there was no way to move on or leave. It now opens with *Start* like the other pages' controls: the arrows, Select and Back work as everywhere until *Start* is chosen; then every button counts as the one asked for, as before.
+- Setup: the 'Look for updates' step shows its label next to the switch again (#132).
+- Updates: when some plugins did not come along with an update, one short notice says so (not one for each), and they are fetched again at the next update checks (#141).
 
 ## [0.6.0-beta.1] - 2026-11-03
 
