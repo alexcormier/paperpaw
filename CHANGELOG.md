@@ -65,6 +65,12 @@ change the plugin SDK.
   (`Book::indexed` off, its title and author there) and read its cover with `library::index`, as for any book not
   indexed. On the bench's card the first walk of 1,000 books that all have covers writes 26,952 blocks instead of
   139,557 and reads 75,974 instead of 152,975, its peak 26.2 KiB instead of 70.0 KiB.
+- **Less waiting for the busy mark** (#118). Going back no longer shows the busy mark the first time (the screen
+  below is there already); what was timed is kept across starts in `.paperpaw/core/timing.txt` (written when the
+  device sleeps or stops, only where it changed what is slow), so on the X4, where every wake is a start, a screen
+  that opened quickly before is not marked again; and the mark shows only for work that took as long as the
+  refresh showing it (500 ms, `KernelBuilder::busy_mark_after`, 400 before). A damaged or older file holds no
+  times. On the X4 a needless mark cost ~330 ms.
 - **The store installs what a plugin requires** (#97): after the store installs a plugin whose `plugin.ini` names
   `requires` (the Arabic, Persian and Urdu menus need their letters, Korean extra needs Korean), the plugins the
   device lacks are offered in the store's dialog with their sizes (*Download* or *Not now*). The plugin stays
