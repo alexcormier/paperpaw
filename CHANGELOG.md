@@ -43,6 +43,10 @@ change the plugin SDK.
 
 ### Changed
 
+- **The update check says how long the device is in use** (#143): next to what started the check, it sends `age`,
+  `new` (under seven days since the first check), `week` (up to thirty days) or `month`, so that the store's
+  statistics can count only devices in use for a while. The device keeps the date of its first check on the card
+  (`first-check.txt`, never sent); without a clock set, no age is sent.
 - **Settings screens skip a pass that counted pictures** (#118). On a black-and-white panel every whole-screen frame
   drew the screen once more, aside, to count its pictures; the settings screens have none, so they now say so
   (`Screen::pictures_in_grays`) and the pass is gone (about 4% of the work of opening a group and going back, on the
