@@ -6,12 +6,6 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-### Fixed
-
-- **The reader's menu shows the page and the pages** (#117). Opened right after a book opens, before its pages were
-  counted, the menu bar showed a percentage ("0 %") for as long as it was open, as the count waited for it to close.
-  The count now goes on below the menu, and the bar shows "2 / 185" once it ends.
-
 ### Added
 
 - Screens: `Screen::times_under_overlays` (`SCREEN_REVISION` 3, #117). A screen that says so has its time
@@ -21,6 +15,20 @@ change the plugin SDK.
   change of what plugins built before see.
 - Events: `events::MENU_PAGE` (`MenuPage { menu, page }`, #117): whoever opened the menu slot as a bar with a page
   text tells the open bar its new text; the menu plugin's bar shows it. New constant and type.
+
+### Changed
+
+- The plugin interface's gate (ADR 0026, #94): `interface.txt` keeps the fingerprint the bless was made with, and
+  a bless of a change plugins rely on is refused unless the interface rises above the one that fingerprint was made
+  at, whatever number `interface.txt` says; layouts of what crosses that changed while the shapes did not are such a
+  change. The first bless of the interface-6 round kept interface 5 that way and its fingerprint with it (#363). The
+  fingerprint is as it was (X4: `00063e32940609b9`).
+
+### Fixed
+
+- **The reader's menu shows the page and the pages** (#117). Opened right after a book opens, before its pages were
+  counted, the menu bar showed a percentage ("0 %") for as long as it was open, as the count waited for it to close.
+  The count now goes on below the menu, and the bar shows "2 / 185" once it ends.
 
 ## [0.6.0-beta.1] - 2026-11-03
 
