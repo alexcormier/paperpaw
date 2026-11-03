@@ -27,7 +27,7 @@ pub trait Swap {
     /// Looks at the card itself (on waking): `true` if it is lost.
     // Only boards with a light sleep wake without a start.
     #[cfg_attr(
-        not(feature = "esp32c3"),
+        not(feature = "asleep-light"),
         expect(dead_code, reason = "used on waking from light sleep")
     )]
     fn probe(&mut self) -> bool;

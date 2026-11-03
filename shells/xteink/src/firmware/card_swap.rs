@@ -24,7 +24,7 @@ impl Firmware {
 
     /// On waking from a light sleep, before the kernel hears it: whether a
     /// card swapped meanwhile was mounted anew (the kernel to be told).
-    #[cfg(feature = "esp32c3")]
+    #[cfg(feature = "asleep-light")]
     #[inline(never)]
     pub(super) fn card_swapped_asleep(&mut self) -> bool {
         let lost = self.card_swap.as_mut().is_some_and(|swap| swap.probe());
