@@ -112,6 +112,10 @@ change the plugin SDK.
 - **Device check, Buttons page** (#121): the page took every button from the moment it opened, so on a device of buttons alone the arrows, Select and Back did nothing and there was no way to move on or leave. It now opens with *Start* like the other pages' controls: the arrows, Select and Back work as everywhere until *Start* is chosen; then every button counts as the one asked for, as before.
 - Setup: the 'Look for updates' step shows its label next to the switch again (#132).
 - Updates: when some plugins did not come along with an update, one short notice says so (not one for each), and they are fetched again at the next update checks (#141).
+- **"Switch off" in the power menu leaves a picture on the screen** (#146). It switched off with the last page still showing, so the
+  device looked frozen. Switching off and sleeping from the power menu now show the sleep screen first, as the power
+  button's short press does. Where the sleep screen is set to show the page as it is, or the page with a picture, switching
+  off shows the logo with "Switched off" and how to switch on instead (English and German).
 
 ## [0.6.0-beta.1] - 2026-11-03
 
