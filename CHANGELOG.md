@@ -6,6 +6,35 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- Screens: `Screen::times_under_overlays` (`SCREEN_REVISION` 3, #117). A screen that says so has its time
+  (`Cx::wake_at`) while overlays alone cover it (a menu bar, a panel), as it still shows below them: for work that goes
+  on there, as the reader counting its pages. No by default: the time waits until it is on top again, as before.
+  Called through `call_since`, so screens built before are asked nothing. New item at the end of a growing trait, no
+  change of what plugins built before see.
+- Events: `events::MENU_PAGE` (`MenuPage { menu, page }`, #117): whoever opened the menu slot as a bar with a page
+  text tells the open bar its new text; the menu plugin's bar shows it. New constant and type.
+- **A list and the item chosen in it beside each other on wide screens** (#88). Where the screen is expanded (a
+  tablet, a phone on its side; never the X4, which is compact in both orientations), a screen that says
+  `Pane::DETAIL` shows beside the full screen below it: the list at the start (on the right in a right-to-left
+  interface), at least 60 mm or 38 % wide, a line between them, bars and the row of hints over both, each laid out
+  for its part through `Screen::on_resize`. A tap goes to the part it lands in and keys follow it; the new action
+  `core.pane.other` moves them to the other part. A detail the list opens takes the place of the one shown, so
+  going through a list piles nothing up; one the detail opens shows alone over both, and *Back* brings the two back.
+  Free additions, no change of the interface: `ui::ScreenClass` (compact below `ui::COMPACT_BELOW_MM`, 100 mm,
+  expanded from `ui::EXPANDED_FROM_MM`, 140 mm, by the width scaled by the reader's interface text size against
+  its default), `Env::screen_class` and `Env::landscape` (of the screen's own part), `events::DISPLAY_CHANGED`
+  (`DisplayChanged`: the display's width, height, class and whether it is on its side, sent once after a resize
+  laid the screens out), `actions::PANE_OTHER` and `Command::extended`, which plugins had no way to make. Screens
+  are asked `pane` once, when made. A list kept by `on_resize` while a turn puts its detail over it is told
+  `on_hide`. The kernel's new `panes` feature (on by default) builds it; the Xteink firmware (X4, X4 Pro, X4
+  Classic, X3), never wide, leaves it out and saves its code. There a detail is always a full screen and
+  `core.pane.other` is not offered; the SDK is the same either way. Shells with the app's default features
+  (`paperpaw-app/panes`) have it. A finger on the line between the parts goes to the nearer one; a change of the
+  interface text size that makes the screen expanded or no longer so lays the two out again. A class a later
+  kernel adds reads as `Expanded` in `DisplayChanged`, so an older plugin still hears the event.
+
 ### Changed
 
 - **Less waiting for the busy mark** (#118). Going back no longer shows the busy mark the first time (the screen
@@ -14,6 +43,27 @@ change the plugin SDK.
   that opened quickly before is not marked again; and the mark shows only for work that took as long as the
   refresh showing it (500 ms, `KernelBuilder::busy_mark_after`, 400 before). A damaged or older file holds no
   times. On the X4 a needless mark cost ~330 ms.
+- The plugin interface's gate (ADR 0026, #94): `interface.txt` keeps the fingerprint the bless was made with, and
+  a bless of a change plugins rely on is refused unless the interface rises above the one that fingerprint was made
+  at, whatever number `interface.txt` says; layouts of what crosses that changed while the shapes did not are such a
+  change. The first bless of the interface-6 round kept interface 5 that way and its fingerprint with it (#363). The
+  fingerprint is as it was (X4: `00063e32940609b9`).
+
+### Fixed
+
+- **The reader's menu shows the page and the pages** (#117). Opened right after a book opens, before its pages were
+  counted, the menu bar showed a percentage ("0 %") for as long as it was open, as the count waited for it to close.
+  The count now goes on below the menu, and the bar shows "2 / 185" once it ends.
+- Tap zones (thirds, corners, the zones of key maps) are measured on the part of the screen the screen has, as
+  the finger's point always was: on touch devices with the row of button hints (the X4 Pro, the emulator) the
+  borders of the lower zones lay about 3 mm off, by part of the row's height (#88).
+- A damaged folder on the memory card (entries with names no file system gives, as a reset can leave) can be removed
+  again, and the folders above it (#388, #99): the folder is cut off where its parent names it, and nothing in it is
+  written, followed or freed, the entries that look sane included (its space may hold another file's data; the space
+  comes back when the card is checked on a computer). Before, removing the folder, or a book's cache in it, failed
+  with "invalid path". Folders of names PaperPaw does not take (made elsewhere: `con`) are removed with all they hold.
+- A book whose cache folder cannot be cleared (a damaged folder, #99) is never read from: the book shows its details,
+  and opening it says the card could not be written, instead of reading another book's chapters as its own.
 
 ## [0.6.0-beta.1] - 2026-11-03
 
