@@ -123,6 +123,11 @@ change the plugin SDK.
   library has no build of yet is listed as "Not available yet", not left out. Store 1.0.5.
 - **Language packs have a group of their own** (#148): *Languages* (*Sprachen*), before *System*. Readers that do not
   know a group show it under *System*; a group this store does not know can no longer cause an error.
+- **A book that needs more letters shows the download** (#147). After *Download* a screen shows what is fetched, a bar
+  with the percent and the bytes so far, and how it ends: it closes and says *Ready* (the book shows its letters, no
+  restart: the packs of letters are data plugins that work at once), or it says what did not come (no connection, no
+  room) with *Try again* and *Close*, or *Restart now* / *Later* for a pack that needs one. Leaving the screen lets the
+  download go on. Store 1.0.5 (the same as #148).
 
 ## [0.6.0-beta.1] - 2026-11-03
 
