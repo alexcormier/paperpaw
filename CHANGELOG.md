@@ -116,6 +116,13 @@ change the plugin SDK.
   device looked frozen. Switching off and sleeping from the power menu now show the sleep screen first, as the power
   button's short press does. Where the sleep screen is set to show the page as it is, or the page with a picture, switching
   off shows the logo with "Switched off" and how to switch on instead (English and German).
+- **The plugin store shows all the plugins of this PaperPaw** (#148). It now tells the plugin library which PaperPaw runs
+  (`abi`, the fingerprint) in its list and page requests; without it the library answered with the builds of PaperPaw
+  0.5, which this one drops, so only a few code plugins were listed. A plugin built for an older interface than the
+  device runs is offered as an update where the library has a build for this one, whatever the version says; one the
+  library has no build of yet is listed as "Not available yet", not left out. Store 1.0.5.
+- **Language packs have a group of their own** (#148): *Languages* (*Sprachen*), before *System*. Readers that do not
+  know a group show it under *System*; a group this store does not know can no longer cause an error.
 
 ## [0.6.0-beta.1] - 2026-11-03
 

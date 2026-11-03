@@ -90,7 +90,7 @@ fn page(id: &str, code: &[u8]) -> String {
 }
 
 fn page_url(id: &str) -> String {
-    format!("https://paperpaw.org/api/v1/plugins/{id}.json?device=x4&lang=en")
+    format!("https://paperpaw.org/api/v1/plugins/{id}.json?device=x4&lang=en&abi={BUILD}")
 }
 
 /// The offer opened as the setup opens it, on an X4 loading code plugins.
