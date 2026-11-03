@@ -6,9 +6,24 @@
 
 use alloc::string::String;
 
+use paperpaw_sdk::library::catalog::State;
+use paperpaw_sdk::work::WorkState;
 use paperpaw_sdk::{
     Command, Commands, Cx, Env, FixedAction, Handled, Id, Instant, Params, Rect, library,
 };
+
+/// The kernel's work that makes the catalog and the sorted books.
+const CATALOG_WORK: Id = Id::new_static("core.catalog");
+
+/// How often an empty library, waiting for the kernel, looks whether the
+/// kernel is at work (in milliseconds).
+const WATCH_MS: u64 = 15_000;
+
+/// How long the kernel may do nothing while the library waits for it,
+/// before the library says it cannot read the card (in milliseconds): a
+/// card swapped while PaperPaw ran, a catalog or sorted books damaged
+/// that nothing makes anew (#145).
+const STUCK_MS: u64 = 90_000;
 
 /// Looks for new books: the kernel walks the library folder anew.
 pub(crate) const LOOK_AGAIN: Id = Id::new_static("files.look-again");
@@ -64,7 +79,50 @@ impl super::ListScreen {
             self.refilter(&env);
             cx.request_redraw();
         }
+        self.watch(cx);
     }
+
+    /// While the library waits for the kernel (collecting the books, or
+    /// preparing them): looks now and then whether the kernel is at work.
+    /// If it does nothing for [`STUCK_MS`], nothing will come: the library
+    /// says the folder cannot be read (what it says when the kernel
+    /// fails), and asks the kernel once more.
+    pub(super) fn watch(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let now = env.now();
+        if self.failed || !(self.collecting || self.preparing()) {
+            self.idle_since = None;
+            return;
+        }
+        let working = matches!(
+            env.work().get(&CATALOG_WORK),
+            Some(WorkState::Running { .. })
+        );
+        if working {
+            self.idle_since = Some(now);
+        }
+        let since = *self.idle_since.get_or_insert(now);
+        if now.since(since) < STUCK_MS {
+            cx.wake_at(Instant(now.millis() + WATCH_MS));
+            return;
+        }
+        self.idle_since = None;
+        self.failed = true;
+        self.collecting = false;
+        self.refilter(&env);
+        cx.command(library::request_catalog());
+        cx.request_redraw();
+    }
+}
+
+/// Whether the catalog is still to be made (none yet). Not where the
+/// storage cannot be read (a card the device cannot use): none would
+/// ever come, and the empty library says where books go.
+pub(crate) fn collecting(env: &Env<'_>) -> bool {
+    matches!(
+        library::service(env).catalog_state(env),
+        State::Missing | State::Building
+    ) && env.storage().list("", &mut |_| {}).is_ok()
 }
 
 /// Whether the library's catalog is being made anew: its books are those
