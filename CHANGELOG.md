@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Switch off" in the power menu leaves a picture on the screen** (#146). It switched off with the last page still showing, so the
+  device looked frozen. Switching off and sleeping from the power menu now show the sleep screen first, as the power
+  button's short press does. Where the sleep screen is set to show the page as it is, or the page with a picture, switching
+  off shows the logo with "Switched off" and how to switch on instead (English and German).
+
 ## [0.6.0-beta.1] - 2026-11-03
 
 **Plugins of this release must be built from `965d866b` or later** (plugin interface 6, #363; `965d866b` raises the shared interface family `ui` to revision 2, #119: the firmware refuses plugins of revision 1, built before). 0.6.0-beta.1 takes

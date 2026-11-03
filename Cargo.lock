@@ -2352,12 +2352,13 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-power"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-platform",
  "paperpaw-plugin-fonts-default",
  "paperpaw-plugin-lock",
+ "paperpaw-plugin-sleep",
  "paperpaw-sdk",
 ]
 
@@ -2463,7 +2464,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-sleep"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
