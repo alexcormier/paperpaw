@@ -46,16 +46,6 @@ pub(crate) struct FrameState {
 /// filters say.
 pub(crate) const MAX_DEFERS: u8 = 3;
 
-/// How long what a call opened, closed or ran takes (for the busy mark).
-#[derive(Debug, Default)]
-pub(crate) struct Timing {
-    /// What the call opened, closed or ran, and when it began (the clock's
-    /// microseconds), until the call is done.
-    pub(crate) running: Option<(String, u64)>,
-    /// How long that took the last time, in milliseconds.
-    pub(crate) durations: Vec<(String, u32)>,
-}
-
 /// How a framebuffer draws, kept while it is made anew.
 #[derive(Debug, Clone, Copy)]
 struct Look {
@@ -566,7 +556,8 @@ impl Kernel {
     }
 
     /// Times what the input started, and shows the busy mark first if it
-    /// was slow the last time (or is a screen not opened yet), holding the
+    /// was slow the last time (or is a screen not opened yet; see
+    /// `Timing::slow`), holding the
     /// work back until [`Kernel::proceed`].
     pub(crate) fn mark_if_slow(&mut self) -> Option<Effects> {
         let key = self
@@ -575,12 +566,7 @@ impl Kernel {
             .iter()
             .find_map(|command| self.work_key(command))?;
         let started = self.shared.meter.micros()?;
-        let slow = match self.timing.durations.iter().find(|(k, _)| *k == key) {
-            Some((_, ms)) => *ms >= SLOW_MS,
-            // Not timed yet: another screen may take long; an action is
-            // taken to be quick until it was not.
-            None => !key.starts_with("run:"),
-        };
+        let slow = self.timing.slow(&key);
         self.timing.running = Some((key, started));
         if !self.busy_mark || !slow {
             return None;

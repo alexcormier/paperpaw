@@ -803,8 +803,10 @@ fn kernel(
         // refreshes' times as they are measured (ADR 0030).
         .panel(paperpaw_sdk::realtime::PanelInfo::new(2))
         // The panel refreshes on its own: a mark shows at once while slow
-        // work goes on.
+        // work goes on; for work that took as long as the refresh showing
+        // it (~504 ms on the X4), so shorter work does not wait (#118).
         .busy_mark(true)
+        .busy_mark_after(500)
         // Built-in packs are read in place; glyphs of packs on the card
         // (other scripts) are kept here once read. Empty until one is.
         .glyph_cache(12 * 1024)

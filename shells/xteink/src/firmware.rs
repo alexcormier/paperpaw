@@ -27,6 +27,7 @@ use crate::ota::Ota;
 use crate::{clock, device, input, now, power, stack};
 
 mod card_swap;
+mod dozing;
 mod paced;
 #[cfg(feature = "esp32c3")]
 mod sleeping_board;
@@ -102,6 +103,8 @@ pub struct State {
     sleep: bool,
     /// The kernel asked to switch the device off (`Effect::PowerOff`).
     power_off: bool,
+    /// Staying awake on USB, the developer's choice (`dozing`).
+    stay: paperpaw_x4::stay_awake::StayAwake,
     /// When the kernel wants to be woken.
     wake_at: Option<Instant>,
     /// When the battery was read last.
@@ -242,11 +245,23 @@ impl Firmware {
             info!("native: the update is kept; restarting to load the code plugins");
             self.restart();
         }
+        self.watch_stay_awake();
         let installing = self.installing();
         match paperpaw_x4::sleeping::wanted(self.state.sleep, self.state.power_off, installing) {
             Some(paperpaw_x4::sleeping::Wanted::SwitchOff) => return self.sleep(false),
+            // A doze only where the kernel itself holds the sleep: not at a
+            // nearly empty battery that does not charge, which sleeps for
+            // real, the timer's or the reader's.
+            Some(paperpaw_x4::sleeping::Wanted::Sleep)
+                if self.state.stay.is_on() && self.kernel.awake_on_usb() =>
+            {
+                return self.doze();
+            }
             Some(paperpaw_x4::sleeping::Wanted::Sleep) => return self.sleep(true),
             None => {}
+        }
+        if self.state.stay.is_dozing() {
+            return self.dozing_step();
         }
         power::feed();
         power::mark(power::at::LOOP);
@@ -520,6 +535,18 @@ impl Firmware {
                 }
                 input::Change::Touch(touch, at) => (self.pointer(touch), at),
             };
+            // A doze ends at the first press; the power button's only wakes.
+            if self.wake_dozing()
+                && matches!(
+                    event,
+                    InputEvent::Button {
+                        name: paperpaw_platform::buttons::POWER,
+                        ..
+                    }
+                )
+            {
+                continue;
+            }
             // The press that brings the front light back only does that.
             if !self.light_passes(&event) {
                 continue;
@@ -629,6 +656,10 @@ impl Firmware {
             return;
         }
         let idle = self.idle_ms();
+        // A doze waits for a press or a command only: what the kernel and
+        // the panel would wake for (a stale time, long past) would make
+        // this return at once, every loop.
+        let dozing = self.state.stay.is_dozing();
         let mut until = now().0
             + if battery {
                 idle
@@ -638,7 +669,9 @@ impl Firmware {
             } else {
                 POLL_MS
             };
-        if let Some(at) = self.state.wake_at {
+        if let Some(at) = self.state.wake_at
+            && !dozing
+        {
             until = until.min(at.0);
         }
         if let Some(worked) = self.state.unsynced {
@@ -652,14 +685,16 @@ impl Firmware {
                 until = until.min(due);
             }
         }
-        if let Some(read) = self.state.status_read {
-            until = until.min(read.0 + STATUS_MS);
-        }
-        if let Some(at) = self.state.panel_idle_at {
-            until = until.min(at);
-        }
-        if let Some(due) = self.frame_due() {
-            until = until.min(due);
+        if !dozing {
+            if let Some(read) = self.state.status_read {
+                until = until.min(read.0 + STATUS_MS);
+            }
+            if let Some(at) = self.state.panel_idle_at {
+                until = until.min(at);
+            }
+            if let Some(due) = self.frame_due() {
+                until = until.min(due);
+            }
         }
         if !power::nap_until(until) {
             self.delay
@@ -689,9 +724,12 @@ impl Firmware {
         // A press over USB that put it to sleep is let go first.
         #[cfg(feature = "remote")]
         self.release_held();
-        self.pause_trial();
-        let effects = self.kernel.suspend(now());
-        self.apply(effects);
+        // A doze that ends in a sleep (the cable pulled) suspended already.
+        if !self.state.stay.suspended_already() {
+            self.pause_trial();
+            let effects = self.kernel.suspend(now());
+            self.apply(effects);
+        }
         // Bluetooth down now: the main loop does not come by once the
         // pending work is finished and the processor sleeps.
         #[cfg(feature = "bluetooth")]
@@ -952,6 +990,10 @@ impl Firmware {
             match line {
                 Ok(line) if line.starts_with(paperpaw_core::CABLE_PREFIX.as_bytes()) => {
                     self.state.cable_at = Some(now().0);
+                    // The computer talking to the X4 wakes a doze, so that
+                    // what the line does (a frame, a plugin's reply) is
+                    // not drawn over the sleep picture.
+                    self.wake_dozing();
                     let line = alloc::string::String::from_utf8_lossy(&line);
                     let at = self.kernel_now();
                     let effects = self.kernel.cable_line(at, &line);
@@ -959,6 +1001,10 @@ impl Firmware {
                 }
                 #[cfg(feature = "remote")]
                 line => {
+                    // Only a command wakes a doze, not a line too long.
+                    if line.is_ok() {
+                        self.wake_dozing();
+                    }
                     self.remote(line);
                     break;
                 }
