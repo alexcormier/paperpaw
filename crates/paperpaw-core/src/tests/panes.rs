@@ -295,7 +295,7 @@ fn larger_interface_text_joins_the_parts() {
     let whole = Rect::new(0, 0, WIDE.0, WIDE.1);
     assert_eq!(areas(&kernel), [whole, whole]);
     assert!(took(&log).contains(&String::from("list hide")));
-    kernel.apply(Command::SetSetting(size, SettingValue::Int(9)));
+    kernel.apply(Command::SetSetting(size, SettingValue::Int(8)));
     kernel.finish();
     assert_eq!(kernel.panes(), Some((0, 1)));
     assert_eq!(areas(&kernel), [LIST, DETAIL]);
