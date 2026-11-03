@@ -2195,7 +2195,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-keys"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2352,12 +2352,13 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-power"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "paperpaw-core",
  "paperpaw-platform",
  "paperpaw-plugin-fonts-default",
  "paperpaw-plugin-lock",
+ "paperpaw-plugin-sleep",
  "paperpaw-sdk",
 ]
 
@@ -2439,7 +2440,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-settings"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2463,7 +2464,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-sleep"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2488,7 +2489,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-store"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
@@ -2791,6 +2792,7 @@ version = "0.6.0-beta.1"
 dependencies = [
  "embedded-hal",
  "paperpaw-app",
+ "paperpaw-config",
  "paperpaw-core",
  "paperpaw-digest",
  "paperpaw-graphics",

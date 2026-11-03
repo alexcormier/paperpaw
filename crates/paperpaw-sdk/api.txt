@@ -4824,6 +4824,13 @@ pub fn paperpaw_sdk::ui::Rows::step(&mut self, bool) -> paperpaw_sdk::ui::ListCh
 pub fn paperpaw_sdk::ui::Rows::step_in(&mut self, &paperpaw_sdk::Env<'_>, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::visible(&self) -> alloc::vec::Vec<(usize, paperpaw_platform::geometry::Rect)>
+pub struct paperpaw_sdk::ui::SearchField<'s>
+impl<'s> paperpaw_sdk::ui::SearchField<'s>
+pub fn paperpaw_sdk::ui::SearchField<'s>::draw(&self, &mut paperpaw_sdk::ui::Ui<'_>, paperpaw_platform::geometry::Rect)
+pub const fn paperpaw_sdk::ui::SearchField<'s>::focused(self, bool) -> Self
+pub fn paperpaw_sdk::ui::SearchField<'s>::height(&paperpaw_sdk::ui::UiStyle) -> u16
+pub const fn paperpaw_sdk::ui::SearchField<'s>::new(&'s str) -> Self
+pub const fn paperpaw_sdk::ui::SearchField<'s>::text(self, &'s str) -> Self
 pub struct paperpaw_sdk::ui::Segments
 impl paperpaw_sdk::ui::Segments
 pub fn paperpaw_sdk::ui::Segments::cell(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>

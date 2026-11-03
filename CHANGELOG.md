@@ -39,6 +39,20 @@ change the plugin SDK.
   (`paperpaw-app/panes`) have it. A finger on the line between the parts goes to the nearer one; a change of the
   interface text size that makes the screen expanded or no longer so lays the two out again. A class a later
   kernel adds reads as `Expanded` in `DisplayChanged`, so an older plugin still hears the event.
+- Devices (#95): PaperPaw beside another firmware (a tool that puts two firmwares on one X4) can be told so, by
+  `dual-boot = on` in a `[firmware]` section of `paperpaw.ini` or by a marker in the tool's bootloader
+  (`paperpaw-dualboot:1`, see `docs/dual-boot.md`). It then never writes the other partition or the OTA data: no
+  updates, no trial, no way back to another firmware; the *Updates* page says why. Not declared, nothing changes. A
+  `[firmware]` section no longer warns as an unknown plugin, and `firmware` can no longer be a plugin's id (as
+  `plugins`, `fonts`, `menus` and `slots` cannot). An update PaperPaw installed itself is still marked as on trial at once, as before; what a tool put in the other
+  slot, and the undoing of an update, wait until the card and `paperpaw.ini` are read. The bootloader's 32 KB and the ini are read only where a start would write the OTA data, after a declared start, or before an install; a normal start reads neither. No change for plugins.
+- **One search field everywhere** (#113). The SDK draws a search field as one part, `ui::SearchField`: a rounded
+  outline round the search icon and a gray hint (or the words searched for), the focus over it when focused, the
+  icon at the right where the interface runs right to left, in the theme's inks. The library's *Find* screen, the
+  settings, the store and the actions list of the button settings use it, so their searches look the same; the
+  settings' search is now a field at the top of the list, no longer a row like the others. For plugin authors:
+  `SearchField::new(hint).text(words).focused(focused).draw(ui, rect)`, `SearchField::height(style)`; a new type,
+  so plugins built before are not affected.
 - Devices (#96): a developer setting *Stay awake on USB* (X4, X4 Pro, X4 Classic, X3; off by default). While the cable is in,
   the sleep after *Sleep after* does not come, and *Sleep* shows the sleep picture but does not sleep, so the computer
   keeps the link for remote tests; the next press or command wakes it, and a cable pulled meanwhile puts the device
@@ -110,6 +124,22 @@ change the plugin SDK.
 - **Device check, Buttons page** (#121): the page took every button from the moment it opened, so on a device of buttons alone the arrows, Select and Back did nothing and there was no way to move on or leave. It now opens with *Start* like the other pages' controls: the arrows, Select and Back work as everywhere until *Start* is chosen; then every button counts as the one asked for, as before.
 - Setup: the 'Look for updates' step shows its label next to the switch again (#132).
 - Updates: when some plugins did not come along with an update, one short notice says so (not one for each), and they are fetched again at the next update checks (#141).
+- **"Switch off" in the power menu leaves a picture on the screen** (#146). It switched off with the last page still showing, so the
+  device looked frozen. Switching off and sleeping from the power menu now show the sleep screen first, as the power
+  button's short press does. Where the sleep screen is set to show the page as it is, or the page with a picture, switching
+  off shows the logo with "Switched off" and how to switch on instead (English and German).
+- **The plugin store shows all the plugins of this PaperPaw** (#148). It now tells the plugin library which PaperPaw runs
+  (`abi`, the fingerprint) in its list and page requests; without it the library answered with the builds of PaperPaw
+  0.5, which this one drops, so only a few code plugins were listed. A plugin built for an older interface than the
+  device runs is offered as an update where the library has a build for this one, whatever the version says; one the
+  library has no build of yet is listed as "Not available yet", not left out. Store 1.0.5.
+- **Language packs have a group of their own** (#148): *Languages* (*Sprachen*), before *System*. Readers that do not
+  know a group show it under *System*; a group this store does not know can no longer cause an error.
+- **A book that needs more letters shows the download** (#147). After *Download* a screen shows what is fetched, a bar
+  with the percent and the bytes so far, and how it ends: it closes and says *Ready* (the book shows its letters, no
+  restart: the packs of letters are data plugins that work at once), or it says what did not come (no connection, no
+  room) with *Try again* and *Close*, or *Restart now* / *Later* for a pack that needs one. Leaving the screen lets the
+  download go on. Store 1.0.5 (the same as #148).
 
 ## [0.6.0-beta.1] - 2026-11-03
 
