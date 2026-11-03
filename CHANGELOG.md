@@ -6,20 +6,26 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-### Changed
+## [0.6.0-beta.2] - 2026-11-03
 
-- **X4 Pro: a real sleep before it switches off** (#153). Sleep (the power button, the power menu, the idle time) used to
-  switch the Pro off at once, as the X4 did before 0.5. Now the Pro sleeps lightly as the X4 does: the screen stays, a press of
-  the power button wakes it at once, and it switches off after the time of the new setting *Switch off after sleeping* (30
-  minutes by default; *At once* gives the old behaviour; *Never* stays asleep). The front light is off while it sleeps and comes
-  back as set when it wakes. Every 10 minutes it wakes for a moment to look at the battery (3 % or less: off at once). The
-  X4 Classic keeps its deep sleep. Not measured on a device yet.
+**Plugins built for 0.6.0-beta.1 keep working; rebuild only to use the new items.** (Plugin interface 6 is unchanged; the SDK changes only additively: `SCREEN_REVISION` 3, `events::MENU_PAGE`, `Cx::is_on_top`, panes, `ScreenClass`, `StorageError::CARD_GONE`, `ui::SearchField`.)
 
-### Fixed
+### In plain words
 
-- **X4, X3: the 15-minute watchdog of a light sleep counts in the sleep** (#153). The reset that ends a sleep which never
-  ends was paused in light sleep after the first sleep (the library's enable call set the pause again). It is now cleared
-  after every arming.
+This is a beta. Keep a copy of your books. The details for plugin authors follow in the sections below.
+
+- **Plugins built for 0.6.0-beta.1 keep working** (plugin interface 6 stays). Rebuild a plugin only to use the new items in this release.
+- **The first update from 0.6.0-beta.1 has no early rollback marker.** A bootloader with rollback and the web flasher still recover a device that hangs on that first start; later updates can be rolled back early.
+- **PaperPaw beside another firmware** (#95). A tool that puts two firmwares on one X4 can tell PaperPaw so (`dual-boot = on` in `paperpaw.ini`, or a marker in the tool's bootloader). PaperPaw then never writes the other partition or the update data. Not declared: nothing changes.
+- **A memory card taken out and put back** (#145). The library no longer says "Preparing the library …" for ever: it says at once that the folder cannot be read, shows the books again when the card is back, and asks for a restart where the X4 had to give the card up. No first-run hints over a card that cannot be read.
+- **X4 Pro: a real sleep before it switches off** (#153), and a shorter wait to wake on the X4 and X3 (the light sleep's watchdog counts in the sleep).
+- **Switch off leaves a picture** (#146): *Switch off* in the power menu shows the sleep picture first, so the device no longer looks frozen.
+- **One search field everywhere** (#113): the library, settings, the store and the button settings use the same field.
+- **The first walk of a big library reads no covers** (#398), **a list beside its detail on wide screens** (#88) and **the reader's menu shows the page and the pages** (#117).
+- **Less waiting** (#118): the busy mark shows less often, and settings screens open faster.
+- **The store** shows all the plugins of this PaperPaw, lists a *Languages* group (#148), installs the plugins a plugin requires (#97) and shows the download for a book that needs more letters (#147). The update check says how long the device is in use (#143) and tells when some plugins did not come along (#141).
+- **Stay awake on USB** (#96): a developer setting, off by default, so a computer can keep the link for remote tests.
+- **The device check** steers its first pages with the buttons (#121). The Screen page may still react slowly to the arrow keys on the X4.
 
 ### Added
 
@@ -77,6 +83,12 @@ change the plugin SDK.
 
 ### Changed
 
+- **X4 Pro: a real sleep before it switches off** (#153). Sleep (the power button, the power menu, the idle time) used to
+  switch the Pro off at once, as the X4 did before 0.5. Now the Pro sleeps lightly as the X4 does: the screen stays, a press of
+  the power button wakes it at once, and it switches off after the time of the new setting *Switch off after sleeping* (30
+  minutes by default; *At once* gives the old behaviour; *Never* stays asleep). The front light is off while it sleeps and comes
+  back as set when it wakes. Every 10 minutes it wakes for a moment to look at the battery (3 % or less: off at once). The
+  X4 Classic keeps its deep sleep. Not measured on a device yet.
 - **The update check says how long the device is in use** (#143): next to what started the check, it sends `age`,
   `new` (under seven days since the first check), `week` (up to thirty days) or `month`, so that the store's
   statistics can count only devices in use for a while. The device keeps the date of its first check on the card
@@ -112,6 +124,9 @@ change the plugin SDK.
 
 ### Fixed
 
+- **X4, X3: the 15-minute watchdog of a light sleep counts in the sleep** (#153). The reset that ends a sleep which never
+  ends was paused in light sleep after the first sleep (the library's enable call set the pause again). It is now cleared
+  after every arming.
 - **The reader's menu shows the page and the pages** (#117). Opened right after a book opens, before its pages were
   counted, the menu bar showed a percentage ("0 %") for as long as it was open, as the count waited for it to close.
   The count now goes on below the menu, and the bar shows "2 / 185" once it ends.
