@@ -38,6 +38,7 @@ struct BuilderParts {
     card_trouble: Option<crate::CardTrouble>,
     clock: Option<fn() -> u64>,
     busy_mark: bool,
+    busy_mark_ms: u32,
     setting_defaults: Vec<(String, String)>,
     plugin_dirs: Vec<String>,
     font_dirs: Vec<String>,
@@ -139,6 +140,15 @@ impl KernelBuilder {
     /// [`clock`](KernelBuilder::clock) to know what is slow.
     pub fn busy_mark(mut self, on: bool) -> Self {
         self.0.busy_mark = on;
+        self
+    }
+
+    /// How long work must have taken the last time to show the
+    /// [`busy_mark`](KernelBuilder::busy_mark), in milliseconds: about as
+    /// long as the panel takes to show the mark, so that shorter work does
+    /// not wait for it. 500 unless said (the X4's panel takes ~504 ms).
+    pub fn busy_mark_after(mut self, ms: u32) -> Self {
+        self.0.busy_mark_ms = ms;
         self
     }
 
@@ -523,6 +533,8 @@ impl BuilderParts {
         }
         // The power mode worn before, over the reader's settings.
         kernel.restore_power();
+        // How long work took at the last start, for the busy mark.
+        kernel.restore_timing();
         kernel.apply_reading_font();
         kernel.apply_status_font();
         kernel.validate();
@@ -692,7 +704,7 @@ impl BuilderParts {
             chromes: Vec::new(),
             chrome_strips: Vec::new(),
             stylesheet_owners: Vec::new(),
-            timing: drawing::Timing::default(),
+            timing: crate::timing::Timing::new(self.busy_mark_ms),
             framebuffer,
             subscriptions: crate::registry::Subscriptions::default(),
             offered_down_to: 0,
@@ -1174,6 +1186,7 @@ impl Kernel {
             card_trouble: None,
             clock: None,
             busy_mark: false,
+            busy_mark_ms: crate::timing::SLOW_MS,
             setting_defaults: Vec::new(),
             plugin_dirs: Vec::new(),
             font_dirs: Vec::new(),

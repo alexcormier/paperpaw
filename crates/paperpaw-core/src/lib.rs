@@ -66,6 +66,7 @@ mod room;
 mod screens;
 #[cfg(test)]
 mod tests;
+mod timing;
 mod work;
 
 use alloc::borrow::Cow;
@@ -136,13 +137,6 @@ const PICTURES_PERCENT: u32 = 15;
 const PICTURES_GRAY_PERCENT: u32 = 2;
 /// How long the row of hints shows on a screen that has it on a press.
 const HINTS_MS: u64 = 4000;
-/// Work that took this long last time (opening a screen, before it is
-/// drawn) shows the busy mark first (see `KernelBuilder::busy_mark`):
-/// about as long as the panel takes to show the mark, which it does
-/// meanwhile, so the mark costs next to nothing.
-const SLOW_MS: u32 = 400;
-/// What was timed is remembered for this many things at most.
-const TIMED: usize = 24;
 /// Largest file of passwords and keys read.
 const MAX_SECRETS: usize = 64 * 1024;
 /// Default memory for glyphs rasterized at runtime.
@@ -365,7 +359,7 @@ pub struct Kernel {
     chrome_strips: Vec<(usize, Rect)>,
     /// The plugin of each of `Shared::stylesheets`, to drop them with it.
     stylesheet_owners: Vec<Id>,
-    timing: drawing::Timing,
+    timing: timing::Timing,
 }
 
 impl fmt::Debug for Kernel {
@@ -663,25 +657,6 @@ impl Kernel {
             }
             _ => None,
         }
-    }
-
-    /// Notes how long the work timed took, once the call is done (with the
-    /// mark shown, once it went on).
-    fn timed(&mut self) {
-        if self.frame.mark.is_some() {
-            return;
-        }
-        let (Some((key, started)), Some(now)) =
-            (self.timing.running.take(), self.shared.meter.micros())
-        else {
-            return;
-        };
-        let ms = (now.saturating_sub(started) / 1000).min(u64::from(u32::MAX)) as u32;
-        self.timing.durations.retain(|(k, _)| *k != key);
-        if self.timing.durations.len() >= TIMED {
-            self.timing.durations.remove(0);
-        }
-        self.timing.durations.push((key, ms));
     }
 
     /// The frame last rendered is on the panel now, at `now` (on the
@@ -1201,6 +1176,7 @@ impl Kernel {
         self.output.commands.push(events::SUSPEND.emit(()));
         self.bluetooth_suspend();
         let effects = self.finish();
+        self.keep_timing();
         // What plugins saved, and what storage kept back, written.
         let _ = self.shared.storage.sync();
         effects
@@ -1214,6 +1190,7 @@ impl Kernel {
         self.now = now;
         self.output.commands.push(events::STOPPING.emit(()));
         let effects = self.finish();
+        self.keep_timing();
         // What plugins saved, and what storage kept back, written.
         let _ = self.shared.storage.sync();
         effects
