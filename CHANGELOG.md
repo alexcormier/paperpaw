@@ -15,6 +15,12 @@ change the plugin SDK.
   back as set when it wakes. Every 10 minutes it wakes for a moment to look at the battery (3 % or less: off at once). The
   X4 Classic keeps its deep sleep. Not measured on a device yet.
 
+### Fixed
+
+- **X4, X3: the 15-minute watchdog of a light sleep counts in the sleep** (#153). The reset that ends a sleep which never
+  ends was paused in light sleep after the first sleep (the library's enable call set the pause again). It is now cleared
+  after every arming.
+
 ### Added
 
 - Screens: `Screen::times_under_overlays` (`SCREEN_REVISION` 3, #117). A screen that says so has its time

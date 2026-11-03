@@ -286,6 +286,20 @@ fn arm_ms(rwdt: &mut esp_hal::rtc_cntl::Rwdt, ms: u64) {
     rwdt.set_stage_action(RwdtStage::Stage0, RwdtStageAction::ResetSystem);
     rwdt.set_timeout(RwdtStage::Stage0, Duration::from_millis(ms));
     rwdt.enable();
+    count_in_light_sleep();
+}
+
+/// Makes the RTC's watchdog count on in light sleep (esp-hal pauses it
+/// there): a sleep that does not end is what it is for. `Rwdt::enable`
+/// writes the whole register with the pause bit set, so this runs after
+/// every enable, not once.
+fn count_in_light_sleep() {
+    let regs = esp_hal::peripherals::LPWR::regs();
+    // SAFETY: the key that unlocks the watchdog's registers, then locks.
+    regs.wdtwprotect().write(|w| unsafe { w.bits(0x50D8_3AA1) });
+    regs.wdtconfig0()
+        .modify(|_, w| w.wdt_pause_in_slp().clear_bit());
+    regs.wdtwprotect().write(|w| unsafe { w.bits(0) });
 }
 
 /// Starts the X4 again if the firmware does not come by: after `rtc_s`
@@ -298,14 +312,6 @@ pub fn watch(
     (rtc_s, timer_s): (u64, u64),
 ) {
     arm(&mut rtc.rwdt, rtc_s);
-    // It counts on in light sleep too (esp-hal pauses it there): a sleep
-    // that does not end is what it is for.
-    let regs = esp_hal::peripherals::LPWR::regs();
-    // SAFETY: the key that unlocks the watchdog's registers, then locks.
-    regs.wdtwprotect().write(|w| unsafe { w.bits(0x50D8_3AA1) });
-    regs.wdtconfig0()
-        .modify(|_, w| w.wdt_pause_in_slp().clear_bit());
-    regs.wdtwprotect().write(|w| unsafe { w.bits(0) });
     wdt.set_timeout(
         esp_hal::timer::timg::MwdtStage::Stage0,
         Duration::from_secs(timer_s),
