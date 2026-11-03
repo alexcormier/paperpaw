@@ -57,6 +57,7 @@ mod io;
 mod keymap;
 mod meter;
 mod network;
+mod panes;
 mod plugins;
 mod realtime;
 mod recall;
@@ -64,8 +65,10 @@ mod refresh;
 mod registry;
 mod room;
 mod screens;
+use screens::ActiveScreen;
 #[cfg(test)]
 mod tests;
+mod timing;
 mod work;
 
 use alloc::borrow::Cow;
@@ -136,13 +139,6 @@ const PICTURES_PERCENT: u32 = 15;
 const PICTURES_GRAY_PERCENT: u32 = 2;
 /// How long the row of hints shows on a screen that has it on a press.
 const HINTS_MS: u64 = 4000;
-/// Work that took this long last time (opening a screen, before it is
-/// drawn) shows the busy mark first (see `KernelBuilder::busy_mark`):
-/// about as long as the panel takes to show the mark, which it does
-/// meanwhile, so the mark costs next to nothing.
-const SLOW_MS: u32 = 400;
-/// What was timed is remembered for this many things at most.
-const TIMED: usize = 24;
 /// Largest file of passwords and keys read.
 const MAX_SECRETS: usize = 64 * 1024;
 /// Default memory for glyphs rasterized at runtime.
@@ -198,37 +194,6 @@ impl fmt::Display for KernelError {
 }
 
 impl core::error::Error for KernelError {}
-
-/// A screen on the navigation stack.
-struct ActiveScreen {
-    id: Id,
-    /// Tells this opening of the screen from every other, also once it was
-    /// made anew (see `Kernel::remake_screens`): e.g. the owner of a
-    /// settings scope.
-    serial: u32,
-    /// The slot it was opened for, if any.
-    slot: Option<Id>,
-    /// Made for the part above the row of hints (when the row shows), as
-    /// it asked ([`HintVisibility::Shown`]).
-    hinted: bool,
-    /// The part of the screen it is made for and drawn into: all of it
-    /// but the bars shown over it and the row of hints (see
-    /// [`Env::content`]).
-    area: Rect,
-    /// What it was opened with, e.g. the book.
-    params: Params,
-    screen: Box<dyn Screen>,
-    /// When it wants [`Screen::on_timer`] ([`Cx::wake_at`]); below another
-    /// screen, once it is on top again.
-    timer: Option<Instant>,
-    /// The key map layer put in front of its slot's while it is on top
-    /// ([`Command::SetKeyLayer`]).
-    key_layer: Option<Id>,
-    /// Opened above a screen guarding the device by that screen (or one
-    /// it opened): its keyboard. Others above it (a sleep screen) get no
-    /// input and are closed as the device wakes.
-    by_guard: bool,
-}
 
 /// An open screen kept while its task is not shown
 /// ([`Command::SwitchTask`]): its id, slot and params.
@@ -365,7 +330,7 @@ pub struct Kernel {
     chrome_strips: Vec<(usize, Rect)>,
     /// The plugin of each of `Shared::stylesheets`, to drop them with it.
     stylesheet_owners: Vec<Id>,
-    timing: drawing::Timing,
+    timing: timing::Timing,
 }
 
 impl fmt::Debug for Kernel {
@@ -665,25 +630,6 @@ impl Kernel {
         }
     }
 
-    /// Notes how long the work timed took, once the call is done (with the
-    /// mark shown, once it went on).
-    fn timed(&mut self) {
-        if self.frame.mark.is_some() {
-            return;
-        }
-        let (Some((key, started)), Some(now)) =
-            (self.timing.running.take(), self.shared.meter.micros())
-        else {
-            return;
-        };
-        let ms = (now.saturating_sub(started) / 1000).min(u64::from(u32::MAX)) as u32;
-        self.timing.durations.retain(|(k, _)| *k != key);
-        if self.timing.durations.len() >= TIMED {
-            self.timing.durations.remove(0);
-        }
-        self.timing.durations.push((key, ms));
-    }
-
     /// The frame last rendered is on the panel now, at `now` (on the
     /// clock the input's times are on): shells call it after each refresh.
     /// After a screen was opened or closed, presses made before it showed
@@ -898,15 +844,8 @@ impl Kernel {
         }
         self.tick_recognizers();
         self.tick_chromes();
-        if let Some(top) = self.stack.last_mut()
-            && top.timer.is_some_and(|at| at <= now)
-        {
-            top.timer = None;
-            self.with_top(|screen, cx| {
-                screen.on_timer(cx);
-                Handled::Yes
-            });
-        }
+        self.tick_pane_list();
+        self.screen_timers_due();
         if self.notice.as_ref().is_some_and(|(_, until)| *until <= now) {
             self.end_notice();
         }
@@ -1201,6 +1140,7 @@ impl Kernel {
         self.output.commands.push(events::SUSPEND.emit(()));
         self.bluetooth_suspend();
         let effects = self.finish();
+        self.keep_timing();
         // What plugins saved, and what storage kept back, written.
         let _ = self.shared.storage.sync();
         effects
@@ -1214,6 +1154,7 @@ impl Kernel {
         self.now = now;
         self.output.commands.push(events::STOPPING.emit(()));
         let effects = self.finish();
+        self.keep_timing();
         // What plugins saved, and what storage kept back, written.
         let _ = self.shared.storage.sync();
         effects
