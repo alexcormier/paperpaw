@@ -36,6 +36,7 @@
 mod find;
 mod grid;
 mod index;
+mod layout;
 mod rows;
 mod sheet;
 pub(crate) mod shelf;
@@ -50,15 +51,16 @@ use paperpaw_sdk::builtin::{actions, events, params, settings, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::library::{self, catalog::State};
 use paperpaw_sdk::semantics::Role;
-use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::ui;
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
     Params, Rect, RefreshMode, RegisterError, Registrar, Screen,
 };
 
 use index::{Filter, NEVER, hash};
+use layout::Layout;
 use paperpaw_sdk::library::sorted::{self, Entry, Sorted};
-use rows::{CoverPace, Loaded, Sizes};
+use rows::{CoverPace, Loaded};
 
 use crate::names::{self, Bound, Distinct, Firsts};
 
@@ -263,69 +265,6 @@ impl ShelfRow {
                 paperpaw_sdk::files::name(&self.name).to_string(),
                 format!("{} · {books}", env.i18n().tr("files.folder")),
             ),
-        }
-    }
-}
-
-/// Where things go on the screen: made anew when a setting changes (the
-/// view, the size of the interface).
-struct Layout {
-    style: UiStyle,
-    sizes: Sizes,
-    header: ui::Header,
-    /// The filters' chips (larger screens; none on small ones).
-    chips: ui::Chips,
-    /// The filter's row (small screens).
-    filter_row: Option<Rect>,
-    /// Where the books (or shelves) go.
-    area: Rect,
-    /// The covers' grid, where books show as covers ([`crate::VIEW`]).
-    grid: Option<grid::Grid>,
-    /// Covers in grays ([`crate::COVERS`]).
-    grays: bool,
-}
-
-impl Layout {
-    fn new(env: &Env<'_>) -> Self {
-        let style = UiStyle::new(env);
-        let sizes = Sizes::new(env, &style);
-        let header = ui::Header::new(env, &style, true);
-        let display = env.device().display;
-        let gap = style.gap();
-        let (chips, filter_row, top) = if sizes.compact {
-            let row = Rect::new(0, header.area().height, display.width, sizes.filter_row);
-            (
-                ui::Chips::default(),
-                Some(row),
-                row.y + row.height + gap / 2,
-            )
-        } else {
-            // From margin to margin, with room round them for the focus.
-            let margin = style.margin();
-            let labels = Filter::ALL.map(Filter::label);
-            let width = display.width.saturating_sub(2 * margin);
-            // As many rows as the words need: none is shortened.
-            let band = Rect::new(
-                margin,
-                header.area().height,
-                width,
-                ui::Chips::height_for(env, &style, width, &labels) + gap,
-            );
-            let chips = ui::Chips::new(env, &style, band, labels);
-            (chips, None, band.y + band.height)
-        };
-        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let grid = (env.settings().read(&crate::VIEW) == crate::VIEW_COVERS)
-            .then(|| grid::Grid::new(env, &style, &sizes, area.height));
-        Layout {
-            style,
-            sizes,
-            header,
-            chips,
-            filter_row,
-            area,
-            grid,
-            grays: crate::covers_in_grays(env),
         }
     }
 }
