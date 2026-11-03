@@ -83,6 +83,8 @@ pub(crate) struct FetchScreen {
     done: u64,
     total: u64,
     shown: bool,
+    /// The height the rows below were laid out for.
+    laid_for: u16,
 }
 
 impl FetchScreen {
@@ -119,6 +121,7 @@ impl FetchScreen {
             done: 0,
             total,
             shown: false,
+            laid_for: 0,
         };
         screen.layout(env);
         screen.count(env);
@@ -128,18 +131,72 @@ impl FetchScreen {
     /// The rows of the end go below the bar.
     fn layout(&mut self, env: &Env<'_>) {
         let display = env.device().display;
-        let top = self.bar().y + self.style.row() * 2;
+        let top = self.bar(env).y + self.style.row() * 2;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         self.list = ListView::new(area, u32::from(self.style.row())).focus_on_keys(env);
         self.header = ui::Header::new(env, &self.style, true);
+        self.laid_for = self.message_area(env).height;
     }
 
-    /// Where the bar is: below the header and the names.
-    fn bar(&self) -> Rect {
+    /// What is said below the header: the names, or what did not come.
+    fn message_text(&self, env: &Env<'_>) -> String {
+        match &self.phase {
+            Phase::Failed(text) => text.clone(),
+            Phase::Restart => env.i18n().format(
+                "store.fetch.restart.text",
+                &[("names", Arg::Str(&self.names))],
+            ),
+            Phase::Working | Phase::Done => self.names.clone(),
+        }
+    }
+
+    /// Where that is said: two rows, or the lines it needs at a large text.
+    fn message_area(&self, env: &Env<'_>) -> Rect {
         let margin = self.style.margin();
         let width = self.header.area().width.saturating_sub(2 * margin);
-        let y = self.header.area().height + self.style.row() * 5 / 2;
-        Rect::new(margin, y, width, self.style.row() / 2)
+        let top = self.header.area().height + self.style.gap();
+        let needs = self.message_needs(env);
+        Rect::new(margin, top, width, needs.max(self.style.row() * 2))
+    }
+
+    /// The height the lines of that need.
+    fn message_needs(&self, env: &Env<'_>) -> u16 {
+        let margin = self.style.margin();
+        let width = self.header.area().width.saturating_sub(2 * margin);
+        ui::message_height(env, &self.style, width, &self.message_text(env))
+    }
+
+    /// Where the hint at the bottom is: all its lines, from the bottom up.
+    fn hint_area(&self, env: &Env<'_>) -> Rect {
+        let display = env.device().display;
+        let hint = env.i18n().tr("store.fetch.hint");
+        let height = ui::note_line_height(env, &self.style, display.width, hint)
+            .max(self.style.row() * 3 / 2);
+        Rect::new(
+            0,
+            display.height.saturating_sub(height),
+            display.width,
+            height,
+        )
+    }
+
+    /// Where the bar is: below the header and the names, with room to
+    /// spare, or close below them where the lines of the hint at a large
+    /// text leave no room for the percent under it.
+    fn bar(&self, env: &Env<'_>) -> Rect {
+        let margin = self.style.margin();
+        let gap = self.style.gap();
+        let width = self.header.area().width.saturating_sub(2 * margin);
+        let message = self.message_area(env);
+        let spare = (self.header.area().height + self.style.row() * 5 / 2)
+            .max(message.y + message.height + gap);
+        let bar = self.style.row() / 2;
+        let y = if spare + bar + gap + self.style.row() <= self.hint_area(env).y {
+            spare
+        } else {
+            self.header.area().height + gap + self.message_needs(env) + gap
+        };
+        Rect::new(margin, y, width, bar)
     }
 
     /// The bytes of what is here: a plugin installed counts whole, the
@@ -302,20 +359,22 @@ impl Screen for FetchScreen {
             .draw(&mut ui, i18n.tr("store.fetch.title"), None, None);
         let margin = style.margin();
         let width = self.header.area().width.saturating_sub(2 * margin);
-        let top = self.header.area().height + style.gap();
         // What is fetched, or what did not come.
-        let message = Rect::new(margin, top, width, style.row() * 2);
-        match &self.phase {
-            Phase::Failed(text) => ui.message(message, text),
-            Phase::Restart => {
-                let text = i18n.format(
-                    "store.fetch.restart.text",
-                    &[("names", Arg::Str(&self.names))],
-                );
-                ui.message(message, &text);
-            }
-            Phase::Working | Phase::Done => ui.message(message, &self.names),
+        let message = self.message_area(env);
+        if message.height != self.laid_for {
+            // Words that need more lines move the rows below them.
+            self.layout(env);
         }
+        let text = self.message_text(env);
+        // Close above the bar where the room is short.
+        let room = self.bar(env).y.saturating_sub(message.y + style.gap());
+        let message = Rect::new(
+            message.x,
+            message.y,
+            message.width,
+            message.height.min(room).max(self.message_needs(env)),
+        );
+        ui.message(message, &text);
         if matches!(self.phase, Phase::Failed(_) | Phase::Restart) {
             let rows = self.rows();
             let texts: Vec<&str> = rows.iter().map(|r| Self::row_text(env, *r)).collect();
@@ -327,7 +386,7 @@ impl Screen for FetchScreen {
                 });
             return;
         }
-        let bar = self.bar();
+        let bar = self.bar(env);
         ui.progress(bar, self.permille, Color::BLACK);
         let percent = i18n
             .localize_digits(&format!("{} %", self.permille / 10))
@@ -347,18 +406,18 @@ impl Screen for FetchScreen {
         } else {
             percent
         };
-        let line = Rect::new(margin, bar.y + bar.height + style.gap(), width, style.row());
-        ui.message(line, &text);
-        let note = Rect::new(
-            0,
-            env.device()
-                .display
-                .height
-                .saturating_sub(style.row() * 3 / 2),
-            env.device().display.width,
-            style.row() * 3 / 2,
+        let needs = ui::message_height(env, &style, width, &text);
+        let line = Rect::new(
+            margin,
+            bar.y + bar.height + style.gap(),
+            width,
+            needs.max(style.row()),
         );
-        ui.note_line(note, i18n.tr("store.fetch.hint"));
+        ui.message(line, &text);
+        // The hint keeps all its lines, from the bottom up.
+        let note = self.hint_area(env);
+        let hint = i18n.tr("store.fetch.hint");
+        ui.note_line(note, hint);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

@@ -127,7 +127,7 @@ change the plugin SDK.
   with the percent and the bytes so far, and how it ends: it closes and says *Ready* (the book shows its letters, no
   restart: the packs of letters are data plugins that work at once), or it says what did not come (no connection, no
   room) with *Try again* and *Close*, or *Restart now* / *Later* for a pack that needs one. Leaving the screen lets the
-  download go on. Store 1.0.5 (the same as #148).
+  download go on. At the largest text the hint keeps all its lines and the percent stays clear of it. Store 1.0.5 (the same as #148).
 
 ## [0.6.0-beta.1] - 2026-11-03
 
