@@ -37,6 +37,12 @@ change the plugin SDK.
 
 ### Changed
 
+- **Settings screens skip a pass that counted pictures** (#118). On a black-and-white panel every whole-screen frame
+  drew the screen once more, aside, to count its pictures; the settings screens have none, so they now say so
+  (`Screen::pictures_in_grays`) and the pass is gone (about 4% of the work of opening a group and going back, on the
+  host). Not the whole lag: the first open of a group in a session still shows the busy mark.
+- **Opening a settings group does less work** (#118). The page asked the settings about every registered setting several times
+  (making the setting's group each time); it now asks once. The key handler of Select falls by about a third on the host.
 - The plugin interface's gate (ADR 0026, #94): `interface.txt` keeps the fingerprint the bless was made with, and
   a bless of a change plugins rely on is refused unless the interface rises above the one that fingerprint was made
   at, whatever number `interface.txt` says; layouts of what crosses that changed while the shapes did not are such a
