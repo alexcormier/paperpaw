@@ -55,6 +55,10 @@ change the plugin SDK.
   (`Book::indexed` off, its title and author there) and read its cover with `library::index`, as for any book not
   indexed. On the bench's card the first walk of 1,000 books that all have covers writes 26,952 blocks instead of
   139,557 and reads 75,974 instead of 152,975, its peak 26.2 KiB instead of 70.0 KiB.
+- **The store installs what a plugin requires** (#97): after the store installs a plugin whose `plugin.ini` names
+  `requires` (the Arabic, Persian and Urdu menus need their letters, Korean extra needs Korean), the plugins the
+  device lacks are offered in the store's dialog with their sizes (*Download* or *Not now*). The plugin stays
+  installed either way. A chain asks step by step; what is on the device or not in the library is passed over.
 
 ### Fixed
 
