@@ -194,7 +194,7 @@ fn sleep_until(deadline: Instant) -> bool {
 /// since start) or until the power button goes down, with the readings
 /// paused ([`crate::input::pause`]); whether the button is down at waking.
 /// The watchdogs are off meanwhile ([`watchdogs`]).
-#[cfg(feature = "esp32c3")]
+#[cfg(feature = "asleep-light")]
 pub fn sleep_asleep(until_ms: u64) -> bool {
     let Some(mut low_power) = critical_section::with(|cs| LOW_POWER.borrow_ref_mut(cs).take())
     else {
@@ -216,7 +216,7 @@ pub fn sleep_asleep(until_ms: u64) -> bool {
 /// never ends is then a reset after those minutes, not a reader awake with
 /// nobody looking until the battery is flat. [`watchdogs_awake`] puts them
 /// back, on every way out of the sleep.
-#[cfg(feature = "esp32c3")]
+#[cfg(feature = "asleep-light")]
 pub fn watchdogs_for_sleep(ms: u64) {
     critical_section::with(|cs| {
         if let Some((rtc, wdt)) = WATCHDOGS.borrow_ref_mut(cs).as_mut() {
@@ -229,7 +229,7 @@ pub fn watchdogs_for_sleep(ms: u64) {
 }
 
 /// Both watchdogs as they are awake, with their seconds, fed.
-#[cfg(feature = "esp32c3")]
+#[cfg(feature = "asleep-light")]
 pub fn watchdogs_awake() {
     critical_section::with(|cs| {
         if let Some((rtc, wdt)) = WATCHDOGS.borrow_ref_mut(cs).as_mut() {

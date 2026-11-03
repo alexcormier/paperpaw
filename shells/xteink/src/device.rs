@@ -25,7 +25,7 @@ pub const BUTTON_RESPONSE: Setting<paperpaw_sdk::setting::Text> =
     Setting::new("x4.button-response");
 /// How long the reader sleeps before it switches itself off (the choices
 /// are in `paperpaw_x4::sleeping`).
-#[cfg(feature = "esp32c3")]
+#[cfg(feature = "asleep-light")]
 pub const POWER_OFF_AFTER: Setting<paperpaw_sdk::setting::Text> =
     Setting::new("x4.power-off-after");
 /// The choices of [`BUTTON_RESPONSE`].
@@ -167,7 +167,7 @@ static SETTINGS: [SettingSpec; 3] = [
 ];
 
 /// How long asleep before it switches off (next to *Sleep after*).
-#[cfg(feature = "esp32c3")]
+#[cfg(feature = "asleep-light")]
 static SLEEP_SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
     POWER_OFF_AFTER.static_str(),
     "x4.power-off-after",
@@ -387,7 +387,7 @@ impl Plugin for X4 {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        #[cfg(feature = "esp32c3")]
+        #[cfg(feature = "asleep-light")]
         r.add_settings(&SLEEP_SETTINGS)?;
         #[cfg(feature = "x4")]
         if SSD1677.load(core::sync::atomic::Ordering::Relaxed) {

@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- **X4 Pro: a real sleep before it switches off** (#153). Sleep (the power button, the power menu, the idle time) used to
+  switch the Pro off at once, as the X4 did before 0.5. Now the Pro sleeps lightly as the X4 does: the screen stays, a press of
+  the power button wakes it at once, and it switches off after the time of the new setting *Switch off after sleeping* (30
+  minutes by default; *At once* gives the old behaviour; *Never* stays asleep). The front light is off while it sleeps and comes
+  back as set when it wakes. Every 10 minutes it wakes for a moment to look at the battery (3 % or less: off at once). The
+  X4 Classic keeps its deep sleep. Not measured on a device yet.
+
 ### Added
 
 - Screens: `Screen::times_under_overlays` (`SCREEN_REVISION` 3, #117). A screen that says so has its time
