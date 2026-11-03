@@ -296,6 +296,75 @@ impl Storage for Swappable {
     }
 }
 
+/// The storage of a card lost for this run: everything fails with
+/// [`StorageError::CARD_GONE`].
+struct Gone;
+
+const GONE: Result<(), StorageError> = Err(StorageError::CARD_GONE);
+
+impl Storage for Gone {
+    fn read_at(&self, _: &str, _: u64, _: &mut [u8]) -> Result<usize, StorageError> {
+        Err(StorageError::CARD_GONE)
+    }
+
+    fn size(&self, _: &str) -> Result<u64, StorageError> {
+        Err(StorageError::CARD_GONE)
+    }
+
+    fn write(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn append(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn write_at(&self, _: &str, _: u64, _: &[u8]) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn truncate(&self, _: &str, _: u64) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn sync(&self) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn list(&self, _: &str, _: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn remove(&self, _: &str) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn exists(&self, _: &str) -> bool {
+        false
+    }
+
+    fn rename(&self, _: &str, _: &str) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn create_dir(&self, _: &str) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn remove_dir_all(&self, _: &str) -> Result<(), StorageError> {
+        GONE
+    }
+
+    fn list_from(
+        &self,
+        _: &str,
+        _: u64,
+        _: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        Err(StorageError::CARD_GONE)
+    }
+}
+
 /// What [`CardSwap::check`] did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Swapped {
@@ -394,7 +463,7 @@ impl<B: Restart + 'static, E> CardSwap<B, E> {
             return Swapped::No;
         }
         if self.remounts_left == 0 || self.mount_tries_left == 0 {
-            return Swapped::GivenUp;
+            return self.give_up();
         }
         if now_ms < self.next_try_ms {
             return Swapped::Waiting;
@@ -415,7 +484,7 @@ impl<B: Restart + 'static, E> CardSwap<B, E> {
             }
             self.mount_tries_left -= 1;
             return if self.mount_tries_left == 0 {
-                Swapped::GivenUp
+                self.give_up()
             } else {
                 Swapped::Waiting
             };
@@ -433,6 +502,19 @@ impl<B: Restart + 'static, E> CardSwap<B, E> {
         self.remounts_left -= 1;
         self.mount_tries_left = MOUNT_TRIES;
         Swapped::Remounted
+    }
+
+    /// The card lost for this run: the storage says so
+    /// ([`StorageError::CARD_GONE`]) to everything that uses it, so that
+    /// the library can ask for a restart. The mount it replaces reaches
+    /// no card (it is lost) as it goes.
+    fn give_up(&mut self) -> Swapped {
+        if let Ok(mut current) = self.storage.try_borrow_mut() {
+            let old = core::mem::replace(&mut *current, Box::new(Gone));
+            drop(current);
+            drop(old);
+        }
+        Swapped::GivenUp
     }
 
     /// Moves to the next generation (the old mount's blocks reach the card

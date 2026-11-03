@@ -54,7 +54,7 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui;
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
-    Params, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    Params, Rect, RefreshMode, RegisterError, Registrar, Screen, StorageError,
 };
 
 use index::{Filter, NEVER, hash};
@@ -286,6 +286,9 @@ struct ListScreen {
     /// The kernel could not make the catalog (`CATALOG_FAILED`): the
     /// folder could not be read; until a catalog is made.
     failed: bool,
+    /// The memory card is lost until a restart ([`card_gone`]), where the
+    /// catalog failed.
+    card_gone: bool,
     filter: Filter,
     by_recent: bool,
     /// How many books (or stacks) the filter shows.
@@ -342,6 +345,7 @@ impl ListScreen {
             archive,
             collecting: collecting(env),
             failed: false,
+            card_gone: false,
             filter: Filter::All,
             by_recent: env.settings().read(&crate::SORT) != crate::SORT_NAME,
             count: 0,
@@ -534,9 +538,10 @@ impl ListScreen {
         self.look_again = total == 0 && archived == 0;
         self.look_again &= !self.failed && !self.collecting && !self.preparing();
         (self.empty_title, self.empty_text) = if self.failed && total == 0 {
+            let (title, text) = failed_words(self.card_gone);
             (
-                env.i18n().tr("files.list.failed.title").to_string(),
-                env.i18n().tr("files.list.failed").to_string(),
+                env.i18n().tr(title).to_string(),
+                env.i18n().tr(text).to_string(),
             )
         } else if self.collecting && total == 0 {
             (
@@ -1370,6 +1375,7 @@ impl ListScreen {
             // The folder could not be read: said instead of "collecting"
             // (the old catalog, if any, stays shown) until one is made.
             self.failed = true;
+            self.card_gone = card_gone(&env);
             self.collecting = false;
             self.refilter(&env);
             cx.request_redraw();
@@ -1380,6 +1386,7 @@ impl ListScreen {
             // or, while covered, when it shows (the one kept is of the old
             // catalog).
             self.failed = false;
+            self.card_gone = false;
             if self.covered {
                 self.gone.clear();
                 self.collecting = false;
@@ -1477,5 +1484,22 @@ impl ListScreen {
         if !self.covered {
             self.pace.wake(cx, &self.loaded);
         }
+    }
+}
+
+/// Whether the memory card is lost until PaperPaw starts again (taken out
+/// and put back more often than a run allows, say): then nothing is tried
+/// again by itself, and the library asks for a restart.
+pub(crate) fn card_gone(env: &Env<'_>) -> bool {
+    env.storage().size("") == Err(StorageError::CARD_GONE)
+}
+
+/// The keys of the title and the words of a library whose folder could not
+/// be read: a restart asked for where the card is lost until then.
+pub(crate) const fn failed_words(card_gone: bool) -> (&'static str, &'static str) {
+    if card_gone {
+        ("files.list.card-gone.title", "files.list.card-gone")
+    } else {
+        ("files.list.failed.title", "files.list.failed")
     }
 }

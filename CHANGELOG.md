@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- Storage: `StorageError::CARD_GONE` (code 1 of `StorageError::Other`, #145): the memory card was taken out and
+  cannot be read again in this run (put back more often than a run allows, or holding nothing PaperPaw reads);
+  nothing is read or written until PaperPaw starts again. The X4 firmware's storage says it once it gives a card up,
+  and the library then asks for a restart (*Restart PaperPaw*) instead of saying it tries again by itself. New
+  constant, no change of the interface.
 - Screens: `Screen::times_under_overlays` (`SCREEN_REVISION` 3, #117). A screen that says so has its time
   (`Cx::wake_at`) while overlays alone cover it (a menu bar, a panel), as it still shows below them: for work that goes
   on there, as the reader counting its pages. No by default: the time waits until it is on top again, as before.

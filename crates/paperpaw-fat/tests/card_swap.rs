@@ -258,8 +258,11 @@ fn a_second_swap_in_one_run_is_given_up_and_reaches_no_card() {
     for at in 0..5 {
         assert_eq!(swap.check(at * RETRY_MS), Swapped::GivenUp);
     }
-    assert!(storage.write("x.txt", b"x").is_err());
-    assert!(storage.sync().is_err());
+    // Said as such, so that the library asks for a restart.
+    assert_eq!(storage.write("x.txt", b"x"), Err(StorageError::CARD_GONE));
+    assert_eq!(storage.sync(), Err(StorageError::CARD_GONE));
+    assert_eq!(storage.size("two.txt"), Err(StorageError::CARD_GONE));
+    assert_eq!(storage.list("", &mut |_| {}), Err(StorageError::CARD_GONE));
     assert_eq!(*third.borrow(), before);
 }
 
@@ -337,7 +340,10 @@ fn a_card_put_back_without_a_file_system_is_given_up_after_some_tries() {
     assert!(outcomes[..tries - 1].iter().all(|o| *o == Swapped::Waiting));
     assert!(outcomes[tries - 1..].iter().all(|o| *o == Swapped::GivenUp));
     assert!(blank.borrow().iter().all(|&b| b == 0), "written to");
-    assert!(storage.read_at("a.txt", 0, &mut [0; 1]).is_err());
+    assert_eq!(
+        storage.read_at("a.txt", 0, &mut [0; 1]),
+        Err(StorageError::CARD_GONE)
+    );
 }
 
 /// A storage that writes as it goes, as a file system that unmounts.
