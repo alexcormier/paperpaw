@@ -91,6 +91,13 @@ change the plugin SDK.
 - **The library no longer says "Preparing the library …" for ever** (#145). If the kernel makes no catalog or
   sorted books for 90 seconds (a card taken out and put back while PaperPaw ran, sorted books that cannot be
   read), the library says that the folder cannot be read, and asks the kernel once more. Files plugin 1.0.5.
+- **A memory card taken out with the library open is said at once** (#145). Turning a page then said "Preparing the
+  library …" until the card was back: the kernel makes nothing of a card it cannot read, so no word of it came. The
+  library now says that the folder cannot be read as soon as it finds the card cannot be read (*Restart PaperPaw*
+  where the X4 gave the card up for the run), and shows the books again once the card is back. Files plugin 1.0.6.
+- **No first-run hints over a card that cannot be read** (#145). With the card taken out, the hints counted as never
+  shown and opened over the library as on a new card; they now count as shown where what was shown cannot be read.
+  Only a card that has no record of them shows them. Hints plugin 1.0.3.
 - **Device check, first page** (#121): the Screen page opened with the focus on *Pass*, the answer it suggests without measuring anything, so the first arrow went round to *Flip pattern* and a first Select passed the page unseen. It now opens on *Flip pattern*, the first tool, as pages with tools should, and *Pass* stays the answer shown filled. Also, a key on that page took seconds, or showed nothing: the page counted as best in grays, which on the X4 makes every change, a moved focus too, a refresh of all the screen in its four grays, and after it a small change is not shown at all until a bigger one comes. The page now shows its stripes in grays when it opens and after *Full refresh*; moving the focus or flipping the pattern refreshes only what changed, in black and white.
 - **Device check, Buttons page** (#121): the page took every button from the moment it opened, so on a device of buttons alone the arrows, Select and Back did nothing and there was no way to move on or leave. It now opens with *Start* like the other pages' controls: the arrows, Select and Back work as everywhere until *Start* is chosen; then every button counts as the one asked for, as before.
 

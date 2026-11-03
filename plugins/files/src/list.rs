@@ -54,7 +54,7 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui;
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
-    Instant, Params, Rect, RefreshMode, RegisterError, Registrar, Screen, StorageError,
+    Instant, Params, Rect, RefreshMode, RegisterError, Registrar, Screen,
 };
 
 use index::{Filter, NEVER, hash};
@@ -117,7 +117,7 @@ static ACTIONS: [FixedAction; 2] = [
     walking::ACTION,
 ];
 static ICONS: [(Id, &str); 2] = [(FIND, "letter-case"), (LOOK_AGAIN, "refresh")];
-pub(crate) use walking::{LOOK_AGAIN, collecting};
+pub(crate) use walking::{LOOK_AGAIN, card_gone, collecting, failed_words};
 
 /// The library screen.
 pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
@@ -369,8 +369,9 @@ impl ListScreen {
         // the first show after a start, and tells the view either way
         // (`CATALOG_CHANGED`); until then it says so, not that there are
         // no books.
-        screen.collecting |= screen.sorted.as_ref().is_some_and(|s| !s.has_books())
-            && env.storage().list("", &mut |_| {}).is_ok();
+        screen.collecting |=
+            screen.sorted.as_ref().is_some_and(|s| !s.has_books()) && walking::readable(env);
+        screen.unreadable(env);
         screen.refilter(env);
         screen
     }
@@ -430,6 +431,7 @@ impl ListScreen {
             sorted.hide_all(env.storage(), &self.gone);
         }
         self.forget_gone();
+        self.unreadable(env);
     }
 
     /// The sorted books let go of where their file went meanwhile (the
@@ -1479,22 +1481,5 @@ impl ListScreen {
         if !self.covered {
             self.pace.wake(cx, &self.loaded);
         }
-    }
-}
-
-/// Whether the memory card is lost until PaperPaw starts again (taken out
-/// and put back more often than a run allows, say): then nothing is tried
-/// again by itself, and the library asks for a restart.
-pub(crate) fn card_gone(env: &Env<'_>) -> bool {
-    env.storage().size("") == Err(StorageError::CARD_GONE)
-}
-
-/// The keys of the title and the words of a library whose folder could not
-/// be read: a restart asked for where the card is lost until then.
-pub(crate) const fn failed_words(card_gone: bool) -> (&'static str, &'static str) {
-    if card_gone {
-        ("files.list.card-gone.title", "files.list.card-gone")
-    } else {
-        ("files.list.failed.title", "files.list.failed")
     }
 }

@@ -9,7 +9,8 @@ use alloc::string::String;
 use paperpaw_sdk::library::catalog::State;
 use paperpaw_sdk::work::WorkState;
 use paperpaw_sdk::{
-    Command, Commands, Cx, Env, FixedAction, Handled, Id, Instant, Params, Rect, library,
+    Command, Commands, Cx, Env, FixedAction, Handled, Id, Instant, Params, Rect, StorageError,
+    library,
 };
 
 /// The kernel's work that makes the catalog and the sorted books.
@@ -108,10 +109,24 @@ impl super::ListScreen {
         }
         self.idle_since = None;
         self.failed = true;
+        self.card_gone = card_gone(&env);
         self.collecting = false;
         self.refilter(&env);
         cx.command(library::request_catalog());
         cx.request_redraw();
+    }
+
+    /// Where the sorted books could not be opened as the card cannot be
+    /// read (taken out while the library was open, #145): the library says
+    /// so at once, as where the kernel fails, not that it prepares them.
+    /// The kernel makes nothing of a card it cannot read, so no word of it
+    /// would come; it walks the library anew once the card is back.
+    pub(super) fn unreadable(&mut self, env: &Env<'_>) {
+        if self.sorted.is_none() && !readable(env) {
+            self.failed = true;
+            self.card_gone = card_gone(env);
+            self.collecting = false;
+        }
     }
 }
 
@@ -122,7 +137,30 @@ pub(crate) fn collecting(env: &Env<'_>) -> bool {
     matches!(
         library::service(env).catalog_state(env),
         State::Missing | State::Building
-    ) && env.storage().list("", &mut |_| {}).is_ok()
+    ) && readable(env)
+}
+
+/// Whether the storage can be read at all: not while the memory card is
+/// taken out (#145).
+pub(crate) fn readable(env: &Env<'_>) -> bool {
+    env.storage().list("", &mut |_| {}).is_ok()
+}
+
+/// Whether the memory card is lost until PaperPaw starts again (taken out
+/// and put back more often than a run allows, say): then nothing is tried
+/// again by itself, and the library asks for a restart.
+pub(crate) fn card_gone(env: &Env<'_>) -> bool {
+    env.storage().size("") == Err(StorageError::CARD_GONE)
+}
+
+/// The keys of the title and the words of a library whose folder could not
+/// be read: a restart asked for where the card is lost until then.
+pub(crate) const fn failed_words(card_gone: bool) -> (&'static str, &'static str) {
+    if card_gone {
+        ("files.list.card-gone.title", "files.list.card-gone")
+    } else {
+        ("files.list.failed.title", "files.list.failed")
+    }
 }
 
 /// Whether the library's catalog is being made anew: its books are those
