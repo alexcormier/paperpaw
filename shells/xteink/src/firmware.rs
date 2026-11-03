@@ -26,6 +26,7 @@ use crate::network::{Network, NetworkIo};
 use crate::ota::Ota;
 use crate::{clock, device, input, now, power, stack};
 
+mod card_swap;
 mod paced;
 #[cfg(feature = "esp32c3")]
 mod sleeping_board;
@@ -86,12 +87,17 @@ pub struct Firmware {
     /// The X4 Pro's front light.
     #[cfg(feature = "x4-pro")]
     pub light: Option<crate::light::Light>,
+    /// The card taken out and put back while running (#145).
+    pub card_swap: Option<alloc::boxed::Box<dyn crate::volume::Swap>>,
     pub state: State,
 }
 
 /// Where the main loop is.
 #[derive(Debug, Default)]
 pub struct State {
+    /// What the card's watch said last, where it was not `No` (logged as
+    /// it changes).
+    card_said: Option<paperpaw_fat::Swapped>,
     /// The kernel asked to sleep.
     sleep: bool,
     /// The kernel asked to switch the device off (`Effect::PowerOff`).
@@ -246,6 +252,7 @@ impl Firmware {
         power::mark(power::at::LOOP);
         stack::check();
         self.io();
+        self.watch_card();
         for effects in self.network.step(&mut self.kernel, now()) {
             self.apply(effects);
         }
@@ -804,7 +811,13 @@ impl Firmware {
         if let Some(ota) = &mut self.ota {
             ota.resume_trial(now().0);
         }
-        let effects = self.kernel.resume(now());
+        // A card swapped while asleep is mounted anew first: waking is
+        // then told as after a USB drive (which resumes too).
+        let effects = if self.card_swapped_asleep() {
+            self.kernel.usb_drive_ended(now())
+        } else {
+            self.kernel.resume(now())
+        };
         self.apply(effects);
     }
 

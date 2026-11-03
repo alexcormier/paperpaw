@@ -88,8 +88,13 @@ mod found;
 mod free;
 mod listed;
 mod settle;
+mod swap;
 
 pub use disk::{BLOCK, BlockDisk, Blocks, DiskError, SharedDisk, VolumeError};
+pub use swap::{
+    CardSwap, LOST_AFTER, MOUNT_TRIES, Mount, PROBE_MS, REMOUNTS, RETRY_MS, Restart, Swappable,
+    Swapped, Watched,
+};
 
 use alloc::format;
 use alloc::string::{String, ToString};
