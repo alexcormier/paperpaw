@@ -302,6 +302,17 @@ fn count_in_light_sleep() {
     regs.wdtwprotect().write(|w| unsafe { w.bits(0) });
 }
 
+/// Whether the RTC's watchdog is paused in light sleep (it must not be:
+/// [`count_in_light_sleep`]); logged once per sleep to check it on a device.
+#[cfg(feature = "asleep-light")]
+pub fn watchdog_pauses_in_sleep() -> bool {
+    esp_hal::peripherals::LPWR::regs()
+        .wdtconfig0()
+        .read()
+        .wdt_pause_in_slp()
+        .bit_is_set()
+}
+
 /// Starts the X4 again if the firmware does not come by: after `rtc_s`
 /// seconds by the RTC's watchdog, which counts on in light sleep (a sleep
 /// that does not end), after `timer_s` seconds by the timer group's. Hung,
