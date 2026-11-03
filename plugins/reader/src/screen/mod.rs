@@ -668,7 +668,12 @@ impl Screen for ReaderScreen {
         };
         if *action == actions::NEXT_PAGE {
             let end = book.page.end;
-            book.show(cx, end, true);
+            // No page after this one though the index counts more: its
+            // count is wrong; counted again from now.
+            if !book.show(cx, end, true) && book.distrust_index(cx.env()) {
+                cx.wake_at(cx.env().now());
+                self.update_status(cx);
+            }
             Handled::Yes
         } else if *action == actions::PREV_PAGE {
             let env = *cx.env();
