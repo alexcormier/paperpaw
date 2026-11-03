@@ -37,17 +37,30 @@ change the plugin SDK.
 
 ### Changed
 
+- **Settings screens skip a pass that counted pictures** (#118). On a black-and-white panel every whole-screen frame
+  drew the screen once more, aside, to count its pictures; the settings screens have none, so they now say so
+  (`Screen::pictures_in_grays`) and the pass is gone (about 4% of the work of opening a group and going back, on the
+  host). Not the whole lag: the first open of a group in a session still shows the busy mark.
+- **Opening a settings group does less work** (#118). The page asked the settings about every registered setting several times
+  (making the setting's group each time); it now asks once. The key handler of Select falls by about a third on the host.
+- The plugin interface's gate (ADR 0026, #94): `interface.txt` keeps the fingerprint the bless was made with, and
+  a bless of a change plugins rely on is refused unless the interface rises above the one that fingerprint was made
+  at, whatever number `interface.txt` says; layouts of what crosses that changed while the shapes did not are such a
+  change. The first bless of the interface-6 round kept interface 5 that way and its fingerprint with it (#363). The
+  fingerprint is as it was (X4: `00063e32940609b9`).
+- The first walk of new books reads no covers (#398): a book's cover is read from it when a view first shows it (the
+  library's list and grid, its book sheet, the home screen's books, the sleep screen), one book at a time, the books
+  shown first, none begun while keys come (a pause of 0.6 s after the last); a book never shown never costs its cover.
+  Until then the book shows as one without a cover does (title and author). Plugins see such a book not yet indexed
+  (`Book::indexed` off, its title and author there) and read its cover with `library::index`, as for any book not
+  indexed. On the bench's card the first walk of 1,000 books that all have covers writes 26,952 blocks instead of
+  139,557 and reads 75,974 instead of 152,975, its peak 26.2 KiB instead of 70.0 KiB.
 - **Less waiting for the busy mark** (#118). Going back no longer shows the busy mark the first time (the screen
   below is there already); what was timed is kept across starts in `.paperpaw/core/timing.txt` (written when the
   device sleeps or stops, only where it changed what is slow), so on the X4, where every wake is a start, a screen
   that opened quickly before is not marked again; and the mark shows only for work that took as long as the
   refresh showing it (500 ms, `KernelBuilder::busy_mark_after`, 400 before). A damaged or older file holds no
   times. On the X4 a needless mark cost ~330 ms.
-- The plugin interface's gate (ADR 0026, #94): `interface.txt` keeps the fingerprint the bless was made with, and
-  a bless of a change plugins rely on is refused unless the interface rises above the one that fingerprint was made
-  at, whatever number `interface.txt` says; layouts of what crosses that changed while the shapes did not are such a
-  change. The first bless of the interface-6 round kept interface 5 that way and its fingerprint with it (#363). The
-  fingerprint is as it was (X4: `00063e32940609b9`).
 
 ### Fixed
 
