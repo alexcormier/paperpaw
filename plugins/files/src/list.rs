@@ -49,12 +49,12 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, settings, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::library::{self, catalog::State};
+use paperpaw_sdk::library;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui;
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
-    Params, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    Instant, Params, Rect, RefreshMode, RegisterError, Registrar, Screen,
 };
 
 use index::{Filter, NEVER, hash};
@@ -117,7 +117,7 @@ static ACTIONS: [FixedAction; 2] = [
     walking::ACTION,
 ];
 static ICONS: [(Id, &str); 2] = [(FIND, "letter-case"), (LOOK_AGAIN, "refresh")];
-pub(crate) use walking::LOOK_AGAIN;
+pub(crate) use walking::{LOOK_AGAIN, card_gone, collecting, failed_words};
 
 /// The library screen.
 pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
@@ -135,16 +135,6 @@ fn open_sorted(env: &Env<'_>, archive: &str) -> Option<Sorted> {
         let _ = env.storage().remove(KEPT);
     }
     Sorted::open(env, archive)
-}
-
-/// Whether the catalog is still to be made (none yet). Not where the
-/// storage cannot be read (a card the device cannot use): none would
-/// ever come, and the empty library says where books go.
-pub(crate) fn collecting(env: &Env<'_>) -> bool {
-    matches!(
-        library::service(env).catalog_state(env),
-        State::Missing | State::Building
-    ) && env.storage().list("", &mut |_| {}).is_ok()
 }
 
 /// The archive folder, as the setting names it: its books are on the
@@ -281,11 +271,17 @@ struct ListScreen {
     sorted: Option<Sorted>,
     /// The kernel was asked for them since they were last there.
     asked: bool,
+    /// Since when the library waits for a kernel that does nothing
+    /// (`watch`).
+    idle_since: Option<Instant>,
     /// No catalog yet: the kernel is making the first.
     collecting: bool,
     /// The kernel could not make the catalog (`CATALOG_FAILED`): the
     /// folder could not be read; until a catalog is made.
     failed: bool,
+    /// The memory card is lost until a restart ([`card_gone`]), where the
+    /// catalog failed.
+    card_gone: bool,
     filter: Filter,
     by_recent: bool,
     /// How many books (or stacks) the filter shows.
@@ -339,9 +335,11 @@ impl ListScreen {
             root: library::folder(env).to_string(),
             sorted: open_sorted(env, &archive),
             asked: false,
+            idle_since: None,
             archive,
             collecting: collecting(env),
             failed: false,
+            card_gone: false,
             filter: Filter::All,
             by_recent: env.settings().read(&crate::SORT) != crate::SORT_NAME,
             count: 0,
@@ -371,8 +369,9 @@ impl ListScreen {
         // the first show after a start, and tells the view either way
         // (`CATALOG_CHANGED`); until then it says so, not that there are
         // no books.
-        screen.collecting |= screen.sorted.as_ref().is_some_and(|s| !s.has_books())
-            && env.storage().list("", &mut |_| {}).is_ok();
+        screen.collecting |=
+            screen.sorted.as_ref().is_some_and(|s| !s.has_books()) && walking::readable(env);
+        screen.unreadable(env);
         screen.refilter(env);
         screen
     }
@@ -432,6 +431,7 @@ impl ListScreen {
             sorted.hide_all(env.storage(), &self.gone);
         }
         self.forget_gone();
+        self.unreadable(env);
     }
 
     /// The sorted books let go of where their file went meanwhile (the
@@ -445,12 +445,13 @@ impl ListScreen {
     }
 
     /// Asks the kernel for the sorted books where they are being made
-    /// anew, once.
+    /// anew, once; and watches that the kernel answers ([`walking`]).
     fn ask(&mut self, cx: &mut Cx<'_, '_>) {
         if self.sorted.is_none() && !self.asked {
             self.asked = true;
             cx.command(sorted::request(&self.archive));
         }
+        self.watch(cx);
     }
 
     /// Takes the shown books (or shelves) anew from the index, the focus
@@ -534,9 +535,10 @@ impl ListScreen {
         self.look_again = total == 0 && archived == 0;
         self.look_again &= !self.failed && !self.collecting && !self.preparing();
         (self.empty_title, self.empty_text) = if self.failed && total == 0 {
+            let (title, text) = failed_words(self.card_gone);
             (
-                env.i18n().tr("files.list.failed.title").to_string(),
-                env.i18n().tr("files.list.failed").to_string(),
+                env.i18n().tr(title).to_string(),
+                env.i18n().tr(text).to_string(),
             )
         } else if self.collecting && total == 0 {
             (
@@ -1370,6 +1372,7 @@ impl ListScreen {
             // The folder could not be read: said instead of "collecting"
             // (the old catalog, if any, stays shown) until one is made.
             self.failed = true;
+            self.card_gone = card_gone(&env);
             self.collecting = false;
             self.refilter(&env);
             cx.request_redraw();
@@ -1380,6 +1383,7 @@ impl ListScreen {
             // or, while covered, when it shows (the one kept is of the old
             // catalog).
             self.failed = false;
+            self.card_gone = false;
             if self.covered {
                 self.gone.clear();
                 self.collecting = false;

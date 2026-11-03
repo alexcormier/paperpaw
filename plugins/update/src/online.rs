@@ -14,15 +14,15 @@
 //!  "plugins": ["paperpaw-plugin-stats 0.4.0", "..."],
 //!  "abi": "f1f6cd5dd377bb4d", "compiler": "6a1f03c2",
 //!  "code": ["hello 0.1.0", "..."], "trigger": "manual",
-//!  "first": ["day", "week"]}
+//!  "first": ["day", "week"], "age": "new"}
 //! ```
 //!
 //! `abi` is the fingerprint native code plugins must have to run here
 //! (ADR 0024), `compiler` the compiler they must name (ADR 0026), `code`
 //! the code plugins installed with their versions, so
 //! the server can say which have builds for an update; both are left out
-//! where the firmware loads no code plugins. `trigger` and `first` count
-//! devices without knowing them (module `count`).
+//! where the firmware loads no code plugins. `trigger`, `first` and `age`
+//! count devices without knowing them (module `count`).
 //!
 //! The answer names the newest update for it, or none (`version`
 //! empty, or no newer than the one running):
@@ -376,6 +376,10 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, trigger: Trigger, out: &mut Comm
     let Some(firmware) = env.firmware() else {
         return;
     };
+    // Beside another firmware nothing is installed: nobody is asked.
+    if crate::dual::declared(env.storage()) {
+        return;
+    }
     let url = format!("{}/api/v1/updates", server(env));
     let request = HttpRequest::new("POST", &url, CHECKED).header(
         String::from("content-type"),

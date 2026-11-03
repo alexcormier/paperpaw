@@ -315,6 +315,10 @@ impl Shopping {
         if let Some(device) = device {
             builder = builder.catalog_device(device);
         }
+        // A device that loads code plugins names its build to the library.
+        let abi = native
+            .as_ref()
+            .map_or_else(String::new, |native| format!("&abi={}", native.fingerprint));
         if let Some(native) = native {
             builder = builder.code_plugins(native, Box::new(NoCode));
         }
@@ -330,7 +334,9 @@ impl Shopping {
         };
         shopping.run(OPEN);
         if let Some(device) = device.filter(|_| network) {
-            let list_url = LIST.replace("device=x4&", &format!("device={device}&"));
+            let list_url = LIST
+                .replace("device=x4&", &format!("device={device}&"))
+                .replace("&order=", &format!("{abi}&order="));
             let call = shopping.request(&list_url);
             shopping.answer(&call, 200, list.as_bytes());
         }

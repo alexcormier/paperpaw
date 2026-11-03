@@ -17,6 +17,7 @@
 extern crate alloc;
 
 mod catalog;
+mod fetch;
 mod letters;
 mod list;
 mod needs;
@@ -57,6 +58,7 @@ const PAGE_SCREEN: Id = Id::new_static("store.plugin");
 const VIEW_SCREEN: Id = Id::new_static("store.view");
 const SOURCE_SCREEN: Id = Id::new_static("store.source");
 const SHOTS_SCREEN: Id = Id::new_static("store.shots");
+const FETCH_SCREEN: Id = Id::new_static("store.fetch");
 const LETTERS_SCREEN: Id = Id::new_static("store.letters");
 /// The fonts browser's list, offered as the entry *Fonts*.
 pub(crate) const FONTS: Id = Id::new_static("fonts-browser.open");
@@ -138,7 +140,7 @@ static ENTRIES: [MenuEntry; 3] = [
 ];
 static ICONS: [(Id, &str); 2] = [(OPEN, "cloud-download"), (DISCOVER_FONTS, "typography")];
 
-static SCREENS: [FixedScreen; 6] = [
+static SCREENS: [FixedScreen; 7] = [
     FixedScreen::new(PAGE_SCREEN, "store.title", |env, params| {
         Box::new(page::PageScreen::new(env, params))
     }),
@@ -151,6 +153,10 @@ static SCREENS: [FixedScreen; 6] = [
     FixedScreen::new(SOURCE_SCREEN, "store.source", |env, params| {
         Box::new(source::SourceScreen::new(env, params))
     }),
+    FixedScreen::new(FETCH_SCREEN, "store.fetch.title", |env, params| {
+        Box::new(fetch::FetchScreen::new(env, params))
+    })
+    .instances(paperpaw_sdk::Instances::SINGLE),
     FixedScreen::new(SHOTS_SCREEN, "store.shots", |env, params| {
         Box::new(shots::ShotsScreen::new(env, params))
     }),

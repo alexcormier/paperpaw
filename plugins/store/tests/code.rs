@@ -15,7 +15,7 @@
 
 mod common;
 
-use common::{LIST, Shared, Shopping};
+use common::{Shared, Shopping};
 use paperpaw_native::signature::{public_key, sign, sign_message};
 use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
@@ -27,7 +27,12 @@ use paperpaw_sdk::native::keys::{
 use paperpaw_sdk::native::{Fingerprint, Native, installed_code, known_author};
 use paperpaw_sdk::{PluginKind, Storage, Version};
 
-const PAGE: &str = "https://paperpaw.org/api/v1/plugins/clock.json?device=x4&lang=en";
+/// The addresses of a device that loads code plugins of [`BUILD`]: they
+/// name it (`abi`), so that the library gives the builds for it (#148).
+const PAGE: &str =
+    "https://paperpaw.org/api/v1/plugins/clock.json?device=x4&lang=en&abi=0006456789abcdef";
+const LIST: &str =
+    "https://paperpaw.org/api/v1/plugins.json?device=x4&lang=en&abi=0006456789abcdef&order=fair";
 const FILES: &str = "https://paperpaw.org/api/v1/plugins/clock";
 /// The build of this PaperPaw.
 const BUILD: Fingerprint = Fingerprint::of(paperpaw_sdk::native::INTERFACE, 0x4567_89ab_cdef);
@@ -1120,4 +1125,16 @@ fn room_not_enough_even_without_the_one_that_is_off_is_refused() {
     );
     assert!(shown.contains("Not enough room"), "{shown}");
     assert!(!shown.contains("Install"), "{shown}");
+}
+
+#[test]
+fn the_library_is_asked_for_the_builds_of_the_paperpaw_that_runs() {
+    assert!(PAGE.ends_with(&format!("abi={BUILD}")), "{PAGE}");
+    assert!(LIST.contains(&format!("&abi={BUILD}")), "{LIST}");
+    // The list was asked for with it (the helper that opens the store
+    // answers that address only), and so is the plugin's page.
+    let mut shopping = store("1.0.0");
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    shopping.request(PAGE);
 }

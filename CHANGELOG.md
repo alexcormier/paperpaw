@@ -23,6 +23,11 @@ change the plugin SDK.
 
 ### Added
 
+- Storage: `StorageError::CARD_GONE` (code 1 of `StorageError::Other`, #145): the memory card was taken out and
+  cannot be read again in this run (put back more often than a run allows, or holding nothing PaperPaw reads);
+  nothing is read or written until PaperPaw starts again. The X4 firmware's storage says it once it gives a card up,
+  and the library then asks for a restart (*Restart PaperPaw*) instead of saying it tries again by itself. New
+  constant, no change of the interface.
 - Screens: `Screen::times_under_overlays` (`SCREEN_REVISION` 3, #117). A screen that says so has its time
   (`Cx::wake_at`) while overlays alone cover it (a menu bar, a panel), as it still shows below them: for work that goes
   on there, as the reader counting its pages. No by default: the time waits until it is on top again, as before.
@@ -49,6 +54,20 @@ change the plugin SDK.
   (`paperpaw-app/panes`) have it. A finger on the line between the parts goes to the nearer one; a change of the
   interface text size that makes the screen expanded or no longer so lays the two out again. A class a later
   kernel adds reads as `Expanded` in `DisplayChanged`, so an older plugin still hears the event.
+- Devices (#95): PaperPaw beside another firmware (a tool that puts two firmwares on one X4) can be told so, by
+  `dual-boot = on` in a `[firmware]` section of `paperpaw.ini` or by a marker in the tool's bootloader
+  (`paperpaw-dualboot:1`, see `docs/dual-boot.md`). It then never writes the other partition or the OTA data: no
+  updates, no trial, no way back to another firmware; the *Updates* page says why. Not declared, nothing changes. A
+  `[firmware]` section no longer warns as an unknown plugin, and `firmware` can no longer be a plugin's id (as
+  `plugins`, `fonts`, `menus` and `slots` cannot). An update PaperPaw installed itself is still marked as on trial at once, as before; what a tool put in the other
+  slot, and the undoing of an update, wait until the card and `paperpaw.ini` are read. The bootloader's 32 KB and the ini are read only where a start would write the OTA data, after a declared start, or before an install; a normal start reads neither. No change for plugins.
+- **One search field everywhere** (#113). The SDK draws a search field as one part, `ui::SearchField`: a rounded
+  outline round the search icon and a gray hint (or the words searched for), the focus over it when focused, the
+  icon at the right where the interface runs right to left, in the theme's inks. The library's *Find* screen, the
+  settings, the store and the actions list of the button settings use it, so their searches look the same; the
+  settings' search is now a field at the top of the list, no longer a row like the others. For plugin authors:
+  `SearchField::new(hint).text(words).focused(focused).draw(ui, rect)`, `SearchField::height(style)`; a new type,
+  so plugins built before are not affected.
 - Devices (#96): a developer setting *Stay awake on USB* (X4, X4 Pro, X4 Classic, X3; off by default). While the cable is in,
   the sleep after *Sleep after* does not come, and *Sleep* shows the sleep picture but does not sleep, so the computer
   keeps the link for remote tests; the next press or command wakes it, and a cable pulled meanwhile puts the device
@@ -58,6 +77,10 @@ change the plugin SDK.
 
 ### Changed
 
+- **The update check says how long the device is in use** (#143): next to what started the check, it sends `age`,
+  `new` (under seven days since the first check), `week` (up to thirty days) or `month`, so that the store's
+  statistics can count only devices in use for a while. The device keeps the date of its first check on the card
+  (`first-check.txt`, never sent); without a clock set, no age is sent.
 - **Settings screens skip a pass that counted pictures** (#118). On a black-and-white panel every whole-screen frame
   drew the screen once more, aside, to count its pictures; the settings screens have none, so they now say so
   (`Screen::pictures_in_grays`) and the pass is gone (about 4% of the work of opening a group and going back, on the
@@ -76,6 +99,12 @@ change the plugin SDK.
   (`Book::indexed` off, its title and author there) and read its cover with `library::index`, as for any book not
   indexed. On the bench's card the first walk of 1,000 books that all have covers writes 26,952 blocks instead of
   139,557 and reads 75,974 instead of 152,975, its peak 26.2 KiB instead of 70.0 KiB.
+- **Less waiting for the busy mark** (#118). Going back no longer shows the busy mark the first time (the screen
+  below is there already); what was timed is kept across starts in `.paperpaw/core/timing.txt` (written when the
+  device sleeps or stops, only where it changed what is slow), so on the X4, where every wake is a start, a screen
+  that opened quickly before is not marked again; and the mark shows only for work that took as long as the
+  refresh showing it (500 ms, `KernelBuilder::busy_mark_after`, 400 before). A damaged or older file holds no
+  times. On the X4 a needless mark cost ~330 ms.
 - **The store installs what a plugin requires** (#97): after the store installs a plugin whose `plugin.ini` names
   `requires` (the Arabic, Persian and Urdu menus need their letters, Korean extra needs Korean), the plugins the
   device lacks are offered in the store's dialog with their sizes (*Download* or *Not now*). The plugin stays
@@ -96,10 +125,36 @@ change the plugin SDK.
   with "invalid path". Folders of names PaperPaw does not take (made elsewhere: `con`) are removed with all they hold.
 - A book whose cache folder cannot be cleared (a damaged folder, #99) is never read from: the book shows its details,
   and opening it says the card could not be written, instead of reading another book's chapters as its own.
+- **The library no longer says "Preparing the library …" for ever** (#145). If the kernel makes no catalog or
+  sorted books for 90 seconds (a card taken out and put back while PaperPaw ran, sorted books that cannot be
+  read), the library says that the folder cannot be read, and asks the kernel once more. Files plugin 1.0.5.
+- **A memory card taken out with the library open is said at once** (#145). Turning a page then said "Preparing the
+  library …" until the card was back: the kernel makes nothing of a card it cannot read, so no word of it came. The
+  library now says that the folder cannot be read as soon as it finds the card cannot be read (*Restart PaperPaw*
+  where the X4 gave the card up for the run), and shows the books again once the card is back. Files plugin 1.0.6.
+- **No first-run hints over a card that cannot be read** (#145). With the card taken out, the hints counted as never
+  shown and opened over the library as on a new card; they now count as shown where what was shown cannot be read.
+  Only a card that has no record of them shows them. Hints plugin 1.0.3.
 - **Device check, first page** (#121): the Screen page opened with the focus on *Pass*, the answer it suggests without measuring anything, so the first arrow went round to *Flip pattern* and a first Select passed the page unseen. It now opens on *Flip pattern*, the first tool, as pages with tools should, and *Pass* stays the answer shown filled. Also, a key on that page took seconds, or showed nothing: the page counted as best in grays, which on the X4 makes every change, a moved focus too, a refresh of all the screen in its four grays, and after it a small change is not shown at all until a bigger one comes. The page now shows its stripes in grays when it opens and after *Full refresh*; moving the focus or flipping the pattern refreshes only what changed, in black and white.
 - **Device check, Buttons page** (#121): the page took every button from the moment it opened, so on a device of buttons alone the arrows, Select and Back did nothing and there was no way to move on or leave. It now opens with *Start* like the other pages' controls: the arrows, Select and Back work as everywhere until *Start* is chosen; then every button counts as the one asked for, as before.
 - Setup: the 'Look for updates' step shows its label next to the switch again (#132).
 - Updates: when some plugins did not come along with an update, one short notice says so (not one for each), and they are fetched again at the next update checks (#141).
+- **"Switch off" in the power menu leaves a picture on the screen** (#146). It switched off with the last page still showing, so the
+  device looked frozen. Switching off and sleeping from the power menu now show the sleep screen first, as the power
+  button's short press does. Where the sleep screen is set to show the page as it is, or the page with a picture, switching
+  off shows the logo with "Switched off" and how to switch on instead (English and German).
+- **The plugin store shows all the plugins of this PaperPaw** (#148). It now tells the plugin library which PaperPaw runs
+  (`abi`, the fingerprint) in its list and page requests; without it the library answered with the builds of PaperPaw
+  0.5, which this one drops, so only a few code plugins were listed. A plugin built for an older interface than the
+  device runs is offered as an update where the library has a build for this one, whatever the version says; one the
+  library has no build of yet is listed as "Not available yet", not left out. Store 1.0.5.
+- **Language packs have a group of their own** (#148): *Languages* (*Sprachen*), before *System*. Readers that do not
+  know a group show it under *System*; a group this store does not know can no longer cause an error.
+- **A book that needs more letters shows the download** (#147). After *Download* a screen shows what is fetched, a bar
+  with the percent and the bytes so far, and how it ends: it closes and says *Ready* (the book shows its letters, no
+  restart: the packs of letters are data plugins that work at once), or it says what did not come (no connection, no
+  room) with *Try again* and *Close*, or *Restart now* / *Later* for a pack that needs one. Leaving the screen lets the
+  download go on. Store 1.0.5 (the same as #148).
 
 ## [0.6.0-beta.1] - 2026-11-03
 
