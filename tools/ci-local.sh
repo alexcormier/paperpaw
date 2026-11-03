@@ -202,9 +202,13 @@ g_embedded() {
     # 16.4 MB: 16 held until the Mail plugin (about 0.25 MB of code and
     # texts, with what its generics pull in) came, 16.3 with it; 0.6.0-beta.1's
     # last fixes (#112, #119, #120, #122: kernel and SDK code in the browser
-    # emulator, +15.6 KB) took it to 16.4. Keep the limits in ci.yml and
-    # release.yml the same.
-    run "embedded: build the web emulator" "python3 shells/web/build.py --limit-mb 16.4"
+    # emulator, +15.6 KB) took it to 16.4. The 0.6.0-beta.2 train (card swap,
+    # search field, store fetch and more, ~+2 KB on a build already at
+    # 16.40 MB) went over it, so 16.8 leaves about 0.4 MB. The browser emulator
+    # is not memory-bound like the X4; the limit is there to catch what is
+    # pulled in by accident (debug info, a host-only dependency), not 2 KB.
+    # Keep the limits in ci.yml and release.yml the same.
+    run "embedded: build the web emulator" "python3 shells/web/build.py --limit-mb 16.8"
 }
 
 g_native() {
