@@ -41,6 +41,13 @@ change the plugin SDK.
   `[firmware]` section no longer warns as an unknown plugin, and `firmware` can no longer be a plugin's id (as
   `plugins`, `fonts`, `menus` and `slots` cannot). An update PaperPaw installed itself is still marked as on trial at once, as before; what a tool put in the other
   slot, and the undoing of an update, wait until the card and `paperpaw.ini` are read. The bootloader's 32 KB and the ini are read only where a start would write the OTA data, after a declared start, or before an install; a normal start reads neither. No change for plugins.
+- **One search field everywhere** (#113). The SDK draws a search field as one part, `ui::SearchField`: a rounded
+  outline round the search icon and a gray hint (or the words searched for), the focus over it when focused, the
+  icon at the right where the interface runs right to left, in the theme's inks. The library's *Find* screen, the
+  settings, the store and the actions list of the button settings use it, so their searches look the same; the
+  settings' search is now a field at the top of the list, no longer a row like the others. For plugin authors:
+  `SearchField::new(hint).text(words).focused(focused).draw(ui, rect)`, `SearchField::height(style)`; a new type,
+  so plugins built before are not affected.
 - Devices (#96): a developer setting *Stay awake on USB* (X4, X4 Pro, X4 Classic, X3; off by default). While the cable is in,
   the sleep after *Sleep after* does not come, and *Sleep* shows the sleep picture but does not sleep, so the computer
   keeps the link for remote tests; the next press or command wakes it, and a cable pulled meanwhile puts the device

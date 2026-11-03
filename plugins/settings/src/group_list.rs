@@ -187,12 +187,10 @@ impl GroupList {
         let heading = ui::heading_height(env, &style);
         let heights = entries
             .iter()
-            .map(|e| {
-                if e.link.is_none() {
-                    heading
-                } else {
-                    style.row()
-                }
+            .map(|e| match e.link {
+                None => heading,
+                Some(Link::Search) => ui::SearchField::height(&style),
+                Some(_) => style.row(),
             })
             .collect();
         let headings = entries.iter().map(|e| e.link.is_none()).collect();
@@ -277,6 +275,12 @@ impl Screen for GroupList {
                     ui.heading(rect, &entry.title);
                     return;
                 };
+                if *link == Link::Search {
+                    ui::SearchField::new(&entry.title)
+                        .focused(focused)
+                        .draw(ui, rect);
+                    return;
+                }
                 let ink = style.focus_ink(focused);
                 let icon = entry.icon.as_deref();
                 let rect = ui.row_icon(rect, room, icon, ink);
@@ -285,7 +289,7 @@ impl Screen for GroupList {
                     ui::Row::switch(&entry.title, on)
                         .focused(focused)
                         .draw(ui, rect);
-                } else if matches!(link, Link::Search | Link::Reset | Link::Restart) {
+                } else if matches!(link, Link::Reset | Link::Restart) {
                     ui::Row::value(&entry.title, "")
                         .focused(focused)
                         .draw(ui, rect);

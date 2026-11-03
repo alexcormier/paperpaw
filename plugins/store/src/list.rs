@@ -416,6 +416,12 @@ impl Screen for ListScreen {
                 let Some(&row) = self.rows.get(entry) else {
                     return;
                 };
+                if row == Row::Search {
+                    ui::SearchField::new(env.i18n().tr("store.search"))
+                        .focused(focused)
+                        .draw(ui, rect);
+                    return;
+                }
                 let ink = style.focus_ink(focused);
                 let rest = ui.row_icon(rect, room, Some(row.icon()), ink);
                 let name = match row {
