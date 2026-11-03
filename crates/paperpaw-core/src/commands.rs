@@ -216,11 +216,16 @@ impl Kernel {
             .is_some()
             .then(|| self.now.add_millis(300));
         // Only the screen on top runs, and one below overlays alone that
-        // asks to: a covered one's time waits. Bars shown run too.
-        let timer = [self.screen_timer(), self.chromes_due()]
-            .into_iter()
-            .flatten()
-            .min();
+        // asks to: a covered one's time waits. Bars shown run too, and a
+        // list beside its detail.
+        let timer = [
+            self.screen_timer(),
+            self.chromes_due(),
+            self.pane_list_due(),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
         effects.wake_at = [
             self.hint.until,
             input,
@@ -284,6 +289,7 @@ impl Kernel {
                 // the screen that had it is gone (ADR 0030).
                 self.sync_room();
                 self.hint_escape();
+                self.show_pane_list();
                 self.with_top(|screen, cx| {
                     screen.on_show(cx);
                     Handled::Yes
@@ -407,7 +413,10 @@ impl Kernel {
             }
             Command::KeepAwake(hold) => self.keep_awake(hold),
             Command::LetSleep(id) => self.let_sleep(&id),
-            // Keys of later releases: none known yet, left as they are.
+            Command::Extended { key, .. } if key == paperpaw_sdk::builtin::actions::PANE_OTHER => {
+                self.other_pane();
+            }
+            // Keys of later releases: left as they are.
             Command::Extended { .. } => {}
             command @ (Command::SetSetting(..)
             | Command::ResetSetting(_)

@@ -15,6 +15,25 @@ change the plugin SDK.
   change of what plugins built before see.
 - Events: `events::MENU_PAGE` (`MenuPage { menu, page }`, #117): whoever opened the menu slot as a bar with a page
   text tells the open bar its new text; the menu plugin's bar shows it. New constant and type.
+- **A list and the item chosen in it beside each other on wide screens** (#88). Where the screen is expanded (a
+  tablet, a phone on its side; never the X4, which is compact in both orientations), a screen that says
+  `Pane::DETAIL` shows beside the full screen below it: the list at the start (on the right in a right-to-left
+  interface), at least 60 mm or 38 % wide, a line between them, bars and the row of hints over both, each laid out
+  for its part through `Screen::on_resize`. A tap goes to the part it lands in and keys follow it; the new action
+  `core.pane.other` moves them to the other part. A detail the list opens takes the place of the one shown, so
+  going through a list piles nothing up; one the detail opens shows alone over both, and *Back* brings the two back.
+  Free additions, no change of the interface: `ui::ScreenClass` (compact below `ui::COMPACT_BELOW_MM`, 100 mm,
+  expanded from `ui::EXPANDED_FROM_MM`, 140 mm, by the width scaled by the reader's interface text size against
+  its default), `Env::screen_class` and `Env::landscape` (of the screen's own part), `events::DISPLAY_CHANGED`
+  (`DisplayChanged`: the display's width, height, class and whether it is on its side, sent once after a resize
+  laid the screens out), `actions::PANE_OTHER` and `Command::extended`, which plugins had no way to make. Screens
+  are asked `pane` once, when made. A list kept by `on_resize` while a turn puts its detail over it is told
+  `on_hide`. The kernel's new `panes` feature (on by default) builds it; the Xteink firmware (X4, X4 Pro, X4
+  Classic, X3), never wide, leaves it out and saves its code. There a detail is always a full screen and
+  `core.pane.other` is not offered; the SDK is the same either way. Shells with the app's default features
+  (`paperpaw-app/panes`) have it. A finger on the line between the parts goes to the nearer one; a change of the
+  interface text size that makes the screen expanded or no longer so lays the two out again. A class a later
+  kernel adds reads as `Expanded` in `DisplayChanged`, so an older plugin still hears the event.
 
 ### Changed
 
@@ -29,6 +48,9 @@ change the plugin SDK.
 - **The reader's menu shows the page and the pages** (#117). Opened right after a book opens, before its pages were
   counted, the menu bar showed a percentage ("0 %") for as long as it was open, as the count waited for it to close.
   The count now goes on below the menu, and the bar shows "2 / 185" once it ends.
+- Tap zones (thirds, corners, the zones of key maps) are measured on the part of the screen the screen has, as
+  the finger's point always was: on touch devices with the row of button hints (the X4 Pro, the emulator) the
+  borders of the lower zones lay about 3 mm off, by part of the row's height (#88).
 
 ## [0.6.0-beta.1] - 2026-11-03
 
