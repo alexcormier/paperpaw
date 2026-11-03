@@ -56,7 +56,7 @@ de.description = "Fett-kursiver Buchtext in Literata, wo sonst Fett dafür steht
 
 [script-arabic]
 version = "1.1.1"
-group = "look"
+group = "languages"
 licence = "OFL-1.1"
 formats = 3
 devices = ["x4", "x4-pro", "x4-classic"]
@@ -70,7 +70,7 @@ de.description = "Bücher auf Arabisch, Persisch und Urdu in Noto Naskh Arabic, 
 
 [script-hebrew]
 version = "1.1.1"
-group = "look"
+group = "languages"
 licence = "OFL-1.1"
 formats = 3
 devices = ["x4", "x4-pro", "x4-classic"]
@@ -84,7 +84,7 @@ de.description = "Bücher auf Hebräisch in Noto Serif Hebrew, mit ihren Punkten
 
 [script-greek]
 version = "1.0.1"
-group = "look"
+group = "languages"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
@@ -97,7 +97,7 @@ de.description = "Bücher auf Griechisch in Literata, modern und mit den ältere
 
 [script-cyrillic]
 version = "1.0.1"
-group = "look"
+group = "languages"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
@@ -110,7 +110,7 @@ de.description = "Bücher auf Russisch, Ukrainisch, Bulgarisch, Serbisch und and
 
 [language-ar]
 version = "1.0.1"
-group = "look"
+group = "languages"
 licence = "Apache-2.0"
 formats = 4
 requires = ["script-arabic"]
@@ -134,7 +134,7 @@ de.how = "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts nach links
 # syllables (`hangul`) can come later as data, without a new interface.
 [script-korean]
 version = "1.1.2"
-group = "look"
+group = "languages"
 licence = "OFL-1.1"
 formats = 3
 devices = ["x4", "x4-pro", "x4-classic"]
@@ -153,7 +153,7 @@ de.description = "Bücher auf Koreanisch in einer klassischen Buchschrift: die 2
 # the reader offers it only for a book that uses such syllables.
 [script-korean-extra]
 version = "1.0.1"
-group = "look"
+group = "languages"
 licence = "OFL-1.1"
 formats = 4
 requires = ["script-korean"]

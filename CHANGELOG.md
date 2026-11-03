@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The plugin store shows all the plugins of this PaperPaw** (#148). It now tells the plugin library which PaperPaw runs
+  (`abi`, the fingerprint) in its list and page requests; without it the library answered with the builds of PaperPaw
+  0.5, which this one drops, so only a few code plugins were listed. A plugin built for an older interface than the
+  device runs is offered as an update where the library has a build for this one, whatever the version says; one the
+  library has no build of yet is listed as "Not available yet", not left out. Store 1.0.5.
+- **Language packs have a group of their own** (#148): *Languages* (*Sprachen*), before *System*. Readers that do not
+  know a group show it under *System*; a group this store does not know can no longer cause an error.
+
 ## [0.6.0-beta.1] - 2026-11-03
 
 **Plugins of this release must be built from `965d866b` or later** (plugin interface 6, #363; `965d866b` raises the shared interface family `ui` to revision 2, #119: the firmware refuses plugins of revision 1, built before). 0.6.0-beta.1 takes
