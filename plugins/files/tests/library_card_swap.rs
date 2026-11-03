@@ -70,10 +70,7 @@ fn app_with_damage(device: DeviceInfo) -> (App, Rc<Cell<bool>>) {
         card = card.with(&format!("books/Book {n:02}.txt"), TEXT);
     }
     card = card.with(SETUP_DONE, b"");
-    card = card.with(
-        paperpaw_sdk::builtin::CONFIG_FILE,
-        BASE_CONFIG.as_bytes(),
-    );
+    card = card.with(paperpaw_sdk::builtin::CONFIG_FILE, BASE_CONFIG.as_bytes());
     let storage = Shared(Rc::new(Swapped {
         card,
         damaged: Rc::clone(&damaged),
