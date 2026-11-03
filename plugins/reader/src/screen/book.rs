@@ -58,6 +58,11 @@ pub(super) struct Book {
     /// Steps in a row whose pages were left out because a font pack could
     /// not be read while they were laid out.
     index_failures: u8,
+    /// Its page index was thrown away once because it counted a page past
+    /// the end of the book ([`Book::distrust_index`]): not again while the
+    /// book is open, so that a count that again disagrees cannot make the
+    /// whole book be counted at every turn.
+    index_mended: bool,
     /// Where the bookmarks and highlights are.
     pub(super) marks: Vec<Mark>,
     /// Text to point out on this page, e.g. a search hit.
@@ -239,6 +244,7 @@ impl Book {
             indexing: None,
             index_stopped: false,
             index_failures: 0,
+            index_mended: false,
             page: Page::default(),
             words: core::cell::OnceCell::new(),
             lines: core::cell::OnceCell::new(),
@@ -423,8 +429,14 @@ impl Book {
     /// more: the index counted pages this layout does not make (made when
     /// a letter measured otherwise, a pack missing). It is thrown away
     /// and the pages are counted again, so that the count is right and no
-    /// page is promised that does not come. Whether it did.
+    /// page is promised that does not come. Only where the turn really
+    /// reached the end of the book's text (a page that could not be laid
+    /// out, a card out or no memory, leaves the index alone), and once
+    /// while the book is open. Whether it did.
     pub(super) fn distrust_index(&mut self, env: &Env<'_>) -> bool {
+        if self.index_mended {
+            return false;
+        }
         let Some(index) = self.index.as_ref().filter(|i| i.is_complete()) else {
             return false;
         };
@@ -434,6 +446,15 @@ impl Book {
         if !more {
             return false;
         }
+        // The end of the text, not an error: only a page laid out and found
+        // empty says the book is over.
+        if !self
+            .layout(env, self.page.end)
+            .is_ok_and(|page| page.is_past_end())
+        {
+            return false;
+        }
+        self.index_mended = true;
         // Gone with the file: a storage that cannot remove it leaves it,
         // and the count of this run is as wrong as before, but not worse.
         #[expect(
@@ -503,6 +524,8 @@ impl Book {
         self.update_links(env);
         self.history.clear();
         self.index = Some(self.open_index(env));
+        // Another layout, another index: mended once again if it comes to it.
+        self.index_mended = false;
         self.chapter_end.set(None);
         self.chapter_first.set(None);
         self.indexing = None;
