@@ -1890,7 +1890,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-diagnostics"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1942,7 +1942,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-files"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2195,7 +2195,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-keys"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2440,7 +2440,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-settings"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2489,7 +2489,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-store"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
@@ -2792,6 +2792,7 @@ version = "0.6.0-beta.1"
 dependencies = [
  "embedded-hal",
  "paperpaw-app",
+ "paperpaw-config",
  "paperpaw-core",
  "paperpaw-digest",
  "paperpaw-graphics",
