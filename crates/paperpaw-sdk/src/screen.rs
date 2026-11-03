@@ -419,8 +419,9 @@ pub enum Handled {
 
 /// The revision of [`Screen`]'s items in this SDK: what a screen built
 /// with it says in [`Screen::revision`]. 1: the items up to
-/// [`Screen::on_timer`]; 2: [`Screen::on_resize`] and [`Screen::pane`].
-pub const SCREEN_REVISION: u16 = 2;
+/// [`Screen::on_timer`]; 2: [`Screen::on_resize`] and [`Screen::pane`];
+/// 3: [`Screen::times_under_overlays`].
+pub const SCREEN_REVISION: u16 = 3;
 
 /// How a screen shows where the screen is wide ([`Screen::pane`]).
 /// Constants of one type, so more can come without a new plugin
@@ -816,6 +817,20 @@ pub trait Screen {
     fn pane(&self) -> Pane {
         Pane::FULL
     }
+
+    /// Whether its time ([`Cx::wake_at`]) comes while overlays alone
+    /// cover it (a menu bar, a panel, a dialog over it), as it still
+    /// shows below them: for work that goes on there, as a reader that
+    /// counts its pages. Asked when the time is due, so it may say so only
+    /// while it has such work. Its [`Screen::on_timer`] then runs below
+    /// the overlays as on top: the screen itself checks
+    /// [`Cx::is_on_top`] and leaves what it does only on top (turning
+    /// pages by itself, reading aloud, opening screens) for later. No by
+    /// default: the time waits until it is on top again. Under a full
+    /// screen it always waits. Revision 3.
+    fn times_under_overlays(&self) -> bool {
+        false
+    }
 }
 
 /// What a plugin asked the kernel to do during an event.
@@ -898,6 +913,16 @@ impl<'a, 'e> Cx<'a, 'e> {
         self.key
     }
 
+    /// Whether the screen this handler runs for is on top, nothing over
+    /// it: its time ([`Cx::wake_at`]) comes otherwise only below overlays
+    /// alone where it asks ([`Screen::times_under_overlays`]), and what it
+    /// does only on top then waits. Outside the stack (a screen made
+    /// aside, a notice) it is not.
+    pub fn is_on_top(&self) -> bool {
+        let top = self.env().stack().last().map(|entry| entry.key);
+        self.key.is_some_and(|key| top == Some(key))
+    }
+
     /// This screen as the stack lists it ([`Env::stack`](crate::Env::stack)).
     pub fn entry(&self) -> Option<&StackEntry> {
         let key = self.key?;
@@ -975,8 +1000,10 @@ impl<'a, 'e> Cx<'a, 'e> {
     /// Requests a call to [`Screen::on_timer`] of this screen at `at` (the
     /// earliest request wins). Use `cx.env().now()` for "as soon as
     /// possible". It comes while the screen is on top: covered by another
-    /// (a menu, a keyboard), the time waits until it is on top again. It
-    /// is kept when the screen is made anew for another size.
+    /// (a menu, a keyboard), the time waits until it is on top again,
+    /// unless overlays alone cover it and it asks for it
+    /// ([`Screen::times_under_overlays`]). It is kept when the screen is
+    /// made anew for another size.
     /// Keeps the device from going to sleep by itself while this screen
     /// is on top, for as long as `hold` lasts (renew it before it ends):
     /// a clock, a timer, a slideshow. It ends when the screen closes.
