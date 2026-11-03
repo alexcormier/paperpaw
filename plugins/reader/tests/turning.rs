@@ -527,9 +527,17 @@ fn a_turn_past_the_last_page_counts_the_pages_again_when_the_index_says_more() {
         at = now;
     }
     assert_eq!(at, last);
-    // The wrong count is gone, the right one is made again.
+    // The wrong count is gone, the right one is made again; the turn that
+    // found no page says nothing: no page turned, no book finished again.
+    let heard = again.events();
     again.press(actions::NEXT_PAGE);
     assert_eq!(again.shown().at(), last);
+    assert_eq!(again.events(), heard);
+    assert_eq!(
+        heard.iter().filter(|e| **e == "finished").count(),
+        1,
+        "{heard:?}"
+    );
     let mended = paperpaw_sdk::read_file(&storage, &indexes[0], 1 << 20).unwrap();
     assert_eq!(mended, right);
 }
