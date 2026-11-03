@@ -754,6 +754,37 @@ fn the_server_knows_nothing_newer() {
 }
 
 #[test]
+fn the_check_says_how_long_the_device_is_in_use_and_nothing_more() {
+    // Noon on 1 November 2026 (UTC), then 8 and 40 days later.
+    let first = 1_793_534_400;
+    let storage = Shared::default();
+    for (at, age) in [
+        (first, "new"),
+        (first + 8 * 86_400, "week"),
+        (first + 40 * 86_400, "month"),
+    ] {
+        let mut device = Device::at(storage.clone(), Some(at));
+        device.run(OPEN);
+        device.run(actions::CONFIRM);
+        let call = device.request();
+        let question = String::from_utf8(call.body.clone().unwrap_or_default()).unwrap();
+        assert!(
+            question.contains(&format!("\"age\":\"{age}\"")),
+            "{question}"
+        );
+        // The age, never a date.
+        assert!(!question.contains("2026-"), "{question}");
+    }
+    // Without a clock, no age.
+    let mut device = Device::new(Shared::default());
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    let question = String::from_utf8(call.body.clone().unwrap_or_default()).unwrap();
+    assert!(!question.contains("age"), "{question}");
+}
+
+#[test]
 fn no_answer_is_said() {
     let mut device = Device::new(Shared::default());
     device.run(OPEN);
