@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A book opened before its font pack came no longer keeps a wrong page count** (#163). A Hebrew book opened before the
+  Hebrew letters were installed was counted with those letters measured as `?`: 2 pages for a book of one. The count was
+  kept under a name that did not change when the pack arrived, so the book showed `1 / 2` and no turn went to the
+  second page. The pages' key now covers the fonts and packs there are (a pack that comes or goes makes the pages be
+  counted again, also while the book is open), and a turn that finds no page though the count says more throws the
+  count away and makes it again. Reader 1.0.8.
+
 ## [0.6.0-beta.2] - 2026-11-03
 
 **Plugins built for 0.6.0-beta.1 keep working; rebuild only to use the new items.** (Plugin interface 6 is unchanged; the SDK changes only additively: `SCREEN_REVISION` 3, `events::MENU_PAGE`, `Cx::is_on_top`, panes, `ScreenClass`, `StorageError::CARD_GONE`, `ui::SearchField`.)

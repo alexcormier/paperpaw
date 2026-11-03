@@ -409,18 +409,54 @@ impl Book {
         Some(first)
     }
 
+    /// Where the page index of this layout of the book is.
+    fn index_path(&self, env: &Env<'_>) -> String {
+        let size = env.storage().size(&self.path).unwrap_or(0);
+        let name = format!(
+            "pages-{:016x}.bin",
+            fnv1a64(format!("{}|{size}", self.typography.key))
+        );
+        format!("{}/{name}", self.dir)
+    }
+
+    /// After a turn that found no page though the index says there are
+    /// more: the index counted pages this layout does not make (made when
+    /// a letter measured otherwise, a pack missing). It is thrown away
+    /// and the pages are counted again, so that the count is right and no
+    /// page is promised that does not come. Whether it did.
+    pub(super) fn distrust_index(&mut self, env: &Env<'_>) -> bool {
+        let Some(index) = self.index.as_ref().filter(|i| i.is_complete()) else {
+            return false;
+        };
+        let more = index
+            .locate(env.storage(), self.page.start)
+            .is_some_and(|(page, _)| page + 1 < index.pages());
+        if !more {
+            return false;
+        }
+        // Gone with the file: a storage that cannot remove it leaves it,
+        // and the count of this run is as wrong as before, but not worse.
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a page index that stays is as before: counted again when its layout changes"
+        )]
+        let _ = env.storage().remove(&self.index_path(env));
+        self.index = Some(self.open_index(env));
+        self.chapter_end.set(None);
+        self.chapter_first.set(None);
+        self.indexing = None;
+        self.index_stopped = false;
+        self.index_failures = 0;
+        true
+    }
+
     /// The page index of this layout of the book as it is now: its name
     /// tells layouts and editions of the book (by size) apart. A new one
     /// removes those of other layouts once more than a few are kept;
     /// switching back finds the others.
     pub(super) fn open_index(&self, env: &Env<'_>) -> PageIndex {
         let storage = env.storage();
-        let size = storage.size(&self.path).unwrap_or(0);
-        let name = format!(
-            "pages-{:016x}.bin",
-            fnv1a64(format!("{}|{size}", self.typography.key))
-        );
-        let path = format!("{}/{name}", self.dir);
+        let path = self.index_path(env);
         if !storage.exists(&path) {
             let mut others = Vec::new();
             #[expect(

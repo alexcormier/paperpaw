@@ -10,6 +10,7 @@ use paperpaw_sdk::{
 use paperpaw_text::{Glyph, LineMetrics, PackBuilder};
 
 const INSTALL: Id = Id::new_static("installer.install");
+const INSTALL_PACK: Id = Id::new_static("installer.install-pack");
 
 /// A pack of the letters a, e and t, `advance` wide.
 fn pack(advance: f32) -> Vec<u8> {
@@ -62,6 +63,14 @@ impl Plugin for Installer {
                     String::from("plugins/.styles.part"),
                 ));
             },
+        ))?;
+        r.add_action(ActionSpec::new(INSTALL_PACK, "installer.install-pack").handler(
+            |_: &Env<'_>, _, out: &mut Commands| {
+                out.push(Command::InstallPlugin(
+                    Id::new_static("script-more"),
+                    String::from("plugins/.script.part"),
+                ));
+            },
         ))
     }
 }
@@ -78,6 +87,17 @@ fn styles() -> Memory {
         .with("plugins/.styles.part/fonts/bold.ppfp", pack(12.0))
 }
 
+/// A script pack: more letters for Literata, a pack that extends it.
+fn script() -> Memory {
+    Memory::new()
+        .with(
+            "plugins/.script.part/plugin.ini",
+            "[plugin]\nid = script-more\nname = More letters\nversion = 1.0.0\nformats = 3\n\n\
+             [extends]\nmore.ppfp = fonts-default.literata\n",
+        )
+        .with("plugins/.script.part/fonts/more.ppfp", pack(14.0))
+}
+
 /// Opens the book on a lean firmware, with the pack waiting on the card.
 fn lean_reading() -> Reading {
     let storage = Shared::default();
@@ -85,11 +105,14 @@ fn lean_reading() -> Reading {
     storage.create_dir("books").unwrap();
     storage.write(BOOK, text.as_bytes()).unwrap();
     let stored = styles();
-    for path in [
-        "plugins/.styles.part/plugin.ini",
-        "plugins/.styles.part/fonts/bold.ppfp",
+    let more = script();
+    for (from, path) in [
+        (&stored, "plugins/.styles.part/plugin.ini"),
+        (&stored, "plugins/.styles.part/fonts/bold.ppfp"),
+        (&more, "plugins/.script.part/plugin.ini"),
+        (&more, "plugins/.script.part/fonts/more.ppfp"),
     ] {
-        let data = paperpaw_sdk::read_file(&stored, path, 1 << 16).unwrap();
+        let data = paperpaw_sdk::read_file(from, path, 1 << 16).unwrap();
         storage.create_dir(path.rsplit_once('/').unwrap().0).ok();
         storage.write(path, &data).unwrap();
     }
@@ -144,6 +167,29 @@ fn a_book_open_when_the_faces_arrive_is_laid_out_again() {
         Some("reader.screen")
     );
     // Its pages are counted anew, under the key of the new faces.
+    let after = indexes(&reading.storage, BOOK);
+    assert_eq!(after.len(), 2, "{after:?}");
+    assert!(after.iter().any(|name| !before.contains(name)));
+}
+
+/// A pack of letters for a font, installed after the book was opened: the
+/// letters it adds measure otherwise, so the pages are counted anew, not
+/// taken from the count made without it (the count said 2 pages for a
+/// book of one: the second never came).
+#[test]
+fn a_script_pack_that_arrives_makes_the_pages_be_counted_anew() {
+    let mut reading = lean_reading();
+    reading.open();
+    let before = indexes(&reading.storage, BOOK);
+    assert_eq!(before.len(), 1, "{before:?}");
+    reading.now += 100;
+    let effects = reading.kernel.run_action(Instant(reading.now), INSTALL_PACK);
+    reading.settle(effects);
+    assert!(reading.kernel.fonts().contains("script-more.more"));
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.screen")
+    );
     let after = indexes(&reading.storage, BOOK);
     assert_eq!(after.len(), 2, "{after:?}");
     assert!(after.iter().any(|name| !before.contains(name)));
