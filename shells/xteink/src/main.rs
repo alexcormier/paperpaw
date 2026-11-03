@@ -50,6 +50,7 @@ mod card;
 mod clock;
 mod crash;
 mod device;
+mod dual;
 mod firmware;
 #[cfg(feature = "remote")]
 mod gray_test;
@@ -447,8 +448,9 @@ fn prepare() -> Ready {
     // Taken only now: an update that failed its trial goes back after its
     // note (`install_note`), which has the update's panic message.
     // A start that goes back (a failed trial) leaves the message where it
-    // is: the firmware it goes back to reads it as its own.
-    let going_back = ota.as_ref().is_some_and(|ota| ota.failed_trial().is_some());
+    // is: the firmware it goes back to reads it as its own. Whether it does
+    // is known once the card has said this is no dual-boot setup (`dual`).
+    let going_back = ota.as_ref().is_some_and(ota::Ota::plans_to_go_back);
     let panicked = if going_back {
         crash::last()
     } else {
@@ -470,6 +472,20 @@ fn prepare() -> Ready {
         Ok(storage) => (storage, None),
         Err(trouble) => (Box::new(NoStorage) as Box<dyn Storage>, Some(trouble)),
     };
+    // The reader's choice and the bootloader say whether this is a dual-boot
+    // setup, nothing in the other firmware's partition or the OTA data
+    // changed: only then the start does what it needs (a tool's update
+    // marked as on trial, one undone), as before anything else is written
+    // to the card. An update this firmware installed, or one that failed its
+    // trial, was marked before the board's start (`Ota::start`), so that a
+    // hang there still ends in the way back.
+    let mut ota = ota;
+    let dual = dual::settle(&mut ota, storage.as_ref());
+    // A failed trial that the setup left alone: the message is no longer
+    // the other firmware's to read.
+    if going_back && ota.as_ref().is_some_and(|ota| ota.failed_trial().is_none()) {
+        crash::take_last();
+    }
     // After the card, which the note below goes to; before anything else
     // is written to it.
     #[cfg(feature = "x3")]
@@ -543,7 +559,7 @@ fn prepare() -> Ready {
     // Plugins the web flasher wrote behind the image, onto the card first.
     let staged = {
         let mut startup = startup::Startup::new(&mut panel);
-        let staged = native::bundle::stage(&flash, storage.as_ref(), &mut |progress| {
+        let staged = native::bundle::stage(&flash, storage.as_ref(), !dual, &mut |progress| {
             startup.update(progress)
         })
         .unwrap_or_default();
