@@ -359,6 +359,7 @@ fn start() -> Firmware {
         remote: remote::Remote,
         #[cfg(feature = "x4-pro")]
         light: ready.light,
+        card_swap: ready.card_swap,
         state: State::default(),
         // Last, and built right in its place: the kernel is large.
         kernel: kernel(
@@ -394,6 +395,8 @@ struct Ready {
     #[cfg(feature = "x4-pro")]
     light: Option<light::Light>,
     storage: Box<dyn Storage>,
+    /// What watches the card being taken out and put back, if there is one.
+    card_swap: Option<Box<dyn volume::Swap>>,
     /// Why there is no card to keep things on, if there is none.
     card_trouble: Option<paperpaw_core::CardTrouble>,
     firmware: Option<paperpaw_sdk::firmware::Firmware>,
@@ -468,9 +471,9 @@ fn prepare() -> Ready {
     #[cfg(feature = "x4-classic")]
     let board = Board::take(p, probe::factory_controller(&flash));
     power::mark(power::at::START_BOARD);
-    let (storage, card_trouble) = match card::mount(board.card) {
-        Ok(storage) => (storage, None),
-        Err(trouble) => (Box::new(NoStorage) as Box<dyn Storage>, Some(trouble)),
+    let (storage, card_swap, card_trouble) = match card::mount(board.card) {
+        Ok(mounted) => (mounted.storage, Some(mounted.swap), None),
+        Err(trouble) => (Box::new(NoStorage) as Box<dyn Storage>, None, Some(trouble)),
     };
     // The reader's choice and the bootloader say whether this is a dual-boot
     // setup, nothing in the other firmware's partition or the OTA data
@@ -588,6 +591,7 @@ fn prepare() -> Ready {
         #[cfg(feature = "x4-pro")]
         light: board.light,
         storage,
+        card_swap,
         card_trouble,
         code,
         staged,

@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- Storage: `StorageError::CARD_GONE` (code 1 of `StorageError::Other`, #145): the memory card was taken out and
+  cannot be read again in this run (put back more often than a run allows, or holding nothing PaperPaw reads);
+  nothing is read or written until PaperPaw starts again. The X4 firmware's storage says it once it gives a card up,
+  and the library then asks for a restart (*Restart PaperPaw*) instead of saying it tries again by itself. New
+  constant, no change of the interface.
 - Screens: `Screen::times_under_overlays` (`SCREEN_REVISION` 3, #117). A screen that says so has its time
   (`Cx::wake_at`) while overlays alone cover it (a menu bar, a panel), as it still shows below them: for work that goes
   on there, as the reader counting its pages. No by default: the time waits until it is on top again, as before.
@@ -108,6 +113,13 @@ change the plugin SDK.
 - **The library no longer says "Preparing the library …" for ever** (#145). If the kernel makes no catalog or
   sorted books for 90 seconds (a card taken out and put back while PaperPaw ran, sorted books that cannot be
   read), the library says that the folder cannot be read, and asks the kernel once more. Files plugin 1.0.5.
+- **A memory card taken out with the library open is said at once** (#145). Turning a page then said "Preparing the
+  library …" until the card was back: the kernel makes nothing of a card it cannot read, so no word of it came. The
+  library now says that the folder cannot be read as soon as it finds the card cannot be read (*Restart PaperPaw*
+  where the X4 gave the card up for the run), and shows the books again once the card is back. Files plugin 1.0.6.
+- **No first-run hints over a card that cannot be read** (#145). With the card taken out, the hints counted as never
+  shown and opened over the library as on a new card; they now count as shown where what was shown cannot be read.
+  Only a card that has no record of them shows them. Hints plugin 1.0.3.
 - **Device check, first page** (#121): the Screen page opened with the focus on *Pass*, the answer it suggests without measuring anything, so the first arrow went round to *Flip pattern* and a first Select passed the page unseen. It now opens on *Flip pattern*, the first tool, as pages with tools should, and *Pass* stays the answer shown filled. Also, a key on that page took seconds, or showed nothing: the page counted as best in grays, which on the X4 makes every change, a moved focus too, a refresh of all the screen in its four grays, and after it a small change is not shown at all until a bigger one comes. The page now shows its stripes in grays when it opens and after *Full refresh*; moving the focus or flipping the pattern refreshes only what changed, in black and white.
 - **Device check, Buttons page** (#121): the page took every button from the moment it opened, so on a device of buttons alone the arrows, Select and Back did nothing and there was no way to move on or leave. It now opens with *Start* like the other pages' controls: the arrows, Select and Back work as everywhere until *Start* is chosen; then every button counts as the one asked for, as before.
 - Setup: the 'Look for updates' step shows its label next to the switch again (#132).
