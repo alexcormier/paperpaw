@@ -12,10 +12,13 @@ categories = ["no-std", "embedded"]
 keywords = ["e-reader", "e-ink", "epaper"]
 
 [features]
-default = ["panes"]
+default = []
 # A list and its detail beside each other on wide screens (`src/panes.rs`).
-# Devices never wide (the Xteink ones) build without it, to save its code;
-# the SDK is the same either way.
+# Asked for, never a default: the Xteink firmware, never wide, builds without
+# it to save its code, and a default-off dependency keeps every crate that
+# names this one (the plugins' dev-dependency) as it was published. The app's
+# `panes` feature (on by default in its defaults) asks for it; the SDK is
+# the same either way. In the kernel's own tests: `--features panes`.
 panes = []
 # Colour framebuffers for colour e-ink panels.
 color = ["paperpaw-graphics/color"]
