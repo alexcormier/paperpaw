@@ -34,6 +34,12 @@ change the plugin SDK.
   (`paperpaw-app/panes`) have it. A finger on the line between the parts goes to the nearer one; a change of the
   interface text size that makes the screen expanded or no longer so lays the two out again. A class a later
   kernel adds reads as `Expanded` in `DisplayChanged`, so an older plugin still hears the event.
+- Devices (#96): a developer setting *Stay awake on USB* (X4, X4 Pro, X4 Classic, X3; off by default). While the cable is in,
+  the sleep after *Sleep after* does not come, and *Sleep* shows the sleep picture but does not sleep, so the computer
+  keeps the link for remote tests; the next press or command wakes it, and a cable pulled meanwhile puts the device
+  to sleep (two seconds after, so a wiggled plug does not). On the X4 the cable is read at its pin; on the X4 Pro, X4
+  Classic and X3 "on USB" means a computer talking to it or charging, so on a wall charger with a full battery the
+  setting does not hold. No change for plugins.
 
 ### Changed
 
@@ -77,6 +83,8 @@ change the plugin SDK.
   with "invalid path". Folders of names PaperPaw does not take (made elsewhere: `con`) are removed with all they hold.
 - A book whose cache folder cannot be cleared (a damaged folder, #99) is never read from: the book shows its details,
   and opening it says the card could not be written, instead of reading another book's chapters as its own.
+- **Device check, first page** (#121): the Screen page opened with the focus on *Pass*, the answer it suggests without measuring anything, so the first arrow went round to *Flip pattern* and a first Select passed the page unseen. It now opens on *Flip pattern*, the first tool, as pages with tools should, and *Pass* stays the answer shown filled. Also, a key on that page took seconds, or showed nothing: the page counted as best in grays, which on the X4 makes every change, a moved focus too, a refresh of all the screen in its four grays, and after it a small change is not shown at all until a bigger one comes. The page now shows its stripes in grays when it opens and after *Full refresh*; moving the focus or flipping the pattern refreshes only what changed, in black and white.
+- **Device check, Buttons page** (#121): the page took every button from the moment it opened, so on a device of buttons alone the arrows, Select and Back did nothing and there was no way to move on or leave. It now opens with *Start* like the other pages' controls: the arrows, Select and Back work as everywhere until *Start* is chosen; then every button counts as the one asked for, as before.
 
 ## [0.6.0-beta.1] - 2026-11-03
 
