@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- **Settings screens skip a pass that counted pictures** (#118). On a black-and-white panel every whole-screen frame
+  drew the screen once more, aside, to count its pictures; the settings screens have none, so they now say so
+  (`Screen::pictures_in_grays`) and the pass is gone (about 4% of the work of opening a group and going back, on the
+  host). Not the whole lag: the first open of a group in a session still shows the busy mark.
+
 ## [0.6.0-beta.1] - 2026-11-03
 
 **Plugins of this release must be built from `965d866b` or later** (plugin interface 6, #363; `965d866b` raises the shared interface family `ui` to revision 2, #119: the firmware refuses plugins of revision 1, built before). 0.6.0-beta.1 takes
