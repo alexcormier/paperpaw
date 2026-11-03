@@ -1140,6 +1140,7 @@ struct paperpaw_sdk::ui::reorder::Drag { pointer: u8, from: usize, to: usize }
 struct paperpaw_sdk::ui::reorder::Reorder { drag: core::option::Option<paperpaw_sdk::ui::reorder::Drag>, mirrored: bool }
 struct paperpaw_sdk::ui::row::Row<'r> { title: &'r str, kind: paperpaw_sdk::ui::row::RowKind<'r>, note: &'r str, focused: bool }
 struct paperpaw_sdk::ui::rows::Rows { area: paperpaw_platform::geometry::Rect, heights: alloc::vec::Vec<u16>, headings: alloc::vec::Vec<bool>, passed: alloc::vec::Vec<bool>, pages: alloc::vec::Vec<(core::option::Option<usize>, core::ops::range::Range<usize>)>, focus: usize, before: usize }
+struct paperpaw_sdk::ui::search::SearchField<'s> { hint: &'s str, text: &'s str, focused: bool }
 struct paperpaw_sdk::ui::sections::Section { heading: bool, count: usize }
 struct paperpaw_sdk::ui::sections::Sections { area: paperpaw_platform::geometry::Rect, heading: u16, row: u16, sections: alloc::vec::Vec<paperpaw_sdk::ui::sections::Section>, focus: usize, before: usize }
 struct paperpaw_sdk::ui::setting_rows::RowLines { title: paperpaw_platform::geometry::Rect, control: paperpaw_platform::geometry::Rect, height: u16 }

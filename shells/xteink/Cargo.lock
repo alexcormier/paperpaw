@@ -2449,7 +2449,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-files"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2557,7 +2557,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-settings"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2578,7 +2578,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-store"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-sdk",
 ]

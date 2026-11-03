@@ -86,6 +86,35 @@ const CASES: &[Case] = &[
         colour: 0,
         fixtures: false,
     },
+    // The search fields of the library's Find screen and of the settings
+    // (#113): one SDK part, focused in English, unfocused in German.
+    Case {
+        name: "x4-library-find-de",
+        profile: "xteink-x4",
+        book: None,
+        sets: &["core.language=de"],
+        script: "run:core.library,wait:1500,run:files.list.find,wait:300,right,right,wait:300",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
+        name: "x4-settings-search",
+        profile: "xteink-x4",
+        book: None,
+        sets: &["slots.core.home=settings.list"],
+        script: "right",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
+        name: "x4-settings-search-de",
+        profile: "xteink-x4",
+        book: None,
+        sets: &["slots.core.home=settings.list", "core.language=de"],
+        script: "right,right",
+        colour: 0,
+        fixtures: false,
+    },
     // The keyboard on buttons with a phone to type on (#111): the focus
     // starts on *Phone*, and Right goes to the first key.
     Case {

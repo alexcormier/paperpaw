@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- **One search field everywhere** (#113). The SDK draws a search field as one part, `ui::SearchField`: a rounded
+  outline round the search icon and a gray hint (or the words searched for), the focus over it when focused, the
+  icon at the right where the interface runs right to left, in the theme's inks. The library's *Find* screen, the
+  settings, the store and the actions list of the button settings use it, so their searches look the same; the
+  settings' search is now a field at the top of the list, no longer a row like the others. For plugin authors:
+  `SearchField::new(hint).text(words).focused(focused).draw(ui, rect)`, `SearchField::height(style)`; a new type,
+  so plugins built before are not affected.
+
 ## [0.6.0-beta.1] - 2026-11-03
 
 **Plugins of this release must be built from `965d866b` or later** (plugin interface 6, #363; `965d866b` raises the shared interface family `ui` to revision 2, #119: the firmware refuses plugins of revision 1, built before). 0.6.0-beta.1 takes
