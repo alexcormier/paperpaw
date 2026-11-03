@@ -49,12 +49,12 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, settings, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::library::{self, catalog::State};
+use paperpaw_sdk::library;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui;
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, FixedAction, FixedScreen, Gesture, GestureKind, Handled, Id,
-    Params, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    Instant, Params, Rect, RefreshMode, RegisterError, Registrar, Screen,
 };
 
 use index::{Filter, NEVER, hash};
@@ -117,7 +117,7 @@ static ACTIONS: [FixedAction; 2] = [
     walking::ACTION,
 ];
 static ICONS: [(Id, &str); 2] = [(FIND, "letter-case"), (LOOK_AGAIN, "refresh")];
-pub(crate) use walking::LOOK_AGAIN;
+pub(crate) use walking::{LOOK_AGAIN, collecting};
 
 /// The library screen.
 pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
@@ -135,16 +135,6 @@ fn open_sorted(env: &Env<'_>, archive: &str) -> Option<Sorted> {
         let _ = env.storage().remove(KEPT);
     }
     Sorted::open(env, archive)
-}
-
-/// Whether the catalog is still to be made (none yet). Not where the
-/// storage cannot be read (a card the device cannot use): none would
-/// ever come, and the empty library says where books go.
-pub(crate) fn collecting(env: &Env<'_>) -> bool {
-    matches!(
-        library::service(env).catalog_state(env),
-        State::Missing | State::Building
-    ) && env.storage().list("", &mut |_| {}).is_ok()
 }
 
 /// The archive folder, as the setting names it: its books are on the
@@ -281,6 +271,9 @@ struct ListScreen {
     sorted: Option<Sorted>,
     /// The kernel was asked for them since they were last there.
     asked: bool,
+    /// Since when the library waits for a kernel that does nothing
+    /// (`watch`).
+    idle_since: Option<Instant>,
     /// No catalog yet: the kernel is making the first.
     collecting: bool,
     /// The kernel could not make the catalog (`CATALOG_FAILED`): the
@@ -339,6 +332,7 @@ impl ListScreen {
             root: library::folder(env).to_string(),
             sorted: open_sorted(env, &archive),
             asked: false,
+            idle_since: None,
             archive,
             collecting: collecting(env),
             failed: false,
@@ -445,12 +439,13 @@ impl ListScreen {
     }
 
     /// Asks the kernel for the sorted books where they are being made
-    /// anew, once.
+    /// anew, once; and watches that the kernel answers ([`walking`]).
     fn ask(&mut self, cx: &mut Cx<'_, '_>) {
         if self.sorted.is_none() && !self.asked {
             self.asked = true;
             cx.command(sorted::request(&self.archive));
         }
+        self.watch(cx);
     }
 
     /// Takes the shown books (or shelves) anew from the index, the focus
