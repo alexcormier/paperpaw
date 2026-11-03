@@ -59,6 +59,10 @@ impl paperpaw_x4::sleeping::Board for Light<'_> {
 
     fn watchdog_for_sleep(&mut self) {
         power::watchdogs_for_sleep(paperpaw_x4::sleeping::SLEEP_WATCHDOG_MS);
+        info!(
+            "sleeping: RTC watchdog paused in sleep: {}",
+            power::watchdog_pauses_in_sleep()
+        );
     }
 
     fn watchdog_awake(&mut self) {

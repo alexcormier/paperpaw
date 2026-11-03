@@ -6,6 +6,21 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- **X4 Pro: a real sleep before it switches off** (#153). Sleep (the power button, the power menu, the idle time) used to
+  switch the Pro off at once, as the X4 did before 0.5. Now the Pro sleeps lightly as the X4 does: the screen stays, a press of
+  the power button wakes it at once, and it switches off after the time of the new setting *Switch off after sleeping* (30
+  minutes by default; *At once* gives the old behaviour; *Never* stays asleep). The front light is off while it sleeps and comes
+  back as set when it wakes. Every 10 minutes it wakes for a moment to look at the battery (3 % or less: off at once). The
+  X4 Classic keeps its deep sleep. Not measured on a device yet.
+
+### Fixed
+
+- **X4, X3: the 15-minute watchdog of a light sleep counts in the sleep** (#153). The reset that ends a sleep which never
+  ends was paused in light sleep after the first sleep (the library's enable call set the pause again). It is now cleared
+  after every arming.
+
 ### Added
 
 - Storage: `StorageError::CARD_GONE` (code 1 of `StorageError::Other`, #145): the memory card was taken out and

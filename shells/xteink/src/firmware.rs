@@ -30,7 +30,7 @@ mod cable;
 mod card_swap;
 mod dozing;
 mod paced;
-#[cfg(feature = "esp32c3")]
+#[cfg(feature = "asleep-light")]
 mod sleeping_board;
 mod waveform;
 
@@ -748,7 +748,7 @@ impl Firmware {
         }
         // A real sleep first (the processor lightly asleep, the power button
         // waking it at once), switched off only after a while (#51).
-        #[cfg(feature = "esp32c3")]
+        #[cfg(feature = "asleep-light")]
         if next == paperpaw_x4::sleeping::After::Light && self.sleep_lightly() {
             return;
         }
@@ -808,13 +808,20 @@ impl Firmware {
     /// every [`paperpaw_x4::sleeping::CHECK_MS`] it wakes for a moment to
     /// look at the battery. The order of it is
     /// [`paperpaw_x4::sleeping::run`], tested on a computer.
-    #[cfg(feature = "esp32c3")]
+    #[cfg(feature = "asleep-light")]
     #[inline(never)]
     fn sleep_lightly(&mut self) -> bool {
         use paperpaw_x4::sleeping::{Ended, Off};
         // The developer switch back to how the X4 slept before.
         if !self.kernel.settings().read(&device::LIGHT_SLEEP) {
             return false;
+        }
+        // The front light goes off for the sleep (its PWM stops in a light
+        // sleep, the LEDs must not be left half lit); `wake_lightly` and the
+        // next frame bring it back as the settings say.
+        #[cfg(feature = "x4-pro")]
+        if let Some(light) = self.light.as_mut() {
+            light.off();
         }
         let choice = self.kernel.settings().read(&device::POWER_OFF_AFTER);
         let off = Off::of(choice);
@@ -836,12 +843,18 @@ impl Firmware {
 
     /// Awake again after a light sleep: plugins hear it (`core.resume`),
     /// the screen is drawn as it was before the sleep screen.
-    #[cfg(feature = "esp32c3")]
+    #[cfg(feature = "asleep-light")]
     fn wake_lightly(&mut self) {
         self.state.sleep = false;
         self.state.power_off = false;
         // The clock and the battery shown anew soon.
         self.state.status_read = None;
+        // The press that woke it is input: the front light, off for the
+        // sleep, comes back as set and its timer starts anew.
+        #[cfg(feature = "x4-pro")]
+        {
+            self.state.light_timer = paperpaw_x4::light_timer::LightTimer::new(now().0);
+        }
         if let Some(ota) = &mut self.ota {
             ota.resume_trial(now().0);
         }
