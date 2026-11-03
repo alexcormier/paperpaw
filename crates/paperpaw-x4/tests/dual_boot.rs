@@ -216,8 +216,8 @@ fn an_update_this_firmware_installed_is_marked_at_once_and_goes_back_if_it_dies(
         let (updates, plan) = Updates::open(chip, &slots, 0, this(), "x4").unwrap();
         assert!(matches!(plan, Start::Failed { .. }), "{name}: {plan:?}");
         assert!(!updates.start_pending(), "{name}: marked bad at once");
-        let chip = updates.into_flash();
-        let mut part = Part(&mut { chip }, slots.data);
+        let mut chip = updates.into_flash();
+        let mut part = Part(&mut chip, slots.data);
         let ota = OtaData::read(&mut part).unwrap();
         assert_eq!(
             ota.state_of(0).map(|(state, _)| state),
