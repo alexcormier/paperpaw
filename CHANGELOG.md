@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The library no longer says "Preparing the library …" for ever** (#145). If the kernel makes no catalog or
+  sorted books for 90 seconds (a card taken out and put back while PaperPaw ran, sorted books that cannot be
+  read), the library says that the folder cannot be read, and asks the kernel once more. Files plugin 1.0.5.
+
 ## [0.6.0-beta.1] - 2026-11-03
 
 **Plugins of this release must be built from `965d866b` or later** (plugin interface 6, #363; `965d866b` raises the shared interface family `ui` to revision 2, #119: the firmware refuses plugins of revision 1, built before). 0.6.0-beta.1 takes
