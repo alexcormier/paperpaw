@@ -72,6 +72,10 @@ change the plugin SDK.
 
 ### Fixed
 
+- **Card language packs keep translating later commands** (#208). The kernel reclaims a nearly full message
+  cache between commands, so a preceding callback cannot exhaust translations for later notices and dialog labels.
+  Smaller caches stay resident; the 16 KiB budget and plugin interface stay unchanged.
+
 - **Arranging the home screen no longer turns the page or opens the tools by mistake** (#215). While the page is arranged, a
   swipe or tap that hits nothing (a finger straying off a widget) does nothing, instead of turning the page or opening
   the menu. *Done* and *Add* are buttons at least two rows wide, with the word *Done*, instead of a small tick that taps
@@ -84,6 +88,9 @@ change the plugin SDK.
   bumps of other languages (#172). Language metadata comes from its catalog header, and store texts and
   dependencies from its data-plugin entry. Existing language packs build to the same bytes.
 
+- **The plugin manager reads only the rows it shows** (#208). It translated the description of every plugin to find how high the
+  rows must be, which filled the 16 KiB a language on the card may read in one go; later texts of that call came out in
+  English. Now only the rows of the page shown are read, and the rows get higher, never lower, when a page needs it.
 - **The store shows every plugin after an update, without a restart** (#164). The first start after an update runs on trial
   and loads no code plugins, on purpose, and the kernel then did not know what the firmware takes: the store asked for no
   builds and showed only data plugins (Look, Languages) until the next cold start, which a Pro on light sleep may not have
