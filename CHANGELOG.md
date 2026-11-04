@@ -11,6 +11,16 @@ change the plugin SDK.
 - **Spanish user interface.** All 3,861 messages of the kernel and the plugins in Spanish, as the data plugin
   `language-es` from the store. Machine-translated and checked with `tools/language-pack.py check es`; corrections
   from Spanish readers are welcome.
+- **Colours of widgets** (#206, SDK). Each widget has a paper (`<widget>.paper`: normal, inverted, light gray, dark
+  gray, transparent; on colour panels also any tone or a code such as `#3b6fd4`) and a text colour (`<widget>.ink`,
+  automatic: black or white, whichever reads on the paper), and the kernel's `core.widgets.paper` and
+  `core.widgets.ink` set them for every widget that has none of its own. `widgets::widget_look` gives the colours and
+  `widgets::draw_frame` paints the paper, so widgets that draw in `look.ink` on `look.paper` follow without a change;
+  `widgets::colour_spec`, `paper`, `ink` and the settings' builders are new. `GridView::draw_on` takes what lies
+  under the items (`widgets::Plate`: white as before, nothing over a picture, a colour), so widgets can sit on a
+  picture or a dark page. Additive: plugin interface 6 stays, plugins built before draw as they did; their widgets
+  follow the colours, those of all widgets too, once rebuilt with this SDK (each plugin carries its own copy of
+  `widget_look`). Transparent widgets take the page to be light: on a dark picture, choose a light text colour.
 - **Picture home screen** (#205), a store plugin (`picture-home`, group Look; needs no new firmware). Your own
   picture behind the widgets, from a folder on the card: fill, whole picture, stretch, original size or tile, in one
   of nine places, zoomed and made paler; prepared once into a screen-sized gray file and drawn from it, a few rows at
