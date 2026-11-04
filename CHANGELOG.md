@@ -50,6 +50,10 @@ change the plugin SDK.
 
 ### Fixed
 
+- **Widget plates follow rounded corners** (#206). A grid plate no longer sticks out past a widget's corners or
+  fills the space beside its shadow. Frameless paper follows explicitly chosen corners; Automatic stays square.
+  Empty widgets have no grid plate outside editing mode.
+
 - **X4 Pro: the charging bolt on battery, and a sleep that never switched off** (#209). The Pro took "a computer sends USB
   frames" for charging: the bolt, the kernel's low-battery rules, its install check and the sleeping reader's *Switch off
   after sleeping* all went by it, so a Pro on battery could show the bolt, run no idle naps and stay asleep all night.
