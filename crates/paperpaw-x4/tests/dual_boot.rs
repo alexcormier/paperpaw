@@ -17,7 +17,7 @@ mod common;
 use common::{FLASH, layouts, table};
 use paperpaw_sdk::MemoryStorage;
 use paperpaw_sdk::firmware::{CHIP_ESP32_C3, Firmware, InstallFailure};
-use paperpaw_x4::dual_boot::{MARKER, REFUSED, Source, WINDOW, scan_marker};
+use paperpaw_x4::dual_boot::{MARKER, REFUSED, Source, WINDOW, X4BOOT, scan_marker};
 use paperpaw_x4::ota::{Flash, FlashError, OtaData, SLOTS, Start, State};
 use paperpaw_x4::partitions::{Slots, TABLE_AT, TABLE_LEN};
 use paperpaw_x4::updates::{TRIAL_MS, TrialEnd, Updates};
@@ -314,18 +314,55 @@ fn what_is_declared_guards_from_the_settling_on() {
 #[test]
 fn the_marker_is_looked_for_in_the_bootloaders_window_only() {
     let (mut chip, _) = flash(layouts()[0].1);
-    assert_eq!(scan_marker(&mut chip), Ok(false));
+    assert_eq!(scan_marker(&mut chip), Ok(None));
     // Across two pieces, at the very end of the window, and just beyond it.
-    for (at, found) in [
-        (0x1000 - 7, true),
-        (WINDOW as usize - MARKER.len(), true),
-        (WINDOW as usize - MARKER.len() + 1, false),
-        (WINDOW as usize + 0x100, false),
-    ] {
-        let (mut chip, _) = flash(layouts()[0].1);
-        chip.0[at..at + MARKER.len()].copy_from_slice(MARKER);
-        assert_eq!(scan_marker(&mut chip), Ok(found), "at {at:#x}");
+    for (tag, source) in [(MARKER, Source::Marker), (X4BOOT, Source::X4Boot)] {
+        for (at, found) in [
+            (0x1000 - 3, true),
+            (WINDOW as usize - tag.len(), true),
+            (WINDOW as usize - tag.len() + 1, false),
+            (WINDOW as usize + 0x100, false),
+        ] {
+            let (mut chip, _) = flash(layouts()[0].1);
+            chip.0[at..at + tag.len()].copy_from_slice(tag);
+            let want = found.then_some(source);
+            assert_eq!(scan_marker(&mut chip), Ok(want), "{source:?} at {at:#x}");
+        }
     }
+    // Both: ours is the one said.
+    let (mut chip, _) = flash(layouts()[0].1);
+    chip.0[0x100..0x100 + X4BOOT.len()].copy_from_slice(X4BOOT);
+    chip.0[0x7000..0x7000 + MARKER.len()].copy_from_slice(MARKER);
+    assert_eq!(scan_marker(&mut chip), Ok(Some(Source::Marker)));
+}
+
+/// 86 bytes of the dualbooter's own hosted bootloader (`bins/bootloader.bin`
+/// of lowio.xyz/tools/dualboot-x4, 21,712 bytes, SHA-256 9855f7b2…db3dfd),
+/// read on 2026-11-04 as bytes only: its tag, with the text around it, where
+/// the file has them (offset 0xb8; the tool's own check is the same six bytes
+/// anywhere in the image).
+const LOWIO_EXCERPT: [u8; 86] = [
+    0x30, 0x38, 0x78, 0x0d, 0x0a, 0x00, 0x00, 0x00, 0x64, 0x6f, 0x77, 0x6e, 0x00, 0x00, 0x00, 0x00,
+    0x75, 0x70, 0x00, 0x00, 0x6f, 0x6b, 0x00, 0x00, 0x56, 0x45, 0x52, 0x49, 0x46, 0x59, 0x20, 0x46,
+    0x41, 0x49, 0x4c, 0x45, 0x44, 0x00, 0x00, 0x00, 0x78, 0x34, 0x62, 0x6f, 0x6f, 0x74, 0x00, 0x00,
+    0x45, 0x20, 0x28, 0x25, 0x6c, 0x75, 0x29, 0x20, 0x25, 0x73, 0x3a, 0x20, 0x6c, 0x6f, 0x61, 0x64,
+    0x20, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x20, 0x74, 0x61, 0x62, 0x6c, 0x65,
+    0x20, 0x65, 0x72, 0x72, 0x6f, 0x72,
+];
+const LOWIO_EXCERPT_AT: usize = 0xb8;
+
+#[test]
+fn a_look_for_nothing_finds_nothing() {
+    use paperpaw_x4::dual_boot::MarkerScan;
+    assert!(!MarkerScan::of(b"").feed(b"anything"));
+}
+
+#[test]
+fn the_real_dualbooter_bootloader_is_recognised() {
+    let (mut chip, _) = flash(layouts()[0].1);
+    chip.0[LOWIO_EXCERPT_AT..LOWIO_EXCERPT_AT + LOWIO_EXCERPT.len()]
+        .copy_from_slice(&LOWIO_EXCERPT);
+    assert_eq!(scan_marker(&mut chip), Ok(Some(Source::X4Boot)));
 }
 
 #[test]
@@ -334,9 +371,9 @@ fn the_note_the_firmware_writes_is_the_one_the_update_plugin_reads() {
     use paperpaw_x4::dual_boot::{NOTE, note, noted};
     let card = MemoryStorage::new();
     assert!(!paperpaw_plugin_update::dual_boot_declared(&card));
-    for source in [Source::Ini, Source::Marker] {
+    for source in [Source::Ini, Source::Marker, Source::X4Boot] {
         for slot in 0..SLOTS {
-            let text = note(source, slot);
+            let text = note(source, Some(slot));
             assert!(noted(&text));
             card.write(NOTE, text.as_bytes()).unwrap();
             assert!(paperpaw_plugin_update::dual_boot_declared(&card));
