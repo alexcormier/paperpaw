@@ -57,6 +57,11 @@ change the plugin SDK.
   their colours, and the home screen and the picture home screen place their widgets with the gap the reader set for
   all widgets (small, normal, large).
 
+### Changed
+
+- **"More plugins" is now "Plugin store"** (#213; de: "Plugin-Store"). The name of the store on the device, its title
+  and the help texts that send you to it.
+
 ### Fixed
 
 - **The store shows every plugin after an update, without a restart** (#164). The first start after an update runs on trial
