@@ -59,10 +59,16 @@ change the plugin SDK.
 
 ### Fixed
 
+- **The store shows every plugin after an update, without a restart** (#164). The first start after an update runs on trial
+  and loads no code plugins, on purpose, and the kernel then did not know what the firmware takes: the store asked for no
+  builds and showed only data plugins (Look, Languages) until the next cold start, which a Pro on light sleep may not have
+  for days. Nothing changes during the trial (no code plugin is offered or installed, so a bad update still goes back and
+  the plugins before stay as they were), but once the update is kept, its mark written for good (about 30 seconds on), the
+  kernel tells plugins what the firmware takes: the store, opened or opened again, lists and installs the builds that fit
+  (*Restart now* as for any code plugin); a mark that could not be written keeps it as before.
 - **Widget plates follow rounded corners** (#206). A grid plate no longer sticks out past a widget's corners or
   fills the space beside its shadow. Frameless paper follows explicitly chosen corners; Automatic stays square.
   Empty widgets have no grid plate outside editing mode.
-
 - **X4 Pro: the charging bolt on battery, and a sleep that never switched off** (#209). The Pro took "a computer sends USB
   frames" for charging: the bolt, the kernel's low-battery rules, its install check and the sleeping reader's *Switch off
   after sleeping* all went by it, so a Pro on battery could show the bolt, run no idle naps and stay asleep all night.
