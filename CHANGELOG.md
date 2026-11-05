@@ -6,7 +6,7 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-## [0.6.0-beta.3] - YYYY-MM-DD
+## [0.6.0-beta.3] - 2026-11-05
 
 ### Added
 
