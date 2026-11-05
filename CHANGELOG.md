@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.6.0-beta.3] - 2026-11-05
+
 ### Added
 
 - **The Wi-Fi page: the networks have a page of their own** (#161). The Wi-Fi page is short whatever is in the air:
@@ -42,7 +44,7 @@ change the plugin SDK.
   each widget plugin is 3.5 to 5.8 KB smaller on the X4 and its widgets follow the firmware's look. Plugins built
   with this SDK that have widgets need this firmware: beta.2 refuses them cleanly ("needs a newer PaperPaw") and
   the store does not offer them to it; plugins without widgets are unaffected. Plugin interface 6 stays.
-- **Picture home screen** (#205), a store plugin (`picture-home`, group Look; its current build needs the shared widget family above). Your own
+- **Picture home screen** (#205), a store plugin (`picture-home`, group Look). Your own
   picture behind the widgets, from a folder on the card: fill, whole picture, stretch, original size or tile, in one
   of nine places, zoomed and made paler; prepared once into a screen-sized gray file and drawn from it, a few rows at
   a time. Pages of widgets and tools placed anywhere in the SDK's grid, on plates over the picture. The status bar is
